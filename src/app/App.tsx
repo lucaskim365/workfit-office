@@ -104,6 +104,12 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/pareto': lazy(() => import('@/modules/equip/pareto/ParetoScreen')),
   '/equip/fault-analysis': lazy(() => import('@/modules/equip/fault-analysis/FaultAnalysisScreen')),
   '/equip/maint-cost': lazy(() => import('@/modules/equip/maint-cost/MaintCostScreen')),
+  // 품질 관리 — 품질 기준정보
+  '/qual/insp-item': lazy(() => import('@/modules/qual/insp-item/QualInspItemScreen')),
+  '/qual/insp-spec': lazy(() => import('@/modules/qual/insp-spec/QualInspSpecScreen')),
+  '/qual/defect-code': lazy(() => import('@/modules/qual/defect-code/QualDefectCodeScreen')),
+  '/qual/sampling-rule': lazy(() => import('@/modules/qual/sampling-rule/QualSamplingRuleScreen')),
+  '/qual/grade': lazy(() => import('@/modules/qual/grade/QualGradeScreen')),
 };
 
 export default function App() {
