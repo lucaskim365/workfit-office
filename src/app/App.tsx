@@ -82,6 +82,12 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/bm': lazy(() => import('@/modules/equip/bm/EquipBmScreen')),
   '/equip/pdm': lazy(() => import('@/modules/equip/pdm/EquipPdmScreen')),
   '/equip/outsourcing': lazy(() => import('@/modules/equip/outsourcing/EquipOutsourceScreen')),
+  // 설비 관리 — 예비품·스페어 파트
+  '/equip/spare-master': lazy(() => import('@/modules/equip/spare-master/SpareMasterScreen')),
+  '/equip/spare-io': lazy(() => import('@/modules/equip/spare-io/SpareIoScreen')),
+  '/equip/spare-stock': lazy(() => import('@/modules/equip/spare-stock/SpareStockScreen')),
+  '/equip/spare-safety': lazy(() => import('@/modules/equip/spare-safety/SpareSafetyScreen')),
+  '/equip/spare-scrap': lazy(() => import('@/modules/equip/spare-scrap/SpareScrapScreen')),
 };
 
 export default function App() {
