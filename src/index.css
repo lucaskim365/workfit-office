@@ -55,3 +55,15 @@ body {
 .mes-marquee {
   animation: mes-marquee-scroll 28s linear infinite;
 }
+
+/* 우하단 토스트 진입 */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

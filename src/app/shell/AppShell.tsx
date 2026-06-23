@@ -7,6 +7,7 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock } from './QuickDock';
+import { ToastFeed } from './ToastFeed';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -28,24 +29,6 @@ function NoTab() {
   );
 }
 
-function Toast({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed bottom-5 right-16 z-[60] w-80 rounded-xl border border-border bg-panel p-3.5 shadow-[0_12px_40px_rgba(16,24,48,0.22)]">
-      <div className="flex items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber/15 text-base">💬</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="rounded bg-amber/15 px-1.5 py-0.5 text-[9.5px] font-bold text-amber">메신저</span>
-            <span className="truncate text-[12px] font-bold text-ink">생산1팀 단톡방</span>
-          </div>
-          <div className="mt-1 text-[11.5px] text-ink2">교대 인수인계 완료했습니다 👍</div>
-        </div>
-        <button onClick={onClose} className="shrink-0 text-ink3 hover:text-ink">×</button>
-      </div>
-    </div>
-  );
-}
-
 export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,7 +41,6 @@ export default function AppShell() {
   const [userOpen, setUserOpen] = useState(false);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [showToast, setShowToast] = useState(true);
   const [favs, setFavs] = useState<string[]>(() => loadJSON('mes_favs', []));
   const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
 
@@ -135,7 +117,7 @@ export default function AppShell() {
       </div>
 
       <QuickDock />
-      {showToast && <Toast onClose={() => setShowToast(false)} />}
+      <ToastFeed />
     </div>
   );
 }
