@@ -10,6 +10,8 @@ import EquipScreen from '@/modules/base/equip/EquipScreen';
 import DefectScreen from '@/modules/base/defect/DefectScreen';
 import CodeScreen from '@/modules/base/code/CodeScreen';
 import ProcessScreen from '@/modules/base/process/ProcessScreen';
+import AuthScreen from '@/modules/base/auth/AuthScreen';
+import RoutingScreen from '@/modules/base/routing/RoutingScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
@@ -25,6 +27,8 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/defect': DefectScreen,
   '/base/code': CodeScreen,
   '/base/process': ProcessScreen,
+  '/base/auth': AuthScreen,
+  '/base/routing': RoutingScreen,
 };
 
 export default function App() {
