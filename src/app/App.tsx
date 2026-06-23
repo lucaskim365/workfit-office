@@ -1,62 +1,46 @@
-import type { ComponentType } from 'react';
+import { lazy, type ComponentType } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './shell/AppShell';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
-import DashboardScreen from '@/modules/ops/dashboard/DashboardScreen';
-import UserScreen from '@/modules/base/user/UserScreen';
-import VendorScreen from '@/modules/base/vendor/VendorScreen';
-import ItemScreen from '@/modules/base/item/ItemScreen';
-import EquipScreen from '@/modules/base/equip/EquipScreen';
-import DefectScreen from '@/modules/base/defect/DefectScreen';
-import CodeScreen from '@/modules/base/code/CodeScreen';
-import ProcessScreen from '@/modules/base/process/ProcessScreen';
-import AuthScreen from '@/modules/base/auth/AuthScreen';
-import RoutingScreen from '@/modules/base/routing/RoutingScreen';
-import UserAdminScreen from '@/modules/sys/user/UserAdminScreen';
-import AuthMgmtScreen from '@/modules/sys/auth/AuthMgmtScreen';
-import MenuMgmtScreen from '@/modules/sys/menu/MenuMgmtScreen';
-import LogMgmtScreen from '@/modules/sys/log/LogMgmtScreen';
-import I18nScreen from '@/modules/sys/i18n/I18nScreen';
-import CalendarScreen from '@/modules/sys/calendar/CalendarScreen';
-import EnvScreen from '@/modules/sys/env/EnvScreen';
-import BackupScreen from '@/modules/sys/backup/BackupScreen';
-import InterfaceScreen from '@/modules/sys/interface/InterfaceScreen';
-import ProdPlanScreen from '@/modules/prod/plan/ProdPlanScreen';
-import WorkOrderScreen from '@/modules/prod/wo/WorkOrderScreen';
-import WorkOrderEditScreen from '@/modules/prod/wo-change/WorkOrderEditScreen';
-import ScheduleScreen from '@/modules/prod/schedule/ScheduleScreen';
-import UrgentScreen from '@/modules/prod/urgent/UrgentScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
 const HOME = '/ops/dashboard';
 
-/** 실제 구현된 화면 레지스트리 (url → 컴포넌트). 미구현 화면은 PlaceholderScreen. */
+/**
+ * 구현된 화면 레지스트리 (url → 컴포넌트).
+ * 각 화면은 React.lazy 로 분리되어 별도 청크로 온디맨드 로드된다(번들 분할).
+ * 미구현 화면은 PlaceholderScreen(eager) 사용.
+ */
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
-  '/ops/dashboard': DashboardScreen,
-  '/base/user': UserScreen,
-  '/base/vendor': VendorScreen,
-  '/base/item': ItemScreen,
-  '/base/equip': EquipScreen,
-  '/base/defect': DefectScreen,
-  '/base/code': CodeScreen,
-  '/base/process': ProcessScreen,
-  '/base/auth': AuthScreen,
-  '/base/routing': RoutingScreen,
-  '/sys/user': UserAdminScreen,
-  '/sys/auth': AuthMgmtScreen,
-  '/sys/menu': MenuMgmtScreen,
-  '/sys/log': LogMgmtScreen,
-  '/sys/i18n': I18nScreen,
-  '/sys/calendar': CalendarScreen,
-  '/sys/env': EnvScreen,
-  '/sys/backup': BackupScreen,
-  '/sys/interface': InterfaceScreen,
-  '/prod/plan': ProdPlanScreen,
-  '/prod/wo': WorkOrderScreen,
-  '/prod/wo-change': WorkOrderEditScreen,
-  '/prod/schedule': ScheduleScreen,
-  '/prod/urgent': UrgentScreen,
+  // 운영 현황
+  '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
+  // 기준 정보
+  '/base/user': lazy(() => import('@/modules/base/user/UserScreen')),
+  '/base/vendor': lazy(() => import('@/modules/base/vendor/VendorScreen')),
+  '/base/item': lazy(() => import('@/modules/base/item/ItemScreen')),
+  '/base/equip': lazy(() => import('@/modules/base/equip/EquipScreen')),
+  '/base/defect': lazy(() => import('@/modules/base/defect/DefectScreen')),
+  '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
+  '/base/process': lazy(() => import('@/modules/base/process/ProcessScreen')),
+  '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
+  '/base/routing': lazy(() => import('@/modules/base/routing/RoutingScreen')),
+  // 시스템 관리
+  '/sys/user': lazy(() => import('@/modules/sys/user/UserAdminScreen')),
+  '/sys/auth': lazy(() => import('@/modules/sys/auth/AuthMgmtScreen')),
+  '/sys/menu': lazy(() => import('@/modules/sys/menu/MenuMgmtScreen')),
+  '/sys/log': lazy(() => import('@/modules/sys/log/LogMgmtScreen')),
+  '/sys/i18n': lazy(() => import('@/modules/sys/i18n/I18nScreen')),
+  '/sys/calendar': lazy(() => import('@/modules/sys/calendar/CalendarScreen')),
+  '/sys/env': lazy(() => import('@/modules/sys/env/EnvScreen')),
+  '/sys/backup': lazy(() => import('@/modules/sys/backup/BackupScreen')),
+  '/sys/interface': lazy(() => import('@/modules/sys/interface/InterfaceScreen')),
+  // 생산 관리
+  '/prod/plan': lazy(() => import('@/modules/prod/plan/ProdPlanScreen')),
+  '/prod/wo': lazy(() => import('@/modules/prod/wo/WorkOrderScreen')),
+  '/prod/wo-change': lazy(() => import('@/modules/prod/wo-change/WorkOrderEditScreen')),
+  '/prod/schedule': lazy(() => import('@/modules/prod/schedule/ScheduleScreen')),
+  '/prod/urgent': lazy(() => import('@/modules/prod/urgent/UrgentScreen')),
 };
 
 export default function App() {

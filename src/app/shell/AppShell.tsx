@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
 import { MENU_TREE } from '../menu-tree';
@@ -24,6 +24,17 @@ function NoTab() {
       <div className="text-center">
         <div className="mb-2 text-[27px] opacity-40">▦</div>
         <div className="text-[12.5px] font-semibold">열린 화면이 없습니다. 좌측 메뉴에서 선택하세요.</div>
+      </div>
+    </div>
+  );
+}
+
+function ScreenLoading() {
+  return (
+    <div className="grid h-full place-items-center text-ink3">
+      <div className="flex items-center gap-2.5 text-[12.5px] font-semibold">
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-border-hi border-t-teal" />
+        화면을 불러오는 중…
       </div>
     </div>
   );
@@ -111,7 +122,15 @@ export default function AppShell() {
             setMenuOpen={setTabMenuOpen}
           />
           <main className="min-h-0 flex-1 overflow-auto bg-bg pr-3">
-            {tabs.length === 0 ? <NoTab /> : <div className="p-[18px]"><Outlet /></div>}
+            {tabs.length === 0 ? (
+              <NoTab />
+            ) : (
+              <div className="p-[18px]">
+                <Suspense fallback={<ScreenLoading />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            )}
           </main>
         </div>
       </div>
