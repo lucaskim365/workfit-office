@@ -49,6 +49,12 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/prod/move': lazy(() => import('@/modules/prod/move/MoveScreen')),
   '/prod/defect': lazy(() => import('@/modules/prod/defect/ProdDefectScreen')),
   '/prod/material-request': lazy(() => import('@/modules/prod/material-request/MaterialReqScreen')),
+  '/prod/trace': lazy(() => import('@/modules/prod/trace/LotTraceScreen')),
+  '/prod/downtime': lazy(() => import('@/modules/prod/downtime/DowntimeScreen')),
+  '/prod/oee': lazy(() => import('@/modules/prod/oee/OeeScreen')),
+  '/prod/closing': lazy(() => import('@/modules/prod/closing/ProdClosingScreen')),
+  '/prod/plan-vs-actual': lazy(() => import('@/modules/prod/plan-vs-actual/PlanVsActualScreen')),
+  '/prod/leadtime': lazy(() => import('@/modules/prod/leadtime/LeadtimeScreen')),
 };
 
 export default function App() {
