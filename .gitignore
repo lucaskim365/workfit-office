@@ -1,0 +1,20 @@
+# 참조 자산 (와이어프레임 / MVP 원본) — 빌드 대상 아님, 저장소 제외
+mes layout/
+스마트-mes-생산-플랫폼-(mvp) (1)/
+
+# 의존성 / 빌드 산출물
+node_modules/
+dist/
+build/
+
+# 환경변수 / 시크릿
+.env
+.env.*
+!.env.example
+firebase-applet-config.json
+
+# OS / 에디터
+.DS_Store
+.vscode/
+.idea/
+*.log
