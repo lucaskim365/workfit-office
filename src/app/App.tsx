@@ -98,6 +98,12 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/cal-plan': lazy(() => import('@/modules/equip/cal-plan/CalPlanScreen')),
   '/equip/cal-result': lazy(() => import('@/modules/equip/cal-result/CalResultScreen')),
   '/equip/cal-fail': lazy(() => import('@/modules/equip/cal-fail/CalFailScreen')),
+  // 설비 관리 — 분석 및 통계 리포트
+  '/equip/mtbf-mttr': lazy(() => import('@/modules/equip/mtbf-mttr/MtbfMttrScreen')),
+  '/equip/rate-analysis': lazy(() => import('@/modules/equip/rate-analysis/RateAnalysisScreen')),
+  '/equip/pareto': lazy(() => import('@/modules/equip/pareto/ParetoScreen')),
+  '/equip/fault-analysis': lazy(() => import('@/modules/equip/fault-analysis/FaultAnalysisScreen')),
+  '/equip/maint-cost': lazy(() => import('@/modules/equip/maint-cost/MaintCostScreen')),
 };
 
 export default function App() {
