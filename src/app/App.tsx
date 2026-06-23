@@ -155,6 +155,21 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/mat/issuing': lazy(() => import('@/modules/mat/issuing/MatIssuingScreen')),
   '/mat/shipping': lazy(() => import('@/modules/mat/shipping/MatShippingScreen')),
   '/mat/stock': lazy(() => import('@/modules/mat/stock/MatStockScreen')),
+  // 자재 관리 — 재고관리·물류설비
+  '/mat/count': lazy(() => import('@/modules/mat/count/MatCountScreen')),
+  '/mat/adjust': lazy(() => import('@/modules/mat/adjust/MatAdjustScreen')),
+  '/mat/aging': lazy(() => import('@/modules/mat/aging/MatAgingScreen')),
+  '/mat/pallet': lazy(() => import('@/modules/mat/pallet/MatPalletScreen')),
+  '/mat/agv': lazy(() => import('@/modules/mat/agv/MatAgvScreen')),
+  // 자재 관리 — 기준정보·연동·외주·키팅·폐기
+  '/mat/safety-stock': lazy(() => import('@/modules/mat/safety-stock/MatSafetyStockScreen')),
+  '/mat/fifo-rule': lazy(() => import('@/modules/mat/fifo-rule/MatFifoRuleScreen')),
+  '/mat/iqc-link': lazy(() => import('@/modules/mat/iqc-link/MatIqcLinkScreen')),
+  '/mat/lot-split': lazy(() => import('@/modules/mat/lot-split/MatLotSplitScreen')),
+  '/mat/kitting': lazy(() => import('@/modules/mat/kitting/MatKittingScreen')),
+  '/mat/subcon-issue': lazy(() => import('@/modules/mat/subcon-issue/MatSubconIssueScreen')),
+  '/mat/subcon-stock': lazy(() => import('@/modules/mat/subcon-stock/MatSubconStockScreen')),
+  '/mat/scrap': lazy(() => import('@/modules/mat/scrap/MatScrapScreen')),
 };
 
 export default function App() {
