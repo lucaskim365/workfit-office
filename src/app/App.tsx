@@ -115,6 +115,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/iqc-result': lazy(() => import('@/modules/qual/iqc-result/QualIqcResultScreen')),
   '/qual/iqc-return': lazy(() => import('@/modules/qual/iqc-return/QualIqcReturnScreen')),
   '/qual/iqc-vendor': lazy(() => import('@/modules/qual/iqc-vendor/QualIqcVendorScreen')),
+  // 품질 관리 — 공정검사(PQC)
+  '/qual/pqc-fml': lazy(() => import('@/modules/qual/pqc-fml/QualPqcFmlScreen')),
+  '/qual/pqc-self': lazy(() => import('@/modules/qual/pqc-self/QualPqcSelfScreen')),
+  '/qual/pqc-patrol': lazy(() => import('@/modules/qual/pqc-patrol/QualPqcPatrolScreen')),
+  '/qual/pqc-interface': lazy(() => import('@/modules/qual/pqc-interface/QualPqcInterfaceScreen')),
 };
 
 export default function App() {
