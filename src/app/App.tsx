@@ -4,6 +4,12 @@ import AppShell from './shell/AppShell';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import DashboardScreen from '@/modules/ops/dashboard/DashboardScreen';
 import UserScreen from '@/modules/base/user/UserScreen';
+import VendorScreen from '@/modules/base/vendor/VendorScreen';
+import ItemScreen from '@/modules/base/item/ItemScreen';
+import EquipScreen from '@/modules/base/equip/EquipScreen';
+import DefectScreen from '@/modules/base/defect/DefectScreen';
+import CodeScreen from '@/modules/base/code/CodeScreen';
+import ProcessScreen from '@/modules/base/process/ProcessScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
@@ -13,6 +19,12 @@ const HOME = '/ops/dashboard';
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/ops/dashboard': DashboardScreen,
   '/base/user': UserScreen,
+  '/base/vendor': VendorScreen,
+  '/base/item': ItemScreen,
+  '/base/equip': EquipScreen,
+  '/base/defect': DefectScreen,
+  '/base/code': CodeScreen,
+  '/base/process': ProcessScreen,
 };
 
 export default function App() {
