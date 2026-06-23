@@ -68,6 +68,9 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/bom': lazy(() => import('@/modules/equip/bom/EquipBomScreen')),
   '/equip/check-item': lazy(() => import('@/modules/equip/check/EquipCheckScreen')),
   '/equip/error-code': lazy(() => import('@/modules/equip/error-code/EquipErrorCodeScreen')),
+  '/equip/vendor': lazy(() => import('@/modules/equip/vendor/EquipVendorScreen')),
+  // 설비 관리 — 상태 모니터링
+  '/equip/andon': lazy(() => import('@/modules/equip/andon/EquipAndonScreen')),
 };
 
 export default function App() {
