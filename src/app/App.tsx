@@ -110,6 +110,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/defect-code': lazy(() => import('@/modules/qual/defect-code/QualDefectCodeScreen')),
   '/qual/sampling-rule': lazy(() => import('@/modules/qual/sampling-rule/QualSamplingRuleScreen')),
   '/qual/grade': lazy(() => import('@/modules/qual/grade/QualGradeScreen')),
+  // 품질 관리 — 수입검사(IQC)
+  '/qual/iqc-wait': lazy(() => import('@/modules/qual/iqc-wait/QualIqcWaitScreen')),
+  '/qual/iqc-result': lazy(() => import('@/modules/qual/iqc-result/QualIqcResultScreen')),
+  '/qual/iqc-return': lazy(() => import('@/modules/qual/iqc-return/QualIqcReturnScreen')),
+  '/qual/iqc-vendor': lazy(() => import('@/modules/qual/iqc-vendor/QualIqcVendorScreen')),
 };
 
 export default function App() {
