@@ -12,6 +12,15 @@ import CodeScreen from '@/modules/base/code/CodeScreen';
 import ProcessScreen from '@/modules/base/process/ProcessScreen';
 import AuthScreen from '@/modules/base/auth/AuthScreen';
 import RoutingScreen from '@/modules/base/routing/RoutingScreen';
+import UserAdminScreen from '@/modules/sys/user/UserAdminScreen';
+import AuthMgmtScreen from '@/modules/sys/auth/AuthMgmtScreen';
+import MenuMgmtScreen from '@/modules/sys/menu/MenuMgmtScreen';
+import LogMgmtScreen from '@/modules/sys/log/LogMgmtScreen';
+import I18nScreen from '@/modules/sys/i18n/I18nScreen';
+import CalendarScreen from '@/modules/sys/calendar/CalendarScreen';
+import EnvScreen from '@/modules/sys/env/EnvScreen';
+import BackupScreen from '@/modules/sys/backup/BackupScreen';
+import InterfaceScreen from '@/modules/sys/interface/InterfaceScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
@@ -29,6 +38,15 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/process': ProcessScreen,
   '/base/auth': AuthScreen,
   '/base/routing': RoutingScreen,
+  '/sys/user': UserAdminScreen,
+  '/sys/auth': AuthMgmtScreen,
+  '/sys/menu': MenuMgmtScreen,
+  '/sys/log': LogMgmtScreen,
+  '/sys/i18n': I18nScreen,
+  '/sys/calendar': CalendarScreen,
+  '/sys/env': EnvScreen,
+  '/sys/backup': BackupScreen,
+  '/sys/interface': InterfaceScreen,
 };
 
 export default function App() {
