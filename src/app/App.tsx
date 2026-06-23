@@ -133,6 +133,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/spc-chart': lazy(() => import('@/modules/qual/spc-chart/QualSpcChartScreen')),
   '/qual/spc-cpk': lazy(() => import('@/modules/qual/spc-cpk/QualSpcCpkScreen')),
   '/qual/spc-alarm': lazy(() => import('@/modules/qual/spc-alarm/QualSpcAlarmScreen')),
+  // 품질 관리 — 품질 추적·사후관리
+  '/qual/trace-lot': lazy(() => import('@/modules/qual/trace-lot/QualTraceLotScreen')),
+  '/qual/voc': lazy(() => import('@/modules/qual/voc/QualVocScreen')),
+  '/qual/8d-report': lazy(() => import('@/modules/qual/8d-report/Qual8dReportScreen')),
 };
 
 export default function App() {
