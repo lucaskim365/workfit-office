@@ -6,6 +6,7 @@ mes layout/
 node_modules/
 dist/
 build/
+*.tsbuildinfo
 
 # 환경변수 / 시크릿
 .env
