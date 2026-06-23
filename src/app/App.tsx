@@ -58,6 +58,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/prod/subcon-order': lazy(() => import('@/modules/prod/subcon-order/SubconOrderScreen')),
   '/prod/subcon-issue': lazy(() => import('@/modules/prod/subcon-issue/SubconIssueScreen')),
   '/prod/subcon-receipt': lazy(() => import('@/modules/prod/subcon-receipt/SubconReceiptScreen')),
+  '/prod/bom': lazy(() => import('@/modules/prod/bom/BomViewScreen')),
+  '/prod/routing': lazy(() => import('@/modules/prod/routing/RoutingMasterScreen')),
+  '/prod/workcenter': lazy(() => import('@/modules/prod/workcenter/WorkcenterMapScreen')),
+  '/prod/shift': lazy(() => import('@/modules/prod/shift/ShiftMgmtScreen')),
 };
 
 export default function App() {
