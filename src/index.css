@@ -42,3 +42,16 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
 }
+
+/* 상단 공지 마퀴 */
+@keyframes mes-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.mes-marquee {
+  animation: mes-marquee-scroll 28s linear infinite;
+}

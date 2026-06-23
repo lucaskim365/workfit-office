@@ -1,24 +1,141 @@
-import { Outlet, useLocation } from 'react-router-dom';
-import { MENU_TREE, modulePrefix } from '../menu-tree';
-import Topbar from './Topbar';
-import Sidebar from './Sidebar';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import type { FlatScreen } from '@/shared/types/menu';
+import { MENU_TREE } from '../menu-tree';
+import { SCREEN_BY_URL, HOME_URL } from './screens';
+import { Topbar } from './Topbar';
+import { Sidebar } from './Sidebar';
+import { TabBar } from './TabBar';
+import { QuickDock } from './QuickDock';
 
-/** 앱 셸: 상단 모듈 내비 + 좌측 사이드바 + 콘텐츠(Outlet). */
+function loadJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function NoTab() {
+  return (
+    <div className="grid h-full place-items-center text-ink3">
+      <div className="text-center">
+        <div className="mb-2 text-[27px] opacity-40">▦</div>
+        <div className="text-[12.5px] font-semibold">열린 화면이 없습니다. 좌측 메뉴에서 선택하세요.</div>
+      </div>
+    </div>
+  );
+}
+
+function Toast({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed bottom-5 right-16 z-[60] w-80 rounded-xl border border-border bg-panel p-3.5 shadow-[0_12px_40px_rgba(16,24,48,0.22)]">
+      <div className="flex items-start gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber/15 text-base">💬</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-amber/15 px-1.5 py-0.5 text-[9.5px] font-bold text-amber">메신저</span>
+            <span className="truncate text-[12px] font-bold text-ink">생산1팀 단톡방</span>
+          </div>
+          <div className="mt-1 text-[11.5px] text-ink2">교대 인수인계 완료했습니다 👍</div>
+        </div>
+        <button onClick={onClose} className="shrink-0 text-ink3 hover:text-ink">×</button>
+      </div>
+    </div>
+  );
+}
+
 export default function AppShell() {
   const location = useLocation();
-  const seg = '/' + (location.pathname.split('/')[1] ?? '');
-  const activeModule =
-    MENU_TREE.find((m) => modulePrefix(m) === seg) ?? MENU_TREE[0];
+  const navigate = useNavigate();
+  const activeUrl = location.pathname;
+
+  const initialScreen = SCREEN_BY_URL[activeUrl] ?? SCREEN_BY_URL[HOME_URL];
+  const [tabs, setTabs] = useState<FlatScreen[]>(initialScreen ? [initialScreen] : []);
+  const [collapsed, setCollapsed] = useState(false);
+  const [openModule, setOpenModule] = useState<string | null>(null);
+  const [userOpen, setUserOpen] = useState(false);
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showToast, setShowToast] = useState(true);
+  const [favs, setFavs] = useState<string[]>(() => loadJSON('mes_favs', []));
+  const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
+
+  useEffect(() => { try { localStorage.setItem('mes_favs', JSON.stringify(favs)); } catch { /* noop */ } }, [favs]);
+  useEffect(() => { try { localStorage.setItem('mes_rail_open', JSON.stringify(railOpen)); } catch { /* noop */ } }, [railOpen]);
+
+  const activeScreen = SCREEN_BY_URL[activeUrl];
+  const activeModuleId = activeScreen?.moduleId ?? MENU_TREE[0].id;
+  const activeModule = MENU_TREE.find((m) => m.id === activeModuleId) ?? MENU_TREE[0];
+
+  const openTab = (s: FlatScreen) => {
+    setTabs((prev) => (prev.some((t) => t.url === s.url) ? prev : [...prev, s]));
+    setOpenModule(null);
+    if (s.url !== activeUrl) navigate(s.url);
+  };
+  const closeTab = (url: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.url === url);
+      const next = prev.filter((t) => t.url !== url);
+      if (url === activeUrl) {
+        const nb = next[idx] ?? next[idx - 1];
+        if (nb) navigate(nb.url);
+      }
+      return next;
+    });
+  };
+  const toggleFav = (name: string) =>
+    setFavs((f) => (f.includes(name) ? f.filter((x) => x !== name) : [...f, name]));
 
   return (
-    <div className="flex h-screen flex-col">
-      <Topbar modules={MENU_TREE} activeModuleId={activeModule.id} />
+    <div className="relative flex h-screen flex-col overflow-hidden bg-bg">
+      <Topbar
+        activeModuleId={activeModuleId}
+        activeUrl={activeUrl}
+        openModule={openModule}
+        setOpenModule={setOpenModule}
+        userOpen={userOpen}
+        setUserOpen={setUserOpen}
+        onPick={openTab}
+      />
+
+      {/* 모듈 드롭다운 딤 */}
+      {openModule && <div onClick={() => setOpenModule(null)} className="absolute inset-x-0 bottom-0 top-[58px] z-40 bg-navy-deep/30" />}
+
       <div className="flex min-h-0 flex-1">
-        <Sidebar module={activeModule} />
-        <main className="flex-1 overflow-y-auto bg-bg p-6">
-          <Outlet />
-        </main>
+        <Sidebar
+          module={activeModule}
+          activeUrl={activeUrl}
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          query={query}
+          setQuery={setQuery}
+          railOpen={railOpen}
+          setRailOpen={setRailOpen}
+          favs={favs}
+          toggleFav={toggleFav}
+          openTab={openTab}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TabBar
+            tabs={tabs}
+            activeUrl={activeUrl}
+            onSelect={(url) => navigate(url)}
+            onClose={closeTab}
+            menuOpen={tabMenuOpen}
+            setMenuOpen={setTabMenuOpen}
+          />
+          <main className="min-h-0 flex-1 overflow-auto bg-bg pr-3">
+            {tabs.length === 0 ? <NoTab /> : <div className="p-[18px]"><Outlet /></div>}
+          </main>
+        </div>
       </div>
+
+      <QuickDock />
+      {showToast && <Toast onClose={() => setShowToast(false)} />}
     </div>
   );
 }
