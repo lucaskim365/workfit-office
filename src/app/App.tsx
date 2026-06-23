@@ -41,6 +41,14 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/prod/wo-change': lazy(() => import('@/modules/prod/wo-change/WorkOrderEditScreen')),
   '/prod/schedule': lazy(() => import('@/modules/prod/schedule/ScheduleScreen')),
   '/prod/urgent': lazy(() => import('@/modules/prod/urgent/UrgentScreen')),
+  '/prod/monitor': lazy(() => import('@/modules/prod/monitor/LineMonitorScreen')),
+  '/prod/wip': lazy(() => import('@/modules/prod/wip/WipScreen')),
+  '/prod/job': lazy(() => import('@/modules/prod/job/JobStartEndScreen')),
+  '/prod/result': lazy(() => import('@/modules/prod/result/ProdResultScreen')),
+  '/prod/material': lazy(() => import('@/modules/prod/material/MaterialLoadScreen')),
+  '/prod/move': lazy(() => import('@/modules/prod/move/MoveScreen')),
+  '/prod/defect': lazy(() => import('@/modules/prod/defect/ProdDefectScreen')),
+  '/prod/material-request': lazy(() => import('@/modules/prod/material-request/MaterialReqScreen')),
 };
 
 export default function App() {
