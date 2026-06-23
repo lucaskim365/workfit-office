@@ -55,6 +55,9 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/prod/closing': lazy(() => import('@/modules/prod/closing/ProdClosingScreen')),
   '/prod/plan-vs-actual': lazy(() => import('@/modules/prod/plan-vs-actual/PlanVsActualScreen')),
   '/prod/leadtime': lazy(() => import('@/modules/prod/leadtime/LeadtimeScreen')),
+  '/prod/subcon-order': lazy(() => import('@/modules/prod/subcon-order/SubconOrderScreen')),
+  '/prod/subcon-issue': lazy(() => import('@/modules/prod/subcon-issue/SubconIssueScreen')),
+  '/prod/subcon-receipt': lazy(() => import('@/modules/prod/subcon-receipt/SubconReceiptScreen')),
 };
 
 export default function App() {
