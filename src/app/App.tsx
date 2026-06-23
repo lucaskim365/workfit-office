@@ -88,6 +88,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/spare-stock': lazy(() => import('@/modules/equip/spare-stock/SpareStockScreen')),
   '/equip/spare-safety': lazy(() => import('@/modules/equip/spare-safety/SpareSafetyScreen')),
   '/equip/spare-scrap': lazy(() => import('@/modules/equip/spare-scrap/SpareScrapScreen')),
+  // 설비 관리 — 금형 및 치공구
+  '/equip/mold-master': lazy(() => import('@/modules/equip/mold-master/MoldMasterScreen')),
+  '/equip/mold-shot': lazy(() => import('@/modules/equip/mold-shot/MoldShotScreen')),
+  '/equip/mold-repair': lazy(() => import('@/modules/equip/mold-repair/MoldRepairScreen')),
+  '/equip/mold-location': lazy(() => import('@/modules/equip/mold-location/MoldLocationScreen')),
 };
 
 export default function App() {
