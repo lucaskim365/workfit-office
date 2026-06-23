@@ -75,6 +75,13 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/alarm': lazy(() => import('@/modules/equip/alarm/EquipAlarmMonScreen')),
   '/equip/param': lazy(() => import('@/modules/equip/param/EquipParamScreen')),
   '/equip/downtime': lazy(() => import('@/modules/equip/downtime/EquipDowntimeScreen')),
+  // 설비 관리 — 보전 및 점검
+  '/equip/pm': lazy(() => import('@/modules/equip/pm/EquipPmPlanScreen')),
+  '/equip/daily-check': lazy(() => import('@/modules/equip/daily-check/EquipDailyCheckScreen')),
+  '/equip/regular-check': lazy(() => import('@/modules/equip/regular-check/EquipPeriodicCheckScreen')),
+  '/equip/bm': lazy(() => import('@/modules/equip/bm/EquipBmScreen')),
+  '/equip/pdm': lazy(() => import('@/modules/equip/pdm/EquipPdmScreen')),
+  '/equip/outsourcing': lazy(() => import('@/modules/equip/outsourcing/EquipOutsourceScreen')),
 };
 
 export default function App() {
