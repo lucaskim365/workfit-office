@@ -1,276 +1,203 @@
 import { Fragment, useState } from 'react';
 import { Card } from '@/shared/ui/Card';
-import { Pill, type Tone } from '@/shared/ui/Pill';
-import { ActionBar } from '@/shared/ui/ActionBar';
-import { T } from '@/shared/theme/tokens';
+import { Pill } from '@/shared/ui/Pill';
+import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
+import { FilterField } from '@/shared/ui/FilterBar';
 
-interface Op {
-  op: string;
-  name: string;
-  wc: string;
-  eq: string;
-  kind: '가공' | '검사' | '이동';
-  setup: number;
-  ct: number;
-  crew: number;
-  yield: number;
-}
-interface Product {
+interface Step {
+  seq: number;
   code: string;
   name: string;
+  eq: string;
+  tt: string;
+  insp: boolean;
+}
+interface Route {
+  code: string;
+  name: string;
+  product: string;
+  tt: string;
   rev: string;
-  line: string;
+  steps: Step[];
 }
 
-const PRODUCTS: Product[] = [
-  { code: 'CN-ASM-100', name: '커넥터 어셈블리', rev: 'B', line: '조립 라인' },
-  { code: 'SN-MOD-200', name: '센서 모듈', rev: 'A', line: 'SMT 라인' },
-  { code: 'BR-KIT-2T', name: '브래킷 키트', rev: 'C', line: '프레스 라인' },
+const ROUTES: Route[] = [
+  {
+    code: 'RT-WF300-A', name: '300mm 표준 라우팅', product: 'WF-300-B', tt: '162', rev: 'Rev.3',
+    steps: [
+      { seq: 10, code: 'OP-10', name: '입고/세정', eq: 'CLEAN', tt: '12', insp: false },
+      { seq: 20, code: 'OP-20', name: '포토(노광)', eq: 'PHO05', tt: '35', insp: false },
+      { seq: 30, code: 'OP-30', name: '식각(Etch)', eq: 'ETCH01', tt: '28', insp: false },
+      { seq: 40, code: 'OP-40', name: '증착(Depo)', eq: 'DEP03', tt: '40', insp: false },
+      { seq: 50, code: 'OP-50', name: 'CMP 연마', eq: 'CMP02', tt: '22', insp: false },
+      { seq: 60, code: 'OP-60', name: '검사(Inspection)', eq: 'INS-VIS', tt: '15', insp: true },
+      { seq: 70, code: 'OP-70', name: '출하 포장', eq: 'PACK', tt: '10', insp: false },
+    ],
+  },
+  {
+    code: 'RT-WF200-A', name: '200mm 표준 라우팅', product: 'WF-200-A', tt: '138', rev: 'Rev.2',
+    steps: [
+      { seq: 10, code: 'OP-10', name: '입고/세정', eq: 'CLEAN', tt: '12', insp: false },
+      { seq: 20, code: 'OP-20', name: '포토(노광)', eq: 'PHO05', tt: '30', insp: false },
+      { seq: 30, code: 'OP-30', name: '식각(Etch)', eq: 'ETCH01', tt: '26', insp: false },
+      { seq: 40, code: 'OP-50', name: 'CMP 연마', eq: 'CMP02', tt: '20', insp: false },
+      { seq: 50, code: 'OP-60', name: '검사', eq: 'INS-VIS', tt: '14', insp: true },
+      { seq: 60, code: 'OP-70', name: '출하 포장', eq: 'PACK', tt: '10', insp: false },
+    ],
+  },
+  {
+    code: 'RT-BGA-14', name: 'BGA 패키지 라우팅', product: 'PKG-BGA-14', tt: '205', rev: 'Rev.1',
+    steps: [
+      { seq: 10, code: 'OP-10', name: '다이 어태치', eq: 'DA-02', tt: '30', insp: false },
+      { seq: 20, code: 'OP-20', name: '와이어 본딩', eq: 'WB-05', tt: '45', insp: false },
+      { seq: 30, code: 'OP-30', name: '몰딩', eq: 'MLD-01', tt: '40', insp: false },
+      { seq: 40, code: 'OP-40', name: '볼 마운트', eq: 'BM-03', tt: '35', insp: false },
+      { seq: 50, code: 'OP-50', name: '마킹', eq: 'MRK-02', tt: '20', insp: false },
+      { seq: 60, code: 'OP-60', name: '외관검사', eq: 'INS-VIS', tt: '18', insp: true },
+      { seq: 70, code: 'OP-70', name: '전기검사', eq: 'FCT-01', tt: '12', insp: true },
+      { seq: 80, code: 'OP-80', name: '포장', eq: 'PACK', tt: '5', insp: false },
+    ],
+  },
 ];
 
-const ROUTING: Record<string, Op[]> = {
-  'CN-ASM-100': [
-    { op: 'OP10', name: '사출 성형', wc: 'WC-INJ', eq: '사출 03호기', kind: '가공', setup: 30, ct: 45, crew: 1, yield: 99.2 },
-    { op: 'OP20', name: '디버링/외관', wc: 'WC-DBG', eq: '–', kind: '검사', setup: 5, ct: 20, crew: 1, yield: 99.5 },
-    { op: 'OP30', name: '터미널 압착', wc: 'WC-PRS', eq: '프레스 01호기', kind: '가공', setup: 25, ct: 30, crew: 1, yield: 98.8 },
-    { op: 'OP40', name: '본체 조립', wc: 'WC-ASM', eq: '조립셀 A', kind: '가공', setup: 10, ct: 60, crew: 2, yield: 99.0 },
-    { op: 'OP50', name: '기능 검사', wc: 'WC-EOL', eq: 'EOL 테스터', kind: '검사', setup: 8, ct: 35, crew: 1, yield: 97.5 },
-    { op: 'OP60', name: '포장', wc: 'WC-PKG', eq: '–', kind: '가공', setup: 5, ct: 18, crew: 1, yield: 99.9 },
-  ],
-  'SN-MOD-200': [
-    { op: 'OP10', name: 'SMT 실장', wc: 'WC-SMT', eq: 'SMT 라인 2', kind: '가공', setup: 40, ct: 28, crew: 1, yield: 99.0 },
-    { op: 'OP20', name: '리플로우', wc: 'WC-RFL', eq: '리플로우 오븐', kind: '가공', setup: 15, ct: 22, crew: 1, yield: 99.3 },
-    { op: 'OP30', name: 'AOI 검사', wc: 'WC-AOI', eq: 'AOI 02호기', kind: '검사', setup: 6, ct: 16, crew: 1, yield: 98.2 },
-    { op: 'OP40', name: '케이스 조립', wc: 'WC-ASM', eq: '조립셀 B', kind: '가공', setup: 10, ct: 48, crew: 2, yield: 99.1 },
-    { op: 'OP50', name: '교정/검사', wc: 'WC-CAL', eq: '교정 지그', kind: '검사', setup: 12, ct: 40, crew: 1, yield: 96.8 },
-  ],
-  'BR-KIT-2T': [
-    { op: 'OP10', name: '프레스 성형', wc: 'WC-PRS', eq: '프레스 01호기', kind: '가공', setup: 35, ct: 12, crew: 1, yield: 99.4 },
-    { op: 'OP20', name: '표면 처리', wc: 'WC-SFC', eq: '도금 라인', kind: '가공', setup: 20, ct: 90, crew: 1, yield: 98.5 },
-    { op: 'OP30', name: '치수 검사', wc: 'WC-INSP', eq: '–', kind: '검사', setup: 5, ct: 25, crew: 1, yield: 99.6 },
-    { op: 'OP40', name: '키트 포장', wc: 'WC-PKG', eq: '–', kind: '가공', setup: 5, ct: 30, crew: 2, yield: 99.9 },
-  ],
-};
+/** 라우팅코드/적용제품 한 줄에 표시하는 화살표 버튼(순서 이동). */
+function ArrowBtn({ dir }: { dir: 'up' | 'down' }) {
+  return (
+    <span className="grid h-[22px] w-[22px] cursor-pointer place-items-center rounded-md border border-border-hi bg-panel text-[10px] text-ink2 hover:bg-panel-alt">
+      {dir === 'up' ? '▲' : '▼'}
+    </span>
+  );
+}
 
-const KIND_TONE: Record<Op['kind'], Tone> = { 가공: 'info', 검사: 'warn', 이동: 'mute' };
-const KIND_C: Record<Op['kind'], string> = { 가공: T.blue, 검사: T.warn, 이동: T.ink3 };
-
-/** 공정라우팅 — 제품 선택 + 공정 흐름도 + 공정 순서 상세. 와이어프레임 routing-master.jsx 정본. */
+/** 공정라우팅 — 필터 + 마스터-디테일(라우팅 목록 + 공정 순서[흐름·이동]). 와이어프레임 admin-screens.ProcessRoutingContent 정본. */
 export default function RoutingScreen() {
-  const [sel, setSel] = useState('CN-ASM-100');
-  const prod = PRODUCTS.find((p) => p.code === sel) ?? PRODUCTS[0];
-  const ops = ROUTING[sel] ?? [];
-  const totalCt = ops.reduce((s, o) => s + o.ct, 0);
-  const totalSetup = ops.reduce((s, o) => s + o.setup, 0);
-  const maxCt = Math.max(...ops.map((o) => o.ct));
-  const bottleneck = ops.find((o) => o.ct === maxCt)!;
-  const rolledYield = ops.reduce((s, o) => (s * o.yield) / 100, 1) * 100;
-
-  const kpis: Array<[string, string, string, string]> = [
-    ['등록 라우팅', String(PRODUCTS.length), '종', 'text-ink'],
-    ['공정 수', String(ops.length), 'OP', 'text-ink'],
-    ['총 표준 C/T', String(totalCt), '초', 'text-teal'],
-    ['병목 공정', `${bottleneck.op} ${bottleneck.ct}s`, '', 'text-danger'],
-    ['누적 수율(RTY)', rolledYield.toFixed(1), '%', 'text-ink'],
-  ];
+  const [selected, setSelected] = useState('RT-WF300-A');
+  const cur = ROUTES.find((r) => r.code === selected) ?? ROUTES[0];
 
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">공정라우팅</h1>
-          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 공정 정보</p>
+          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 공정라우팅</p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: '공정 추가', variant: 'primary' }, 'save', 'download']} />
+        <ActionBar actions={[{ preset: 'add', label: '라우팅 추가' }, 'save', 'upload', 'download']} />
       </div>
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        {kpis.map(([label, value, unit, color], i) => (
-          <div key={label} className="rounded-xl border border-border bg-panel px-4 py-3.5">
-            <div className="mb-1.5 text-[10.5px] font-semibold text-ink3">{label}</div>
-            <div className="flex items-baseline gap-1">
-              <span className={`font-extrabold tracking-tight tabular-nums ${color} ${i === 3 ? 'text-base' : 'text-2xl'}`}>
-                {value}
-              </span>
-              <span className="text-[11px] font-semibold text-ink3">{unit}</span>
-            </div>
-          </div>
+      {/* 필터 */}
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-border bg-panel p-3.5">
+        {['적용 제품', '상태'].map((f) => (
+          <FilterField key={f} label={f}>
+            <span className="inline-flex h-8 min-w-[110px] items-center justify-between gap-4 rounded-md border border-border-hi bg-panel px-3.5 text-[11.5px] font-semibold text-ink">
+              전체 <span className="text-[8px] text-ink3">▾</span>
+            </span>
+          </FilterField>
         ))}
+        <FilterField label="검색">
+          <span className="inline-flex h-8 w-[180px] items-center rounded-md border border-border-hi bg-panel px-3 text-[11.5px] text-ink3">라우팅코드 / 라우팅명</span>
+        </FilterField>
+        <span className="ml-auto">
+          <ActionButton icon="search" label="조회" variant="primary" />
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[250px_1fr]">
-        {/* 제품/라우팅 목록 */}
-        <Card title="제품 / 라우팅" bodyClassName="p-0">
-          <div className="py-1.5">
-            {PRODUCTS.map((p) => {
-              const on = p.code === sel;
-              const cnt = (ROUTING[p.code] ?? []).length;
-              return (
-                <button
-                  key={p.code}
-                  onClick={() => setSel(p.code)}
-                  style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}
-                  className={`flex w-full items-center gap-2.5 px-3.5 py-3 text-left transition-colors ${
-                    on ? 'bg-teal-soft' : 'hover:bg-panel-alt'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className={`text-[12px] font-bold ${on ? 'text-teal' : 'text-ink'}`}>{p.name}</div>
-                    <div className="mt-0.5 font-mono text-[9.5px] text-ink3">
-                      {p.code} · {p.line}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="rounded bg-blue-soft px-1.5 py-0.5 text-[9.5px] font-bold text-blue">
-                      Rev {p.rev}
-                    </span>
-                    <div className="mt-1 text-[9px] text-ink3">{cnt} OP</div>
-                  </div>
-                </button>
-              );
-            })}
+      {/* 마스터-디테일 */}
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_1.5fr]">
+        {/* 라우팅 목록 */}
+        <Card title="라우팅 목록" action={<span className="text-[10.5px] text-ink3">총 {ROUTES.length}건</span>} bodyClassName="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[11.5px]">
+              <thead>
+                <tr>
+                  {['라우팅코드', '적용 제품', '공정', '표준(분)', '상태'].map((h, i) => (
+                    <th key={h} className={`border-b border-border bg-panel-alt px-3 py-2.5 text-[10.5px] font-bold whitespace-nowrap text-ink2 ${i >= 2 && i <= 3 ? 'text-right' : i === 4 ? 'text-center' : 'text-left'}`}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ROUTES.map((r) => {
+                  const on = r.code === selected;
+                  return (
+                    <tr key={r.code} onClick={() => setSelected(r.code)} className={`cursor-pointer border-b border-border transition-colors ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}>
+                      <td className="px-3 py-2.5" style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}>
+                        <div className={`font-mono text-[11px] font-bold ${on ? 'text-teal' : 'text-ink'}`}>{r.code}</div>
+                        <div className="mt-0.5 text-[10px] text-ink3">{r.name}</div>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-ink2">{r.product}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-ink2">{r.steps.length}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-ink2">{r.tt}</td>
+                      <td className="px-3 py-2.5 text-center"><Pill tone={on ? 'ok' : 'mute'}>{r.rev}</Pill></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </Card>
 
-        <div className="flex flex-col gap-3.5">
-          {/* 공정 흐름도 */}
-          <Card
-            title="공정 흐름도"
-            action={
-              <span className="text-[10.5px] text-ink3">
-                {prod.name} <span className="font-mono">· Rev {prod.rev}</span>
-              </span>
-            }
-          >
-            <div className="flex items-stretch gap-0 overflow-x-auto pb-1">
-              {ops.map((o, i) => {
-                const isBn = o.ct === maxCt;
-                return (
-                  <Fragment key={o.op}>
-                    <div
-                      className={`min-w-[96px] flex-1 rounded-[10px] border-[1.5px] p-2.5 ${
-                        isBn ? 'border-danger bg-[#fdecea]' : 'border-border bg-panel'
-                      }`}
-                    >
-                      <div className="mb-1.5 flex items-center justify-between gap-1.5">
-                        <span className="font-mono text-[9.5px] font-extrabold text-ink3">{o.op}</span>
-                        {isBn ? (
-                          <span className="whitespace-nowrap rounded bg-danger px-1.5 py-px text-[8.5px] font-extrabold text-white">
-                            병목
-                          </span>
-                        ) : (
-                          <span className="h-[7px] w-[7px] rounded-sm" style={{ background: KIND_C[o.kind] }} />
-                        )}
-                      </div>
-                      <div className="mb-1.5 text-[11.5px] font-bold leading-tight text-ink">{o.name}</div>
-                      <div className={`font-mono text-[13px] font-extrabold ${isBn ? 'text-danger' : 'text-teal'}`}>
-                        {o.ct}s
-                      </div>
-                      <div className="mt-0.5 truncate text-[9px] text-ink3">{o.eq}</div>
-                    </div>
-                    {i < ops.length - 1 && (
-                      <div className="flex flex-shrink-0 items-center px-1 text-[14px] text-ink3">→</div>
-                    )}
-                  </Fragment>
-                );
-              })}
+        {/* 공정 순서 */}
+        <Card
+          title={<span>공정 순서 <span className="text-teal">· {cur.code}</span></span>}
+          action={
+            <div className="flex items-center gap-2">
+              <span className="text-[10.5px] text-ink3">{cur.steps.length}개 공정 · {cur.tt}분</span>
+              <ActionButton icon="plus" label="공정 추가" />
             </div>
-            <div className="mt-3 flex items-center gap-4 border-t border-border pt-2.5 text-[10.5px]">
-              <span className="text-ink3">
-                총 표준시간 <b className="font-mono text-ink">{totalCt}s</b> · Setup{' '}
-                <b className="font-mono text-ink2">{totalSetup}분</b>
-              </span>
-              <span className="text-ink3">
-                라인 택트(병목) <b className="font-mono text-danger">{maxCt}s/EA</b>
-              </span>
-              <div className="ml-auto flex gap-3">
-                {(['가공', '검사'] as const).map((k) => (
-                  <span key={k} className="flex items-center gap-1.5 font-semibold text-ink2">
-                    <span className="h-2 w-2 rounded-sm" style={{ background: KIND_C[k] }} />
-                    {k}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </Card>
+          }
+          bodyClassName="p-0"
+        >
+          {/* 흐름 */}
+          <div className="flex items-center overflow-x-auto px-3.5 pb-1.5 pt-3.5">
+            {cur.steps.map((p, i) => (
+              <Fragment key={p.seq}>
+                <div className={`w-[78px] flex-shrink-0 rounded-[9px] border-[1.5px] px-1.5 py-2 text-center ${p.insp ? 'border-amber bg-[#fdf6e8]' : 'border-border bg-panel'}`}>
+                  <div className="font-mono text-[9px] font-bold text-ink3">{p.code}</div>
+                  <div className="mt-0.5 text-[10.5px] font-bold leading-tight text-ink">{p.name}</div>
+                </div>
+                {i < cur.steps.length - 1 && <span className="flex-shrink-0 px-px text-[14px] text-border-hi">→</span>}
+              </Fragment>
+            ))}
+          </div>
 
-          {/* 공정 순서 상세 */}
-          <Card title="공정 순서 상세" bodyClassName="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[11.5px]">
-                <thead>
-                  <tr>
-                    {['공정', '구분', '작업장 / 설비', 'Setup(분)', '표준 C/T(초)', '인원', '공정수율'].map((h, i) => (
-                      <th
-                        key={h}
-                        className={`border-b border-border bg-panel-alt px-3 py-2.5 text-[10.5px] font-bold whitespace-nowrap text-ink2 ${
-                          i === 3 || i === 6 ? 'text-right' : i === 1 || i === 5 ? 'text-center' : 'text-left'
-                        }`}
-                      >
-                        {h}
-                      </th>
-                    ))}
+          {/* 테이블 */}
+          <div className="mt-1.5 overflow-x-auto">
+            <table className="w-full border-collapse text-[11.5px]">
+              <thead>
+                <tr>
+                  <th className="w-[50px] border-b border-border bg-panel-alt px-3 py-2.5 text-center text-[10.5px] font-bold text-ink2">순서</th>
+                  {['공정코드', '공정명', '표준설비', 'T/T(분)', '검사'].map((h, i) => (
+                    <th key={h} className={`border-b border-border bg-panel-alt px-3 py-2.5 text-[10.5px] font-bold whitespace-nowrap text-ink2 ${i === 3 ? 'text-right' : i === 4 ? 'text-center' : 'text-left'}`}>
+                      {h}
+                    </th>
+                  ))}
+                  <th className="w-[70px] border-b border-border bg-panel-alt px-3 py-2.5 text-center text-[10.5px] font-bold text-ink2">이동</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cur.steps.map((p, i) => (
+                  <tr key={p.seq} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                    <td className="border-b border-border px-3 py-2.5 text-center font-extrabold tabular-nums text-navy">{p.seq}</td>
+                    <td className="border-b border-border px-3 py-2.5 font-mono font-bold text-ink">{p.code}</td>
+                    <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{p.name}</td>
+                    <td className="border-b border-border px-3 py-2.5 font-mono text-ink2">{p.eq}</td>
+                    <td className="border-b border-border px-3 py-2.5 text-right font-semibold tabular-nums text-ink2">{p.tt}</td>
+                    <td className="border-b border-border px-3 py-2.5 text-center">
+                      {p.insp ? <Pill tone="warn">검사</Pill> : <span className="text-ink3">—</span>}
+                    </td>
+                    <td className="border-b border-border px-3 py-2.5 text-center">
+                      <span className="inline-flex gap-1">
+                        <ArrowBtn dir="up" />
+                        <ArrowBtn dir="down" />
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {ops.map((o, i) => {
-                    const isBn = o.ct === maxCt;
-                    return (
-                      <tr key={o.op} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                        <td className="border-b border-border px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="w-8 font-mono text-[9.5px] font-extrabold text-ink3">{o.op}</span>
-                            <span className="font-bold text-ink">{o.name}</span>
-                          </div>
-                        </td>
-                        <td className="border-b border-border px-3 py-2.5 text-center">
-                          <Pill tone={KIND_TONE[o.kind]}>{o.kind}</Pill>
-                        </td>
-                        <td className="border-b border-border px-3 py-2.5">
-                          <span className="font-mono text-[10.5px] text-ink2">{o.wc}</span>
-                          <div className="mt-0.5 text-[9.5px] text-ink3">{o.eq}</div>
-                        </td>
-                        <td className="border-b border-border px-3 py-2.5 text-right font-mono text-ink2">{o.setup}</td>
-                        <td className="border-b border-border px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 min-w-[70px] flex-1 rounded bg-bg-deep">
-                              <div
-                                className="h-full rounded"
-                                style={{ width: `${(o.ct / maxCt) * 100}%`, background: isBn ? T.err : T.teal }}
-                              />
-                            </div>
-                            <span
-                              className={`w-8 text-right font-mono font-extrabold ${isBn ? 'text-danger' : 'text-ink'}`}
-                            >
-                              {o.ct}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="border-b border-border px-3 py-2.5 text-center font-mono text-ink2">{o.crew}명</td>
-                        <td
-                          className={`border-b border-border px-3 py-2.5 text-right font-mono font-bold ${
-                            o.yield < 98 ? 'text-amber' : 'text-ink2'
-                          }`}
-                        >
-                          {o.yield}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-between border-t border-border bg-panel-alt px-4 py-2.5">
-              <span className="text-[10.5px] text-ink3">
-                {ops.length}개 공정 · 누적 수율(RTY) <b className="text-ink2">{rolledYield.toFixed(1)}%</b>
-              </span>
-              <span className="text-[11px] text-ink3">
-                병목 <b className="text-danger">{bottleneck.op} {bottleneck.name}</b> — 라인 능력 결정 공정
-              </span>
-            </div>
-          </Card>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
     </div>
   );
