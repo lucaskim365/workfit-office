@@ -7,15 +7,16 @@ import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
-import type { User } from './mock';
+import { ROLE_GROUPS, type User } from './mock';
 
-const STATUS = ['활성', '휴직', '잠금'] as const;
+const STATUS = ['사용', '잠금', '미사용'] as const;
 
 const schema = z.object({
-  empNo: z.string().min(1, '사번을 입력하세요').max(20, '사번이 너무 깁니다'),
+  empNo: z.string().min(1, '사번을 입력하세요').max(20),
   name: z.string().min(1, '이름을 입력하세요').max(30),
-  dept: z.string().min(1, '부서를 선택하세요'),
-  role: z.string().min(1, '역할을 입력하세요').max(40),
+  dept: z.string().min(1, '부서를 입력하세요').max(30),
+  position: z.string().min(1, '직책을 입력하세요').max(20),
+  roleGroup: z.enum(ROLE_GROUPS),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(STATUS),
 });
@@ -26,27 +27,20 @@ const EMPTY: UserFormValues = {
   empNo: '',
   name: '',
   dept: '',
-  role: '',
+  position: '',
+  roleGroup: 'OPERATOR',
   email: '',
-  status: '활성',
+  status: '사용',
 };
 
 interface UserFormModalProps {
   open: boolean;
-  /** 값이 있으면 수정, 없으면 신규. */
   initial?: User | null;
-  deptOptions: string[];
   onClose: () => void;
   onSubmit: (values: UserFormValues, id?: string) => void;
 }
 
-export default function UserFormModal({
-  open,
-  initial,
-  deptOptions,
-  onClose,
-  onSubmit,
-}: UserFormModalProps) {
+export default function UserFormModal({ open, initial, onClose, onSubmit }: UserFormModalProps) {
   const {
     register,
     handleSubmit,
@@ -57,7 +51,6 @@ export default function UserFormModal({
     defaultValues: EMPTY,
   });
 
-  // 열릴 때마다 초기값 동기화
   useEffect(() => {
     if (!open) return;
     reset(
@@ -66,19 +59,14 @@ export default function UserFormModal({
             empNo: initial.empNo,
             name: initial.name,
             dept: initial.dept,
-            role: initial.role,
+            position: initial.position,
+            roleGroup: initial.roleGroup as UserFormValues['roleGroup'],
             email: initial.email,
             status: initial.status,
           }
         : EMPTY,
     );
   }, [open, initial, reset]);
-
-  const deptSelectOptions = [
-    { value: '', label: '부서 선택' },
-    ...deptOptions.map((d) => ({ value: d, label: d })),
-  ];
-  const statusOptions = STATUS.map((s) => ({ value: s, label: s }));
 
   const submit = handleSubmit((values) => {
     onSubmit(values, initial?.id);
@@ -100,29 +88,34 @@ export default function UserFormModal({
     >
       <form onSubmit={submit} className="grid grid-cols-2 gap-x-4 gap-y-3.5">
         <Field label="사번" required error={errors.empNo?.message}>
-          <TextField {...register('empNo')} invalid={!!errors.empNo} placeholder="E2024-001" />
+          <TextField {...register('empNo')} invalid={!!errors.empNo} placeholder="A00000" />
         </Field>
         <Field label="이름" required error={errors.name?.message}>
           <TextField {...register('name')} invalid={!!errors.name} placeholder="홍길동" />
         </Field>
         <Field label="부서" required error={errors.dept?.message}>
-          <SelectField {...register('dept')} invalid={!!errors.dept} options={deptSelectOptions} />
+          <TextField {...register('dept')} invalid={!!errors.dept} placeholder="생산1팀" />
+        </Field>
+        <Field label="직책" required error={errors.position?.message}>
+          <TextField {...register('position')} invalid={!!errors.position} placeholder="담당" />
+        </Field>
+        <Field label="권한그룹" required error={errors.roleGroup?.message}>
+          <SelectField
+            {...register('roleGroup')}
+            invalid={!!errors.roleGroup}
+            options={ROLE_GROUPS.map((r) => ({ value: r, label: r }))}
+          />
         </Field>
         <Field label="상태" required error={errors.status?.message}>
-          <SelectField {...register('status')} invalid={!!errors.status} options={statusOptions} />
+          <SelectField
+            {...register('status')}
+            invalid={!!errors.status}
+            options={STATUS.map((s) => ({ value: s, label: s }))}
+          />
         </Field>
         <div className="col-span-2">
-          <Field label="역할" required error={errors.role?.message}>
-            <TextField {...register('role')} invalid={!!errors.role} placeholder="생산 관리자" />
-          </Field>
-        </div>
-        <div className="col-span-2">
           <Field label="이메일" required error={errors.email?.message}>
-            <TextField
-              {...register('email')}
-              invalid={!!errors.email}
-              placeholder="user@workfit.co.kr"
-            />
+            <TextField {...register('email')} invalid={!!errors.email} placeholder="user@workfit.co.kr" />
           </Field>
         </div>
       </form>
