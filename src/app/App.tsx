@@ -124,6 +124,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/oqc-wait': lazy(() => import('@/modules/qual/oqc-wait/QualOqcWaitScreen')),
   '/qual/oqc-release': lazy(() => import('@/modules/qual/oqc-release/QualOqcReleaseScreen')),
   '/qual/oqc-coa': lazy(() => import('@/modules/qual/oqc-coa/QualOqcCoaScreen')),
+  // 품질 관리 — 부적합·불량 관리
+  '/qual/ncr': lazy(() => import('@/modules/qual/ncr/QualNcrScreen')),
+  '/qual/mrb': lazy(() => import('@/modules/qual/mrb/QualMrbScreen')),
+  '/qual/rework': lazy(() => import('@/modules/qual/rework/QualReworkScreen')),
+  '/qual/capa': lazy(() => import('@/modules/qual/capa/QualCapaScreen')),
 };
 
 export default function App() {
