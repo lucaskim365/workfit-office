@@ -120,6 +120,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/pqc-self': lazy(() => import('@/modules/qual/pqc-self/QualPqcSelfScreen')),
   '/qual/pqc-patrol': lazy(() => import('@/modules/qual/pqc-patrol/QualPqcPatrolScreen')),
   '/qual/pqc-interface': lazy(() => import('@/modules/qual/pqc-interface/QualPqcInterfaceScreen')),
+  // 품질 관리 — 출하검사(OQC)
+  '/qual/oqc-wait': lazy(() => import('@/modules/qual/oqc-wait/QualOqcWaitScreen')),
+  '/qual/oqc-release': lazy(() => import('@/modules/qual/oqc-release/QualOqcReleaseScreen')),
+  '/qual/oqc-coa': lazy(() => import('@/modules/qual/oqc-coa/QualOqcCoaScreen')),
 };
 
 export default function App() {
