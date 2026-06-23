@@ -73,6 +73,8 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/andon': lazy(() => import('@/modules/equip/andon/EquipAndonScreen')),
   '/equip/oee': lazy(() => import('@/modules/equip/oee/EquipOeeScreen')),
   '/equip/alarm': lazy(() => import('@/modules/equip/alarm/EquipAlarmMonScreen')),
+  '/equip/param': lazy(() => import('@/modules/equip/param/EquipParamScreen')),
+  '/equip/downtime': lazy(() => import('@/modules/equip/downtime/EquipDowntimeScreen')),
 };
 
 export default function App() {
