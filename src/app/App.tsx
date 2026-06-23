@@ -21,6 +21,11 @@ import CalendarScreen from '@/modules/sys/calendar/CalendarScreen';
 import EnvScreen from '@/modules/sys/env/EnvScreen';
 import BackupScreen from '@/modules/sys/backup/BackupScreen';
 import InterfaceScreen from '@/modules/sys/interface/InterfaceScreen';
+import ProdPlanScreen from '@/modules/prod/plan/ProdPlanScreen';
+import WorkOrderScreen from '@/modules/prod/wo/WorkOrderScreen';
+import WorkOrderEditScreen from '@/modules/prod/wo-change/WorkOrderEditScreen';
+import ScheduleScreen from '@/modules/prod/schedule/ScheduleScreen';
+import UrgentScreen from '@/modules/prod/urgent/UrgentScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
@@ -47,6 +52,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/sys/env': EnvScreen,
   '/sys/backup': BackupScreen,
   '/sys/interface': InterfaceScreen,
+  '/prod/plan': ProdPlanScreen,
+  '/prod/wo': WorkOrderScreen,
+  '/prod/wo-change': WorkOrderEditScreen,
+  '/prod/schedule': ScheduleScreen,
+  '/prod/urgent': UrgentScreen,
 };
 
 export default function App() {
