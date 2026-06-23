@@ -62,6 +62,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/prod/routing': lazy(() => import('@/modules/prod/routing/RoutingMasterScreen')),
   '/prod/workcenter': lazy(() => import('@/modules/prod/workcenter/WorkcenterMapScreen')),
   '/prod/shift': lazy(() => import('@/modules/prod/shift/ShiftMgmtScreen')),
+  // 설비 관리 — 기준정보
+  '/equip/master': lazy(() => import('@/modules/equip/master/EquipMasterScreen')),
+  '/equip/spec': lazy(() => import('@/modules/equip/spec/EquipSpecScreen')),
+  '/equip/bom': lazy(() => import('@/modules/equip/bom/EquipBomScreen')),
 };
 
 export default function App() {
