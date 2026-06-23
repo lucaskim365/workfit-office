@@ -141,6 +141,20 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/gage-master': lazy(() => import('@/modules/qual/gage-master/QualGageMasterScreen')),
   '/qual/cal': lazy(() => import('@/modules/qual/cal/QualCalScreen')),
   '/qual/gage-rr': lazy(() => import('@/modules/qual/gage-rr/QualGageRrScreen')),
+  // 자재 관리 — 입고·창고
+  '/mat/receipt': lazy(() => import('@/modules/mat/receipt/MatReceiptScreen')),
+  '/mat/label': lazy(() => import('@/modules/mat/label/MatLabelScreen')),
+  '/mat/holding': lazy(() => import('@/modules/mat/holding/MatHoldingScreen')),
+  '/mat/return': lazy(() => import('@/modules/mat/return/MatReturnScreen')),
+  '/mat/location': lazy(() => import('@/modules/mat/location/MatLocationScreen')),
+  '/mat/putaway': lazy(() => import('@/modules/mat/putaway/MatPutawayScreen')),
+  // 자재 관리 — 이송·불출·출하·재고
+  '/mat/transfer': lazy(() => import('@/modules/mat/transfer/MatTransferScreen')),
+  '/mat/request': lazy(() => import('@/modules/mat/request/MatRequestScreen')),
+  '/mat/picking': lazy(() => import('@/modules/mat/picking/MatPickingScreen')),
+  '/mat/issuing': lazy(() => import('@/modules/mat/issuing/MatIssuingScreen')),
+  '/mat/shipping': lazy(() => import('@/modules/mat/shipping/MatShippingScreen')),
+  '/mat/stock': lazy(() => import('@/modules/mat/stock/MatStockScreen')),
 };
 
 export default function App() {
