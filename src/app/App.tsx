@@ -129,6 +129,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/mrb': lazy(() => import('@/modules/qual/mrb/QualMrbScreen')),
   '/qual/rework': lazy(() => import('@/modules/qual/rework/QualReworkScreen')),
   '/qual/capa': lazy(() => import('@/modules/qual/capa/QualCapaScreen')),
+  // 품질 관리 — 통계적 공정관리(SPC)
+  '/qual/spc-chart': lazy(() => import('@/modules/qual/spc-chart/QualSpcChartScreen')),
+  '/qual/spc-cpk': lazy(() => import('@/modules/qual/spc-cpk/QualSpcCpkScreen')),
+  '/qual/spc-alarm': lazy(() => import('@/modules/qual/spc-alarm/QualSpcAlarmScreen')),
 };
 
 export default function App() {
