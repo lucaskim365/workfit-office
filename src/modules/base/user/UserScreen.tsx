@@ -5,17 +5,13 @@ import { DataTable, type Column } from '@/shared/ui/DataTable';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
 import { USERS, type User } from './mock';
+import UserFormModal, { type UserFormValues } from './UserFormModal';
 
 const STATUS_TONE: Record<User['status'], Tone> = {
   활성: 'ok',
   휴직: 'mute',
   잠금: 'err',
 };
-
-const DEPT_OPTIONS: Option[] = [
-  { value: '', label: '전체 부서' },
-  ...[...new Set(USERS.map((u) => u.dept))].map((d) => ({ value: d, label: d })),
-];
 
 const STATUS_OPTIONS: Option[] = [
   { value: '', label: '전체 상태' },
@@ -24,47 +20,71 @@ const STATUS_OPTIONS: Option[] = [
   { value: '잠금', label: '잠금' },
 ];
 
-const COLUMNS: Column<User>[] = [
-  { key: 'empNo', header: '사번', mono: true, sortable: true, width: 110 },
-  { key: 'name', header: '이름', sortable: true, width: 90 },
-  { key: 'dept', header: '부서', sortable: true },
-  { key: 'role', header: '역할', sortable: true },
-  { key: 'email', header: '이메일' },
-  {
-    key: 'status',
-    header: '상태',
-    align: 'center',
-    sortable: true,
-    width: 80,
-    render: (u) => (
-      <Pill tone={STATUS_TONE[u.status]} solid={u.status === '잠금'}>
-        {u.status}
-      </Pill>
-    ),
-  },
-  { key: 'lastLogin', header: '최근 접속', align: 'right', mono: true, sortable: true, width: 140 },
-];
-
-/** 사용자관리 — 공통 FilterBar / ActionBar / DataTable 적용 화면. */
+/** 사용자관리 — FilterBar / ActionBar / DataTable / Modal(RHF+Zod) 통합 화면. */
 export default function UserScreen() {
-  // 입력 중 필터(draft) → '조회' 시 적용(applied) 패턴
+  const [list, setList] = useState<User[]>(USERS);
   const [draft, setDraft] = useState({ dept: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
 
+  // 모달: editing === undefined(닫힘) / null(추가) / User(수정)
+  const [editing, setEditing] = useState<User | null | undefined>(undefined);
+
+  const deptOptions = useMemo(() => [...new Set(list.map((u) => u.dept))], [list]);
+  const deptFilterOptions: Option[] = [
+    { value: '', label: '전체 부서' },
+    ...deptOptions.map((d) => ({ value: d, label: d })),
+  ];
+
   const rows = useMemo(() => {
     const kw = applied.q.trim().toLowerCase();
-    return USERS.filter(
+    return list.filter(
       (u) =>
         (!applied.dept || u.dept === applied.dept) &&
         (!applied.status || u.status === applied.status) &&
-        (!kw || [u.empNo, u.name, u.dept, u.role, u.email].some((v) => v.toLowerCase().includes(kw))),
+        (!kw ||
+          [u.empNo, u.name, u.dept, u.role, u.email].some((v) => v.toLowerCase().includes(kw))),
     );
-  }, [applied]);
+  }, [list, applied]);
+
+  const columns: Column<User>[] = [
+    { key: 'empNo', header: '사번', mono: true, sortable: true, width: 110 },
+    { key: 'name', header: '이름', sortable: true, width: 90 },
+    { key: 'dept', header: '부서', sortable: true },
+    { key: 'role', header: '역할', sortable: true },
+    { key: 'email', header: '이메일' },
+    {
+      key: 'status',
+      header: '상태',
+      align: 'center',
+      sortable: true,
+      width: 80,
+      render: (u) => (
+        <Pill tone={STATUS_TONE[u.status]} solid={u.status === '잠금'}>
+          {u.status}
+        </Pill>
+      ),
+    },
+    { key: 'lastLogin', header: '최근 접속', align: 'right', mono: true, sortable: true, width: 140 },
+  ];
+
+  const handleSubmit = (values: UserFormValues, id?: string) => {
+    if (id) {
+      setList((prev) => prev.map((u) => (u.id === id ? { ...u, ...values } : u)));
+    } else {
+      const newUser: User = { id: `U${Date.now()}`, lastLogin: '-', ...values };
+      setList((prev) => [newUser, ...prev]);
+    }
+  };
+
+  const handleDelete = () => {
+    if (selected.length === 0) return;
+    setList((prev) => prev.filter((u) => !selected.includes(u.id)));
+    setSelected([]);
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* 페이지 헤더 */}
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자관리</h1>
@@ -73,13 +93,12 @@ export default function UserScreen() {
         <ActionBar actions={['refresh', 'upload', 'download']} />
       </div>
 
-      {/* 필터 바 */}
       <FilterBar onSearch={() => setApplied(draft)}>
         <FilterField label="부서">
           <Select
             value={draft.dept}
             onChange={(v) => setDraft({ ...draft, dept: v })}
-            options={DEPT_OPTIONS}
+            options={deptFilterOptions}
             width={140}
           />
         </FilterField>
@@ -102,10 +121,16 @@ export default function UserScreen() {
         </FilterField>
       </FilterBar>
 
-      {/* 목록 */}
       <Card
         title="사용자 목록"
-        action={<ActionBar actions={[{ preset: 'add', label: '사용자 추가', variant: 'primary' }, 'delete']} />}
+        action={
+          <ActionBar
+            actions={[
+              { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 },
+              { preset: 'add', label: '사용자 추가', variant: 'primary', onClick: () => setEditing(null) },
+            ]}
+          />
+        }
         bodyClassName="p-3"
       >
         {selected.length > 0 && (
@@ -120,15 +145,24 @@ export default function UserScreen() {
           </div>
         )}
         <DataTable<User>
-          columns={COLUMNS}
+          columns={columns}
           rows={rows}
           rowKey={(u) => u.id}
           pageSize={10}
           selectable
           selectedKeys={selected}
           onSelectionChange={setSelected}
+          onRowClick={(u) => setEditing(u)}
         />
       </Card>
+
+      <UserFormModal
+        open={editing !== undefined}
+        initial={editing}
+        deptOptions={deptOptions}
+        onClose={() => setEditing(undefined)}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }
