@@ -93,6 +93,11 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/equip/mold-shot': lazy(() => import('@/modules/equip/mold-shot/MoldShotScreen')),
   '/equip/mold-repair': lazy(() => import('@/modules/equip/mold-repair/MoldRepairScreen')),
   '/equip/mold-location': lazy(() => import('@/modules/equip/mold-location/MoldLocationScreen')),
+  // 설비 관리 — 계측기 및 검교정
+  '/equip/gage-master': lazy(() => import('@/modules/equip/gage-master/GageMasterScreen')),
+  '/equip/cal-plan': lazy(() => import('@/modules/equip/cal-plan/CalPlanScreen')),
+  '/equip/cal-result': lazy(() => import('@/modules/equip/cal-result/CalResultScreen')),
+  '/equip/cal-fail': lazy(() => import('@/modules/equip/cal-fail/CalFailScreen')),
 };
 
 export default function App() {
