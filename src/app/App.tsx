@@ -137,6 +137,10 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/qual/trace-lot': lazy(() => import('@/modules/qual/trace-lot/QualTraceLotScreen')),
   '/qual/voc': lazy(() => import('@/modules/qual/voc/QualVocScreen')),
   '/qual/8d-report': lazy(() => import('@/modules/qual/8d-report/Qual8dReportScreen')),
+  // 품질 관리 — 계측기·신뢰성 관리
+  '/qual/gage-master': lazy(() => import('@/modules/qual/gage-master/QualGageMasterScreen')),
+  '/qual/cal': lazy(() => import('@/modules/qual/cal/QualCalScreen')),
+  '/qual/gage-rr': lazy(() => import('@/modules/qual/gage-rr/QualGageRrScreen')),
 };
 
 export default function App() {
