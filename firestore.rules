@@ -25,7 +25,7 @@ service cloud.firestore {
         'shifts', 'shiftRotations', 'workCenters', 'boms', 'routings',
         'stockMovements', 'counters', 'workOrders', 'salesOrders',
         'shipments', 'receipts', 'issues', 'inspectionItems',
-        'inspectionStandards', 'defectCodes', 'qualityGrades'
+        'inspectionStandards', 'defectCodes', 'qualityGrades', 'inspections'
       ];
     }
 

@@ -38,6 +38,7 @@ import { INSPECTION_ITEM_SEED } from '@/data/seeds/inspectionItem.seed';
 import { INSPECTION_STANDARD_SEED } from '@/data/seeds/inspectionStandard.seed';
 import { DEFECT_CODE_SEED } from '@/data/seeds/defectCode.seed';
 import { QUALITY_GRADE_SEED } from '@/data/seeds/qualityGrade.seed';
+import { INSPECTION_SEED } from '@/data/seeds/inspection.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -68,6 +69,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'inspectionStandards', docs: INSPECTION_STANDARD_SEED, id: (d) => d.code },
   { coll: 'defectCodes', docs: DEFECT_CODE_SEED, id: (d) => d.code },
   { coll: 'qualityGrades', docs: QUALITY_GRADE_SEED, id: (d) => d.code },
+  { coll: 'inspections', docs: INSPECTION_SEED, id: (d) => d.recv },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
