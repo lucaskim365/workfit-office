@@ -7,24 +7,12 @@ import { LineChart } from '@/shared/ui/charts/LineChart';
 import { KPIS, SPARK } from '@/modules/ops/dashboard/mock';
 import { ProgBar } from '../_bits';
 import { T } from '@/shared/theme/tokens';
-
-interface Line {
-  line: string;
-  item: string;
-  plan: number;
-  act: number;
-  eq: '가동' | '대기';
-  oee: number;
-}
-
-const LINES: Line[] = [
-  { line: 'M-Line', item: 'WF-300-B', plan: 4000, act: 2480, eq: '가동', oee: 89 },
-  { line: 'P-Line', item: 'PKG-BGA-14', plan: 2500, act: 1625, eq: '가동', oee: 84 },
-  { line: 'A-Line', item: 'MOD-CAM-02', plan: 1800, act: 540, eq: '대기', oee: 61 },
-];
+import { useLineMonitors } from '@/features/lineMonitor/useLineMonitors';
 
 /** 생산 현황 모니터링 — 와이어프레임 prod-screens.LineMonitorContent 정본. */
 export default function LineMonitorScreen() {
+  const { data: lines = [], isLoading } = useLineMonitors();
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -45,7 +33,12 @@ export default function LineMonitorScreen() {
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-        {LINES.map((l) => {
+        {lines.length === 0 && (
+          <div className="col-span-full grid place-items-center py-10 text-[13px] text-ink3">
+            {isLoading ? '불러오는 중…' : '라인 정보가 없습니다.'}
+          </div>
+        )}
+        {lines.map((l) => {
           const tone: Tone = l.eq === '가동' ? 'ok' : 'warn';
           return (
             <Card

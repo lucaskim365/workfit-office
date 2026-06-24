@@ -2,25 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
-
-interface Wip {
-  lot: string;
-  name: string;
-  cur: string;
-  next: string;
-  qty: number;
-  good: number;
-  bad: number;
-  wait: number;
-}
-
-const WIP: Wip[] = [
-  { lot: 'LOT-2606-A12', name: '커넥터 하우징', cur: 'OP10 사출성형', next: 'OP20 디버링/검사', qty: 4800, good: 4760, bad: 40, wait: 0.4 },
-  { lot: 'LOT-2606-B07', name: '터미널 핀', cur: 'OP30 터미널압착', next: 'OP40 본체조립', qty: 12000, good: 11940, bad: 60, wait: 1.2 },
-  { lot: 'LOT-2606-C03', name: '커넥터 어셈블리', cur: 'OP40 본체조립', next: 'OP50 기능검사', qty: 2400, good: 2376, bad: 24, wait: 2.6 },
-  { lot: 'LOT-2606-D09', name: '센서 모듈 PCB', cur: 'OP10 SMT실장', next: 'OP20 리플로우', qty: 5400, good: 5360, bad: 40, wait: 0.2 },
-  { lot: 'LOT-2606-E02', name: '센서 모듈', cur: 'OP50 기능검사', next: '입고 / 완료', qty: 1480, good: 1452, bad: 28, wait: 3.1 },
-];
+import { useMoveWip } from '@/features/moveWip/useMoveWip';
 
 interface Tx {
   no: string;
@@ -47,14 +29,19 @@ const stTone = (s: Tx['state']): Tone => (s === '완료' ? 'ok' : 'info');
 
 /** 공정 이동 처리 — 와이어프레임 move.jsx 정본. */
 export default function MoveScreen() {
+  const { data: wips = [], isLoading } = useMoveWip();
   const [lot, setLot] = useState('LOT-2606-A12');
   const [filter, setFilter] = useState('전체');
-  const cur = WIP.find((w) => w.lot === lot) ?? WIP[0];
+  const cur = wips.find((w) => w.lot === lot) ?? wips[0];
   const rows = TX.filter((t) => filter === '전체' || t.state === filter);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '이동 대기 재공 LOT이 없습니다.'}</div>;
+  }
 
   const kpis: Array<[string, string, string, string]> = [
     ['금일 이동', '5', '건', 'text-ink'],
-    ['이동 대기 LOT', String(WIP.length), '건', 'text-blue'],
+    ['이동 대기 LOT', String(wips.length), '건', 'text-blue'],
     ['양품 이동수량', '24,860', 'EA', 'text-teal'],
     ['불량 분류', '190', 'EA', 'text-danger'],
     ['정체 LOT(2h+)', '2', '건', 'text-amber'],
@@ -87,7 +74,7 @@ export default function MoveScreen() {
         <Card title="공정 이동 등록">
           <label className="mb-1.5 block text-[10.5px] font-bold text-ink3">이동 대상 LOT (재공)</label>
           <div className="mb-3.5 flex max-h-[188px] flex-col gap-1.5 overflow-y-auto">
-            {WIP.map((w) => {
+            {wips.map((w) => {
               const on = w.lot === lot;
               return (
                 <button key={w.lot} onClick={() => setLot(w.lot)} className={`rounded-lg border-[1.5px] px-3 py-2 text-left ${on ? 'border-teal bg-teal-soft' : 'border-border bg-panel'}`}>

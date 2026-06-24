@@ -93,6 +93,12 @@ import { URGENT_ORDER_SEED } from '@/data/seeds/urgentOrder.seed';
 import { PRODUCTION_RESULT_SEED } from '@/data/seeds/productionResult.seed';
 import { JOB_LOG_SEED } from '@/data/seeds/jobLog.seed';
 import { WIP_STATUS_SEED } from '@/data/seeds/wipStatus.seed';
+import { LINE_MONITOR_SEED } from '@/data/seeds/lineMonitor.seed';
+import { MOVE_WIP_SEED } from '@/data/seeds/moveWip.seed';
+import { PROD_DEFECT_SEED } from '@/data/seeds/prodDefect.seed';
+import { MATERIAL_LOAD_SEED } from '@/data/seeds/materialLoad.seed';
+import { MATERIAL_REQUEST_SEED } from '@/data/seeds/materialRequest.seed';
+import { PROD_LOT_TRACE_SEED } from '@/data/seeds/prodLotTrace.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -179,6 +185,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'productionResults', docs: PRODUCTION_RESULT_SEED, id: (d) => d.no },
   { coll: 'jobLogs', docs: JOB_LOG_SEED, id: (d) => d.no },
   { coll: 'wipStatus', docs: WIP_STATUS_SEED, id: (d) => d.id },
+  { coll: 'lineMonitors', docs: LINE_MONITOR_SEED, id: (d) => d.line },
+  { coll: 'moveWip', docs: MOVE_WIP_SEED, id: (d) => d.lot },
+  { coll: 'prodDefects', docs: PROD_DEFECT_SEED, id: (d) => d.no },
+  { coll: 'materialLoads', docs: MATERIAL_LOAD_SEED, id: (d) => d.id },
+  { coll: 'materialRequests', docs: MATERIAL_REQUEST_SEED, id: (d) => d.wo },
+  { coll: 'prodLotTraces', docs: PROD_LOT_TRACE_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

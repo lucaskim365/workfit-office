@@ -38,7 +38,8 @@ service cloud.firestore {
         'andonStatus', 'oeeEquipments', 'liveAlarms', 'equipParams', 'downtimes',
         'molds', 'moldShots', 'moldRepairs', 'moldLocations',
         'equipGages', 'calPlans', 'calResults', 'calFails',
-        'prodPlans', 'scheduleEntries', 'urgentOrders', 'productionResults', 'jobLogs', 'wipStatus'
+        'prodPlans', 'scheduleEntries', 'urgentOrders', 'productionResults', 'jobLogs', 'wipStatus',
+        'lineMonitors', 'moveWip', 'prodDefects', 'materialLoads', 'materialRequests', 'prodLotTraces'
       ];
     }
 

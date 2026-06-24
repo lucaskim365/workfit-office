@@ -1,18 +1,14 @@
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
-
-const ROWS: Array<[string, string, string, string, string, string]> = [
-  ['WF-300-B', '300mm 웨이퍼', 'LOT-RAW-8821', '2,500', '2,480', '정상'],
-  ['CHM-SL-05', '슬러리 SL-05', 'LOT-CHM-0457', '40', '38', '정상'],
-  ['RES-PR-22', '포토레지스트', 'LOT-RES-1120', '20', '20', '정상'],
-  ['CHM-GAS-02', '공정 가스', 'LOT-GAS-0099', '15', '17', '초과'],
-];
+import { useMaterialLoads } from '@/features/materialLoad/useMaterialLoads';
 
 const tone = (s: string): Tone => (s === '정상' ? 'ok' : 'err');
 
 /** 자재 투입 관리 — 와이어프레임 prod-screens-2.MaterialLoadContent 정본. */
 export default function MaterialLoadScreen() {
+  const { data: rows = [], isLoading } = useMaterialLoads();
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -56,16 +52,24 @@ export default function MaterialLoadScreen() {
                 </tr>
               </thead>
               <tbody>
-                {ROWS.map((r, i) => (
-                  <tr key={r[0]} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                    <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] font-bold text-ink">{r[0]}</td>
-                    <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{r[1]}</td>
-                    <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r[2]}</td>
-                    <td className="border-b border-border px-3 py-2.5 text-right tabular-nums text-ink2">{r[3]}</td>
-                    <td className={`border-b border-border px-3 py-2.5 text-right font-bold tabular-nums ${r[5] === '초과' ? 'text-danger' : 'text-ink'}`}>{r[4]}</td>
-                    <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={tone(r[5])}>{r[5]}</Pill></td>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="border-b border-border px-3 py-10 text-center text-[11px] text-ink3">
+                      {isLoading ? '불러오는 중…' : '투입 자재가 없습니다.'}
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  rows.map((r, i) => (
+                    <tr key={r.id} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                      <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] font-bold text-ink">{r.mat}</td>
+                      <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{r.name}</td>
+                      <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r.lot}</td>
+                      <td className="border-b border-border px-3 py-2.5 text-right tabular-nums text-ink2">{r.req}</td>
+                      <td className={`border-b border-border px-3 py-2.5 text-right font-bold tabular-nums ${r.state === '초과' ? 'text-danger' : 'text-ink'}`}>{r.actual}</td>
+                      <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={tone(r.state)}>{r.state}</Pill></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

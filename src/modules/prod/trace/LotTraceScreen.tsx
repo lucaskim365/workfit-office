@@ -2,6 +2,7 @@ import { Card } from '@/shared/ui/Card';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '../_bits';
+import { useProdLotTraces } from '@/features/prodLotTrace/useProdLotTraces';
 
 const FWD = [
   { op: 'OP-10 입고/세정', eq: 'CLEAN', worker: '이순신', t: '06-09 08:12', mat: 'LOT-RAW-8821' },
@@ -9,13 +10,6 @@ const FWD = [
   { op: 'OP-30 식각(Etch)', eq: 'ETCH01', worker: '강감찬', t: '06-09 11:05', mat: 'CHM-GAS-02' },
   { op: 'OP-50 CMP 연마', eq: 'CMP02', worker: '유관순', t: '06-09 13:22', mat: 'CHM-SL-05' },
   { op: 'OP-60 검사', eq: 'INS-VIS', worker: '안중근', t: '06-09 14:48', mat: '—' },
-];
-
-const MATS: Array<[string, string, string, string]> = [
-  ['WF-300-B', '300mm 웨이퍼', 'LOT-RAW-8821', '대성반도체'],
-  ['RES-PR-22', '포토레지스트', 'LOT-RES-1120', '한울케미칼'],
-  ['CHM-SL-05', '슬러리 SL-05', 'LOT-CHM-0457', 'JS머트리얼'],
-  ['CHM-GAS-02', '공정 가스', 'LOT-GAS-0099', '대한가스'],
 ];
 
 const SUMMARY: Array<[string, string, boolean]> = [
@@ -28,6 +22,7 @@ const SUMMARY: Array<[string, string, boolean]> = [
 
 /** 생산 이력 추적 — 정/역방향 LOT 계보. 와이어프레임 prod-screens-2.LotTraceContent 정본. */
 export default function LotTraceScreen() {
+  const { data: mats = [] } = useProdLotTraces();
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -83,12 +78,12 @@ export default function LotTraceScreen() {
 
         <Card title="투입 자재 계보 (BOM — 역방향)">
           <div className="flex flex-col gap-2">
-            {MATS.map((m, i) => (
-              <div key={m[0]} className="flex items-center gap-2.5 rounded-lg border border-border bg-panel-alt px-3 py-2.5">
+            {mats.map((m, i) => (
+              <div key={m.mat} className="flex items-center gap-2.5 rounded-lg border border-border bg-panel-alt px-3 py-2.5">
                 <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-teal-soft text-[11px] font-extrabold text-teal">{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11.5px] font-bold text-ink">{m[1]} <span className="font-mono text-[10px] text-ink3">{m[0]}</span></div>
-                  <div className="mt-px text-[10px] text-ink3"><span className="font-mono">{m[2]}</span> · {m[3]}</div>
+                  <div className="text-[11.5px] font-bold text-ink">{m.name} <span className="font-mono text-[10px] text-ink3">{m.mat}</span></div>
+                  <div className="mt-px text-[10px] text-ink3"><span className="font-mono">{m.lot}</span> · {m.vendor}</div>
                 </div>
               </div>
             ))}

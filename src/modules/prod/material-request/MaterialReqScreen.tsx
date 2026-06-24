@@ -3,39 +3,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { T } from '@/shared/theme/tokens';
-
-interface Mat {
-  code: string;
-  name: string;
-  req: number;
-  unit: string;
-  stock: number;
-  loc: string;
-}
-interface WO {
-  wo: string;
-  name: string;
-  line: string;
-  mats: Mat[];
-}
-
-const WOS: WO[] = [
-  { wo: 'WO-1001', name: '커넥터 하우징', line: '사출 03호기', mats: [
-    { code: 'PA66-GF30', name: 'PA66 강화수지', req: 240, unit: 'kg', stock: 1850, loc: 'A-01-2' },
-    { code: 'MB-CLR-BK', name: '마스터배치(흑)', req: 6, unit: 'kg', stock: 95, loc: 'A-02-1' },
-  ] },
-  { wo: 'WO-1003', name: '커넥터 어셈블리', line: '조립셀 A', mats: [
-    { code: 'CN-HSG-08P', name: '커넥터 하우징', req: 2400, unit: 'EA', stock: 2600, loc: 'B-01-3' },
-    { code: 'TM-PIN-16', name: '터미널 핀', req: 38400, unit: 'EA', stock: 31000, loc: 'B-02-1' },
-    { code: 'SEAL-RING', name: '실링 O-Ring', req: 2400, unit: 'EA', stock: 5000, loc: 'B-03-2' },
-    { code: 'LABEL-CN', name: '식별 라벨', req: 2400, unit: 'EA', stock: 8000, loc: 'C-01-1' },
-  ] },
-  { wo: 'WO-1004', name: '센서 모듈 PCB', line: 'SMT 라인 2', mats: [
-    { code: 'IC-SEN-A1', name: '센서 IC', req: 5400, unit: 'EA', stock: 0, loc: 'D-01-1' },
-    { code: 'CHIP-0402', name: '칩부품 0402', req: 129600, unit: 'EA', stock: 480000, loc: 'D-02-4' },
-    { code: 'CASE-SN', name: '센서 케이스', req: 5400, unit: 'EA', stock: 6200, loc: 'B-04-2' },
-  ] },
-];
+import { useMaterialRequests } from '@/features/materialRequest/useMaterialRequests';
 
 interface Tx {
   no: string;
@@ -63,8 +31,17 @@ export default function MaterialReqScreen() {
   const [wo, setWo] = useState('WO-1003');
   const [prio, setPrio] = useState('보통');
   const [filter, setFilter] = useState('전체');
-  const cur = WOS.find((w) => w.wo === wo) ?? WOS[0];
+  const { data: wos, isLoading } = useMaterialRequests();
   const rows = TX.filter((t) => filter === '전체' || t.state === filter);
+
+  if (isLoading || !wos) {
+    return <div className="px-4 py-8 text-center text-[12px] text-ink3">불러오는 중…</div>;
+  }
+  if (wos.length === 0) {
+    return <div className="px-4 py-8 text-center text-[12px] text-ink3">작업지시 데이터가 없습니다.</div>;
+  }
+
+  const cur = wos.find((w) => w.wo === wo) ?? wos[0];
   const shortage = cur.mats.filter((m) => m.stock < m.req).length;
 
   const kpis: Array<[string, string, string, string]> = [
@@ -104,7 +81,7 @@ export default function MaterialReqScreen() {
             <div className="flex items-center gap-2">
               <span className="text-[10.5px] text-ink3">작업지시</span>
               <div className="flex gap-1.5">
-                {WOS.map((w) => (
+                {wos.map((w) => (
                   <button key={w.wo} onClick={() => setWo(w.wo)} className={`rounded-[7px] border px-2.5 py-1 font-mono text-[10px] font-bold ${wo === w.wo ? 'border-teal bg-teal text-white' : 'border-border-hi bg-panel text-ink2'}`}>{w.wo}</button>
                 ))}
               </div>

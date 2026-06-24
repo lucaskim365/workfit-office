@@ -4,6 +4,8 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { RankBars } from '@/shared/ui/charts/RankBars';
 import { T } from '@/shared/theme/tokens';
+import { useProdDefects } from '@/features/prodDefect/useProdDefects';
+import type { ProdDefect } from '@/domain/prodDefect/schema';
 
 const CODES = [
   { code: 'D-EXT', name: '외관 불량', c: T.blue },
@@ -22,28 +24,7 @@ const LOTS = [
   { lot: 'LOT-2606-B07', name: '터미널 핀', proc: 'OP30 압착' },
 ];
 
-interface Tx {
-  no: string;
-  date: string;
-  lot: string;
-  name: string;
-  proc: string;
-  code: string;
-  qty: number;
-  action: '재작업' | '폐기' | '특채';
-  by: string;
-}
-
-const TX: Tx[] = [
-  { no: 'DF-2606-052', date: '06-21 13:30', lot: 'LOT-2606-A12', name: '커넥터 하우징', proc: 'OP20 디버링', code: 'D-EXT', qty: 24, action: '재작업', by: '김품질' },
-  { no: 'DF-2606-051', date: '06-21 12:10', lot: 'LOT-2606-D09', name: '센서 모듈 PCB', proc: 'OP30 AOI', code: 'D-SLD', qty: 40, action: '재작업', by: '이검사' },
-  { no: 'DF-2606-050', date: '06-21 11:05', lot: 'LOT-2606-C03', name: '커넥터 어셈블리', proc: 'OP50 기능검사', code: 'D-FUN', qty: 24, action: '폐기', by: '김품질' },
-  { no: 'DF-2606-049', date: '06-21 10:20', lot: 'LOT-2606-B07', name: '터미널 핀', proc: 'OP30 압착', code: 'D-DIM', qty: 60, action: '폐기', by: '박작업' },
-  { no: 'DF-2606-048', date: '06-21 09:15', lot: 'LOT-2606-E02', name: '센서 모듈', proc: 'OP50 기능검사', code: 'D-FUN', qty: 28, action: '특채', by: '이검사' },
-  { no: 'DF-2606-047', date: '06-21 08:40', lot: 'LOT-2606-A11', name: '커넥터 하우징', proc: 'OP10 사출', code: 'D-EXT', qty: 40, action: '재작업', by: '김품질' },
-];
-
-const actionTone = (a: Tx['action']): Tone => (a === '재작업' ? 'warn' : a === '폐기' ? 'err' : 'mute');
+const actionTone = (a: ProdDefect['action']): Tone => (a === '재작업' ? 'warn' : a === '폐기' ? 'err' : 'mute');
 
 /** 불량 내역 등록 — 와이어프레임 defect-reg.jsx 정본. */
 export default function ProdDefectScreen() {
@@ -51,10 +32,17 @@ export default function ProdDefectScreen() {
   const [code, setCode] = useState('D-EXT');
   const [action, setAction] = useState('재작업');
   const [filter, setFilter] = useState('전체');
-  const rows = TX.filter((t) => filter === '전체' || t.action === filter);
+
+  const { data: tx, isLoading } = useProdDefects();
+
+  if (isLoading || !tx) {
+    return <div className="p-6 text-[12px] text-ink3">불러오는 중…</div>;
+  }
+
+  const rows = tx.filter((t) => filter === '전체' || t.action === filter);
 
   const codeAgg: Record<string, number> = {};
-  TX.forEach((t) => (codeAgg[t.code] = (codeAgg[t.code] || 0) + t.qty));
+  tx.forEach((t) => (codeAgg[t.code] = (codeAgg[t.code] || 0) + t.qty));
   const codeRows = Object.keys(codeAgg)
     .sort((a, b) => codeAgg[b] - codeAgg[a])
     .map((k) => ({ label: CODE_MAP[k].name, v: codeAgg[k], c: CODE_MAP[k].c }));
@@ -62,7 +50,7 @@ export default function ProdDefectScreen() {
   const kpis: Array<[string, string, string, string]> = [
     ['금일 불량 수량', '216', 'EA', 'text-danger'],
     ['공정 불량률', '0.82', '%', 'text-amber'],
-    ['최다 불량', codeRows[0].label, '', 'text-ink'],
+    ['최다 불량', codeRows[0]?.label ?? '-', '', 'text-ink'],
     ['재작업 대상', '104', 'EA', 'text-amber'],
     ['폐기 대상', '84', 'EA', 'text-danger'],
   ];
