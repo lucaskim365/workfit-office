@@ -1,50 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
 import { DetailField } from '@/shared/ui/DetailField';
-
-interface Vendor {
-  code: string;
-  name: string;
-  type: '매입' | '매출' | '외주';
-  use: '사용' | '미사용';
-  bizNo: string;
-  ceo: string;
-  manager: string;
-  addr: string;
-}
-
-const VENDORS: Vendor[] = [
-  { code: 'V-10021', name: '대성반도체(주)', type: '매입', use: '사용', bizNo: '214-86-01357', ceo: '박정호', manager: '김영업 · 010-2345-6789', addr: '경기도 화성시 동탄첨단산업1로 27, 메가센터 7층' },
-  { code: 'V-10044', name: '한울정밀', type: '외주', use: '사용', bizNo: '124-81-44521', ceo: '이정밀', manager: '이외주 · 031-555-1004', addr: '경기도 안산시 단원구 산단로 102' },
-  { code: 'V-20310', name: 'SK머티리얼즈', type: '매입', use: '사용', bizNo: '305-81-77810', ceo: '최소재', manager: '정구매 · 041-330-7781', addr: '충남 천안시 서북구 입장면 산업로 55' },
-  { code: 'V-30551', name: '동진쎄미켐', type: '매입', use: '사용', bizNo: '128-86-22019', ceo: '강화학', manager: '오자재 · 031-260-2201', addr: '경기도 화성시 향남읍 제약공단로 8' },
-  { code: 'V-40712', name: '글로벌로지스', type: '매출', use: '미사용', bizNo: '220-87-90011', ceo: '한물류', manager: '최영업 · 02-3478-9001', addr: '서울 강남구 테헤란로 401' },
-  { code: 'V-50880', name: '미래화학', type: '외주', use: '사용', bizNo: '514-81-30022', ceo: '신미래', manager: '서외주 · 053-580-3002', addr: '대구 달서구 성서공단로 200' },
-];
+import { VENDOR_TYPES, type Vendor } from '@/domain/vendor/schema';
+import { useVendors } from '@/features/vendor/useVendors';
 
 const TYPE_TONE: Record<Vendor['type'], Tone> = { 매입: 'info', 매출: 'ok', 외주: 'mute' };
-const TYPE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...(['매입', '매출', '외주'] as const).map((t) => ({ value: t, label: t }))];
+const TYPE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...VENDOR_TYPES.map((t) => ({ value: t, label: t }))];
 const USE_OPTIONS: Option[] = [{ value: '', label: '전체' }, { value: '사용', label: '사용' }, { value: '미사용', label: '미사용' }];
 
-/** 거래처관리 — 필터 + 마스터-디테일. 와이어프레임 admin-screens.VendorMgmtContent 정본. */
+/** 거래처관리 — 필터 + 마스터-디테일. 데이터: features/vendor/useVendors (Firestore/seed). */
 export default function VendorScreen() {
   const [draft, setDraft] = useState({ type: '', use: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState('V-10021');
 
-  const rows = useMemo(() => {
-    const kw = applied.q.trim().toLowerCase();
-    return VENDORS.filter(
-      (v) =>
-        (!applied.type || v.type === applied.type) &&
-        (!applied.use || v.use === applied.use) &&
-        (!kw || v.code.toLowerCase().includes(kw) || v.name.toLowerCase().includes(kw)),
-    );
-  }, [applied]);
-  const cur = VENDORS.find((v) => v.code === selected) ?? VENDORS[0];
+  const { data: rows = [], isLoading } = useVendors(applied);
+  const cur = rows.find((v) => v.code === selected) ?? rows[0];
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -82,6 +56,12 @@ export default function VendorScreen() {
                 </tr>
               </thead>
               <tbody>
+                {isLoading && (
+                  <tr><td colSpan={4} className="px-3.5 py-8 text-center text-[11.5px] text-ink3">불러오는 중…</td></tr>
+                )}
+                {!isLoading && rows.length === 0 && (
+                  <tr><td colSpan={4} className="px-3.5 py-8 text-center text-[11.5px] text-ink3">조회된 거래처가 없습니다.</td></tr>
+                )}
                 {rows.map((v) => {
                   const on = v.code === selected;
                   return (
@@ -101,18 +81,22 @@ export default function VendorScreen() {
         </Card>
 
         <Card title="거래처 상세정보" action={<ActionBar actions={[{ preset: 'save', label: '저장' }]} />}>
-          <div className="flex flex-col gap-3">
-            <DetailField label="거래처코드" required value={cur.code} />
-            <DetailField label="거래처명" required value={cur.name} />
-            <DetailField label="사업자번호" value={cur.bizNo} mono />
-            <div className="grid grid-cols-2 gap-3">
-              <DetailField label="대표자" value={cur.ceo} />
-              <DetailField label="구분" select value={cur.type} />
+          {cur ? (
+            <div className="flex flex-col gap-3">
+              <DetailField label="거래처코드" required value={cur.code} />
+              <DetailField label="거래처명" required value={cur.name} />
+              <DetailField label="사업자번호" value={cur.bizNo} mono />
+              <div className="grid grid-cols-2 gap-3">
+                <DetailField label="대표자" value={cur.ceo} />
+                <DetailField label="구분" select value={cur.type} />
+              </div>
+              <DetailField label="담당자" value={cur.manager} />
+              <DetailField label="사용여부" select value={cur.use} />
+              <DetailField label="주소" multiline value={cur.addr} />
             </div>
-            <DetailField label="담당자" value={cur.manager} />
-            <DetailField label="사용여부" select value={cur.use} />
-            <DetailField label="주소" multiline value={cur.addr} />
-          </div>
+          ) : (
+            <div className="py-10 text-center text-[11.5px] text-ink3">선택된 거래처가 없습니다.</div>
+          )}
         </Card>
       </div>
     </div>
