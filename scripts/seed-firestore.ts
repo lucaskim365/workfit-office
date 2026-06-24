@@ -108,6 +108,11 @@ import { TRANSFER_SEED } from '@/data/seeds/transfer.seed';
 import { COUNT_RECORD_SEED } from '@/data/seeds/countRecord.seed';
 import { ADJUSTMENT_SEED } from '@/data/seeds/adjustment.seed';
 import { AGING_STOCK_SEED } from '@/data/seeds/agingStock.seed';
+import { LABEL_TASK_SEED } from '@/data/seeds/labelTask.seed';
+import { HOLDING_STOCK_SEED } from '@/data/seeds/holdingStock.seed';
+import { MAT_RETURN_SEED } from '@/data/seeds/matReturn.seed';
+import { PICKING_LIST_SEED } from '@/data/seeds/pickingList.seed';
+import { DELIVERY_ORDER_SEED } from '@/data/seeds/deliveryOrder.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -209,6 +214,11 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'countRecords', docs: COUNT_RECORD_SEED, id: (d) => d.id },
   { coll: 'adjustments', docs: ADJUSTMENT_SEED, id: (d) => d.no },
   { coll: 'agingStock', docs: AGING_STOCK_SEED, id: (d) => d.lot },
+  { coll: 'labelTasks', docs: LABEL_TASK_SEED, id: (d) => d.lot },
+  { coll: 'holdingStock', docs: HOLDING_STOCK_SEED, id: (d) => d.lot },
+  { coll: 'matReturns', docs: MAT_RETURN_SEED, id: (d) => d.no },
+  { coll: 'pickingList', docs: PICKING_LIST_SEED, id: (d) => d.id },
+  { coll: 'deliveryOrders', docs: DELIVERY_ORDER_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

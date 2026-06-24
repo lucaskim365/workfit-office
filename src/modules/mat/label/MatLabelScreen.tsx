@@ -2,17 +2,13 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { useLabelTasks } from '@/features/labelTask/useLabelTasks';
 
-const ROWS: string[][] = [
-  ['LOT-RAW-8821', 'WF-300-B', 'Pallet', '500', 'RFID', '발행완료'],
-  ['LOT-RAW-8822', 'WF-300-B', 'Pallet', '500', 'RFID', '발행완료'],
-  ['LOT-CHM-0457', 'CHM-SL-05', 'Box', '20', '바코드', '발행완료'],
-  ['LOT-RES-1120', 'RES-PR-22', 'Box', '10', '바코드', '대기'],
-];
 const BARS = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1, 2, 3, 1, 1, 2, 1, 3, 1, 2, 2, 1, 3, 1, 2, 1, 3, 2, 1];
 
 /** 입고 라벨 발행 — 와이어프레임 wms-screens.jsx 정본. */
 export default function MatLabelScreen() {
+  const { data: rows = [], isLoading } = useLabelTasks();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="입고 라벨 발행" sub="입고 라벨 발행 (Barcode/RFID Print)" actions={<ActionBar actions={['save']} />} />
@@ -21,14 +17,16 @@ export default function MatLabelScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['추적번호(Lot)', '품목', '단위', '수량', '라벨', '상태'].map((c, i) => <th key={c} className={th(i === 3 ? 'right' : i >= 4 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {ROWS.map((r, i) => (
-                <tr key={i} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r[0]}</td>
-                  <td className={`${td('left')} font-mono text-[11px]`}>{r[1]}</td>
-                  <td className={td('left')}>{r[2]}</td>
-                  <td className={`${td('right')} font-bold tabular-nums text-ink`}>{r[3]}</td>
-                  <td className={td('center')}><Pill tone={r[4] === 'RFID' ? 'info' : 'mute'}>{r[4]}</Pill></td>
-                  <td className={td('center')}><Pill tone={r[5] === '발행완료' ? 'ok' : 'warn'}>{r[5]}</Pill></td>
+              {rows.length === 0 ? (
+                <tr><td colSpan={6} className="px-3 py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '라벨 발행 대상이 없습니다.'}</td></tr>
+              ) : rows.map((r, i) => (
+                <tr key={r.lot} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r.lot}</td>
+                  <td className={`${td('left')} font-mono text-[11px]`}>{r.code}</td>
+                  <td className={td('left')}>{r.unit}</td>
+                  <td className={`${td('right')} font-bold tabular-nums text-ink`}>{r.qty}</td>
+                  <td className={td('center')}><Pill tone={r.labelType === 'RFID' ? 'info' : 'mute'}>{r.labelType}</Pill></td>
+                  <td className={td('center')}><Pill tone={r.status === '발행완료' ? 'ok' : 'warn'}>{r.status}</Pill></td>
                 </tr>
               ))}
             </tbody>

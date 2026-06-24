@@ -41,7 +41,8 @@ service cloud.firestore {
         'prodPlans', 'scheduleEntries', 'urgentOrders', 'productionResults', 'jobLogs', 'wipStatus',
         'lineMonitors', 'moveWip', 'prodDefects', 'materialLoads', 'materialRequests', 'prodLotTraces',
         'subconOrders', 'subconIssues', 'subconReceipts',
-        'warehouseZones', 'putawayTasks', 'transfers', 'countRecords', 'adjustments', 'agingStock'
+        'warehouseZones', 'putawayTasks', 'transfers', 'countRecords', 'adjustments', 'agingStock',
+        'labelTasks', 'holdingStock', 'matReturns', 'pickingList', 'deliveryOrders'
       ];
     }
 
