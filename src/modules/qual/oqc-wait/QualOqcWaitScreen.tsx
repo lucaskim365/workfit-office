@@ -3,34 +3,30 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, Sel, FilterCard, FilterField, ChipTabs, SearchBox } from '../_qual';
+import { useInspections, useTransitionInspection } from '@/features/inspection/useInspections';
 
 const PRIO_TONE: Record<string, Tone> = { 긴급: 'err', 일반: 'mute' };
-const ST_TONE: Record<string, Tone> = { 대기: 'info', 검사중: 'warn', 보류: 'mute' };
+const ST_TONE: Record<string, Tone> = { 대기: 'info', 검사중: 'warn', 보류: 'mute', 판정완료: 'ok' };
 const dueColor = (d: string) => (d === '지연' ? C.err : d === 'D-Day' || d === 'D-1' ? C.warn : C.ink2);
-
-interface ItemRow { n: string; t: string; s: string }
-interface Lot { so: string; date: string; code: string; name: string; cust: string; dest: string; qty: number; unit: string; lot: string; insp: string; letter: string; n: number; ac: number; re: number; level: string; aql: number; prio: string; ship: string; due: string; wait: number; status: string; pic: string; coa: boolean; pqc: string; items: ItemRow[]; req: string[] }
-const OQ_LOTS: Lot[] = [
-  { so: 'SO-260621-018', date: '06-21 09:10', code: 'FG-BRK-A', name: '브래킷 ASSY-A', cust: '현대모비스', dest: '아산 1공장', qty: 1200, unit: 'EA', lot: 'L2606-1013', insp: '샘플링', letter: 'J', n: 80, ac: 2, re: 3, level: 'II', aql: 1.0, prio: '긴급', ship: '06-22 14:00', due: 'D-1', wait: 4.1, status: '대기', pic: '미지정', coa: true, pqc: '합격', items: [{ n: '외관 (전수)', t: '계수', s: '스크래치·이물 無' }, { n: '외경(O.D)', t: '계량', s: '25.00 ±0.05 mm' }, { n: '체결 토크', t: '계량', s: '12.0 ±1.5 N·m' }], req: ['전수 외관검사', 'COA 동봉', '고객 라벨 양식'] },
-  { so: 'SO-260621-015', date: '06-21 08:40', code: 'FG-HSG-C', name: '하우징 C-Type', cust: 'LG전자', dest: '창원 물류', qty: 5000, unit: 'EA', lot: 'L2606-1008', insp: '샘플링', letter: 'L', n: 200, ac: 5, re: 6, level: 'II', aql: 1.5, prio: '일반', ship: '06-23 10:00', due: 'D-2', wait: 4.6, status: '대기', pic: '미지정', coa: true, pqc: '합격', items: [{ n: '중량', t: '계량', s: '50.0 ±2.0 g' }, { n: '외관', t: '계수', s: '웰드라인·변형 無' }, { n: '색상', t: '계수', s: '한계견본 내' }], req: ['COA 동봉', 'RoHS 성적서'] },
-  { so: 'SO-260620-031', date: '06-20 16:20', code: 'FG-GER-22', name: '기어 G-22T', cust: '한국델파이', dest: '대구공장', qty: 1500, unit: 'EA', lot: 'L2606-0931', insp: '샘플링', letter: 'H', n: 50, ac: 1, re: 2, level: 'II', aql: 1.0, prio: '일반', ship: '06-21 16:00', due: 'D-Day', wait: 21.5, status: '검사중', pic: '이검사', coa: true, pqc: '합격', items: [{ n: '치형(M)', t: '계량', s: '1.50 ±0.01 mm' }, { n: 'PCD', t: '계량', s: '33.00 ±0.05 mm' }, { n: '치면 손상', t: '계수', s: '손상 無' }], req: ['초·중·종물 성적서', 'COA 동봉'] },
-  { so: 'SO-260620-028', date: '06-20 14:05', code: 'FG-CVR-B', name: '커버 플레이트 B', cust: '만도', dest: '평택공장', qty: 3000, unit: 'EA', lot: 'L2606-1011', insp: '전수', letter: '—', n: 3000, ac: 0, re: 1, level: '—', aql: 0, prio: '긴급', ship: '06-21 13:00', due: '지연', wait: 23.0, status: '보류', pic: '이검사', coa: false, pqc: '조건부', items: [{ n: '두께(t)', t: '계량', s: '2.00 ±0.05 mm' }, { n: '평면도', t: '계량', s: '≤0.10 mm' }, { n: '버·크랙', t: '계수', s: '버·크랙 無' }], req: ['전수검사', '고객 입회검사 요청'] },
-  { so: 'SO-260620-022', date: '06-20 11:15', code: 'FG-SFT-D', name: '샤프트 D-40', cust: '현대모비스', dest: '아산 2공장', qty: 800, unit: 'EA', lot: 'L2606-1006', insp: '샘플링', letter: 'G', n: 32, ac: 1, re: 2, level: 'II', aql: 1.0, prio: '일반', ship: '06-22 09:00', due: 'D-1', wait: 26.0, status: '대기', pic: '미지정', coa: true, pqc: '합격', items: [{ n: '축경(Ø)', t: '계량', s: '40.00 ±0.03 mm' }, { n: '진원도', t: '계량', s: '≤0.02 mm' }, { n: '표면 거칠기', t: '계량', s: '≤1.6 Ra' }], req: ['COA 동봉', '재질성적서(밀시트)'] },
-  { so: 'SO-260619-040', date: '06-19 17:30', code: 'FG-BRK-A', name: '브래킷 ASSY-A', cust: 'LG마그나', dest: '인천공장', qty: 600, unit: 'EA', lot: 'L2606-0939', insp: '샘플링', letter: 'F', n: 20, ac: 0, re: 1, level: 'II', aql: 0.65, prio: '일반', ship: '06-24 10:00', due: 'D-3', wait: 39.5, status: '대기', pic: '미지정', coa: true, pqc: '합격', items: [{ n: '외관', t: '계수', s: '스크래치 無' }, { n: '외경(O.D)', t: '계량', s: '25.00 ±0.05 mm' }], req: ['COA 동봉', 'PPAP 레벨3'] },
-];
 
 /** 출하검사 대기 현황 — 와이어프레임 qual-oqc-wait.jsx 정본. */
 export default function QualOqcWaitScreen() {
+  const { data: lots = [], isLoading } = useInspections({ stage: 'OQC' });
+  const transition = useTransitionInspection();
   const [sel, setSel] = useState('SO-260621-018');
   const [tab, setTab] = useState('전체');
   const [q, setQ] = useState('');
-  let rows = OQ_LOTS.filter((l) => tab === '전체' || l.status === tab);
-  if (q) rows = rows.filter((l) => l.name.includes(q) || l.cust.includes(q) || l.code.toLowerCase().includes(q.toLowerCase()) || l.so.toLowerCase().includes(q.toLowerCase()));
-  const cur = OQ_LOTS.find((l) => l.so === sel) || OQ_LOTS[0];
+  let rows = lots.filter((l) => tab === '전체' || l.status === tab);
+  if (q) rows = rows.filter((l) => l.name.includes(q) || l.cust.includes(q) || l.code.toLowerCase().includes(q.toLowerCase()) || l.recv.toLowerCase().includes(q.toLowerCase()));
+  const cur = lots.find((l) => l.recv === sel) || lots[0];
 
-  const cnt = (s: string) => OQ_LOTS.filter((l) => l.status === s).length;
-  const urgent = OQ_LOTS.filter((l) => l.due === '지연' || l.due === 'D-Day' || l.due === 'D-1').length;
-  const shipQty = OQ_LOTS.filter((l) => l.due === 'D-Day' || l.due === 'D-1').reduce((s, l) => s + l.qty, 0);
+  const cnt = (s: string) => lots.filter((l) => l.status === s).length;
+  const urgent = lots.filter((l) => l.due === '지연' || l.due === 'D-Day' || l.due === 'D-1').length;
+  const shipQty = lots.filter((l) => l.due === 'D-Day' || l.due === 'D-1').reduce((s, l) => s + l.qty, 0);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '출하검사 대상이 없습니다.'}</div>;
+  }
 
   const banner = cur.insp === '전수'
     ? [['검사', '전수'], ['시료수', cur.n.toLocaleString()], ['Ac', '0'], ['Re', '1']]
@@ -73,11 +69,11 @@ export default function QualOqcWaitScreen() {
             </thead>
             <tbody>
               {rows.map((l, i) => {
-                const on = l.so === sel;
+                const on = l.recv === sel;
                 return (
-                  <tr key={l.so} onClick={() => setSel(l.so)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
+                  <tr key={l.recv} onClick={() => setSel(l.recv)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
                     <td className="border-b border-border px-2.5 py-2.5" style={{ borderLeft: on ? `3px solid ${C.teal}` : '3px solid transparent' }}>
-                      <div className="font-mono text-[10.5px] font-bold" style={{ color: on ? C.teal : C.ink }}>{l.so}</div>
+                      <div className="font-mono text-[10.5px] font-bold" style={{ color: on ? C.teal : C.ink }}>{l.recv}</div>
                       <div className="mt-px text-[9px] text-ink3">{l.date}</div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2.5"><div className="font-bold text-ink">{l.name}</div><div className="mt-px font-mono text-[9px] text-ink3">{l.code} · {l.lot}</div></td>
@@ -97,7 +93,7 @@ export default function QualOqcWaitScreen() {
         <Card title="출하 LOT 상세" bodyClassName="p-0" action={<Pill tone={ST_TONE[cur.status]}>{cur.status}</Pill>}>
           <div className="border-b border-border px-4 py-3.5" style={{ background: C.panelAlt }}>
             <div className="flex items-center gap-2"><span className="text-[14.5px] font-extrabold text-ink">{cur.name}</span><Pill tone={PRIO_TONE[cur.prio]}>{cur.prio}</Pill></div>
-            <div className="mt-0.5 font-mono text-[10.5px] text-ink3">{cur.code} · {cur.so} · LOT {cur.lot}</div>
+            <div className="mt-0.5 font-mono text-[10.5px] text-ink3">{cur.code} · {cur.recv} · LOT {cur.lot}</div>
           </div>
 
           <div className="border-b border-border px-4 py-3.5">
@@ -144,8 +140,23 @@ export default function QualOqcWaitScreen() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white" style={{ background: C.navy }}>출하검사 착수 →</button>
-              <button className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2">보류</button>
+              <button
+                onClick={() => {
+                  if (cur.status === '대기' || cur.status === '보류') transition.mutate({ recv: cur.recv, to: '검사중' });
+                }}
+                disabled={cur.status === '판정완료' || transition.isPending}
+                className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:opacity-50"
+                style={{ background: C.navy }}
+              >
+                {cur.status === '대기' ? '출하검사 착수 →' : cur.status === '보류' ? '검사 재개 →' : '출하검사 진행 →'}
+              </button>
+              <button
+                onClick={() => transition.mutate({ recv: cur.recv, to: '보류' })}
+                disabled={cur.status === '보류' || cur.status === '판정완료' || transition.isPending}
+                className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2 disabled:opacity-40"
+              >
+                보류
+              </button>
             </div>
           </div>
         </Card>

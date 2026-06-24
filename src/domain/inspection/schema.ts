@@ -61,6 +61,20 @@ export const inspectionSchema = z.object({
   /** 판정완료 전까지 null. */
   judgement: z.enum(INSPECTION_JUDGEMENTS).nullable().default(null),
   items: z.array(inspectionLineSchema).default([]),
+
+  // OQC(출하검사) 전용 선택 필드 — IQC에서는 비워둔다.
+  /** 고객(거래처). vendor가 매입처면 cust는 매출처. */
+  cust: z.string().default(''),
+  /** 납품처. */
+  dest: z.string().default(''),
+  /** 출하 예정 일시. */
+  ship: z.string().default(''),
+  /** COA(성적서) 발행 필요 여부. */
+  coa: z.boolean().default(false),
+  /** 연계 공정검사(PQC) 결과 — 출하검사 선행 게이트. */
+  pqc: z.string().default(''),
+  /** 고객 요구사항(필요서류·검사조건). */
+  req: z.array(z.string()).default([]),
 });
 
 export type Inspection = z.infer<typeof inspectionSchema>;
