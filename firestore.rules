@@ -31,7 +31,8 @@ service cloud.firestore {
         'traceNodes', 'voc', 'd8Reports',
         'gages', 'calibrations', 'gageRrStudies',
         'pqcFmlChecks', 'pqcSelfChecks', 'pqcPatrols', 'pqcDevices',
-        'coaCertificates', 'equipments'
+        'coaCertificates', 'equipments',
+        'equipmentSpecs', 'equipBoms', 'equipCheckItems', 'alarmMasters', 'equipVendors'
       ];
     }
 

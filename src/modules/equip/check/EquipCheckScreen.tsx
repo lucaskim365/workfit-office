@@ -4,60 +4,9 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '@/modules/prod/_bits';
+import { useEquipCheckItems } from '@/features/equipCheckItem/useEquipCheckItems';
+import type { CheckItemRow } from '@/domain/equipCheckItem/schema';
 import { EQ_LIST } from '../_data';
-
-interface Item { area: string; name: string; kind: '일상' | '정기'; cycle: string; method: string; std: string; lo: string; hi: string; unit: string; pass: string; action: string }
-const it = (area: string, name: string, kind: '일상' | '정기', cycle: string, method: string, std: string, lo: string, hi: string, unit: string, pass: string, action: string): Item => ({ area, name, kind, cycle, method, std, lo, hi, unit, pass, action });
-
-const CHECK_ITEMS: Record<string, Item[]> = {
-  CMP: [
-    it('헤드 캐리어 유닛', '멤브레인 마모도', '일상', '1일', '게이지', '1.5', '1.2', '', 'mm', '두께 ≥ 1.2 mm', '멤브레인 교체 의뢰'),
-    it('헤드 캐리어 유닛', '헤드 진공 누설', '정기', '1주', '계측', '', '', '5', 'mmHg/min', '누설 ≤ 5', 'O-Ring 점검·교체'),
-    it('연마 플래튼', '연마 패드 마모도', '일상', '1일', '게이지', '1.3', '1.2', '', 'mm', '두께 ≥ 1.2 mm', '패드 교체'),
-    it('연마 플래튼', '컨디셔너 다이아 상태', '정기', '1주', '육안', '', '', '', '-', '균열·박리 없음', '컨디셔너 디스크 교체'),
-    it('연마 플래튼', '구동부 윤활 상태', '정기', '1개월', '점검', '', '', '', '-', '규정 주유량 충족', '주유 작업 실시'),
-    it('슬러리 공급 유닛', '슬러리 공급 압력', '일상', '1일', '계측', '0.3', '0.2', '0.4', 'MPa', '0.2 ~ 0.4 MPa', '펌프·레귤레이터 점검'),
-    it('슬러리 공급 유닛', '슬러리 유량', '일상', '1일', '계측', '200', '180', '220', 'mL/min', '180 ~ 220 mL/min', 'MFC 캘리브레이션'),
-    it('End-point 검출', '광학 센서 청결도', '정기', '1주', '육안', '', '', '', '-', '오염·파티클 없음', '센서 클리닝'),
-    it('End-point 검출', '신호 캘리브레이션', '정기', '1개월', '측정', '', '', '1', '%', '오차 ≤ ±1 %', '재캘리브레이션'),
-  ],
-  Etch: [
-    it('RF 제너레이터', 'RF 매칭(반사파)', '일상', '1일', '계측', '', '', '5', 'W', 'Reflect ≤ 5 W', '매칭 네트워크 점검'),
-    it('챔버 A', '챔버 압력', '일상', '1일', '계측', '', '-3', '3', '%', '규정 ±3 %', 'APC 밸브·펌프 점검'),
-    it('챔버 A', '가스 누설 점검', '정기', '1주', 'He 디텍터', '', '', '', '-', '누설 없음', '배관·피팅 조임'),
-    it('챔버 A', 'O-Ring 상태', '정기', '1개월', '육안', '', '', '', '-', '경화·손상 없음', 'O-Ring 교체'),
-  ],
-  Photo: [
-    it('웨이퍼 스테이지', '스테이지 정렬', '일상', '1일', '자동측정', '', '-2', '2', 'nm', '±2 nm 이내', '얼라인먼트 재수행'),
-    it('광원', '광원 출력', '일상', '1일', '계측', '', '-2', '2', '%', '규정 ±2 %', '램프 점검·교체'),
-    it('얼라인먼트 유닛', '렌즈 오염', '정기', '1주', '검사', '0', '', '0', 'EA', '파티클 0', '렌즈 클리닝'),
-    it('환경', '온습도 환경', '일상', '1일', '모니터', '23', '22.9', '23.1', '℃', '23 ±0.1 ℃', '항온항습 설비 점검'),
-  ],
-  Depo: [
-    it('프로세스 챔버', '히터 온도 편차', '일상', '1일', '계측', '', '-3', '3', '℃', '±3 ℃', '히터·열전대 점검'),
-    it('가스 박스', '가스 유량(MFC)', '일상', '1일', '계측', '', '-2', '2', '%', '규정 ±2 %', 'MFC 캘리브레이션'),
-    it('프로세스 챔버', '챔버 누설률', '정기', '1주', '계측', '', '', '1', 'mTorr/min', '≤ 1', '챔버 리크 점검'),
-    it('프로세스 챔버', '샤워헤드 오염', '정기', '1개월', '육안', '', '', '', '-', '증착물 제거 상태', '샤워헤드 세정'),
-  ],
-  Implant: [
-    it('이온 소스', '빔 전류 안정도', '일상', '1일', '계측', '', '-1', '1', '%', '±1 % 이내', '이온 소스 점검'),
-    it('엔드 스테이션', '진공도 확인', '일상', '1일', '계측', '', '', '1e-6', 'Torr', '≤ 1×10⁻⁶', '펌프·게이지 확인'),
-    it('이온 소스', '소스 수명', '정기', '1주', '카운터', '', '20', '', '%', '잔여 ≥ 20 %', '이온 소스 교체'),
-    it('가속관', '고전압 절연', '정기', '1개월', '계측', '', '', '', '-', '방전 없음', '절연부 점검'),
-  ],
-  Thermal: [
-    it('퍼니스 튜브', '온도 프로파일', '일상', '1일', '계측', '', '-2', '2', '℃', '±2 ℃', '히터·열전대 점검'),
-    it('보트 엘리베이터', '보트 구동 상태', '일상', '1일', '청음', '', '', '', '-', '이상음 없음', '구동부 점검'),
-    it('가스 패널', '퍼지 압력', '정기', '1주', '계측', '', '-5', '5', '%', '규정 ±5 %', '가스 패널 점검'),
-    it('퍼니스 튜브', '석영 튜브 균열', '정기', '1개월', '육안', '', '', '', '-', '균열 없음', '석영 튜브 교체'),
-  ],
-  Clean: [
-    it('케미컬 배스', '케미컬 농도', '일상', '1일', '적정', '', '-3', '3', '%', '규정 ±3 %', '케미컬 보충·교체'),
-    it('린스 모듈', 'DI수 비저항', '일상', '1일', '계측', '18', '18', '', 'MΩ·cm', '≥ 18', 'DI 공급 설비 점검'),
-    it('케미컬 배스', '배스 온도', '일상', '1일', '계측', '', '-1', '1', '℃', '규정 ±1 ℃', '히터·센서 점검'),
-    it('스핀 드라이어', '필터 차압', '정기', '1주', '계측', '', '', '0.1', 'MPa', '≤ 0.1', '필터 교체'),
-  ],
-};
 
 const kindTone = (k: string): Tone => (k === '일상' ? 'info' : 'ok');
 const cycleTone = (c: string): Tone => (c === '1일' ? 'info' : c === '1주' ? 'ok' : c === '1개월' ? 'mute' : 'warn');
@@ -73,14 +22,23 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 
 /** 설비별 점검 항목 — 와이어프레임 equip-check.jsx 정본. */
 export default function EquipCheckScreen() {
+  const { data: docs = [], isLoading } = useEquipCheckItems();
   const [sel, setSel] = useState('EQ-CMP02');
   const [pick, setPick] = useState(0);
+
+  // 설비 유형(type) 도큐먼트 배열 → 유형별 점검항목 맵으로 파생(인라인 CHECK_ITEMS 대체).
+  const byType = useMemo(() => {
+    const m: Record<string, CheckItemRow[]> = {};
+    docs.forEach((d) => { m[d.type] = d.items; });
+    return m;
+  }, [docs]);
+
   const eq = EQ_LIST.find((e) => e.code === sel) ?? EQ_LIST[0];
-  const items = CHECK_ITEMS[eq.type] ?? [];
+  const items = byType[eq.type] ?? [];
   const item = items[pick] ?? items[0];
 
   const groups = useMemo(() => {
-    const g: Array<{ area: string; rows: Array<{ item: Item; idx: number }> }> = [];
+    const g: Array<{ area: string; rows: Array<{ item: CheckItemRow; idx: number }> }> = [];
     items.forEach((x, idx) => {
       let grp = g.find((y) => y.area === x.area);
       if (!grp) { grp = { area: x.area, rows: [] }; g.push(grp); }
@@ -92,6 +50,10 @@ export default function EquipCheckScreen() {
   const daily = items.filter((i) => i.kind === '일상').length;
   const weekly = items.filter((i) => i.cycle === '1주').length;
   const monthly = items.filter((i) => i.cycle === '1개월').length;
+
+  if (!docs.length) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '점검 항목이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -115,7 +77,7 @@ export default function EquipCheckScreen() {
           <div className="flex max-h-[600px] flex-col gap-px overflow-y-auto p-1.5">
             {EQ_LIST.map((e) => {
               const on = e.code === sel;
-              const n = (CHECK_ITEMS[e.type] ?? []).length;
+              const n = (byType[e.type] ?? []).length;
               return (
                 <button key={e.code} onClick={() => { setSel(e.code); setPick(0); }} className={`flex w-full items-center gap-2.5 rounded-r-[7px] px-2.5 py-2 text-left ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`} style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}>
                   <span className={`h-2 w-2 shrink-0 rounded-full ${e.state === '가동' ? 'bg-ok' : e.state === '대기' ? 'bg-blue' : e.state === '정지' ? 'bg-amber' : 'bg-danger'}`} />

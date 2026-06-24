@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '@/modules/prod/_bits';
+import { useEquipBoms } from '@/features/equipBom/useEquipBoms';
+import type { BomNode } from '@/domain/equipBom/schema';
 
 type Lv = 'line' | 'equip' | 'unit' | 'part';
 const LV: Record<Lv, { label: string; glyph: string; color: string; tone: Tone }> = {
@@ -13,72 +15,18 @@ const LV: Record<Lv, { label: string; glyph: string; color: string; tone: Tone }
   part: { label: '부품', glyph: '◦', color: '#56607a', tone: 'mute' },
 };
 
-interface Node {
-  lv: Lv;
-  code: string;
-  name: string;
-  model?: string;
-  maker?: string;
-  state?: string;
-  qty?: number;
-  partNo?: string;
-  spare?: string;
-  cycle?: string;
-  children?: Node[];
+/** 트리 노드 타입 — 도메인 스키마(equipBoms)에서 파생. */
+type Node = BomNode;
+
+/** NODE_MAP 구성 — 트리를 평탄화해 code→{node,parent} 인덱스 생성. */
+function buildNodeMap(root: Node): Record<string, { node: Node; parent: Node | null }> {
+  const map: Record<string, { node: Node; parent: Node | null }> = {};
+  (function index(node: Node, parent: Node | null) {
+    map[node.code] = { node, parent };
+    (node.children ?? []).forEach((c) => index(c, node));
+  })(root, null);
+  return map;
 }
-
-const part = (code: string, name: string, partNo: string, qty: number, maker: string, spare: string, cycle: string): Node => ({ lv: 'part', code, name, partNo, qty, maker, spare, cycle });
-
-const BOM: Node = {
-  lv: 'line', code: 'LINE-A', name: 'A라인', children: [
-    { lv: 'equip', code: 'EQ-CMP02', name: 'CMP 02호기', model: 'Reflexion LK', maker: 'AMAT', state: '가동', children: [
-      { lv: 'unit', code: 'U-CMP02-HC', name: '헤드 캐리어 유닛', qty: 1, maker: 'AMAT', children: [
-        part('P-1001', '캐리어 멤브레인', 'AM-MB-200', 4, 'AMAT', 'Y', '6개월'),
-        part('P-1002', '리테이너 링', 'AM-RR-300', 4, 'AMAT', 'Y', '3개월'),
-        part('P-1003', '진공 척 어셈블리', 'AM-VC-110', 4, 'AMAT', 'N', '12개월'),
-      ] },
-      { lv: 'unit', code: 'U-CMP02-PL1', name: '연마 플래튼 #1', qty: 1, maker: 'AMAT', children: [
-        part('P-1010', '연마 패드', 'RHM-IC1000', 1, 'DuPont', 'Y', '7일'),
-        part('P-1011', '컨디셔너 디스크', 'AM-CD-A45', 1, 'AMAT', 'Y', '1개월'),
-        part('P-1012', '플래튼 구동 모터', 'YAS-SGM-3', 1, 'Yaskawa', 'N', '60개월'),
-      ] },
-      { lv: 'unit', code: 'U-CMP02-PL2', name: '연마 플래튼 #2', qty: 1, maker: 'AMAT', children: [
-        part('P-1020', '연마 패드', 'RHM-IC1000', 1, 'DuPont', 'Y', '7일'),
-        part('P-1021', '컨디셔너 디스크', 'AM-CD-A45', 1, 'AMAT', 'Y', '1개월'),
-      ] },
-      { lv: 'unit', code: 'U-CMP02-SL', name: '슬러리 공급 유닛', qty: 1, maker: 'AMAT', children: [
-        part('P-1030', '슬러리 다이어프램 펌프', 'IWK-LK-25', 2, 'IWAKI', 'Y', '24개월'),
-        part('P-1031', '유량 센서', 'KEY-FD-Q', 2, 'Keyence', 'N', '36개월'),
-        part('P-1032', '인라인 필터', 'PALL-PF-5', 4, 'Pall', 'Y', '1개월'),
-      ] },
-      { lv: 'unit', code: 'U-CMP02-EP', name: 'End-point 검출 유닛', qty: 1, maker: 'AMAT', children: [
-        part('P-1040', '광학 센서 모듈', 'AM-OPT-EP', 1, 'AMAT', 'N', '48개월'),
-        part('P-1041', '신호 처리 보드', 'AM-PCB-EP2', 1, 'AMAT', 'Y', '—'),
-      ] },
-    ] },
-    { lv: 'equip', code: 'EQ-ETCH01', name: 'Etch 01호기', model: 'Centura Sym3', maker: 'AMAT', state: '대기', children: [
-      { lv: 'unit', code: 'U-ETCH01-RF', name: 'RF 제너레이터', qty: 1, maker: 'AE', children: [
-        part('P-2001', 'RF 매칭 박스', 'AE-MN-30', 1, 'Advanced Energy', 'N', '60개월'),
-        part('P-2002', 'RF 케이블 세트', 'AE-CBL-A', 2, 'Advanced Energy', 'Y', '24개월'),
-      ] },
-      { lv: 'unit', code: 'U-ETCH01-CHA', name: '챔버 A', qty: 1, maker: 'AMAT', children: [
-        part('P-2010', '샤워헤드', 'AM-SH-200', 1, 'AMAT', 'Y', '12개월'),
-        part('P-2011', 'O-Ring 키트', 'AM-OR-KIT', 1, 'AMAT', 'Y', '6개월'),
-      ] },
-    ] },
-    { lv: 'equip', code: 'EQ-PHO05', name: 'Photo 05호기', model: 'NSR-S635E', maker: 'Nikon', state: '가동', children: [
-      { lv: 'unit', code: 'U-PHO05-RS', name: '레티클 스테이지', qty: 1, maker: 'Nikon', children: [
-        part('P-3001', '리니어 모터', 'NK-LM-S6', 2, 'Nikon', 'N', '60개월'),
-      ] },
-    ] },
-  ],
-};
-
-const NODE_MAP: Record<string, { node: Node; parent: Node | null }> = {};
-(function index(node: Node, parent: Node | null) {
-  NODE_MAP[node.code] = { node, parent };
-  (node.children ?? []).forEach((c) => index(c, node));
-})(BOM, null);
 const countDesc = (node: Node): number => (node.children ?? []).reduce((n, c) => n + 1 + countDesc(c), 0);
 
 function TreeRow({ node, depth, sel, setSel, expanded, toggle }: { node: Node; depth: number; sel: string; setSel: (c: string) => void; expanded: Set<string>; toggle: (c: string) => void }) {
@@ -106,12 +54,20 @@ function TreeRow({ node, depth, sel, setSel, expanded, toggle }: { node: Node; d
 
 /** 설비 계층 구조(BOM) — 와이어프레임 equip-bom.jsx 정본 (4레벨 트리). */
 export default function EquipBomScreen() {
+  const { data: boms, isLoading } = useEquipBoms();
   const [sel, setSel] = useState('EQ-CMP02');
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['LINE-A', 'EQ-CMP02', 'U-CMP02-HC']));
   const toggle = (code: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(code)) n.delete(code); else n.add(code); return n; });
+
+  // 첫 트리(단일 BOM 도큐먼트)를 정본으로 사용. NODE_MAP은 훅 데이터로부터 동일 구성.
+  const tree = boms?.[0] ?? null;
+  const NODE_MAP = useMemo(() => (tree ? buildNodeMap(tree) : {}), [tree]);
   const expandAll = () => { const all = new Set<string>(); Object.keys(NODE_MAP).forEach((k) => { if ((NODE_MAP[k].node.children ?? []).length) all.add(k); }); setExpanded(all); };
 
-  const cur = NODE_MAP[sel] ?? NODE_MAP['EQ-CMP02'];
+  if (isLoading) return <div className="px-1 py-10 text-center text-[12.5px] text-ink3">불러오는 중…</div>;
+  if (!tree) return <div className="px-1 py-10 text-center text-[12.5px] text-ink3">설비 BOM 데이터가 없습니다.</div>;
+
+  const cur = NODE_MAP[sel] ?? NODE_MAP[tree.code];
   const node = cur.node;
   const parent = cur.parent;
   const meta = LV[node.lv];
@@ -153,14 +109,14 @@ export default function EquipBomScreen() {
         ))}
         <span className="ml-auto flex gap-2">
           <button onClick={expandAll} className="rounded-md border border-border-hi px-2.5 py-1 text-[10.5px] font-bold text-teal">전체 펼치기</button>
-          <button onClick={() => setExpanded(new Set(['LINE-A']))} className="rounded-md border border-border-hi px-2.5 py-1 text-[10.5px] font-bold text-ink2">전체 접기</button>
+          <button onClick={() => setExpanded(new Set([tree.code]))} className="rounded-md border border-border-hi px-2.5 py-1 text-[10.5px] font-bold text-ink2">전체 접기</button>
         </span>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[380px_1fr]">
         <Card title="구성 트리 (BOM)" action={<span className="text-[10.5px] text-ink3">총 {Object.keys(NODE_MAP).length}개 노드</span>} bodyClassName="p-0">
           <div className="max-h-[560px] overflow-y-auto p-1">
-            <TreeRow node={BOM} depth={0} sel={sel} setSel={setSel} expanded={expanded} toggle={toggle} />
+            <TreeRow node={tree} depth={0} sel={sel} setSel={setSel} expanded={expanded} toggle={toggle} />
           </div>
         </Card>
 

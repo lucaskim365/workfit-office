@@ -4,52 +4,27 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '@/modules/prod/_bits';
-
-interface TypeItem { type: string; name: string; desc: string; items: number; eq: number }
-const TYPES: TypeItem[] = [
-  { type: 'CMP', name: 'CMP', desc: '연마', items: 8, eq: 3 },
-  { type: 'Etch', name: 'Etch', desc: '식각', items: 7, eq: 4 },
-  { type: 'Photo', name: 'Photo', desc: '노광', items: 9, eq: 5 },
-  { type: 'Depo', name: 'Depo', desc: '증착', items: 8, eq: 3 },
-  { type: 'Implant', name: 'Implant', desc: '이온주입', items: 7, eq: 2 },
-  { type: 'Thermal', name: 'Thermal', desc: '열처리', items: 6, eq: 3 },
-  { type: 'Clean', name: 'Clean', desc: '세정', items: 6, eq: 4 },
-];
-
-type Def = [string, string, string, string, string, string, boolean];
-const SPEC_DEF: Record<string, Def[]> = {
-  CMP: [['처리 능력', '수치', 'WPH', '120', '100', '140', true], ['연마 헤드 수', '수치', 'EA', '4', '4', '4', true], ['연마 압력', '수치', 'psi', '5.0', '3.0', '7.0', true], ['플래튼 회전수', '수치', 'rpm', '93', '60', '120', true], ['슬러리 유량', '수치', 'mL/min', '200', '150', '250', true], ['소비 전력', '수치', 'kW', '32', '—', '40', true], ['CDA 사용량', '수치', 'L/min', '850', '—', '1,000', false], ['장비 중량', '수치', 'kg', '4,200', '—', '—', false]],
-  Etch: [['처리 능력', '수치', 'WPH', '90', '75', '110', true], ['챔버 수', '수치', 'EA', '2', '2', '2', true], ['RF 출력', '수치', 'W', '3,000', '2,500', '3,500', true], ['공정 압력', '수치', 'mTorr', '50', '30', '80', true], ['진공도', '수치', 'Torr', '5×10⁻³', '—', '1×10⁻²', true], ['소비 전력', '수치', 'kW', '45', '—', '55', true], ['장비 중량', '수치', 'kg', '5,100', '—', '—', false]],
-  Photo: [['처리 능력', '수치', 'WPH', '180', '150', '200', true], ['해상도', '수치', 'nm', '38', '—', '45', true], ['오버레이', '수치', 'nm', '2.0', '—', '3.0', true], ['광원 파장', '선택', 'nm', '193', '—', '—', true], ['NA(개구수)', '수치', '-', '1.35', '1.20', '1.40', true], ['스테이지 정밀도', '수치', 'nm', '2', '—', '5', true], ['소비 전력', '수치', 'kW', '60', '—', '70', true], ['환경 온도', '수치', '℃', '23', '22.9', '23.1', true], ['장비 중량', '수치', 'kg', '12,000', '—', '—', false]],
-  Depo: [['처리 능력', '수치', 'WPH', '110', '90', '130', true], ['챔버 수', '수치', 'EA', '4', '4', '4', true], ['공정 온도', '수치', '℃', '400', '350', '450', true], ['가스 라인', '수치', 'EA', '8', '6', '10', false], ['공정 압력', '수치', 'Torr', '2.5', '1.0', '5.0', true], ['소비 전력', '수치', 'kW', '38', '—', '48', true], ['두께 균일도', '수치', '%', '±1.5', '—', '±3.0', true], ['장비 중량', '수치', 'kg', '6,300', '—', '—', false]],
-  Implant: [['처리 능력', '수치', 'WPH', '200', '160', '230', true], ['빔 전류', '수치', 'mA', '25', '10', '30', true], ['가속 전압', '수치', 'keV', '900', '5', '900', true], ['진공도', '수치', 'Torr', '1×10⁻⁶', '—', '5×10⁻⁶', true], ['도즈 균일도', '수치', '%', '±0.5', '—', '±1.0', true], ['소비 전력', '수치', 'kW', '52', '—', '62', true], ['장비 중량', '수치', 'kg', '9,800', '—', '—', false]],
-  Thermal: [['처리 능력', '수치', 'WPH', '150', '120', '170', true], ['튜브 수', '수치', 'EA', '1', '1', '1', true], ['최대 온도', '수치', '℃', '1,200', '1,000', '1,250', true], ['승온 속도', '수치', '℃/min', '50', '30', '60', true], ['온도 균일도', '수치', '℃', '±2', '—', '±3', true], ['소비 전력', '수치', 'kW', '28', '—', '35', true]],
-  Clean: [['처리 능력', '수치', 'WPH', '160', '130', '190', true], ['배스 수', '수치', 'EA', '6', '6', '6', true], ['DI수 사용량', '수치', 'L/min', '1,200', '900', '1,400', true], ['DI수 비저항', '수치', 'MΩ·cm', '18', '18', '—', true], ['배스 온도', '수치', '℃', '65', '60', '70', true], ['소비 전력', '수치', 'kW', '18', '—', '24', false]],
-};
-
-interface Meas { eq: string; name: string; vals: string[]; state: '표준' | '주의' | '이탈'; flag: number[] }
-const MEAS: Record<string, Meas[]> = {
-  CMP: [{ eq: 'EQ-CMP01', name: 'CMP 01호기', vals: ['118', '4', '5.0', '93'], state: '표준', flag: [] }, { eq: 'EQ-CMP02', name: 'CMP 02호기', vals: ['120', '4', '5.2', '95'], state: '표준', flag: [] }, { eq: 'EQ-CMP03', name: 'CMP 03호기', vals: ['96', '4', '7.4', '93'], state: '이탈', flag: [0, 2] }],
-  Etch: [{ eq: 'EQ-ETCH01', name: 'Etch 01호기', vals: ['92', '2', '3,000', '50'], state: '표준', flag: [] }, { eq: 'EQ-ETCH02', name: 'Etch 02호기', vals: ['88', '2', '2,950', '54'], state: '표준', flag: [] }, { eq: 'EQ-ETCH03', name: 'Etch 03호기', vals: ['90', '2', '3,600', '78'], state: '주의', flag: [2] }, { eq: 'EQ-ETCH04', name: 'Etch 04호기', vals: ['74', '2', '3,100', '52'], state: '이탈', flag: [0] }],
-  Photo: [{ eq: 'EQ-PHO01', name: 'Photo 01호기', vals: ['182', '38', '2.0', '193'], state: '표준', flag: [] }, { eq: 'EQ-PHO02', name: 'Photo 02호기', vals: ['178', '40', '2.4', '193'], state: '표준', flag: [] }, { eq: 'EQ-PHO03', name: 'Photo 03호기', vals: ['180', '42', '3.2', '193'], state: '주의', flag: [2] }, { eq: 'EQ-PHO04', name: 'Photo 04호기', vals: ['175', '38', '2.1', '193'], state: '표준', flag: [] }, { eq: 'EQ-PHO05', name: 'Photo 05호기', vals: ['184', '39', '2.0', '193'], state: '표준', flag: [] }],
-  Depo: [{ eq: 'EQ-DEP01', name: 'Depo 01호기', vals: ['112', '4', '400', '8'], state: '표준', flag: [] }, { eq: 'EQ-DEP02', name: 'Depo 02호기', vals: ['108', '4', '460', '8'], state: '이탈', flag: [2] }, { eq: 'EQ-DEP03', name: 'Depo 03호기', vals: ['110', '4', '405', '8'], state: '표준', flag: [] }],
-  Implant: [{ eq: 'EQ-IMP01', name: 'Implant 01호기', vals: ['205', '25', '900', '1×10⁻⁶'], state: '표준', flag: [] }, { eq: 'EQ-IMP02', name: 'Implant 02호기', vals: ['198', '24', '900', '3×10⁻⁶'], state: '표준', flag: [] }],
-  Thermal: [{ eq: 'EQ-OVEN01', name: 'Thermal 01호기', vals: ['152', '1', '1,200', '50'], state: '표준', flag: [] }, { eq: 'EQ-OVEN03', name: 'Thermal 03호기', vals: ['148', '1', '1,180', '48'], state: '표준', flag: [] }, { eq: 'EQ-OVEN05', name: 'Thermal 05호기', vals: ['118', '1', '1,260', '50'], state: '이탈', flag: [0, 2] }],
-  Clean: [{ eq: 'EQ-CLN01', name: 'Clean 01호기', vals: ['162', '6', '1,200', '18.2'], state: '표준', flag: [] }, { eq: 'EQ-CLN02', name: 'Clean 02호기', vals: ['158', '6', '1,180', '18.0'], state: '표준', flag: [] }, { eq: 'EQ-CLN03', name: 'Clean 03호기', vals: ['160', '6', '1,420', '18.1'], state: '주의', flag: [2] }, { eq: 'EQ-CLN04', name: 'Clean 04호기', vals: ['155', '6', '1,210', '17.4'], state: '이탈', flag: [3] }],
-};
+import { useEquipmentSpecs } from '@/features/equipmentSpec/useEquipmentSpecs';
 
 const measTone = (s: string): Tone => (s === '표준' ? 'ok' : s === '주의' ? 'warn' : 'err');
 const dtypeTone = (t: string): Tone => (t === '수치' ? 'info' : 'mute');
 
 /** 설비 스펙·제원 관리 — 와이어프레임 equip-spec.jsx 정본. */
 export default function EquipSpecScreen() {
+  const { data: specs = [], isLoading } = useEquipmentSpecs();
   const [sel, setSel] = useState('CMP');
-  const def = SPEC_DEF[sel] ?? [];
-  const meas = MEAS[sel] ?? [];
-  const cur = TYPES.find((t) => t.type === sel) ?? TYPES[0];
+
+  // 데이터 계층(type별 도큐먼트)에서 화면 파생값 계산.
+  const TYPES = specs;
+  const cur = specs.find((s) => s.type === sel) ?? specs[0];
+  const def = cur?.defs ?? [];
+  const meas = cur?.meas ?? [];
   const matrixItems = def.slice(0, 4);
   const outCnt = meas.filter((m) => m.state === '이탈').length;
   const warnCnt = meas.filter((m) => m.state === '주의').length;
+
+  if (isLoading) return <div className="p-6 text-sm text-ink3">불러오는 중…</div>;
+  if (!cur) return <div className="p-6 text-sm text-ink3">설비 제원 데이터가 없습니다.</div>;
 
   return (
     <div className="flex flex-col gap-3.5">

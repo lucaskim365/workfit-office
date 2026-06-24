@@ -58,6 +58,11 @@ import { PQC_PATROL_SEED } from '@/data/seeds/pqcPatrol.seed';
 import { PQC_DEVICE_SEED } from '@/data/seeds/pqcDevice.seed';
 import { COA_SEED } from '@/data/seeds/coa.seed';
 import { EQUIPMENT_SEED } from '@/data/seeds/equipment.seed';
+import { EQUIPMENT_SPEC_SEED } from '@/data/seeds/equipmentSpec.seed';
+import { EQUIP_BOM_SEED } from '@/data/seeds/equipBom.seed';
+import { EQUIP_CHECK_SEED } from '@/data/seeds/equipCheckItem.seed';
+import { ALARM_MASTER_SEED } from '@/data/seeds/alarmMaster.seed';
+import { EQUIP_VENDOR_SEED } from '@/data/seeds/equipVendor.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -108,6 +113,11 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'pqcDevices', docs: PQC_DEVICE_SEED, id: (d) => d.id },
   { coll: 'coaCertificates', docs: COA_SEED, id: (d) => d.no },
   { coll: 'equipments', docs: EQUIPMENT_SEED, id: (d) => d.code },
+  { coll: 'equipmentSpecs', docs: EQUIPMENT_SPEC_SEED, id: (d) => d.type },
+  { coll: 'equipBoms', docs: EQUIP_BOM_SEED, id: (d) => d.code },
+  { coll: 'equipCheckItems', docs: EQUIP_CHECK_SEED, id: (d) => d.type },
+  { coll: 'alarmMasters', docs: ALARM_MASTER_SEED, id: (d) => d.type },
+  { coll: 'equipVendors', docs: EQUIP_VENDOR_SEED, id: (d) => d.code },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
