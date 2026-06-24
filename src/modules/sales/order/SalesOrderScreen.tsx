@@ -1,28 +1,29 @@
 import { Card } from '@/shared/ui/Card';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td, won } from '../_sales';
+import { orderTotals } from '@/domain/salesOrder/schema';
+import { useSalesOrders } from '@/features/salesOrder/useSalesOrders';
 
-type Line = [code: string, name: string, qty: number, price: string, due: string, amt: number];
-const LINES: Line[] = [
-  ['MX-200', '메모리 모듈', 12, '3,960,000', '2026-07-05', 47520000],
-  ['CMP-CON-14', '보드 커넥터', 200, '12,800', '2026-07-05', 2560000],
-  ['PKG-BGA-14', 'BGA 기판', 5, '4,250,000', '2026-07-12', 21250000],
-];
-const HEADER: [string, string][] = [
-  ['수주번호', 'SO-2606-088'], ['거래처', '한빛전자'], ['수주일자', '2026-06-23'],
-  ['납품 요청일', '2026-07-05'], ['결제 조건', '월말 마감 / 익월 30일'], ['영업 담당', '김영업'],
-];
-
-/** 수주/주문서 입력 — 와이어프레임 sales-screens.jsx 정본. */
+/** 수주/주문서 입력 — 데이터: features/salesOrder (header-line). */
 export default function SalesOrderScreen() {
-  const total = LINES.reduce((s, l) => s + l[5], 0);
+  const { data: orders = [] } = useSalesOrders();
+  const cur = orders[0];
+  const lines = cur?.lines ?? [];
+  const total = cur ? orderTotals(cur).amount : 0;
+  const header: [string, string][] = cur
+    ? [
+        ['수주번호', cur.no], ['거래처', cur.customer], ['수주일자', cur.orderDate],
+        ['납품 요청일', cur.reqDeliveryDate], ['결제 조건', cur.paymentTerms], ['영업 담당', cur.salesperson],
+      ]
+    : [];
+
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="수주/주문서 입력" sub="영업수주 관리 / 수주 등록 (Sales Order)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.7fr]">
         <Card title="주문 헤더">
           <div className="flex flex-col gap-3">
-            {HEADER.map(([k, v], i) => (
+            {header.map(([k, v], i) => (
               <div key={k} className="flex flex-col gap-1">
                 <span className="text-[10.5px] font-bold text-ink3">{k}</span>
                 <div className="flex h-[34px] items-center rounded-lg border border-border-hi px-3 text-[12px] text-ink" style={{ background: i === 0 ? C.panelAlt : '#fff', fontWeight: i === 0 ? 700 : 500, fontFamily: i === 0 ? 'ui-monospace, monospace' : 'inherit' }}>{v}</div>
@@ -34,14 +35,14 @@ export default function SalesOrderScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['품목', '품명', '수량', '단가', '납기일', '금액'].map((c, i) => <th key={c} className={th(i >= 2 && i !== 4 ? 'right' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {LINES.map((r, i) => (
-                <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
-                  <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                  <td className={td('left')}>{r[1]}</td>
-                  <td className={`${td('right')} tabular-nums`}>{r[2]}</td>
-                  <td className={`${td('right')} tabular-nums`}>{won(Number(r[3].replace(/,/g, '')))}</td>
-                  <td className={`${td('left')} tabular-nums`}>{r[4]}</td>
-                  <td className={`${td('right')} font-bold tabular-nums text-ink`}>{won(r[5])}</td>
+              {lines.map((l, i) => (
+                <tr key={l.code + i} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
+                  <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{l.code}</td>
+                  <td className={td('left')}>{l.name}</td>
+                  <td className={`${td('right')} tabular-nums`}>{l.qty}</td>
+                  <td className={`${td('right')} tabular-nums`}>{won(l.price)}</td>
+                  <td className={`${td('left')} tabular-nums`}>{l.due}</td>
+                  <td className={`${td('right')} font-bold tabular-nums text-ink`}>{won(l.qty * l.price)}</td>
                 </tr>
               ))}
             </tbody>
