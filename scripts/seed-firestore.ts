@@ -130,6 +130,12 @@ import { ACCOUNTS_RECEIVABLE_SEED } from '@/data/seeds/accountsReceivable.seed';
 import { CREDIT_LIMIT_SEED } from '@/data/seeds/creditLimit.seed';
 import { SALES_REVENUE_SEED } from '@/data/seeds/salesRevenue.seed';
 import { TAX_INVOICE_SEED } from '@/data/seeds/taxInvoice.seed';
+import { AUTH_ROLE_SEED } from '@/data/seeds/authRole.seed';
+import { BACKUP_POLICY_SEED } from '@/data/seeds/backupPolicy.seed';
+import { COMPANY_SITE_SEED } from '@/data/seeds/companySite.seed';
+import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
+import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
+import { SYS_ADMIN_SEED } from '@/data/seeds/sysAdmin.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -253,6 +259,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'creditLimits', docs: CREDIT_LIMIT_SEED, id: (d) => d.cust },
   { coll: 'salesRevenues', docs: SALES_REVENUE_SEED, id: (d) => d.no },
   { coll: 'taxInvoices', docs: TAX_INVOICE_SEED, id: (d) => d.no },
+  { coll: 'authRoles', docs: AUTH_ROLE_SEED, id: (d) => d.code },
+  { coll: 'backupPolicies', docs: BACKUP_POLICY_SEED, id: (d) => d.id },
+  { coll: 'companySites', docs: COMPANY_SITE_SEED, id: (d) => d.name },
+  { coll: 'interfaces', docs: SYS_INTERFACE_SEED, id: (d) => d.id },
+  { coll: 'systemLogs', docs: SYSTEM_LOG_SEED, id: (d) => d.id },
+  { coll: 'sysAdmins', docs: SYS_ADMIN_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

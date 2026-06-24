@@ -45,7 +45,8 @@ service cloud.firestore {
         'labelTasks', 'holdingStock', 'matReturns', 'pickingList', 'deliveryOrders',
         'safetyStock', 'fifoRules', 'matSubconIssues', 'subconStocks', 'pallets', 'agvRobots',
         'kits', 'lotSplits', 'iqcLinks', 'matScraps', 'matRequisitions',
-        'quotes', 'salesCollections', 'accountsReceivable', 'creditLimits', 'salesRevenues', 'taxInvoices'
+        'quotes', 'salesCollections', 'accountsReceivable', 'creditLimits', 'salesRevenues', 'taxInvoices',
+        'authRoles', 'backupPolicies', 'companySites', 'interfaces', 'systemLogs', 'sysAdmins'
       ];
     }
 

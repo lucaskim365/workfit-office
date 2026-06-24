@@ -6,6 +6,7 @@ import { ActionBar } from '@/shared/ui/ActionBar';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
+import { useCompanySites } from '@/features/companySite/useCompanySites';
 
 /** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. */
 function FRow({ label, required, children, multiline }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean }) {
@@ -19,14 +20,6 @@ function FRow({ label, required, children, multiline }: { label: string; require
   );
 }
 
-type Site = { name: string; kind: string; addr: string; tel: string; mgr: string; active: boolean };
-const SITES: Site[] = [
-  { name: '본사', kind: '본점', addr: '경기도 화성시 동탄첨단산업1로 27, 메가센터 7층', tel: '031-8000-1200', mgr: '김경영', active: true },
-  { name: 'Fab1 (제1공장)', kind: '제조장', addr: '경기도 평택시 고덕산업단지 245', tel: '031-8000-1300', mgr: '박생산', active: true },
-  { name: 'Fab2 (제2공장)', kind: '제조장', addr: '충청남도 아산시 탕정면 삼성로 181', tel: '041-5000-2100', mgr: '이설비', active: true },
-  { name: '동탄 물류센터', kind: '물류장', addr: '경기도 화성시 동탄산단6길 15', tel: '031-8000-1450', mgr: '최물류', active: false },
-];
-
 const AL = { left: 'text-left', center: 'text-center' } as const;
 const th = (al: keyof typeof AL) => `whitespace-nowrap border-b border-border bg-panel-alt px-3 py-2.5 text-[10.5px] font-bold text-ink2 ${AL[al]}`;
 const td = (al: keyof typeof AL) => `border-b border-border px-3 py-2.5 ${AL[al]}`;
@@ -35,6 +28,8 @@ const td = (al: keyof typeof AL) => `border-b border-border px-3 py-2.5 ${AL[al]
 export default function CompanyScreen() {
   const [active, setActive] = useState(true);
   const [mask, setMask] = useState(true);
+  const { data: sites, isLoading } = useCompanySites();
+  const rows = sites ?? [];
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -111,11 +106,17 @@ export default function CompanyScreen() {
         </Card>
       </div>
 
-      <Card title="사업장 현황" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">총 {SITES.length}개 사업장</span>}>
+      <Card title="사업장 현황" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">총 {rows.length}개 사업장</span>}>
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['사업장명', '구분', '주소', '대표 전화', '관리자', '상태'].map((c, i) => <th key={c} className={th(i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
-            {SITES.map((s, i) => (
+            {isLoading && (
+              <tr><td colSpan={6} className={`${td('center')} text-ink3`}>불러오는 중…</td></tr>
+            )}
+            {!isLoading && rows.length === 0 && (
+              <tr><td colSpan={6} className={`${td('center')} text-ink3`}>등록된 사업장이 없습니다.</td></tr>
+            )}
+            {rows.map((s, i) => (
               <tr key={s.name} style={{ background: i % 2 ? '#f7f9fc' : '#fff' }}>
                 <td className={`${td('left')} font-bold text-ink`}>{s.name}</td>
                 <td className={td('left')}><Pill tone={s.kind === '본점' ? 'info' : s.kind === '제조장' ? 'ok' : 'mute'}>{s.kind}</Pill></td>

@@ -5,36 +5,21 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { DetailField } from '@/shared/ui/DetailField';
 import { T } from '@/shared/theme/tokens';
+import { useSysInterfaces } from '@/features/sysInterface/useSysInterfaces';
+import type { SysInterface } from '@/domain/sysInterface/schema';
 
-interface Iface {
-  id: string;
-  name: string;
-  target: 'ERP' | 'PLC' | 'WMS' | 'EQ';
-  dir: string;
-  cycle: string;
-  last: string;
-  status: '정상' | '지연' | '오류';
-  addr: string;
-  method: string;
-  remark: string;
-}
-
-const IFACES: Iface[] = [
-  { id: 'IF-ERP-001', name: 'ERP 생산실적 송신', target: 'ERP', dir: '송신', cycle: '5분', last: '14:25:02', status: '정상', addr: 'https://erp.workfit.co.kr/api/prod', method: 'REST API', remark: '생산 실적 확정 시 ERP로 전송. 야간 배치(02:00) 정합성 재검증 수행.' },
-  { id: 'IF-ERP-002', name: 'ERP 작업지시 수신', target: 'ERP', dir: '수신', cycle: '10분', last: '14:20:10', status: '정상', addr: 'https://erp.workfit.co.kr/api/wo', method: 'REST API', remark: 'ERP 작업지시 수신 후 Run Sheet 발행.' },
-  { id: 'IF-PLC-014', name: 'CMP02 설비 데이터', target: 'PLC', dir: '수신', cycle: '실시간', last: '14:25:08', status: '정상', addr: 'opc.tcp://10.20.5.14:4840', method: 'OPC UA', remark: 'CMP02 설비 가동 데이터 실시간 수집.' },
-  { id: 'IF-PLC-022', name: 'ETCH01 설비 데이터', target: 'PLC', dir: '수신', cycle: '실시간', last: '14:18:44', status: '지연', addr: 'opc.tcp://10.20.5.22:4840', method: 'OPC UA', remark: 'ETCH01 설비 데이터 수집 — 응답 지연 점검 필요.' },
-  { id: 'IF-WMS-003', name: 'WMS 자재 입출고', target: 'WMS', dir: '양방향', cycle: '15분', last: '14:12:30', status: '정상', addr: 'https://wms.workfit.co.kr/api', method: 'REST API', remark: '자재 입출고 연동.' },
-  { id: 'IF-MES-009', name: '검사장비 결과 수신', target: 'EQ', dir: '수신', cycle: '실시간', last: '13:50:21', status: '오류', addr: 'tcp://10.20.6.9:9100', method: 'Socket', remark: '검사장비 결과 수신 — 연결 오류.' },
-];
-
-const TONE: Record<Iface['status'], Tone> = { 정상: 'ok', 지연: 'warn', 오류: 'err' };
-const TGT_COLOR: Record<Iface['target'], string> = { ERP: T.navy, PLC: T.teal, WMS: T.blue, EQ: T.ink2 };
+const TONE: Record<SysInterface['status'], Tone> = { 정상: 'ok', 지연: 'warn', 오류: 'err' };
+const TGT_COLOR: Record<SysInterface['target'], string> = { ERP: T.navy, PLC: T.teal, WMS: T.blue, EQ: T.ink2 };
 
 /** 인터페이스 관리 — 외부 연동 모니터링 + 정보 등록. 와이어프레임 sys-screens-2.InterfaceMgmtContent 정본. */
 export default function InterfaceScreen() {
+  const { data: ifaces = [], isLoading } = useSysInterfaces();
   const [selected, setSelected] = useState('IF-ERP-001');
-  const cur = IFACES.find((x) => x.id === selected) ?? IFACES[0];
+  const cur = ifaces.find((x) => x.id === selected) ?? ifaces[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '인터페이스가 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -65,7 +50,7 @@ export default function InterfaceScreen() {
                 </tr>
               </thead>
               <tbody>
-                {IFACES.map((x) => {
+                {ifaces.map((x) => {
                   const on = x.id === selected;
                   return (
                     <tr key={x.id} onClick={() => setSelected(x.id)} className={`cursor-pointer border-b border-border transition-colors ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}>

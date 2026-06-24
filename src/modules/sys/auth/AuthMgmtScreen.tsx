@@ -1,28 +1,9 @@
 import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
-
-interface Role {
-  code: string;
-  name: string;
-}
-
-const ROLES: Role[] = [
-  { code: 'OPERATOR', name: '작업자' },
-  { code: 'LEADER', name: '반장' },
-  { code: 'MANAGER', name: '관리자' },
-  { code: 'SYS_ADMIN', name: '시스템관리자' },
-];
+import { useAuthRoles } from '@/features/authRole/useAuthRoles';
 
 const MENUS = ['운영 현황', '기준 정보', '생산 관리', '설비 관리', '품질 관리', '리포트', '시스템 관리'];
-
-// [role][menu] = [접근, 수정]
-const SEED: Record<string, boolean[][]> = {
-  OPERATOR: MENUS.map((_, i) => [i < 5, false]),
-  LEADER: MENUS.map((_, i) => [i < 6, i >= 2 && i <= 4]),
-  MANAGER: [[true, false], [true, true], [true, true], [true, true], [true, true], [true, false], [true, false]],
-  SYS_ADMIN: MENUS.map(() => [true, true]),
-};
 
 function Check({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
@@ -42,16 +23,27 @@ function Check({ on, onClick }: { on: boolean; onClick: () => void }) {
 
 /** 권한 관리 — 직무(역할) + 메뉴 접근/수정 권한. 와이어프레임 sys-screens.AuthMgmtContent 정본. */
 export default function AuthMgmtScreen() {
+  const { data: roles = [], isLoading } = useAuthRoles();
   const [selected, setSelected] = useState('MANAGER');
-  const [matrix, setMatrix] = useState<Record<string, boolean[][]>>(SEED);
-  const role = ROLES.find((r) => r.code === selected) ?? ROLES[2];
-  const grid = matrix[selected];
+  // 화면 내 토글 편집을 보존하는 오버라이드. 키 = 역할 코드, 값 = [메뉴][접근,수정].
+  const [overrides, setOverrides] = useState<Record<string, boolean[][]>>({});
+
+  if (isLoading) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">불러오는 중…</div>;
+  }
+  if (roles.length === 0) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">등록된 역할이 없습니다.</div>;
+  }
+
+  const role = roles.find((r) => r.code === selected) ?? roles[0];
+  const grid: boolean[][] = overrides[role.code] ?? role.permissions.map((row) => [...row]);
 
   const toggle = (mi: number, ci: number) =>
-    setMatrix((prev) => {
-      const next = prev[selected].map((row) => [...row]);
+    setOverrides((prev) => {
+      const base = prev[role.code] ?? role.permissions.map((row) => [...row]);
+      const next = base.map((row) => [...row]);
       next[mi][ci] = !next[mi][ci];
-      return { ...prev, [selected]: next };
+      return { ...prev, [role.code]: next };
     });
 
   return (
@@ -66,7 +58,7 @@ export default function AuthMgmtScreen() {
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[300px_1fr]">
         <Card title="직무 (역할)" bodyClassName="p-0">
-          {ROLES.map((r) => {
+          {roles.map((r) => {
             const on = r.code === selected;
             return (
               <button

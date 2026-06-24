@@ -1,27 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Kpi } from '@/shared/ui/Kpi';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Toggle } from '@/shared/ui/Toggle';
-
-interface Policy {
-  name: string;
-  cycle: string;
-  keep: string;
-  after: string;
-  size: string;
-  on: boolean;
-}
-
-const POLICIES: Policy[] = [
-  { name: '설비 가동 로그', cycle: '매일 02:00', keep: '90일', after: '아카이브 후 삭제', size: '1.2 GB/일', on: true },
-  { name: '사용자 접속 로그', cycle: '매일 02:00', keep: '365일', after: '백업 후 삭제', size: '120 MB/일', on: false },
-  { name: '데이터 변경 이력', cycle: '매일 03:00', keep: '365일', after: '백업 보관', size: '340 MB/일', on: false },
-  { name: 'SPC 측정 데이터', cycle: '매주 일 04:00', keep: '180일', after: '아카이브 후 삭제', size: '4.6 GB/주', on: false },
-  { name: '알람 이력', cycle: '매일 02:30', keep: '180일', after: '백업 후 삭제', size: '85 MB/일', on: false },
-  { name: '인터페이스 로그', cycle: '매일 01:00', keep: '30일', after: '즉시 삭제', size: '2.1 GB/일', on: false },
-];
+import { useBackupPolicies } from '@/features/backupPolicy/useBackupPolicies';
+import type { BackupPolicy } from '@/domain/backupPolicy/schema';
 
 const HISTORY: Array<[string, string, string, string, string, string]> = [
   ['2026-06-11 02:00', '설비 가동 로그', '백업', '1.21 GB', '00:04:12', '성공'],
@@ -45,8 +29,17 @@ const resTone = (r: string): Tone => (r === '성공' ? 'ok' : r === '경고' ? '
 
 /** 데이터 백업 — 요약 + 저장소 + 백업/삭제 정책 + 이력. 와이어프레임 sys-screens-2.DataBackupContent 정본. */
 export default function BackupScreen() {
-  const [policies, setPolicies] = useState(POLICIES);
+  const { data: seed = [], isLoading } = useBackupPolicies();
+  const [policies, setPolicies] = useState<BackupPolicy[]>([]);
+  // 로딩 완료 시 훅 데이터로 로컬 상태 동기화(토글 조작을 위한 로컬 사본).
+  useEffect(() => {
+    if (seed.length) setPolicies(seed);
+  }, [seed]);
   const toggle = (i: number) => setPolicies((p) => p.map((x, j) => (j === i ? { ...x, on: !x.on } : x)));
+
+  if (!policies.length) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '백업 정책이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">

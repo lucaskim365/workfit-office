@@ -3,37 +3,22 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
+import { useSystemLogs } from '@/features/systemLog/useSystemLogs';
+import type { SystemLog } from '@/domain/systemLog/schema';
 
-interface Log {
-  at: string;
-  user: string;
-  type: '접속' | '변경';
-  screen: string;
-  detail: string;
-  ip: string;
-}
-
-const LOGS: Log[] = [
-  { at: '2026-06-09 14:22:11', user: 'A12345 홍길동', type: '변경', screen: '품목정보', detail: 'UPDATE · WF-200-A 안전재고 500→600', ip: '10.20.3.14' },
-  { at: '2026-06-09 14:08:55', user: 'B22120 이순신', type: '접속', screen: '로그인', detail: 'LOGIN SUCCESS', ip: '10.20.3.51' },
-  { at: '2026-06-09 13:51:02', user: 'A67890 김철수', type: '변경', screen: '작업 지시', detail: 'INSERT · WO-20260609-022', ip: '10.20.3.22' },
-  { at: '2026-06-09 13:30:40', user: 'C77201 유관순', type: '접속', screen: '로그아웃', detail: 'LOGOUT', ip: '10.20.3.77' },
-  { at: '2026-06-09 12:47:18', user: 'A12345 홍길동', type: '변경', screen: '그룹권한관리', detail: 'UPDATE · ADMIN 권한 수정', ip: '10.20.3.14' },
-  { at: '2026-06-09 11:20:33', user: 'B53410 강감찬', type: '접속', screen: '로그인 실패', detail: 'LOGIN FAIL (비밀번호 오류)', ip: '10.20.3.99' },
-];
-
-const TONE: Record<Log['type'], Tone> = { 접속: 'info', 변경: 'warn' };
+const TONE: Record<SystemLog['type'], Tone> = { 접속: 'info', 변경: 'warn' };
 const TYPE_OPTIONS: Option[] = [{ value: '', label: '전체' }, { value: '접속', label: '접속' }, { value: '변경', label: '변경' }];
 
 /** 로그 관리 — 접속·변경 이력. 와이어프레임 sys-screens.LogMgmtContent 정본. */
 export default function LogMgmtScreen() {
   const [draft, setDraft] = useState({ type: '', q: '' });
   const [applied, setApplied] = useState(draft);
+  const { data: logs = [], isLoading } = useSystemLogs();
 
   const rows = useMemo(() => {
     const kw = applied.q.trim().toLowerCase();
-    return LOGS.filter((l) => (!applied.type || l.type === applied.type) && (!kw || l.user.toLowerCase().includes(kw)));
-  }, [applied]);
+    return logs.filter((l) => (!applied.type || l.type === applied.type) && (!kw || l.user.toLowerCase().includes(kw)));
+  }, [logs, applied]);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -70,8 +55,15 @@ export default function LogMgmtScreen() {
               </tr>
             </thead>
             <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="border-b border-border px-3 py-10 text-center text-[12px] text-ink3">
+                    {isLoading ? '불러오는 중…' : '로그가 없습니다.'}
+                  </td>
+                </tr>
+              )}
               {rows.map((l, i) => (
-                <tr key={i} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                <tr key={l.id} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
                   <td className="border-b border-border px-3 py-2.5 whitespace-nowrap tabular-nums text-ink3">{l.at}</td>
                   <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{l.user}</td>
                   <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={TONE[l.type]}>{l.type}</Pill></td>

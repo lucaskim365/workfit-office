@@ -5,49 +5,36 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
 import { DetailField } from '@/shared/ui/DetailField';
+import { useSysAdmins } from '@/features/sysAdmin/useSysAdmins';
+import type { SysAdmin } from '@/domain/sysAdmin/schema';
 
-interface Admin {
-  id: string;
-  name: string;
-  level: '슈퍼관리자' | '시스템관리자' | '운영관리자';
-  modules: string;
-  status: '사용' | '잠금' | '미사용';
-  twoFa: 'ON' | 'OFF';
-  ip: string;
-  lastLogin: string;
-}
-
-const ADMINS: Admin[] = [
-  { id: 'admin', name: '홍길동', level: '슈퍼관리자', modules: '전체 모듈', status: '사용', twoFa: 'ON', ip: '10.20.3.0/24', lastLogin: '2026-06-09 08:41' },
-  { id: 'sys_kim', name: '김철수', level: '시스템관리자', modules: '시스템·기준', status: '사용', twoFa: 'ON', ip: '10.20.3.0/24', lastLogin: '2026-06-09 08:12' },
-  { id: 'ops_lee', name: '이순신', level: '운영관리자', modules: '생산·설비', status: '사용', twoFa: 'OFF', ip: '-', lastLogin: '2026-06-08 17:55' },
-  { id: 'qa_kang', name: '강감찬', level: '운영관리자', modules: '품질', status: '잠금', twoFa: 'ON', ip: '-', lastLogin: '2026-06-05 09:03' },
-  { id: 'adm_yoo', name: '유관순', level: '시스템관리자', modules: '시스템·리포트', status: '사용', twoFa: 'ON', ip: '10.20.3.0/24', lastLogin: '2026-06-09 07:30' },
-  { id: 'ops_ahn', name: '안중근', level: '운영관리자', modules: '설비', status: '미사용', twoFa: 'OFF', ip: '-', lastLogin: '2026-05-28 14:20' },
-];
-
-const ST_TONE: Record<Admin['status'], Tone> = { 사용: 'ok', 잠금: 'warn', 미사용: 'mute' };
-const LV_TONE: Record<Admin['level'], Tone> = { 슈퍼관리자: 'err', 시스템관리자: 'info', 운영관리자: 'mute' };
+const ST_TONE: Record<SysAdmin['status'], Tone> = { 사용: 'ok', 잠금: 'warn', 미사용: 'mute' };
+const LV_TONE: Record<SysAdmin['level'], Tone> = { 슈퍼관리자: 'err', 시스템관리자: 'info', 운영관리자: 'mute' };
 const LEVELS = ['슈퍼관리자', '시스템관리자', '운영관리자'] as const;
 const LEVEL_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...LEVELS.map((l) => ({ value: l, label: l }))];
 const STATUS_OPTIONS: Option[] = [{ value: '', label: '전체' }, { value: '사용', label: '사용' }, { value: '잠금', label: '잠금' }, { value: '미사용', label: '미사용' }];
 
 /** 사용자 관리(시스템 어드민) — 와이어프레임 sys-screens.UserAdminContent 정본. */
 export default function UserAdminScreen() {
+  const { data: admins = [], isLoading } = useSysAdmins();
   const [draft, setDraft] = useState({ level: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState('admin');
 
   const rows = useMemo(() => {
     const kw = applied.q.trim().toLowerCase();
-    return ADMINS.filter(
+    return admins.filter(
       (a) =>
         (!applied.level || a.level === applied.level) &&
         (!applied.status || a.status === applied.status) &&
         (!kw || a.id.toLowerCase().includes(kw) || a.name.toLowerCase().includes(kw)),
     );
-  }, [applied]);
-  const cur = ADMINS.find((a) => a.id === selected) ?? ADMINS[0];
+  }, [admins, applied]);
+  const cur = admins.find((a) => a.id === selected) ?? admins[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '관리자 계정이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
