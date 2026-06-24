@@ -30,7 +30,8 @@ service cloud.firestore {
         'spcCharts', 'spcCapability', 'spcAlarms',
         'traceNodes', 'voc', 'd8Reports',
         'gages', 'calibrations', 'gageRrStudies',
-        'pqcFmlChecks', 'pqcSelfChecks', 'pqcPatrols', 'pqcDevices'
+        'pqcFmlChecks', 'pqcSelfChecks', 'pqcPatrols', 'pqcDevices',
+        'coaCertificates'
       ];
     }
 

@@ -53,3 +53,8 @@ export function format8dNo(dateKey: string, seq: number): string {
 export function formatCalNo(dateKey: string, seq: number): string {
   return formatDocNo('CL', dateKey, seq);
 }
+
+/** COA-YYMMDD-NNN (출하 성적서). */
+export function formatCoaNo(dateKey: string, seq: number): string {
+  return formatDocNo('COA', dateKey, seq);
+}

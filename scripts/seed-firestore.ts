@@ -56,6 +56,7 @@ import { PQC_FML_SEED } from '@/data/seeds/pqcFml.seed';
 import { PQC_SELF_SEED } from '@/data/seeds/pqcSelf.seed';
 import { PQC_PATROL_SEED } from '@/data/seeds/pqcPatrol.seed';
 import { PQC_DEVICE_SEED } from '@/data/seeds/pqcDevice.seed';
+import { COA_SEED } from '@/data/seeds/coa.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -104,6 +105,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'pqcSelfChecks', docs: PQC_SELF_SEED, id: (d) => d.wo },
   { coll: 'pqcPatrols', docs: PQC_PATROL_SEED, id: (d) => d.id },
   { coll: 'pqcDevices', docs: PQC_DEVICE_SEED, id: (d) => d.id },
+  { coll: 'coaCertificates', docs: COA_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
