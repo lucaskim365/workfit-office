@@ -2,17 +2,15 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { useLotSplits } from '@/features/lotSplit/useLotSplits';
 
 const SPLIT: [string, number][] = [['LOT-RAW-8821-A', 200], ['LOT-RAW-8821-B', 200], ['LOT-RAW-8821-C', 100]];
 const MERGE: [string, number][] = [['LOT-CHM-0457-1', 20], ['LOT-CHM-0457-2', 15]];
-const HIST: string[][] = [
-  ['SP-260611-08', '분할', 'LOT-RAW-8821', 'LOT-RAW-8821-A/B/C', '500 → 200·200·100', '김현우', '06-11 09:24'],
-  ['MG-260611-05', '병합', 'LOT-CHM-0457-1/2', 'LOT-CHM-0457-M', '20·15 → 35', '이서연', '06-11 10:02'],
-  ['SP-260610-22', '분할', 'LOT-PKG-3320', 'LOT-PKG-3320-A/B', '500 → 300·200', '박준호', '06-10 16:40'],
-];
 
 /** 자재 LOT 분할/병합 — 와이어프레임 wms-screens-4.jsx 정본. */
 export default function MatLotSplitScreen() {
+  /** 분할/병합 처리 이력 — 데이터 계층(lotSplits)에서 소비. */
+  const { data: hist = [], isLoading } = useLotSplits();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="자재 LOT 분할/병합" sub="창고/위치 / 자재 LOT 분할(Split)·병합(Merge)" actions={<ActionBar actions={['save']} />} />
@@ -62,15 +60,17 @@ export default function MatLotSplitScreen() {
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['처리번호', '유형', '원 Lot', '결과 Lot', '수량 변화', '작업자', '일시'].map((c, i) => <th key={c} className={th(i === 1 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
-            {HIST.map((r, i) => (
-              <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
-                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                <td className={td('center')}><Pill tone={r[1] === '분할' ? 'info' : 'warn'}>{r[1]}</Pill></td>
-                <td className={`${td('left')} font-mono text-[10.5px]`}>{r[2]}</td>
-                <td className={`${td('left')} font-mono text-[10.5px] font-semibold text-ink`}>{r[3]}</td>
-                <td className={`${td('left')} tabular-nums`}>{r[4]}</td>
-                <td className={td('left')}>{r[5]}</td>
-                <td className={`${td('left')} tabular-nums text-ink3`}>{r[6]}</td>
+            {hist.length === 0 ? (
+              <tr><td colSpan={7} className="py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '처리 이력이 없습니다.'}</td></tr>
+            ) : hist.map((r, i) => (
+              <tr key={r.id} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
+                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r.id}</td>
+                <td className={td('center')}><Pill tone={r.type === '분할' ? 'info' : 'warn'}>{r.type}</Pill></td>
+                <td className={`${td('left')} font-mono text-[10.5px]`}>{r.srcLot}</td>
+                <td className={`${td('left')} font-mono text-[10.5px] font-semibold text-ink`}>{r.resultLots}</td>
+                <td className={`${td('left')} tabular-nums`}>{r.qty}</td>
+                <td className={td('left')}>{r.who}</td>
+                <td className={`${td('left')} tabular-nums text-ink3`}>{r.date}</td>
               </tr>
             ))}
           </tbody>

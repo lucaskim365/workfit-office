@@ -2,13 +2,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, MKpis, th, td } from '../_mat';
+import { useKits } from '@/features/kit/useKits';
 
-type Kit = [no: string, wo: string, line: string, total: number, status: string, ready: number];
-const KITS: Kit[] = [
-  ['KIT-260611-04', 'WO-260611-021', 'M-Line 조립1', 6, '준비중', 4],
-  ['KIT-260611-05', 'WO-260611-024', 'M-Line 조립2', 5, '대기', 0],
-  ['KIT-260611-03', 'WO-260611-018', 'A-Line 패키징', 8, '완료', 8],
-];
 type Part = [code: string, name: string, need: number, ready: number, ok: boolean];
 const PARTS: Part[] = [
   ['CMP-IC-3301', '메인 컨트롤러 IC', 1, 1, true],
@@ -22,6 +17,12 @@ const tone = (s: string): Tone => (s === '완료' ? 'ok' : s === '준비중' ? '
 
 /** 자재 키팅(Kitting) 작업 관리 — 와이어프레임 wms-screens-4.jsx 정본. */
 export default function MatKittingScreen() {
+  const { data: kits = [], isLoading } = useKits();
+
+  if (kits.length === 0) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '키팅 지시가 없습니다.'}</div>;
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="자재 키팅(Kitting) 작업 관리" sub="불출 / 자재 키팅(Kitting) 작업 관리" actions={<ActionBar actions={['add', 'save']} />} />
@@ -31,13 +32,13 @@ export default function MatKittingScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['키트번호', '작업지시', '작업장', '구성', '상태'].map((c, i) => <th key={c} className={th(i >= 3 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {KITS.map((r, i) => (
-                <tr key={i} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r[0]}</td>
-                  <td className={`${td('left')} font-mono text-[10.5px]`}>{r[1]}</td>
-                  <td className={td('left')}>{r[2]}</td>
-                  <td className={td('center')}><span className="text-[11px] font-bold text-ink">{r[5]}/{r[3]}</span><span className="text-[10px] text-ink3"> 종</span></td>
-                  <td className={td('center')}><Pill tone={tone(r[4])}>{r[4]}</Pill></td>
+              {kits.map((r, i) => (
+                <tr key={r.no} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r.no}</td>
+                  <td className={`${td('left')} font-mono text-[10.5px]`}>{r.wo}</td>
+                  <td className={td('left')}>{r.line}</td>
+                  <td className={td('center')}><span className="text-[11px] font-bold text-ink">{r.done}/{r.count}</span><span className="text-[10px] text-ink3"> 종</span></td>
+                  <td className={td('center')}><Pill tone={tone(r.status)}>{r.status}</Pill></td>
                 </tr>
               ))}
             </tbody>

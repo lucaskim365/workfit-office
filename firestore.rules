@@ -43,7 +43,8 @@ service cloud.firestore {
         'subconOrders', 'subconIssues', 'subconReceipts',
         'warehouseZones', 'putawayTasks', 'transfers', 'countRecords', 'adjustments', 'agingStock',
         'labelTasks', 'holdingStock', 'matReturns', 'pickingList', 'deliveryOrders',
-        'safetyStock', 'fifoRules', 'matSubconIssues', 'subconStocks', 'pallets', 'agvRobots'
+        'safetyStock', 'fifoRules', 'matSubconIssues', 'subconStocks', 'pallets', 'agvRobots',
+        'kits', 'lotSplits', 'iqcLinks', 'matScraps', 'matRequisitions'
       ];
     }
 

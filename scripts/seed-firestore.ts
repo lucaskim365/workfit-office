@@ -119,6 +119,11 @@ import { MAT_SUBCON_ISSUE_SEED } from '@/data/seeds/matSubconIssue.seed';
 import { SUBCON_STOCK_SEED } from '@/data/seeds/subconStock.seed';
 import { PALLET_SEED } from '@/data/seeds/pallet.seed';
 import { AGV_ROBOT_SEED } from '@/data/seeds/agvRobot.seed';
+import { KIT_SEED } from '@/data/seeds/kit.seed';
+import { LOT_SPLIT_SEED } from '@/data/seeds/lotSplit.seed';
+import { IQC_LINK_SEED } from '@/data/seeds/iqcLink.seed';
+import { MAT_SCRAP_SEED } from '@/data/seeds/matScrap.seed';
+import { MAT_REQUISITION_SEED } from '@/data/seeds/matRequisition.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -231,6 +236,11 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'subconStocks', docs: SUBCON_STOCK_SEED, id: (d) => d.name },
   { coll: 'pallets', docs: PALLET_SEED, id: (d) => d.id },
   { coll: 'agvRobots', docs: AGV_ROBOT_SEED, id: (d) => d.id },
+  { coll: 'kits', docs: KIT_SEED, id: (d) => d.no },
+  { coll: 'lotSplits', docs: LOT_SPLIT_SEED, id: (d) => d.id },
+  { coll: 'iqcLinks', docs: IQC_LINK_SEED, id: (d) => d.lot },
+  { coll: 'matScraps', docs: MAT_SCRAP_SEED, id: (d) => d.no },
+  { coll: 'matRequisitions', docs: MAT_REQUISITION_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
