@@ -27,7 +27,8 @@ service cloud.firestore {
         'shipments', 'receipts', 'issues', 'inspectionItems',
         'inspectionStandards', 'defectCodes', 'qualityGrades', 'inspections',
         'nonconformances', 'mrbCases', 'reworkOrders', 'capaActions',
-        'spcCharts', 'spcCapability', 'spcAlarms'
+        'spcCharts', 'spcCapability', 'spcAlarms',
+        'traceNodes', 'voc', 'd8Reports'
       ];
     }
 

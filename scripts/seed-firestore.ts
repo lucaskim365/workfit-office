@@ -46,6 +46,9 @@ import { CAPA_SEED } from '@/data/seeds/capa.seed';
 import { SPC_CHART_SEED } from '@/data/seeds/spcChart.seed';
 import { SPC_CAPABILITY_SEED } from '@/data/seeds/spcCapability.seed';
 import { SPC_ALARM_SEED } from '@/data/seeds/spcAlarm.seed';
+import { TRACE_NODE_SEED } from '@/data/seeds/traceNode.seed';
+import { VOC_SEED } from '@/data/seeds/voc.seed';
+import { D8_REPORT_SEED } from '@/data/seeds/d8Report.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -84,6 +87,9 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'spcCharts', docs: SPC_CHART_SEED, id: (d) => d.id },
   { coll: 'spcCapability', docs: SPC_CAPABILITY_SEED, id: (d) => d.id },
   { coll: 'spcAlarms', docs: SPC_ALARM_SEED, id: (d) => d.id },
+  { coll: 'traceNodes', docs: TRACE_NODE_SEED, id: (d) => d.id },
+  { coll: 'voc', docs: VOC_SEED, id: (d) => d.no },
+  { coll: 'd8Reports', docs: D8_REPORT_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

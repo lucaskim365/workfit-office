@@ -38,3 +38,13 @@ export function formatReworkNo(prefix: 'RW' | 'SC', dateKey: string, seq: number
 export function formatCapaNo(dateKey: string, seq: number): string {
   return formatDocNo('CAPA', dateKey, seq);
 }
+
+/** VOC-YYMMDD-NNN (고객 클레임). */
+export function formatVocNo(dateKey: string, seq: number): string {
+  return formatDocNo('VOC', dateKey, seq);
+}
+
+/** 8D-YYMMDD-NNN (8D 보고서). */
+export function format8dNo(dateKey: string, seq: number): string {
+  return formatDocNo('8D', dateKey, seq);
+}

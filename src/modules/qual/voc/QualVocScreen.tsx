@@ -3,31 +3,30 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, ChipTabs } from '../_qual';
+import { useVocs, useTransitionVoc } from '@/features/voc/useVocs';
+import { nextStatus } from '@/domain/voc/status';
 
 const VOC_ST: Record<string, Tone> = { 접수: 'info', 조사중: 'warn', 회신: 'warn', 종결: 'ok' };
 const VOC_TYPE: Record<string, string> = { 품질: C.err, 납기: C.warn, 포장: C.blue, 수량: '#8a5cf6', 서비스: C.teal };
 const sevTone = (s: string): Tone => (s === '치명' ? 'err' : s === '주요' ? 'warn' : 'mute');
 const dueColor = (d: string) => (d === '지연' ? C.err : d === 'D-Day' || d === 'D-1' ? C.warn : C.ink2);
 
-interface Voc { no: string; date: string; cust: string; contact: string; prod: string; code: string; lot: string; type: string; sev: string; channel: string; qty: number; due: string; status: string; pic: string; content: string; req: string; link: { ncr: string; d8: string; mrb: string }; steps: [string, string, number][] }
-const VOC_LIST: Voc[] = [
-  { no: 'VOC-260621-007', date: '2026-06-21', cust: '현대모비스', contact: '구매팀 김과장', prod: '기어 G-22T', code: 'FG-GER-22', lot: 'L2605-0820', type: '품질', sev: '치명', channel: '전화', qty: 35, due: 'D-1', status: '조사중', pic: '박품질', content: '조립 라인에서 기어 치합 소음 발생. 35EA 반품 요청 및 근본원인·재발방지 대책 회신 요구.', req: '8D 보고서 회신 · 재발방지 대책 · 반품 교환', link: { ncr: 'NCR-260620-011', d8: '8D-260620-002', mrb: 'MRB-260620-003' }, steps: [['접수', '06-20 16:30', 1], ['원인 분석', '진행중', 0], ['대책 수립', '—', 0], ['고객 회신', '—', 0], ['종결', '—', 0]] },
-  { no: 'VOC-260620-006', date: '2026-06-20', cust: 'LG전자', contact: '품질팀 이책임', prod: '하우징 C-Type', code: 'FG-HSG-C', lot: 'L2606-0922', type: '포장', sev: '경미', channel: '이메일', qty: 200, due: 'D-3', status: '접수', pic: '미배정', content: '납품 박스 일부 파손으로 제품 표면 스크래치 우려. 포장 개선 요청.', req: '포장 사양 개선 · 해당 로트 재검', link: { ncr: '—', d8: '—', mrb: '—' }, steps: [['접수', '06-20 11:10', 1], ['원인 분석', '—', 0], ['대책 수립', '—', 0], ['고객 회신', '—', 0], ['종결', '—', 0]] },
-  { no: 'VOC-260619-005', date: '2026-06-19', cust: '만도', contact: '생산관리 정대리', prod: '커버 플레이트 B', code: 'FG-CVR-B', lot: 'L2606-0910', type: '납기', sev: '주요', channel: '포털', qty: 0, due: 'D-Day', status: '회신', pic: '한영업', content: '6월 3주차 납품 2일 지연으로 고객 라인 가동 차질. 지연 사유 및 향후 대책 요청.', req: '지연 사유서 · 납기 준수 계획', link: { ncr: '—', d8: '—', mrb: '—' }, steps: [['접수', '06-19 09:40', 1], ['원인 분석', '06-19 14:00', 1], ['대책 수립', '06-19 17:00', 1], ['고객 회신', '진행중', 0], ['종결', '—', 0]] },
-  { no: 'VOC-260618-004', date: '2026-06-18', cust: '현대모비스', contact: '구매팀 김과장', prod: '샤프트 D-40', code: 'FG-SFT-D', lot: 'L2606-0905', type: '품질', sev: '주요', channel: '방문', qty: 60, due: '완료', status: '종결', pic: '박품질', content: '진원도 불량 60EA 발견. 선별 및 교환 요청.', req: '교환 · 8D 회신', link: { ncr: 'NCR-260619-009', d8: '8D-260619-001', mrb: 'MRB-260619-001' }, steps: [['접수', '06-18 10:20', 1], ['원인 분석', '06-18 15:00', 1], ['대책 수립', '06-19 11:00', 1], ['고객 회신', '06-19 16:00', 1], ['종결', '06-20 09:00', 1]] },
-  { no: 'VOC-260617-003', date: '2026-06-17', cust: 'LG마그나', contact: '품질팀 최주임', prod: '브래킷 ASSY-A', code: 'FG-BRK-A', lot: 'L2606-0888', type: '수량', sev: '경미', channel: '이메일', qty: 12, due: '완료', status: '종결', pic: '한영업', content: '납품 수량 12EA 부족. 추가 납품 요청.', req: '부족분 추가 납품', link: { ncr: '—', d8: '—', mrb: '—' }, steps: [['접수', '06-17 13:30', 1], ['원인 분석', '06-17 15:00', 1], ['대책 수립', '06-17 16:00', 1], ['고객 회신', '06-18 09:00', 1], ['종결', '06-18 14:00', 1]] },
-];
-
 /** 고객 클레임(VOC) 접수 관리 — 와이어프레임 qual-voc.jsx 정본. */
 export default function QualVocScreen() {
+  const { data: list = [], isLoading } = useVocs();
+  const transition = useTransitionVoc();
   const [sel, setSel] = useState('VOC-260621-007');
   const [tab, setTab] = useState('전체');
-  const cur = VOC_LIST.find((v) => v.no === sel) || VOC_LIST[0];
-  const rows = VOC_LIST.filter((v) => tab === '전체' || (tab === '미종결' ? v.status !== '종결' : v.status === '종결'));
+  const cur = list.find((v) => v.no === sel) || list[0];
+  const rows = list.filter((v) => tab === '전체' || (tab === '미종결' ? v.status !== '종결' : v.status === '종결'));
 
-  const open = VOC_LIST.filter((v) => v.status !== '종결').length;
-  const urgent = VOC_LIST.filter((v) => v.status !== '종결' && (v.due === '지연' || v.due === 'D-Day' || v.due === 'D-1')).length;
-  const quality = VOC_LIST.filter((v) => v.type === '품질').length;
+  const open = list.filter((v) => v.status !== '종결').length;
+  const urgent = list.filter((v) => v.status !== '종결' && (v.due === '지연' || v.due === 'D-Day' || v.due === 'D-1')).length;
+  const quality = list.filter((v) => v.type === '품질').length;
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '접수된 클레임이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -42,7 +41,7 @@ export default function QualVocScreen() {
       <KpiGrid cols={5} items={[
         ['미처리 VOC', '' + open, '건', C.err],
         ['회신 임박·지연', '' + urgent, '건', C.warn],
-        ['금월 접수', '' + VOC_LIST.length, '건', C.ink],
+        ['금월 접수', '' + list.length, '건', C.ink],
         ['품질 클레임', '' + quality, '건', C.err],
         ['평균 회신', '1.8', '일', C.blue],
       ]} />
@@ -141,7 +140,15 @@ export default function QualVocScreen() {
               <span className="text-[12px] font-extrabold" style={{ color: cur.status === '종결' ? C.ok : dueColor(cur.due) }}>{cur.status === '종결' ? '회신 완료' : `회신기한 ${cur.due}`}</span>
             </div>
             <div className="flex gap-2">
-              <button className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white" style={{ background: cur.status === '종결' ? C.borderHi : C.navy }}>{cur.status === '종결' ? '처리 완료됨' : '고객 회신 등록 →'}</button>
+              <button
+                onClick={() => {
+                  const to = nextStatus(cur.status);
+                  if (to) transition.mutate({ no: cur.no, to });
+                }}
+                disabled={cur.status === '종결' || transition.isPending}
+                className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:opacity-50"
+                style={{ background: cur.status === '종결' ? C.borderHi : C.navy }}
+              >{cur.status === '종결' ? '처리 완료됨' : '고객 회신 등록 →'}</button>
               <button className="h-[38px] rounded-lg border border-border-hi bg-panel px-3 text-[12px] font-bold text-ink2">8D 연계</button>
             </div>
           </div>

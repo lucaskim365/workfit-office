@@ -3,28 +3,28 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, ChipTabs } from '../_qual';
+import { useD8Reports, useTransitionD8 } from '@/features/d8Report/useD8Reports';
+import { nextStatus } from '@/domain/d8Report/status';
 
 const D8_ST: Record<string, Tone> = { 작성중: 'warn', 검토: 'info', 발행: 'ok', 고객승인: 'ok' };
 const D8_DISC = ['팀 구성', '문제 정의', '봉쇄 조치(임시)', '근본 원인', '시정조치 선정', '시정조치 실행', '재발 방지', '완료·치하'];
 
-interface D8 { no: string; voc: string; ncr: string; title: string; cust: string; owner: string; date: string; status: string; step: number; body: string[] }
-const D8_LIST: D8[] = [
-  { no: '8D-260620-002', voc: 'VOC-260621-007', ncr: 'NCR-260620-011', title: '기어 G-22T 치면 소음 클레임', cust: '현대모비스', owner: '박품질', date: '2026-06-21', status: '작성중', step: 5, body: ['품질(박품질·리더)·생산(김생산)·기술(정기술)·영업(한영업) 4인 CFT 구성. 회의 주기 일 1회.', '아산 조립라인 기어 치합 시 소음 발생, 35EA 반품. (5W2H) 06/20 고객 라인, 치합 마찰음, 발생률 약 2.3%.', '동일 LOT(L2605-0820) 출하분 전량 회수·격리. 재고 100% 소음 선별검사 실시, 양품만 재출하.', '호빙 가공 후 치면 조도 관리 미흡 + 열처리 경도 산포. (특성요인도·5-Why) 작업표준에 치면 조도 기준 누락.', '치면 연마 공정 추가(Ra0.8 관리), 작업표준서 개정, 호빙 공정 SPC 관리항목 도입.', '', '', ''] },
-  { no: '8D-260619-001', voc: 'VOC-260618-004', ncr: 'NCR-260619-009', title: '샤프트 D-40 진원도 불량', cust: '현대모비스', owner: '박품질', date: '2026-06-20', status: '발행', step: 8, body: ['품질(박품질)·생산(김생산)·기술(정기술) 3인 CFT 구성.', '진원도 0.035mm(규격 ≤0.02) 60EA 발생. 고객 입고검사 적발.', '반품 60EA 전량 재선별. 동일 설비 가공분 100% 진원도 재검.', '연삭기 척 클램프 마모로 척킹 편심 발생. 척 정기점검에 클램프 마모 측정 누락.', '척 클램프 교체, 연삭기 일상점검에 클램프 마모 항목 추가.', '클램프 교체 및 60EA 재연삭 완료(회수 58EA). 점검표 개정 적용.', '척 클램프 마모 한계 표준화, 전 연삭기 수평전개. 후속 3LOT 진원도 모니터링 정상.', '재발 0건(2주). CFT 해단 및 사례 공유. 작업자 교육 완료.'] },
-  { no: '8D-260615-003', voc: '—', ncr: 'NCR-260615-004', title: '식별·LOT 표시 누락 (내부감사)', cust: '내부', owner: '한품질', date: '2026-06-18', status: '고객승인', step: 8, body: ['품질·물류 2인 구성.', '3라인 LOT 식별표 미부착 다수 적발(내부감사).', '미표시 재공품 전수 식별표 부착.', '식별표 수작업 출력으로 누락 빈번.', '공정완료→라벨 자동발행 인터페이스 구축.', '인터페이스 구축 완료 및 적용.', '전 라인 자동라벨 수평전개.', '재발 0건. 감사 부적합 종결.'] },
-  { no: '8D-260621-004', voc: 'VOC-260620-006', ncr: '—', title: '하우징 C-Type 포장 파손', cust: 'LG전자', owner: '한영업', date: '2026-06-21', status: '검토', step: 3, body: ['영업·품질·물류 3인 구성.', '납품 박스 파손으로 표면 스크래치 우려. 200EA.', '해당 LOT 재검사 및 포장 보강 후 재납품.', '', '', '', '', ''] },
-];
-
 /** 8D Report 발행·관리 — 와이어프레임 qual-8d-report.jsx 정본. */
 export default function Qual8dReportScreen() {
+  const { data: list = [], isLoading } = useD8Reports();
+  const transition = useTransitionD8();
   const [sel, setSel] = useState('8D-260620-002');
   const [tab, setTab] = useState('전체');
-  const cur = D8_LIST.find((d) => d.no === sel) || D8_LIST[0];
-  const rows = D8_LIST.filter((d) => tab === '전체' || (tab === '진행중' ? d.status === '작성중' || d.status === '검토' : d.status === '발행' || d.status === '고객승인'));
+  const cur = list.find((d) => d.no === sel) || list[0];
+  const rows = list.filter((d) => tab === '전체' || (tab === '진행중' ? d.status === '작성중' || d.status === '검토' : d.status === '발행' || d.status === '고객승인'));
 
-  const writing = D8_LIST.filter((d) => d.status === '작성중' || d.status === '검토').length;
-  const issued = D8_LIST.filter((d) => d.status === '발행' || d.status === '고객승인').length;
-  const approved = D8_LIST.filter((d) => d.status === '고객승인').length;
+  const writing = list.filter((d) => d.status === '작성중' || d.status === '검토').length;
+  const issued = list.filter((d) => d.status === '발행' || d.status === '고객승인').length;
+  const approved = list.filter((d) => d.status === '고객승인').length;
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '8D 보고서가 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -117,7 +117,15 @@ export default function Qual8dReportScreen() {
           </div>
 
           <div className="flex gap-2 border-t border-border px-4 py-3.5">
-            <button className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:cursor-not-allowed" disabled={cur.step < 8} style={{ background: cur.step >= 8 ? C.navy : C.borderHi }}>{cur.status === '고객승인' ? '승인 완료됨' : cur.step >= 8 ? '8D 발행·고객 전송 →' : `D${cur.step + 1} 작성 진행`}</button>
+            <button
+              onClick={() => {
+                const to = nextStatus(cur.status);
+                if (to) transition.mutate({ no: cur.no, to });
+              }}
+              className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:cursor-not-allowed"
+              disabled={cur.step < 8 || transition.isPending}
+              style={{ background: cur.step >= 8 ? C.navy : C.borderHi }}
+            >{cur.status === '고객승인' ? '승인 완료됨' : cur.step >= 8 ? '8D 발행·고객 전송 →' : `D${cur.step + 1} 작성 진행`}</button>
             <button className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2">PDF</button>
           </div>
         </Card>
