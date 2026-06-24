@@ -18,3 +18,23 @@ export function formatWoNo(dateKey: string, seq: number): string {
 export function formatNcrNo(dateKey: string, seq: number): string {
   return `NCR-${dateKey}-${String(seq).padStart(3, '0')}`;
 }
+
+/** 접두사 기반 일반 채번 포맷({PREFIX}-YYMMDD-NNN). */
+export function formatDocNo(prefix: string, dateKey: string, seq: number): string {
+  return `${prefix}-${dateKey}-${String(seq).padStart(3, '0')}`;
+}
+
+/** MRB-YYMMDD-NNN (부적합 심의). */
+export function formatMrbNo(dateKey: string, seq: number): string {
+  return formatDocNo('MRB', dateKey, seq);
+}
+
+/** RW-/SC-YYMMDD-NNN (재작업/폐기 지시). prefix로 구분. */
+export function formatReworkNo(prefix: 'RW' | 'SC', dateKey: string, seq: number): string {
+  return formatDocNo(prefix, dateKey, seq);
+}
+
+/** CAPA-YYMMDD-NNN (시정·예방조치). */
+export function formatCapaNo(dateKey: string, seq: number): string {
+  return formatDocNo('CAPA', dateKey, seq);
+}

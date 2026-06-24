@@ -3,6 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_qual';
+import { useMrbCases, useTransitionMrb } from '@/features/mrbCase/useMrbCases';
+import { nextStatus } from '@/domain/mrbCase/status';
 
 const MRB_ST: Record<string, Tone> = { 심의대기: 'info', 심의중: 'warn', 의결완료: 'ok', 보류: 'mute' };
 const DISP = ['사용가(특채)', '재작업', '수리', '반품', '폐기'];
@@ -11,20 +13,18 @@ const dispColor = (d: string) => ({ info: C.blue, warn: C.warn, mute: C.ink3, er
 const sevTone = (s: string): Tone => (s === '치명' ? 'err' : s === '주요' ? 'warn' : 'mute');
 const wonM = (n: number) => '₩' + (n / 10000).toLocaleString() + '만';
 
-interface Case { no: string; ncr: string; date: string; meeting: string; code: string; name: string; lot: string; defect: string; sev: string; qty: number; unit: string; loss: number; status: string; decision: string | null; board: [string, string, string][]; reason: string }
-const MRB_CASES: Case[] = [
-  { no: 'MRB-260621-004', ncr: 'NCR-260621-005', date: '2026-06-21', meeting: '06-22 14:00', code: 'RM-STS304', name: 'STS304 강판 t2.0', lot: 'L2606-0018', defect: '인장강도 미달', sev: '치명', qty: 280, unit: 'SHT', loss: 4620000, status: '심의대기', decision: null, board: [['품질 책임', '박품질', '반품'], ['생산 관리', '김생산', '반품'], ['구매', '이구매', '반품'], ['기술', '정기술', '폐기']], reason: '규격(520MPa) 대비 인장강도 미달로 구조 안전성 미확보. 협력사 귀책 명확하여 반품 처리 타당.' },
-  { no: 'MRB-260620-003', ncr: 'NCR-260620-011', date: '2026-06-20', meeting: '06-21 10:00', code: 'FG-GER-22', name: '기어 G-22T', lot: 'L2605-0820', defect: '치면 소음', sev: '치명', qty: 35, unit: 'EA', loss: 2800000, status: '심의중', decision: null, board: [['품질 책임', '박품질', '폐기'], ['생산 관리', '김생산', '재작업'], ['기술', '정기술', '재작업'], ['영업', '한영업', '폐기']], reason: '고객 클레임품. 치면 조도 재가공 가능성 검토 중이나 열처리 경도 영향 추가 분석 필요.' },
-  { no: 'MRB-260620-002', ncr: 'NCR-260620-007', date: '2026-06-20', meeting: '06-20 15:00', code: 'FG-CVR-B', name: '커버 플레이트 B', lot: 'L2606-1011', defect: '평면도 불량', sev: '주요', qty: 42, unit: 'EA', loss: 630000, status: '의결완료', decision: '사용가(특채)', board: [['품질 책임', '박품질', '사용가(특채)'], ['생산 관리', '김생산', '사용가(특채)'], ['영업', '한영업', '사용가(특채)'], ['기술', '정기술', '재작업']], reason: '평면도 0.13mm로 규격(≤0.10) 초과하나 고객 사용 영향 경미. 고객 동의 확보 후 특채 출하 의결.' },
-  { no: 'MRB-260619-001', ncr: 'NCR-260619-009', date: '2026-06-19', meeting: '06-19 16:00', code: 'FG-SFT-D', name: '샤프트 D-40', lot: 'L2606-0905', defect: '진원도 불량', sev: '주요', qty: 60, unit: 'EA', loss: 1200000, status: '의결완료', decision: '재작업', board: [['품질 책임', '박품질', '재작업'], ['생산 관리', '김생산', '재작업'], ['기술', '정기술', '재작업'], ['구매', '이구매', '폐기']], reason: '진원도 0.035mm. 재연삭으로 규격 회복 가능 판단. 재작업 후 전수 재검사 조건부 의결.' },
-];
-
 /** MRB(부적합 심의) 현황 — 와이어프레임 qual-mrb.jsx 정본. */
 export default function QualMrbScreen() {
+  const { data: list = [], isLoading } = useMrbCases();
+  const transition = useTransitionMrb();
   const [sel, setSel] = useState('MRB-260621-004');
   const [pick, setPick] = useState<string | null>(null);
-  const cur = MRB_CASES.find((c) => c.no === sel) || MRB_CASES[0];
+  const cur = list.find((c) => c.no === sel) || list[0];
   useEffect(() => { setPick(null); }, [sel]);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '심의 안건이 없습니다.'}</div>;
+  }
 
   const tally: Record<string, number> = {};
   cur.board.forEach(([, , op]) => { tally[op] = (tally[op] || 0) + 1; });
@@ -32,10 +32,10 @@ export default function QualMrbScreen() {
   const decision = cur.decision || pick || consensus;
   const decided = cur.status === '의결완료';
 
-  const waiting = MRB_CASES.filter((c) => c.status === '심의대기' || c.status === '심의중').length;
-  const doneCnt = MRB_CASES.filter((c) => c.status === '의결완료').length;
-  const scrapLoss = MRB_CASES.filter((c) => (c.decision || '') === '폐기').reduce((s, c) => s + c.loss, 0);
-  const totalLoss = MRB_CASES.reduce((s, c) => s + c.loss, 0);
+  const waiting = list.filter((c) => c.status === '심의대기' || c.status === '심의중').length;
+  const doneCnt = list.filter((c) => c.status === '의결완료').length;
+  const scrapLoss = list.filter((c) => (c.decision || '') === '폐기').reduce((s, c) => s + c.loss, 0);
+  const totalLoss = list.reduce((s, c) => s + c.loss, 0);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -50,7 +50,7 @@ export default function QualMrbScreen() {
       <KpiGrid cols={5} items={[
         ['심의 대기·진행', '' + waiting, '건', C.warn],
         ['금월 의결 완료', '' + doneCnt, '건', C.ok],
-        ['금월 심의 안건', '' + MRB_CASES.length, '건', C.ink],
+        ['금월 심의 안건', '' + list.length, '건', C.ink],
         ['추정 손실액', wonM(totalLoss), '', C.err],
         ['폐기 결정액', wonM(scrapLoss), '', C.ink3],
       ]} />
@@ -67,7 +67,7 @@ export default function QualMrbScreen() {
               </tr>
             </thead>
             <tbody>
-              {MRB_CASES.map((c, i) => {
+              {list.map((c, i) => {
                 const on = c.no === sel;
                 return (
                   <tr key={c.no} onClick={() => setSel(c.no)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
@@ -139,8 +139,24 @@ export default function QualMrbScreen() {
               <div className="text-[10px] leading-relaxed text-ink2">{cur.reason}</div>
             </div>
             <div className="flex gap-2">
-              <button className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white" style={{ background: decided ? C.borderHi : C.navy }}>{decided ? '의결 완료됨' : '의결 확정 →'}</button>
-              <button className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2">보류</button>
+              <button
+                onClick={() => {
+                  const to = nextStatus(cur.status);
+                  if (to) transition.mutate({ no: cur.no, to });
+                }}
+                disabled={decided || transition.isPending}
+                className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:opacity-100"
+                style={{ background: decided ? C.borderHi : C.navy }}
+              >
+                {decided ? '의결 완료됨' : '의결 확정 →'}
+              </button>
+              <button
+                onClick={() => transition.mutate({ no: cur.no, to: '보류' })}
+                disabled={cur.status !== '심의중' || transition.isPending}
+                className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2 disabled:opacity-100"
+              >
+                보류
+              </button>
             </div>
           </div>
         </Card>

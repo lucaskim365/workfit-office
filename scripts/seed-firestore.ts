@@ -40,6 +40,9 @@ import { DEFECT_CODE_SEED } from '@/data/seeds/defectCode.seed';
 import { QUALITY_GRADE_SEED } from '@/data/seeds/qualityGrade.seed';
 import { INSPECTION_SEED } from '@/data/seeds/inspection.seed';
 import { NONCONFORMANCE_SEED } from '@/data/seeds/nonconformance.seed';
+import { MRB_CASE_SEED } from '@/data/seeds/mrbCase.seed';
+import { REWORK_ORDER_SEED } from '@/data/seeds/reworkOrder.seed';
+import { CAPA_SEED } from '@/data/seeds/capa.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -72,6 +75,9 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'qualityGrades', docs: QUALITY_GRADE_SEED, id: (d) => d.code },
   { coll: 'inspections', docs: INSPECTION_SEED, id: (d) => d.recv },
   { coll: 'nonconformances', docs: NONCONFORMANCE_SEED, id: (d) => d.no },
+  { coll: 'mrbCases', docs: MRB_CASE_SEED, id: (d) => d.no },
+  { coll: 'reworkOrders', docs: REWORK_ORDER_SEED, id: (d) => d.no },
+  { coll: 'capaActions', docs: CAPA_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
