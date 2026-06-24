@@ -24,7 +24,7 @@ service cloud.firestore {
         'items', 'vendors', 'commonCodes', 'users', 'roleGroups',
         'shifts', 'shiftRotations', 'workCenters', 'boms', 'routings',
         'stockMovements', 'counters', 'workOrders', 'salesOrders',
-        'shipments', 'receipts', 'issues'
+        'shipments', 'receipts', 'issues', 'inspectionItems'
       ];
     }
 

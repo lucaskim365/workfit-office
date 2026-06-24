@@ -34,6 +34,7 @@ import { SALES_ORDER_SEED } from '@/data/seeds/salesOrder.seed';
 import { SHIPMENT_SEED } from '@/data/seeds/shipment.seed';
 import { RECEIPT_SEED } from '@/data/seeds/receipt.seed';
 import { ISSUE_SEED } from '@/data/seeds/issue.seed';
+import { INSPECTION_ITEM_SEED } from '@/data/seeds/inspectionItem.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -60,6 +61,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'shipments', docs: SHIPMENT_SEED, id: (d) => d.no },
   { coll: 'receipts', docs: RECEIPT_SEED, id: (d) => d.po },
   { coll: 'issues', docs: ISSUE_SEED, id: (d) => d.no },
+  { coll: 'inspectionItems', docs: INSPECTION_ITEM_SEED, id: (d) => d.code },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
