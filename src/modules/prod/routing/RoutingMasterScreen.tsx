@@ -3,74 +3,29 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { T } from '@/shared/theme/tokens';
+import { type RoutingStep } from '@/domain/routing/schema';
+import { useRoutings } from '@/features/routing/useRoutings';
 
-interface Op {
-  op: string;
-  name: string;
-  wc: string;
-  eq: string;
-  kind: '가공' | '검사' | '이동';
-  setup: number;
-  ct: number;
-  crew: number;
-  yield: number;
-}
-interface Product {
-  code: string;
-  name: string;
-  rev: string;
-  line: string;
-}
+const KIND_TONE: Record<RoutingStep['kind'], Tone> = { 가공: 'info', 검사: 'warn', 이동: 'mute' };
+const KIND_C: Record<RoutingStep['kind'], string> = { 가공: T.blue, 검사: T.warn, 이동: T.ink3 };
 
-const PRODUCTS: Product[] = [
-  { code: 'CN-ASM-100', name: '커넥터 어셈블리', rev: 'B', line: '조립 라인' },
-  { code: 'SN-MOD-200', name: '센서 모듈', rev: 'A', line: 'SMT 라인' },
-  { code: 'BR-KIT-2T', name: '브래킷 키트', rev: 'C', line: '프레스 라인' },
-];
-
-const ROUTING: Record<string, Op[]> = {
-  'CN-ASM-100': [
-    { op: 'OP10', name: '사출 성형', wc: 'WC-INJ', eq: '사출 03호기', kind: '가공', setup: 30, ct: 45, crew: 1, yield: 99.2 },
-    { op: 'OP20', name: '디버링/외관', wc: 'WC-DBG', eq: '–', kind: '검사', setup: 5, ct: 20, crew: 1, yield: 99.5 },
-    { op: 'OP30', name: '터미널 압착', wc: 'WC-PRS', eq: '프레스 01호기', kind: '가공', setup: 25, ct: 30, crew: 1, yield: 98.8 },
-    { op: 'OP40', name: '본체 조립', wc: 'WC-ASM', eq: '조립셀 A', kind: '가공', setup: 10, ct: 60, crew: 2, yield: 99.0 },
-    { op: 'OP50', name: '기능 검사', wc: 'WC-EOL', eq: 'EOL 테스터', kind: '검사', setup: 8, ct: 35, crew: 1, yield: 97.5 },
-    { op: 'OP60', name: '포장', wc: 'WC-PKG', eq: '–', kind: '가공', setup: 5, ct: 18, crew: 1, yield: 99.9 },
-  ],
-  'SN-MOD-200': [
-    { op: 'OP10', name: 'SMT 실장', wc: 'WC-SMT', eq: 'SMT 라인 2', kind: '가공', setup: 40, ct: 28, crew: 1, yield: 99.0 },
-    { op: 'OP20', name: '리플로우', wc: 'WC-RFL', eq: '리플로우 오븐', kind: '가공', setup: 15, ct: 22, crew: 1, yield: 99.3 },
-    { op: 'OP30', name: 'AOI 검사', wc: 'WC-AOI', eq: 'AOI 02호기', kind: '검사', setup: 6, ct: 16, crew: 1, yield: 98.2 },
-    { op: 'OP40', name: '케이스 조립', wc: 'WC-ASM', eq: '조립셀 B', kind: '가공', setup: 10, ct: 48, crew: 2, yield: 99.1 },
-    { op: 'OP50', name: '교정/검사', wc: 'WC-CAL', eq: '교정 지그', kind: '검사', setup: 12, ct: 40, crew: 1, yield: 96.8 },
-  ],
-  'BR-KIT-2T': [
-    { op: 'OP10', name: '프레스 성형', wc: 'WC-PRS', eq: '프레스 01호기', kind: '가공', setup: 35, ct: 12, crew: 1, yield: 99.4 },
-    { op: 'OP20', name: '표면 처리', wc: 'WC-SFC', eq: '도금 라인', kind: '가공', setup: 20, ct: 90, crew: 1, yield: 98.5 },
-    { op: 'OP30', name: '치수 검사', wc: 'WC-INSP', eq: '–', kind: '검사', setup: 5, ct: 25, crew: 1, yield: 99.6 },
-    { op: 'OP40', name: '키트 포장', wc: 'WC-PKG', eq: '–', kind: '가공', setup: 5, ct: 30, crew: 2, yield: 99.9 },
-  ],
-};
-
-const KIND_TONE: Record<Op['kind'], Tone> = { 가공: 'info', 검사: 'warn', 이동: 'mute' };
-const KIND_C: Record<Op['kind'], string> = { 가공: T.blue, 검사: T.warn, 이동: T.ink3 };
-
-/** 공정(Routing) 마스터 — 와이어프레임 routing-master.jsx 정본. */
+/** 공정(Routing) 마스터 — 데이터: features/routing/useRoutings (header-line). */
 export default function RoutingMasterScreen() {
   const [sel, setSel] = useState('CN-ASM-100');
-  const prod = PRODUCTS.find((p) => p.code === sel) ?? PRODUCTS[0];
-  const ops = ROUTING[sel] ?? [];
+  const { data: routings = [] } = useRoutings();
+  const prod = routings.find((p) => p.code === sel) ?? routings[0];
+  const ops = prod?.steps ?? [];
   const totalCt = ops.reduce((s, o) => s + o.ct, 0);
   const totalSetup = ops.reduce((s, o) => s + o.setup, 0);
-  const maxCt = Math.max(...ops.map((o) => o.ct));
-  const bottleneck = ops.find((o) => o.ct === maxCt)!;
+  const maxCt = ops.length ? Math.max(...ops.map((o) => o.ct)) : 0;
+  const bottleneck = ops.find((o) => o.ct === maxCt);
   const rolledYield = ops.reduce((s, o) => (s * o.yield) / 100, 1) * 100;
 
   const kpis: Array<[string, string, string, string]> = [
-    ['등록 라우팅', String(PRODUCTS.length), '종', 'text-ink'],
+    ['등록 라우팅', String(routings.length), '종', 'text-ink'],
     ['공정 수', String(ops.length), 'OP', 'text-ink'],
     ['총 표준 C/T', String(totalCt), '초', 'text-teal'],
-    ['병목 공정', `${bottleneck.op} ${bottleneck.ct}s`, '', 'text-danger'],
+    ['병목 공정', bottleneck ? `${bottleneck.op} ${bottleneck.ct}s` : '-', '', 'text-danger'],
     ['누적 수율(RTY)', rolledYield.toFixed(1), '%', 'text-ink'],
   ];
 
@@ -99,9 +54,9 @@ export default function RoutingMasterScreen() {
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[250px_1fr]">
         <Card title="제품 / 라우팅" bodyClassName="p-0">
           <div className="py-1.5">
-            {PRODUCTS.map((p) => {
+            {routings.map((p) => {
               const on = p.code === sel;
-              const cnt = (ROUTING[p.code] ?? []).length;
+              const cnt = p.steps.length;
               return (
                 <button key={p.code} onClick={() => setSel(p.code)} className={`flex w-full items-center gap-2.5 px-3.5 py-3 text-left ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`} style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}>
                   <div className="min-w-0 flex-1">
@@ -119,7 +74,7 @@ export default function RoutingMasterScreen() {
         </Card>
 
         <div className="flex flex-col gap-3.5">
-          <Card title="공정 흐름도" action={<span className="text-[10.5px] text-ink3">{prod.name} <span className="font-mono">· Rev {prod.rev}</span></span>}>
+          <Card title="공정 흐름도" action={<span className="text-[10.5px] text-ink3">{prod?.name} <span className="font-mono">· Rev {prod?.rev}</span></span>}>
             <div className="flex items-stretch gap-0 overflow-x-auto pb-1">
               {ops.map((o, i) => {
                 const isBn = o.ct === maxCt;
@@ -201,7 +156,7 @@ export default function RoutingMasterScreen() {
             </div>
             <div className="flex items-center justify-between border-t border-border bg-panel-alt px-4 py-2.5">
               <span className="text-[10.5px] text-ink3">{ops.length}개 공정 · 누적 수율(RTY) <b className="text-ink2">{rolledYield.toFixed(1)}%</b></span>
-              <span className="text-[11px] text-ink3">병목 <b className="text-danger">{bottleneck.op} {bottleneck.name}</b> — 라인 능력 결정 공정</span>
+              <span className="text-[11px] text-ink3">병목 <b className="text-danger">{bottleneck?.op} {bottleneck?.name}</b> — 라인 능력 결정 공정</span>
             </div>
           </Card>
         </div>

@@ -2,108 +2,29 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
+import { type BomItem } from '@/domain/bom/schema';
+import { useBoms } from '@/features/bom/useBoms';
 
-interface Product {
-  code: string;
-  name: string;
-  rev: string;
-}
-const PRODUCTS: Product[] = [
-  { code: 'CN-ASM-100', name: '커넥터 어셈블리', rev: 'C' },
-  { code: 'SN-MOD-200', name: '센서 모듈', rev: 'B' },
-  { code: 'PWR-UNIT-50', name: '전원 유닛', rev: 'A' },
-  { code: 'BR-KIT-2T', name: '브래킷 키트', rev: 'D' },
-];
-
-interface BomRow {
-  lvl: number;
-  code: string;
-  name: string;
-  kind: '제품' | '반제품' | '원자재' | '부자재';
-  qty: number;
-  unit: string;
-  ext: number;
-  price: number | null;
-  proc: string;
-  loss: number;
-}
-
-const TREE: Record<string, BomRow[]> = {
-  'CN-ASM-100': [
-    { lvl: 0, code: 'CN-ASM-100', name: '커넥터 어셈블리', kind: '제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '최종 조립', loss: 0 },
-    { lvl: 1, code: 'CN-HSG-08P', name: '커넥터 하우징', kind: '반제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '사출 03호기', loss: 1.5 },
-    { lvl: 2, code: 'PA66-GF30', name: 'PA66 강화수지', kind: '원자재', qty: 12, unit: 'g', ext: 12, price: 8, proc: '사출 투입', loss: 2.0 },
-    { lvl: 2, code: 'MB-CLR-BK', name: '마스터배치(흑)', kind: '부자재', qty: 0.3, unit: 'g', ext: 0.3, price: 30, proc: '사출 투입', loss: 1.0 },
-    { lvl: 1, code: 'TM-PIN-16', name: '터미널 핀', kind: '반제품', qty: 16, unit: 'EA', ext: 16, price: null, proc: '프레스 01호기', loss: 0.8 },
-    { lvl: 2, code: 'CU-C2680', name: '동합금 스트립', kind: '원자재', qty: 4.2, unit: 'g', ext: 67.2, price: 22, proc: '프레스 투입', loss: 3.0 },
-    { lvl: 1, code: 'SEAL-RING', name: '실링 O-Ring', kind: '원자재', qty: 1, unit: 'EA', ext: 1, price: 120, proc: '조립 투입', loss: 0.5 },
-    { lvl: 1, code: 'LABEL-CN', name: '식별 라벨', kind: '부자재', qty: 1, unit: 'EA', ext: 1, price: 35, proc: '조립 투입', loss: 0.5 },
-  ],
-  'SN-MOD-200': [
-    { lvl: 0, code: 'SN-MOD-200', name: '센서 모듈', kind: '제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '최종 조립', loss: 0 },
-    { lvl: 1, code: 'PCB-SN-4L', name: 'PCB 기판(4L)', kind: '반제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: 'SMT 라인', loss: 1.2 },
-    { lvl: 2, code: 'IC-SEN-A1', name: '센서 IC', kind: '원자재', qty: 1, unit: 'EA', ext: 1, price: 2800, proc: 'SMT 실장', loss: 0.3 },
-    { lvl: 2, code: 'CHIP-0402', name: '칩부품 0402', kind: '원자재', qty: 24, unit: 'EA', ext: 24, price: 12, proc: 'SMT 실장', loss: 2.0 },
-    { lvl: 1, code: 'CASE-SN', name: '센서 케이스', kind: '원자재', qty: 1, unit: 'EA', ext: 1, price: 480, proc: '조립 투입', loss: 1.0 },
-  ],
-  'PWR-UNIT-50': [
-    { lvl: 0, code: 'PWR-UNIT-50', name: '전원 유닛', kind: '제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '최종 조립', loss: 0 },
-    { lvl: 1, code: 'TR-50W', name: '트랜스포머 50W', kind: '원자재', qty: 1, unit: 'EA', ext: 1, price: 3200, proc: '조립 투입', loss: 0.5 },
-    { lvl: 1, code: 'CAP-450V', name: '평활 콘덴서', kind: '원자재', qty: 2, unit: 'EA', ext: 2, price: 850, proc: '조립 투입', loss: 0.8 },
-    { lvl: 1, code: 'HEATSINK-A', name: '방열판', kind: '원자재', qty: 1, unit: 'EA', ext: 1, price: 1100, proc: '조립 투입', loss: 0.5 },
-  ],
-  'BR-KIT-2T': [
-    { lvl: 0, code: 'BR-KIT-2T', name: '브래킷 키트', kind: '제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '최종 포장', loss: 0 },
-    { lvl: 1, code: 'BR-MNT-2T', name: '브래킷 본체', kind: '반제품', qty: 1, unit: 'EA', ext: 1, price: null, proc: '프레스 01호기', loss: 1.0 },
-    { lvl: 1, code: 'BOLT-M6', name: '체결 볼트 M6', kind: '부자재', qty: 4, unit: 'EA', ext: 4, price: 18, proc: '포장 투입', loss: 1.0 },
-  ],
-};
-
-interface Rev {
-  rev: string;
-  date: string;
-  by: string;
-  note: string;
-  cur?: boolean;
-}
-const REVS: Record<string, Rev[]> = {
-  'CN-ASM-100': [
-    { rev: 'C', date: '2026-05-12', by: '김설계', note: '터미널 핀 사양 변경(TM-PIN-16) 적용', cur: true },
-    { rev: 'B', date: '2025-11-03', by: '이생기', note: '실링 O-Ring 추가 (방수 등급 상향)' },
-    { rev: 'A', date: '2025-06-20', by: '김설계', note: '최초 등록' },
-  ],
-  'SN-MOD-200': [
-    { rev: 'B', date: '2026-03-08', by: '이생기', note: '센서 IC 2nd 소스 추가', cur: true },
-    { rev: 'A', date: '2025-09-15', by: '김설계', note: '최초 등록' },
-  ],
-  'PWR-UNIT-50': [{ rev: 'A', date: '2026-01-20', by: '김설계', note: '최초 등록', cur: true }],
-  'BR-KIT-2T': [
-    { rev: 'D', date: '2026-04-30', by: '박품질', note: '볼트 규격 M5→M6 변경', cur: true },
-    { rev: 'C', date: '2025-12-11', by: '이생기', note: '표면처리 사양 변경' },
-    { rev: 'B', date: '2025-08-02', by: '김설계', note: '브래킷 두께 보강' },
-    { rev: 'A', date: '2025-03-19', by: '김설계', note: '최초 등록' },
-  ],
-};
-
-const KIND_TONE: Record<BomRow['kind'], Tone> = { 제품: 'ok', 반제품: 'warn', 원자재: 'info', 부자재: 'mute' };
+const KIND_TONE: Record<BomItem['kind'], Tone> = { 제품: 'ok', 반제품: 'warn', 원자재: 'info', 부자재: 'mute' };
 const won = (n: number) => n.toLocaleString('ko-KR');
 
-/** BOM(자재명세서) 조회 — 와이어프레임 bom-view.jsx 정본. */
+/** BOM(자재명세서) 조회 — 데이터: features/bom/useBoms (header-line). */
 export default function BomViewScreen() {
   const [sel, setSel] = useState('CN-ASM-100');
   const [q, setQ] = useState('');
-  const prod = PRODUCTS.find((p) => p.code === sel) ?? PRODUCTS[0];
-  const tree = TREE[sel] ?? [];
-  const revs = REVS[sel] ?? [];
-  const products = PRODUCTS.filter((p) => !q || p.name.includes(q) || p.code.toLowerCase().includes(q.toLowerCase()));
+  const { data: boms = [] } = useBoms();
+  const prod = boms.find((p) => p.code === sel) ?? boms[0];
+  const tree = prod?.items ?? [];
+  const revs = prod?.revisions ?? [];
+  const products = boms.filter((p) => !q || p.name.includes(q) || p.code.toLowerCase().includes(q.toLowerCase()));
   const matCost = tree.filter((r) => r.price != null).reduce((s, r) => s + r.ext * (r.price as number), 0);
-  const maxLvl = Math.max(...tree.map((r) => r.lvl));
+  const maxLvl = tree.length ? Math.max(...tree.map((r) => r.lvl)) : 0;
 
   const kpis: Array<[string, string, string, string]> = [
-    ['등록 제품(BOM)', String(PRODUCTS.length), '종', 'text-ink'],
+    ['등록 제품(BOM)', String(boms.length), '종', 'text-ink'],
     ['BOM 레벨', String(maxLvl + 1), 'Lv', 'text-ink'],
-    ['구성 품목', String(tree.length - 1), '종', 'text-ink'],
-    ['현재 Revision', `Rev ${prod.rev}`, '', 'text-blue'],
+    ['구성 품목', String(Math.max(tree.length - 1, 0)), '종', 'text-ink'],
+    ['현재 Revision', `Rev ${prod?.rev ?? '-'}`, '', 'text-blue'],
     ['자재 표준원가', won(matCost), '₩', 'text-teal'],
   ];
 
@@ -158,7 +79,7 @@ export default function BomViewScreen() {
         </Card>
 
         {/* BOM 트리 */}
-        <Card title="BOM 구성 (다단계)" action={<span className="text-[10.5px] text-ink3">{prod.name} <span className="font-mono">· {prod.code} · Rev {prod.rev}</span></span>} bodyClassName="p-0">
+        <Card title="BOM 구성 (다단계)" action={<span className="text-[10.5px] text-ink3">{prod?.name} <span className="font-mono">· {prod?.code} · Rev {prod?.rev}</span></span>} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[11.5px]">
               <thead>
