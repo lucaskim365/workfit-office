@@ -2,14 +2,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { useAdjustments } from '@/features/adjustment/useAdjustments';
 
-type Row = [no: string, code: string, loc: string, qty: string, reason: string, status: string, sel?: boolean];
-const ROWS: Row[] = [
-  ['ADJ-260611-03', 'WF-200-A', 'A-1-2-1', '-15', '자연 감실', '승인완료', true],
-  ['ADJ-260611-02', 'RES-PR-22', 'A-3-2-2', '+2', '실사 증가', '승인완료'],
-  ['ADJ-260611-01', 'CHM-GAS-02', 'B-1-1-1', '-8', '파손', '승인대기'],
-  ['ADJ-260610-05', 'WF-300-B', 'A-1-1-3', '-3', '분실', '승인완료'],
-];
 const tone = (s: string): Tone => (s === '승인완료' ? 'ok' : 'warn');
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -21,6 +15,12 @@ function Box({ value, bold }: { value: string; bold?: boolean }) {
 
 /** 재고 조정 등록 — 와이어프레임 wms-screens-3.jsx 정본. */
 export default function MatAdjustScreen() {
+  const { data: rows = [], isLoading } = useAdjustments();
+
+  if (rows.length === 0) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '재고 조정 내역이 없습니다.'}</div>;
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="재고 조정 등록" sub="재고 조정 등록 (Stock Adjustment)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
@@ -29,14 +29,14 @@ export default function MatAdjustScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['조정번호', '품목', '위치', '조정수량', '사유', '상태'].map((c, i) => <th key={c} className={th(i === 3 ? 'right' : i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {ROWS.map((r, i) => (
-                <tr key={i} style={{ background: r[6] ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: r[6] ? C.teal : C.ink, borderLeft: r[6] ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r[0]}</td>
-                  <td className={`${td('left')} font-mono text-[11px] font-semibold text-ink`}>{r[1]}</td>
-                  <td className={`${td('left')} font-mono text-[10.5px]`}>{r[2]}</td>
-                  <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: r[3][0] === '-' ? C.err : C.warn }}>{r[3]}</td>
-                  <td className={td('left')}>{r[4]}</td>
-                  <td className={td('center')}><Pill tone={tone(r[5])}>{r[5]}</Pill></td>
+              {rows.map((r, i) => (
+                <tr key={r.no} style={{ background: r.urgent ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: r.urgent ? C.teal : C.ink, borderLeft: r.urgent ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r.no}</td>
+                  <td className={`${td('left')} font-mono text-[11px] font-semibold text-ink`}>{r.code}</td>
+                  <td className={`${td('left')} font-mono text-[10.5px]`}>{r.loc}</td>
+                  <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: r.qty[0] === '-' ? C.err : C.warn }}>{r.qty}</td>
+                  <td className={td('left')}>{r.reason}</td>
+                  <td className={td('center')}><Pill tone={tone(r.status)}>{r.status}</Pill></td>
                 </tr>
               ))}
             </tbody>

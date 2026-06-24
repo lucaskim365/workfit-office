@@ -102,6 +102,12 @@ import { PROD_LOT_TRACE_SEED } from '@/data/seeds/prodLotTrace.seed';
 import { SUBCON_ORDER_SEED } from '@/data/seeds/subconOrder.seed';
 import { SUBCON_ISSUE_SEED } from '@/data/seeds/subconIssue.seed';
 import { SUBCON_RECEIPT_SEED } from '@/data/seeds/subconReceipt.seed';
+import { WAREHOUSE_ZONE_SEED } from '@/data/seeds/warehouseZone.seed';
+import { PUTAWAY_TASK_SEED } from '@/data/seeds/putawayTask.seed';
+import { TRANSFER_SEED } from '@/data/seeds/transfer.seed';
+import { COUNT_RECORD_SEED } from '@/data/seeds/countRecord.seed';
+import { ADJUSTMENT_SEED } from '@/data/seeds/adjustment.seed';
+import { AGING_STOCK_SEED } from '@/data/seeds/agingStock.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -197,6 +203,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'subconOrders', docs: SUBCON_ORDER_SEED, id: (d) => d.no },
   { coll: 'subconIssues', docs: SUBCON_ISSUE_SEED, id: (d) => d.no },
   { coll: 'subconReceipts', docs: SUBCON_RECEIPT_SEED, id: (d) => d.no },
+  { coll: 'warehouseZones', docs: WAREHOUSE_ZONE_SEED, id: (d) => d.z },
+  { coll: 'putawayTasks', docs: PUTAWAY_TASK_SEED, id: (d) => d.lot },
+  { coll: 'transfers', docs: TRANSFER_SEED, id: (d) => d.no },
+  { coll: 'countRecords', docs: COUNT_RECORD_SEED, id: (d) => d.id },
+  { coll: 'adjustments', docs: ADJUSTMENT_SEED, id: (d) => d.no },
+  { coll: 'agingStock', docs: AGING_STOCK_SEED, id: (d) => d.lot },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

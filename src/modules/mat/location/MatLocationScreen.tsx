@@ -1,17 +1,13 @@
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, MHead, Bar } from '../_mat';
+import { useWarehouseZones } from '@/features/warehouseZone/useWarehouseZones';
 
-const ZONES = [
-  { z: 'A', name: '원자재 창고', racks: 24, use: 86, c: C.teal },
-  { z: 'B', name: '격리 구역', racks: 8, use: 42, c: C.warn },
-  { z: 'C', name: '반제품 창고', racks: 16, use: 71, c: C.blue },
-  { z: 'D', name: '완제품 창고', racks: 20, use: 64, c: C.navy },
-];
 const LEVELS: [string, string][] = [['만재', C.teal], ['일부', C.warn], ['공위', '#fff']];
 
 /** 창고 위치 관리 — 와이어프레임 wms-screens.jsx 정본. */
 export default function MatLocationScreen() {
+  const { data: zones = [], isLoading } = useWarehouseZones();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="창고 위치 관리" sub="창고 위치 관리 (Location/Rack Control)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
@@ -36,13 +32,17 @@ export default function MatLocationScreen() {
           </div>
         </Card>
         <Card title="구역(Zone)별 현황" bodyClassName="p-0">
-          {ZONES.map((z, i) => (
-            <div key={z.z} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: i < ZONES.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-              <span className="grid h-9 w-9 place-items-center rounded-[9px] text-[15px] font-extrabold" style={{ background: z.c + '1a', color: z.c }}>{z.z}</span>
-              <div className="min-w-0 flex-1"><div className="text-[12px] font-bold text-ink">{z.name}</div><div className="text-[10.5px] text-ink3">{z.racks} Racks</div></div>
-              <div className="w-[90px]"><Bar v={z.use} color={z.c} /></div>
-            </div>
-          ))}
+          {zones.length === 0 ? (
+            <div className="grid place-items-center py-16 text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '구역 데이터가 없습니다.'}</div>
+          ) : (
+            zones.map((z, i) => (
+              <div key={z.z} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: i < zones.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                <span className="grid h-9 w-9 place-items-center rounded-[9px] text-[15px] font-extrabold" style={{ background: z.c + '1a', color: z.c }}>{z.z}</span>
+                <div className="min-w-0 flex-1"><div className="text-[12px] font-bold text-ink">{z.name}</div><div className="text-[10.5px] text-ink3">{z.racks} Racks</div></div>
+                <div className="w-[90px]"><Bar v={z.use} color={z.c} /></div>
+              </div>
+            ))
+          )}
         </Card>
       </div>
     </div>

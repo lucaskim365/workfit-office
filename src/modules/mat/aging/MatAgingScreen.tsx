@@ -2,20 +2,14 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, MHead, MKpis, th, td } from '../_mat';
+import { useAgingStock } from '@/features/agingStock/useAgingStock';
 
-type Row = [lot: string, code: string, name: string, exp: string, dleft: number];
-const ROWS: Row[] = [
-  ['LOT-RES-1102', 'RES-PR-22', '포토레지스트', '2026-06-15', 4],
-  ['LOT-CHM-0440', 'CHM-SL-05', '슬러리 SL-05', '2026-06-20', 9],
-  ['LOT-CHM-0099', 'CHM-GAS-02', '공정 가스', '2026-06-12', 1],
-  ['LOT-RES-1120', 'RES-PR-22', '포토레지스트', '2026-07-10', 29],
-  ['LOT-CHM-0457', 'CHM-SL-05', '슬러리 SL-05', '2026-08-01', 51],
-];
 const tone = (d: number): Tone => (d <= 2 ? 'err' : d <= 5 ? 'warn' : d <= 14 ? 'info' : 'ok');
 const lbl = (d: number) => (d <= 2 ? '긴급' : d <= 5 ? '임박' : d <= 14 ? '주의' : '정상');
 
 /** 재고 보존 기한 관리 — 와이어프레임 wms-screens-3.jsx 정본. */
 export default function MatAgingScreen() {
+  const { data: rows = [], isLoading } = useAgingStock();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="재고 보존 기한 관리" sub="재고 보존 기한 관리 (Aging/Expiry)" actions={<ActionBar actions={['download']} />} />
@@ -24,14 +18,16 @@ export default function MatAgingScreen() {
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['Lot 번호', '품목', '품목명', '유효기한', '잔여일', '상태'].map((c, i) => <th key={c} className={th(i === 4 ? 'right' : i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
-            {ROWS.map((r, i) => (
-              <tr key={i} style={{ background: r[4] <= 2 ? '#fdeceb' : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                <td className={`${td('left')} font-mono text-[11px]`}>{r[1]}</td>
-                <td className={`${td('left')} font-semibold text-ink`}>{r[2]}</td>
-                <td className={`${td('left')} tabular-nums`}>{r[3]}</td>
-                <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: r[4] <= 2 ? C.err : r[4] <= 5 ? C.warn : C.ink2 }}>D-{r[4]}</td>
-                <td className={td('center')}><Pill tone={tone(r[4])} solid={r[4] <= 2}>{lbl(r[4])}</Pill></td>
+            {rows.length === 0 ? (
+              <tr><td colSpan={6} className="px-3 py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '대상 재고가 없습니다.'}</td></tr>
+            ) : rows.map((r, i) => (
+              <tr key={r.lot} style={{ background: r.days <= 2 ? '#fdeceb' : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r.lot}</td>
+                <td className={`${td('left')} font-mono text-[11px]`}>{r.code}</td>
+                <td className={`${td('left')} font-semibold text-ink`}>{r.name}</td>
+                <td className={`${td('left')} tabular-nums`}>{r.expiry}</td>
+                <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: r.days <= 2 ? C.err : r.days <= 5 ? C.warn : C.ink2 }}>D-{r.days}</td>
+                <td className={td('center')}><Pill tone={tone(r.days)} solid={r.days <= 2}>{lbl(r.days)}</Pill></td>
               </tr>
             ))}
           </tbody>

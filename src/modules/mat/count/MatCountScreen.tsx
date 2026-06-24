@@ -2,19 +2,15 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, MKpis, FBar, FField, FSel, FInput, th, td } from '../_mat';
+import { useCountRecords } from '@/features/countRecord/useCountRecords';
 
-const ROWS: string[][] = [
-  ['WF-300-B', 'A-1-1-1', '8,420', '8,420', '0', '일치'],
-  ['WF-200-A', 'A-1-2-1', '3,100', '3,085', '-15', '차이'],
-  ['CHM-SL-05', 'A-3-1-4', '142', '142', '0', '일치'],
-  ['RES-PR-22', 'A-3-2-2', '38', '40', '+2', '차이'],
-  ['PKG-BGA-14', 'C-2-1-1', '5,200', '미실사', '—', '대기'],
-];
 const tone = (s: string): Tone => (s === '일치' ? 'ok' : s === '차이' ? 'warn' : 'mute');
 const diffColor = (d: string) => (d === '0' ? C.ink3 : d === '—' ? C.ink3 : d[0] === '-' ? C.err : C.warn);
 
 /** 재고 실사 계획/등록 — 와이어프레임 wms-screens-3.jsx 정본. */
 export default function MatCountScreen() {
+  const { data: rows = [], isLoading } = useCountRecords();
+
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="재고 실사 계획/등록" sub="재고 실사 계획/등록 (Physical Counting)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
@@ -29,14 +25,16 @@ export default function MatCountScreen() {
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['품목', '위치', '전산재고', '실사수량', '차이', '상태'].map((c, i) => <th key={c} className={th(i >= 2 && i <= 4 ? 'right' : i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
-            {ROWS.map((r, i) => (
-              <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
-                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                <td className={td('left')}><span className="rounded-[5px] px-2 py-0.5 font-mono text-[10.5px] text-ink2" style={{ background: C.bgDeep }}>{r[1]}</span></td>
-                <td className={`${td('right')} tabular-nums`}>{r[2]}</td>
-                <td className={`${td('right')} font-bold tabular-nums text-ink`}>{r[3]}</td>
-                <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: diffColor(r[4]) }}>{r[4]}</td>
-                <td className={td('center')}><Pill tone={tone(r[5])}>{r[5]}</Pill></td>
+            {rows.length === 0 ? (
+              <tr><td colSpan={6} className="px-3 py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '실사 내역이 없습니다.'}</td></tr>
+            ) : rows.map((r, i) => (
+              <tr key={r.id} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
+                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r.code}</td>
+                <td className={td('left')}><span className="rounded-[5px] px-2 py-0.5 font-mono text-[10.5px] text-ink2" style={{ background: C.bgDeep }}>{r.loc}</span></td>
+                <td className={`${td('right')} tabular-nums`}>{r.book}</td>
+                <td className={`${td('right')} font-bold tabular-nums text-ink`}>{r.actual}</td>
+                <td className={`${td('right')} font-extrabold tabular-nums`} style={{ color: diffColor(r.diff) }}>{r.diff}</td>
+                <td className={td('center')}><Pill tone={tone(r.result)}>{r.result}</Pill></td>
               </tr>
             ))}
           </tbody>

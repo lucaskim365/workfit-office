@@ -2,17 +2,18 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { usePutawayTasks } from '@/features/putawayTask/usePutawayTasks';
 
-const ROWS: string[][] = [
-  ['LOT-RAW-8821', 'WF-300-B', '입고장', 'A-1-2-1', 'Pallet', '대기'],
-  ['LOT-RAW-8822', 'WF-300-B', '입고장', 'A-1-2-2', 'Pallet', '대기'],
-  ['LOT-CHM-0457', 'CHM-SL-05', '입고장', 'A-3-1-4', 'Box', '완료'],
-  ['LOT-PKG-3320', 'PKG-BGA-14', '입고장', 'C-2-1-1', 'Pallet', '진행'],
-];
 const tone = (s: string): Tone => (s === '완료' ? 'ok' : s === '진행' ? 'info' : 'mute');
 
 /** 적치 지시/등록 (Put-away) — 와이어프레임 wms-screens.jsx 정본. */
 export default function MatPutawayScreen() {
+  const { data: rows = [], isLoading } = usePutawayTasks();
+
+  if (rows.length === 0) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '적치 지시가 없습니다.'}</div>;
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="적치 지시/등록" sub="적치 지시/등록 (Put-away)" actions={<ActionBar actions={['save']} />} />
@@ -21,14 +22,14 @@ export default function MatPutawayScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['추적번호', '품목', '현재위치', '추천 적치위치', '단위', '상태'].map((c, i) => <th key={c} className={th(i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {ROWS.map((r, i) => (
-                <tr key={i} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r[0]}</td>
-                  <td className={`${td('left')} font-mono text-[11px]`}>{r[1]}</td>
-                  <td className={`${td('left')} text-ink3`}>{r[2]}</td>
-                  <td className={td('left')}><span className="rounded-[5px] px-2 py-0.5 font-mono text-[11px] font-bold" style={{ color: C.teal, background: C.tealSoft }}>{r[3]}</span></td>
-                  <td className={td('left')}>{r[4]}</td>
-                  <td className={td('center')}><Pill tone={tone(r[5])}>{r[5]}</Pill></td>
+              {rows.map((r, i) => (
+                <tr key={r.lot} style={{ background: i === 0 ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                  <td className={`${td('left')} font-mono text-[11px] font-bold`} style={{ color: i === 0 ? C.teal : C.ink, borderLeft: i === 0 ? `3px solid ${C.teal}` : '3px solid transparent' }}>{r.lot}</td>
+                  <td className={`${td('left')} font-mono text-[11px]`}>{r.code}</td>
+                  <td className={`${td('left')} text-ink3`}>{r.from}</td>
+                  <td className={td('left')}><span className="rounded-[5px] px-2 py-0.5 font-mono text-[11px] font-bold" style={{ color: C.teal, background: C.tealSoft }}>{r.to}</span></td>
+                  <td className={td('left')}>{r.unit}</td>
+                  <td className={td('center')}><Pill tone={tone(r.status)}>{r.status}</Pill></td>
                 </tr>
               ))}
             </tbody>

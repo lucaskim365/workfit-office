@@ -40,7 +40,8 @@ service cloud.firestore {
         'equipGages', 'calPlans', 'calResults', 'calFails',
         'prodPlans', 'scheduleEntries', 'urgentOrders', 'productionResults', 'jobLogs', 'wipStatus',
         'lineMonitors', 'moveWip', 'prodDefects', 'materialLoads', 'materialRequests', 'prodLotTraces',
-        'subconOrders', 'subconIssues', 'subconReceipts'
+        'subconOrders', 'subconIssues', 'subconReceipts',
+        'warehouseZones', 'putawayTasks', 'transfers', 'countRecords', 'adjustments', 'agingStock'
       ];
     }
 
