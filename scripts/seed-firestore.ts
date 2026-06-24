@@ -79,6 +79,10 @@ import { OEE_EQUIPMENT_SEED } from '@/data/seeds/oeeEquipment.seed';
 import { LIVE_ALARM_SEED } from '@/data/seeds/liveAlarm.seed';
 import { EQUIP_PARAM_SEED } from '@/data/seeds/equipParam.seed';
 import { DOWNTIME_SEED } from '@/data/seeds/downtime.seed';
+import { MOLD_SEED } from '@/data/seeds/mold.seed';
+import { MOLD_SHOT_SEED } from '@/data/seeds/moldShot.seed';
+import { MOLD_REPAIR_SEED } from '@/data/seeds/moldRepair.seed';
+import { MOLD_LOCATION_SEED } from '@/data/seeds/moldLocation.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -151,6 +155,10 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'liveAlarms', docs: LIVE_ALARM_SEED, id: (d) => d.id },
   { coll: 'equipParams', docs: EQUIP_PARAM_SEED, id: (d) => d.code },
   { coll: 'downtimes', docs: DOWNTIME_SEED, id: (d) => d.id },
+  { coll: 'molds', docs: MOLD_SEED, id: (d) => d.code },
+  { coll: 'moldShots', docs: MOLD_SHOT_SEED, id: (d) => d.code },
+  { coll: 'moldRepairs', docs: MOLD_REPAIR_SEED, id: (d) => d.no },
+  { coll: 'moldLocations', docs: MOLD_LOCATION_SEED, id: (d) => d.code },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

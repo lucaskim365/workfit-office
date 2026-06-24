@@ -3,17 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_maint';
+import { useMoldLocations } from '@/features/moldLocation/useMoldLocations';
 
-interface Loc { code: string; name: string; cat: string; home: string; cur: string; holder: string; state: string; since: string }
-const LOC_ROWS: Loc[] = [
-  { code: 'MD-PRS-210', name: '브래킷 프레스 금형', cat: '프레스금형', home: '2-B-01', cur: '프레스 01호기', holder: '생산1팀', state: '대출중', since: '06-01' },
-  { code: 'MD-INJ-103', name: '하우징 캡 금형', cat: '사출금형', home: '1-C-02', cur: '1-C-02', holder: '금형창고', state: '보관중', since: '04-13' },
-  { code: 'MD-PRS-211', name: '터미널 단자 금형', cat: '프레스금형', home: '2-B-02', cur: '동양프레스(외주)', holder: '동양프레스', state: '외부수리', since: '04-20' },
-  { code: 'MD-INJ-101', name: '커넥터 하우징 금형', cat: '사출금형', home: '1-A-03', cur: '사출 03호기', holder: '생산2팀', state: '대출중', since: '05-22' },
-  { code: 'MD-INJ-102', name: '센서 커버 금형', cat: '사출금형', home: '1-A-04', cur: '이동중', holder: '물류', state: '이동중', since: '06-10' },
-  { code: 'JG-WLD-051', name: '용접 고정 지그', cat: '지그', home: 'J-01', cur: '용접 02호기', holder: '생산3팀', state: '대출중', since: '03-15' },
-  { code: 'GG-PLG-014', name: '플러그 게이지 세트', cat: '게이지', home: 'G-04', cur: 'G-04', holder: '계측실', state: '보관중', since: '06-01' },
-];
 interface Tx { no: string; date: string; type: string; code: string; name: string; from: string; to: string; reason: string; who: string }
 const LOC_TX: Tx[] = [
   { no: 'ML-2606-031', date: '06-10 13:20', type: '출고', code: 'MD-INJ-102', name: '센서 커버 금형', from: '금형창고 1-A-04', to: '사출 05호기', reason: '생산 대출', who: '김설비' },
@@ -28,16 +19,21 @@ const txTone = (t: string): Tone => (t === '반납' ? 'ok' : t === '출고' ? 'i
 
 /** 금형 입·출고 / 위치 관리 — 와이어프레임 mold-location.jsx 정본. */
 export default function MoldLocationScreen() {
+  const { data: rows = [], isLoading } = useMoldLocations();
   const [view, setView] = useState<'현재 위치' | '입출고 이력'>('현재 위치');
   const [mode, setMode] = useState<'출고' | '반납' | '반출'>('출고');
   const [moldCode, setMoldCode] = useState('MD-INJ-103');
-  const mold = LOC_ROWS.find((m) => m.code === moldCode) || LOC_ROWS[0];
+  const mold = rows.find((m) => m.code === moldCode) || rows[0];
 
-  const inStorage = LOC_ROWS.filter((m) => m.state === '보관중').length;
-  const onLoan = LOC_ROWS.filter((m) => m.state === '대출중').length;
-  const external = LOC_ROWS.filter((m) => m.state === '외부수리').length;
-  const moving = LOC_ROWS.filter((m) => m.state === '이동중').length;
+  const inStorage = rows.filter((m) => m.state === '보관중').length;
+  const onLoan = rows.filter((m) => m.state === '대출중').length;
+  const external = rows.filter((m) => m.state === '외부수리').length;
+  const moving = rows.filter((m) => m.state === '이동중').length;
   const modeColor = mode === '반납' ? C.teal : mode === '반출' ? C.err : C.blue;
+
+  if (!mold) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '금형 자산이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -50,7 +46,7 @@ export default function MoldLocationScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['총 자산', '' + LOC_ROWS.length, '점', C.ink], ['보관중', '' + inStorage, '점', C.ok], ['현장 대출중', '' + onLoan, '점', C.blue],
+        ['총 자산', '' + rows.length, '점', C.ink], ['보관중', '' + inStorage, '점', C.ok], ['현장 대출중', '' + onLoan, '점', C.blue],
         ['외부 반출', '' + external, '점', C.err], ['이동중', '' + moving, '점', C.warn],
       ]} />
 
@@ -77,7 +73,7 @@ export default function MoldLocationScreen() {
                 </tr>
               </thead>
               <tbody>
-                {LOC_ROWS.map((m, i) => (
+                {rows.map((m, i) => (
                   <tr key={m.code} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
                     <td className="border-b border-border px-3 py-2.5"><div className="font-bold text-ink">{m.name}</div><div className="mt-px font-mono text-[9.5px] text-ink3">{m.code}</div></td>
                     <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={LOC_CAT[m.cat]}>{m.cat}</Pill></td>
@@ -130,7 +126,7 @@ export default function MoldLocationScreen() {
           <div className="mb-3">
             <label className="mb-1.5 block text-[10.5px] font-bold text-ink3">금형 / 치공구</label>
             <div className="flex max-h-[168px] flex-col gap-1.5 overflow-y-auto">
-              {LOC_ROWS.map((m) => {
+              {rows.map((m) => {
                 const on = m.code === moldCode;
                 return (
                   <button key={m.code} onClick={() => setMoldCode(m.code)} className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left" style={{ border: `1.5px solid ${on ? C.teal : C.border}`, background: on ? C.tealSoft : '#fff' }}>

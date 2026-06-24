@@ -3,16 +3,10 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { LineChart } from '@/shared/ui/charts/LineChart';
+import { useMoldShots } from '@/features/moldShot/useMoldShots';
+import type { MoldShot } from '@/domain/moldShot/schema';
 import { C, KpiGrid } from '../_maint';
 
-interface Row { code: string; name: string; asset: string; eq: string; cum: number; life: number; today: number; avg: number; item: string }
-const SHOT_ROWS: Row[] = [
-  { code: 'MD-PRS-210', name: '브래킷 프레스 금형', asset: 'A2021-0212', eq: '프레스 01호기', cum: 940000, life: 1000000, today: 4200, avg: 4100, item: 'BR-MNT-2T' },
-  { code: 'MD-INJ-103', name: '하우징 캡 금형', asset: 'A2019-0078', eq: '사출 02호기', cum: 980000, life: 1000000, today: 1850, avg: 1900, item: 'HS-CAP-06' },
-  { code: 'MD-PRS-211', name: '터미널 단자 금형', asset: 'A2020-0150', eq: '프레스 02호기', cum: 1480000, life: 1500000, today: 0, avg: 6200, item: 'TM-PIN-16' },
-  { code: 'MD-INJ-101', name: '커넥터 하우징 금형', asset: 'A2023-0451', eq: '사출 03호기', cum: 412000, life: 500000, today: 3100, avg: 2950, item: 'CN-HSG-08P' },
-  { code: 'MD-INJ-102', name: '센서 커버 금형', asset: 'A2022-0388', eq: '사출 05호기', cum: 188000, life: 400000, today: 2400, avg: 2300, item: 'SN-CVR-04' },
-];
 const SHOT_TREND: Record<string, number[]> = {
   'MD-PRS-210': [3900, 4100, 4300, 4000, 4200, 3800, 4200],
   'MD-INJ-103': [1900, 2000, 1850, 1750, 1900, 1800, 1850],
@@ -38,9 +32,9 @@ const SHOT_LOG: Record<string, Log[]> = {
   'MD-INJ-102': [{ date: '06-10', type: '카운트', val: '+2,400', cum: '188,000', who: '자동수집' }, { date: '2022-05', type: '등록', val: '초기 0', cum: '0', who: '시스템' }],
 };
 const num = (n: number) => n.toLocaleString('ko-KR');
-const pctOf = (r: Row) => Math.round((r.cum / r.life) * 100);
-const etaDays = (r: Row) => (r.avg > 0 ? Math.max(Math.round((r.life - r.cum) / r.avg), 0) : null);
-const shotState = (r: Row) => { const p = pctOf(r); return p >= 100 ? '한계초과' : p >= 95 ? '교체임박' : p >= 85 ? '주의' : '정상'; };
+const pctOf = (r: MoldShot) => Math.round((r.cum / r.life) * 100);
+const etaDays = (r: MoldShot) => (r.avg > 0 ? Math.max(Math.round((r.life - r.cum) / r.avg), 0) : null);
+const shotState = (r: MoldShot) => { const p = pctOf(r); return p >= 100 ? '한계초과' : p >= 95 ? '교체임박' : p >= 85 ? '주의' : '정상'; };
 const shotTone = (s: string): Tone => (s === '정상' ? 'ok' : s === '주의' ? 'warn' : s === '교체임박' ? 'warn' : 'err');
 const logTone = (t: string): Tone => (t === '카운트' ? 'info' : t === '리셋' ? 'warn' : t === '수리' ? 'err' : t === '점검' ? 'ok' : 'mute');
 
@@ -57,17 +51,27 @@ function LifeBar({ pct }: { pct: number }) {
 /** 금형 타수(Shot) 관리 — 와이어프레임 mold-shot.jsx 정본. */
 export default function MoldShotScreen() {
   const [sel, setSel] = useState('MD-PRS-210');
-  const cur = SHOT_ROWS.find((r) => r.code === sel) || SHOT_ROWS[0];
+  const { data: rows, isLoading } = useMoldShots();
+
+  // 로딩·빈 데이터 가드 — 데이터 도착 전 차트·KPI 산식이 0 나눗셈에 걸리지 않게 한다.
+  if (isLoading || !rows) {
+    return <div className="p-6 text-sm text-ink3">불러오는 중…</div>;
+  }
+  if (rows.length === 0) {
+    return <div className="p-6 text-sm text-ink3">금형 타수 데이터가 없습니다.</div>;
+  }
+
+  const cur = rows.find((r) => r.code === sel) || rows[0];
   const curPct = pctOf(cur);
   const curEta = etaDays(cur);
   const trend = SHOT_TREND[cur.code] || [];
   const log = SHOT_LOG[cur.code] || [];
 
-  const todayTotal = SHOT_ROWS.reduce((s, r) => s + r.today, 0);
-  const running = SHOT_ROWS.filter((r) => r.today > 0).length;
-  const nearLimit = SHOT_ROWS.filter((r) => pctOf(r) >= 85 && pctOf(r) < 100).length;
-  const overLimit = SHOT_ROWS.filter((r) => pctOf(r) >= 100).length;
-  const avgUse = Math.round(SHOT_ROWS.reduce((s, r) => s + pctOf(r), 0) / SHOT_ROWS.length);
+  const todayTotal = rows.reduce((s, r) => s + r.today, 0);
+  const running = rows.filter((r) => r.today > 0).length;
+  const nearLimit = rows.filter((r) => pctOf(r) >= 85 && pctOf(r) < 100).length;
+  const overLimit = rows.filter((r) => pctOf(r) >= 100).length;
+  const avgUse = Math.round(rows.reduce((s, r) => s + pctOf(r), 0) / rows.length);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -96,7 +100,7 @@ export default function MoldShotScreen() {
               </tr>
             </thead>
             <tbody>
-              {SHOT_ROWS.map((r, i) => {
+              {rows.map((r, i) => {
                 const on = r.code === sel, p = pctOf(r), eta = etaDays(r), st = shotState(r);
                 return (
                   <tr key={r.code} onClick={() => setSel(r.code)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
