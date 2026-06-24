@@ -5,31 +5,20 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField } from '@/shared/ui/FilterBar';
 import { ReadSelect, ProgBar } from '../_bits';
+import { useProdPlans } from '@/features/prodPlan/useProdPlans';
+import type { ProdPlan } from '@/domain/prodPlan/schema';
 
-interface Plan {
-  no: string;
-  code: string;
-  name: string;
-  line: string;
-  shift: string;
-  qty: string;
-  status: '확정' | '검토' | '수신';
-}
-
-const PLANS: Plan[] = [
-  { no: 'PL-260611-01', code: 'WF-300-B', name: '300mm 웨이퍼', line: 'M-Line', shift: '주간', qty: '4,000', status: '확정' },
-  { no: 'PL-260611-02', code: 'WF-200-A', name: '200mm 웨이퍼', line: 'M-Line', shift: '야간', qty: '3,200', status: '확정' },
-  { no: 'PL-260611-03', code: 'PKG-BGA-14', name: 'BGA 패키지', line: 'P-Line', shift: '주간', qty: '2,500', status: '검토' },
-  { no: 'PL-260611-04', code: 'MOD-CAM-02', name: '카메라 모듈', line: 'A-Line', shift: '주간', qty: '1,800', status: '수신' },
-  { no: 'PL-260612-01', code: 'WF-300-B', name: '300mm 웨이퍼', line: 'M-Line', shift: '주간', qty: '4,200', status: '수신' },
-];
-
-const ST_TONE: Record<Plan['status'], Tone> = { 확정: 'ok', 검토: 'info', 수신: 'mute' };
+const ST_TONE: Record<ProdPlan['status'], Tone> = { 확정: 'ok', 검토: 'info', 수신: 'mute' };
 const LOADS: Array<[string, number]> = [['M-Line', 92], ['P-Line', 78], ['A-Line', 64]];
 
 /** 생산계획 관리 — 와이어프레임 prod-screens.ProdPlanContent 정본. */
 export default function ProdPlanScreen() {
+  const { data: plans = [], isLoading } = useProdPlans();
   const [sel, setSel] = useState('PL-260611-01');
+
+  if (!plans.length) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '생산 계획이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -67,7 +56,7 @@ export default function ProdPlanScreen() {
                 </tr>
               </thead>
               <tbody>
-                {PLANS.map((p) => {
+                {plans.map((p) => {
                   const on = p.no === sel;
                   return (
                     <tr key={p.no} onClick={() => setSel(p.no)} className={`cursor-pointer border-b border-border transition-colors ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}>

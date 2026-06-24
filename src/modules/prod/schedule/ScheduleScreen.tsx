@@ -2,6 +2,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { T } from '@/shared/theme/tokens';
+import { useScheduleEntries } from '@/features/scheduleEntry/useScheduleEntries';
 
 const START = 8;
 const END = 20;
@@ -49,12 +50,6 @@ const RESOURCES: Resource[] = [
   ] },
 ];
 
-const UNASSIGNED = [
-  { wo: 'WO-1013', prod: '커넥터 어셈블리', qty: 2000, due: 'D-1', urgent: true },
-  { wo: 'WO-1014', prod: '센서 모듈', qty: 1500, due: 'D-2', urgent: false },
-  { wo: 'WO-1015', prod: '브래킷 키트', qty: 3000, due: 'D-3', urgent: false },
-];
-
 const BLOCK_STYLE: Record<Status, { bg: string; fg: string; border: string }> = {
   진행중: { bg: T.teal, fg: '#fff', border: T.teal },
   대기: { bg: T.blueSoft, fg: T.blue, border: T.blue },
@@ -67,6 +62,8 @@ const xPct = (h: number) => ((h - START) / (END - START)) * 100;
 const pad2 = (h: number) => String(Math.floor(h)).padStart(2, '0') + ':' + (h % 1 ? '30' : '00');
 
 export default function ScheduleScreen() {
+  const { data: UNASSIGNED = [], isLoading } = useScheduleEntries();
+
   const allBlocks = RESOURCES.flatMap((r) => r.blocks.filter((b) => !b.setup));
   const totalWo = allBlocks.length;
   const totalQty = allBlocks.reduce((s, b) => s + b.qty, 0);
@@ -187,6 +184,11 @@ export default function ScheduleScreen() {
         {/* 미배정 오더 + 부하 */}
         <div className="flex flex-col gap-3.5">
           <Card title="미배정 오더" action={<Pill tone="warn">{UNASSIGNED.length}</Pill>} bodyClassName="p-0">
+            {isLoading || UNASSIGNED.length === 0 ? (
+              <div className="grid place-items-center py-10 text-[12px] text-ink3">
+                {isLoading ? '불러오는 중…' : '미배정 오더가 없습니다.'}
+              </div>
+            ) : (
             <div className="py-1">
               {UNASSIGNED.map((o, i) => (
                 <div key={o.wo} className={`cursor-grab px-4 py-3 ${i < UNASSIGNED.length - 1 ? 'border-b border-border' : ''}`}>
@@ -201,6 +203,7 @@ export default function ScheduleScreen() {
                 </div>
               ))}
             </div>
+            )}
             <div className="border-t border-border bg-panel-alt p-3">
               <button className="w-full rounded-[9px] bg-navy py-2.5 text-[12px] font-extrabold text-white">자동 배정 실행</button>
             </div>

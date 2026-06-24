@@ -2,29 +2,20 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
+import { useJobLogs } from '@/features/jobLog/useJobLogs';
+import type { JobLog } from '@/domain/jobLog/schema';
 
-interface Job {
-  no: string;
-  code: string;
-  proc: string;
-  status: '진행중' | '완료' | '대기';
-  start: string;
-  end: string;
-}
-
-const JOBS: Job[] = [
-  { no: 'WO-260611-021', code: 'WF-300-B', proc: 'OP-30 식각', status: '진행중', start: '08:12', end: '—' },
-  { no: 'WO-260611-022', code: 'WF-300-B', proc: 'OP-50 CMP', status: '진행중', start: '09:40', end: '—' },
-  { no: 'WO-260611-015', code: 'PKG-BGA-14', proc: 'OP-40 증착', status: '완료', start: '07:30', end: '11:05' },
-  { no: 'WO-260611-018', code: 'WF-200-A', proc: 'OP-20 포토', status: '대기', start: '—', end: '—' },
-];
-
-const tone = (s: Job['status']): Tone => (s === '진행중' ? 'info' : s === '완료' ? 'ok' : 'mute');
+const tone = (s: JobLog['status']): Tone => (s === '진행중' ? 'info' : s === '완료' ? 'ok' : 'mute');
 
 /** 작업 시작/종료 등록 — 와이어프레임 prod-screens.JobStartEndContent 정본. */
 export default function JobStartEndScreen() {
+  const { data: jobs = [], isLoading } = useJobLogs();
   const [sel, setSel] = useState('WO-260611-021');
-  const cur = JOBS.find((j) => j.no === sel) ?? JOBS[0];
+  const cur = jobs.find((j) => j.no === sel) ?? jobs[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '작업 목록이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -48,7 +39,7 @@ export default function JobStartEndScreen() {
                 </tr>
               </thead>
               <tbody>
-                {JOBS.map((j) => {
+                {jobs.map((j) => {
                   const on = j.no === sel;
                   return (
                     <tr key={j.no} onClick={() => setSel(j.no)} className={`cursor-pointer border-b border-border transition-colors ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}>

@@ -4,27 +4,17 @@ import { Kpi } from '@/shared/ui/Kpi';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { DetailField } from '@/shared/ui/DetailField';
-
-interface Result {
-  no: string;
-  code: string;
-  order: string;
-  good: string;
-  bad: string;
-  defect: string;
-  agg: '자동(PLC)' | '수기';
-}
-
-const RESULTS: Result[] = [
-  { no: 'WO-260611-021', code: 'WF-300-B', order: '4,000', good: '2,480', bad: '38', defect: 'LB-1001', agg: '자동(PLC)' },
-  { no: 'WO-260611-022', code: 'WF-300-B', order: '2,000', good: '780', bad: '12', defect: 'A-2210', agg: '자동(PLC)' },
-  { no: 'WO-260611-015', code: 'PKG-BGA-14', order: '2,500', good: '1,625', bad: '21', defect: 'LB-1002', agg: '수기' },
-];
+import { useProductionResults } from '@/features/productionResult/useProductionResults';
 
 /** 생산실적 등록 — 와이어프레임 prod-screens-2.ProdResultContent 정본. */
 export default function ProdResultScreen() {
+  const { data: results = [], isLoading } = useProductionResults();
   const [sel, setSel] = useState('WO-260611-021');
-  const cur = RESULTS.find((r) => r.no === sel) ?? RESULTS[0];
+  const cur = results.find((r) => r.no === sel) ?? results[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '생산실적이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -55,7 +45,7 @@ export default function ProdResultScreen() {
                 </tr>
               </thead>
               <tbody>
-                {RESULTS.map((r) => {
+                {results.map((r) => {
                   const on = r.no === sel;
                   return (
                     <tr key={r.no} onClick={() => setSel(r.no)} className={`cursor-pointer border-b border-border transition-colors ${on ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}>

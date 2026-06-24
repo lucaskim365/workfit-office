@@ -37,7 +37,8 @@ service cloud.firestore {
         'spareParts', 'spareMovements', 'spareStocks', 'spareSafety', 'spareScraps',
         'andonStatus', 'oeeEquipments', 'liveAlarms', 'equipParams', 'downtimes',
         'molds', 'moldShots', 'moldRepairs', 'moldLocations',
-        'equipGages', 'calPlans', 'calResults', 'calFails'
+        'equipGages', 'calPlans', 'calResults', 'calFails',
+        'prodPlans', 'scheduleEntries', 'urgentOrders', 'productionResults', 'jobLogs', 'wipStatus'
       ];
     }
 

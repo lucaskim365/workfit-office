@@ -4,6 +4,8 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { ReadSelect } from '../_bits';
 import { T } from '@/shared/theme/tokens';
+import { useUrgentOrders } from '@/features/urgentOrder/useUrgentOrders';
+import type { UrgentOrder } from '@/domain/urgentOrder/schema';
 
 const ITEMS = [
   { code: 'CN-ASM-100', name: '커넥터 어셈블리', line: '조립셀 A' },
@@ -12,33 +14,12 @@ const ITEMS = [
   { code: 'CN-HSG-08P', name: '커넥터 하우징', line: '사출 03호기' },
 ];
 
-interface Tx {
-  no: string;
-  type: '긴급' | '재작업';
-  date: string;
-  name: string;
-  qty: number;
-  prio: '최우선' | '높음' | '보통';
-  reason: string;
-  line: string;
-  by: string;
-  state: '발령' | '진행중' | '완료';
-}
-
-const TX: Tx[] = [
-  { no: 'UR-2606-009', type: '긴급', date: '06-21 13:20', name: '커넥터 어셈블리', qty: 2000, prio: '최우선', reason: 'VIP 납기 단축 대응', line: '조립셀 A', by: '김반장', state: '진행중' },
-  { no: 'RW-2606-031', type: '재작업', date: '06-21 11:40', name: '센서 모듈', qty: 320, prio: '높음', reason: 'AOI 납땜 불량 (LOT B-0619)', line: 'SMT 라인 2', by: '이검사', state: '발령' },
-  { no: 'UR-2606-008', type: '긴급', date: '06-21 10:05', name: '브래킷 키트', qty: 1500, prio: '높음', reason: '결품 긴급 대응', line: '프레스 01호기', by: '박계획', state: '진행중' },
-  { no: 'RW-2606-030', type: '재작업', date: '06-21 09:15', name: '커넥터 하우징', qty: 180, prio: '보통', reason: '치수 NG / 외관 불량', line: '사출 03호기', by: '김품질', state: '완료' },
-  { no: 'UR-2606-007', type: '긴급', date: '06-21 08:30', name: '하우징 캡', qty: 800, prio: '보통', reason: '특별 주문 (샘플)', line: '사출 03호기', by: '박계획', state: '완료' },
-  { no: 'RW-2606-029', type: '재작업', date: '06-20 16:50', name: '터미널 핀', qty: 640, prio: '높음', reason: '압착 강도 불량', line: '프레스 01호기', by: '이검사', state: '완료' },
-];
-
-const typeTone = (t: Tx['type']): Tone => (t === '긴급' ? 'err' : 'warn');
-const prioTone = (p: Tx['prio']): Tone => (p === '최우선' ? 'err' : p === '높음' ? 'warn' : 'info');
-const stTone = (s: Tx['state']): Tone => (s === '발령' ? 'info' : s === '진행중' ? 'ok' : 'mute');
+const typeTone = (t: UrgentOrder['type']): Tone => (t === '긴급' ? 'err' : 'warn');
+const prioTone = (p: UrgentOrder['prio']): Tone => (p === '최우선' ? 'err' : p === '높음' ? 'warn' : 'info');
+const stTone = (s: UrgentOrder['state']): Tone => (s === '발령' ? 'info' : s === '진행중' ? 'ok' : 'mute');
 
 export default function UrgentScreen() {
+  const { data: TX = [], isLoading } = useUrgentOrders();
   const [mode, setMode] = useState<'긴급' | '재작업'>('긴급');
   const [itemCode, setItemCode] = useState('CN-ASM-100');
   const [prio, setPrio] = useState('최우선');
@@ -179,6 +160,11 @@ export default function UrgentScreen() {
                 </tr>
               </thead>
               <tbody>
+                {txRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-10 text-center text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '지시 이력이 없습니다.'}</td>
+                  </tr>
+                )}
                 {txRows.map((t, i) => (
                   <tr key={t.no} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
                     <td className="border-b border-border px-3 py-2.5 align-top font-mono text-[10px] text-ink3">{t.no}<div className="mt-0.5 text-[9.5px]">{t.date}</div></td>

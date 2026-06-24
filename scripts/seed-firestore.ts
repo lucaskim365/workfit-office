@@ -87,6 +87,12 @@ import { EQUIP_GAGE_SEED } from '@/data/seeds/equipGage.seed';
 import { CAL_PLAN_SEED } from '@/data/seeds/calPlan.seed';
 import { CAL_RESULT_SEED } from '@/data/seeds/calResult.seed';
 import { CAL_FAIL_SEED } from '@/data/seeds/calFail.seed';
+import { PROD_PLAN_SEED } from '@/data/seeds/prodPlan.seed';
+import { SCHEDULE_ENTRY_SEED } from '@/data/seeds/scheduleEntry.seed';
+import { URGENT_ORDER_SEED } from '@/data/seeds/urgentOrder.seed';
+import { PRODUCTION_RESULT_SEED } from '@/data/seeds/productionResult.seed';
+import { JOB_LOG_SEED } from '@/data/seeds/jobLog.seed';
+import { WIP_STATUS_SEED } from '@/data/seeds/wipStatus.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -167,6 +173,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'calPlans', docs: CAL_PLAN_SEED, id: (d) => d.sn },
   { coll: 'calResults', docs: CAL_RESULT_SEED, id: (d) => d.no },
   { coll: 'calFails', docs: CAL_FAIL_SEED, id: (d) => d.no },
+  { coll: 'prodPlans', docs: PROD_PLAN_SEED, id: (d) => d.no },
+  { coll: 'scheduleEntries', docs: SCHEDULE_ENTRY_SEED, id: (d) => d.wo },
+  { coll: 'urgentOrders', docs: URGENT_ORDER_SEED, id: (d) => d.no },
+  { coll: 'productionResults', docs: PRODUCTION_RESULT_SEED, id: (d) => d.no },
+  { coll: 'jobLogs', docs: JOB_LOG_SEED, id: (d) => d.no },
+  { coll: 'wipStatus', docs: WIP_STATUS_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

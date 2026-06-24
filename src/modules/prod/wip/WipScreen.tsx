@@ -4,14 +4,7 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { RankBars, type RankRow } from '@/shared/ui/charts/RankBars';
 import { T } from '@/shared/theme/tokens';
-
-const ROWS: Array<[string, string, string, string, string, string, string]> = [
-  ['LOT-A2301', 'WF-300-B', 'OP-30 식각', 'ETCH01', '480', '2h 12m', '정상'],
-  ['LOT-A2302', 'WF-300-B', 'OP-50 CMP', 'CMP02', '500', '0h 48m', '정상'],
-  ['LOT-B5510', 'PKG-BGA-14', 'OP-40 증착', 'DEP03', '320', '4h 35m', '지연'],
-  ['LOT-C7720', 'MOD-CAM-02', 'OP-20 포토', 'PHO05', '180', '1h 05m', '정상'],
-  ['LOT-A2298', 'WF-200-A', 'OP-60 검사', 'INS-VIS', '410', '5h 50m', '병목'],
-];
+import { useWipStatus } from '@/features/wipStatus/useWipStatus';
 
 const DIST: RankRow[] = [
   { label: 'OP-60 검사', v: 620, c: T.err },
@@ -25,6 +18,7 @@ const tone = (s: string): Tone => (s === '정상' ? 'ok' : s === '지연' ? 'war
 
 /** WIP 재공 관리 — 와이어프레임 prod-screens.WipContent 정본. */
 export default function WipScreen() {
+  const { data: rows = [], isLoading } = useWipStatus();
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -54,17 +48,25 @@ export default function WipScreen() {
                 </tr>
               </thead>
               <tbody>
-                {ROWS.map((r, i) => (
-                  <tr key={r[0]} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                    <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] font-bold text-ink">{r[0]}</td>
-                    <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r[1]}</td>
-                    <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{r[2]}</td>
-                    <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r[3]}</td>
-                    <td className="border-b border-border px-3 py-2.5 text-right font-bold tabular-nums text-ink">{r[4]}</td>
-                    <td className={`border-b border-border px-3 py-2.5 text-right font-semibold tabular-nums ${r[6] === '병목' ? 'text-danger' : 'text-ink2'}`}>{r[5]}</td>
-                    <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={tone(r[6])} solid={r[6] === '병목'}>{r[6]}</Pill></td>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="border-b border-border px-3 py-10 text-center text-[12px] text-ink3">
+                      {isLoading ? '불러오는 중…' : '재공 LOT이 없습니다.'}
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  rows.map((r, i) => (
+                    <tr key={r.id} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                      <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] font-bold text-ink">{r.lot}</td>
+                      <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r.item}</td>
+                      <td className="border-b border-border px-3 py-2.5 font-semibold text-ink">{r.proc}</td>
+                      <td className="border-b border-border px-3 py-2.5 font-mono text-[11px] text-ink2">{r.eq}</td>
+                      <td className="border-b border-border px-3 py-2.5 text-right font-bold tabular-nums text-ink">{r.qty}</td>
+                      <td className={`border-b border-border px-3 py-2.5 text-right font-semibold tabular-nums ${r.status === '병목' ? 'text-danger' : 'text-ink2'}`}>{r.elapsed}</td>
+                      <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={tone(r.status)} solid={r.status === '병목'}>{r.status}</Pill></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
