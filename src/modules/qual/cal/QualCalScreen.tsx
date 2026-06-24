@@ -3,33 +3,32 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, ChipTabs } from '../_qual';
+import { useCalibrations, useTransitionCalibration } from '@/features/calibration/useCalibrations';
+import { nextStatus } from '@/domain/calibration/status';
 
 const CAL_ST: Record<string, Tone> = { 예정: 'info', 진행중: 'warn', 완료: 'ok', 지연: 'err' };
 const CAL_RES: Record<string, Tone> = { 합격: 'ok', 조정후합격: 'warn', 부적합: 'err', '-': 'mute' };
 const RES_C: Record<Tone, string> = { ok: C.ok, warn: C.warn, err: C.err, mute: C.ink3, info: C.blue };
 const CAL_KIND: Record<string, string> = { 내부: C.teal, 외부: C.blue, '공인(KOLAS)': '#8a5cf6' };
 
-interface Cal { id: string; gage: string; gid: string; cycle: string; plan: string; done: string; kind: string; org: string; cert: string; std: string; result: string; status: string; pts: string[][] }
-const CAL_LIST: Cal[] = [
-  { id: 'CL-260621-008', gage: '3차원 측정기(CMM)', gid: 'QG-CMM-01', cycle: '12개월', plan: '2026-03-15', done: '2026-03-15', kind: '공인(KOLAS)', org: '한국산업기술시험원', cert: 'KCL-26-0312', std: '게이지블록 1급', result: '합격', status: '완료', pts: [['10.0000 mm', '10.0003', '+0.0003', '±0.0010'], ['50.0000 mm', '49.9994', '−0.0006', '±0.0015'], ['100.0000 mm', '100.0011', '+0.0011', '±0.0020'], ['진원도 0', '0.0008', '+0.0008', '±0.0020']] },
-  { id: 'CL-260620-007', gage: '윤곽 투영기', gid: 'QG-PRO-06', cycle: '6개월', plan: '2026-05-18', done: '2026-06-20', kind: '외부', org: '대한계측교정', cert: 'DKC-26-0455', std: '표준 스케일', result: '조정후합격', status: '완료', pts: [['1.0000 mm', '1.0024', '+0.0024', '±0.0010'], ['1.0000 mm(조정후)', '1.0006', '+0.0006', '±0.0010'], ['10.0000 mm', '10.0008', '+0.0008', '±0.0015'], ['각도 90°', '90.02°', '+0.02', '±0.05']] },
-  { id: 'CL-260619-006', gage: '로크웰 경도계', gid: 'QG-HRC-03', cycle: '6개월', plan: '2026-06-05', done: '—', kind: '내부', org: '품질팀 자체', cert: '—', std: '표준 경도블록', result: '-', status: '지연', pts: [['25.0 HRC', '—', '—', '±0.8'], ['45.0 HRC', '—', '—', '±0.8'], ['63.0 HRC', '—', '—', '±0.8']] },
-  { id: 'CL-260622-009', gage: '표면조도 측정기', gid: 'QG-RGH-05', cycle: '12개월', plan: '2026-06-22', done: '—', kind: '공인(KOLAS)', org: '한국산업기술시험원', cert: '—', std: '표준조도편', result: '-', status: '예정', pts: [['Ra 0.40 ㎛', '—', '—', '±0.02'], ['Ra 1.60 ㎛', '—', '—', '±0.05'], ['Ra 6.30 ㎛', '—', '—', '±0.10']] },
-  { id: 'CL-260621-010', gage: '만능재료시험기(UTM)', gid: 'QG-TEN-04', cycle: '12개월', plan: '2026-06-21', done: '—', kind: '공인(KOLAS)', org: '한국기계전기전자시험연구원', cert: '—', std: '표준 로드셀', result: '-', status: '진행중', pts: [['5.000 kN', '—', '—', '±0.5%'], ['15.000 kN', '—', '—', '±0.5%'], ['25.000 kN', '—', '—', '±0.5%']] },
-  { id: 'CL-260618-005', gage: '영상 측정 시스템', gid: 'QG-VIS-02', cycle: '12개월', plan: '2026-02-20', done: '2026-02-20', kind: '외부', org: '대한계측교정', cert: 'DKC-26-0188', std: '표준 글래스 스케일', result: '합격', status: '완료', pts: [['1.0000 mm', '0.9998', '−0.0002', '±0.0010'], ['10.0000 mm', '10.0004', '+0.0004', '±0.0015'], ['50.0000 mm', '49.9991', '−0.0009', '±0.0020']] },
-];
-
 /** 검교정 계획 및 실적 — 와이어프레임 qual-cal.jsx 정본. */
 export default function QualCalScreen() {
+  const { data: list = [], isLoading } = useCalibrations();
+  const transition = useTransitionCalibration();
   const [sel, setSel] = useState('CL-260620-007');
   const [tab, setTab] = useState('전체');
-  const cur = CAL_LIST.find((c) => c.id === sel) || CAL_LIST[0];
-  const rows = CAL_LIST.filter((c) => tab === '전체' || (tab === '미완료' ? c.status !== '완료' : c.status === '완료'));
+  const cur = list.find((c) => c.id === sel) || list[0];
+  const rows = list.filter((c) => tab === '전체' || (tab === '미완료' ? c.status !== '완료' : c.status === '완료'));
 
-  const planned = CAL_LIST.filter((c) => c.status === '예정' || c.status === '진행중').length;
-  const overdue = CAL_LIST.filter((c) => c.status === '지연').length;
-  const doneCnt = CAL_LIST.filter((c) => c.status === '완료').length;
-  const adjusted = CAL_LIST.filter((c) => c.result === '조정후합격' || c.result === '부적합').length;
+  const planned = list.filter((c) => c.status === '예정' || c.status === '진행중').length;
+  const overdue = list.filter((c) => c.status === '지연').length;
+  const doneCnt = list.filter((c) => c.status === '완료').length;
+  const adjusted = list.filter((c) => c.result === '조정후합격' || c.result === '부적합').length;
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '검교정 계획이 없습니다.'}</div>;
+  }
+
   const ptOk = (p: string[]) => (p[1] === '—' ? null : cur.result !== '부적합');
 
   return (
@@ -43,7 +42,7 @@ export default function QualCalScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['검교정 대상', '' + CAL_LIST.length, '건', C.ink],
+        ['검교정 대상', '' + list.length, '건', C.ink],
         ['예정·진행', '' + planned, '건', C.blue],
         ['기한 지연', '' + overdue, '건', C.err],
         ['완료', '' + doneCnt, '건', C.ok],
@@ -141,7 +140,17 @@ export default function QualCalScreen() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white" style={{ background: C.navy }}>{cur.status === '완료' ? '성적서 보기' : '실적 등록 →'}</button>
+              <button
+                onClick={() => {
+                  const to = nextStatus(cur.status);
+                  if (to) transition.mutate({ id: cur.id, to });
+                }}
+                disabled={cur.status === '완료' || transition.isPending}
+                className="h-[38px] flex-1 rounded-lg text-[12px] font-bold text-white disabled:opacity-50"
+                style={{ background: C.navy }}
+              >
+                {cur.status === '완료' ? '성적서 보기' : '실적 등록 →'}
+              </button>
               <button className="h-[38px] rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] font-bold text-ink2">라벨</button>
             </div>
           </div>

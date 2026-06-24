@@ -48,3 +48,8 @@ export function formatVocNo(dateKey: string, seq: number): string {
 export function format8dNo(dateKey: string, seq: number): string {
   return formatDocNo('8D', dateKey, seq);
 }
+
+/** CL-YYMMDD-NNN (검교정 계획·실적). */
+export function formatCalNo(dateKey: string, seq: number): string {
+  return formatDocNo('CL', dateKey, seq);
+}

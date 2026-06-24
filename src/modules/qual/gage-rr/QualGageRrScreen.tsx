@@ -3,21 +3,14 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_qual';
+import { useGageRrs } from '@/features/gageRr/useGageRrs';
+import type { GageRr } from '@/domain/gageRr/schema';
 
 const grrTone = (g: number): Tone => (g < 10 ? 'ok' : g <= 30 ? 'warn' : 'err');
 const grrColor = (g: number) => ({ ok: C.ok, warn: C.warn, err: C.err }[grrTone(g) as 'ok' | 'warn' | 'err']);
 const grrGrade = (g: number) => (g < 10 ? '적합' : g <= 30 ? '조건부' : '부적합');
 
-interface Study { id: string; gage: string; gid: string; char: string; unit: string; method: string; ops: number; parts: number; trials: number; ev: number; av: number; pv: number; tol: number; date: string }
-const MSA_LIST: Study[] = [
-  { id: 'MSA-2603-01', gage: '3차원 측정기(CMM)', gid: 'QG-CMM-01', char: '외경(O.D)', unit: 'mm', method: 'ANOVA', ops: 3, parts: 10, trials: 3, ev: 0.05, av: 0.03, pv: 0.83, tol: 0.1, date: '2026-03' },
-  { id: 'MSA-2602-02', gage: '영상 측정 시스템', gid: 'QG-VIS-02', char: '핀 피치', unit: 'mm', method: 'ANOVA', ops: 3, parts: 10, trials: 2, ev: 0.07, av: 0.05, pv: 0.92, tol: 0.1, date: '2026-02' },
-  { id: 'MSA-2601-03', gage: '로크웰 경도계', gid: 'QG-HRC-03', char: '표면 경도', unit: 'HRC', method: '평균-범위', ops: 3, parts: 10, trials: 3, ev: 0.1, av: 0.07, pv: 0.95, tol: 4.0, date: '2026-01' },
-  { id: 'MSA-2512-04', gage: '윤곽 투영기', gid: 'QG-PRO-06', char: '치형(M)', unit: 'mm', method: '평균-범위', ops: 2, parts: 10, trials: 3, ev: 0.12, av: 0.09, pv: 0.98, tol: 0.02, date: '2025-12' },
-  { id: 'MSA-2511-05', gage: '영상 측정 시스템 #2', gid: 'QG-VIS-07', char: '소형 부품 치수', unit: 'mm', method: 'ANOVA', ops: 3, parts: 10, trials: 2, ev: 0.28, av: 0.18, pv: 0.95, tol: 0.05, date: '2025-11' },
-];
-
-function msaOf(s: Study) {
+function msaOf(s: GageRr) {
   const grr = Math.sqrt(s.ev ** 2 + s.av ** 2);
   const tv = Math.sqrt(grr ** 2 + s.pv ** 2);
   const pct = (x: number) => (x / tv) * 100;
@@ -27,11 +20,17 @@ function msaOf(s: Study) {
 
 /** Gage R&R (측정시스템 분석) — 와이어프레임 qual-gage-rr.jsx 정본. */
 export default function QualGageRrScreen() {
+  const { data: studies = [], isLoading } = useGageRrs();
   const [sel, setSel] = useState('MSA-2601-03');
-  const cur = MSA_LIST.find((s) => s.id === sel) || MSA_LIST[0];
-  const m = msaOf(cur);
+  const cur = studies.find((s) => s.id === sel) || studies[0];
 
-  const all = MSA_LIST.map((s) => ({ s, m: msaOf(s) }));
+  const all = studies.map((s) => ({ s, m: msaOf(s) }));
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : 'MSA 분석 데이터가 없습니다.'}</div>;
+  }
+
+  const m = msaOf(cur);
   const okCnt = all.filter((a) => a.m.grrP < 10).length;
   const condCnt = all.filter((a) => a.m.grrP >= 10 && a.m.grrP <= 30).length;
   const ngCnt = all.filter((a) => a.m.grrP > 30).length;
@@ -54,7 +53,7 @@ export default function QualGageRrScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['분석 대상', '' + MSA_LIST.length, '건', C.ink],
+        ['분석 대상', '' + studies.length, '건', C.ink],
         ['적합 (<10%)', '' + okCnt, '건', C.ok],
         ['조건부 (10~30%)', '' + condCnt, '건', C.warn],
         ['부적합 (>30%)', '' + ngCnt, '건', C.err],

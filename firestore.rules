@@ -28,7 +28,8 @@ service cloud.firestore {
         'inspectionStandards', 'defectCodes', 'qualityGrades', 'inspections',
         'nonconformances', 'mrbCases', 'reworkOrders', 'capaActions',
         'spcCharts', 'spcCapability', 'spcAlarms',
-        'traceNodes', 'voc', 'd8Reports'
+        'traceNodes', 'voc', 'd8Reports',
+        'gages', 'calibrations', 'gageRrStudies'
       ];
     }
 

@@ -49,6 +49,9 @@ import { SPC_ALARM_SEED } from '@/data/seeds/spcAlarm.seed';
 import { TRACE_NODE_SEED } from '@/data/seeds/traceNode.seed';
 import { VOC_SEED } from '@/data/seeds/voc.seed';
 import { D8_REPORT_SEED } from '@/data/seeds/d8Report.seed';
+import { GAGE_SEED } from '@/data/seeds/gage.seed';
+import { CALIBRATION_SEED } from '@/data/seeds/calibration.seed';
+import { GAGE_RR_SEED } from '@/data/seeds/gageRr.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -90,6 +93,9 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'traceNodes', docs: TRACE_NODE_SEED, id: (d) => d.id },
   { coll: 'voc', docs: VOC_SEED, id: (d) => d.no },
   { coll: 'd8Reports', docs: D8_REPORT_SEED, id: (d) => d.no },
+  { coll: 'gages', docs: GAGE_SEED, id: (d) => d.id },
+  { coll: 'calibrations', docs: CALIBRATION_SEED, id: (d) => d.id },
+  { coll: 'gageRrStudies', docs: GAGE_RR_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

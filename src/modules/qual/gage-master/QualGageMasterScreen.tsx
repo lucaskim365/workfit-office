@@ -3,6 +3,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, SearchBox } from '../_qual';
+import { useGages } from '@/features/gage/useGages';
 
 const QG_ST: Record<string, Tone> = { 사용중: 'ok', 검교정중: 'info', 수리중: 'warn', 사용중지: 'err' };
 const QG_CAT: Record<string, string> = { 좌표측정: C.blue, 영상측정: C.teal, 경도: C.warn, 물성: C.err, 조도: '#8a5cf6', 윤곽: C.blue };
@@ -11,17 +12,6 @@ const grrColor = (g: number) => ({ ok: C.ok, warn: C.warn, err: C.err }[grrTone(
 const grrGrade = (g: number) => (g < 10 ? '양호' : g <= 30 ? '조건부' : '부적합');
 const BASE = Date.UTC(2026, 5, 21);
 const dd = (d: string) => Math.round((Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) - BASE) / 86400000);
-
-interface Gage { id: string; name: string; cat: string; maker: string; model: string; range: string; res: string; loc: string; dept: string; cal: string; calNext: string; grr: number; grrDate: string; state: string; items: string[] }
-const QG_LIST: Gage[] = [
-  { id: 'QG-CMM-01', name: '3차원 측정기(CMM)', cat: '좌표측정', maker: 'ZEISS', model: 'CONTURA G2', range: '700×1000×600 mm', res: '0.5 ㎛', loc: '품질실', dept: '품질팀', cal: '2026-03-15', calNext: '2027-03-15', grr: 6.8, grrDate: '2026-03', state: '사용중', items: ['외경(O.D)', '내경(I.D)', '평면도', '진원도', 'PCD'] },
-  { id: 'QG-VIS-02', name: '영상 측정 시스템', cat: '영상측정', maker: 'KEYENCE', model: 'IM-7000', range: '100×100 mm', res: '1 ㎛', loc: '2라인 #4', dept: '품질팀', cal: '2026-02-20', calNext: '2027-02-20', grr: 9.2, grrDate: '2026-02', state: '사용중', items: ['외형 치수', '핀 피치', '표면 결함'] },
-  { id: 'QG-HRC-03', name: '로크웰 경도계', cat: '경도', maker: 'Mitutoyo', model: 'HR-530', range: '20–88 HRC', res: '0.1 HRC', loc: '시험실', dept: '품질팀', cal: '2025-12-05', calNext: '2026-06-05', grr: 12.5, grrDate: '2026-01', state: '사용중', items: ['표면 경도', '심부 경도'] },
-  { id: 'QG-TEN-04', name: '만능재료시험기(UTM)', cat: '물성', maker: 'Instron', model: '5967', range: '0–30 kN', res: '0.01 N', loc: '시험실', dept: '품질팀', cal: '2026-04-10', calNext: '2027-04-10', grr: 7.5, grrDate: '2026-04', state: '사용중', items: ['인장강도', '연신율'] },
-  { id: 'QG-RGH-05', name: '표면조도 측정기', cat: '조도', maker: 'Mitutoyo', model: 'SJ-410', range: 'Ra 0.01–16 ㎛', res: '0.001 ㎛', loc: '계측실', dept: '품질팀', cal: '2026-05-22', calNext: '2027-05-22', grr: 8.9, grrDate: '2026-05', state: '사용중', items: ['표면 거칠기'] },
-  { id: 'QG-PRO-06', name: '윤곽 투영기', cat: '윤곽', maker: 'Nikon', model: 'V-12B', range: 'Ø300 mm', res: '1 ㎛', loc: '계측실', dept: '품질팀', cal: '2025-11-18', calNext: '2026-05-18', grr: 14.8, grrDate: '2025-12', state: '검교정중', items: ['치형', '윤곽 형상'] },
-  { id: 'QG-VIS-07', name: '영상 측정 시스템 #2', cat: '영상측정', maker: 'KEYENCE', model: 'IM-6145', range: '50×50 mm', res: '1 ㎛', loc: '품질실', dept: '품질팀', cal: '2025-10-30', calNext: '2026-04-30', grr: 33.2, grrDate: '2025-11', state: '사용중지', items: ['소형 부품 치수'] },
-];
 
 function GrrBar({ grr }: { grr: number }) {
   const pos = (Math.min(grr, 40) / 40) * 100;
@@ -39,16 +29,21 @@ function GrrBar({ grr }: { grr: number }) {
 
 /** 계측기·검사 장비 마스터 — 와이어프레임 qual-gage-master.jsx 정본. */
 export default function QualGageMasterScreen() {
+  const { data: list = [], isLoading } = useGages();
   const [sel, setSel] = useState('QG-CMM-01');
   const [q, setQ] = useState('');
-  let rows = QG_LIST;
+  let rows = list;
   if (q) rows = rows.filter((g) => g.name.includes(q) || g.maker.toLowerCase().includes(q.toLowerCase()) || g.id.toLowerCase().includes(q.toLowerCase()));
-  const cur = QG_LIST.find((g) => g.id === sel) || QG_LIST[0];
+  const cur = list.find((g) => g.id === sel) || list[0];
 
-  const active = QG_LIST.filter((g) => g.state === '사용중').length;
-  const calDue = QG_LIST.filter((g) => dd(g.calNext) <= 30).length;
-  const grrOk = QG_LIST.filter((g) => g.grr < 10).length;
-  const grrNg = QG_LIST.filter((g) => g.grr > 30).length;
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '검사 장비가 없습니다.'}</div>;
+  }
+
+  const active = list.filter((g) => g.state === '사용중').length;
+  const calDue = list.filter((g) => dd(g.calNext) <= 30).length;
+  const grrOk = list.filter((g) => g.grr < 10).length;
+  const grrNg = list.filter((g) => g.grr > 30).length;
   const curDday = dd(cur.calNext);
 
   return (
@@ -62,7 +57,7 @@ export default function QualGageMasterScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['검사 장비', '' + QG_LIST.length, '대', C.ink],
+        ['검사 장비', '' + list.length, '대', C.ink],
         ['검교정 임박·만료', '' + calDue, '대', C.warn],
         ['MSA 양호 (<10%)', '' + grrOk, '대', C.ok],
         ['MSA 부적합 (>30%)', '' + grrNg, '대', C.err],
