@@ -6,7 +6,7 @@ import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '../_bits';
 import { type WoStatus } from '@/domain/workOrder/schema';
 import { nextStatus, nextActionLabel } from '@/domain/workOrder/status';
-import { useWorkOrders, useCreateWorkOrder, useTransitionWorkOrder } from '@/features/workOrder/useWorkOrders';
+import { useWorkOrders, useCreateWorkOrder, useTransitionWorkOrder, useCompleteWorkOrder } from '@/features/workOrder/useWorkOrders';
 
 const ST_TONE: Record<WoStatus, Tone> = { 완료: 'ok', 진행: 'info', 발행: 'mute', 대기: 'mute', 지연: 'warn' };
 const BARS = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1, 2, 3, 1, 1, 2, 1, 3, 1, 2, 2, 1, 3];
@@ -19,6 +19,7 @@ export default function WorkOrderScreen() {
   const { data: WOS = [] } = useWorkOrders();
   const createWo = useCreateWorkOrder();
   const transitionWo = useTransitionWorkOrder();
+  const completeWo = useCompleteWorkOrder();
 
   const cur = WOS.find((w) => w.no === sel) ?? WOS[0];
   const advance = cur ? nextStatus(cur.status) : null;
@@ -35,7 +36,10 @@ export default function WorkOrderScreen() {
     : [];
 
   const handleAdvance = () => {
-    if (cur && advance) transitionWo.mutate({ no: cur.no, to: advance, at: stamp() });
+    if (!cur || !advance) return;
+    // 완료 전이는 서비스(상태 전이 + 생산입고 원장)로 — cross-entity 정합성
+    if (advance === '완료') completeWo.mutate({ no: cur.no, at: stamp() });
+    else transitionWo.mutate({ no: cur.no, to: advance, at: stamp() });
   };
   const handleCreate = () => {
     createWo.mutate(
