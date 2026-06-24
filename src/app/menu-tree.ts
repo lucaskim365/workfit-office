@@ -303,6 +303,7 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_SYS_LOG', name: '로그 관리', url: '/sys/log', icon: '◷', order: 40, use: true },
     ] },
     { id: 'G_SYS_GLOBAL', name: '글로벌/운영', icon: '⌗', order: 20, use: true, children: [
+      { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 5, use: true },
       { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', icon: '⌗', order: 10, use: true },
       { id: 'S_SYS_CAL', name: '공장 달력', url: '/sys/calendar', icon: '▤', order: 20, use: true },
       { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', icon: '⚙', order: 30, use: true },

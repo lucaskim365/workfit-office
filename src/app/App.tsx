@@ -27,6 +27,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
   '/base/routing': lazy(() => import('@/modules/base/routing/RoutingScreen')),
   // 시스템 관리
+  '/sys/company': lazy(() => import('@/modules/sys/company/CompanyScreen')),
   '/sys/user': lazy(() => import('@/modules/sys/user/UserAdminScreen')),
   '/sys/auth': lazy(() => import('@/modules/sys/auth/AuthMgmtScreen')),
   '/sys/menu': lazy(() => import('@/modules/sys/menu/MenuMgmtScreen')),
