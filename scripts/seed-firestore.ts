@@ -69,6 +69,11 @@ import { PERIODIC_CHECK_SEED } from '@/data/seeds/periodicCheck.seed';
 import { BM_ACTION_SEED } from '@/data/seeds/bmAction.seed';
 import { PDM_EQUIPMENT_SEED } from '@/data/seeds/pdmEquipment.seed';
 import { MAINT_OUTSOURCING_SEED } from '@/data/seeds/maintOutsourcing.seed';
+import { SPARE_PART_SEED } from '@/data/seeds/sparePart.seed';
+import { SPARE_MOVEMENT_SEED } from '@/data/seeds/spareMovement.seed';
+import { SPARE_STOCK_SEED } from '@/data/seeds/spareStock.seed';
+import { SPARE_SAFETY_SEED } from '@/data/seeds/spareSafety.seed';
+import { SPARE_SCRAP_SEED } from '@/data/seeds/spareScrap.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -130,6 +135,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'bmActions', docs: BM_ACTION_SEED, id: (d) => d.no },
   { coll: 'pdmEquipments', docs: PDM_EQUIPMENT_SEED, id: (d) => d.code },
   { coll: 'maintOutsourcing', docs: MAINT_OUTSOURCING_SEED, id: (d) => d.no },
+  { coll: 'spareParts', docs: SPARE_PART_SEED, id: (d) => d.code },
+  { coll: 'spareMovements', docs: SPARE_MOVEMENT_SEED, id: (d) => d.no },
+  { coll: 'spareStocks', docs: SPARE_STOCK_SEED, id: (d) => d.code },
+  { coll: 'spareSafety', docs: SPARE_SAFETY_SEED, id: (d) => d.code },
+  // 미채번(no='–') 폐기건은 code를 문서ID로(충돌 방지).
+  { coll: 'spareScraps', docs: SPARE_SCRAP_SEED, id: (d) => (d.no && d.no !== '–' ? d.no : d.code) },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

@@ -3,16 +3,10 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_maint';
+import { useSpareSafety } from '@/features/spareSafety/useSpareSafety';
+import type { SpareSafety } from '@/domain/spareSafety/schema';
 
-interface Row { code: string; name: string; cat: string; unit: string; price: number; stock: number; safe: number; opt: number; lead: number; maker: string; eqs: string[]; po: string; lastReq: string; state: string }
-const SAFE_ROWS: Row[] = [
-  { code: 'SP-FIL-IM', name: '이온소스 필라멘트', cat: '소모성', unit: 'EA', price: 680000, stock: 0, safe: 3, opt: 6, lead: 28, maker: 'AMAT', eqs: ['Implant 02호기'], po: '미발주', lastReq: '–', state: '결품' },
-  { code: 'SP-PAD-IC', name: '연마 패드', cat: '소모성', unit: 'EA', price: 210000, stock: 4, safe: 10, opt: 24, lead: 7, maker: 'DuPont', eqs: ['CMP 02호기'], po: '미발주', lastReq: '–', state: '부족' },
-  { code: 'SP-MB-200', name: '캐리어 멤브레인', cat: '소모성', unit: 'EA', price: 480000, stock: 6, safe: 8, opt: 12, lead: 14, maker: 'AMAT', eqs: ['CMP 02호기', 'CMP 03호기'], po: '발주중', lastReq: '06-09', state: '부족' },
-  { code: 'SP-SEN-PT', name: '백금 측온센서(Pt100)', cat: '전장부품', unit: 'EA', price: 88000, stock: 3, safe: 5, opt: 10, lead: 12, maker: 'WIKA', eqs: ['Thermal 05호기'], po: '미발주', lastReq: '–', state: '부족' },
-  { code: 'SP-HTR-3K', name: '튜브 히터 어셈블리', cat: '전장부품', unit: 'EA', price: 1850000, stock: 2, safe: 2, opt: 3, lead: 30, maker: 'ASM', eqs: ['Thermal 05호기'], po: '입고예정', lastReq: '06-07', state: '주의' },
-  { code: 'SP-RFMN-30', name: 'RF 매칭 네트워크', cat: '전장부품', unit: 'EA', price: 3200000, stock: 1, safe: 1, opt: 2, lead: 45, maker: 'Adv. Energy', eqs: ['Etch 01호기'], po: '미발주', lastReq: '–', state: '주의' },
-];
+type Row = SpareSafety;
 const stTone = (s: string): Tone => (s === '정상' ? 'ok' : s === '결품' ? 'err' : 'warn');
 const poTone = (p: string): Tone => (p === '입고예정' ? 'ok' : p === '발주중' ? 'info' : 'mute');
 const won = (n: number) => n.toLocaleString('ko-KR');
@@ -32,19 +26,25 @@ function SafeBar({ stock, safe, opt }: { stock: number; safe: number; opt: numbe
 
 /** 안전재고 미달 알림 — 와이어프레임 spare-safety.jsx 정본. */
 export default function SpareSafetyScreen() {
+  const { data: safeRows = [], isLoading } = useSpareSafety();
   const [sel, setSel] = useState('SP-FIL-IM');
   const [filter, setFilter] = useState('전체');
-  const rows = [...SAFE_ROWS].sort((a, b) => sevRank(a) - sevRank(b));
+  const rows = [...safeRows].sort((a, b) => sevRank(a) - sevRank(b));
   const shown = rows.filter((r) => filter === '전체' || (filter === '미발주' ? r.po === '미발주' : r.state === filter));
-  const cur = SAFE_ROWS.find((r) => r.code === sel) || SAFE_ROWS[0];
+  const cur = safeRows.find((r) => r.code === sel) || safeRows[0];
+
+  const cntOut = safeRows.filter((r) => r.stock === 0).length;
+  const cntNoPo = safeRows.filter((r) => r.po === '미발주').length;
+  const cntPo = safeRows.filter((r) => r.po !== '미발주').length;
+  const estTotal = safeRows.filter((r) => r.po === '미발주').reduce((s, r) => s + Math.max(r.opt - r.stock, 0) * r.price, 0);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '미달 품목이 없습니다.'}</div>;
+  }
+
   const reorderQty = Math.max(cur.opt - cur.stock, 0);
   const reorderAmt = reorderQty * cur.price;
   const shortQty = Math.max(cur.safe - cur.stock, 0);
-
-  const cntOut = SAFE_ROWS.filter((r) => r.stock === 0).length;
-  const cntNoPo = SAFE_ROWS.filter((r) => r.po === '미발주').length;
-  const cntPo = SAFE_ROWS.filter((r) => r.po !== '미발주').length;
-  const estTotal = SAFE_ROWS.filter((r) => r.po === '미발주').reduce((s, r) => s + Math.max(r.opt - r.stock, 0) * r.price, 0);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -57,7 +57,7 @@ export default function SpareSafetyScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['미달 품목', '' + SAFE_ROWS.length, '종', C.warn], ['결품', '' + cntOut, '종', C.err], ['미발주(조치필요)', '' + cntNoPo, '종', C.err],
+        ['미달 품목', '' + safeRows.length, '종', C.warn], ['결품', '' + cntOut, '종', C.err], ['미발주(조치필요)', '' + cntNoPo, '종', C.err],
         ['발주 진행중', '' + cntPo, '종', C.blue], ['예상 발주금액', (estTotal / 1e6).toFixed(2), 'M₩', C.ink],
       ]} />
 

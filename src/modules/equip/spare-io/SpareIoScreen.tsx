@@ -3,6 +3,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_maint';
+import { useSpareMovements } from '@/features/spareMovement/useSpareMovements';
 
 const SPIO_PARTS = [
   { code: 'SP-MB-200', name: '캐리어 멤브레인', unit: 'EA', stock: 6 },
@@ -12,28 +13,18 @@ const SPIO_PARTS = [
   { code: 'SP-ORK-A', name: 'O-Ring 키트', unit: 'SET', stock: 24 },
 ];
 
-interface Tx { no: string; type: string; date: string; code: string; name: string; qty: number; unit: string; after: number; reason: string; who: string; ref: string }
-const SPIO_TX: Tx[] = [
-  { no: 'IO-2606-052', type: '출고', date: '06-10 09:15', code: 'SP-HTR-3K', name: '튜브 히터 어셈블리', qty: 1, unit: 'EA', after: 2, reason: 'BM 수리 (BM-2606-031)', who: '박보전', ref: 'Thermal 05호기' },
-  { no: 'IO-2606-051', type: '입고', date: '06-10 08:40', code: 'SP-PAD-IC', name: '연마 패드', qty: 20, unit: 'EA', after: 24, reason: '정기 구매입고 (PO-26-0612)', who: '김자재', ref: 'DuPont' },
-  { no: 'IO-2606-050', type: '출고', date: '06-09 16:50', code: 'SP-MB-200', name: '캐리어 멤브레인', qty: 2, unit: 'EA', after: 6, reason: 'PM 교체 (CMP 02호기)', who: '김설비', ref: 'CMP 02호기' },
-  { no: 'IO-2606-049', type: '출고', date: '06-09 14:05', code: 'SP-FIL-IM', name: '이온소스 필라멘트', qty: 1, unit: 'EA', after: 0, reason: 'BM 수리 (BM-2606-028)', who: '이정비', ref: 'Implant 02호기' },
-  { no: 'IO-2606-048', type: '입고', date: '06-09 10:20', code: 'SP-ORK-A', name: 'O-Ring 키트', qty: 12, unit: 'SET', after: 24, reason: '정기 구매입고 (PO-26-0608)', who: '김자재', ref: 'AMAT' },
-  { no: 'IO-2606-047', type: '출고', date: '06-08 11:30', code: 'SP-ORK-A', name: 'O-Ring 키트', qty: 2, unit: 'SET', after: 12, reason: 'BM 수리 (BM-2606-026)', who: '이정비', ref: 'Depo 03호기' },
-  { no: 'IO-2606-046', type: '입고', date: '06-07 09:00', code: 'SP-HTR-3K', name: '튜브 히터 어셈블리', qty: 1, unit: 'EA', after: 3, reason: '긴급 발주입고 (PO-26-0605)', who: '김자재', ref: 'ASM' },
-  { no: 'IO-2606-045', type: '출고', date: '06-06 15:40', code: 'SP-PAD-IC', name: '연마 패드', qty: 4, unit: 'EA', after: 4, reason: 'PM 교체 (CMP 02호기)', who: '김설비', ref: 'CMP 02호기' },
-];
 const ioTone = (t: string): Tone => (t === '입고' ? 'ok' : 'info');
 
 /** 예비품 입고/출고 — 와이어프레임 spare-io.jsx 정본. */
 export default function SpareIoScreen() {
+  const { data: movements = [], isLoading } = useSpareMovements();
   const [mode, setMode] = useState<'입고' | '출고'>('출고');
   const [partCode, setPartCode] = useState('SP-HTR-3K');
   const [qty, setQty] = useState(1);
   const [filter, setFilter] = useState('전체');
   const part = SPIO_PARTS.find((p) => p.code === partCode) || SPIO_PARTS[0];
   const after = mode === '입고' ? part.stock + qty : part.stock - qty;
-  const txRows = SPIO_TX.filter((t) => filter === '전체' || t.type === filter);
+  const txRows = movements.filter((t) => filter === '전체' || t.type === filter);
   const modeColor = mode === '입고' ? C.teal : C.blue;
 
   return (
@@ -131,6 +122,11 @@ export default function SpareIoScreen() {
               </tr>
             </thead>
             <tbody>
+              {txRows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '입출고 이력이 없습니다.'}</td>
+                </tr>
+              )}
               {txRows.map((t, i) => (
                 <tr key={t.no} className="align-top" style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
                   <td className="border-b border-border px-3 py-2.5 font-mono text-[10px] text-ink3">{t.no}<div className="mt-0.5 text-[9.5px]">{t.date}</div></td>
