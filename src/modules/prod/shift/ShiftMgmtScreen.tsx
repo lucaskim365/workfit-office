@@ -1,30 +1,10 @@
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { T } from '@/shared/theme/tokens';
-
-interface Shift {
-  code: string;
-  name: string;
-  start: number;
-  end: number;
-  brk: number;
-  net: number;
-  c: string;
-}
-const SHIFTS: Shift[] = [
-  { code: 'D', name: '주간 (Day)', start: 8, end: 20, brk: 90, net: 10.5, c: T.teal },
-  { code: 'N', name: '야간 (Night)', start: 20, end: 8, brk: 90, net: 10.5, c: T.navy },
-  { code: 'A', name: '상주 (관리)', start: 9, end: 18, brk: 60, net: 8.0, c: T.blue },
-];
+import { useShifts, useShiftRotations } from '@/features/shift/useShifts';
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const TODAY_IDX = 4;
-
-const ROTATION = [
-  { crew: 'A조', lead: '김주임', n: 8, plan: ['주간', '주간', '야간', '야간', '휴무', '휴무', '주간'] },
-  { crew: 'B조', lead: '이주임', n: 8, plan: ['야간', '야간', '휴무', '휴무', '주간', '주간', '야간'] },
-  { crew: 'C조', lead: '박주임', n: 7, plan: ['휴무', '휴무', '주간', '주간', '야간', '야간', '휴무'] },
-];
 
 const SHIFT_TONE: Record<string, { bg: string; fg: string; bd: string }> = {
   주간: { bg: T.tealSoft, fg: T.teal, bd: T.teal },
@@ -52,9 +32,12 @@ function ShiftTimeline({ start, end, c }: { start: number; end: number; c: strin
 
 /** 근무조(Shift) 관리 — 와이어프레임 shift-mgmt.jsx 정본. */
 export default function ShiftMgmtScreen() {
+  const { data: SHIFTS = [] } = useShifts();
+  const { data: ROTATION = [] } = useShiftRotations();
+
   const todayHeads = ROTATION.filter((r) => r.plan[TODAY_IDX] !== '휴무').reduce((s, r) => s + r.n, 0);
   const totalHeads = ROTATION.reduce((s, r) => s + r.n, 0);
-  const weeklyHours = SHIFTS[0].net * 4;
+  const weeklyHours = (SHIFTS[0]?.net ?? 0) * 4;
 
   const kpis: Array<[string, string, string, string]> = [
     ['근무조', String(SHIFTS.length), '조', 'text-ink'],
@@ -93,16 +76,16 @@ export default function ShiftMgmtScreen() {
               <div key={s.code} className="rounded-[10px] border border-border px-3 py-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: s.c }} />
+                    <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: s.color }} />
                     <span className="text-[12.5px] font-extrabold text-ink">{s.name}</span>
                   </div>
                   <span className="font-mono text-[11px] font-bold text-ink2">{pad2(s.start)}–{pad2(s.end)}</span>
                 </div>
-                <ShiftTimeline start={s.start} end={s.end} c={s.c} />
+                <ShiftTimeline start={s.start} end={s.end} c={s.color} />
                 <div className="mt-2 flex justify-between text-[10px]">
                   <span className="text-ink3">총 시간 <b className="font-mono text-ink2">{s.end > s.start ? s.end - s.start : 24 - s.start + s.end}h</b></span>
                   <span className="text-ink3">휴게 <b className="font-mono text-ink2">{s.brk}분</b></span>
-                  <span className="text-ink3">실근무 <b className="font-mono" style={{ color: s.c }}>{s.net}h</b></span>
+                  <span className="text-ink3">실근무 <b className="font-mono" style={{ color: s.color }}>{s.net}h</b></span>
                 </div>
               </div>
             ))}
