@@ -34,7 +34,8 @@ service cloud.firestore {
         'coaCertificates', 'equipments',
         'equipmentSpecs', 'equipBoms', 'equipCheckItems', 'alarmMasters', 'equipVendors',
         'pmPlans', 'dailyChecks', 'periodicChecks', 'bmActions', 'pdmEquipments', 'maintOutsourcing',
-        'spareParts', 'spareMovements', 'spareStocks', 'spareSafety', 'spareScraps'
+        'spareParts', 'spareMovements', 'spareStocks', 'spareSafety', 'spareScraps',
+        'andonStatus', 'oeeEquipments', 'liveAlarms', 'equipParams', 'downtimes'
       ];
     }
 

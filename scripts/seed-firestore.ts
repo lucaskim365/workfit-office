@@ -74,6 +74,11 @@ import { SPARE_MOVEMENT_SEED } from '@/data/seeds/spareMovement.seed';
 import { SPARE_STOCK_SEED } from '@/data/seeds/spareStock.seed';
 import { SPARE_SAFETY_SEED } from '@/data/seeds/spareSafety.seed';
 import { SPARE_SCRAP_SEED } from '@/data/seeds/spareScrap.seed';
+import { ANDON_STATUS_SEED } from '@/data/seeds/andonStatus.seed';
+import { OEE_EQUIPMENT_SEED } from '@/data/seeds/oeeEquipment.seed';
+import { LIVE_ALARM_SEED } from '@/data/seeds/liveAlarm.seed';
+import { EQUIP_PARAM_SEED } from '@/data/seeds/equipParam.seed';
+import { DOWNTIME_SEED } from '@/data/seeds/downtime.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -141,6 +146,11 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'spareSafety', docs: SPARE_SAFETY_SEED, id: (d) => d.code },
   // 미채번(no='–') 폐기건은 code를 문서ID로(충돌 방지).
   { coll: 'spareScraps', docs: SPARE_SCRAP_SEED, id: (d) => (d.no && d.no !== '–' ? d.no : d.code) },
+  { coll: 'andonStatus', docs: ANDON_STATUS_SEED, id: (d) => d.code },
+  { coll: 'oeeEquipments', docs: OEE_EQUIPMENT_SEED, id: (d) => d.code },
+  { coll: 'liveAlarms', docs: LIVE_ALARM_SEED, id: (d) => d.id },
+  { coll: 'equipParams', docs: EQUIP_PARAM_SEED, id: (d) => d.code },
+  { coll: 'downtimes', docs: DOWNTIME_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

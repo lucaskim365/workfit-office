@@ -2,6 +2,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { RankBars } from '@/shared/ui/charts/RankBars';
+import { useDowntimes } from '@/features/downtime/useDowntimes';
 
 const DT_CAT = [
   { key: 'bm', name: '고장(BM)', c: '#e0564f' },
@@ -45,16 +46,6 @@ const DT_DAILY: ({ d: string } & Record<DayKey, number>)[] = [
   { d: '06.10', bm: 8.0, pm: 2.0, setup: 2.5, wait: 1.5, qc: 1.0, etc: 0.5 },
 ];
 
-const DT_LOG: string[][] = [
-  ['Thermal 05호기', '06-10 13:20', '— (진행중)', '2.4', '고장(BM)', 'AL-6003 튜브 과승온 — 히터 점검중', '박보전', '진행중'],
-  ['Depo 03호기', '06-09 22:10', '06-10 02:40', '4.5', '고장(BM)', '챔버 누설 — O-Ring 교체', '이정비', '완료'],
-  ['CMP 02호기', '06-09 14:00', '06-09 16:00', '2.0', '계획보전(PM)', '월간 예방점검 — 소모품 교체', '김설비', '완료'],
-  ['Etch 01호기', '06-09 09:30', '06-09 12:00', '2.5', '준비·교체', '제품 전환 레시피 셋업', '박보전', '완료'],
-  ['Implant 02호기', '06-08 20:00', '06-08 21:15', '1.25', '자재 대기', '웨이퍼 공급 지연', '—', '완료'],
-  ['Photo 05호기', '06-08 11:00', '06-08 11:40', '0.67', '품질·검사', '오버레이 재측정', '김설비', '완료'],
-  ['Clean 04호기', '06-07 16:30', '06-07 18:00', '1.5', '고장(BM)', '필터 차압 초과 — 필터 교체', '이정비', '완료'],
-];
-
 const catColor = (n: string) => DT_REASON.find((r) => r.name === n)?.c || '#94a0b8';
 
 function Sel({ value, w }: { value?: string; w?: number }) {
@@ -80,6 +71,7 @@ const td = (al: string) => `border-b border-border px-3 py-2.5 ${AL[al]} text-in
 
 /** 비가동(Downtime) 현황 — 와이어프레임 equip-downtime.jsx 정본. */
 export default function EquipDowntimeScreen() {
+  const { data: log = [], isLoading } = useDowntimes();
   const totalH = DT_REASON.reduce((s, r) => s + r.h, 0);
   const maxReason = Math.max(...DT_REASON.map((r) => r.h));
   const dailyMax = Math.max(...DT_DAILY.map((d) => DT_CAT.reduce((s, c) => s + d[c.key], 0)));
@@ -180,35 +172,39 @@ export default function EquipDowntimeScreen() {
       </Card>
 
       {/* 비가동 이력 */}
-      <Card title="비가동 이력" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">최근 발생 순 · {DT_LOG.length}건</span>}>
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr>
-              <th className={th('left')}>설비</th>
-              <th className={th('center')}>시작</th>
-              <th className={th('center')}>종료</th>
-              <th className={th('right')}>시간(h)</th>
-              <th className={th('center')}>구분</th>
-              <th className={th('left')}>사유 / 조치</th>
-              <th className={th('center')}>담당</th>
-              <th className={th('center')}>상태</th>
-            </tr>
-          </thead>
-          <tbody>
-            {DT_LOG.map((r, i) => (
-              <tr key={i} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                <td className={`${td('left')} font-bold text-ink`}>{r[0]}</td>
-                <td className={`${td('center')} font-mono`}>{r[1]}</td>
-                <td className={`${td('center')} font-mono`}>{r[2]}</td>
-                <td className={`${td('right')} font-extrabold tabular-nums text-ink`}>{r[3]}</td>
-                <td className={td('center')}><span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ink2"><span className="h-[9px] w-[9px] rounded-sm" style={{ background: catColor(r[4]) }} />{r[4]}</span></td>
-                <td className={`${td('left')} text-ink`}>{r[5]}</td>
-                <td className={td('center')}>{r[6]}</td>
-                <td className={td('center')}><Pill tone={r[7] === '진행중' ? 'err' : 'ok'}>{r[7]}</Pill></td>
+      <Card title="비가동 이력" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">최근 발생 순 · {log.length}건</span>}>
+        {log.length === 0 ? (
+          <div className="grid place-items-center py-12 text-[12px] text-ink3">{isLoading ? '불러오는 중…' : '비가동 이력이 없습니다.'}</div>
+        ) : (
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr>
+                <th className={th('left')}>설비</th>
+                <th className={th('center')}>시작</th>
+                <th className={th('center')}>종료</th>
+                <th className={th('right')}>시간(h)</th>
+                <th className={th('center')}>구분</th>
+                <th className={th('left')}>사유 / 조치</th>
+                <th className={th('center')}>담당</th>
+                <th className={th('center')}>상태</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {log.map((r, i) => (
+                <tr key={r.id} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                  <td className={`${td('left')} font-bold text-ink`}>{r.eq}</td>
+                  <td className={`${td('center')} font-mono`}>{r.start}</td>
+                  <td className={`${td('center')} font-mono`}>{r.end}</td>
+                  <td className={`${td('right')} font-extrabold tabular-nums text-ink`}>{r.dur}</td>
+                  <td className={td('center')}><span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ink2"><span className="h-[9px] w-[9px] rounded-sm" style={{ background: catColor(r.category) }} />{r.category}</span></td>
+                  <td className={`${td('left')} text-ink`}>{r.reason}</td>
+                  <td className={td('center')}>{r.worker}</td>
+                  <td className={td('center')}><Pill tone={r.state === '진행중' ? 'err' : 'ok'}>{r.state}</Pill></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Card>
     </div>
   );

@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Donut } from '@/shared/ui/charts/Donut';
+import { useAndonStatus } from '@/features/andonStatus/useAndonStatus';
+import type { AndonStatus } from '@/domain/andonStatus/schema';
 
 type St = 'RUN' | 'IDLE' | 'STOP' | 'DOWN' | 'PM';
 const AND: Record<St, { ko: string; c: string; soft: string }> = {
@@ -10,38 +13,9 @@ const AND: Record<St, { ko: string; c: string; soft: string }> = {
   PM: { ko: '점검', c: '#3a6ee0', soft: '#e9eefc' },
 };
 
-interface Eq { code: string; name: string; st: St; lot: string; prod: string; step: string; prog: number; run: string; cy: string; oee: number }
-const BOARD: Array<{ line: string; eq: Eq[] }> = [
-  { line: 'A라인', eq: [
-    { code: 'CMP-02', name: 'CMP 02호기', st: 'RUN', lot: 'LOT-A2406-118', prod: 'AP-9 / 14nm', step: 'STEP 7/12', prog: 62, run: '04:12', cy: '120 WPH', oee: 88 },
-    { code: 'ETCH-01', name: 'Etch 01호기', st: 'IDLE', lot: '—', prod: '대기 (레시피 대기)', step: 'STEP 0/9', prog: 0, run: '00:24', cy: '90 WPH', oee: 80 },
-    { code: 'PHO-05', name: 'Photo 05호기', st: 'RUN', lot: 'LOT-A2406-117', prod: 'AP-9 / 14nm', step: 'STEP 3/8', prog: 41, run: '02:38', cy: '180 WPH', oee: 92 },
-    { code: 'PHO-06', name: 'Photo 06호기', st: 'PM', lot: '—', prod: '정기 PM (광원 교체)', step: '—', prog: 35, run: '01:05', cy: '180 WPH', oee: 0 },
-    { code: 'CMP-03', name: 'CMP 03호기', st: 'RUN', lot: 'LOT-A2406-120', prod: 'BX-2 / 28nm', step: 'STEP 9/12', prog: 78, run: '05:46', cy: '118 WPH', oee: 85 },
-    { code: 'CLN-02', name: 'Clean 02호기', st: 'RUN', lot: 'LOT-A2406-119', prod: 'AP-9 / 14nm', step: 'STEP 2/4', prog: 55, run: '01:52', cy: '160 WPH', oee: 90 },
-  ] },
-  { line: 'B라인', eq: [
-    { code: 'DEP-03', name: 'Depo 03호기', st: 'STOP', lot: '—', prod: '생산 정지 (계획)', step: '—', prog: 0, run: '01:30', cy: '110 WPH', oee: 0 },
-    { code: 'IMP-02', name: 'Implant 02호기', st: 'RUN', lot: 'LOT-B2406-077', prod: 'CX-5 / 40nm', step: 'STEP 4/6', prog: 67, run: '03:21', cy: '200 WPH', oee: 86 },
-    { code: 'DEP-04', name: 'Depo 04호기', st: 'RUN', lot: 'LOT-B2406-078', prod: 'CX-5 / 40nm', step: 'STEP 1/4', prog: 22, run: '00:48', cy: '110 WPH', oee: 83 },
-    { code: 'IMP-03', name: 'Implant 03호기', st: 'IDLE', lot: '—', prod: '대기 (자재 입고 대기)', step: 'STEP 0/6', prog: 0, run: '00:12', cy: '200 WPH', oee: 84 },
-    { code: 'ETCH-04', name: 'Etch 04호기', st: 'RUN', lot: 'LOT-B2406-079', prod: 'BX-2 / 28nm', step: 'STEP 6/9', prog: 71, run: '04:55', cy: '92 WPH', oee: 81 },
-    { code: 'CMP-05', name: 'CMP 05호기', st: 'RUN', lot: 'LOT-B2406-080', prod: 'CX-5 / 40nm', step: 'STEP 5/12', prog: 48, run: '02:10', cy: '120 WPH', oee: 87 },
-  ] },
-  { line: 'C라인', eq: [
-    { code: 'OVEN-05', name: 'Thermal 05호기', st: 'DOWN', lot: 'LOT-C2406-041', prod: '튜브 과승온', step: 'AL-6003', prog: 0, run: '00:42', cy: '150 WPH', oee: 0 },
-    { code: 'CLN-04', name: 'Clean 04호기', st: 'RUN', lot: 'LOT-C2406-052', prod: 'DV-1 / 65nm', step: 'STEP 3/4', prog: 84, run: '06:18', cy: '160 WPH', oee: 88 },
-    { code: 'OVEN-06', name: 'Thermal 06호기', st: 'RUN', lot: 'LOT-C2406-053', prod: 'DV-1 / 65nm', step: 'STEP 2/3', prog: 58, run: '03:40', cy: '150 WPH', oee: 85 },
-    { code: 'CLN-05', name: 'Clean 05호기', st: 'IDLE', lot: '—', prod: '대기 (배스 안정화)', step: 'STEP 0/4', prog: 0, run: '00:08', cy: '160 WPH', oee: 86 },
-    { code: 'ETCH-07', name: 'Etch 07호기', st: 'RUN', lot: 'LOT-C2406-054', prod: 'DV-1 / 65nm', step: 'STEP 8/9', prog: 91, run: '05:02', cy: '90 WPH', oee: 82 },
-    { code: 'DEP-08', name: 'Depo 08호기', st: 'STOP', lot: '—', prod: '생산 정지 (Idle)', step: '—', prog: 0, run: '02:15', cy: '110 WPH', oee: 0 },
-  ] },
-];
-
-const ALL = BOARD.flatMap((b) => b.eq);
+/** 안돈 도큐먼트(설비별 1행)는 도메인 타입 AndonStatus 를 그대로 쓴다. */
+type Eq = AndonStatus;
 const STS = Object.keys(AND) as St[];
-const COUNT = Object.fromEntries(STS.map((k) => [k, ALL.filter((e) => e.st === k).length])) as Record<St, number>;
-const RUN_RATE = Math.round((COUNT.RUN / ALL.length) * 100);
 
 const EVENTS: Array<{ t: string; st: St; eq: string; msg: string }> = [
   { t: '14:22:08', st: 'DOWN', eq: 'OVEN-05', msg: 'AL-6003 튜브 과승온 — 설비 정지' },
@@ -54,14 +28,14 @@ const EVENTS: Array<{ t: string; st: St; eq: string; msg: string }> = [
   { t: '13:31:48', st: 'IDLE', eq: 'ETCH-01', msg: '레시피 대기 상태' },
 ];
 
-function StatTile({ k }: { k: St }) {
+function StatTile({ k, count, total }: { k: St; count: number; total: number }) {
   const a = AND[k];
   return (
     <div className="flex flex-1 items-center gap-2.5 rounded-[10px] border border-border bg-panel px-4 py-3" style={{ borderLeft: `4px solid ${a.c}` }}>
-      <span className="text-[26px] font-extrabold leading-none tabular-nums" style={{ color: a.c }}>{COUNT[k]}</span>
+      <span className="text-[26px] font-extrabold leading-none tabular-nums" style={{ color: a.c }}>{count}</span>
       <div className="flex flex-col">
         <span className="text-[12px] font-bold text-ink">{a.ko}</span>
-        <span className="text-[9.5px] text-ink3">{Math.round((COUNT[k] / ALL.length) * 100)}%</span>
+        <span className="text-[9.5px] text-ink3">{total ? Math.round((count / total) * 100) : 0}%</span>
       </div>
     </div>
   );
@@ -101,6 +75,30 @@ function EqTile({ e }: { e: Eq }) {
 
 /** 실시간 설비 가동 (Andon) — 와이어프레임 equip-andon.jsx 정본. */
 export default function EquipAndonScreen() {
+  const { data: rows = [], isLoading } = useAndonStatus();
+
+  // 안돈 도큐먼트(설비별 1행) → line 별 그룹핑으로 보드 재구성. seed 등장 순서 유지.
+  const BOARD = useMemo(() => {
+    const map = new Map<string, Eq[]>();
+    for (const e of rows) {
+      const g = map.get(e.line);
+      if (g) g.push(e);
+      else map.set(e.line, [e]);
+    }
+    return [...map.entries()].map(([line, eq]) => ({ line, eq }));
+  }, [rows]);
+
+  const ALL = rows;
+  const COUNT = useMemo(
+    () => Object.fromEntries(STS.map((k) => [k, ALL.filter((e) => e.st === k).length])) as Record<St, number>,
+    [ALL],
+  );
+  const RUN_RATE = ALL.length ? Math.round((COUNT.RUN / ALL.length) * 100) : 0;
+
+  if (!ALL.length) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '설비 안돈 데이터가 없습니다.'}</div>;
+  }
+
   const donut = STS.filter((k) => COUNT[k] > 0).map((k) => ({ name: AND[k].ko, v: COUNT[k], c: AND[k].c }));
   return (
     <div className="flex flex-col gap-3.5">
@@ -123,7 +121,7 @@ export default function EquipAndonScreen() {
           <span className="text-[26px] font-extrabold leading-none tabular-nums text-white">{RUN_RATE}<span className="text-[13px]">%</span></span>
           <span className="text-[9.5px] text-white/60">가동 {COUNT.RUN} / 총 {ALL.length}대</span>
         </div>
-        {STS.map((k) => <StatTile key={k} k={k} />)}
+        {STS.map((k) => <StatTile key={k} k={k} count={COUNT[k]} total={ALL.length} />)}
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_280px]">

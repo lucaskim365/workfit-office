@@ -3,6 +3,8 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { Donut } from '@/shared/ui/charts/Donut';
 import { RankBars } from '@/shared/ui/charts/RankBars';
 import { LineChart } from '@/shared/ui/charts/LineChart';
+import { useLiveAlarms, useTransitionLiveAlarm } from '@/features/liveAlarm/useLiveAlarms';
+import { nextStatus, nextActionLabel } from '@/domain/liveAlarm/status';
 
 const SEV: Record<string, string> = { 중대: '#e0564f', 경고: '#ef8f43', 주의: '#3a6ee0' };
 const STATE: Record<string, { c: string; soft: string }> = {
@@ -10,24 +12,6 @@ const STATE: Record<string, { c: string; soft: string }> = {
   조치중: { c: '#ef8f43', soft: '#fdf0e3' },
   완료: { c: '#1f9d6b', soft: '#e7f5ee' },
 };
-
-interface Alarm { sev: '중대' | '경고' | '주의'; t: string; el: string; eq: string; code: string; msg: string; state: '미조치' | '조치중' | '완료'; mgr: string; il: boolean }
-const ALARMS: Alarm[] = [
-  { sev: '중대', t: '14:22:08', el: '13분', eq: 'Thermal 05호기', code: 'AL-6003', msg: '튜브 과승온 — 설비 인터록 정지', state: '조치중', mgr: '박보전', il: true },
-  { sev: '중대', t: '14:08:41', el: '27분', eq: 'Etch 04호기', code: 'AL-2010', msg: 'RF 반사파 과다 (Reflect 38W)', state: '조치중', mgr: '이정비', il: true },
-  { sev: '경고', t: '14:14:22', el: '21분', eq: 'Etch 01호기', code: 'AL-2033', msg: '챔버 압력 이상 — APC 밸브 점검 필요', state: '미조치', mgr: '—', il: false },
-  { sev: '경고', t: '14:11:55', el: '24분', eq: 'CMP 03호기', code: 'AL-1021', msg: '슬러리 공급 압력 저하 (0.15 MPa)', state: '미조치', mgr: '—', il: false },
-  { sev: '주의', t: '14:05:12', el: '30분', eq: 'Photo 06호기', code: 'AL-3041', msg: '광원 출력 저하 — 램프 수명 임박', state: '조치중', mgr: '김설비', il: false },
-  { sev: '경고', t: '13:51:48', el: '44분', eq: 'Implant 02호기', code: 'AL-5044', msg: '진공도 저하 (1.4×10⁻⁵)', state: '완료', mgr: '이정비', il: false },
-  { sev: '주의', t: '13:40:33', el: '55분', eq: 'Clean 04호기', code: 'AL-7011', msg: '케미컬 농도 이탈 (+3.8%)', state: '완료', mgr: '김설비', il: false },
-  { sev: '중대', t: '13:22:07', el: '1시간 13분', eq: 'Depo 03호기', code: 'AL-4081', msg: '챔버 누설 감지 — 리크 테스트 실시', state: '완료', mgr: '박보전', il: true },
-  { sev: '주의', t: '13:08:19', el: '1시간 27분', eq: 'Photo 05호기', code: 'AL-3088', msg: '환경 온도 편차 (+0.12℃)', state: '완료', mgr: '김설비', il: false },
-  { sev: '경고', t: '12:55:40', el: '1시간 40분', eq: 'Implant 03호기', code: 'AL-5070', msg: '고전압 방전 경고 — 절연부 점검', state: '완료', mgr: '이정비', il: false },
-];
-
-const ACTIVE = ALARMS.filter((a) => a.state !== '완료');
-const SEV_COUNT = (s: string) => ACTIVE.filter((a) => a.sev === s).length;
-const UNACK = ALARMS.filter((a) => a.state === '미조치').length;
 
 const TOP_EQ = [
   { label: 'Etch (식각)', v: 18, c: '#e0564f' },
@@ -59,6 +43,18 @@ function Kpi({ label, value, unit, color }: { label: string; value: string | num
 
 /** 설비 알람·장애 모니터링 — 와이어프레임 equip-alarmmon.jsx 정본. */
 export default function EquipAlarmMonScreen() {
+  const { data: alarms, isLoading } = useLiveAlarms();
+  const transition = useTransitionLiveAlarm();
+
+  // 로딩·빈 가드
+  if (isLoading || !alarms) {
+    return <div className="p-6 text-sm text-ink3">알람을 불러오는 중…</div>;
+  }
+
+  const ACTIVE = alarms.filter((a) => a.state !== '완료');
+  const SEV_COUNT = (s: string) => ACTIVE.filter((a) => a.sev === s).length;
+  const UNACK = alarms.filter((a) => a.state === '미조치').length;
+
   const donut = ['중대', '경고', '주의'].map((s) => ({ name: s, v: SEV_COUNT(s), c: SEV[s] }));
   return (
     <div className="flex flex-col gap-3.5">
@@ -85,7 +81,7 @@ export default function EquipAlarmMonScreen() {
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_290px]">
-        <Card title="실시간 알람 내역" action={<div className="flex gap-1.5">{Object.keys(STATE).map((s) => <span key={s} className="inline-flex items-center gap-1 text-[10px] font-bold" style={{ color: STATE[s].c }}><span className="h-[7px] w-[7px] rounded-full" style={{ background: STATE[s].c }} />{s} {ALARMS.filter((a) => a.state === s).length}</span>)}</div>} bodyClassName="p-0">
+        <Card title="실시간 알람 내역" action={<div className="flex gap-1.5">{Object.keys(STATE).map((s) => <span key={s} className="inline-flex items-center gap-1 text-[10px] font-bold" style={{ color: STATE[s].c }}><span className="h-[7px] w-[7px] rounded-full" style={{ background: STATE[s].c }} />{s} {alarms.filter((a) => a.state === s).length}</span>)}</div>} bodyClassName="p-0">
           <div className="max-h-[540px] overflow-y-auto">
             <table className="w-full border-collapse text-[11.5px]">
               <thead>
@@ -96,10 +92,12 @@ export default function EquipAlarmMonScreen() {
                 </tr>
               </thead>
               <tbody>
-                {ALARMS.map((a, i) => {
+                {alarms.map((a) => {
                   const active = a.state !== '완료';
+                  const next = nextStatus(a.state);
+                  const label = nextActionLabel(a.state);
                   return (
-                    <tr key={i} style={active ? { background: STATE[a.state].soft } : undefined} className={active ? '' : 'bg-panel'}>
+                    <tr key={a.id} style={active ? { background: STATE[a.state].soft } : undefined} className={active ? '' : 'bg-panel'}>
                       <td className="border-b border-border px-3 py-2.5 text-center" style={{ borderLeft: `3px solid ${SEV[a.sev]}` }}><Pill tone={sevTone(a.sev)}>{a.sev}</Pill></td>
                       <td className="border-b border-border px-3 py-2.5 text-center font-mono text-[10.5px] text-ink2">{a.t}</td>
                       <td className="border-b border-border px-3 py-2.5 text-center text-[10.5px] font-bold" style={{ color: active ? SEV[a.sev] : 'var(--color-ink3)' }}>{a.el}</td>
@@ -118,7 +116,21 @@ export default function EquipAlarmMonScreen() {
                           {a.state === '미조치' && <span className="alm-pulse h-[5px] w-[5px] rounded-full bg-white" />}{a.state}
                         </span>
                       </td>
-                      <td className={`border-b border-border px-3 py-2.5 text-center text-[11px] font-semibold ${a.mgr === '—' ? 'text-ink3' : 'text-ink'}`}>{a.mgr}</td>
+                      <td className={`border-b border-border px-3 py-2.5 text-center text-[11px] font-semibold ${a.mgr === '—' ? 'text-ink3' : 'text-ink'}`}>
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{a.mgr}</span>
+                          {next && label && (
+                            <button
+                              type="button"
+                              disabled={transition.isPending}
+                              onClick={() => transition.mutate({ id: a.id, to: next })}
+                              className="rounded border border-border bg-panel px-2 py-0.5 text-[10px] font-bold text-ink2 hover:bg-panel-alt disabled:opacity-50"
+                            >
+                              {label}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
