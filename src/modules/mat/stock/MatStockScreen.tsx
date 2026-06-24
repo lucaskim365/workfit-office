@@ -3,36 +3,38 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Donut } from '@/shared/ui/charts/Donut';
 import { C, MHead, MKpis, th, td } from '../_mat';
+import { useStocks } from '@/features/stock/useStock';
 
-type Row = [code: string, name: string, wh: string, stock: string, safe: string, status: string];
-const ROWS: Row[] = [
-  ['WF-300-B', '300mm 웨이퍼', 'A-Zone', '8,420', '5,000', '정상'],
-  ['WF-200-A', '200mm 웨이퍼', 'A-Zone', '3,100', '4,000', '부족'],
-  ['CHM-SL-05', '슬러리 SL-05', 'A-Zone', '142', '100', '정상'],
-  ['RES-PR-22', '포토레지스트', 'A-Zone', '38', '60', '부족'],
-  ['PKG-BGA-14', 'BGA 기판', 'C-Zone', '5,200', '2,000', '과다'],
-];
 const tone = (s: string): Tone => (s === '정상' ? 'ok' : s === '부족' ? 'err' : 'warn');
+const fmt = (n: number) => n.toLocaleString('ko-KR');
 
-/** 실시간 재고 조회 — 와이어프레임 wms-screens-2.jsx 정본. */
+/** 실시간 재고 조회 — 데이터: features/stock/useStock (원장→현재고 도출). */
 export default function MatStockScreen() {
+  const { data: stocks = [] } = useStocks();
+  const shortage = stocks.filter((s) => s.status === '부족').length;
+  const over = stocks.filter((s) => s.status === '과다').length;
+  const normal = stocks.filter((s) => s.status === '정상').length;
+
   return (
     <div className="flex flex-col gap-3.5">
-      <MHead title="실시간 재고 조회" sub="실시간 재고 조회 (Stock Status)" actions={<ActionBar actions={['refresh', 'download']} />} />
-      <MKpis items={[['총 품목', '248', '종'], ['안전재고 미만', '12', '종', 'err'], ['총 재고가', '14.2', '억'], ['재고회전율', '8.4', '회']]} />
+      <MHead title="실시간 재고 조회" sub="실시간 재고 조회 (Stock Status) · 원장 도출" actions={<ActionBar actions={['refresh', 'download']} />} />
+      <MKpis items={[['관리 품목', String(stocks.length), '종'], ['안전재고 미만', String(shortage), '종', 'err'], ['과다 재고', String(over), '종', 'warn'], ['정상', String(normal), '종', 'ok']]} />
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.7fr_1fr]">
-        <Card title="품목·Lot별 현재고" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">안전재고 대비 실시간</span>}>
+        <Card title="품목·Lot별 현재고" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">원장(stockMovements) 합산 · 실시간</span>}>
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['품목', '품목명', '창고', '현재고', '안전재고', '상태'].map((c, i) => <th key={c} className={th(i >= 3 && i <= 4 ? 'right' : i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {ROWS.map((r, i) => (
-                <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                  <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                  <td className={`${td('left')} font-semibold text-ink`}>{r[1]}</td>
-                  <td className={td('left')}>{r[2]}</td>
-                  <td className={`${td('right')} font-bold tabular-nums`} style={{ color: r[5] === '부족' ? C.err : C.ink }}>{r[3]}</td>
-                  <td className={`${td('right')} tabular-nums text-ink3`}>{r[4]}</td>
-                  <td className={td('center')}><Pill tone={tone(r[5])} solid={r[5] === '부족'}>{r[5]}</Pill></td>
+              {stocks.length === 0 && (
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-[11.5px] text-ink3">재고 데이터가 없습니다.</td></tr>
+              )}
+              {stocks.map((r, i) => (
+                <tr key={`${r.item}-${r.warehouse}`} style={{ background: i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                  <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r.item}</td>
+                  <td className={`${td('left')} font-semibold text-ink`}>{r.itemName}</td>
+                  <td className={td('left')}>{r.warehouse}</td>
+                  <td className={`${td('right')} font-bold tabular-nums`} style={{ color: r.status === '부족' ? C.err : C.ink }}>{fmt(r.currentQty)}</td>
+                  <td className={`${td('right')} tabular-nums text-ink3`}>{fmt(r.safetyStock)}</td>
+                  <td className={td('center')}><Pill tone={tone(r.status)} solid={r.status === '부족'}>{r.status}</Pill></td>
                 </tr>
               ))}
             </tbody>
@@ -40,10 +42,10 @@ export default function MatStockScreen() {
         </Card>
         <Card title="재고 상태 분포">
           <div className="mb-2 flex justify-center">
-            <Donut data={[{ name: '정상', v: 224, c: C.teal }, { name: '부족', v: 12, c: C.err }, { name: '과다', v: 12, c: C.warn }]} size={140} centerTop="248" centerSub="총 품목" />
+            <Donut data={[{ name: '정상', v: normal, c: C.teal }, { name: '부족', v: shortage, c: C.err }, { name: '과다', v: over, c: C.warn }]} size={140} centerTop={String(stocks.length)} centerSub="총 품목" />
           </div>
           <div className="flex flex-col gap-2">
-            {([['정상', 224, C.teal], ['안전재고 미만', 12, C.err], ['과다 재고', 12, C.warn]] as const).map(([l, n, c]) => (
+            {([['정상', normal, C.teal], ['안전재고 미만', shortage, C.err], ['과다 재고', over, C.warn]] as const).map(([l, n, c]) => (
               <div key={l} className="flex items-center gap-2 text-[11px]">
                 <span className="h-[9px] w-[9px] rounded-[3px]" style={{ background: c }} />
                 <span className="flex-1 font-semibold text-ink2">{l}</span>
