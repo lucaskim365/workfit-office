@@ -2,73 +2,18 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
+import { useCommonCodeGroups } from '@/features/commonCode/useCommonCodes';
 
-interface CodeRow {
-  code: string;
-  name: string;
-  order: string;
-  use: boolean;
-  regBy: string;
-}
-interface CodeGroup {
-  code: string;
-  name: string;
-  codes: CodeRow[];
-}
-
-const GROUPS: CodeGroup[] = [
-  {
-    code: 'EQ_STATUS',
-    name: '설비 가동 상태',
-    codes: [
-      { code: 'RUN', name: '가동', order: '10', use: true, regBy: '관리자' },
-      { code: 'IDLE', name: '대기', order: '20', use: true, regBy: '관리자' },
-      { code: 'STOP', name: '정지', order: '30', use: true, regBy: '관리자' },
-      { code: 'DOWN', name: '고장', order: '40', use: true, regBy: '관리자' },
-      { code: 'PM', name: '예방정비', order: '50', use: false, regBy: '관리자' },
-    ],
-  },
-  { code: 'USE_YN', name: '사용 여부', codes: [
-    { code: 'Y', name: '사용', order: '10', use: true, regBy: '관리자' },
-    { code: 'N', name: '미사용', order: '20', use: true, regBy: '관리자' },
-  ] },
-  { code: 'DEFECT_GRADE', name: '결함 등급', codes: [
-    { code: 'A', name: '심', order: '10', use: true, regBy: '관리자' },
-    { code: 'B', name: '중', order: '20', use: true, regBy: '관리자' },
-    { code: 'C', name: '경', order: '30', use: true, regBy: '관리자' },
-    { code: 'D', name: '정보', order: '40', use: false, regBy: '관리자' },
-  ] },
-  { code: 'INSP_TYPE', name: '검사 유형', codes: [
-    { code: 'IQC', name: '수입검사', order: '10', use: true, regBy: '관리자' },
-    { code: 'PQC', name: '공정검사', order: '20', use: true, regBy: '관리자' },
-    { code: 'OQC', name: '출하검사', order: '30', use: true, regBy: '관리자' },
-  ] },
-  { code: 'VENDOR_TYPE', name: '거래처 구분', codes: [
-    { code: 'BUY', name: '매입', order: '10', use: true, regBy: '관리자' },
-    { code: 'SELL', name: '매출', order: '20', use: true, regBy: '관리자' },
-    { code: 'SUB', name: '외주', order: '30', use: true, regBy: '관리자' },
-  ] },
-  { code: 'LINE_CODE', name: '라인 코드', codes: [
-    { code: 'A', name: 'A라인', order: '10', use: true, regBy: '관리자' },
-    { code: 'B', name: 'B라인', order: '20', use: true, regBy: '관리자' },
-    { code: 'C', name: 'C라인', order: '30', use: true, regBy: '관리자' },
-  ] },
-  { code: 'UNIT', name: '단위', codes: [
-    { code: 'EA', name: '개', order: '10', use: true, regBy: '관리자' },
-    { code: 'KG', name: '킬로그램', order: '20', use: true, regBy: '관리자' },
-    { code: 'BOX', name: '박스', order: '30', use: false, regBy: '관리자' },
-  ] },
-];
-
-/** 공통코드정보 — 코드그룹 ↔ 상세코드 2패널. 와이어프레임 admin-screens.CommonCodeContent 정본. */
+/** 공통코드정보 — 코드그룹 ↔ 상세코드 2패널. 데이터: features/commonCode/useCommonCodes. */
 export default function CodeScreen() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState('EQ_STATUS');
 
-  const groups = GROUPS.filter(
+  const { data: all = [], isLoading } = useCommonCodeGroups();
+  const groups = all.filter(
     (g) => !search || g.code.toLowerCase().includes(search.toLowerCase()) || g.name.includes(search),
   );
-  const cur = GROUPS.find((g) => g.code === selected) ?? GROUPS[0];
+  const cur = all.find((g) => g.code === selected) ?? all[0];
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -104,6 +49,12 @@ export default function CodeScreen() {
                 </tr>
               </thead>
               <tbody>
+                {isLoading && (
+                  <tr><td colSpan={3} className="px-3.5 py-8 text-center text-[11.5px] text-ink3">불러오는 중…</td></tr>
+                )}
+                {!isLoading && groups.length === 0 && (
+                  <tr><td colSpan={3} className="px-3.5 py-8 text-center text-[11.5px] text-ink3">조회된 코드 그룹이 없습니다.</td></tr>
+                )}
                 {groups.map((g) => {
                   const on = g.code === selected;
                   return (
@@ -123,8 +74,8 @@ export default function CodeScreen() {
 
         {/* 상세 코드 */}
         <Card
-          title={<span>상세 코드 <span className="text-teal">· {cur.code}</span></span>}
-          action={<span className="text-[10.5px] text-ink3">총 {cur.codes.length}건</span>}
+          title={<span>상세 코드 {cur && <span className="text-teal">· {cur.code}</span>}</span>}
+          action={<span className="text-[10.5px] text-ink3">총 {cur?.codes.length ?? 0}건</span>}
           bodyClassName="p-0"
         >
           <div className="overflow-x-auto">
@@ -139,7 +90,7 @@ export default function CodeScreen() {
                 </tr>
               </thead>
               <tbody>
-                {cur.codes.map((c, i) => (
+                {(cur?.codes ?? []).map((c, i) => (
                   <tr key={c.code} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
                     <td className="border-b border-border px-3.5 py-2.5 font-bold text-ink">{c.code}</td>
                     <td className="border-b border-border px-3.5 py-2.5 font-semibold text-ink2">{c.name}</td>
