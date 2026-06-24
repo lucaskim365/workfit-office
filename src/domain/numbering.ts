@@ -13,3 +13,8 @@ export function yymmdd(d: Date): string {
 export function formatWoNo(dateKey: string, seq: number): string {
   return `WO-${dateKey}-${String(seq).padStart(3, '0')}`;
 }
+
+/** NCR-YYMMDD-NNN (부적합 보고서). */
+export function formatNcrNo(dateKey: string, seq: number): string {
+  return `NCR-${dateKey}-${String(seq).padStart(3, '0')}`;
+}
