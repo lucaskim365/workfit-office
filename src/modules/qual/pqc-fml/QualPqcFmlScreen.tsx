@@ -3,22 +3,13 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, ChipTabs } from '../_qual';
+import { usePqcFmlChecks } from '@/features/pqcFml/usePqcFml';
+import type { PqcFml as Wo, StageInfo } from '@/domain/pqcFml/schema';
 
 const FM_ST: Record<string, { t: Tone; mk: string }> = { 합격: { t: 'ok', mk: '✓' }, 불합격: { t: 'err', mk: '✕' }, 검사중: { t: 'warn', mk: '…' }, 대기: { t: 'mute', mk: '○' }, 해당없음: { t: 'mute', mk: '–' } };
 const TONE_C: Record<Tone, string> = { ok: C.ok, err: C.err, warn: C.warn, mute: C.borderHi, info: C.blue };
 const FM_STAGES: [string, string][] = [['first', '초물'], ['mid', '중물'], ['last', '종물']];
 const STAGE_LABEL: Record<string, string> = { first: '초물', mid: '중물', last: '종물' };
-
-interface ItemRow { n: string; t: '계량' | '계수'; lsl?: number; usl?: number; val: number; unit?: string }
-interface StageInfo { st: string; pic: string; time: string; ng: number }
-interface Wo { wo: string; item: string; code: string; line: string; equip: string; proc: string; qty: number; done: number; lot: string; active: string; stages: Record<string, StageInfo>; items: ItemRow[] }
-const FM_WOS: Wo[] = [
-  { wo: 'WO-260621-013', item: '브래킷 ASSY-A', code: 'FG-BRK-A', line: '1라인 #3', equip: 'CNC-03', proc: 'CNC 가공', qty: 1200, done: 420, lot: 'L2606-1013', active: 'mid', stages: { first: { st: '합격', pic: '이검사', time: '09:12', ng: 0 }, mid: { st: '검사중', pic: '이검사', time: '13:40', ng: 1 }, last: { st: '대기', pic: '—', time: '—', ng: 0 } }, items: [{ n: '외경(O.D)', t: '계량', lsl: 24.95, usl: 25.05, val: 25.01, unit: 'mm' }, { n: '전장(Length)', t: '계량', lsl: 79.8, usl: 80.2, val: 80.31, unit: 'mm' }, { n: '탭 깊이', t: '계량', lsl: 11.8, usl: 12.2, val: 12.0, unit: 'mm' }, { n: '버·이물', t: '계수', val: 0 }, { n: '도금 외관', t: '계수', val: 0 }] },
-  { wo: 'WO-260621-011', item: '커버 플레이트 B', code: 'FG-CVR-B', line: '2라인 #1', equip: 'PRS-07', proc: '프레스', qty: 3000, done: 0, lot: 'L2606-1011', active: 'first', stages: { first: { st: '검사중', pic: '김검사', time: '14:05', ng: 0 }, mid: { st: '대기', pic: '—', time: '—', ng: 0 }, last: { st: '대기', pic: '—', time: '—', ng: 0 } }, items: [{ n: '두께(t)', t: '계량', lsl: 1.95, usl: 2.05, val: 2.0, unit: 'mm' }, { n: '홀 피치', t: '계량', lsl: 49.9, usl: 50.1, val: 49.98, unit: 'mm' }, { n: '평면도', t: '계량', lsl: 0, usl: 0.1, val: 0.06, unit: 'mm' }, { n: '버·크랙', t: '계수', val: 0 }] },
-  { wo: 'WO-260621-008', item: '하우징 C-Type', code: 'FG-HSG-C', line: '1라인 #1', equip: 'INJ-02', proc: '사출', qty: 5000, done: 5000, lot: 'L2606-1008', active: 'last', stages: { first: { st: '합격', pic: '이검사', time: '07:40', ng: 0 }, mid: { st: '합격', pic: '이검사', time: '11:20', ng: 0 }, last: { st: '검사중', pic: '이검사', time: '15:10', ng: 0 } }, items: [{ n: '중량', t: '계량', lsl: 48.0, usl: 52.0, val: 50.4, unit: 'g' }, { n: '웰드라인', t: '계수', val: 0 }, { n: '수축·변형', t: '계수', val: 0 }, { n: '색상', t: '계수', val: 0 }] },
-  { wo: 'WO-260621-006', item: '샤프트 D-40', code: 'FG-SFT-D', line: '3라인 #2', equip: 'LTH-05', proc: '선삭', qty: 800, done: 60, lot: 'L2606-1006', active: 'first', stages: { first: { st: '불합격', pic: '김검사', time: '08:30', ng: 2 }, mid: { st: '대기', pic: '—', time: '—', ng: 0 }, last: { st: '대기', pic: '—', time: '—', ng: 0 } }, items: [{ n: '축경(Ø)', t: '계량', lsl: 39.97, usl: 40.03, val: 40.08, unit: 'mm' }, { n: '진원도', t: '계량', lsl: 0, usl: 0.02, val: 0.035, unit: 'mm' }, { n: '표면 거칠기', t: '계량', lsl: 0, usl: 1.6, val: 1.2, unit: 'Ra' }, { n: '센터 자국', t: '계수', val: 0 }] },
-  { wo: 'WO-260620-031', item: '기어 G-22T', code: 'FG-GER-22', line: '3라인 #1', equip: 'HOB-01', proc: '호빙', qty: 1500, done: 1500, lot: 'L2606-0931', active: 'done', stages: { first: { st: '합격', pic: '이검사', time: '06:50', ng: 0 }, mid: { st: '합격', pic: '이검사', time: '10:30', ng: 0 }, last: { st: '합격', pic: '이검사', time: '16:40', ng: 0 } }, items: [{ n: '치형(M)', t: '계량', lsl: 1.49, usl: 1.51, val: 1.5, unit: 'mm' }, { n: 'PCD', t: '계량', lsl: 32.95, usl: 33.05, val: 33.0, unit: 'mm' }, { n: '치면 손상', t: '계수', val: 0 }] },
-];
 
 function FmMini({ stages }: { stages: Record<string, StageInfo> }) {
   return (
@@ -42,16 +33,21 @@ export default function QualPqcFmlScreen() {
   const [sel, setSel] = useState('WO-260621-013');
   const [stage, setStage] = useState<string | null>(null);
   const [tab, setTab] = useState('진행중');
-  const cur = FM_WOS.find((w) => w.wo === sel) || FM_WOS[0];
+  const { data: wos, isLoading } = usePqcFmlChecks();
   useEffect(() => { setStage(null); }, [sel]);
+
+  if (isLoading || !wos) return <div className="p-6 text-sm text-ink3">불러오는 중…</div>;
+  if (wos.length === 0) return <div className="p-6 text-sm text-ink3">작업지시 데이터가 없습니다.</div>;
+
+  const cur = wos.find((w) => w.wo === sel) || wos[0];
   const actStage = stage ?? (cur.active === 'done' ? 'last' : cur.active);
 
   const isDone = (w: Wo) => w.active === 'done';
-  const rows = FM_WOS.filter((w) => tab === '전체' || (tab === '진행중' ? !isDone(w) : isDone(w)));
+  const rows = wos.filter((w) => tab === '전체' || (tab === '진행중' ? !isDone(w) : isDone(w)));
 
-  const firstWait = FM_WOS.filter((w) => w.stages.first.st === '검사중' || w.stages.first.st === '대기').length;
-  const ngLine = FM_WOS.filter((w) => Object.values(w.stages).some((s) => s.st === '불합격')).length;
-  const inProg = FM_WOS.filter((w) => !isDone(w)).length;
+  const firstWait = wos.filter((w) => w.stages.first.st === '검사중' || w.stages.first.st === '대기').length;
+  const ngLine = wos.filter((w) => Object.values(w.stages).some((s) => s.st === '불합격')).length;
+  const inProg = wos.filter((w) => !isDone(w)).length;
 
   const st = cur.stages[actStage];
   const results = cur.items.map((it) => (it.t === '계량' ? { ng: it.val < it.lsl! || it.val > it.usl! } : { ng: it.val > 0 }));

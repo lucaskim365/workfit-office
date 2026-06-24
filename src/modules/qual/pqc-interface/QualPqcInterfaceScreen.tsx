@@ -4,33 +4,28 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Sparkline } from '@/shared/ui/charts/Sparkline';
 import { C, KpiGrid } from '../_qual';
+import { usePqcDevices } from '@/features/pqcDevice/usePqcDevices';
 
 const IF_ST: Record<string, Tone> = { 연결: 'ok', 지연: 'warn', 단절: 'err' };
 const PROTO_C: Record<string, string> = { 'OPC-UA': C.blue, MQTT: C.teal, 'Modbus-TCP': C.navy, MTConnect: '#8a5cf6', 'RS-232': C.ink3 };
 
-interface Tag { tag: string; item: string; unit: string; spec: string }
-interface Stream { t: string; item: string; val: string | number; res: string }
-interface Device { id: string; name: string; dev: string; proto: string; ep: string; loc: string; status: string; last: string; today: number; err: number; lat: number; auto: number; spark: number[]; tags: Tag[]; stream: Stream[] }
-const IF_DEVICES: Device[] = [
-  { id: 'IF-CMM-01', name: 'CMM 3차원 측정기', dev: 'ZEISS CONTURA', proto: 'OPC-UA', ep: 'opc.tcp://192.168.10.21:4840', loc: '품질실', status: '연결', last: '2초 전', today: 1240, err: 0, lat: 45, auto: 100, spark: [18, 22, 20, 24, 19, 26, 23, 28, 25, 27], tags: [{ tag: 'PRG_OD_X', item: '외경(O.D)', unit: 'mm', spec: '25.00±0.05' }, { tag: 'PRG_ID_X', item: '내경(I.D)', unit: 'mm', spec: '8.00±0.01' }, { tag: 'PRG_FLAT', item: '평면도', unit: 'mm', spec: '≤0.05' }], stream: [{ t: '15:42:03', item: '외경(O.D)', val: 25.01, res: 'OK' }, { t: '15:41:48', item: '내경(I.D)', val: 8.004, res: 'OK' }, { t: '15:41:30', item: '평면도', val: 0.031, res: 'OK' }, { t: '15:41:05', item: '외경(O.D)', val: 25.06, res: 'NG' }, { t: '15:40:42', item: '내경(I.D)', val: 7.998, res: 'OK' }] },
-  { id: 'IF-VIS-02', name: '비전 외관검사기', dev: 'COGNEX In-Sight', proto: 'MQTT', ep: 'mqtt://192.168.10.45:1883', loc: '2라인 #4', status: '연결', last: '1초 전', today: 8650, err: 3, lat: 12, auto: 100, spark: [120, 135, 128, 142, 138, 150, 145, 155, 148, 160], tags: [{ tag: 'VIS_DEFECT', item: '표면 결함', unit: '판정', spec: '결함 無' }, { tag: 'VIS_DIM', item: '외형 치수', unit: 'mm', spec: '규격 내' }], stream: [{ t: '15:42:05', item: '표면 결함', val: 'PASS', res: 'OK' }, { t: '15:42:04', item: '표면 결함', val: 'PASS', res: 'OK' }, { t: '15:42:02', item: '외형 치수', val: 'OK', res: 'OK' }, { t: '15:42:00', item: '표면 결함', val: 'SCRATCH', res: 'NG' }, { t: '15:41:58', item: '표면 결함', val: 'PASS', res: 'OK' }] },
-  { id: 'IF-CNC-03', name: 'CNC 인프로세스 게이지', dev: 'FANUC PLC', proto: 'Modbus-TCP', ep: '192.168.10.33:502', loc: '1라인 #3', status: '지연', last: '38초 전', today: 420, err: 1, lat: 1850, auto: 95, spark: [9, 11, 8, 12, 7, 10, 6, 9, 5, 7], tags: [{ tag: 'DR4001', item: '외경 Ø', unit: 'mm', spec: '25.00±0.05' }, { tag: 'DR4002', item: '전장(L)', unit: 'mm', spec: '80.0±0.2' }], stream: [{ t: '15:41:25', item: '외경 Ø', val: 25.04, res: 'OK' }, { t: '15:40:52', item: '전장(L)', val: 80.31, res: 'NG' }, { t: '15:40:18', item: '외경 Ø', val: 25.02, res: 'OK' }, { t: '15:39:40', item: '외경 Ø', val: 25.03, res: 'OK' }] },
-  { id: 'IF-TRQ-04', name: '토크 측정 시스템', dev: 'KISTLER ComoNeo', proto: 'OPC-UA', ep: 'opc.tcp://192.168.10.51:4840', loc: '1라인 #5', status: '연결', last: '4초 전', today: 2310, err: 0, lat: 60, auto: 100, spark: [40, 44, 42, 48, 45, 50, 47, 52, 49, 51], tags: [{ tag: 'TRQ_FINAL', item: '체결 토크', unit: 'N·m', spec: '12.0±1.5' }, { tag: 'TRQ_ANGLE', item: '회전각', unit: '°', spec: '90±10' }], stream: [{ t: '15:42:01', item: '체결 토크', val: 12.3, res: 'OK' }, { t: '15:41:46', item: '회전각', val: 88, res: 'OK' }, { t: '15:41:30', item: '체결 토크', val: 11.8, res: 'OK' }, { t: '15:41:12', item: '체결 토크', val: 12.1, res: 'OK' }] },
-  { id: 'IF-GAGE-05', name: '디지털 캘리퍼 게이트웨이', dev: 'Mitutoyo U-WAVE', proto: 'RS-232', ep: 'COM3 · 9600bps', loc: '3라인 #2', status: '단절', last: '12분 전', today: 86, err: 14, lat: 0, auto: 0, spark: [5, 4, 6, 3, 4, 2, 1, 0, 0, 0], tags: [{ tag: 'CAL_DIA', item: '축경 Ø', unit: 'mm', spec: '40.00±0.03' }], stream: [{ t: '15:30:14', item: '축경 Ø', val: 40.01, res: 'OK' }, { t: '15:29:50', item: '축경 Ø', val: 40.02, res: 'OK' }] },
-  { id: 'IF-MCT-06', name: '머시닝센터 (MTConnect)', dev: 'DMG MORI', proto: 'MTConnect', ep: 'http://192.168.10.60:5000', loc: '1라인 #6', status: '연결', last: '3초 전', today: 540, err: 0, lat: 80, auto: 100, spark: [12, 14, 13, 16, 15, 18, 16, 19, 17, 20], tags: [{ tag: 'PROBE_Z', item: '높이(Z)', unit: 'mm', spec: '15.0±0.1' }, { tag: 'PROBE_BORE', item: '보어경', unit: 'mm', spec: '12.0±0.02' }], stream: [{ t: '15:42:00', item: '높이(Z)', val: 15.02, res: 'OK' }, { t: '15:41:33', item: '보어경', val: 12.0, res: 'OK' }, { t: '15:41:02', item: '높이(Z)', val: 14.99, res: 'OK' }] },
-];
 const latColor = (l: number, st: string) => (st === '단절' ? C.ink3 : l >= 1000 ? C.err : l >= 300 ? C.warn : C.ok);
 
 /** 설비·계측 데이터 인터페이스 — 와이어프레임 qual-pqc-interface.jsx 정본. */
 export default function QualPqcInterfaceScreen() {
+  const { data: devices = [], isLoading } = usePqcDevices();
   const [sel, setSel] = useState('IF-CMM-01');
-  const cur = IF_DEVICES.find((d) => d.id === sel) || IF_DEVICES[0];
+  const cur = devices.find((d) => d.id === sel) || devices[0];
 
-  const connected = IF_DEVICES.filter((d) => d.status === '연결').length;
-  const down = IF_DEVICES.filter((d) => d.status !== '연결').length;
-  const todaySum = IF_DEVICES.reduce((s, d) => s + d.today, 0);
-  const errSum = IF_DEVICES.reduce((s, d) => s + d.err, 0);
-  const autoRate = Math.round(IF_DEVICES.reduce((s, d) => s + d.auto, 0) / IF_DEVICES.length);
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '인터페이스가 없습니다.'}</div>;
+  }
+
+  const connected = devices.filter((d) => d.status === '연결').length;
+  const down = devices.filter((d) => d.status !== '연결').length;
+  const todaySum = devices.reduce((s, d) => s + d.today, 0);
+  const errSum = devices.reduce((s, d) => s + d.err, 0);
+  const autoRate = Math.round(devices.reduce((s, d) => s + d.auto, 0) / devices.length);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -43,7 +38,7 @@ export default function QualPqcInterfaceScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['연결 인터페이스', `${connected}/${IF_DEVICES.length}`, '', C.ok],
+        ['연결 인터페이스', `${connected}/${devices.length}`, '', C.ok],
         ['단절·지연', '' + down, '건', C.err],
         ['금일 자동수집', todaySum.toLocaleString(), '건', C.ink],
         ['수집 오류', '' + errSum, '건', C.warn],
@@ -62,7 +57,7 @@ export default function QualPqcInterfaceScreen() {
               </tr>
             </thead>
             <tbody>
-              {IF_DEVICES.map((d, i) => {
+              {devices.map((d, i) => {
                 const on = d.id === sel;
                 return (
                   <tr key={d.id} onClick={() => setSel(d.id)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>

@@ -3,6 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_qual';
+import { usePqcPatrols } from '@/features/pqcPatrol/usePqcPatrols';
+import type { PqcPatrol, PqcPatrolStop } from '@/domain/pqcPatrol/schema';
 
 const PT_RES: Record<string, Tone> = { 정상: 'ok', 이상: 'err', 점검중: 'warn', 미점검: 'mute' };
 const TONE_C: Record<Tone, string> = { ok: C.ok, err: C.err, warn: C.warn, mute: C.borderHi, info: C.blue };
@@ -10,50 +12,28 @@ const PT_ITEMS = [
   { k: 'std', n: '작업표준 준수' }, { k: 'five', n: '5S·정리정돈' }, { k: 'id', n: '식별·LOT 표시' },
   { k: 'self', n: '자주검사 기록' }, { k: 'iso', n: '부적합품 격리' }, { k: 'eqp', n: '설비 이상음·누유' },
 ];
-type Checks = Record<string, number> | null;
+type Checks = PqcPatrolStop['c'];
 const ptResult = (c: Checks) => (!c ? '미점검' : Object.values(c).some((v) => v === 0) ? '이상' : '정상');
-
-interface Stop { line: string; proc: string; equip: string; time: string; c: Checks; note?: string }
-interface Round { id: string; time: string; route: string; pic: string; status: string; dur: string; stops: Stop[] }
-const PT_ROUNDS: Round[] = [
-  { id: 'PR-260621-3', time: '14:00', route: 'A동 1·2라인', pic: '이순회', status: '진행중', dur: '22분', stops: [
-    { line: '1라인 #1', proc: '사출', equip: 'INJ-02', time: '14:03', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-    { line: '1라인 #3', proc: 'CNC 가공', equip: 'CNC-03', time: '14:09', c: { std: 0, five: 1, id: 1, self: 0, iso: 1, eqp: 1 }, note: '작업표준서 미게시 · 자주검사 기록 2회차 누락' },
-    { line: '2라인 #1', proc: '프레스', equip: 'PRS-07', time: '14:15', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-    { line: '2라인 #2', proc: '프레스', equip: 'PRS-08', time: '14:18', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 0 }, note: '유압유닛 미세 누유 — 설비팀 통보' },
-    { line: '2라인 #4', proc: '검사', equip: 'VIS-01', time: '점검중', c: null },
-    { line: '1라인 #5', proc: '조립', equip: 'ASM-02', time: '예정', c: null },
-    { line: '1라인 #6', proc: '조립', equip: 'ASM-03', time: '예정', c: null },
-    { line: 'A동 출하', proc: '포장', equip: 'PKG-01', time: '예정', c: null },
-  ] },
-  { id: 'PR-260621-2', time: '11:00', route: 'A동 1·2라인', pic: '이순회', status: '완료', dur: '34분', stops: [
-    { line: '1라인 #1', proc: '사출', equip: 'INJ-02', time: '11:04', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-    { line: '1라인 #3', proc: 'CNC 가공', equip: 'CNC-03', time: '11:11', c: { std: 1, five: 0, id: 1, self: 1, iso: 1, eqp: 1 }, note: '가공칩 미정리 — 즉시 시정' },
-    { line: '2라인 #1', proc: '프레스', equip: 'PRS-07', time: '11:20', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-    { line: '2라인 #4', proc: '검사', equip: 'VIS-01', time: '11:28', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-  ] },
-  { id: 'PR-260621-1', time: '08:00', route: 'B동 3라인', pic: '김순회', status: '완료', dur: '28분', stops: [
-    { line: '3라인 #1', proc: '호빙', equip: 'HOB-01', time: '08:05', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-    { line: '3라인 #2', proc: '선삭', equip: 'LTH-05', time: '08:14', c: { std: 1, five: 1, id: 0, self: 1, iso: 0, eqp: 1 }, note: 'LOT 식별표 미부착 · 부적합품 미격리' },
-    { line: '3라인 #3', proc: '연삭', equip: 'GRD-02', time: '08:24', c: { std: 1, five: 1, id: 1, self: 1, iso: 1, eqp: 1 } },
-  ] },
-  { id: 'PR-260621-4', time: '17:00', route: 'A동 1·2라인', pic: '이순회', status: '예정', dur: '—', stops: [] },
-];
 
 /** 공정 순회(Patrol) 검사 — 와이어프레임 qual-pqc-patrol.jsx 정본. */
 export default function QualPqcPatrolScreen() {
+  const { data: rounds = [], isLoading } = usePqcPatrols();
   const [sel, setSel] = useState('PR-260621-3');
   const [stopIdx, setStopIdx] = useState(1);
-  const cur = PT_ROUNDS.find((r) => r.id === sel) || PT_ROUNDS[0];
-  useEffect(() => { const ab = cur.stops.findIndex((s) => ptResult(s.c) === '이상'); setStopIdx(ab >= 0 ? ab : 0); }, [sel]);
+  const cur = rounds.find((r) => r.id === sel) || rounds[0];
+  useEffect(() => { const ab = cur?.stops.findIndex((s) => ptResult(s.c) === '이상') ?? -1; setStopIdx(ab >= 0 ? ab : 0); }, [sel, cur]);
 
-  const doneStops = (r: Round) => r.stops.filter((s) => s.c).length;
-  const abn = (r: Round) => r.stops.filter((s) => ptResult(s.c) === '이상').length;
+  const doneStops = (r: PqcPatrol) => r.stops.filter((s) => s.c).length;
+  const abn = (r: PqcPatrol) => r.stops.filter((s) => ptResult(s.c) === '이상').length;
 
-  const todayAbn = PT_ROUNDS.reduce((s, r) => s + abn(r), 0);
-  const inProg = PT_ROUNDS.filter((r) => r.status === '진행중').length;
-  const doneRounds = PT_ROUNDS.filter((r) => r.status === '완료').length;
-  const totalChecked = PT_ROUNDS.reduce((s, r) => s + doneStops(r), 0);
+  const todayAbn = rounds.reduce((s, r) => s + abn(r), 0);
+  const inProg = rounds.filter((r) => r.status === '진행중').length;
+  const doneRounds = rounds.filter((r) => r.status === '완료').length;
+  const totalChecked = rounds.reduce((s, r) => s + doneStops(r), 0);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '순회 라운드가 없습니다.'}</div>;
+  }
 
   const stop = cur.stops[stopIdx];
   const stopRes = stop ? ptResult(stop.c) : '미점검';
@@ -69,7 +49,7 @@ export default function QualPqcPatrolScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['금일 순회 라운드', '' + PT_ROUNDS.length, '회', C.ink],
+        ['금일 순회 라운드', '' + rounds.length, '회', C.ink],
         ['진행중', '' + inProg, '회', C.warn],
         ['완료', '' + doneRounds, '회', C.ok],
         ['점검 지점', '' + totalChecked, '지점', C.ink],
@@ -88,7 +68,7 @@ export default function QualPqcPatrolScreen() {
               </tr>
             </thead>
             <tbody>
-              {PT_ROUNDS.map((r, i) => {
+              {rounds.map((r, i) => {
                 const on = r.id === sel;
                 const total = r.stops.length || 1;
                 const dn = doneStops(r);

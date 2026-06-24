@@ -3,18 +3,11 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid, ChipTabs } from '../_qual';
+import { usePqcSelfChecks } from '@/features/pqcSelf/usePqcSelf';
+import type { PqcSelf, Round } from '@/domain/pqcSelf/schema';
 
 const RT: Record<string, Tone> = { 합격: 'ok', 경고: 'warn', 이탈: 'err', 대기: 'mute' };
 
-interface Round { r: number; time: string; val: number; n: number; ng: number; st: string }
-interface Wo { wo: string; item: string; code: string; line: string; equip: string; proc: string; qty: number; done: number; op: string; cycle: string; interval: string; next: number; adher: number; char: string; unit: string; target: number; usl: number; lsl: number; rounds: Round[] }
-const SF_WOS: Wo[] = [
-  { wo: 'WO-260621-013', item: '브래킷 ASSY-A', code: 'FG-BRK-A', line: '1라인 #3', equip: 'CNC-03', proc: 'CNC 가공', qty: 1200, done: 420, op: '김작업', cycle: '50개', interval: '1h', next: -8, adher: 97, char: '외경 Ø', unit: 'mm', target: 25.0, usl: 25.05, lsl: 24.95, rounds: [{ r: 1, time: '08:00', val: 25.0, n: 5, ng: 0, st: '합격' }, { r: 2, time: '09:00', val: 25.02, n: 5, ng: 0, st: '합격' }, { r: 3, time: '10:00', val: 25.01, n: 5, ng: 0, st: '합격' }, { r: 4, time: '11:00', val: 25.03, n: 5, ng: 0, st: '경고' }, { r: 5, time: '13:00', val: 25.02, n: 5, ng: 0, st: '합격' }, { r: 6, time: '14:00', val: 25.04, n: 5, ng: 1, st: '경고' }] },
-  { wo: 'WO-260621-011', item: '커버 플레이트 B', code: 'FG-CVR-B', line: '2라인 #1', equip: 'PRS-07', proc: '프레스', qty: 3000, done: 1850, op: '박작업', cycle: '100개', interval: '30m', next: 12, adher: 92, char: '두께 t', unit: 'mm', target: 2.0, usl: 2.05, lsl: 1.95, rounds: [{ r: 1, time: '08:30', val: 2.0, n: 5, ng: 0, st: '합격' }, { r: 2, time: '09:00', val: 1.99, n: 5, ng: 0, st: '합격' }, { r: 3, time: '09:30', val: 1.98, n: 5, ng: 0, st: '합격' }, { r: 4, time: '10:00', val: 2.01, n: 5, ng: 0, st: '합격' }, { r: 5, time: '10:30', val: 2.0, n: 5, ng: 0, st: '합격' }] },
-  { wo: 'WO-260621-008', item: '하우징 C-Type', code: 'FG-HSG-C', line: '1라인 #1', equip: 'INJ-02', proc: '사출', qty: 5000, done: 3200, op: '이작업', cycle: '200개', interval: '2h', next: 46, adher: 100, char: '중량', unit: 'g', target: 50.0, usl: 52.0, lsl: 48.0, rounds: [{ r: 1, time: '07:40', val: 50.1, n: 5, ng: 0, st: '합격' }, { r: 2, time: '09:40', val: 49.8, n: 5, ng: 0, st: '합격' }, { r: 3, time: '11:40', val: 50.4, n: 5, ng: 0, st: '합격' }, { r: 4, time: '13:40', val: 50.2, n: 5, ng: 0, st: '합격' }] },
-  { wo: 'WO-260621-006', item: '샤프트 D-40', code: 'FG-SFT-D', line: '3라인 #2', equip: 'LTH-05', proc: '선삭', qty: 800, done: 280, op: '정작업', cycle: '30개', interval: '1h', next: -34, adher: 78, char: '축경 Ø', unit: 'mm', target: 40.0, usl: 40.03, lsl: 39.97, rounds: [{ r: 1, time: '08:30', val: 40.0, n: 5, ng: 0, st: '합격' }, { r: 2, time: '09:30', val: 40.01, n: 5, ng: 0, st: '합격' }, { r: 3, time: '10:30', val: 40.03, n: 5, ng: 1, st: '경고' }, { r: 4, time: '12:30', val: 40.05, n: 5, ng: 2, st: '이탈' }] },
-  { wo: 'WO-260620-031', item: '기어 G-22T', code: 'FG-GER-22', line: '3라인 #1', equip: 'HOB-01', proc: '호빙', qty: 1500, done: 1500, op: '한작업', cycle: '100개', interval: '2h', next: 999, adher: 100, char: 'PCD', unit: 'mm', target: 33.0, usl: 33.05, lsl: 32.95, rounds: [{ r: 1, time: '06:50', val: 33.0, n: 5, ng: 0, st: '합격' }, { r: 2, time: '08:50', val: 33.01, n: 5, ng: 0, st: '합격' }, { r: 3, time: '10:50', val: 32.99, n: 5, ng: 0, st: '합격' }, { r: 4, time: '12:50', val: 33.0, n: 5, ng: 0, st: '합격' }] },
-];
 const nextLabel = (m: number) => (m === 999 ? '완료' : m < 0 ? `${-m}분 지연` : m === 0 ? '검사 도래' : `${m}분 후`);
 const nextColor = (m: number) => (m === 999 ? C.ink3 : m < 0 ? C.err : m <= 15 ? C.warn : C.ink2);
 
@@ -53,17 +46,22 @@ function ControlChart({ rounds, target, usl, lsl, unit }: { rounds: Round[]; tar
 
 /** 자주검사 실적 등록 — 와이어프레임 qual-pqc-self.jsx 정본. */
 export default function QualPqcSelfScreen() {
+  const { data: wos = [], isLoading } = usePqcSelfChecks();
   const [sel, setSel] = useState('WO-260621-006');
   const [tab, setTab] = useState('진행중');
-  const cur = SF_WOS.find((w) => w.wo === sel) || SF_WOS[0];
+  const cur = wos.find((w) => w.wo === sel) || wos[0];
 
-  const done = (w: Wo) => w.next === 999;
-  const rows = SF_WOS.filter((w) => tab === '전체' || (tab === '진행중' ? !done(w) : done(w)));
+  const done = (w: PqcSelf) => w.next === 999;
+  const rows = wos.filter((w) => tab === '전체' || (tab === '진행중' ? !done(w) : done(w)));
 
-  const dueCnt = SF_WOS.filter((w) => w.next !== 999 && w.next <= 0).length;
-  const oocCnt = SF_WOS.filter((w) => w.rounds.some((r) => r.st === '이탈')).length;
-  const todayChecks = SF_WOS.reduce((s, w) => s + w.rounds.length, 0);
-  const avgAdher = Math.round(SF_WOS.reduce((s, w) => s + w.adher, 0) / SF_WOS.length);
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '자주검사 대상이 없습니다.'}</div>;
+  }
+
+  const dueCnt = wos.filter((w) => w.next !== 999 && w.next <= 0).length;
+  const oocCnt = wos.filter((w) => w.rounds.some((r) => r.st === '이탈')).length;
+  const todayChecks = wos.reduce((s, w) => s + w.rounds.length, 0);
+  const avgAdher = Math.round(wos.reduce((s, w) => s + w.adher, 0) / wos.length);
 
   const lastNg = cur.rounds.some((r) => r.st === '이탈');
   const cpk = (Math.min(cur.usl - cur.target, cur.target - cur.lsl) / ((cur.usl - cur.lsl) / 6)).toFixed(2);
@@ -80,7 +78,7 @@ export default function QualPqcSelfScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['자주검사 대상', '' + SF_WOS.filter((w) => !done(w)).length, 'WO', C.ink],
+        ['자주검사 대상', '' + wos.filter((w) => !done(w)).length, 'WO', C.ink],
         ['검사 도래·지연', '' + dueCnt, '건', C.warn],
         ['관리 이탈(OOC)', '' + oocCnt, '건', C.err],
         ['금일 검사', '' + todayChecks, '회', C.ink],

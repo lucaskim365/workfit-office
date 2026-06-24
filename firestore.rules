@@ -29,7 +29,8 @@ service cloud.firestore {
         'nonconformances', 'mrbCases', 'reworkOrders', 'capaActions',
         'spcCharts', 'spcCapability', 'spcAlarms',
         'traceNodes', 'voc', 'd8Reports',
-        'gages', 'calibrations', 'gageRrStudies'
+        'gages', 'calibrations', 'gageRrStudies',
+        'pqcFmlChecks', 'pqcSelfChecks', 'pqcPatrols', 'pqcDevices'
       ];
     }
 

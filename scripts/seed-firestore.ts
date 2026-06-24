@@ -52,6 +52,10 @@ import { D8_REPORT_SEED } from '@/data/seeds/d8Report.seed';
 import { GAGE_SEED } from '@/data/seeds/gage.seed';
 import { CALIBRATION_SEED } from '@/data/seeds/calibration.seed';
 import { GAGE_RR_SEED } from '@/data/seeds/gageRr.seed';
+import { PQC_FML_SEED } from '@/data/seeds/pqcFml.seed';
+import { PQC_SELF_SEED } from '@/data/seeds/pqcSelf.seed';
+import { PQC_PATROL_SEED } from '@/data/seeds/pqcPatrol.seed';
+import { PQC_DEVICE_SEED } from '@/data/seeds/pqcDevice.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -96,6 +100,10 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'gages', docs: GAGE_SEED, id: (d) => d.id },
   { coll: 'calibrations', docs: CALIBRATION_SEED, id: (d) => d.id },
   { coll: 'gageRrStudies', docs: GAGE_RR_SEED, id: (d) => d.id },
+  { coll: 'pqcFmlChecks', docs: PQC_FML_SEED, id: (d) => d.wo },
+  { coll: 'pqcSelfChecks', docs: PQC_SELF_SEED, id: (d) => d.wo },
+  { coll: 'pqcPatrols', docs: PQC_PATROL_SEED, id: (d) => d.id },
+  { coll: 'pqcDevices', docs: PQC_DEVICE_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
