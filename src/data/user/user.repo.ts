@@ -1,0 +1,88 @@
+import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { userSchema, type User, type UserFormValues } from '@/domain/user/schema';
+import { USER_SEED } from '@/data/seeds/user.seed';
+
+/**
+ * 사용자 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
+ * 문서 ID = user.id. 미설정 시 seed degrade.
+ */
+const COLL = 'users';
+
+export interface UserFilter {
+  dept?: string;
+  roleGroup?: string;
+  status?: string;
+  q?: string;
+}
+
+let memory: User[] = USER_SEED.map((u) => userSchema.parse(u));
+
+function applyFilter(rows: User[], f?: UserFilter): User[] {
+  if (!f) return rows;
+  const kw = f.q?.trim().toLowerCase() ?? '';
+  return rows.filter(
+    (u) =>
+      (!f.dept || u.dept === f.dept) &&
+      (!f.roleGroup || u.roleGroup === f.roleGroup) &&
+      (!f.status || u.status === f.status) &&
+      (!kw || [u.empNo, u.name].some((v) => v.toLowerCase().includes(kw))),
+  );
+}
+
+/** 차기 ID 채번(U0NN) — 운영 시 counters 컬렉션으로 대체. */
+function nextId(rows: User[]): string {
+  const max = rows.reduce((m, u) => {
+    const n = Number(u.id.replace(/\D/g, ''));
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `U${String(max + 1).padStart(3, '0')}`;
+}
+
+export const userRepo = {
+  async list(filter?: UserFilter): Promise<User[]> {
+    if (isFirebaseConfigured && db) {
+      const snap = await getDocs(collection(db, COLL));
+      const rows = snap.docs.map((d) => userSchema.parse(d.data()));
+      return applyFilter(rows, filter);
+    }
+    return applyFilter(memory, filter);
+  },
+
+  /** 신규 등록 — id 채번 후 저장. */
+  async create(values: UserFormValues): Promise<User> {
+    const all = await this.list();
+    const user = userSchema.parse({ ...values, id: nextId(all), lastLogin: '-' });
+    await this.save(user);
+    return user;
+  },
+
+  /** 기존 사용자 수정 — lastLogin 등 시스템 필드 보존. */
+  async update(id: string, values: UserFormValues): Promise<void> {
+    const existing = (await this.list()).find((u) => u.id === id);
+    await this.save(userSchema.parse({ ...existing, ...values, id }));
+  },
+
+  /** 등록/수정(upsert). */
+  async save(user: User): Promise<void> {
+    const valid = userSchema.parse(user);
+    if (isFirebaseConfigured && db) {
+      await setDoc(doc(db, COLL, valid.id), valid);
+      return;
+    }
+    const i = memory.findIndex((m) => m.id === valid.id);
+    if (i >= 0) memory[i] = valid;
+    else memory = [valid, ...memory];
+  },
+
+  async removeMany(ids: Array<string | number>): Promise<void> {
+    const set = new Set(ids.map(String));
+    if (isFirebaseConfigured && db) {
+      const fdb = db;
+      await Promise.all([...set].map((id) => deleteDoc(doc(fdb, COLL, id))));
+      return;
+    }
+    memory = memory.filter((m) => !set.has(m.id));
+  },
+};

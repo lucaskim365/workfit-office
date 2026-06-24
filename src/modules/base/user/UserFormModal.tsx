@@ -1,27 +1,14 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Modal } from '@/shared/ui/Modal';
 import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
-import { ROLE_GROUPS, type User } from './mock';
+import { ROLE_GROUPS, USER_STATUS, userFormSchema, type User, type UserFormValues } from '@/domain/user/schema';
 
-const STATUS = ['사용', '잠금', '미사용'] as const;
-
-const schema = z.object({
-  empNo: z.string().min(1, '사번을 입력하세요').max(20),
-  name: z.string().min(1, '이름을 입력하세요').max(30),
-  dept: z.string().min(1, '부서를 입력하세요').max(30),
-  position: z.string().min(1, '직책을 입력하세요').max(20),
-  roleGroup: z.enum(ROLE_GROUPS),
-  email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
-  status: z.enum(STATUS),
-});
-
-export type UserFormValues = z.infer<typeof schema>;
+export type { UserFormValues };
 
 const EMPTY: UserFormValues = {
   empNo: '',
@@ -47,7 +34,7 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
     reset,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(userFormSchema),
     defaultValues: EMPTY,
   });
 
@@ -110,7 +97,7 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
           <SelectField
             {...register('status')}
             invalid={!!errors.status}
-            options={STATUS.map((s) => ({ value: s, label: s }))}
+            options={USER_STATUS.map((s) => ({ value: s, label: s }))}
           />
         </Field>
         <div className="col-span-2">

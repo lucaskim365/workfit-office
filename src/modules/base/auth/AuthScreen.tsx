@@ -2,43 +2,14 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Select, type Option } from '@/shared/ui/FilterBar';
+import { PERM_MENUS, PERM_COLS } from '@/domain/roleGroup/schema';
+import { useRoleGroups, useSaveRoleGroup } from '@/features/roleGroup/useRoleGroups';
 
-interface Member {
-  name: string;
-  code: string;
-}
-interface Group {
-  code: string;
-  name: string;
-  members: Member[];
-  desc: string;
-}
-
-const GROUPS: Group[] = [
-  { code: 'ADMIN', name: '관리자 그룹', members: [{ name: '김승기', code: 'A12345' }, { name: '오태경', code: 'A67890' }], desc: '전사 시스템 관리 권한 그룹. 사용자/권한/코드 전 영역 접근 가능.' },
-  { code: 'OPERATOR', name: '운영자 그룹', members: [{ name: '박민준', code: 'B10021' }], desc: '운영 모니터링 및 기준정보 조회 중심 권한.' },
-  { code: 'FIELD_ADMIN', name: '현장관리자 그룹', members: [{ name: '임건우', code: 'C33012' }], desc: '현장 생산·실적 등록 및 설비 상태 제어 권한.' },
-  { code: 'MT_ADMIN', name: '생산 관리자', members: [{ name: '문성민', code: 'D45100' }], desc: '생산계획·작업지시 관리 권한.' },
-  { code: 'MT_USER', name: '생산 담당자 그룹', members: [{ name: '정하윤', code: 'D45221' }], desc: '생산 실적 입력 권한.' },
-  { code: 'QC_USER', name: '품질 담당자 그룹', members: [{ name: '이서연', code: 'Q22013' }], desc: '품질 검사·판정 등록 권한.' },
-];
-
-const MENUS = ['시스템관리', '사용자관리', '그룹권한관리', '공통코드정보', '품목정보', '설비정보', '불량항목정보', '접속이력관리'];
-const PERM_COLS = ['보기', '조회', '신규', '저장', '삭제', '엑셀'];
+const MENUS = PERM_MENUS;
 const USE_OPTIONS: Option[] = [
   { value: '사용', label: '사용' },
   { value: '미사용', label: '미사용' },
 ];
-
-// 그룹별 권한 매트릭스 초기값 (MENUS × PERM_COLS)
-const SEED: Record<string, boolean[][]> = {
-  ADMIN: MENUS.map(() => PERM_COLS.map(() => true)),
-  OPERATOR: MENUS.map((_, i) => PERM_COLS.map((_, c) => c < 2 || i < 2)),
-  FIELD_ADMIN: MENUS.map((_, i) => PERM_COLS.map((_, c) => c < 4 && i > 1)),
-  MT_ADMIN: MENUS.map(() => PERM_COLS.map((_, c) => c < 4)),
-  MT_USER: MENUS.map(() => PERM_COLS.map((_, c) => c < 2)),
-  QC_USER: MENUS.map((_, i) => PERM_COLS.map((_, c) => c < 3 && i > 3)),
-};
 
 function Check({ on, onClick }: { on: boolean; onClick?: () => void }) {
   return (
@@ -61,29 +32,34 @@ function Check({ on, onClick }: { on: boolean; onClick?: () => void }) {
 /** 그룹권한관리 — 역할그룹 목록 + 상세 + 메뉴권한 매트릭스. 와이어프레임 sub-auth.jsx 정본. */
 export default function AuthScreen() {
   const [selected, setSelected] = useState('ADMIN');
-  const [matrix, setMatrix] = useState<Record<string, boolean[][]>>(SEED);
   const [search, setSearch] = useState('');
+  /** 그룹별 권한 매트릭스 로컬 편집 오버라이드(저장 전). */
+  const [edits, setEdits] = useState<Record<string, boolean[][]>>({});
 
-  const group = GROUPS.find((g) => g.code === selected) ?? GROUPS[0];
-  const grid = matrix[selected];
-  const filteredGroups = GROUPS.filter(
+  const { data: groups = [] } = useRoleGroups();
+  const saveGroup = useSaveRoleGroup();
+
+  const group = groups.find((g) => g.code === selected) ?? groups[0];
+  const grid = (group && (edits[group.code] ?? group.permissions)) ?? [];
+  const filteredGroups = groups.filter(
     (g) => !search || g.code.toLowerCase().includes(search.toLowerCase()) || g.name.includes(search),
   );
 
   const toggleCell = (mi: number, ci: number) => {
-    setMatrix((prev) => {
-      const next = prev[selected].map((row) => [...row]);
-      next[mi][ci] = !next[mi][ci];
-      return { ...prev, [selected]: next };
-    });
+    if (!group) return;
+    const next = grid.map((row) => [...row]);
+    next[mi][ci] = !next[mi][ci];
+    setEdits((prev) => ({ ...prev, [group.code]: next }));
   };
   const toggleRow = (mi: number) => {
-    setMatrix((prev) => {
-      const allOn = prev[selected][mi].every(Boolean);
-      const next = prev[selected].map((row) => [...row]);
-      next[mi] = next[mi].map(() => !allOn);
-      return { ...prev, [selected]: next };
-    });
+    if (!group) return;
+    const allOn = grid[mi].every(Boolean);
+    const next = grid.map((row) => [...row]);
+    next[mi] = next[mi].map(() => !allOn);
+    setEdits((prev) => ({ ...prev, [group.code]: next }));
+  };
+  const savePermissions = () => {
+    if (group) saveGroup.mutate({ ...group, permissions: grid });
   };
 
   return (
@@ -134,7 +110,7 @@ export default function AuthScreen() {
           <div className="flex flex-col gap-3">
             <FieldRow label="역할그룹명" required>
               <div className="flex h-9 items-center rounded-md border border-border-hi bg-panel px-3.5 text-[12.5px] font-bold text-ink">
-                {group.code}
+                {group?.code}
               </div>
             </FieldRow>
             <FieldRow label="사용여부">
@@ -142,7 +118,7 @@ export default function AuthScreen() {
             </FieldRow>
             <FieldRow label="구성원">
               <div className="flex flex-wrap gap-2">
-                {group.members.map((m) => (
+                {(group?.members ?? []).map((m) => (
                   <span
                     key={m.code}
                     className="inline-flex items-center gap-1.5 rounded-md border border-[#cfe0fb] bg-blue-soft py-1.5 pl-3 pr-2 text-[11.5px] font-semibold text-navy"
@@ -158,7 +134,7 @@ export default function AuthScreen() {
             </FieldRow>
             <FieldRow label="비고" top>
               <div className="min-h-[56px] rounded-md border border-border-hi bg-panel px-3.5 py-2.5 text-[12px] leading-relaxed text-ink2">
-                {group.desc}
+                {group?.desc}
               </div>
             </FieldRow>
           </div>
@@ -168,7 +144,7 @@ export default function AuthScreen() {
       {/* 하단: 메뉴권한 매트릭스 */}
       <Card
         title="메뉴권한 목록"
-        action={<ActionBar actions={[{ preset: 'save', label: '권한 저장', variant: 'primary' }]} />}
+        action={<ActionBar actions={[{ preset: 'save', label: '권한 저장', variant: 'primary', onClick: savePermissions }]} />}
         bodyClassName="p-0"
       >
         <div className="overflow-x-auto">
@@ -192,15 +168,17 @@ export default function AuthScreen() {
               </tr>
             </thead>
             <tbody>
-              {MENUS.map((menu, mi) => (
+              {MENUS.map((menu, mi) => {
+                const row = grid[mi] ?? PERM_COLS.map(() => false);
+                return (
                 <tr key={menu} className={mi % 2 ? 'bg-panel-alt' : 'bg-panel'}>
                   <td className="border-b border-r border-border px-2.5 py-2 text-center">
                     <div className="flex justify-center">
-                      <Check on={grid[mi].every(Boolean)} onClick={() => toggleRow(mi)} />
+                      <Check on={row.every(Boolean)} onClick={() => toggleRow(mi)} />
                     </div>
                   </td>
                   <td className="border-b border-r border-border px-2.5 py-2 font-bold text-ink">{menu}</td>
-                  {grid[mi].map((on, ci) => (
+                  {row.map((on, ci) => (
                     <td key={ci} className="border-b border-r border-border px-2.5 py-2 text-center">
                       <div className="flex justify-center">
                         <Check on={on} onClick={() => toggleCell(mi, ci)} />
@@ -208,7 +186,8 @@ export default function AuthScreen() {
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -5,7 +5,8 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { DataTable, type Column } from '@/shared/ui/DataTable';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
-import { USERS, ROLE_GROUPS, type User } from './mock';
+import { ROLE_GROUPS, type User } from '@/domain/user/schema';
+import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 
 const STATUS_TONE: Record<User['status'], Tone> = { 사용: 'ok', 잠금: 'warn', 미사용: 'mute' };
@@ -20,36 +21,29 @@ const ROLE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...ROLE_GROUPS.m
 
 /** 사용자관리 — 필터 + KPI 요약 + 목록(직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
 export default function UserScreen() {
-  const [list, setList] = useState<User[]>(USERS);
   const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
 
+  const { data: all = [] } = useUsers();
+  const { data: rows = [] } = useUsers(applied);
+  const upsert = useUpsertUser();
+  const removeUsers = useRemoveUsers();
+
   const deptOptions: Option[] = [
     { value: '', label: '전체' },
-    ...[...new Set(list.map((u) => u.dept))].map((d) => ({ value: d, label: d })),
+    ...[...new Set(all.map((u) => u.dept))].map((d) => ({ value: d, label: d })),
   ];
-
-  const rows = useMemo(() => {
-    const kw = applied.q.trim().toLowerCase();
-    return list.filter(
-      (u) =>
-        (!applied.dept || u.dept === applied.dept) &&
-        (!applied.roleGroup || u.roleGroup === applied.roleGroup) &&
-        (!applied.status || u.status === applied.status) &&
-        (!kw || [u.empNo, u.name].some((v) => v.toLowerCase().includes(kw))),
-    );
-  }, [list, applied]);
 
   const summary = useMemo(
     () => ({
-      total: list.length,
-      active: list.filter((u) => u.status === '사용').length,
-      locked: list.filter((u) => u.status === '잠금').length,
-      inactive: list.filter((u) => u.status === '미사용').length,
+      total: all.length,
+      active: all.filter((u) => u.status === '사용').length,
+      locked: all.filter((u) => u.status === '잠금').length,
+      inactive: all.filter((u) => u.status === '미사용').length,
     }),
-    [list],
+    [all],
   );
 
   const columns: Column<User>[] = [
@@ -84,12 +78,11 @@ export default function UserScreen() {
   ];
 
   const handleSubmit = (values: UserFormValues, id?: string) => {
-    if (id) setList((p) => p.map((u) => (u.id === id ? { ...u, ...values } : u)));
-    else setList((p) => [{ id: `U${Date.now()}`, lastLogin: '-', ...values }, ...p]);
+    upsert.mutate({ values, id });
   };
   const handleDelete = () => {
     if (selected.length === 0) return;
-    setList((p) => p.filter((u) => !selected.includes(u.id)));
+    removeUsers.mutate(selected);
     setSelected([]);
   };
 
