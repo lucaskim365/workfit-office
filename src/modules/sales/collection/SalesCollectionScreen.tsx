@@ -2,17 +2,11 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, MKpis, FBar, FField, FSel, th, td, won } from '../_sales';
-
-type Row = [no: string, cust: string, date: string, method: string, amt: number, doc: string, match: string];
-const ROWS: Row[] = [
-  ['RC-2606-055', '대륭산업', '2026-06-23', '계좌이체', 14025000, 'TI-2606-072', '소진'],
-  ['RC-2606-054', '세진테크', '2026-06-22', '어음', 17424000, 'TI-2606-068', '소진'],
-  ['RC-2606-053', '한빛전자', '2026-06-20', '계좌이체', 30000000, '선입금', '미소진'],
-  ['RC-2606-051', '동진정밀', '2026-06-18', '카드', 2112000, 'TI-2606-065', '소진'],
-];
+import { useSalesCollections } from '@/features/salesCollection/useSalesCollections';
 
 /** 수금 입력 — 와이어프레임 sales-screens.jsx 정본. */
 export default function SalesCollectionScreen() {
+  const { data: rows = [], isLoading } = useSalesCollections();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="수금 입력" sub="수금 및 채권 관리 / 입금 등록 (Collection)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
@@ -27,15 +21,17 @@ export default function SalesCollectionScreen() {
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['수금번호', '거래처', '수금일', '수금방법', '수금액', '매칭 증빙', '매칭'].map((c, i) => <th key={c} className={th(i === 4 ? 'right' : i === 6 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
-            {ROWS.map((r, i) => (
-              <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
-                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r[0]}</td>
-                <td className={`${td('left')} font-semibold text-ink`}>{r[1]}</td>
-                <td className={`${td('left')} tabular-nums`}>{r[2]}</td>
-                <td className={td('left')}><Pill tone="mute">{r[3]}</Pill></td>
-                <td className={`${td('right')} font-bold tabular-nums text-ink`}>{won(r[4])}</td>
-                <td className={`${td('left')} font-mono text-[10.5px]`}>{r[5]}</td>
-                <td className={td('center')}><Pill tone={r[6] === '소진' ? 'ok' : 'warn'}>{r[6]}</Pill></td>
+            {rows.length === 0 ? (
+              <tr><td colSpan={7} className="px-3 py-10 text-center text-[11px] text-ink3">{isLoading ? '불러오는 중…' : '수금 내역이 없습니다.'}</td></tr>
+            ) : rows.map((r, i) => (
+              <tr key={r.no} style={{ background: i % 2 ? C.panelAlt : '#fff' }} className="cursor-pointer">
+                <td className={`${td('left')} font-mono text-[11px] font-bold text-ink`}>{r.no}</td>
+                <td className={`${td('left')} font-semibold text-ink`}>{r.cust}</td>
+                <td className={`${td('left')} tabular-nums`}>{r.date}</td>
+                <td className={td('left')}><Pill tone="mute">{r.method}</Pill></td>
+                <td className={`${td('right')} font-bold tabular-nums text-ink`}>{won(r.amt)}</td>
+                <td className={`${td('left')} font-mono text-[10.5px]`}>{r.doc}</td>
+                <td className={td('center')}><Pill tone={r.match === '소진' ? 'ok' : 'warn'}>{r.match}</Pill></td>
               </tr>
             ))}
           </tbody>

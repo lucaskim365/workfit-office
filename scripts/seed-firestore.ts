@@ -124,6 +124,12 @@ import { LOT_SPLIT_SEED } from '@/data/seeds/lotSplit.seed';
 import { IQC_LINK_SEED } from '@/data/seeds/iqcLink.seed';
 import { MAT_SCRAP_SEED } from '@/data/seeds/matScrap.seed';
 import { MAT_REQUISITION_SEED } from '@/data/seeds/matRequisition.seed';
+import { QUOTE_SEED } from '@/data/seeds/quote.seed';
+import { SALES_COLLECTION_SEED } from '@/data/seeds/salesCollection.seed';
+import { ACCOUNTS_RECEIVABLE_SEED } from '@/data/seeds/accountsReceivable.seed';
+import { CREDIT_LIMIT_SEED } from '@/data/seeds/creditLimit.seed';
+import { SALES_REVENUE_SEED } from '@/data/seeds/salesRevenue.seed';
+import { TAX_INVOICE_SEED } from '@/data/seeds/taxInvoice.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -241,6 +247,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'iqcLinks', docs: IQC_LINK_SEED, id: (d) => d.lot },
   { coll: 'matScraps', docs: MAT_SCRAP_SEED, id: (d) => d.no },
   { coll: 'matRequisitions', docs: MAT_REQUISITION_SEED, id: (d) => d.no },
+  { coll: 'quotes', docs: QUOTE_SEED, id: (d) => d.no },
+  { coll: 'salesCollections', docs: SALES_COLLECTION_SEED, id: (d) => d.no },
+  { coll: 'accountsReceivable', docs: ACCOUNTS_RECEIVABLE_SEED, id: (d) => d.cust },
+  { coll: 'creditLimits', docs: CREDIT_LIMIT_SEED, id: (d) => d.cust },
+  { coll: 'salesRevenues', docs: SALES_REVENUE_SEED, id: (d) => d.no },
+  { coll: 'taxInvoices', docs: TAX_INVOICE_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
