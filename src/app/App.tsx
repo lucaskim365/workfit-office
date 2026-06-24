@@ -15,6 +15,7 @@ const HOME = '/ops/dashboard';
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 운영 현황
   '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
+  '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),
   // 기준 정보
   '/base/user': lazy(() => import('@/modules/base/user/UserScreen')),
   '/base/vendor': lazy(() => import('@/modules/base/vendor/VendorScreen')),
