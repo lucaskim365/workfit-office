@@ -3,16 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C } from '../_maint';
-
-const DC_EQUIP = [
-  { code: 'EQ-CMP02', name: 'CMP 02호기', done: 7, total: 11, state: '진행중' },
-  { code: 'EQ-ETCH01', name: 'Etch 01호기', done: 9, total: 9, state: '완료' },
-  { code: 'EQ-PHO05', name: 'Photo 05호기', done: 8, total: 8, state: '완료' },
-  { code: 'EQ-DEP03', name: 'Depo 03호기', done: 0, total: 10, state: '미점검' },
-  { code: 'EQ-IMP02', name: 'Implant 02호기', done: 10, total: 10, state: '완료' },
-  { code: 'EQ-OVEN05', name: 'Thermal 05호기', done: 3, total: 9, state: '진행중' },
-  { code: 'EQ-CLN04', name: 'Clean 04호기', done: 0, total: 8, state: '미점검' },
-];
+import { useDailyChecks, useTransitionDailyCheck } from '@/features/dailyCheck/useDailyChecks';
+import { nextStatus } from '@/domain/dailyCheck/status';
 
 interface ChkItem { id: string; name: string; std: string; unit: string; init: 'ok' | 'ng' | null; val: string; note?: string }
 const DC_ITEMS: { group: string; items: ChkItem[] }[] = [
@@ -42,6 +34,8 @@ const dotColor = (s: string) => (s === '완료' ? C.ok : s === '진행중' ? C.b
 /** 일상 점검 관리 — 와이어프레임 equip-daily-check.jsx 정본. */
 export default function EquipDailyCheckScreen() {
   const [sel, setSel] = useState('EQ-CMP02');
+  const { data: dcEquip, isLoading } = useDailyChecks();
+  const transition = useTransitionDailyCheck();
   const flat = DC_ITEMS.flatMap((g) => g.items);
   const initRes: Record<string, 'ok' | 'ng' | null> = {};
   const initVal: Record<string, string> = {};
@@ -54,8 +48,22 @@ export default function EquipDailyCheckScreen() {
   const ngN = flat.filter((it) => res[it.id] === 'ng').length;
   const naN = flat.filter((it) => !res[it.id]).length;
   const pct = Math.round(((okN + ngN) / total) * 100);
-  const eq = DC_EQUIP.find((e) => e.code === sel) || DC_EQUIP[0];
   const setJ = (id: string, v: 'ok' | 'ng') => setRes((r) => ({ ...r, [id]: r[id] === v ? null : v }));
+
+  // 로딩/빈 가드 — 화면 출력은 데이터 적재 후 동일.
+  if (isLoading || !dcEquip) {
+    return <div className="px-1 py-6 text-[12px] text-ink3">불러오는 중…</div>;
+  }
+  if (dcEquip.length === 0) {
+    return <div className="px-1 py-6 text-[12px] text-ink3">점검 대상 설비가 없습니다.</div>;
+  }
+  const DC_EQUIP = dcEquip;
+  const eq = DC_EQUIP.find((e) => e.code === sel) || DC_EQUIP[0];
+  /** 선택 설비의 다음 상태로 전이(점검 착수 → 진행중, 점검 완료 → 완료). */
+  const advance = (e: { code: string; state: (typeof DC_EQUIP)[number]['state'] }) => {
+    const to = nextStatus(e.state);
+    if (to) transition.mutate({ code: e.code, to });
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -64,7 +72,19 @@ export default function EquipDailyCheckScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">일상 점검 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">설비 관리 / 설비 보전 및 점검 / 일상 점검 관리</p>
         </div>
-        <ActionBar actions={['save', { icon: 'save', label: '점검 완료 제출', variant: 'primary' }]} />
+        <ActionBar
+          actions={[
+            'save',
+            {
+              icon: 'save',
+              label: '점검 완료 제출',
+              variant: 'primary',
+              // 선택 설비의 다음 상태로 전이(미점검→진행중→완료). 완료면 비활성.
+              onClick: () => advance(eq),
+              disabled: nextStatus(eq.state) == null || transition.isPending,
+            },
+          ]}
+        />
       </div>
 
       {/* 점검 컨텍스트 바 */}

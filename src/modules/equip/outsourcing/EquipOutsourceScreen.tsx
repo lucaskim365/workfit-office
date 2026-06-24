@@ -3,17 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, Sel, FilterCard, FilterField, KpiGrid, Timeline, won, type Step } from '../_maint';
+import { useMaintOutsourcing } from '@/features/maintOutsourcing/useMaintOutsourcing';
 
-interface Row { no: string; eq: string; item: string; vendor: string; date: string; dur: string; cost: number; state: string; warranty: string; sev: string }
-const OS_ROWS: Row[] = [
-  { no: 'OS-2606-009', eq: 'Thermal 05호기', item: '히터 어셈블리 정밀 재생', vendor: '한국히팅시스템', date: '06-09', dur: '3일', cost: 8200000, state: '진행중', warranty: '6개월', sev: '중대' },
-  { no: 'OS-2606-008', eq: 'Photo 05호기', item: '노광 렌즈 모듈 캘리브레이션', vendor: 'ASML Korea', date: '06-05', dur: '5일', cost: 24500000, state: '입고대기', warranty: '12개월', sev: '중대' },
-  { no: 'OS-2605-021', eq: 'Etch 01호기', item: 'RF 제너레이터 오버홀', vendor: 'AMAT 서비스', date: '05-28', dur: '7일', cost: 15800000, state: '완료', warranty: '12개월', sev: '중대' },
-  { no: 'OS-2605-019', eq: 'CMP 02호기', item: '연마 헤드 스핀들 재생', vendor: '정밀기공(주)', date: '05-22', dur: '4일', cost: 6400000, state: '완료', warranty: '6개월', sev: '주의' },
-  { no: 'OS-2605-014', eq: 'Implant 02호기', item: '이온소스 챔버 클리닝', vendor: 'AMAT 서비스', date: '05-15', dur: '3일', cost: 9100000, state: '완료', warranty: '3개월', sev: '주의' },
-  { no: 'OS-2605-008', eq: 'Depo 03호기', item: '진공펌프 오버홀', vendor: '에드워드코리아', date: '05-08', dur: '6일', cost: 7300000, state: '완료', warranty: '12개월', sev: '주의' },
-  { no: 'OS-2604-022', eq: 'Clean 04호기', item: '케미컬 펌프 교체', vendor: '정밀기공(주)', date: '04-26', dur: '2일', cost: 3200000, state: '완료', warranty: '6개월', sev: '경미' },
-];
 const stTone = (s: string): Tone => (s === '완료' ? 'ok' : s === '진행중' ? 'info' : s === '입고대기' ? 'warn' : 'mute');
 const sevTone = (s: string): Tone => (s === '중대' ? 'err' : s === '주의' ? 'warn' : 'mute');
 
@@ -32,9 +23,14 @@ const OS_FLOW: Step[] = [
 
 /** 외부 수리(외주 보전) 이력 — 와이어프레임 equip-outsource.jsx 정본. */
 export default function EquipOutsourceScreen() {
+  const { data: rows = [], isLoading } = useMaintOutsourcing();
   const [sel, setSel] = useState('OS-2606-009');
-  const cur = OS_ROWS.find((r) => r.no === sel) || OS_ROWS[0];
+  const cur = rows.find((r) => r.no === sel) || rows[0];
   const maxV = Math.max(...OS_VENDORS.map((v) => v[2]));
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '외주 의뢰가 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -78,7 +74,7 @@ export default function EquipOutsourceScreen() {
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1.55fr_1fr]">
         {/* 외주 수리 이력 */}
-        <Card title="외주 수리 이력" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{OS_ROWS.length}건</span>}>
+        <Card title="외주 수리 이력" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{rows.length}건</span>}>
           <table className="w-full border-collapse text-[11.5px]">
             <thead>
               <tr>
@@ -88,7 +84,7 @@ export default function EquipOutsourceScreen() {
               </tr>
             </thead>
             <tbody>
-              {OS_ROWS.map((r, i) => {
+              {rows.map((r, i) => {
                 const on = r.no === sel;
                 return (
                   <tr key={r.no} onClick={() => setSel(r.no)} className="cursor-pointer align-top" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>

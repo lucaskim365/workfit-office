@@ -3,17 +3,9 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, Sel, FilterCard, FilterField, KpiGrid, Timeline, won, type Step } from '../_maint';
+import { useBmActions, useTransitionBm } from '@/features/bmAction/useBmActions';
+import { nextStatus, nextActionLabel } from '@/domain/bmAction/status';
 
-interface Row { no: string; eq: string; sym: string; cause: string; date: string; worker: string; team: string; down: number; sev: string; state: string; parts: number; cost: number }
-const BM_ROWS: Row[] = [
-  { no: 'BM-2606-031', eq: 'Thermal 05호기', sym: '히터존 3 온도 미상승', cause: '히터 단선', date: '06-10 08:42', worker: '박보전', team: '보전 2팀', down: 95, sev: '중대', state: '수리중', parts: 1, cost: 1850000 },
-  { no: 'BM-2606-030', eq: 'CMP 02호기', sym: '구동부 이상 진동', cause: '베어링 마모', date: '06-10 06:15', worker: '김설비', team: '보전 1팀', down: 0, sev: '경미', state: '진단중', parts: 0, cost: 0 },
-  { no: 'BM-2606-029', eq: 'Etch 01호기', sym: 'RF 파워 불안정', cause: '매칭 네트워크 불량', date: '06-09 22:30', worker: '박보전', team: '보전 2팀', down: 142, sev: '중대', state: '완료', parts: 2, cost: 3200000 },
-  { no: 'BM-2606-028', eq: 'Implant 02호기', sym: '이온빔 전류 저하', cause: '필라멘트 수명', date: '06-09 14:05', worker: '이정비', team: '보전 1팀', down: 88, sev: '중대', state: '완료', parts: 1, cost: 2400000 },
-  { no: 'BM-2606-027', eq: 'Photo 05호기', sym: '스테이지 정렬 오차', cause: 'XY 모터 엔코더 노이즈', date: '06-08 11:20', worker: '김설비', team: '보전 1팀', down: 56, sev: '주의', state: '완료', parts: 1, cost: 780000 },
-  { no: 'BM-2606-026', eq: 'Depo 03호기', sym: '챔버 압력 누설', cause: 'O-ring 경화', date: '06-07 09:50', worker: '이정비', team: '보전 1팀', down: 38, sev: '주의', state: '완료', parts: 3, cost: 420000 },
-  { no: 'BM-2606-025', eq: 'Clean 04호기', sym: '케미컬 공급 불량', cause: '펌프 다이어프램 손상', date: '06-06 16:40', worker: '박보전', team: '보전 2팀', down: 64, sev: '주의', state: '완료', parts: 1, cost: 650000 },
-];
 const stTone = (s: string): Tone => (s === '완료' ? 'ok' : s === '수리중' ? 'info' : s === '진단중' ? 'warn' : 'mute');
 const sevTone = (s: string): Tone => (s === '중대' ? 'err' : s === '주의' ? 'warn' : 'mute');
 
@@ -30,8 +22,16 @@ const BM_PARTS: [string, string, number, string, string][] = [
 
 /** 사후보전(BM) 조치 — 와이어프레임 equip-bm.jsx 정본. */
 export default function EquipBmScreen() {
+  const { data: rows = [], isLoading } = useBmActions();
+  const transition = useTransitionBm();
   const [sel, setSel] = useState('BM-2606-031');
-  const cur = BM_ROWS.find((r) => r.no === sel) || BM_ROWS[0];
+  const cur = rows.find((r) => r.no === sel) || rows[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : 'BM 작업이 없습니다.'}</div>;
+  }
+
+  const advanceLabel = nextActionLabel(cur.state);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -58,7 +58,7 @@ export default function EquipBmScreen() {
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1.5fr_1fr]">
         {/* 작업 목록 */}
-        <Card title="BM 작업 목록" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{BM_ROWS.length}건</span>}>
+        <Card title="BM 작업 목록" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{rows.length}건</span>}>
           <table className="w-full border-collapse text-[11.5px]">
             <thead>
               <tr>
@@ -68,7 +68,7 @@ export default function EquipBmScreen() {
               </tr>
             </thead>
             <tbody>
-              {BM_ROWS.map((r, i) => {
+              {rows.map((r, i) => {
                 const on = r.no === sel;
                 return (
                   <tr key={r.no} onClick={() => setSel(r.no)} className="cursor-pointer align-top" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
@@ -106,6 +106,19 @@ export default function EquipBmScreen() {
           <div className="border-b border-border px-4 py-3.5">
             <div className="mb-3 text-[10.5px] font-bold text-ink3">조치 진행</div>
             <Timeline steps={BM_FLOW} />
+            <div className="mt-1.5 flex gap-2">
+              <button
+                onClick={() => {
+                  const to = nextStatus(cur.state);
+                  if (to) transition.mutate({ no: cur.no, to });
+                }}
+                disabled={cur.state === '완료' || transition.isPending}
+                className="h-9 flex-1 rounded-lg text-[11.5px] font-bold text-white disabled:opacity-50"
+                style={{ background: C.navy }}
+              >
+                {advanceLabel ?? '조치 완료'}
+              </button>
+            </div>
           </div>
 
           <div className="px-4 py-3.5">

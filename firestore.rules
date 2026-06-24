@@ -32,7 +32,8 @@ service cloud.firestore {
         'gages', 'calibrations', 'gageRrStudies',
         'pqcFmlChecks', 'pqcSelfChecks', 'pqcPatrols', 'pqcDevices',
         'coaCertificates', 'equipments',
-        'equipmentSpecs', 'equipBoms', 'equipCheckItems', 'alarmMasters', 'equipVendors'
+        'equipmentSpecs', 'equipBoms', 'equipCheckItems', 'alarmMasters', 'equipVendors',
+        'pmPlans', 'dailyChecks', 'periodicChecks', 'bmActions', 'pdmEquipments', 'maintOutsourcing'
       ];
     }
 

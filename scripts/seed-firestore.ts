@@ -63,6 +63,12 @@ import { EQUIP_BOM_SEED } from '@/data/seeds/equipBom.seed';
 import { EQUIP_CHECK_SEED } from '@/data/seeds/equipCheckItem.seed';
 import { ALARM_MASTER_SEED } from '@/data/seeds/alarmMaster.seed';
 import { EQUIP_VENDOR_SEED } from '@/data/seeds/equipVendor.seed';
+import { PM_PLAN_SEED } from '@/data/seeds/pmPlan.seed';
+import { DAILY_CHECK_SEED } from '@/data/seeds/dailyCheck.seed';
+import { PERIODIC_CHECK_SEED } from '@/data/seeds/periodicCheck.seed';
+import { BM_ACTION_SEED } from '@/data/seeds/bmAction.seed';
+import { PDM_EQUIPMENT_SEED } from '@/data/seeds/pdmEquipment.seed';
+import { MAINT_OUTSOURCING_SEED } from '@/data/seeds/maintOutsourcing.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -118,6 +124,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'equipCheckItems', docs: EQUIP_CHECK_SEED, id: (d) => d.type },
   { coll: 'alarmMasters', docs: ALARM_MASTER_SEED, id: (d) => d.type },
   { coll: 'equipVendors', docs: EQUIP_VENDOR_SEED, id: (d) => d.code },
+  { coll: 'pmPlans', docs: PM_PLAN_SEED, id: (d) => d.id },
+  { coll: 'dailyChecks', docs: DAILY_CHECK_SEED, id: (d) => d.code },
+  { coll: 'periodicChecks', docs: PERIODIC_CHECK_SEED, id: (d) => d.no },
+  { coll: 'bmActions', docs: BM_ACTION_SEED, id: (d) => d.no },
+  { coll: 'pdmEquipments', docs: PDM_EQUIPMENT_SEED, id: (d) => d.code },
+  { coll: 'maintOutsourcing', docs: MAINT_OUTSOURCING_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

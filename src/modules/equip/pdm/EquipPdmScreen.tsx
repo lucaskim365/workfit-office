@@ -3,16 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C } from '../_maint';
+import { usePdmEquipments } from '@/features/pdmEquipment/usePdmEquipments';
 
-interface Eq { code: string; name: string; health: number; rul: number; trend: 'down' | 'up' | 'flat'; state: string; driver: string }
-const PDM_EQ: Eq[] = [
-  { code: 'EQ-OVEN05', name: 'Thermal 05호기', health: 41, rul: 6, trend: 'down', state: '위험', driver: '히터존 온도편차' },
-  { code: 'EQ-CMP02', name: 'CMP 02호기', health: 63, rul: 18, trend: 'down', state: '주의', driver: '구동부 진동' },
-  { code: 'EQ-IMP02', name: 'Implant 02호기', health: 72, rul: 34, trend: 'flat', state: '주의', driver: '이온소스 전류' },
-  { code: 'EQ-ETCH01', name: 'Etch 01호기', health: 88, rul: 72, trend: 'up', state: '정상', driver: '–' },
-  { code: 'EQ-PHO05', name: 'Photo 05호기', health: 91, rul: 95, trend: 'flat', state: '정상', driver: '–' },
-  { code: 'EQ-DEP03', name: 'Depo 03호기', health: 84, rul: 61, trend: 'flat', state: '정상', driver: '–' },
-];
 const pdmTone = (s: string): Tone => (s === '위험' ? 'err' : s === '주의' ? 'warn' : 'ok');
 const pdmColor = (s: string) => (s === '위험' ? C.err : s === '주의' ? C.amber : C.teal);
 
@@ -60,11 +52,16 @@ const trColor = (t: string) => (t === 'down' ? C.err : t === 'up' ? C.teal : C.i
 
 /** 예지보전(PdM) 이상 감지 — 와이어프레임 equip-pdm.jsx 정본. */
 export default function EquipPdmScreen() {
+  const { data: pdmEq = [], isLoading } = usePdmEquipments();
   const [sel, setSel] = useState('EQ-OVEN05');
   const [metric, setMetric] = useState('진동 (mm/s)');
-  const cur = PDM_EQ.find((e) => e.code === sel) || PDM_EQ[0];
+  const cur = pdmEq.find((e) => e.code === sel) || pdmEq[0];
   const s = sensorData[metric];
   const last = s.data[s.data.length - 1];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '예지보전 대상 설비가 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -89,12 +86,12 @@ export default function EquipPdmScreen() {
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[270px_1fr]">
         {/* 건전성 보드 */}
-        <Card title="설비 건전성 (Health Index)" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{PDM_EQ.length}대</span>}>
+        <Card title="설비 건전성 (Health Index)" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{pdmEq.length}대</span>}>
           <div className="flex flex-col">
-            {PDM_EQ.map((e, i) => {
+            {pdmEq.map((e, i) => {
               const on = e.code === sel;
               return (
-                <button key={e.code} onClick={() => setSel(e.code)} className="flex flex-col gap-1.5 px-3.5 py-2.5 text-left" style={{ background: on ? C.tealSoft : undefined, borderLeft: on ? `3px solid ${C.teal}` : '3px solid transparent', borderBottom: i < PDM_EQ.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                <button key={e.code} onClick={() => setSel(e.code)} className="flex flex-col gap-1.5 px-3.5 py-2.5 text-left" style={{ background: on ? C.tealSoft : undefined, borderLeft: on ? `3px solid ${C.teal}` : '3px solid transparent', borderBottom: i < pdmEq.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                   <span className="flex w-full items-center gap-2">
                     <span className="flex-1 text-[12px] font-bold" style={{ color: on ? C.teal : C.ink }}>{e.name}</span>
                     <Pill tone={pdmTone(e.state)}>{e.state}</Pill>

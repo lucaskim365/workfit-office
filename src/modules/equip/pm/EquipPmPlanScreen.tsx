@@ -2,6 +2,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, Sel, FilterCard, FilterField, KpiGrid } from '../_maint';
+import { usePmPlans } from '@/features/pmPlan/usePmPlans';
 
 const PM_TYPE: Record<string, string> = { 일상: C.teal, 주간: C.blue, 월간: C.amber, 분기: C.violet, 연간: '#e0564f' };
 
@@ -36,24 +37,15 @@ const PM_NEXT: [string, string, string, number][] = [
   ['CMP 02호기', '월간', '06-25', 15], ['Etch 01호기', '분기', '06-13', 3], ['Photo 05호기', '주간', '06-16', 6],
   ['Depo 03호기', '주간', '06-20', 10], ['Implant 02호기', '월간', '06-18', 8], ['Thermal 05호기', '연간', '06-23', 13], ['Clean 04호기', '월간', '06-11', 1],
 ];
-const PM_MASTER = [
-  ['CMP 02호기', '연마 헤드 정밀점검', '월간', '30일', '05-25', '06-25', '김설비', '정상'],
-  ['CMP 02호기', '구동부 윤활', '주간', '7일', '06-03', '06-10', '김설비', '진행중'],
-  ['Etch 01호기', 'RF 매칭 점검', '주간', '7일', '06-06', '06-13', '박보전', '정상'],
-  ['Etch 01호기', '챔버 오버홀', '분기', '90일', '03-15', '06-13', '박보전', '임박'],
-  ['Photo 05호기', '스테이지 정렬', '주간', '7일', '06-09', '06-16', '김설비', '정상'],
-  ['Depo 03호기', '히터 캘리브레이션', '월간', '30일', '05-20', '06-20', '이정비', '정상'],
-  ['Implant 02호기', '이온 소스 점검', '월간', '30일', '05-18', '06-18', '이정비', '정상'],
-  ['Thermal 05호기', '튜브 일상점검', '일상', '1일', '06-09', '06-10', '박보전', '지연'],
-  ['Thermal 05호기', '퍼니스 오버홀', '연간', '365일', '25-06-23', '06-23', '박보전', '임박'],
-  ['Clean 04호기', '케미컬 라인 점검', '월간', '30일', '05-11', '06-11', '김설비', '임박'],
-];
 const stTone = (s: string): Tone => (s === '완료' || s === '정상' ? 'ok' : s === '진행중' ? 'info' : s === '지연' ? 'err' : s === '임박' ? 'warn' : 'mute');
 
 const dow = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 예방보전(PM) 계획 — 와이어프레임 equip-pm-plan.jsx 정본. */
 export default function EquipPmPlanScreen() {
+  // PM 계획 마스터(pmPlans) — 데이터 계층에서 로드. 달력 상수는 화면에 그대로 둔다.
+  const { data: plans = [], isLoading } = usePmPlans();
+
   const cells: (number | null)[] = [null]; // 6/1=월 → 앞 1칸 공백
   for (let d = 1; d <= 30; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
@@ -155,7 +147,7 @@ export default function EquipPmPlanScreen() {
         </div>
       </div>
 
-      <Card title="PM 계획 마스터" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{PM_MASTER.length}건</span>}>
+      <Card title="PM 계획 마스터" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{plans.length}건</span>}>
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr>
@@ -165,18 +157,24 @@ export default function EquipPmPlanScreen() {
             </tr>
           </thead>
           <tbody>
-            {PM_MASTER.map((r, i) => (
-              <tr key={i} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                <td className="border-b border-border px-3 py-2.5 font-bold text-ink">{r[0]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-ink2">{r[1]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-center"><span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ink2"><span className="h-2 w-2 rounded-sm" style={{ background: PM_TYPE[r[2]] }} />{r[2]}</span></td>
-                <td className="border-b border-border px-3 py-2.5 text-center text-ink3">{r[3]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-center font-mono text-ink2">{r[4]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-center font-mono font-bold text-ink">{r[5]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-center text-ink2">{r[6]}</td>
-                <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={stTone(r[7])}>{r[7]}</Pill></td>
+            {plans.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="border-b border-border px-3 py-10 text-center text-[12px] text-ink3">{isLoading ? '불러오는 중…' : 'PM 계획이 없습니다.'}</td>
               </tr>
-            ))}
+            ) : (
+              plans.map((r, i) => (
+                <tr key={r.id} className={i % 2 ? 'bg-panel-alt' : 'bg-panel'}>
+                  <td className="border-b border-border px-3 py-2.5 font-bold text-ink">{r.eq}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-ink2">{r.item}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-center"><span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ink2"><span className="h-2 w-2 rounded-sm" style={{ background: PM_TYPE[r.pmType] }} />{r.pmType}</span></td>
+                  <td className="border-b border-border px-3 py-2.5 text-center text-ink3">{r.cycle}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-center font-mono text-ink2">{r.last}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-center font-mono font-bold text-ink">{r.next}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-center text-ink2">{r.mgr}</td>
+                  <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={stTone(r.status)}>{r.status}</Pill></td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </Card>

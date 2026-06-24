@@ -3,18 +3,9 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, Sel, FilterCard, FilterField, KpiGrid } from '../_maint';
+import { usePeriodicChecks, useTransitionPeriodicCheck } from '@/features/periodicCheck/usePeriodicChecks';
+import { nextStatus, nextActionLabel } from '@/domain/periodicCheck/status';
 
-interface Row { no: string; date: string; eq: string; type: string; team: string; worker: string; dur: string; items: number; ng: number; result: string; next: string }
-const PC_ROWS: Row[] = [
-  { no: 'PC-2606-018', date: '2026-06-09', eq: 'Depo 03호기', type: '월간', team: '보전 1팀', worker: '이정비', dur: '95', items: 24, ng: 0, result: '합격', next: '2026-07-09' },
-  { no: 'PC-2606-017', date: '2026-06-09', eq: 'Implant 02호기', type: '월간', team: '보전 1팀', worker: '이정비', dur: '110', items: 28, ng: 1, result: '조건부', next: '2026-07-09' },
-  { no: 'PC-2606-016', date: '2026-06-08', eq: 'Etch 01호기', type: '분기', team: '보전 2팀', worker: '박보전', dur: '240', items: 42, ng: 0, result: '합격', next: '2026-09-08' },
-  { no: 'PC-2606-015', date: '2026-06-05', eq: 'Photo 05호기', type: '분기', team: '보전 2팀', worker: '박보전', dur: '210', items: 38, ng: 2, result: '불합격', next: '2026-06-12' },
-  { no: 'PC-2606-014', date: '2026-06-04', eq: 'CMP 02호기', type: '월간', team: '보전 1팀', worker: '김설비', dur: '88', items: 24, ng: 0, result: '합격', next: '2026-07-04' },
-  { no: 'PC-2606-013', date: '2026-06-03', eq: 'Clean 04호기', type: '월간', team: '보전 1팀', worker: '김설비', dur: '76', items: 20, ng: 0, result: '합격', next: '2026-07-03' },
-  { no: 'PC-2606-012', date: '2026-06-02', eq: 'Thermal 05호기', type: '연간', team: '보전 2팀', worker: '박보전', dur: '480', items: 64, ng: 3, result: '조건부', next: '2027-06-02' },
-  { no: 'PC-2606-011', date: '2026-06-01', eq: 'CMP 03호기', type: '월간', team: '보전 1팀', worker: '이정비', dur: '92', items: 24, ng: 0, result: '합격', next: '2026-07-01' },
-];
 const resTone = (r: string): Tone => (r === '합격' ? 'ok' : r === '조건부' ? 'warn' : r === '불합격' ? 'err' : 'mute');
 
 const PC_DETAIL: { group: string; items: [string, string, string, 'OK' | 'NG', string][] }[] = [
@@ -37,11 +28,23 @@ const PC_DETAIL: { group: string; items: [string, string, string, 'OK' | 'NG', s
 
 /** 정기 점검 현황 — 와이어프레임 equip-periodic-check.jsx 정본. */
 export default function EquipPeriodicCheckScreen() {
+  const { data: rows = [], isLoading } = usePeriodicChecks();
+  const transition = useTransitionPeriodicCheck();
   const [sel, setSel] = useState('PC-2606-015');
-  const cur = PC_ROWS.find((r) => r.no === sel) || PC_ROWS[0];
   const flat = PC_DETAIL.flatMap((g) => g.items);
   const okN = flat.filter((i) => i[3] === 'OK').length;
   const ngN = flat.filter((i) => i[3] === 'NG').length;
+
+  if (isLoading) {
+    return <div className="p-6 text-sm text-ink3">불러오는 중…</div>;
+  }
+  if (rows.length === 0) {
+    return <div className="p-6 text-sm text-ink3">정기 점검 실적이 없습니다.</div>;
+  }
+
+  const cur = rows.find((r) => r.no === sel) || rows[0];
+  const nx = nextStatus(cur.status);
+  const nxLabel = nextActionLabel(cur.status);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -87,7 +90,7 @@ export default function EquipPeriodicCheckScreen() {
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1.55fr_1fr]">
         {/* 실적 목록 */}
-        <Card title="정기 점검 실적" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{PC_ROWS.length}건</span>}>
+        <Card title="정기 점검 실적" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{rows.length}건</span>}>
           <table className="w-full border-collapse text-[11.5px]">
             <thead>
               <tr>
@@ -97,7 +100,7 @@ export default function EquipPeriodicCheckScreen() {
               </tr>
             </thead>
             <tbody>
-              {PC_ROWS.map((r, i) => {
+              {rows.map((r, i) => {
                 const on = r.no === sel;
                 return (
                   <tr key={r.no} onClick={() => setSel(r.no)} className="cursor-pointer" style={{ background: on ? C.tealSoft : i % 2 ? C.panelAlt : '#fff' }}>
@@ -119,7 +122,17 @@ export default function EquipPeriodicCheckScreen() {
           <div className="border-b border-border px-4 py-3.5" style={{ background: C.panelAlt }}>
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-[14px] font-extrabold text-ink">{cur.eq}</span>
-              <Pill tone={resTone(cur.result)}>{cur.result}</Pill>
+              <div className="flex items-center gap-2">
+                {nx && nxLabel && (
+                  <ActionButton
+                    icon="save"
+                    label={nxLabel}
+                    variant="primary"
+                    onClick={() => transition.mutate({ no: cur.no, to: nx })}
+                  />
+                )}
+                <Pill tone={resTone(cur.result)}>{cur.result}</Pill>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-x-3.5 gap-y-2">
               {[['점검주기', cur.type], ['점검팀', cur.team], ['점검자', cur.worker], ['소요시간', cur.dur + '분'], ['점검항목', cur.items + '개'], ['차기 점검', cur.next]].map(([k, v]) => (

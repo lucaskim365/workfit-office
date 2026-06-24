@@ -9,6 +9,13 @@ export function yymmdd(d: Date): string {
   return `${yy}${mm}${dd}`;
 }
 
+/** YYMM (연월) 키 — 월단위 채번용. */
+export function yymm(d: Date): string {
+  const yy = String(d.getFullYear()).slice(2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${yy}${mm}`;
+}
+
 /** WO-YYMMDD-NNN. */
 export function formatWoNo(dateKey: string, seq: number): string {
   return `WO-${dateKey}-${String(seq).padStart(3, '0')}`;
