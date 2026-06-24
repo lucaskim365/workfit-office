@@ -3,7 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C } from '../_qual';
-import { useInspections, useJudgeInspection } from '@/features/inspection/useInspections';
+import { useInspections } from '@/features/inspection/useInspections';
+import { useJudgeIncoming } from '@/features/quality/useQualityJudge';
 import type { Inspection } from '@/domain/inspection/schema';
 
 type Judgement = NonNullable<Inspection['judgement']>;
@@ -14,7 +15,7 @@ const TONE_C: Record<Tone, string> = { ok: C.ok, info: C.blue, warn: C.warn, err
 /** 수입검사 실적 및 판정 등록 — 와이어프레임 qual-iqc-result.jsx 정본. */
 export default function QualIqcResultScreen() {
   const { data: lots = [], isLoading } = useInspections({ stage: 'IQC' });
-  const judgeM = useJudgeInspection();
+  const judgeM = useJudgeIncoming();
   // 검사중 LOT을 우선 로드(없으면 첫 건). 실제 라우팅 연동 시 recv 파라미터로 대체.
   const lot = lots.find((l) => l.status === '검사중') ?? lots[0];
 
@@ -56,7 +57,8 @@ export default function QualIqcResultScreen() {
     const items = lot.items.map((it, ii) =>
       it.type === '계량' ? { ...it, values: meas[ii] as string[] } : { ...it, defect: meas[ii] as number },
     );
-    judgeM.mutate({ recv: lot.recv, judgement: finalJ, items });
+    // cross-entity: 판정 확정 + 합격→재고입고 / 반품·불합격→NCR 자동발행.
+    judgeM.mutate({ recv: lot.recv, judgement: finalJ, items, at: new Date().toISOString() });
   };
 
   return (
