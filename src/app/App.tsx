@@ -170,6 +170,19 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/mat/subcon-issue': lazy(() => import('@/modules/mat/subcon-issue/MatSubconIssueScreen')),
   '/mat/subcon-stock': lazy(() => import('@/modules/mat/subcon-stock/MatSubconStockScreen')),
   '/mat/scrap': lazy(() => import('@/modules/mat/scrap/MatScrapScreen')),
+
+  '/sales/quote': lazy(() => import('@/modules/sales/quote/SalesQuoteScreen')),
+  '/sales/order': lazy(() => import('@/modules/sales/order/SalesOrderScreen')),
+  '/sales/order-status': lazy(() => import('@/modules/sales/order-status/SalesOrderStatusScreen')),
+  '/sales/shipment': lazy(() => import('@/modules/sales/shipment/SalesShipmentScreen')),
+  '/sales/revenue': lazy(() => import('@/modules/sales/revenue/SalesRevenueScreen')),
+  '/sales/tax-invoice': lazy(() => import('@/modules/sales/tax-invoice/SalesTaxInvoiceScreen')),
+  '/sales/collection': lazy(() => import('@/modules/sales/collection/SalesCollectionScreen')),
+  '/sales/ar': lazy(() => import('@/modules/sales/ar/SalesArScreen')),
+  '/sales/credit': lazy(() => import('@/modules/sales/credit/SalesCreditScreen')),
+  '/sales/rev-period': lazy(() => import('@/modules/sales/rev-period/SalesRevPeriodScreen')),
+  '/sales/item-rank': lazy(() => import('@/modules/sales/item-rank/SalesItemRankScreen')),
+  '/sales/kpi': lazy(() => import('@/modules/sales/kpi/SalesKpiScreen')),
 };
 
 export default function App() {

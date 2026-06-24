@@ -32,6 +32,30 @@ export const MENU_TREE: MenuNode[] = [
     ] },
   ] },
 
+  /* ── 영업 관리 ── */
+  { id: 'M_SALES', name: '영업 관리', icon: '₩', order: 25, use: true, children: [
+    { id: 'G_SALES_ORDER', name: '영업수주 관리', icon: '✎', order: 10, use: true, children: [
+      { id: 'S_SALES_QUOTE', name: '견적서 입력/관리', url: '/sales/quote', icon: '✎', order: 10, use: true },
+      { id: 'S_SALES_SO', name: '수주/주문서 입력', url: '/sales/order', icon: '⊞', order: 20, use: true },
+      { id: 'S_SALES_SOSTAT', name: '주문서 현황', url: '/sales/order-status', icon: '◷', order: 30, use: true },
+    ] },
+    { id: 'G_SALES_SHIP', name: '출하 및 매출 관리', icon: '⇪', order: 20, use: true, children: [
+      { id: 'S_SALES_SHIP', name: '출하/출고 입력', url: '/sales/shipment', icon: '⇪', order: 10, use: true },
+      { id: 'S_SALES_REV', name: '매출 입력', url: '/sales/revenue', icon: '₩', order: 20, use: true },
+      { id: 'S_SALES_TAX', name: '세금계산서/거래명세서', url: '/sales/tax-invoice', icon: '▤', order: 30, use: true },
+    ] },
+    { id: 'G_SALES_COLLECT', name: '수금 및 채권 관리', icon: '⚖', order: 30, use: true, children: [
+      { id: 'S_SALES_RECEIPT', name: '수금 입력', url: '/sales/collection', icon: '⤓', order: 10, use: true },
+      { id: 'S_SALES_AR', name: '채권/미수금 현황', url: '/sales/ar', icon: '⚠', order: 20, use: true },
+      { id: 'S_SALES_CREDIT', name: '여신 관리', url: '/sales/credit', icon: '◫', order: 30, use: true },
+    ] },
+    { id: 'G_SALES_REPORT', name: '영업 통계 및 분석', icon: '▦', order: 40, use: true, children: [
+      { id: 'S_SALES_PERIOD', name: '기간별 매출 현황', url: '/sales/rev-period', icon: '↗', order: 10, use: true },
+      { id: 'S_SALES_RANK', name: '품목별 판매 순위', url: '/sales/item-rank', icon: '⊞', order: 20, use: true },
+      { id: 'S_SALES_KPI', name: '목표 대비 실적(KPI)', url: '/sales/kpi', icon: '▦', order: 30, use: true },
+    ] },
+  ] },
+
   /* ── 생산 관리 ── */
   { id: 'M_PROD', name: '생산 관리', icon: '⚙', order: 30, use: true, children: [
     { id: 'G_PROD_MASTER', name: '생산 기준정보', icon: '⌗', order: 10, use: true, children: [
