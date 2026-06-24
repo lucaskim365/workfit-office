@@ -3,6 +3,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_qual';
+import { useSpcCapabilities } from '@/features/spcCapability/useSpcCapabilities';
+import type { SpcCapability } from '@/domain/spcCapability/schema';
 
 const CPK_JIT = [0.86, 1.05, 0.94, 1.12, 0.9, 1.08, 1.0, 0.95, 1.07, 0.91, 1.04, 0.97, 0.88];
 const cpkTone = (v: number): Tone => (v >= 1.33 ? 'ok' : v >= 1.0 ? 'warn' : 'err');
@@ -16,13 +18,7 @@ function phi(z: number) {
   return z > 0 ? 1 - p : p;
 }
 
-interface Char { id: string; prod: string; code: string; char: string; unit: string; proc: string; n: number; mean: number; sigma: number; lsl: number; usl: number; target: number }
-const CPK_CHARS: Char[] = [
-  { id: 'BRK-OD', prod: '브래킷 ASSY-A', code: 'FG-BRK-A', char: '외경(O.D)', unit: 'mm', proc: 'CNC-03', n: 125, mean: 25.013, sigma: 0.0128, lsl: 24.95, usl: 25.05, target: 25.0 },
-  { id: 'CVR-T', prod: '커버 플레이트 B', code: 'FG-CVR-B', char: '두께(t)', unit: 'mm', proc: 'PRS-07', n: 100, mean: 2.001, sigma: 0.0112, lsl: 1.95, usl: 2.05, target: 2.0 },
-  { id: 'HSG-WT', prod: '하우징 C-Type', code: 'FG-HSG-C', char: '중량', unit: 'g', proc: 'INJ-02', n: 150, mean: 50.12, sigma: 0.52, lsl: 48.0, usl: 52.0, target: 50.0 },
-  { id: 'TRQ', prod: '체결 토크', code: 'PROC-ASM', char: '토크', unit: 'N·m', proc: 'ASM-05', n: 80, mean: 11.62, sigma: 0.47, lsl: 10.5, usl: 13.5, target: 12.0 },
-];
+type Char = SpcCapability;
 
 function capOf(c: Char) {
   const cp = (c.usl - c.lsl) / (6 * c.sigma);
@@ -76,11 +72,17 @@ function Histogram({ c }: { c: Char }) {
 
 /** 공정능력 지수(Cp, Cpk) 분석 — 와이어프레임 qual-spc-cpk.jsx 정본. */
 export default function QualSpcCpkScreen() {
+  const { data: chars = [], isLoading } = useSpcCapabilities();
   const [sel, setSel] = useState('TRQ');
-  const cur = CPK_CHARS.find((c) => c.id === sel) || CPK_CHARS[0];
+  const cur = chars.find((c) => c.id === sel) || chars[0];
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '분석 대상 특성이 없습니다.'}</div>;
+  }
+
   const cap = capOf(cur);
 
-  const all = CPK_CHARS.map((c) => ({ c, cap: capOf(c) }));
+  const all = chars.map((c) => ({ c, cap: capOf(c) }));
   const good = all.filter((a) => a.cap.cpk >= 1.33).length;
   const weak = all.filter((a) => a.cap.cpk < 1.0).length;
   const cpkAvg = (all.reduce((s, a) => s + a.cap.cpk, 0) / all.length).toFixed(2);
@@ -97,7 +99,7 @@ export default function QualSpcCpkScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['분석 특성', '' + CPK_CHARS.length, '개', C.ink],
+        ['분석 특성', '' + chars.length, '개', C.ink],
         ['능력 양호 (Cpk≥1.33)', '' + good, '개', C.ok],
         ['능력 부족 (Cpk<1.0)', '' + weak, '개', C.err],
         ['평균 Cpk', cpkAvg, '', C.blue],

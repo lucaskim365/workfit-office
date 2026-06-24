@@ -26,7 +26,8 @@ service cloud.firestore {
         'stockMovements', 'counters', 'workOrders', 'salesOrders',
         'shipments', 'receipts', 'issues', 'inspectionItems',
         'inspectionStandards', 'defectCodes', 'qualityGrades', 'inspections',
-        'nonconformances', 'mrbCases', 'reworkOrders', 'capaActions'
+        'nonconformances', 'mrbCases', 'reworkOrders', 'capaActions',
+        'spcCharts', 'spcCapability', 'spcAlarms'
       ];
     }
 

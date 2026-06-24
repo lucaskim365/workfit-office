@@ -43,6 +43,9 @@ import { NONCONFORMANCE_SEED } from '@/data/seeds/nonconformance.seed';
 import { MRB_CASE_SEED } from '@/data/seeds/mrbCase.seed';
 import { REWORK_ORDER_SEED } from '@/data/seeds/reworkOrder.seed';
 import { CAPA_SEED } from '@/data/seeds/capa.seed';
+import { SPC_CHART_SEED } from '@/data/seeds/spcChart.seed';
+import { SPC_CAPABILITY_SEED } from '@/data/seeds/spcCapability.seed';
+import { SPC_ALARM_SEED } from '@/data/seeds/spcAlarm.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -78,6 +81,9 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'mrbCases', docs: MRB_CASE_SEED, id: (d) => d.no },
   { coll: 'reworkOrders', docs: REWORK_ORDER_SEED, id: (d) => d.no },
   { coll: 'capaActions', docs: CAPA_SEED, id: (d) => d.no },
+  { coll: 'spcCharts', docs: SPC_CHART_SEED, id: (d) => d.id },
+  { coll: 'spcCapability', docs: SPC_CAPABILITY_SEED, id: (d) => d.id },
+  { coll: 'spcAlarms', docs: SPC_ALARM_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

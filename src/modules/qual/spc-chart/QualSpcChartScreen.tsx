@@ -4,18 +4,12 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Sparkline } from '@/shared/ui/charts/Sparkline';
 import { C, KpiGrid } from '../_qual';
+import { useSpcCharts } from '@/features/spcChart/useSpcCharts';
+import type { SpcChart } from '@/domain/spcChart/schema';
 
 const SPC_ST: Record<string, Tone> = { 안정: 'ok', 주의: 'warn', 이탈: 'err' };
 
-interface Char { id: string; prod: string; code: string; char: string; unit: string; proc: string; n: number; state: string; cpk: number; xUcl: number; xCl: number; xLcl: number; rUcl: number; rCl: number; mean: number[]; rng: number[]; viol: [string, string, string][] }
-const SPC_CHARS: Char[] = [
-  { id: 'BRK-OD', prod: '브래킷 ASSY-A', code: 'FG-BRK-A', char: '외경(O.D)', unit: 'mm', proc: 'CNC-03', n: 5, state: '이탈', cpk: 1.08, xUcl: 25.043, xCl: 25.008, xLcl: 24.973, rUcl: 0.097, rCl: 0.046, mean: [25.0, 25.01, 24.99, 25.0, 25.02, 24.99, 25.01, 25.0, 24.99, 25.01, 25.02, 25.01, 25.03, 25.02, 25.04, 25.05, 25.03, 25.04], rng: [0.04, 0.05, 0.03, 0.06, 0.04, 0.05, 0.03, 0.04, 0.05, 0.04, 0.06, 0.05, 0.04, 0.07, 0.05, 0.06, 0.08, 0.05], viol: [['#16', '1점 관리상한 이탈 (Rule 1)', 'err'], ['#13~#18', '연속 6점 상승 추세 (Rule 3)', 'warn']] },
-  { id: 'CVR-T', prod: '커버 플레이트 B', code: 'FG-CVR-B', char: '두께(t)', unit: 'mm', proc: 'PRS-07', n: 5, state: '안정', cpk: 1.42, xUcl: 2.038, xCl: 2.001, xLcl: 1.964, rUcl: 0.085, rCl: 0.04, mean: [2.0, 2.01, 2.0, 1.99, 2.01, 2.0, 2.0, 2.01, 1.99, 2.0, 2.01, 2.0, 1.99, 2.0, 2.01, 2.0, 2.0, 1.99], rng: [0.04, 0.05, 0.03, 0.04, 0.05, 0.03, 0.04, 0.05, 0.04, 0.03, 0.05, 0.04, 0.04, 0.03, 0.05, 0.04, 0.03, 0.04], viol: [] },
-  { id: 'HSG-WT', prod: '하우징 C-Type', code: 'FG-HSG-C', char: '중량', unit: 'g', proc: 'INJ-02', n: 5, state: '주의', cpk: 1.27, xUcl: 51.6, xCl: 50.1, xLcl: 48.6, rUcl: 3.5, rCl: 1.65, mean: [50.1, 49.8, 50.4, 50.2, 49.9, 50.3, 50.0, 50.5, 49.7, 50.2, 50.1, 49.9, 50.3, 50.0, 50.2, 49.8, 50.1, 50.0], rng: [1.5, 1.8, 1.4, 2.0, 1.6, 1.5, 1.7, 1.6, 3.6, 1.5, 1.8, 1.6, 1.4, 1.7, 1.5, 1.6, 1.5, 1.7], viol: [['#9', 'R관리도 관리상한 이탈 — 산포 증가 (Rule 1)', 'err']] },
-  { id: 'TRQ', prod: '체결 토크', code: 'PROC-ASM', char: '토크', unit: 'N·m', proc: 'ASM-05', n: 5, state: '주의', cpk: 1.19, xUcl: 13.4, xCl: 12.0, xLcl: 10.6, rUcl: 3.2, rCl: 1.5, mean: [12.0, 11.9, 12.1, 11.8, 11.9, 11.7, 11.8, 11.6, 11.7, 11.5, 11.6, 11.7, 11.5, 11.6, 11.4, 11.6, 11.5, 11.7], rng: [1.4, 1.6, 1.3, 1.5, 1.4, 1.5, 1.3, 1.6, 1.4, 1.5, 1.3, 1.4, 1.5, 1.3, 1.6, 1.4, 1.5, 1.3], viol: [['#10~#17', '연속 8점 중심선 하측 (Rule 2) — 공정 평균 이동', 'warn']] },
-];
-
-function SpcChart({ c }: { c: Char }) {
+function SpcChart({ c }: { c: SpcChart }) {
   const W = 560, padL = 46, padR = 14;
   const N = c.mean.length;
   const xH = 150, rH = 96, gap = 16, topPad = 12;
@@ -61,13 +55,18 @@ function SpcChart({ c }: { c: Char }) {
 
 /** 관리도(Control Chart) 모니터링 — 와이어프레임 qual-spc-chart.jsx 정본. */
 export default function QualSpcChartScreen() {
+  const { data: charts = [], isLoading } = useSpcCharts();
   const [sel, setSel] = useState('BRK-OD');
-  const cur = SPC_CHARS.find((c) => c.id === sel) || SPC_CHARS[0];
+  const cur = charts.find((c) => c.id === sel) || charts[0];
 
-  const ooc = SPC_CHARS.filter((c) => c.state === '이탈').length;
-  const ruleViol = SPC_CHARS.reduce((s, c) => s + c.viol.length, 0);
-  const stable = SPC_CHARS.filter((c) => c.state === '안정').length;
-  const cpkAvg = (SPC_CHARS.reduce((s, c) => s + c.cpk, 0) / SPC_CHARS.length).toFixed(2);
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '모니터링 특성이 없습니다.'}</div>;
+  }
+
+  const ooc = charts.filter((c) => c.state === '이탈').length;
+  const ruleViol = charts.reduce((s, c) => s + c.viol.length, 0);
+  const stable = charts.filter((c) => c.state === '안정').length;
+  const cpkAvg = (charts.reduce((s, c) => s + c.cpk, 0) / charts.length).toFixed(2);
   const fmt = (v: number) => v.toFixed(cur.unit === 'g' || cur.unit === 'N·m' ? 1 : 3);
   const stats: [string, number][] = [['X̄ UCL', cur.xUcl], ['X̄ CL', cur.xCl], ['X̄ LCL', cur.xLcl], ['R̄', cur.rCl], ['R UCL', cur.rUcl], ['Cpk', cur.cpk]];
 
@@ -82,7 +81,7 @@ export default function QualSpcChartScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['모니터링 특성', '' + SPC_CHARS.length, '개', C.ink],
+        ['모니터링 특성', '' + charts.length, '개', C.ink],
         ['관리이탈(OOC)', '' + ooc, '개', C.err],
         ['규칙 위반', '' + ruleViol, '건', C.warn],
         ['관리상태 안정', '' + stable, '개', C.ok],
@@ -91,12 +90,12 @@ export default function QualSpcChartScreen() {
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_2fr]">
         {/* 특성 목록 */}
-        <Card title="모니터링 특성" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{SPC_CHARS.length}개</span>}>
+        <Card title="모니터링 특성" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">{charts.length}개</span>}>
           <div className="flex flex-col">
-            {SPC_CHARS.map((c, i) => {
+            {charts.map((c, i) => {
               const on = c.id === sel;
               return (
-                <div key={c.id} onClick={() => setSel(c.id)} className="flex cursor-pointer items-center gap-2.5 px-3.5 py-3" style={{ borderBottom: i < SPC_CHARS.length - 1 ? `1px solid ${C.border}` : 'none', background: on ? C.tealSoft : '#fff', borderLeft: on ? `3px solid ${C.teal}` : '3px solid transparent' }}>
+                <div key={c.id} onClick={() => setSel(c.id)} className="flex cursor-pointer items-center gap-2.5 px-3.5 py-3" style={{ borderBottom: i < charts.length - 1 ? `1px solid ${C.border}` : 'none', background: on ? C.tealSoft : '#fff', borderLeft: on ? `3px solid ${C.teal}` : '3px solid transparent' }}>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5"><span className="text-[12px] font-extrabold" style={{ color: on ? C.teal : C.ink }}>{c.char}</span><Pill tone={SPC_ST[c.state]} solid={c.state === '이탈'}>{c.state}</Pill></div>
                     <div className="mt-0.5 text-[9px] text-ink3">{c.prod} · {c.proc}</div>
