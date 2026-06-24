@@ -4,38 +4,45 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { ReadSelect } from '../_bits';
+import { type WoStatus } from '@/domain/workOrder/schema';
+import { nextStatus, nextActionLabel } from '@/domain/workOrder/status';
+import { useWorkOrders, useCreateWorkOrder, useTransitionWorkOrder } from '@/features/workOrder/useWorkOrders';
 
-interface WO {
-  no: string;
-  code: string;
-  line: string;
-  qty: string;
-  shift: string;
-  status: '발행' | '진행' | '대기' | '완료';
-}
-
-const WOS: WO[] = [
-  { no: 'WO-260611-021', code: 'WF-300-B', line: 'M-Line', qty: '4,000', shift: '주간', status: '발행' },
-  { no: 'WO-260611-022', code: 'WF-300-B', line: 'M-Line', qty: '2,000', shift: '주간', status: '진행' },
-  { no: 'WO-260611-018', code: 'WF-200-A', line: 'M-Line', qty: '3,200', shift: '야간', status: '대기' },
-  { no: 'WO-260611-015', code: 'PKG-BGA-14', line: 'P-Line', qty: '2,500', shift: '주간', status: '진행' },
-  { no: 'WO-260610-040', code: 'MOD-CAM-02', line: 'A-Line', qty: '1,800', shift: '주간', status: '완료' },
-];
-
-const ST_TONE: Record<WO['status'], Tone> = { 완료: 'ok', 진행: 'info', 발행: 'mute', 대기: 'mute' };
+const ST_TONE: Record<WoStatus, Tone> = { 완료: 'ok', 진행: 'info', 발행: 'mute', 대기: 'mute', 지연: 'warn' };
 const BARS = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1, 2, 3, 1, 1, 2, 1, 3, 1, 2, 2, 1, 3];
+const fmt = (n: number) => n.toLocaleString('ko-KR');
+const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ');
 
-/** 작업지시 관리 — 목록 + Run Sheet 미리보기. 와이어프레임 prod-screens.WorkOrderContent 정본. */
+/** 작업지시 관리 — 목록 + Run Sheet. 데이터: features/workOrder (채번·상태머신). */
 export default function WorkOrderScreen() {
   const [sel, setSel] = useState('WO-260611-021');
+  const { data: WOS = [] } = useWorkOrders();
+  const createWo = useCreateWorkOrder();
+  const transitionWo = useTransitionWorkOrder();
+
   const cur = WOS.find((w) => w.no === sel) ?? WOS[0];
-  const runSheet: Array<[string, string]> = [
-    ['품목', `${cur.code} · 제품`],
-    ['라인 / 교대', `${cur.line} / ${cur.shift}`],
-    ['지시수량', `${cur.qty} EA`],
-    ['라우팅', 'RT-WF300-A (7공정)'],
-    ['지시일시', '2026-06-11 08:00'],
-  ];
+  const advance = cur ? nextStatus(cur.status) : null;
+  const advanceLabel = cur ? nextActionLabel(cur.status) : null;
+
+  const runSheet: Array<[string, string]> = cur
+    ? [
+        ['품목', `${cur.code} · ${cur.itemName || '제품'}`],
+        ['라인 / 교대', `${cur.line} / ${cur.shift}`],
+        ['지시수량', `${fmt(cur.qty)} EA`],
+        ['상태', cur.status],
+        ['지시일시', cur.plannedDate || '—'],
+      ]
+    : [];
+
+  const handleAdvance = () => {
+    if (cur && advance) transitionWo.mutate({ no: cur.no, to: advance, at: stamp() });
+  };
+  const handleCreate = () => {
+    createWo.mutate(
+      { code: 'WF-300-B', itemName: '300mm 웨이퍼', line: 'M-Line', qty: 1000, shift: '주간', plannedDate: new Date().toISOString().slice(0, 10) },
+      { onSuccess: (wo) => setSel(wo.no) },
+    );
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -44,7 +51,7 @@ export default function WorkOrderScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">작업지시 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">생산 관리 / 작업지시 관리 (Work Order)</p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: '지시 추가' }, 'save', 'download']} />
+        <ActionBar actions={[{ preset: 'add', label: '지시 추가', onClick: handleCreate }, 'download']} />
       </div>
 
       <FilterBar onSearch={() => {}}>
@@ -55,7 +62,7 @@ export default function WorkOrderScreen() {
       </FilterBar>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-        <Card title="작업지시 목록" action={<span className="text-[10.5px] text-ink3">총 5건</span>} bodyClassName="p-0">
+        <Card title="작업지시 목록" action={<span className="text-[10.5px] text-ink3">총 {WOS.length}건</span>} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[11.5px]">
               <thead>
@@ -73,7 +80,7 @@ export default function WorkOrderScreen() {
                       <td className={`px-3 py-2.5 font-mono text-[11px] font-bold ${on ? 'text-teal' : 'text-ink'}`} style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}>{w.no}</td>
                       <td className="px-3 py-2.5 font-mono text-[11px] font-semibold text-ink">{w.code}</td>
                       <td className="px-3 py-2.5 text-center text-ink2">{w.line}</td>
-                      <td className="px-3 py-2.5 text-right font-bold tabular-nums text-ink">{w.qty}</td>
+                      <td className="px-3 py-2.5 text-right font-bold tabular-nums text-ink">{fmt(w.qty)}</td>
                       <td className="px-3 py-2.5 text-center text-ink2">{w.shift}</td>
                       <td className="px-3 py-2.5 text-center"><Pill tone={ST_TONE[w.status]}>{w.status}</Pill></td>
                     </tr>
@@ -89,7 +96,7 @@ export default function WorkOrderScreen() {
             <div className="flex items-center justify-between bg-navy px-4 py-3 text-white">
               <div>
                 <div className="text-[10px] font-semibold text-[#9fabc6]">WORK ORDER</div>
-                <div className="font-mono text-[15px] font-extrabold">{cur.no}</div>
+                <div className="font-mono text-[15px] font-extrabold">{cur?.no ?? '—'}</div>
               </div>
               <div className="flex flex-col items-center gap-0.5">
                 <div className="flex h-[34px] items-stretch gap-[1.5px]">
@@ -97,7 +104,7 @@ export default function WorkOrderScreen() {
                     <span key={i} style={{ width: w }} className={i % 2 ? 'bg-transparent' : 'bg-white'} />
                   ))}
                 </div>
-                <span className="font-mono text-[8px] text-[#9fabc6]">{cur.no.replace(/-/g, '')}</span>
+                <span className="font-mono text-[8px] text-[#9fabc6]">{(cur?.no ?? '').replace(/-/g, '')}</span>
               </div>
             </div>
             <div className="flex flex-col gap-2.5 p-4">
@@ -111,7 +118,13 @@ export default function WorkOrderScreen() {
           </div>
           <div className="mt-3 flex justify-end gap-2">
             <ActionButton icon="download" label="QR/바코드 발행" accent="excel" />
-            <ActionButton icon="save" label="지시 발행" variant="primary" />
+            <ActionButton
+              icon="save"
+              label={advanceLabel ?? '완료됨'}
+              variant="primary"
+              onClick={handleAdvance}
+              disabled={!advance}
+            />
           </div>
         </Card>
       </div>
