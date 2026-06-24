@@ -2,13 +2,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { useAgvRobots } from '@/features/agvRobot/useAgvRobots';
 
-const ROBOTS = [
-  { id: 'AGV-01', task: 'A-1-2-1 → C-라인대기', bat: 86, st: '이동중' },
-  { id: 'AGV-02', task: '입고장 → A-3-1-4', bat: 64, st: '이동중' },
-  { id: 'AMR-03', task: '대기', bat: 42, st: '대기' },
-  { id: 'AGV-04', task: '충전중', bat: 18, st: '충전' },
-];
 const stTone = (s: string): Tone => (s === '이동중' ? 'ok' : s === '충전' ? 'warn' : 'mute');
 const dotC = (s: string) => (s === '이동중' ? C.ok : s === '충전' ? C.warn : C.ink3);
 
@@ -23,11 +18,15 @@ const tone = (s: string): Tone => (s === '완료' ? 'ok' : 'info');
 
 /** AGV/AMR 연동 관리 — 와이어프레임 wms-screens-3.jsx 정본. */
 export default function MatAgvScreen() {
+  const { data: robots = [], isLoading } = useAgvRobots();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="AGV/AMR 연동 관리" sub="AGV/AMR 연동 관리 (Mobile Robot)" actions={<ActionBar actions={['refresh', 'download']} />} />
+      {robots.length === 0 ? (
+        <div className="grid place-items-center py-10 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '로봇이 없습니다.'}</div>
+      ) : (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {ROBOTS.map((r) => (
+        {robots.map((r) => (
           <Card key={r.id}>
             <div className="mb-2 flex items-center justify-between">
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: dotC(r.st) }} /><span className="font-mono text-[12.5px] font-extrabold text-ink">{r.id}</span></span>
@@ -42,6 +41,7 @@ export default function MatAgvScreen() {
           </Card>
         ))}
       </div>
+      )}
       <Card title="물류 이동 명령 이력" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">출발지-목적지 명령 하향 전송</span>}>
         <table className="w-full border-collapse text-[11.5px]">
           <thead><tr>{['이동번호', '로봇', '출발지', '목적지', '지시시각', '상태'].map((c, i) => <th key={c} className={th(i === 4 || i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>

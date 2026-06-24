@@ -2,14 +2,8 @@ import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, MHead, th, td } from '../_mat';
+import { useFifoRules } from '@/features/fifoRule/useFifoRules';
 
-type Rule = [group: string, rule: string, basis: string, control: string, on: boolean];
-const RULES: Rule[] = [
-  ['원자재(웨이퍼)', 'FIFO', '입고일자', '강제', true],
-  ['화학약품·가스', 'FEFO', '유효기한', '강제', true],
-  ['포토레지스트', 'FEFO', '제조일자', '강제', true],
-  ['포장·부자재', 'FIFO', '입고일자', '권고', false],
-];
 type Lot = [lot: string, recv: string, mfg: string, qty: number, order: number, status: string];
 const LOTS: Lot[] = [
   ['LOT-RAW-8810', '2026-05-28', '2026-05-20', 120, 1, '우선'],
@@ -20,6 +14,7 @@ const LOTS: Lot[] = [
 
 /** 자재 선입선출(FIFO) 룰 관리 — 와이어프레임 wms-screens-4.jsx 정본. */
 export default function MatFifoRuleScreen() {
+  const { data: rules = [], isLoading } = useFifoRules();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="자재 선입선출(FIFO) 룰 관리" sub="기준정보/설정 / 선입선출(FIFO·FEFO) 룰 관리" actions={<ActionBar actions={['add', 'save']} />} />
@@ -28,15 +23,17 @@ export default function MatFifoRuleScreen() {
           <table className="w-full border-collapse text-[11.5px]">
             <thead><tr>{['품목군', '룰', '기준일자', '통제', '적용'].map((c, i) => <th key={c} className={th(i >= 3 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
             <tbody>
-              {RULES.map((r, i) => (
-                <tr key={i} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
-                  <td className={`${td('left')} font-bold text-ink`}>{r[0]}</td>
-                  <td className={td('left')}><Pill tone={r[1] === 'FEFO' ? 'warn' : 'info'}>{r[1]}</Pill></td>
-                  <td className={td('left')}>{r[2]}</td>
-                  <td className={td('center')}><Pill tone={r[3] === '강제' ? 'err' : 'mute'} solid={r[3] === '강제'}>{r[3]}</Pill></td>
+              {rules.length === 0 ? (
+                <tr><td colSpan={5} className="px-3 py-8 text-center text-[11px] text-ink3">{isLoading ? '불러오는 중…' : '룰이 없습니다.'}</td></tr>
+              ) : rules.map((r, i) => (
+                <tr key={r.category} style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
+                  <td className={`${td('left')} font-bold text-ink`}>{r.category}</td>
+                  <td className={td('left')}><Pill tone={r.rule === 'FEFO' ? 'warn' : 'info'}>{r.rule}</Pill></td>
+                  <td className={td('left')}>{r.basis}</td>
+                  <td className={td('center')}><Pill tone={r.mode === '강제' ? 'err' : 'mute'} solid={r.mode === '강제'}>{r.mode}</Pill></td>
                   <td className={td('center')}>
-                    <span className="relative inline-block h-[18px] w-[34px] rounded-full align-middle" style={{ background: r[4] ? C.teal : C.borderHi }}>
-                      <span className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white" style={{ left: r[4] ? 18 : 2 }} />
+                    <span className="relative inline-block h-[18px] w-[34px] rounded-full align-middle" style={{ background: r.use ? C.teal : C.borderHi }}>
+                      <span className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white" style={{ left: r.use ? 18 : 2 }} />
                     </span>
                   </td>
                 </tr>

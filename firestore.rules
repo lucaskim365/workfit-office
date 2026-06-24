@@ -42,7 +42,8 @@ service cloud.firestore {
         'lineMonitors', 'moveWip', 'prodDefects', 'materialLoads', 'materialRequests', 'prodLotTraces',
         'subconOrders', 'subconIssues', 'subconReceipts',
         'warehouseZones', 'putawayTasks', 'transfers', 'countRecords', 'adjustments', 'agingStock',
-        'labelTasks', 'holdingStock', 'matReturns', 'pickingList', 'deliveryOrders'
+        'labelTasks', 'holdingStock', 'matReturns', 'pickingList', 'deliveryOrders',
+        'safetyStock', 'fifoRules', 'matSubconIssues', 'subconStocks', 'pallets', 'agvRobots'
       ];
     }
 

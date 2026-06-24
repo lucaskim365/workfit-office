@@ -113,6 +113,12 @@ import { HOLDING_STOCK_SEED } from '@/data/seeds/holdingStock.seed';
 import { MAT_RETURN_SEED } from '@/data/seeds/matReturn.seed';
 import { PICKING_LIST_SEED } from '@/data/seeds/pickingList.seed';
 import { DELIVERY_ORDER_SEED } from '@/data/seeds/deliveryOrder.seed';
+import { SAFETY_STOCK_SEED } from '@/data/seeds/safetyStock.seed';
+import { FIFO_RULE_SEED } from '@/data/seeds/fifoRule.seed';
+import { MAT_SUBCON_ISSUE_SEED } from '@/data/seeds/matSubconIssue.seed';
+import { SUBCON_STOCK_SEED } from '@/data/seeds/subconStock.seed';
+import { PALLET_SEED } from '@/data/seeds/pallet.seed';
+import { AGV_ROBOT_SEED } from '@/data/seeds/agvRobot.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -219,6 +225,12 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'matReturns', docs: MAT_RETURN_SEED, id: (d) => d.no },
   { coll: 'pickingList', docs: PICKING_LIST_SEED, id: (d) => d.id },
   { coll: 'deliveryOrders', docs: DELIVERY_ORDER_SEED, id: (d) => d.no },
+  { coll: 'safetyStock', docs: SAFETY_STOCK_SEED, id: (d) => d.code },
+  { coll: 'fifoRules', docs: FIFO_RULE_SEED, id: (d) => d.category },
+  { coll: 'matSubconIssues', docs: MAT_SUBCON_ISSUE_SEED, id: (d) => d.no },
+  { coll: 'subconStocks', docs: SUBCON_STOCK_SEED, id: (d) => d.name },
+  { coll: 'pallets', docs: PALLET_SEED, id: (d) => d.id },
+  { coll: 'agvRobots', docs: AGV_ROBOT_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

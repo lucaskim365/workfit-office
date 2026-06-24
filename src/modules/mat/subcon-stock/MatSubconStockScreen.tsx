@@ -1,13 +1,8 @@
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, MHead, Bar, th, td } from '../_mat';
+import { useSubconStocks } from '@/features/subconStock/useSubconStocks';
 
-const VENDORS = [
-  { name: '대성테크', item: 'PCB-A1 외 2종', issued: 4200, used: 3100, ret: 0, c: C.teal },
-  { name: '한울가공', item: 'EMI 쉴드캔 외 1종', issued: 2800, used: 2400, ret: 50, c: C.blue },
-  { name: '동진정밀', item: '200mm 웨이퍼', issued: 1500, used: 900, ret: 0, c: C.warn },
-  { name: '서원SMT', item: '보드 커넥터 외 3종', issued: 9000, used: 7200, ret: 120, c: C.navy },
-];
 type Row = [vendor: string, code: string, name: string, issued: number, used: number, ret: number];
 const ROWS: Row[] = [
   ['대성테크', 'PCB-A1', '메인 PCB', 2000, 1500, 500],
@@ -19,11 +14,13 @@ const ROWS: Row[] = [
 
 /** 외주처 재고 현황 모니터링 — 와이어프레임 wms-screens-4.jsx 정본. */
 export default function MatSubconStockScreen() {
+  const { data: vendors = [], isLoading } = useSubconStocks();
   return (
     <div className="flex flex-col gap-3.5">
       <MHead title="외주처 재고 현황 모니터링" sub="외주 자재 관리 / 외주처 보유 재고 현황" actions={<ActionBar actions={['refresh', 'download']} />} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {VENDORS.map((v) => {
+        {isLoading && vendors.length === 0 && <Card><div className="py-6 text-center text-[11px] text-ink3">불러오는 중…</div></Card>}
+        {vendors.map((v) => {
           const stock = v.issued - v.used - v.ret;
           const usePct = Math.round((v.used / v.issued) * 100);
           return (
