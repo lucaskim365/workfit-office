@@ -1,32 +1,13 @@
 import type { Tone } from '@/shared/ui/Pill';
 
-export interface Equip {
-  code: string;
-  name: string;
-  type: string;
-  model: string;
-  maker: string;
-  line: string;
-  loc: string;
-  date: string;
-  mgr: string;
-  state: '가동' | '대기' | '정지' | '고장';
-  power: string;
-  volt: string;
-  use: string;
-  ip: string;
-}
-
-/** 설비 마스터 — 설비관리 모듈 전역 공유 샘플. */
-export const EQ_LIST: Equip[] = [
-  { code: 'EQ-CMP02', name: 'CMP 02호기', type: 'CMP', model: 'Reflexion LK', maker: 'AMAT', line: 'A라인', loc: 'FAB1-2F-A03', date: '2022-04-18', mgr: '김설비', state: '가동', power: '32', volt: '380V 3상', use: '사용', ip: '10.21.4.12' },
-  { code: 'EQ-ETCH01', name: 'Etch 01호기', type: 'Etch', model: 'Centura Sym3', maker: 'AMAT', line: 'A라인', loc: 'FAB1-2F-A05', date: '2021-11-30', mgr: '박보전', state: '대기', power: '45', volt: '380V 3상', use: '사용', ip: '10.21.4.18' },
-  { code: 'EQ-PHO05', name: 'Photo 05호기', type: 'Photo', model: 'NSR-S635E', maker: 'Nikon', line: 'A라인', loc: 'FAB1-3F-A11', date: '2023-02-09', mgr: '김설비', state: '가동', power: '60', volt: '440V 3상', use: '사용', ip: '10.21.5.04' },
-  { code: 'EQ-DEP03', name: 'Depo 03호기', type: 'Depo', model: 'Producer GT', maker: 'AMAT', line: 'B라인', loc: 'FAB1-2F-B07', date: '2020-08-22', mgr: '이정비', state: '정지', power: '38', volt: '380V 3상', use: '사용', ip: '10.21.6.21' },
-  { code: 'EQ-IMP02', name: 'Implant 02호기', type: 'Implant', model: 'VIISta 900', maker: 'AMAT', line: 'B라인', loc: 'FAB1-2F-B09', date: '2021-06-14', mgr: '이정비', state: '가동', power: '52', volt: '440V 3상', use: '사용', ip: '10.21.6.30' },
-  { code: 'EQ-OVEN05', name: 'Thermal 05호기', type: 'Thermal', model: 'ASM A412', maker: 'ASM', line: 'C라인', loc: 'FAB1-1F-C02', date: '2019-03-05', mgr: '박보전', state: '고장', power: '28', volt: '380V 3상', use: '미사용', ip: '10.21.7.08' },
-  { code: 'EQ-CLN04', name: 'Clean 04호기', type: 'Clean', model: 'FSI Mercury', maker: 'TEL', line: 'C라인', loc: 'FAB1-1F-C05', date: '2022-09-27', mgr: '김설비', state: '가동', power: '18', volt: '220V 단상', use: '사용', ip: '10.21.7.15' },
-];
+/**
+ * 설비 마스터(equipments)는 데이터 계층으로 이관됨.
+ * 타입·시드를 도메인/시드에서 re-export 해 기존 소비 화면(master·check) 호환 유지.
+ * 신규 화면은 features/equipment/useEquipments 훅을 직접 사용할 것. ([[data-layer-pattern]])
+ */
+export type { Equipment as Equip } from '@/domain/equipment/schema';
+export { EQUIPMENT_SEED as EQ_LIST } from '@/data/seeds/equipment.seed';
+import type { Equipment as Equip } from '@/domain/equipment/schema';
 
 export const EQ_TREE: Array<{ line: string; codes: string[] }> = [
   { line: 'A라인', codes: ['EQ-CMP02', 'EQ-ETCH01', 'EQ-PHO05'] },

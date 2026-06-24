@@ -6,7 +6,8 @@ import { FilterBar, FilterField, TextInput } from '@/shared/ui/FilterBar';
 import { PhotoSlot } from '@/shared/ui/PhotoSlot';
 import { DetailField } from '@/shared/ui/DetailField';
 import { ReadSelect } from '@/modules/prod/_bits';
-import { EQ_LIST, EQ_TREE, EQ_UNITS, SPEC, CHECKS, ALARMS, HISTORY, stTone, gradeTone, histTone, cycleTone } from '../_data';
+import { EQ_TREE, EQ_UNITS, SPEC, CHECKS, ALARMS, HISTORY, stTone, gradeTone, histTone, cycleTone } from '../_data';
+import { useEquipments } from '@/features/equipment/useEquipments';
 
 const TABS = ['기본정보', '제원 / 스펙', '점검 항목', '알람 / 에러 코드', '보전 이력'];
 const GALLERY = ['측면', '명판', '설치'];
@@ -16,7 +17,11 @@ export default function EquipMasterScreen() {
   const [sel, setSel] = useState('EQ-CMP02');
   const [tab, setTab] = useState('기본정보');
   const [openLines, setOpenLines] = useState<Record<string, boolean>>({ A라인: true, B라인: true, C라인: true });
+  const { data: EQ_LIST = [], isLoading } = useEquipments();
   const eq = EQ_LIST.find((e) => e.code === sel) ?? EQ_LIST[0];
+  if (!eq) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '등록된 설비가 없습니다.'}</div>;
+  }
   const spec = SPEC[eq.type] ?? [];
   const specRows: Array<[(typeof spec)[number], (typeof spec)[number] | undefined]> = [];
   for (let i = 0; i < spec.length; i += 2) specRows.push([spec[i], spec[i + 1]]);
