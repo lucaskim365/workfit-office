@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { authRoleSchema, type AuthRole } from '@/domain/authRole/schema';
 import { AUTH_ROLE_SEED } from '@/data/seeds/authRole.seed';
 
@@ -30,7 +31,7 @@ export const authRoleRepo = {
   async list(filter?: AuthRoleFilter): Promise<AuthRole[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => authRoleSchema.parse(d.data()));
+      const rows = snap.docs.map((d) => authRoleSchema.parse(decodeFromFirestore(d.data())));
       return applyFilter(rows, filter);
     }
     return applyFilter(memory, filter);
@@ -45,7 +46,7 @@ export const authRoleRepo = {
   async save(role: AuthRole): Promise<void> {
     const valid = authRoleSchema.parse(role);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.code), valid);
+      await setDoc(doc(db, COLL, valid.code), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.code === valid.code);

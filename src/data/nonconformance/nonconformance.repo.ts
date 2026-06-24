@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import {
   nonconformanceSchema,
   type Nonconformance,
@@ -40,14 +41,14 @@ function applyFilter(rows: Nonconformance[], f?: NcrFilter): Nonconformance[] {
 async function loadAll(): Promise<Nonconformance[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => nonconformanceSchema.parse(d.data()));
+    return snap.docs.map((d) => nonconformanceSchema.parse(decodeFromFirestore(d.data())));
   }
   return memory;
 }
 
 async function persist(n: Nonconformance): Promise<void> {
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, n.no), n);
+    await setDoc(doc(db, COLL, n.no), encodeForFirestore(n));
     return;
   }
   const i = memory.findIndex((m) => m.no === n.no);

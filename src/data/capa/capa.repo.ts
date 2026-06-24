@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { capaSchema, type Capa, type CapaDraft } from '@/domain/capa/schema';
 import { canTransition } from '@/domain/capa/status';
 import { yymmdd, formatCapaNo } from '@/domain/numbering';
@@ -36,14 +37,14 @@ function applyFilter(rows: Capa[], f?: CapaFilter): Capa[] {
 async function loadAll(): Promise<Capa[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => capaSchema.parse(d.data()));
+    return snap.docs.map((d) => capaSchema.parse(decodeFromFirestore(d.data())));
   }
   return memory;
 }
 
 async function persist(c: Capa): Promise<void> {
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, c.no), c);
+    await setDoc(doc(db, COLL, c.no), encodeForFirestore(c));
     return;
   }
   const i = memory.findIndex((m) => m.no === c.no);

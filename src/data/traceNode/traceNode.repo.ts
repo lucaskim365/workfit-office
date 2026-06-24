@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { traceNodeSchema, type TraceNode } from '@/domain/traceNode/schema';
 import { TRACE_NODE_SEED } from '@/data/seeds/traceNode.seed';
 
@@ -38,7 +39,7 @@ export const traceNodeRepo = {
   async list(filter?: TraceNodeFilter): Promise<TraceNode[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => traceNodeSchema.parse(d.data()));
+      const rows = snap.docs.map((d) => traceNodeSchema.parse(decodeFromFirestore(d.data())));
       return applyFilter(rows, filter);
     }
     return applyFilter(memory, filter);
@@ -53,7 +54,7 @@ export const traceNodeRepo = {
   async save(node: TraceNode): Promise<void> {
     const valid = traceNodeSchema.parse(node);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.id), valid);
+      await setDoc(doc(db, COLL, valid.id), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.id === valid.id);

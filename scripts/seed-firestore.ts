@@ -18,6 +18,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { encodeForFirestore } from '@/shared/lib/firestore-codec';
 
 import { ITEM_SEED } from '@/data/seeds/item.seed';
 import { VENDOR_SEED } from '@/data/seeds/vendor.seed';
@@ -315,7 +316,8 @@ async function main() {
     for (let i = 0; i < t.docs.length; i += 450) {
       const batch = db.batch();
       for (const d of t.docs.slice(i, i + 450)) {
-        batch.set(db.collection(t.coll).doc(t.id(d)), d as Record<string, unknown>);
+        // 중첩 배열(배열의 배열)을 맵으로 감싸 Firestore 제약 우회. 없으면 무영향.
+        batch.set(db.collection(t.coll).doc(t.id(d)), encodeForFirestore(d) as Record<string, unknown>);
       }
       await batch.commit();
     }

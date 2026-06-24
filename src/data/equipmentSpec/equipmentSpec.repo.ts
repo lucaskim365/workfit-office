@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { equipmentSpecSchema, type EquipmentSpec } from '@/domain/equipmentSpec/schema';
 import { EQUIPMENT_SPEC_SEED } from '@/data/seeds/equipmentSpec.seed';
 
@@ -30,7 +31,7 @@ export const equipmentSpecRepo = {
   async list(filter?: EquipmentSpecFilter): Promise<EquipmentSpec[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => equipmentSpecSchema.parse(d.data()));
+      const rows = snap.docs.map((d) => equipmentSpecSchema.parse(decodeFromFirestore(d.data())));
       return applyFilter(rows, filter);
     }
     return applyFilter(memory, filter);
@@ -45,7 +46,7 @@ export const equipmentSpecRepo = {
   async save(spec: EquipmentSpec): Promise<void> {
     const valid = equipmentSpecSchema.parse(spec);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.type), valid);
+      await setDoc(doc(db, COLL, valid.type), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.type === valid.type);

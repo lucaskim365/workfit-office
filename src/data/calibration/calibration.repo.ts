@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import {
   calibrationSchema,
   type Calibration,
@@ -38,14 +39,14 @@ function applyFilter(rows: Calibration[], f?: CalFilter): Calibration[] {
 async function loadAll(): Promise<Calibration[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => calibrationSchema.parse(d.data()));
+    return snap.docs.map((d) => calibrationSchema.parse(decodeFromFirestore(d.data())));
   }
   return memory;
 }
 
 async function persist(c: Calibration): Promise<void> {
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, c.id), c);
+    await setDoc(doc(db, COLL, c.id), encodeForFirestore(c));
     return;
   }
   const i = memory.findIndex((m) => m.id === c.id);

@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { roleGroupSchema, type RoleGroup } from '@/domain/roleGroup/schema';
 import { ROLE_GROUP_SEED } from '@/data/seeds/roleGroup.seed';
 
@@ -16,7 +17,7 @@ export const roleGroupRepo = {
   async list(): Promise<RoleGroup[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      return snap.docs.map((d) => roleGroupSchema.parse(d.data()));
+      return snap.docs.map((d) => roleGroupSchema.parse(decodeFromFirestore(d.data())));
     }
     return memory;
   },
@@ -25,7 +26,7 @@ export const roleGroupRepo = {
   async save(group: RoleGroup): Promise<void> {
     const valid = roleGroupSchema.parse(group);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.code), valid);
+      await setDoc(doc(db, COLL, valid.code), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.code === valid.code);

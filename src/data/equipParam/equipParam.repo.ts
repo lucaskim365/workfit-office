@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { equipParamSchema, type EquipParam } from '@/domain/equipParam/schema';
 import { EQUIP_PARAM_SEED } from '@/data/seeds/equipParam.seed';
 
@@ -35,7 +36,7 @@ export const equipParamRepo = {
   async list(filter?: EquipParamFilter): Promise<EquipParam[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => equipParamSchema.parse(d.data()));
+      const rows = snap.docs.map((d) => equipParamSchema.parse(decodeFromFirestore(d.data())));
       return applyFilter(rows, filter);
     }
     return applyFilter(memory, filter);
@@ -50,7 +51,7 @@ export const equipParamRepo = {
   async save(item: EquipParam): Promise<void> {
     const valid = equipParamSchema.parse(item);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.code), valid);
+      await setDoc(doc(db, COLL, valid.code), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.code === valid.code);

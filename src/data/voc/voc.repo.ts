@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { vocSchema, type Voc, type VocDraft } from '@/domain/voc/schema';
 import { canTransition } from '@/domain/voc/status';
 import { yymmdd, formatVocNo } from '@/domain/numbering';
@@ -36,14 +37,14 @@ function applyFilter(rows: Voc[], f?: VocFilter): Voc[] {
 async function loadAll(): Promise<Voc[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => vocSchema.parse(d.data()));
+    return snap.docs.map((d) => vocSchema.parse(decodeFromFirestore(d.data())));
   }
   return memory;
 }
 
 async function persist(v: Voc): Promise<void> {
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, v.no), v);
+    await setDoc(doc(db, COLL, v.no), encodeForFirestore(v));
     return;
   }
   const i = memory.findIndex((m) => m.no === v.no);

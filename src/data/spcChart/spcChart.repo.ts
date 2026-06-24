@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { spcChartSchema, type SpcChart } from '@/domain/spcChart/schema';
 import { SPC_CHART_SEED } from '@/data/seeds/spcChart.seed';
 
@@ -36,7 +37,7 @@ export const spcChartRepo = {
   async list(filter?: SpcChartFilter): Promise<SpcChart[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => spcChartSchema.parse(d.data()));
+      const rows = snap.docs.map((d) => spcChartSchema.parse(decodeFromFirestore(d.data())));
       return applyFilter(rows, filter);
     }
     return applyFilter(memory, filter);
@@ -51,7 +52,7 @@ export const spcChartRepo = {
   async save(item: SpcChart): Promise<void> {
     const valid = spcChartSchema.parse(item);
     if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.id), valid);
+      await setDoc(doc(db, COLL, valid.id), encodeForFirestore(valid));
       return;
     }
     const i = memory.findIndex((m) => m.id === valid.id);

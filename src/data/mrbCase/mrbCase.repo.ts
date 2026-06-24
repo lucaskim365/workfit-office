@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { mrbCaseSchema, type MrbCase, type MrbCaseDraft } from '@/domain/mrbCase/schema';
 import { canTransition } from '@/domain/mrbCase/status';
 import { yymmdd, formatMrbNo } from '@/domain/numbering';
@@ -38,14 +39,14 @@ function applyFilter(rows: MrbCase[], f?: MrbFilter): MrbCase[] {
 async function loadAll(): Promise<MrbCase[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => mrbCaseSchema.parse(d.data()));
+    return snap.docs.map((d) => mrbCaseSchema.parse(decodeFromFirestore(d.data())));
   }
   return memory;
 }
 
 async function persist(c: MrbCase): Promise<void> {
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, c.no), c);
+    await setDoc(doc(db, COLL, c.no), encodeForFirestore(c));
     return;
   }
   const i = memory.findIndex((m) => m.no === c.no);
