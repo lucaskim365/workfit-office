@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// MES 백엔드 보안 룰 — 현재 앱(17개 컬렉션) 전용.
+//
+// 자체 로그인(Firebase Auth 미사용)을 쓰므로 request.auth 가 항상 null 이다.
+// 따라서 룰은 "인증 검사"가 아니라 "본 앱이 쓰는 컬렉션만 개방 + 나머지 전면 차단"
+// 하는 UI-게이트 모델이다. (※ 로그인 화면은 화면 차단일 뿐, DB 차원의 보안 경계는 아님.
+//   진짜 보안이 필요하면 Cloud Function custom token + request.auth 룰로 후속 강화.)
+//
+// 배포: firebase deploy --only firestore:rules
+//   (firebase.json 의 database=ai-studio-... named DB 로 배포됨)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1) 기본 전면 차단 — 아래에 명시되지 않은 모든 경로는 거부.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2) 본 앱이 사용하는 컬렉션만 개방.
+    //    repo 의 COLL 상수와 1:1. 새 컬렉션 추가 시 여기에 등록할 것.
+    function appCollection(name) {
+      return name in [
+        'items', 'vendors', 'commonCodes', 'users', 'roleGroups',
+        'shifts', 'shiftRotations', 'workCenters', 'boms', 'routings',
+        'stockMovements', 'counters', 'workOrders', 'salesOrders',
+        'shipments', 'receipts', 'issues'
+      ];
+    }
+
+    match /{coll}/{docId} {
+      allow read, write: if appCollection(coll);
+    }
+  }
+}

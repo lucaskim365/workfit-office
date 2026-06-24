@@ -1,3 +1,5 @@
+import { useAuth } from '@/app/auth/AuthProvider';
+
 interface UserMenuProps {
   onClose: () => void;
 }
@@ -16,6 +18,7 @@ function Item({ icon, label, sub }: { icon: string; label: string; sub?: string 
 
 /** 계정 팝업 — 와이어프레임 app-shell.UserAccountMenu 정본. */
 export function UserMenu({ onClose }: UserMenuProps) {
+  const { signOutUser, demoMode } = useAuth();
   return (
     <>
       <div className="fixed inset-0 z-[55]" onClick={onClose} />
@@ -53,7 +56,15 @@ export function UserMenu({ onClose }: UserMenuProps) {
 
         <div className="flex border-t border-border">
           <button onClick={onClose} className="flex-1 border-r border-border py-3 text-[11.5px] font-semibold text-ink2 hover:bg-panel-alt">도움말</button>
-          <button onClick={onClose} className="flex-1 py-3 text-[11.5px] font-bold text-danger hover:bg-panel-alt">로그아웃</button>
+          <button
+            onClick={() => {
+              onClose();
+              if (!demoMode) void signOutUser();
+            }}
+            className="flex-1 py-3 text-[11.5px] font-bold text-danger hover:bg-panel-alt"
+          >
+            로그아웃
+          </button>
         </div>
       </div>
     </>
