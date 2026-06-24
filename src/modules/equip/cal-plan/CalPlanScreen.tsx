@@ -4,18 +4,8 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { RankBars } from '@/shared/ui/charts/RankBars';
 import { C, KpiGrid } from '../_maint';
+import { useCalPlans } from '@/features/calPlan/useCalPlans';
 
-interface Row { sn: string; name: string; cat: string; cycle: number; lastCal: string; nextCal: string; org: string; dept: string }
-const PLAN_ROWS: Row[] = [
-  { sn: 'CAL-2305-007', name: '디지털 압력계', cat: '압력계', cycle: 12, lastCal: '2025-06-18', nextCal: '2026-06-18', org: '한국계량기기(외부)', dept: '설비팀' },
-  { sn: 'CAL-2403-019', name: '외측 마이크로미터', cat: '마이크로미터', cycle: 12, lastCal: '2025-05-20', nextCal: '2026-05-20', org: '사내 교정실', dept: '품질팀' },
-  { sn: 'CAL-2402-022', name: '표준 온도센서(RTD)', cat: '온도센서', cycle: 12, lastCal: '2025-07-01', nextCal: '2026-07-01', org: 'KOLAS 인정기관(외부)', dept: '품질팀' },
-  { sn: 'CAL-2312-014', name: '정밀 전자저울', cat: '저울', cycle: 6, lastCal: '2026-01-05', nextCal: '2026-07-05', org: '한국계량기기(외부)', dept: '품질팀' },
-  { sn: 'CAL-2310-011', name: '디지털 토크렌치', cat: '토크렌치', cycle: 6, lastCal: '2026-02-14', nextCal: '2026-08-14', org: '사내 교정실', dept: '설비팀' },
-  { sn: 'CAL-2208-003', name: '하이트게이지', cat: '하이트게이지', cycle: 12, lastCal: '2025-09-12', nextCal: '2026-09-12', org: '사내 교정실', dept: '품질팀' },
-  { sn: 'CAL-2406-030', name: '다이얼게이지', cat: '다이얼게이지', cycle: 12, lastCal: '2025-10-30', nextCal: '2026-10-30', org: '사내 교정실', dept: '품질팀' },
-  { sn: 'CAL-2401-001', name: '디지털 버니어캘리퍼스', cat: '캘리퍼스', cycle: 12, lastCal: '2025-12-10', nextCal: '2026-12-10', org: '사내 교정실', dept: '품질팀' },
-];
 const BASE = Date.UTC(2026, 5, 21);
 const dday = (d: string) => Math.round((Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) - BASE) / 86400000);
 const planState = (d: number) => (d < 0 ? '지연' : d <= 14 ? '임박' : d <= 30 ? '예정' : '정상');
@@ -25,8 +15,9 @@ const orgTone = (o: string): Tone => (isExt(o) ? 'mute' : 'info');
 
 /** 검교정 주기 / 계획 관리 — 와이어프레임 cal-plan.jsx 정본. */
 export default function CalPlanScreen() {
+  const { data: plans = [], isLoading } = useCalPlans();
   const [filter, setFilter] = useState('전체');
-  const enriched = PLAN_ROWS.map((r) => ({ ...r, dd: dday(r.nextCal), st: planState(dday(r.nextCal)) }));
+  const enriched = plans.map((r) => ({ ...r, dd: dday(r.nextCal), st: planState(dday(r.nextCal)) }));
   const rows = [...enriched].sort((a, b) => a.dd - b.dd).filter((r) => filter === '전체' || r.st === filter);
 
   const overdue = enriched.filter((r) => r.st === '지연').length;
@@ -36,6 +27,10 @@ export default function CalPlanScreen() {
 
   const months = ['5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
   const monthCount = months.map((m, i) => ({ label: m, v: enriched.filter((r) => +r.nextCal.slice(5, 7) === i + 5).length, c: m === '6월' ? C.warn : C.navy }));
+
+  if (!plans.length) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '검교정 대상이 없습니다.'}</div>;
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -48,7 +43,7 @@ export default function CalPlanScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['검교정 대상', '' + PLAN_ROWS.length, '대', C.ink], ['기한 지연', '' + overdue, '대', C.err], ['임박(14일)', '' + soon, '대', C.warn],
+        ['검교정 대상', '' + plans.length, '대', C.ink], ['기한 지연', '' + overdue, '대', C.err], ['임박(14일)', '' + soon, '대', C.warn],
         ['30일 내 예정', '' + planned, '대', C.blue], ['외부 의뢰', '' + ext, '대', C.ink],
       ]} />
 

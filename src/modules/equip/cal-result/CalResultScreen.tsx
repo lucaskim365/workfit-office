@@ -3,21 +3,13 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { C, KpiGrid } from '../_maint';
+import { useCalResults } from '@/features/calResult/useCalResults';
 
 const RES_GAGES = [
   { sn: 'CAL-2305-007', name: '디지털 압력계', tol: '±0.25 %FS', unit: '%FS' },
   { sn: 'CAL-2403-019', name: '외측 마이크로미터', tol: '±0.001 mm', unit: 'mm' },
   { sn: 'CAL-2402-022', name: '표준 온도센서(RTD)', tol: '±0.05 ℃', unit: '℃' },
   { sn: 'CAL-2312-014', name: '정밀 전자저울', tol: '±0.1 g', unit: 'g' },
-];
-interface Tx { no: string; date: string; sn: string; name: string; org: string; result: string; err: string; tol: string; cert: string; barcode: string; who: string }
-const RES_TX: Tx[] = [
-  { no: 'CR-2606-022', date: '06-18', sn: 'CAL-2305-007', name: '디지털 압력계', org: '한국계량기기', result: '불합격', err: '+0.42 %FS', tol: '±0.25 %FS', cert: 'CERT-26-1182', barcode: '8809-2606-0072', who: '이검교' },
-  { no: 'CR-2606-021', date: '06-15', sn: 'CAL-2208-003', name: '하이트게이지', org: '사내 교정실', result: '합격', err: '+0.012 mm', tol: '±0.03 mm', cert: 'CERT-26-1175', barcode: '8809-2606-0061', who: '김품질' },
-  { no: 'CR-2606-020', date: '06-12', sn: 'CAL-2401-001', name: '디지털 버니어캘리퍼스', org: '사내 교정실', result: '합격', err: '−0.008 mm', tol: '±0.02 mm', cert: 'CERT-26-1169', barcode: '8809-2606-0058', who: '김품질' },
-  { no: 'CR-2606-019', date: '06-09', sn: 'CAL-2310-011', name: '디지털 토크렌치', org: '사내 교정실', result: '합격(조정)', err: '−1.8 %', tol: '±3 %', cert: 'CERT-26-1160', barcode: '8809-2606-0049', who: '박설비' },
-  { no: 'CR-2606-018', date: '06-05', sn: 'CAL-2402-022', name: '표준 온도센서(RTD)', org: 'KOLAS 인정기관', result: '합격', err: '+0.021 ℃', tol: '±0.05 ℃', cert: 'CERT-26-1151', barcode: '8809-2606-0040', who: '이검교' },
-  { no: 'CR-2606-017', date: '06-02', sn: 'CAL-2312-014', name: '정밀 전자저울', org: '한국계량기기', result: '합격', err: '+0.04 g', tol: '±0.1 g', cert: 'CERT-26-1144', barcode: '8809-2606-0031', who: '김품질' },
 ];
 const resTone = (r: string): Tone => (r.startsWith('합격') ? 'ok' : 'err');
 const BARS = [3, 1, 2, 1, 3, 2, 1, 3, 1, 2, 3, 1, 2, 1, 3];
@@ -27,10 +19,11 @@ export default function CalResultScreen() {
   const [sn, setSn] = useState('CAL-2305-007');
   const [result, setResult] = useState('합격');
   const [filter, setFilter] = useState('전체');
+  const { data: resTx = [], isLoading } = useCalResults();
   const gage = RES_GAGES.find((g) => g.sn === sn) || RES_GAGES[0];
-  const txRows = RES_TX.filter((t) => filter === '전체' || (filter === '합격' ? t.result.startsWith('합격') : t.result === '불합격'));
+  const txRows = resTx.filter((t) => filter === '전체' || (filter === '합격' ? t.result.startsWith('합격') : t.result === '불합격'));
   const fail = result === '불합격';
-  const passCnt = RES_TX.filter((t) => t.result.startsWith('합격')).length;
+  const passCnt = resTx.filter((t) => t.result.startsWith('합격')).length;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -43,8 +36,8 @@ export default function CalResultScreen() {
       </div>
 
       <KpiGrid cols={5} items={[
-        ['당월 검교정', '' + RES_TX.length, '건', C.ink], ['합격', '' + passCnt, '건', C.ok], ['불합격', '' + RES_TX.filter((t) => t.result === '불합격').length, '건', C.err],
-        ['합격률', Math.round((passCnt / RES_TX.length) * 100) + '', '%', C.ink], ['성적서 미등록', '0', '건', C.warn],
+        ['당월 검교정', '' + resTx.length, '건', C.ink], ['합격', '' + passCnt, '건', C.ok], ['불합격', '' + resTx.filter((t) => t.result === '불합격').length, '건', C.err],
+        ['합격률', (resTx.length ? Math.round((passCnt / resTx.length) * 100) : 0) + '', '%', C.ink], ['성적서 미등록', '0', '건', C.warn],
       ]} />
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[340px_1fr]">
@@ -134,6 +127,13 @@ export default function CalResultScreen() {
               </tr>
             </thead>
             <tbody>
+              {(isLoading || txRows.length === 0) && (
+                <tr>
+                  <td colSpan={5} className="border-b border-border px-3 py-8 text-center text-[11px] text-ink3">
+                    {isLoading ? '불러오는 중…' : '검교정 실적이 없습니다'}
+                  </td>
+                </tr>
+              )}
               {txRows.map((t, i) => (
                 <tr key={t.no} className="align-top" style={{ background: i % 2 ? C.panelAlt : '#fff' }}>
                   <td className="border-b border-border px-3 py-2.5 font-mono text-[10px] text-ink3">{t.no}<div className="mt-0.5 text-[9.5px]">{t.date} · {t.org}</div></td>

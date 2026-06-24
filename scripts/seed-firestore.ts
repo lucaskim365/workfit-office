@@ -83,6 +83,10 @@ import { MOLD_SEED } from '@/data/seeds/mold.seed';
 import { MOLD_SHOT_SEED } from '@/data/seeds/moldShot.seed';
 import { MOLD_REPAIR_SEED } from '@/data/seeds/moldRepair.seed';
 import { MOLD_LOCATION_SEED } from '@/data/seeds/moldLocation.seed';
+import { EQUIP_GAGE_SEED } from '@/data/seeds/equipGage.seed';
+import { CAL_PLAN_SEED } from '@/data/seeds/calPlan.seed';
+import { CAL_RESULT_SEED } from '@/data/seeds/calResult.seed';
+import { CAL_FAIL_SEED } from '@/data/seeds/calFail.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -159,6 +163,10 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'moldShots', docs: MOLD_SHOT_SEED, id: (d) => d.code },
   { coll: 'moldRepairs', docs: MOLD_REPAIR_SEED, id: (d) => d.no },
   { coll: 'moldLocations', docs: MOLD_LOCATION_SEED, id: (d) => d.code },
+  { coll: 'equipGages', docs: EQUIP_GAGE_SEED, id: (d) => d.sn },
+  { coll: 'calPlans', docs: CAL_PLAN_SEED, id: (d) => d.sn },
+  { coll: 'calResults', docs: CAL_RESULT_SEED, id: (d) => d.no },
+  { coll: 'calFails', docs: CAL_FAIL_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

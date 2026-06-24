@@ -36,7 +36,8 @@ service cloud.firestore {
         'pmPlans', 'dailyChecks', 'periodicChecks', 'bmActions', 'pdmEquipments', 'maintOutsourcing',
         'spareParts', 'spareMovements', 'spareStocks', 'spareSafety', 'spareScraps',
         'andonStatus', 'oeeEquipments', 'liveAlarms', 'equipParams', 'downtimes',
-        'molds', 'moldShots', 'moldRepairs', 'moldLocations'
+        'molds', 'moldShots', 'moldRepairs', 'moldLocations',
+        'equipGages', 'calPlans', 'calResults', 'calFails'
       ];
     }
 
