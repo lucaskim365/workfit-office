@@ -2,27 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
-
-interface Mat {
-  code: string;
-  name: string;
-  type: '무상' | '유상';
-  qty: string;
-  unit: string;
-  price: number;
-}
-interface Order {
-  no: string;
-  vendor: string;
-  mats: Mat[];
-}
-
-const ORDERS: Order[] = [
-  { no: 'SC-2606-018', vendor: '동양프레스', mats: [{ code: 'STL-SS400', name: 'SS400 코일', type: '무상', qty: '2.4', unit: 'ton', price: 0 }] },
-  { no: 'SC-2606-017', vendor: '한빛도금', mats: [{ code: 'BR-SEMI', name: '브래킷 반제품', type: '무상', qty: '6,000', unit: 'EA', price: 0 }] },
-  { no: 'SC-2606-016', vendor: '정밀가공', mats: [{ code: 'CN-HSG-RAW', name: '하우징 사출품', type: '무상', qty: '4,000', unit: 'EA', price: 0 }] },
-  { no: 'SC-2606-015', vendor: '대성몰드', mats: [{ code: 'CU-C2680', name: '동합금 스트립', type: '유상', qty: '85', unit: 'kg', price: 22000 }] },
-];
+import { useSubconIssues } from '@/features/subconIssue/useSubconIssues';
 
 interface Tx {
   no: string;
@@ -59,8 +39,13 @@ const won = (n: number) => n.toLocaleString('ko-KR');
 export default function SubconIssueScreen() {
   const [order, setOrder] = useState('SC-2606-018');
   const [filter, setFilter] = useState('전체');
-  const cur = ORDERS.find((o) => o.no === order) ?? ORDERS[0];
+  const { data: orders = [], isLoading } = useSubconIssues();
+  const cur = orders.find((o) => o.no === order) ?? orders[0];
   const rows = TX.filter((t) => filter === '전체' || t.type === filter);
+
+  if (isLoading || !cur) {
+    return <div className="p-6 text-[12px] text-ink3">불러오는 중…</div>;
+  }
 
   const kpis: Array<[string, string, string, string]> = [
     ['금일 출고', '2', '건', 'text-ink'],
@@ -97,7 +82,7 @@ export default function SubconIssueScreen() {
           <Card title="지급 자재 출고 등록">
             <label className="mb-1.5 block text-[10.5px] font-bold text-ink3">외주 지시</label>
             <div className="mb-3 flex flex-col gap-1.5">
-              {ORDERS.map((o) => {
+              {orders.map((o) => {
                 const on = o.no === order;
                 return (
                   <button key={o.no} onClick={() => setOrder(o.no)} className={`flex items-center gap-2.5 rounded-lg border-[1.5px] px-3 py-2 text-left ${on ? 'border-teal bg-teal-soft' : 'border-border bg-panel'}`}>

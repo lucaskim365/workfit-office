@@ -99,6 +99,9 @@ import { PROD_DEFECT_SEED } from '@/data/seeds/prodDefect.seed';
 import { MATERIAL_LOAD_SEED } from '@/data/seeds/materialLoad.seed';
 import { MATERIAL_REQUEST_SEED } from '@/data/seeds/materialRequest.seed';
 import { PROD_LOT_TRACE_SEED } from '@/data/seeds/prodLotTrace.seed';
+import { SUBCON_ORDER_SEED } from '@/data/seeds/subconOrder.seed';
+import { SUBCON_ISSUE_SEED } from '@/data/seeds/subconIssue.seed';
+import { SUBCON_RECEIPT_SEED } from '@/data/seeds/subconReceipt.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -191,6 +194,9 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'materialLoads', docs: MATERIAL_LOAD_SEED, id: (d) => d.id },
   { coll: 'materialRequests', docs: MATERIAL_REQUEST_SEED, id: (d) => d.wo },
   { coll: 'prodLotTraces', docs: PROD_LOT_TRACE_SEED, id: (d) => d.id },
+  { coll: 'subconOrders', docs: SUBCON_ORDER_SEED, id: (d) => d.no },
+  { coll: 'subconIssues', docs: SUBCON_ISSUE_SEED, id: (d) => d.no },
+  { coll: 'subconReceipts', docs: SUBCON_RECEIPT_SEED, id: (d) => d.no },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

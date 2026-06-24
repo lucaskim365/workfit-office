@@ -3,22 +3,7 @@ import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { T } from '@/shared/theme/tokens';
-
-interface Order {
-  no: string;
-  vendor: string;
-  name: string;
-  proc: string;
-  price: number;
-  ordered: number;
-  received: number;
-}
-
-const ORDERS: Order[] = [
-  { no: 'SC-2606-016', vendor: '정밀가공', name: '커넥터 하우징', proc: '하우징 후가공', price: 240, ordered: 4000, received: 2000 },
-  { no: 'SC-2606-018', vendor: '동양프레스', name: '브래킷 본체', proc: '프레스 가공', price: 320, ordered: 8000, received: 0 },
-  { no: 'SC-2606-017', vendor: '한빛도금', name: '브래킷 키트', proc: '표면처리(도금)', price: 180, ordered: 6000, received: 0 },
-];
+import { useSubconReceipts } from '@/features/subconReceipt/useSubconReceipts';
 
 interface Tx {
   no: string;
@@ -45,15 +30,21 @@ const won = (n: number) => n.toLocaleString('ko-KR');
 
 /** 외주 실적/입고 등록 — 와이어프레임 subcon-receipt.jsx 정본. */
 export default function SubconReceiptScreen() {
+  const { data: orders = [], isLoading } = useSubconReceipts();
   const [order, setOrder] = useState('SC-2606-016');
   const [insp, setInsp] = useState('합격');
   const [filter, setFilter] = useState('전체');
-  const cur = ORDERS.find((o) => o.no === order) ?? ORDERS[0];
+  const cur = orders.find((o) => o.no === order) ?? orders[0];
+  const rows = TX.filter((t) => filter === '전체' || t.state === filter);
+
+  if (!cur) {
+    return <div className="grid place-items-center py-20 text-[13px] text-ink3">{isLoading ? '불러오는 중…' : '외주 지시가 없습니다.'}</div>;
+  }
+
   const remain = cur.ordered - cur.received;
   const inGood = Math.round(remain * 0.99);
   const inBad = remain - inGood;
   const cost = inGood * cur.price;
-  const rows = TX.filter((t) => filter === '전체' || t.state === filter);
 
   const kpis: Array<[string, string, string, string]> = [
     ['금일 입고', '2', '건', 'text-ink'],
@@ -89,7 +80,7 @@ export default function SubconReceiptScreen() {
         <Card title="외주 입고 등록">
           <label className="mb-1.5 block text-[10.5px] font-bold text-ink3">외주 지시 (미입고)</label>
           <div className="mb-3.5 flex flex-col gap-1.5">
-            {ORDERS.map((o) => {
+            {orders.map((o) => {
               const on = o.no === order;
               const rem = o.ordered - o.received;
               return (

@@ -2,31 +2,8 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { ActionBar } from '@/shared/ui/ActionBar';
-
-interface Order {
-  no: string;
-  vendor: string;
-  proc: string;
-  code: string;
-  name: string;
-  qty: number;
-  unit: string;
-  price: number;
-  due: string;
-  dday: number;
-  mat: string;
-  matType: '무상' | '유상';
-  matQty: string;
-  state: '지시' | '생산중' | '입고대기' | '완료';
-}
-
-const ORDERS: Order[] = [
-  { no: 'SC-2606-018', vendor: '동양프레스', proc: '프레스 가공', code: 'BR-MNT-2T', name: '브래킷 본체', qty: 8000, unit: 'EA', price: 320, due: '06-25', dday: 4, mat: 'SS400 코일', matType: '무상', matQty: '2.4 ton', state: '생산중' },
-  { no: 'SC-2606-017', vendor: '한빛도금', proc: '표면처리(도금)', code: 'BR-KIT-2T', name: '브래킷 키트', qty: 6000, unit: 'EA', price: 180, due: '06-23', dday: 2, mat: '브래킷 반제품', matType: '무상', matQty: '6,000 EA', state: '입고대기' },
-  { no: 'SC-2606-016', vendor: '정밀가공', proc: '하우징 후가공', code: 'CN-HSG-08P', name: '커넥터 하우징', qty: 4000, unit: 'EA', price: 240, due: '06-22', dday: 1, mat: '하우징 사출품', matType: '무상', matQty: '4,000 EA', state: '생산중' },
-  { no: 'SC-2606-015', vendor: '대성몰드', proc: '코어 정밀가공', code: 'TM-PIN-16', name: '터미널 핀', qty: 20000, unit: 'EA', price: 95, due: '06-20', dday: -1, mat: '동합금 스트립', matType: '유상', matQty: '85 kg', state: '완료' },
-  { no: 'SC-2606-014', vendor: '동양프레스', proc: '프레스 가공', code: 'BR-MNT-2T', name: '브래킷 본체', qty: 5000, unit: 'EA', price: 320, due: '06-28', dday: 7, mat: 'SS400 코일', matType: '무상', matQty: '1.5 ton', state: '지시' },
-];
+import { useSubconOrders, useTransitionSubconOrder } from '@/features/subconOrder/useSubconOrders';
+import { nextStatus, nextActionLabel } from '@/domain/subconOrder/status';
 
 const FLOW = ['지시', '생산중', '입고대기', '완료'];
 const stTone = (s: string): Tone => (s === '완료' ? 'mute' : s === '입고대기' ? 'warn' : s === '생산중' ? 'ok' : 'info');
@@ -36,10 +13,26 @@ const won = (n: number) => n.toLocaleString('ko-KR');
 export default function SubconOrderScreen() {
   const [sel, setSel] = useState('SC-2606-017');
   const [filter, setFilter] = useState('전체');
-  const cur = ORDERS.find((o) => o.no === sel) ?? ORDERS[0];
-  const rows = ORDERS.filter((o) => filter === '전체' || o.state === filter);
-  const curIdx = FLOW.indexOf(cur.state);
+  const { data: orders, isLoading } = useSubconOrders();
+  const transition = useTransitionSubconOrder();
+
+  // 로딩/빈 가드 — 데이터 도착 전 렌더 차단.
+  if (isLoading || !orders) {
+    return <div className="px-4 py-10 text-center text-[12px] text-ink3">불러오는 중…</div>;
+  }
+  if (orders.length === 0) {
+    return <div className="px-4 py-10 text-center text-[12px] text-ink3">외주 발주 데이터가 없습니다.</div>;
+  }
+
+  const cur = orders.find((o) => o.no === sel) ?? orders[0];
+  const rows = orders.filter((o) => filter === '전체' || o.status === filter);
+  const curIdx = FLOW.indexOf(cur.status);
   const amount = cur.qty * cur.price;
+  const nextLabel = nextActionLabel(cur.status);
+  const onAdvance = () => {
+    const to = nextStatus(cur.status);
+    if (to) transition.mutate({ no: cur.no, to });
+  };
 
   const kpis: Array<[string, string, string, string]> = [
     ['진행 외주', '4', '건', 'text-ink'],
@@ -109,7 +102,7 @@ export default function SubconOrderScreen() {
                         <div className="text-[10.5px] text-ink2">{o.due}</div>
                         <div className={`text-[9px] font-bold ${o.dday >= 0 && o.dday <= 2 ? 'text-danger' : 'text-ink3'}`}>{o.dday < 0 ? '완료' : `D−${o.dday}`}</div>
                       </td>
-                      <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={stTone(o.state)}>{o.state}</Pill></td>
+                      <td className="border-b border-border px-3 py-2.5 text-center"><Pill tone={stTone(o.status)}>{o.status}</Pill></td>
                     </tr>
                   );
                 })}
@@ -122,7 +115,7 @@ export default function SubconOrderScreen() {
           <div className="border-b border-border bg-panel-alt px-4 py-3.5">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[15px] font-extrabold text-ink">{cur.vendor}</span>
-              <Pill tone={stTone(cur.state)}>{cur.state}</Pill>
+              <Pill tone={stTone(cur.status)}>{cur.status}</Pill>
             </div>
             <div className="text-[11px] text-ink3">{cur.proc} · {cur.name}</div>
           </div>
@@ -175,6 +168,15 @@ export default function SubconOrderScreen() {
           </div>
 
           <div className="flex flex-col gap-2 px-4 py-3">
+            {nextLabel && (
+              <button
+                onClick={onAdvance}
+                disabled={transition.isPending}
+                className="w-full rounded-[9px] bg-teal py-2.5 text-[12px] font-extrabold text-white disabled:opacity-60"
+              >
+                {nextLabel}
+              </button>
+            )}
             <button className="w-full rounded-[9px] border border-border-hi bg-panel py-2.5 text-[12px] font-bold text-ink2">지급 자재 출고 관리</button>
             <button className="w-full rounded-[9px] bg-navy py-2.5 text-[12px] font-extrabold text-white">외주 지시서 출력</button>
           </div>
