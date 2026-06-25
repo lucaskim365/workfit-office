@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
 import { MENU_TREE } from '../menu-tree';
@@ -54,6 +54,16 @@ export default function AppShell() {
   const [query, setQuery] = useState('');
   const [favs, setFavs] = useState<string[]>(() => loadJSON('mes_favs', []));
   const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
+
+  // 본문 스크롤 중에는 우측 퀵 도크를 비켜나게(yield) 한다 — 멈추면 650ms 뒤 복귀.
+  const [scrolling, setScrolling] = useState(false);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onMainScroll = () => {
+    setScrolling(true);
+    clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => setScrolling(false), 650);
+  };
+  useEffect(() => () => clearTimeout(scrollTimer.current), []);
 
   useEffect(() => { try { localStorage.setItem('mes_favs', JSON.stringify(favs)); } catch { /* noop */ } }, [favs]);
   useEffect(() => { try { localStorage.setItem('mes_rail_open', JSON.stringify(railOpen)); } catch { /* noop */ } }, [railOpen]);
@@ -121,7 +131,7 @@ export default function AppShell() {
             menuOpen={tabMenuOpen}
             setMenuOpen={setTabMenuOpen}
           />
-          <main className="min-h-0 flex-1 overflow-auto bg-bg pr-3">
+          <main onScroll={onMainScroll} className="content-scroll min-h-0 flex-1 overflow-auto bg-bg pr-3">
             {tabs.length === 0 ? (
               <NoTab />
             ) : (
@@ -135,7 +145,7 @@ export default function AppShell() {
         </div>
       </div>
 
-      <QuickDock />
+      <QuickDock scrolling={scrolling} />
       <ToastFeed />
     </div>
   );

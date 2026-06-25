@@ -70,7 +70,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                       {m.name}
                       <span className="ml-auto font-semibold opacity-80">{screenCount}</span>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto p-0.5" style={{ columns: cols, columnGap: '12px' }}>
+                    <div className="content-scroll min-h-0 flex-1 overflow-y-auto p-0.5" style={{ columns: cols, columnGap: '12px' }}>
                       {groups.map((g: MenuNode) => (
                         <div key={g.id} className="mb-2 [break-inside:avoid]">
                           <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-extrabold text-navy">

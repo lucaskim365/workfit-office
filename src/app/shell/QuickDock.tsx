@@ -17,8 +17,9 @@ const DOCK_TOOLS: Tool[] = [
 
 const PANEL_W = 384;
 
-/** 우측 가장자리 퀵 도크(세로 책갈피 탭 + 슬라이드 패널). 와이어프레임 quick-dock.jsx 정본. */
-export function QuickDock() {
+/** 우측 가장자리 퀵 도크(세로 책갈피 탭 + 슬라이드 패널). 와이어프레임 quick-dock.jsx 정본.
+ * scrolling: 본문 스크롤 중이면 탭을 더 밀어내고 흐리게(양보) → 멈추면 복귀. */
+export function QuickDock({ scrolling = false }: { scrolling?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const tool = DOCK_TOOLS.find((t) => t.key === open);
@@ -38,6 +39,8 @@ export function QuickDock() {
           const peeked = hover === t.key || open === t.key;
           const first = i === 0;
           const last = i === DOCK_TOOLS.length - 1;
+          // 평상시 22px만 노출, 스크롤 중엔 40px까지 양보(+흐리게), 호버/열림 시 완전 노출.
+          const tx = peeked ? 0 : scrolling ? 40 : 22;
           return (
             <button
               key={t.key}
@@ -46,11 +49,12 @@ export function QuickDock() {
               onClick={() => setOpen(open === t.key ? null : t.key)}
               style={{
                 background: t.color,
-                transform: `translateX(${peeked ? 0 : 22}px)`,
+                transform: `translateX(${tx}px)`,
+                opacity: !peeked && scrolling ? 0.35 : 1,
                 borderRadius: `${first ? 12 : 0}px 0 0 ${last ? 12 : 0}px`,
                 boxShadow: '-4px 4px 14px rgba(16,24,48,.22)',
               }}
-              className="flex w-8 flex-col-reverse items-center gap-2 pb-3.5 pt-3 text-white transition-transform duration-200"
+              className="flex w-8 flex-col-reverse items-center gap-2 pb-3.5 pt-3 text-white transition-[transform,opacity] duration-200"
             >
               <span className="rotate-[-90deg] text-base leading-none">{t.icon}</span>
               <span className="text-[12.5px] font-bold tracking-wide [writing-mode:sideways-lr]">{t.label}</span>

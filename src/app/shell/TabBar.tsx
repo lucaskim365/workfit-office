@@ -51,7 +51,7 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-[55]" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-1.5 top-[calc(100%+4px)] z-[60] max-h-80 w-[248px] overflow-y-auto rounded-[10px] border border-border bg-panel p-1.5 shadow-[0_12px_32px_rgba(16,24,48,0.2)]">
+            <div className="content-scroll absolute right-1.5 top-[calc(100%+4px)] z-[60] max-h-80 w-[248px] overflow-y-auto rounded-[10px] border border-border bg-panel p-1.5 shadow-[0_12px_32px_rgba(16,24,48,0.2)]">
               <div className="px-2.5 pb-1.5 pt-1.5 text-[9.5px] font-extrabold tracking-wide text-ink3">열린 화면 {tabs.length}</div>
               {tabs.map((t) => {
                 const a = t.url === activeUrl;

@@ -64,7 +64,7 @@ export function Sidebar(props: SidebarProps) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-px overflow-y-auto p-2">
+      <div className="content-scroll flex flex-col gap-px overflow-y-auto p-2">
         {/* 검색 */}
         {!collapsed && (
           <div className="relative mb-1.5">
