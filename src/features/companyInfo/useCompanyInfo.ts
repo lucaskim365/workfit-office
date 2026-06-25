@@ -24,3 +24,11 @@ export function useSaveCompanyInfo() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+/** 회사 로고 업로드 — Storage에 올리고 {url, path} 반환(화면이 폼에 반영·저장). */
+export function useUploadCompanyLogo() {
+  return useMutation({
+    mutationFn: ({ file, prevPath }: { file: File; prevPath?: string }) =>
+      companyInfoRepo.uploadLogo(file, prevPath),
+  });
+}

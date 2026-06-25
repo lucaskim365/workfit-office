@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// WorkFit MES — Storage 보안 규칙
+// 데모 단계(앱 자체 로그인, Firebase Auth 미사용)라 branding/ 경로만 공개 업로드를 허용한다.
+// 그 외 모든 경로는 기본 차단. 업로드는 이미지·5MB 이하로 제한.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 회사 로고 등 브랜딩 자산
+    match /branding/{allPaths=**} {
+      allow read: if true;
+      // 삭제(request.resource == null) 또는 5MB 이하 이미지 업로드만 허용
+      allow write: if request.resource == null
+        || (request.resource.size < 5 * 1024 * 1024
+            && request.resource.contentType.matches('image/.*'));
+    }
+
+    // 그 외 전체 차단(기본 거부)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

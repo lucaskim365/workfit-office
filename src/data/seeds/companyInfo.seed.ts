@@ -27,6 +27,8 @@ export const COMPANY_INFO_SEED: CompanyInfo[] = [
     sysName: 'WorkFit MES',
     reportHeader: 'WorkFitMES',
     docFooter: '본 문서는 WorkFitMES에서 발행되었습니다.',
+    logoUrl: '',
+    logoPath: '',
     mask: true,
   },
 ];

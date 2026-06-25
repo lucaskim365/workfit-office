@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { companyInfoSchema, type CompanyInfo } from '@/domain/companyInfo/schema';
 import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
 
@@ -35,5 +36,32 @@ export const companyInfoRepo = {
       return;
     }
     memory = valid;
+  },
+
+  /**
+   * 회사 로고 업로드 — 이미지는 Storage `branding/`에, 결과 URL·경로를 반환.
+   * 화면이 받아 companyInfo.logoUrl/logoPath에 저장(자동저장)한다.
+   * prevPath가 있으면 교체 후 이전 파일을 best-effort 삭제.
+   * Firebase 미설정이면 base64 data URL로 폴백(세션 한정 미리보기).
+   */
+  async uploadLogo(file: File, prevPath?: string): Promise<{ url: string; path: string }> {
+    if (isFirebaseConfigured && storage) {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `branding/company-logo-${Date.now()}.${ext}`;
+      const r = ref(storage, path);
+      await uploadBytes(r, file, { contentType: file.type || 'image/png' });
+      const url = await getDownloadURL(r);
+      if (prevPath && prevPath !== path) {
+        try { await deleteObject(ref(storage, prevPath)); } catch { /* 이전 파일 없음 등 무시 */ }
+      }
+      return { url, path };
+    }
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    return { url, path: '' };
   },
 };

@@ -47,6 +47,10 @@ export const companyInfoSchema = z.object({
   reportHeader: z.string().default(''),
   /** 문서 푸터. */
   docFooter: z.string().default(''),
+  /** 회사 로고 다운로드 URL(Storage). 비어 있으면 미등록. */
+  logoUrl: z.string().default(''),
+  /** 회사 로고 Storage 경로(교체·삭제용). */
+  logoPath: z.string().default(''),
   /** 민감정보 마스킹 표기 여부. */
   mask: z.boolean().default(true),
 });
