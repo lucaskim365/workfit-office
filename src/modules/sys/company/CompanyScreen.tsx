@@ -194,9 +194,9 @@ export default function CompanyScreen() {
             <FRow label="문서 푸터"><TextField value={v('docFooter')} onChange={(e) => set('docFooter', e.target.value)} /></FRow>
             <FRow label="회사 로고" multiline>
               <div className="flex items-center gap-3">
-                <div className="grid h-[52px] w-[120px] place-items-center overflow-hidden rounded-md border border-dashed border-border-hi bg-panel-alt text-[11px] font-bold text-ink3">
+                <div className="grid h-[52px] w-[120px] place-items-center overflow-hidden rounded-md border border-[#2b313d] bg-[#3a414f] p-1.5 text-[11px] font-bold text-white/55">
                   {form?.logoUrl
-                    ? <img src={form.logoUrl} alt="회사 로고" className="h-full w-full object-contain" />
+                    ? <img src={form.logoUrl} alt="회사 로고" className="max-h-full max-w-full object-contain" />
                     : 'LOGO'}
                 </div>
                 <div className="flex flex-col gap-1.5">
