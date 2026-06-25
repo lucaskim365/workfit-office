@@ -9,11 +9,11 @@ import { SelectField } from '@/shared/ui/form/SelectField';
 import { useCompanySites, useSaveCompanySite } from '@/features/companySite/useCompanySites';
 import type { CompanySite } from '@/domain/companySite/schema';
 
-/** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. */
-function FRow({ label, required, children, multiline }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean }) {
+/** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. compact: 2단 배치용(라벨 폭 자동·간격 확보). */
+function FRow({ label, required, children, multiline, compact }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean; compact?: boolean }) {
   return (
-    <div className={`grid grid-cols-[112px_1fr] gap-3.5 ${multiline ? 'items-start' : 'items-center'}`}>
-      <span className={`text-[12px] font-bold text-ink2 ${multiline ? 'pt-2' : ''}`}>
+    <div className={`grid ${compact ? 'grid-cols-[auto_1fr] gap-2.5' : 'grid-cols-[112px_1fr] gap-3.5'} ${multiline ? 'items-start' : 'items-center'}`}>
+      <span className={`whitespace-nowrap text-[12px] font-bold text-ink2 ${multiline ? 'pt-2' : ''}`}>
         {label}{required && <span className="ml-0.5 text-danger">*</span>}
       </span>
       {children}
@@ -62,9 +62,9 @@ export default function CompanyScreen() {
             <FRow label="영문 회사명"><TextField defaultValue="WorkFit Technology Co., Ltd." /></FRow>
             <FRow label="사업자등록번호"><TextField defaultValue="142-81-04567" className="font-mono tabular-nums" /></FRow>
             <FRow label="법인등록번호"><TextField defaultValue="110111-3456789" className="font-mono tabular-nums" /></FRow>
-            <div className="grid grid-cols-2 gap-3">
-              <FRow label="대표자" required><TextField defaultValue="김경영" /></FRow>
-              <FRow label="설립일"><TextField defaultValue="2011-03-02" className="tabular-nums" /></FRow>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+              <FRow label="대표자" required compact><TextField defaultValue="김경영" /></FRow>
+              <FRow label="설립일" compact><TextField defaultValue="2011-03-02" className="tabular-nums" /></FRow>
             </div>
           </div>
         </Card>
@@ -88,9 +88,9 @@ export default function CompanyScreen() {
 
         <Card title="연락처 / 주소">
           <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <FRow label="대표 전화"><TextField defaultValue="031-8000-1200" className="tabular-nums" /></FRow>
-              <FRow label="팩스"><TextField defaultValue="031-8000-1209" className="tabular-nums" /></FRow>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+              <FRow label="대표 전화" compact><TextField defaultValue="031-8000-1200" className="tabular-nums" /></FRow>
+              <FRow label="팩스" compact><TextField defaultValue="031-8000-1209" className="tabular-nums" /></FRow>
             </div>
             <FRow label="대표 이메일"><TextField defaultValue="contact@workfit.co.kr" /></FRow>
             <FRow label="홈페이지"><TextField defaultValue="https://www.workfit.co.kr" /></FRow>
