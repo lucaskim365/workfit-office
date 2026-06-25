@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
-import { ActionBar } from '@/shared/ui/ActionBar';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
@@ -19,6 +18,20 @@ function FRow({ label, required, children, multiline, compact }: { label: string
         {label}{required && <span className="ml-0.5 text-danger">*</span>}
       </span>
       {children}
+    </div>
+  );
+}
+
+/** 자동저장 상태 표시 — 저장 버튼을 대체. 변경 시 디바운스 후 자동 반영됨을 안내. */
+function SaveStatus({ pending, dirty }: { pending: boolean; dirty: boolean }) {
+  const [text, tone, dot] =
+    pending ? ['저장 중…', 'text-teal', 'bg-teal animate-pulse']
+    : dirty ? ['변경됨 · 곧 저장', 'text-ink3', 'bg-amber-400']
+    : ['모든 변경 저장됨', 'text-ink3', 'bg-emerald-500'];
+  return (
+    <div className="flex items-center gap-2 text-[11.5px] font-bold">
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      <span className={tone}>{text}</span>
     </div>
   );
 }
@@ -49,11 +62,26 @@ export default function CompanyScreen() {
 
   const dirty = infoDirty || sitesDirty;
   const pending = saveInfo.isPending || saveSite.isPending;
-  const onSave = () => {
-    if (form && infoDirty) saveInfo.mutate(form);
-    rows.forEach((s) => { if (draft[s.name]) saveSite.mutate({ ...s, ...draft[s.name] }); });
-    setDraft({});
-  };
+
+  // 자동저장 — 기본정보: 입력이 멈춘 뒤(700ms) 변경분을 Firestore로 반영.
+  // 저장 성공 시 info가 form과 같아져 effect가 재저장하지 않음(루프 없음).
+  useEffect(() => {
+    if (!form || !info || !infoDirty) return;
+    const t = setTimeout(() => saveInfo.mutate(form), 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, info, infoDirty]);
+
+  // 자동저장 — 사업장 표: 편집이 멈춘 뒤(700ms) 변경 행만 반영 후 draft 비움.
+  useEffect(() => {
+    if (!sitesDirty) return;
+    const t = setTimeout(() => {
+      rows.forEach((s) => { if (draft[s.name]) saveSite.mutate({ ...s, ...draft[s.name] }); });
+      setDraft({});
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, sitesDirty]);
 
   // 폼 로드 전(초기 1프레임)엔 빈 값으로 렌더 — 값 헬퍼.
   const v = (k: keyof CompanyInfo) => (form?.[k] ?? '') as string;
@@ -65,7 +93,7 @@ export default function CompanyScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">회사 정보</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 회사 정보</p>
         </div>
-        <ActionBar actions={['refresh', { preset: 'save', label: pending ? '저장 중…' : dirty ? '저장 *' : '저장', onClick: onSave, disabled: !dirty || pending }]} />
+        <SaveStatus pending={pending} dirty={dirty} />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
