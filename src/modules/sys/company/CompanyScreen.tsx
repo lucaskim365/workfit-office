@@ -6,7 +6,8 @@ import { ActionBar } from '@/shared/ui/ActionBar';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
-import { useCompanySites } from '@/features/companySite/useCompanySites';
+import { useCompanySites, useSaveCompanySite } from '@/features/companySite/useCompanySites';
+import type { CompanySite } from '@/domain/companySite/schema';
 
 /** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. */
 function FRow({ label, required, children, multiline }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean }) {
@@ -29,7 +30,20 @@ export default function CompanyScreen() {
   const [active, setActive] = useState(true);
   const [mask, setMask] = useState(true);
   const { data: sites, isLoading } = useCompanySites();
+  const save = useSaveCompanySite();
   const rows = sites ?? [];
+
+  // 사업장 인라인 편집 — name(PK)별로 변경분을 draft에 보관, 저장 시 Firestore로 영구 반영.
+  const [draft, setDraft] = useState<Record<string, Partial<CompanySite>>>({});
+  const edit = (name: string, patch: Partial<CompanySite>) =>
+    setDraft((d) => ({ ...d, [name]: { ...d[name], ...patch } }));
+  const dirty = Object.keys(draft).length > 0;
+  const onSave = () => {
+    rows.forEach((s) => {
+      if (draft[s.name]) save.mutate({ ...s, ...draft[s.name] });
+    });
+    setDraft({});
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -38,7 +52,7 @@ export default function CompanyScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">회사 정보</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 회사 정보</p>
         </div>
-        <ActionBar actions={['refresh', { preset: 'save', label: '저장' }]} />
+        <ActionBar actions={['refresh', { preset: 'save', label: save.isPending ? '저장 중…' : dirty ? '저장 *' : '저장', onClick: onSave, disabled: !dirty || save.isPending }]} />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
@@ -116,16 +130,28 @@ export default function CompanyScreen() {
             {!isLoading && rows.length === 0 && (
               <tr><td colSpan={6} className={`${td('center')} text-ink3`}>등록된 사업장이 없습니다.</td></tr>
             )}
-            {rows.map((s, i) => (
-              <tr key={s.name} style={{ background: i % 2 ? '#f7f9fc' : '#fff' }}>
-                <td className={`${td('left')} font-bold text-ink`}>{s.name}</td>
-                <td className={td('left')}><Pill tone={s.kind === '본점' ? 'info' : s.kind === '제조장' ? 'ok' : 'mute'}>{s.kind}</Pill></td>
-                <td className={`${td('left')} text-ink2`}>{s.addr}</td>
-                <td className={`${td('left')} tabular-nums text-ink2`}>{s.tel}</td>
-                <td className={`${td('left')} text-ink2`}>{s.mgr}</td>
-                <td className={td('center')}><Pill tone={s.active ? 'ok' : 'mute'}>{s.active ? '사용' : '미사용'}</Pill></td>
-              </tr>
-            ))}
+            {rows.map((s0, i) => {
+              const s = { ...s0, ...draft[s0.name] };
+              const inp = 'w-full rounded-md border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none focus:border-teal';
+              return (
+                <tr key={s0.name} style={{ background: i % 2 ? '#f7f9fc' : '#fff' }}>
+                  <td className={`${td('left')} font-bold text-ink`}>{s.name}</td>
+                  <td className={td('left')}><Pill tone={s.kind === '본점' ? 'info' : s.kind === '제조장' ? 'ok' : 'mute'}>{s.kind}</Pill></td>
+                  <td className={`${td('left')} text-ink2`}>{s.addr}</td>
+                  <td className={`${td('left')} tabular-nums`}>
+                    <input value={s.tel} onChange={(e) => edit(s0.name, { tel: e.target.value })} className={`${inp} tabular-nums`} />
+                  </td>
+                  <td className={td('left')}>
+                    <input value={s.mgr} onChange={(e) => edit(s0.name, { mgr: e.target.value })} className={inp} />
+                  </td>
+                  <td className={td('center')}>
+                    <button onClick={() => edit(s0.name, { active: !s.active })} title="클릭하여 상태 변경">
+                      <Pill tone={s.active ? 'ok' : 'mute'}>{s.active ? '사용' : '미사용'}</Pill>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>
