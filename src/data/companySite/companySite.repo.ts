@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { companySiteSchema, type CompanySite } from '@/domain/companySite/schema';
 import { COMPANY_SITE_SEED } from '@/data/seeds/companySite.seed';
@@ -56,5 +56,14 @@ export const companySiteRepo = {
     const i = memory.findIndex((m) => m.name === valid.name);
     if (i >= 0) memory[i] = valid;
     else memory = [...memory, valid];
+  },
+
+  /** 삭제. 문서 ID = 사업장명. */
+  async remove(name: string): Promise<void> {
+    if (isFirebaseConfigured && db) {
+      await deleteDoc(doc(db, COLL, name));
+      return;
+    }
+    memory = memory.filter((m) => m.name !== name);
   },
 };

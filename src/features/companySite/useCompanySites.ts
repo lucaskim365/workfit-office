@@ -24,3 +24,12 @@ export function useSaveCompanySite() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+/** 회사 사업장 삭제. 성공 시 목록 캐시 무효화. */
+export function useRemoveCompanySite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => companySiteRepo.remove(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}

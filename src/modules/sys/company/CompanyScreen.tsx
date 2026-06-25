@@ -7,8 +7,13 @@ import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { useCompanyInfo, useSaveCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import type { CompanyInfo } from '@/domain/companyInfo/schema';
-import { useCompanySites, useSaveCompanySite } from '@/features/companySite/useCompanySites';
+import { useCompanySites, useSaveCompanySite, useRemoveCompanySite } from '@/features/companySite/useCompanySites';
 import type { CompanySite } from '@/domain/companySite/schema';
+
+/** 사업장 구분 선택지 — 추가/인라인 편집 공용. */
+const SITE_KINDS = ['본점', '제조장', '물류장', '영업소', '기타'] as const;
+/** 사업장 표 셀 입력/선택 공통 스타일(컴팩트). */
+const CELL = 'w-full rounded-md border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none focus:border-teal';
 
 /** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. compact: 2단 배치용(라벨 폭 자동·간격 확보). */
 function FRow({ label, required, children, multiline, compact }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean; compact?: boolean }) {
@@ -54,14 +59,35 @@ export default function CompanyScreen() {
   // 사업장 인라인 편집 — name(PK)별로 변경분을 draft에 보관, 저장 시 Firestore로 영구 반영.
   const { data: sites, isLoading } = useCompanySites();
   const saveSite = useSaveCompanySite();
+  const removeSite = useRemoveCompanySite();
   const rows = sites ?? [];
   const [draft, setDraft] = useState<Record<string, Partial<CompanySite>>>({});
   const edit = (name: string, patch: Partial<CompanySite>) =>
     setDraft((d) => ({ ...d, [name]: { ...d[name], ...patch } }));
   const sitesDirty = Object.keys(draft).length > 0;
 
+  // 사업장 추가 — 신규 행 입력 폼(이름이 PK라 추가는 명시 버튼으로 처리, 인라인 자동저장과 분리).
+  const [adding, setAdding] = useState(false);
+  const [neu, setNeu] = useState<Partial<CompanySite>>({ kind: '제조장', active: true });
+  const onAdd = () => {
+    const name = (neu.name ?? '').trim();
+    if (!name) { alert('사업장명을 입력하세요.'); return; }
+    if (rows.some((r) => r.name === name)) { alert('이미 존재하는 사업장명입니다.'); return; }
+    saveSite.mutate({
+      name, kind: neu.kind || '기타', addr: neu.addr ?? '',
+      tel: neu.tel ?? '', mgr: neu.mgr ?? '', active: neu.active ?? true,
+    });
+    setNeu({ kind: '제조장', active: true });
+    setAdding(false);
+  };
+  const onRemove = (name: string) => {
+    if (!window.confirm(`'${name}' 사업장을 삭제하시겠습니까?\n삭제 후 되돌릴 수 없습니다.`)) return;
+    setDraft((d) => { const next = { ...d }; delete next[name]; return next; });
+    removeSite.mutate(name);
+  };
+
   const dirty = infoDirty || sitesDirty;
-  const pending = saveInfo.isPending || saveSite.isPending;
+  const pending = saveInfo.isPending || saveSite.isPending || removeSite.isPending;
 
   // 자동저장 — 기본정보: 입력이 멈춘 뒤(700ms) 변경분을 Firestore로 반영.
   // 저장 성공 시 info가 form과 같아져 effect가 재저장하지 않음(루프 없음).
@@ -161,38 +187,101 @@ export default function CompanyScreen() {
         </Card>
       </div>
 
-      <Card title="사업장 현황" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">총 {rows.length}개 사업장</span>}>
+      <Card
+        title="사업장 현황"
+        bodyClassName="p-0"
+        action={
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10.5px] text-ink3">총 {rows.length}개 사업장</span>
+            {!adding && (
+              <button onClick={() => setAdding(true)}
+                className="rounded-md border border-teal bg-teal/10 px-2.5 py-1 text-[11px] font-bold text-teal transition-colors hover:bg-teal/20">
+                + 사업장 추가
+              </button>
+            )}
+          </div>
+        }
+      >
         <table className="w-full border-collapse text-[11.5px]">
-          <thead><tr>{['사업장명', '구분', '주소', '대표 전화', '관리자', '상태'].map((c, i) => <th key={c} className={th(i === 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
+          <thead><tr>{['사업장명', '구분', '주소', '대표 전화', '관리자', '상태', '관리'].map((c, i) => <th key={c} className={th(i >= 5 ? 'center' : 'left')}>{c}</th>)}</tr></thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={6} className={`${td('center')} text-ink3`}>불러오는 중…</td></tr>
+              <tr><td colSpan={7} className={`${td('center')} text-ink3`}>불러오는 중…</td></tr>
             )}
-            {!isLoading && rows.length === 0 && (
-              <tr><td colSpan={6} className={`${td('center')} text-ink3`}>등록된 사업장이 없습니다.</td></tr>
+            {!isLoading && rows.length === 0 && !adding && (
+              <tr><td colSpan={7} className={`${td('center')} text-ink3`}>등록된 사업장이 없습니다.</td></tr>
             )}
             {rows.map((s0, i) => {
               const s = { ...s0, ...draft[s0.name] };
-              const inp = 'w-full rounded-md border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none focus:border-teal';
               return (
                 <tr key={s0.name} style={{ background: i % 2 ? '#f7f9fc' : '#fff' }}>
                   <td className={`${td('left')} font-bold text-ink`}>{s.name}</td>
-                  <td className={td('left')}><Pill tone={s.kind === '본점' ? 'info' : s.kind === '제조장' ? 'ok' : 'mute'}>{s.kind}</Pill></td>
-                  <td className={`${td('left')} text-ink2`}>{s.addr}</td>
-                  <td className={`${td('left')} tabular-nums`}>
-                    <input value={s.tel} onChange={(e) => edit(s0.name, { tel: e.target.value })} className={`${inp} tabular-nums`} />
+                  <td className={td('left')}>
+                    <select value={s.kind} onChange={(e) => edit(s0.name, { kind: e.target.value })} className={CELL}>
+                      {SITE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                    </select>
                   </td>
                   <td className={td('left')}>
-                    <input value={s.mgr} onChange={(e) => edit(s0.name, { mgr: e.target.value })} className={inp} />
+                    <input value={s.addr} onChange={(e) => edit(s0.name, { addr: e.target.value })} className={CELL} />
+                  </td>
+                  <td className={`${td('left')} tabular-nums`}>
+                    <input value={s.tel} onChange={(e) => edit(s0.name, { tel: e.target.value })} className={`${CELL} tabular-nums`} />
+                  </td>
+                  <td className={td('left')}>
+                    <input value={s.mgr} onChange={(e) => edit(s0.name, { mgr: e.target.value })} className={CELL} />
                   </td>
                   <td className={td('center')}>
                     <button onClick={() => edit(s0.name, { active: !s.active })} title="클릭하여 상태 변경">
                       <Pill tone={s.active ? 'ok' : 'mute'}>{s.active ? '사용' : '미사용'}</Pill>
                     </button>
                   </td>
+                  <td className={td('center')}>
+                    <button onClick={() => onRemove(s0.name)} title="사업장 삭제"
+                      className="rounded-md border border-border-hi px-2 py-1 text-[11px] font-bold text-danger transition-colors hover:border-danger hover:bg-danger/10">
+                      삭제
+                    </button>
+                  </td>
                 </tr>
               );
             })}
+            {adding && (
+              <tr className="bg-teal/5">
+                <td className={td('left')}>
+                  <input autoFocus value={neu.name ?? ''} onChange={(e) => setNeu((n) => ({ ...n, name: e.target.value }))}
+                    placeholder="사업장명*" className={CELL} />
+                </td>
+                <td className={td('left')}>
+                  <select value={neu.kind ?? '제조장'} onChange={(e) => setNeu((n) => ({ ...n, kind: e.target.value }))} className={CELL}>
+                    {SITE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                  </select>
+                </td>
+                <td className={td('left')}>
+                  <input value={neu.addr ?? ''} onChange={(e) => setNeu((n) => ({ ...n, addr: e.target.value }))}
+                    placeholder="주소" className={CELL} />
+                </td>
+                <td className={td('left')}>
+                  <input value={neu.tel ?? ''} onChange={(e) => setNeu((n) => ({ ...n, tel: e.target.value }))}
+                    placeholder="대표 전화" className={`${CELL} tabular-nums`} />
+                </td>
+                <td className={td('left')}>
+                  <input value={neu.mgr ?? ''} onChange={(e) => setNeu((n) => ({ ...n, mgr: e.target.value }))}
+                    placeholder="관리자" className={CELL} />
+                </td>
+                <td className={td('center')}>
+                  <button onClick={() => setNeu((n) => ({ ...n, active: !(n.active ?? true) }))} title="클릭하여 상태 변경">
+                    <Pill tone={(neu.active ?? true) ? 'ok' : 'mute'}>{(neu.active ?? true) ? '사용' : '미사용'}</Pill>
+                  </button>
+                </td>
+                <td className={td('center')}>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button onClick={onAdd}
+                      className="rounded-md border border-teal bg-teal/10 px-2 py-1 text-[11px] font-bold text-teal transition-colors hover:bg-teal/20">추가</button>
+                    <button onClick={() => { setAdding(false); setNeu({ kind: '제조장', active: true }); }}
+                      className="rounded-md border border-border-hi px-2 py-1 text-[11px] font-bold text-ink3 transition-colors hover:bg-panel-alt">취소</button>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </Card>
