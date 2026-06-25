@@ -196,7 +196,7 @@ export default function CompanyScreen() {
               <div className="flex flex-col gap-2.5">
                 <div className="grid h-[140px] w-full place-items-center overflow-hidden rounded-lg border border-[#2b313d] bg-[#3a414f] p-3 text-[11px] font-bold text-white/55">
                   {form?.logoUrl
-                    ? <img src={form.logoUrl} alt="회사 로고" className="h-full w-auto max-w-none object-contain" />
+                    ? <img src={form.logoUrl} alt="회사 로고" className="max-h-full max-w-full object-contain" />
                     : 'LOGO'}
                 </div>
                 <div className="flex flex-col gap-1.5">
