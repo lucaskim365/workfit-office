@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
@@ -6,6 +6,8 @@ import { ActionBar } from '@/shared/ui/ActionBar';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
+import { useCompanyInfo, useSaveCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import type { CompanyInfo } from '@/domain/companyInfo/schema';
 import { useCompanySites, useSaveCompanySite } from '@/features/companySite/useCompanySites';
 import type { CompanySite } from '@/domain/companySite/schema';
 
@@ -27,23 +29,34 @@ const td = (al: keyof typeof AL) => `border-b border-border px-3 py-2.5 ${AL[al]
 
 /** 회사 정보 — 시스템 관리 / 회사 기준정보(법인·사업장·표기) 관리. */
 export default function CompanyScreen() {
-  const [active, setActive] = useState(true);
-  const [mask, setMask] = useState(true);
-  const { data: sites, isLoading } = useCompanySites();
-  const save = useSaveCompanySite();
-  const rows = sites ?? [];
+  // 기본정보(싱글톤) — Firestore 로드분을 폼 state로 복제, 편집 후 저장 시 영구 반영.
+  const { data: info } = useCompanyInfo();
+  const saveInfo = useSaveCompanyInfo();
+  const [form, setForm] = useState<CompanyInfo | null>(null);
+  useEffect(() => { if (info) setForm(info); }, [info]);
+  const set = <K extends keyof CompanyInfo>(k: K, v: CompanyInfo[K]) =>
+    setForm((f) => (f ? { ...f, [k]: v } : f));
+  const infoDirty = !!form && !!info && JSON.stringify(form) !== JSON.stringify(info);
 
   // 사업장 인라인 편집 — name(PK)별로 변경분을 draft에 보관, 저장 시 Firestore로 영구 반영.
+  const { data: sites, isLoading } = useCompanySites();
+  const saveSite = useSaveCompanySite();
+  const rows = sites ?? [];
   const [draft, setDraft] = useState<Record<string, Partial<CompanySite>>>({});
   const edit = (name: string, patch: Partial<CompanySite>) =>
     setDraft((d) => ({ ...d, [name]: { ...d[name], ...patch } }));
-  const dirty = Object.keys(draft).length > 0;
+  const sitesDirty = Object.keys(draft).length > 0;
+
+  const dirty = infoDirty || sitesDirty;
+  const pending = saveInfo.isPending || saveSite.isPending;
   const onSave = () => {
-    rows.forEach((s) => {
-      if (draft[s.name]) save.mutate({ ...s, ...draft[s.name] });
-    });
+    if (form && infoDirty) saveInfo.mutate(form);
+    rows.forEach((s) => { if (draft[s.name]) saveSite.mutate({ ...s, ...draft[s.name] }); });
     setDraft({});
   };
+
+  // 폼 로드 전(초기 1프레임)엔 빈 값으로 렌더 — 값 헬퍼.
+  const v = (k: keyof CompanyInfo) => (form?.[k] ?? '') as string;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -52,36 +65,36 @@ export default function CompanyScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">회사 정보</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 회사 정보</p>
         </div>
-        <ActionBar actions={['refresh', { preset: 'save', label: save.isPending ? '저장 중…' : dirty ? '저장 *' : '저장', onClick: onSave, disabled: !dirty || save.isPending }]} />
+        <ActionBar actions={['refresh', { preset: 'save', label: pending ? '저장 중…' : dirty ? '저장 *' : '저장', onClick: onSave, disabled: !dirty || pending }]} />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
         <Card title="기본 정보">
           <div className="flex flex-col gap-3">
-            <FRow label="회사명" required><TextField defaultValue="워크핏테크놀로지(주)" /></FRow>
-            <FRow label="영문 회사명"><TextField defaultValue="WorkFit Technology Co., Ltd." /></FRow>
-            <FRow label="사업자등록번호"><TextField defaultValue="142-81-04567" className="font-mono tabular-nums" /></FRow>
-            <FRow label="법인등록번호"><TextField defaultValue="110111-3456789" className="font-mono tabular-nums" /></FRow>
+            <FRow label="회사명" required><TextField value={v('name')} onChange={(e) => set('name', e.target.value)} /></FRow>
+            <FRow label="영문 회사명"><TextField value={v('nameEn')} onChange={(e) => set('nameEn', e.target.value)} /></FRow>
+            <FRow label="사업자등록번호"><TextField value={v('bizNo')} onChange={(e) => set('bizNo', e.target.value)} className="font-mono tabular-nums" /></FRow>
+            <FRow label="법인등록번호"><TextField value={v('corpNo')} onChange={(e) => set('corpNo', e.target.value)} className="font-mono tabular-nums" /></FRow>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <FRow label="대표자" required compact><TextField defaultValue="김경영" /></FRow>
-              <FRow label="설립일" compact><TextField defaultValue="2011-03-02" className="tabular-nums" /></FRow>
+              <FRow label="대표자" required compact><TextField value={v('ceo')} onChange={(e) => set('ceo', e.target.value)} /></FRow>
+              <FRow label="설립일" compact><TextField value={v('foundedDate')} onChange={(e) => set('foundedDate', e.target.value)} className="tabular-nums" /></FRow>
             </div>
           </div>
         </Card>
 
         <Card title="업종 / 분류">
           <div className="flex flex-col gap-3">
-            <FRow label="업태"><TextField defaultValue="제조업" /></FRow>
-            <FRow label="종목"><TextField defaultValue="반도체 모듈 · 전자부품 제조" /></FRow>
+            <FRow label="업태"><TextField value={v('bizType')} onChange={(e) => set('bizType', e.target.value)} /></FRow>
+            <FRow label="종목"><TextField value={v('bizItem')} onChange={(e) => set('bizItem', e.target.value)} /></FRow>
             <FRow label="회사 구분">
-              <SelectField defaultValue="법인" options={[{ value: '법인', label: '법인사업자' }, { value: '개인', label: '개인사업자' }]} />
+              <SelectField value={v('companyType')} onChange={(e) => set('companyType', e.target.value as CompanyInfo['companyType'])} options={[{ value: '법인', label: '법인사업자' }, { value: '개인', label: '개인사업자' }]} />
             </FRow>
             <FRow label="회계연도 시작">
-              <SelectField defaultValue="1" options={[{ value: '1', label: '1월' }, { value: '3', label: '3월' }, { value: '4', label: '4월' }]} />
+              <SelectField value={v('fiscalStart')} onChange={(e) => set('fiscalStart', e.target.value)} options={[{ value: '1', label: '1월' }, { value: '3', label: '3월' }, { value: '4', label: '4월' }]} />
             </FRow>
             <div className="flex items-center justify-between border-t border-border pt-3">
               <div><div className="text-[12.5px] font-bold text-ink">사용 여부</div><div className="mt-0.5 text-[10.5px] text-ink3">미사용 시 신규 전표 발행 제한</div></div>
-              <Toggle on={active} onChange={setActive} />
+              <Toggle on={form?.active ?? true} onChange={(b) => set('active', b)} />
             </div>
           </div>
         </Card>
@@ -89,13 +102,13 @@ export default function CompanyScreen() {
         <Card title="연락처 / 주소">
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <FRow label="대표 전화" compact><TextField defaultValue="031-8000-1200" className="tabular-nums" /></FRow>
-              <FRow label="팩스" compact><TextField defaultValue="031-8000-1209" className="tabular-nums" /></FRow>
+              <FRow label="대표 전화" compact><TextField value={v('tel')} onChange={(e) => set('tel', e.target.value)} className="tabular-nums" /></FRow>
+              <FRow label="팩스" compact><TextField value={v('fax')} onChange={(e) => set('fax', e.target.value)} className="tabular-nums" /></FRow>
             </div>
-            <FRow label="대표 이메일"><TextField defaultValue="contact@workfit.co.kr" /></FRow>
-            <FRow label="홈페이지"><TextField defaultValue="https://www.workfit.co.kr" /></FRow>
+            <FRow label="대표 이메일"><TextField value={v('email')} onChange={(e) => set('email', e.target.value)} /></FRow>
+            <FRow label="홈페이지"><TextField value={v('homepage')} onChange={(e) => set('homepage', e.target.value)} /></FRow>
             <FRow label="본사 주소" multiline>
-              <textarea defaultValue="경기도 화성시 동탄첨단산업1로 27, 메가센터 7층 (우 18469)" rows={2}
+              <textarea value={v('address')} onChange={(e) => set('address', e.target.value)} rows={2}
                 className="resize-none rounded-md border border-border-hi bg-panel px-3 py-2 text-[12.5px] leading-relaxed text-ink outline-none transition-colors focus:border-teal" />
             </FRow>
           </div>
@@ -103,9 +116,9 @@ export default function CompanyScreen() {
 
         <Card title="시스템 표기 / 문서">
           <div className="flex flex-col gap-3">
-            <FRow label="시스템 표기명"><TextField defaultValue="WorkFit MES" /></FRow>
-            <FRow label="보고서 머리말"><TextField defaultValue="WorkFitMES" /></FRow>
-            <FRow label="문서 푸터"><TextField defaultValue="본 문서는 WorkFitMES에서 발행되었습니다." /></FRow>
+            <FRow label="시스템 표기명"><TextField value={v('sysName')} onChange={(e) => set('sysName', e.target.value)} /></FRow>
+            <FRow label="보고서 머리말"><TextField value={v('reportHeader')} onChange={(e) => set('reportHeader', e.target.value)} /></FRow>
+            <FRow label="문서 푸터"><TextField value={v('docFooter')} onChange={(e) => set('docFooter', e.target.value)} /></FRow>
             <FRow label="회사 로고" multiline>
               <div className="flex items-center gap-3">
                 <div className="grid h-[52px] w-[120px] place-items-center rounded-md border border-dashed border-border-hi bg-panel-alt text-[11px] font-bold text-ink3">LOGO</div>
@@ -114,7 +127,7 @@ export default function CompanyScreen() {
             </FRow>
             <div className="flex items-center justify-between border-t border-border pt-3">
               <div><div className="text-[12.5px] font-bold text-ink">민감정보 마스킹</div><div className="mt-0.5 text-[10.5px] text-ink3">사업자번호·연락처 마스킹 표기</div></div>
-              <Toggle on={mask} onChange={setMask} />
+              <Toggle on={form?.mask ?? true} onChange={(b) => set('mask', b)} />
             </div>
           </div>
         </Card>

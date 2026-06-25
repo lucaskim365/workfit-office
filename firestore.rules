@@ -46,7 +46,7 @@ service cloud.firestore {
         'safetyStock', 'fifoRules', 'matSubconIssues', 'subconStocks', 'pallets', 'agvRobots',
         'kits', 'lotSplits', 'iqcLinks', 'matScraps', 'matRequisitions',
         'quotes', 'salesCollections', 'accountsReceivable', 'creditLimits', 'salesRevenues', 'taxInvoices',
-        'authRoles', 'backupPolicies', 'companySites', 'interfaces', 'systemLogs', 'sysAdmins'
+        'authRoles', 'backupPolicies', 'companySites', 'companyInfo', 'interfaces', 'systemLogs', 'sysAdmins'
       ];
     }
 
