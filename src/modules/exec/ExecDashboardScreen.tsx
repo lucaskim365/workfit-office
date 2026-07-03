@@ -5,7 +5,7 @@ import { LineChart } from '@/shared/ui/charts/LineChart';
 import { C, RHead, RParam, RLegend, ProgBar, FField, FSel } from '../report/_report';
 import { getExecDashboardData, type ExecAlert } from './mock';
 import { PerformanceSection } from './PerformanceSection';
-import factoryOverview from '@/assets/exec-factory-overview.png';
+import factoryOverview from '@/assets/exec-factory-overview.jpg';
 
 const TONE_COLOR: Record<ExecAlert['tone'], string> = {
   err: C.err,
