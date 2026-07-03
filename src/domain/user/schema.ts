@@ -7,6 +7,12 @@ import { z } from 'zod';
 export const ROLE_GROUPS = ['ADMIN', 'OPERATOR', 'FIELD_ADMIN', 'MT_ADMIN', 'MT_USER', 'QC_USER'] as const;
 export const USER_STATUS = ['사용', '잠금', '미사용'] as const;
 
+/**
+ * 신규 사용자 공통 초기 비밀번호(데모). 사용자관리에서 등록 시 자동 부여되며,
+ * 사용자는 로그인 후 비밀번호 변경으로 교체한다. seed 계정도 동일 값 사용.
+ */
+export const DEFAULT_USER_PASSWORD = 'mes1234';
+
 export const userSchema = z.object({
   id: z.string().min(1),
   empNo: z.string().min(1, '사번을 입력하세요').max(20),

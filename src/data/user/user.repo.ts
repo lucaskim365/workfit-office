@@ -1,6 +1,6 @@
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
-import { userSchema, type User, type UserFormValues } from '@/domain/user/schema';
+import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
 
 /**
@@ -53,7 +53,9 @@ export const userRepo = {
   /** 신규 등록 — id 채번 후 저장. */
   async create(values: UserFormValues): Promise<User> {
     const all = await this.list();
-    const user = userSchema.parse({ ...values, id: nextId(all), lastLogin: '-' });
+    // 신규 사용자는 공통 초기 비밀번호를 부여해 바로 로그인 가능하게 한다.
+    // (로그인 후 비밀번호 변경으로 교체) — 로그인 연동.
+    const user = userSchema.parse({ ...values, password: DEFAULT_USER_PASSWORD, id: nextId(all), lastLogin: '-' });
     await this.save(user);
     return user;
   },

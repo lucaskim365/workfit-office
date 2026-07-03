@@ -6,7 +6,7 @@ import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
-import { ROLE_GROUPS, USER_STATUS, userFormSchema, type User, type UserFormValues } from '@/domain/user/schema';
+import { ROLE_GROUPS, USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 
 export type { UserFormValues };
 
@@ -105,6 +105,11 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             <TextField {...register('email')} invalid={!!errors.email} placeholder="user@workfit.co.kr" />
           </Field>
         </div>
+        {!initial && (
+          <div className="col-span-2 rounded-lg bg-blue-soft px-3 py-2 text-[11.5px] text-navy">
+            🔑 신규 사용자는 초기 비밀번호 <b>{DEFAULT_USER_PASSWORD}</b> 로 등록되어 바로 로그인할 수 있습니다. (로그인 후 변경 권장)
+          </div>
+        )}
       </form>
     </Modal>
   );

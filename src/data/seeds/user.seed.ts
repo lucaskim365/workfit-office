@@ -1,4 +1,4 @@
-import type { User } from '@/domain/user/schema';
+import { DEFAULT_USER_PASSWORD, type User } from '@/domain/user/schema';
 
 /**
  * 사용자 시드 — Firebase 미설정 시 폴백 + 초기 seed 소스.
@@ -7,7 +7,7 @@ import type { User } from '@/domain/user/schema';
  * ⚠ password 는 데모 한정 평문. 전 계정 공통 초기 비밀번호 `mes1234`.
  *   자체 로그인(사번 또는 이메일 + 비밀번호)으로 로그인. ([[firebase-backend-setup]])
  */
-const DEMO_PW = 'mes1234';
+const DEMO_PW = DEFAULT_USER_PASSWORD;
 
 export const USER_SEED: User[] = [
   { id: 'U001', empNo: 'A12345', name: '김승기', dept: '시스템관리팀', position: '관리자', roleGroup: 'ADMIN', email: 'seunggi.kim@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 08:41', password: DEMO_PW },
