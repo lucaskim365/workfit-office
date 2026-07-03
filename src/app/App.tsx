@@ -5,7 +5,7 @@ import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
 
 const SCREENS = flattenScreens();
-const HOME = '/ops/dashboard';
+const HOME = '/exec';
 
 /**
  * 구현된 화면 레지스트리 (url → 컴포넌트).
@@ -13,6 +13,8 @@ const HOME = '/ops/dashboard';
  * 미구현 화면은 PlaceholderScreen(eager) 사용.
  */
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
+  // 경영 현황 (로그인 후 랜딩)
+  '/exec': lazy(() => import('@/modules/exec/ExecDashboardScreen')),
   // 운영 현황
   '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
   '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),
