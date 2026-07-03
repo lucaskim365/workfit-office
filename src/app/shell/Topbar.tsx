@@ -4,6 +4,7 @@ import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
 import ChangePasswordModal from '@/app/auth/ChangePasswordModal';
+import { useAuth } from '@/app/auth/AuthProvider';
 
 interface TopbarProps {
   activeModuleId: string;
@@ -31,6 +32,9 @@ function Brand() {
 
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick }: TopbarProps) {
   const [pwOpen, setPwOpen] = useState(false);
+  const { user } = useAuth();
+  // 로그인 사용자 이니셜(이름 앞 2글자). 미로그인/데모 시 기본 표기.
+  const initials = user?.name ? user.name.slice(0, 2) : 'ME';
   return (
     <header className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 bg-[#64748b] px-3.5">
       <div className="flex shrink-0 items-center gap-7">
@@ -111,10 +115,10 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
         <div className="relative">
           <button
             onClick={() => setUserOpen(!userOpen)}
-            title="계정"
+            title={user ? `${user.name} (${user.empNo})` : '계정'}
             className={`grid h-8 w-8 place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white ${userOpen ? 'ring-2 ring-white/30' : ''}`}
           >
-            KS
+            {initials}
           </button>
           {userOpen && (
             <UserMenu
