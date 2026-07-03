@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
+import profilePhoto from '@/assets/profile-honchaewon.png';
 
 interface Tool {
   key: string;
@@ -146,10 +147,10 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     <div className="flex h-full flex-col bg-[#eaf7fb]">
       {/* 프로필 헤더 */}
       <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #34d2de, #14b6cf)' }}>
-        <div className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border-2 border-white/75 bg-white/25 text-[9px] font-bold text-white">사진</div>
+        <img src={profilePhoto} alt="홍채원" className="h-[54px] w-[54px] shrink-0 rounded-full border-2 border-white/75 object-cover" />
         <div className="min-w-0 flex-1 text-white">
-          <div className="text-[15.5px] font-extrabold tracking-tight">김아리 <span className="text-[11.5px] font-semibold opacity-90">사원</span></div>
-          <div className="mt-0.5 text-[10.5px] opacity-90">미카컴퍼니 · 팀원</div>
+          <div className="text-[15.5px] font-extrabold tracking-tight">홍채원 <span className="text-[11.5px] font-semibold opacity-90">사원</span></div>
+          <div className="mt-0.5 text-[10.5px] opacity-90">개발팀 · 사원</div>
         </div>
         <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-white/20 text-[14px] text-white">
           🔔
