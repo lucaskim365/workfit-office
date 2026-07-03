@@ -50,6 +50,27 @@ export interface PeriodRow {
   up: boolean;
 }
 
+/** 기간 비교 막대(지수) — GroupedBars 입력. type 별칭(암묵적 인덱스 시그니처 필요). */
+export type PeriodBar = {
+  label: string;
+  prev: number;
+  cur: number;
+};
+
+/** 부서/라인 스코어카드 행. grade A/B/C. */
+export interface ScorecardRow {
+  org: string;
+  prod: number;
+  qual: number;
+  oee: number;
+  due: number;
+  score: string;
+  grade: 'A' | 'B' | 'C';
+}
+
+/** 스코어카드 상단 요약 KPI([label, value, unit, tone?]) — MKpis 입력 호환. */
+export type ScorecardKpi = [string, string, string] | [string, string, string, string];
+
 export interface ExecDashboardData {
   company: string;
   period: string;
@@ -58,6 +79,12 @@ export interface ExecDashboardData {
   trend: ExecTrend;
   alerts: ExecAlert[];
   periodRows: PeriodRow[];
+  /** 기간 비교(전월 vs 당월) 화면용. */
+  periodCompareLabel: string;
+  periodBars: PeriodBar[];
+  /** 부서/라인 스코어카드 화면용. */
+  scorecardKpis: ScorecardKpi[];
+  scorecardRows: ScorecardRow[];
 }
 
 const DATA: ExecDashboardData = {
@@ -98,6 +125,27 @@ const DATA: ExecDashboardData = {
     { label: '평균 OEE', prev: '84.2%', cur: '86.6%', delta: '+2.4%p', up: true },
     { label: '납기 준수율', prev: '98.7%', cur: '98.4%', delta: '-0.3%p', up: false },
     { label: '불량률', prev: '2.2%', cur: '1.6%', delta: '-0.6%p', up: true },
+  ],
+  periodCompareLabel: '2026-05 vs 2026-06',
+  periodBars: [
+    { label: '생산량', prev: 94, cur: 98 },
+    { label: '수율', prev: 96, cur: 97 },
+    { label: 'OEE', prev: 84, cur: 87 },
+    { label: '납기', prev: 99, cur: 98 },
+    { label: '불량률', prev: 22, cur: 16 },
+  ],
+  scorecardKpis: [
+    ['평가 조직', '12', '개'],
+    ['A 등급', '7', '개', 'teal'],
+    ['목표 달성', '83', '%'],
+    ['전월비', '+1.8', '%p'],
+  ],
+  scorecardRows: [
+    { org: 'M-Line 1', prod: 98, qual: 97, oee: 88, due: 99, score: '95.5', grade: 'A' },
+    { org: 'M-Line 2', prod: 96, qual: 96, oee: 85, due: 98, score: '93.8', grade: 'A' },
+    { org: 'A-Line', prod: 96, qual: 95, oee: 84, due: 97, score: '93.0', grade: 'B' },
+    { org: '가공팀', prod: 97, qual: 98, oee: 90, due: 96, score: '95.3', grade: 'A' },
+    { org: '조립팀', prod: 95, qual: 94, oee: 82, due: 95, score: '91.5', grade: 'B' },
   ],
 };
 
