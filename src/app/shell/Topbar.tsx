@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { MENU_TREE } from '../menu-tree';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
@@ -32,6 +32,22 @@ function Brand() {
 
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick }: TopbarProps) {
   const [pwOpen, setPwOpen] = useState(false);
+  // 열린 드롭다운이 화면 좌/우 가장자리를 넘어가면 안쪽으로 밀어주는 보정값(px).
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    setShift(0);
+  }, [openModule]);
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el || !openModule) return;
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    let delta = 0;
+    if (r.left < margin) delta = margin - r.left;
+    else if (r.right > window.innerWidth - margin) delta = window.innerWidth - margin - r.right;
+    if (delta !== 0) setShift((prev) => prev + delta);
+  }, [openModule, shift]);
   const { user } = useAuth();
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
@@ -60,10 +76,11 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
                 {isOpen && (
                   <div
-                    className="absolute left-1/2 top-[calc(100%+10px)] z-[60] flex max-h-[calc(100vh-88px)] -translate-x-1/2 flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)]"
-                    style={{ width: cols === 3 ? 624 : cols === 2 ? 432 : 248 }}
+                    ref={panelRef}
+                    className="absolute left-1/2 top-[calc(100%+10px)] z-[60] flex max-h-[calc(100vh-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)]"
+                    style={{ width: cols === 3 ? 624 : cols === 2 ? 432 : 248, transform: `translateX(calc(-50% + ${shift}px))` }}
                   >
-                    <div className="absolute -top-1.5 left-1/2 -ml-1.5 h-3 w-3 rotate-45 border-l border-t border-border bg-panel" />
+                    <div className="absolute -top-1.5 -ml-1.5 h-3 w-3 rotate-45 border-l border-t border-border bg-panel" style={{ left: `calc(50% - ${shift}px)` }} />
                     <div className="flex shrink-0 items-center gap-1.5 px-2.5 pb-2 pt-1.5 text-[10px] font-extrabold tracking-wide text-ink3">
                       <MenuGlyph glyph={m.icon} size={14} color="var(--color-teal)" />
                       {m.name}
