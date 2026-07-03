@@ -9,7 +9,6 @@ export const MENU_TREE: MenuNode[] = [
   { id: 'M_EXEC', name: '경영 현황', icon: '▦', order: 5, use: true, children: [
     { id: 'G_EXEC_DASH', name: '대시보드', icon: '▦', order: 10, use: true, children: [
       { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', icon: '▦', order: 10, use: true },
-      { id: 'S_EXEC_PERF', name: '성과 관리', url: '/exec/performance', icon: '↗', order: 20, use: true },
     ] },
   ] },
 

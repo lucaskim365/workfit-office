@@ -13,9 +13,8 @@ const HOME = '/exec';
  * 미구현 화면은 PlaceholderScreen(eager) 사용.
  */
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
-  // 경영 현황 (로그인 후 랜딩)
+  // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
   '/exec': lazy(() => import('@/modules/exec/ExecDashboardScreen')),
-  '/exec/performance': lazy(() => import('@/modules/exec/ExecPerformanceScreen')),
   // 운영 현황
   '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
   '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),

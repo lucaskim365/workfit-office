@@ -4,6 +4,7 @@ import { Sparkline } from '@/shared/ui/charts/Sparkline';
 import { LineChart } from '@/shared/ui/charts/LineChart';
 import { C, RHead, RParam, RLegend, ProgBar, FField, FSel } from '../report/_report';
 import { getExecDashboardData, type ExecAlert } from './mock';
+import { PerformanceSection } from './PerformanceSection';
 
 const TONE_COLOR: Record<ExecAlert['tone'], string> = {
   err: C.err,
@@ -11,6 +12,16 @@ const TONE_COLOR: Record<ExecAlert['tone'], string> = {
   ok: C.ok,
   info: C.blue,
 };
+
+/** 섹션 구분 헤더. */
+function SecHead({ children }: { children: string }) {
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <span className="h-[15px] w-1 rounded-sm bg-teal" />
+      <span className="text-[13.5px] font-extrabold tracking-tight text-ink">{children}</span>
+    </div>
+  );
+}
 
 /**
  * 경영 현황(Executive Cockpit) — 로그인 후 랜딩. 회사 전체를 경영자 관점 한 화면에 요약.
@@ -25,6 +36,13 @@ export default function ExecDashboardScreen() {
       <RParam period={d.period}>
         <FField label="공장"><FSel value={d.company} w={80} /></FField>
       </RParam>
+
+      {/* ── 성과 관리(매출·거래처) — 상단 배치 ── */}
+      <SecHead>성과 관리 · 매출/거래처</SecHead>
+      <PerformanceSection />
+
+      {/* ── 전사 종합 현황 ── */}
+      <SecHead>전사 종합 현황</SecHead>
 
       {/* KPI 타일 */}
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">

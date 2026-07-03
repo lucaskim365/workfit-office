@@ -3,7 +3,7 @@ import { Gauge } from '@/shared/ui/charts/Gauge';
 import { Donut, type DonutDatum } from '@/shared/ui/charts/Donut';
 import { LineChart } from '@/shared/ui/charts/LineChart';
 import { DivergingBars } from '@/shared/ui/charts/DivergingBars';
-import { C, RHead, RParam, RLegend, FField, FSel } from '../report/_report';
+import { C, RLegend } from '../report/_report';
 import { getExecPerformanceData } from './performance.mock';
 
 const won = (n: number) => n.toLocaleString('ko-KR');
@@ -28,17 +28,14 @@ function DonutBlock({ title, data }: { title: string; data: DonutDatum[] }) {
 }
 
 /**
- * 경영 현황 — 성과 관리(매출·거래처). 참고 "사업 성과관리" 대시보드 이관.
- * 데이터는 단일 소스 getExecPerformanceData()(데모 샘플). 계획서 경영현황_성과관리_추가.
+ * 성과 관리(매출·거래처) 섹션 — 경영 대시보드 상단에 삽입.
+ * 데이터는 단일 소스 getExecPerformanceData()(데모 샘플).
  */
-export default function ExecPerformanceScreen() {
+export function PerformanceSection() {
   const d = getExecPerformanceData();
 
   return (
     <div className="flex flex-col gap-3.5">
-      <RHead title="성과 관리" sub="경영 현황 / 매출·거래처 성과 (Performance)" type="R2" />
-      <RParam period={d.period}><FField label="대상"><FSel value="전체 거래처" w={100} /></FField></RParam>
-
       {/* KPI 4 */}
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {d.kpis.map((k) => (
