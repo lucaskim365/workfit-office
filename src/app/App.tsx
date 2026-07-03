@@ -15,6 +15,7 @@ const HOME = '/exec';
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩)
   '/exec': lazy(() => import('@/modules/exec/ExecDashboardScreen')),
+  '/exec/performance': lazy(() => import('@/modules/exec/ExecPerformanceScreen')),
   // 운영 현황
   '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
   '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),
