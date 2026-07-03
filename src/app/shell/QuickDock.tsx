@@ -12,10 +12,8 @@ interface Tool {
 
 const DOCK_TOOLS: Tool[] = [
   { key: 'gw', label: '그룹웨어', icon: '▦', color: '#16b8cf' },
-  { key: 'bot', label: '챗봇', icon: '✦', color: '#17a89a' },
+  { key: 'bot', label: '위디', icon: '✦', color: '#17a89a' },
   { key: 'msg', label: '메신저', icon: '💬', color: '#e6960c' },
-  { key: 'app', label: 'App Store', icon: '◳', color: '#6c5ce7' },
-  { key: 'edu', label: '교육', icon: '◉', color: '#e0567a' },
 ];
 
 const PANEL_W = 384;
@@ -78,8 +76,6 @@ export function QuickDock({ scrolling = false }: { scrolling?: boolean }) {
             <div className="menu-scroll min-h-0 flex-1 overflow-y-auto">
               {tool.key === 'bot' && <ChatbotPanel />}
               {tool.key === 'msg' && <MessengerPanel />}
-              {tool.key === 'app' && <AppStorePanel />}
-              {tool.key === 'edu' && <EduPanel />}
             </div>
           </>
         )}
@@ -197,11 +193,11 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ---------- 챗봇 ---------- */
+/* ---------- 위디 ---------- */
 function ChatbotPanel() {
   const chips = ['오늘 생산 실적 알려줘', '설비 알람 현황', '재고 부족 품목', '결재 상신 방법'];
   const msgs: { who: 'bot' | 'me'; t: string }[] = [
-    { who: 'bot', t: '안녕하세요, 김승기님 👋\nMES 도우미입니다. 무엇을 도와드릴까요?' },
+    { who: 'bot', t: '안녕하세요, 김승기님 👋\n위디입니다. 무엇을 도와드릴까요?' },
     { who: 'me', t: '오늘 M-Line 생산 실적 알려줘' },
     { who: 'bot', t: '오늘 M-Line 실적은 4,182 EA로 목표 대비 104.5% 달성했습니다. 종합 가동률(OEE)은 87.4%입니다. 📈' },
     { who: 'me', t: '불량률은 어때?' },
@@ -265,184 +261,6 @@ function MessengerPanel() {
           </div>
         </button>
       ))}
-    </div>
-  );
-}
-
-/* ---------- App Store (업무용 웹앱) ---------- */
-function AppStorePanel() {
-  const cats = ['전체', '생산', '품질', '설비', '물류', '안전', '분석'];
-  const featured = { name: '설비 예지보전 AI', tag: 'NEW', desc: '센서 데이터로 고장 시점을 예측해 비가동을 줄입니다.', icon: '🤖', rating: '4.8', installs: '1.2k' };
-  const apps = [
-    { name: 'QR 작업지시', cat: '생산', icon: '📲', color: '#3a6ee0', desc: 'QR 스캔으로 작업 시작/종료 등록', rating: '4.7', state: 'installed' },
-    { name: '실시간 OEE 보드', cat: '분석', icon: '📊', color: '#17a89a', desc: '라인별 종합효율 실시간 모니터', rating: '4.9', state: 'get' },
-    { name: '불량 사진 리포트', cat: '품질', icon: '📷', color: '#e0483b', desc: '현장 불량 촬영·분류·자동 집계', rating: '4.5', state: 'get' },
-    { name: '재고 스캐너', cat: '물류', icon: '📦', color: '#e6960c', desc: '바코드로 입출고·실사 처리', rating: '4.6', state: 'installed' },
-    { name: '안전점검 체크', cat: '안전', icon: '🦺', color: '#16a34a', desc: '일일 안전점검 체크리스트', rating: '4.4', state: 'get' },
-    { name: '설비 점검 일지', cat: '설비', icon: '🛠️', color: '#56607a', desc: 'PM 일정·점검 이력 기록', rating: '4.3', state: 'get' },
-    { name: '교대 인수인계', cat: '생산', icon: '🔁', color: '#8b5cf6', desc: '교대조 간 인수인계 노트 공유', rating: '4.6', state: 'update' },
-    { name: 'SPC 관리도', cat: '품질', icon: '📈', color: '#0ea5e9', desc: '공정 통계 관리도·이상 알림', rating: '4.8', state: 'get' },
-  ];
-  const [cat, setCat] = useState('전체');
-  const list = cat === '전체' ? apps : apps.filter((a) => a.cat === cat);
-  const stateStyle = (s: string) => {
-    if (s === 'installed') return { label: '열기', cls: 'bg-bg-deep text-ink2' };
-    if (s === 'update') return { label: '업데이트', cls: 'bg-blue-soft text-blue' };
-    return { label: '받기', cls: 'bg-[#ece9fd] text-[#6c5ce7]' };
-  };
-  return (
-    <div className="flex flex-col gap-3.5 p-3.5">
-      {/* 카테고리 칩 */}
-      <div className="menu-scroll flex gap-[7px] overflow-x-auto pb-0.5">
-        {cats.map((c, i) => (
-          <button key={i} onClick={() => setCat(c)} className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-bold ${cat === c ? 'bg-[#6c5ce7] text-white' : 'bg-panel-alt text-ink2'}`}>{c}</button>
-        ))}
-      </div>
-
-      {/* 추천 앱 (히어로) */}
-      {cat === '전체' && (
-        <div className="flex flex-col gap-3 rounded-2xl p-4 text-white" style={{ background: 'linear-gradient(135deg, #7b6bf0, #5a4ad1)' }}>
-          <span className="text-[10px] font-extrabold tracking-wider opacity-85">오늘의 추천</span>
-          <div className="flex items-center gap-3">
-            <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[14px] bg-white/20 text-[27px]">{featured.icon}</span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[14.5px] font-extrabold">{featured.name}</span>
-                <span className="rounded bg-[#ffd54a] px-1.5 py-px text-[8px] font-extrabold text-[#5a4ad1]">{featured.tag}</span>
-              </div>
-              <div className="mt-0.5 text-[10.5px] leading-snug opacity-90">{featured.desc}</div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10.5px] opacity-90">★ {featured.rating} · 설치 {featured.installs}</span>
-            <button className="rounded-full bg-white px-5 py-[7px] text-[11.5px] font-extrabold text-[#5a4ad1]">받기</button>
-          </div>
-        </div>
-      )}
-
-      {/* 앱 리스트 */}
-      <div className="flex flex-col gap-2">
-        <div className="mb-0.5 flex items-center justify-between">
-          <span className="text-[12.5px] font-extrabold text-ink">{cat === '전체' ? '업무 앱' : cat + ' 앱'}</span>
-          <span className="text-[10.5px] text-ink3">{list.length}개</span>
-        </div>
-        {list.map((a, i) => {
-          const st = stateStyle(a.state);
-          return (
-            <div key={i} className={`flex items-center gap-3 py-2.5 ${i < list.length - 1 ? 'border-b border-border' : ''}`}>
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[20px]" style={{ background: a.color + '1a', color: a.color }}>{a.icon}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[12.5px] font-bold text-ink">{a.name}</span>
-                  <span className="shrink-0 rounded bg-panel-alt px-1.5 py-px text-[9px] font-bold text-ink3">{a.cat}</span>
-                </div>
-                <div className="mt-0.5 truncate text-[10.5px] text-ink3">{a.desc}</div>
-                <div className="mt-0.5 text-[10px] text-ink3">★ {a.rating}</div>
-              </div>
-              <button className={`shrink-0 rounded-full px-[15px] py-[7px] text-[11px] font-extrabold ${st.cls}`}>{st.label}</button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- 교육 (직원 교육 콘텐츠) ---------- */
-function EduPanel() {
-  const cats = ['전체', '필수', '직무', '안전', '품질', '리더십'];
-  const [cat, setCat] = useState('전체');
-  const inProgress = { title: '신규 입사자 안전보건 교육', chapter: '3 / 8 차시', percent: 38, due: 'D-5' };
-  const courses = [
-    { title: '산업안전보건 법정교육', cat: '필수', icon: '🦺', color: '#16a34a', dur: '50분', lessons: 6, state: '필수', badge: 'D-5' },
-    { title: 'SPC 공정관리 기초', cat: '품질', icon: '📈', color: '#0ea5e9', dur: '1시간 20분', lessons: 9, state: '수강중', progress: 38 },
-    { title: '설비 TPM 자주보전', cat: '직무', icon: '🛠️', color: '#56607a', dur: '45분', lessons: 5, state: '받기' },
-    { title: '화학물질 취급 안전', cat: '안전', icon: '⚗️', color: '#e0483b', dur: '35분', lessons: 4, state: '필수', badge: 'D-12' },
-    { title: '데이터로 보는 생산성', cat: '직무', icon: '📊', color: '#17a89a', dur: '1시간', lessons: 7, state: '받기' },
-    { title: '현장 리더의 소통법', cat: '리더십', icon: '🤝', color: '#6c5ce7', dur: '55분', lessons: 6, state: '완료' },
-    { title: '품질 4대 도구 실습', cat: '품질', icon: '🔧', color: '#3a6ee0', dur: '1시간 10분', lessons: 8, state: '받기' },
-    { title: '직장 내 괴롭힘 예방', cat: '필수', icon: '🛡️', color: '#e6960c', dur: '40분', lessons: 4, state: '완료' },
-  ];
-  const list = cat === '전체' ? courses : courses.filter((c) => c.cat === cat);
-  const stBtn = (s: string) => {
-    if (s === '수강중') return { label: '이어보기', cls: 'bg-[#e0567a] text-white' };
-    if (s === '완료') return { label: '복습', cls: 'bg-bg-deep text-ink2' };
-    return { label: s === '필수' ? '시작' : '수강', cls: 'bg-[#fde8ee] text-[#e0567a]' };
-  };
-  return (
-    <div className="flex flex-col gap-3.5 p-3.5">
-      {/* 카테고리 칩 */}
-      <div className="menu-scroll flex gap-[7px] overflow-x-auto pb-0.5">
-        {cats.map((c, i) => (
-          <button key={i} onClick={() => setCat(c)} className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-bold ${cat === c ? 'bg-[#e0567a] text-white' : 'bg-panel-alt text-ink2'}`}>{c}</button>
-        ))}
-      </div>
-
-      {/* 이어보기(진행 중) */}
-      {cat === '전체' && (
-        <div className="flex flex-col gap-2.5 rounded-2xl p-4 text-white" style={{ background: 'linear-gradient(135deg, #ec6f8e, #d44d72)' }}>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold tracking-wider opacity-90">이어보기</span>
-            <span className="rounded-md bg-white/20 px-2 py-0.5 text-[9.5px] font-extrabold">{inProgress.due}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-[14px] bg-white/20 text-[24px]">▶</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13.5px] font-extrabold">{inProgress.title}</div>
-              <div className="mt-0.5 text-[10.5px] opacity-90">{inProgress.chapter}</div>
-            </div>
-          </div>
-          <div>
-            <div className="h-1.5 rounded bg-white/30"><div className="h-full rounded bg-white" style={{ width: `${inProgress.percent}%` }} /></div>
-            <div className="mt-1.5 flex justify-between text-[10px]">
-              <span className="opacity-90">진행률 {inProgress.percent}%</span>
-              <span className="font-bold">이어보기 ▸</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 학습 요약 */}
-      {cat === '전체' && (
-        <div className="grid grid-cols-3 gap-2">
-          {([['이수', '12', 'text-[#e0567a]'], ['진행중', '2', 'text-[#0ea5e9]'], ['미이수', '3', 'text-amber']] as const).map((s, i) => (
-            <div key={i} className="rounded-[11px] border border-border bg-panel px-2 py-[11px] text-center">
-              <div className={`text-[18px] font-extrabold ${s[2]}`}>{s[1]}</div>
-              <div className="mt-px text-[10px] font-semibold text-ink3">{s[0]}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 강의 리스트 */}
-      <div className="flex flex-col gap-2">
-        <div className="mb-0.5 flex items-center justify-between">
-          <span className="text-[12.5px] font-extrabold text-ink">{cat === '전체' ? '추천 과정' : cat + ' 과정'}</span>
-          <span className="text-[10.5px] text-ink3">{list.length}개</span>
-        </div>
-        {list.map((c, i) => {
-          const b = stBtn(c.state);
-          return (
-            <div key={i} className={`flex items-center gap-3 py-2.5 ${i < list.length - 1 ? 'border-b border-border' : ''}`}>
-              <span className="relative grid h-[46px] w-[46px] shrink-0 place-items-center rounded-xl text-[20px]" style={{ background: c.color + '1a', color: c.color }}>
-                {c.icon}
-                {c.badge && <span className="absolute -right-[5px] -top-[5px] rounded-full border-[1.5px] border-white bg-danger px-[5px] py-px text-[8px] font-extrabold text-white">{c.badge}</span>}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[12.5px] font-bold text-ink">{c.title}</span>
-                  {c.cat === '필수' && <span className="shrink-0 rounded bg-[#fde8ee] px-1.5 py-px text-[8.5px] font-extrabold text-[#e0567a]">필수</span>}
-                </div>
-                <div className="mt-[3px] text-[10.5px] text-ink3">⏱ {c.dur} · {c.lessons}차시 · {c.cat}</div>
-                {c.progress != null && (
-                  <div className="mt-1.5 h-1 rounded-[3px] bg-bg-deep"><div className="h-full rounded-[3px] bg-[#e0567a]" style={{ width: `${c.progress}%` }} /></div>
-                )}
-              </div>
-              <button className={`shrink-0 rounded-full px-3.5 py-[7px] text-[11px] font-extrabold ${b.cls}`}>{b.label}</button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
