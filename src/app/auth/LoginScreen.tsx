@@ -66,9 +66,13 @@ export default function LoginScreen() {
       <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.18)]">
         <div className="flex flex-col items-center gap-3 bg-navy px-6 pb-6 pt-8">
           {logoUrl ? (
-            <div className="grid h-16 w-full max-w-[220px] place-items-center rounded-xl bg-white/95 px-4 py-3">
-              <img src={logoUrl} alt={companyName} className="h-full w-full object-contain" />
-            </div>
+            // 남색 헤더 위에 로고 직접 배치(흰 로고도 보이도록). 원본 비율 유지 +
+            // 최대 높이/너비 제한으로 어떤 비율의 로고든 박스를 넘치지 않게 담는다.
+            <img
+              src={logoUrl}
+              alt={companyName}
+              className="max-h-16 w-auto max-w-[240px] object-contain"
+            />
           ) : (
             <div className="grid h-14 w-14 place-items-center rounded-xl bg-teal text-[22px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">
               {companyName.charAt(0) || 'M'}
