@@ -33,8 +33,8 @@ function Brand() {
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick }: TopbarProps) {
   const [pwOpen, setPwOpen] = useState(false);
   const { user } = useAuth();
-  // 로그인 사용자 이니셜(이름 앞 2글자). 미로그인/데모 시 기본 표기.
-  const initials = user?.name ? user.name.slice(0, 2) : 'ME';
+  // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
+  const initials = user?.name ? user.name.slice(-2) : 'WF';
   return (
     <header className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 bg-[#64748b] px-3.5">
       <div className="flex shrink-0 items-center gap-7">
