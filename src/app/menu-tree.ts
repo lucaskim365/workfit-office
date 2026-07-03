@@ -5,16 +5,12 @@ import type { MenuNode } from '@/shared/types/menu';
  * 8개 모듈 / 약 40개 그룹 / 약 170개 화면. 상단 모듈 내비·좌측 사이드바·라우팅이 공유.
  */
 export const MENU_TREE: MenuNode[] = [
-  /* ── 경영 현황 (로그인 후 랜딩) ── */
+  /* ── 경영 현황 (로그인 후 랜딩, 운영 현황 통합) ── */
   { id: 'M_EXEC', name: '경영 현황', icon: '▦', order: 5, use: true, children: [
     { id: 'G_EXEC_DASH', name: '대시보드', icon: '▦', order: 10, use: true, children: [
       { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', icon: '▦', order: 10, use: true },
     ] },
-  ] },
-
-  /* ── 운영 현황 ── */
-  { id: 'M_OPS', name: '운영 현황', icon: '◫', order: 10, use: true, children: [
-    { id: 'G_OPS_MON', name: '모니터링', icon: '◫', order: 10, use: true, children: [
+    { id: 'G_OPS_MON', name: '모니터링', icon: '◫', order: 20, use: true, children: [
       { id: 'S_OPS_DASH', name: '통합 모니터링', url: '/ops/dashboard', icon: '◫', order: 10, use: true },
       { id: 'S_OPS_LINE', name: '라인 가동 현황', url: '/ops/line', icon: '◷', order: 20, use: true },
     ] },
