@@ -1,56 +1,85 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import {
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  type User as FbUser,
-} from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { authRepo } from '@/data/auth/auth.repo';
+import { userRepo } from '@/data/user/user.repo';
+import type { User } from '@/domain/user/schema';
 
 /**
- * 인증 컨텍스트 — Firebase Auth(이메일/비밀번호) 로그인 게이트.
- * 클라이언트 SDK가 Firestore에 직접 접근하므로, 로그인 = 보안 룰(request.auth != null)의 전제다.
+ * 인증 컨텍스트 — 자체 로그인(users 컬렉션 대조) 세션.
+ * ⚠ UI 게이트일 뿐 진짜 보안이 아니다(클라 평문 대조). 진짜 인증은 후속
+ *    Cloud Function custom token 으로 전환 예정. ([[firebase-backend-setup]])
  *
- * Firebase 미설정(.env 없음)일 때는 데모 모드로 자동 통과시켜
- * seed 폴백으로 동작하던 기존 동작을 깨지 않는다. ([[data-layer-pattern]] graceful degrade)
+ * 세션은 localStorage 에 사용자 id 만 저장하고, 초기 로드 시 users 에서 복원한다.
+ * (전체 User 를 저장하면 stale/평문 노출 위험 → id 만 보관)
+ *
+ * ⚠ 이 Provider 는 QueryProvider 바깥에 있으므로 TanStack Query 훅을 쓰지 못한다.
+ *    → repo(authRepo/userRepo)를 직접 호출한다.
  */
 interface AuthState {
-  user: FbUser | null;
-  /** 인증 상태 확정 전(초기 로딩). */
+  /** 로그인한 사용자(자체 도메인 User). 미로그인 시 null. */
+  user: User | null;
+  /** 세션 복원 등 초기 로딩 중. */
   loading: boolean;
-  /** Firebase 미설정으로 인증을 건너뛴 데모 모드. */
+  /** 자체 로그인은 항상 동작하므로 데모 통과 개념은 없음(하위호환용, 항상 false). */
   demoMode: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** 사번(empNo) 또는 이메일 + 비밀번호로 로그인. 실패 시 AuthError throw. */
+  signIn: (loginId: string, password: string) => Promise<void>;
+  /** 로그아웃 — 세션 클리어. */
   signOutUser: () => Promise<void>;
+  /** 로그인 사용자의 비밀번호 변경(현재 비번 검증 후 DB 영구화). 실패 시 AuthError throw. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FbUser | null>(null);
-  const [loading, setLoading] = useState(isFirebaseConfigured);
+const SESSION_KEY = 'mes.auth.uid';
 
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 초기 마운트 시 저장된 세션(사용자 id) 복원.
   useEffect(() => {
-    if (!isFirebaseConfigured || !auth) return;
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return unsub;
+    let alive = true;
+    (async () => {
+      try {
+        const uid = localStorage.getItem(SESSION_KEY);
+        if (uid) {
+          const users = await userRepo.list();
+          const found = users.find((u) => u.id === uid && u.status === '사용');
+          if (alive && found) setUser(found);
+          else localStorage.removeItem(SESSION_KEY);
+        }
+      } catch {
+        /* 복원 실패 시 미로그인으로 처리 */
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  async function signIn(email: string, password: string) {
-    if (!auth) throw new Error('Firebase Auth가 초기화되지 않았습니다.');
-    await signInWithEmailAndPassword(auth, email, password);
+  async function signIn(loginId: string, password: string) {
+    const u = await authRepo.authenticate(loginId, password);
+    localStorage.setItem(SESSION_KEY, u.id);
+    setUser(u);
+    void authRepo.touchLastLogin(u.id);
   }
 
   async function signOutUser() {
-    if (!auth) return;
-    await signOut(auth);
+    localStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    if (!user) throw new Error('로그인 상태가 아닙니다.');
+    const updated = await authRepo.changePassword(user.id, currentPassword, newPassword);
+    setUser(updated); // 세션 내 비밀번호 최신화(이후 변경 검증 정확)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, demoMode: !isFirebaseConfigured, signIn, signOutUser }}>
+    <AuthContext.Provider value={{ user, loading, demoMode: false, signIn, signOutUser, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

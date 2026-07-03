@@ -17,6 +17,11 @@ export const userSchema = z.object({
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS).default('사용'),
   lastLogin: z.string().default('-'),
+  /**
+   * 로그인 비밀번호. ⚠ 데모 한정 평문 저장 — 실제 보안 아님.
+   * 진짜 인증은 후속(Cloud Function custom token)으로 전환 예정. ([[firebase-backend-setup]])
+   */
+  password: z.string().default(''),
 });
 
 export type User = z.infer<typeof userSchema>;

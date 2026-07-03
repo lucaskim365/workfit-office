@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { MENU_TREE } from '../menu-tree';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
+import ChangePasswordModal from '@/app/auth/ChangePasswordModal';
 
 const NOTICE_TICKER = [
   '[WorkFit] M-line · Fab1 정상 가동 중',
@@ -36,6 +38,7 @@ function Brand() {
 }
 
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick }: TopbarProps) {
+  const [pwOpen, setPwOpen] = useState(false);
   return (
     <header className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 bg-navy-deep px-3.5">
       <div className="flex shrink-0 items-center gap-7">
@@ -138,9 +141,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           >
             KS
           </button>
-          {userOpen && <UserMenu onClose={() => setUserOpen(false)} />}
+          {userOpen && (
+            <UserMenu
+              onClose={() => setUserOpen(false)}
+              onChangePassword={() => setPwOpen(true)}
+            />
+          )}
         </div>
       </div>
+
+      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </header>
   );
 }

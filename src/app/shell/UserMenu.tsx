@@ -2,11 +2,12 @@ import { useAuth } from '@/app/auth/AuthProvider';
 
 interface UserMenuProps {
   onClose: () => void;
+  onChangePassword: () => void;
 }
 
-function Item({ icon, label, sub }: { icon: string; label: string; sub?: string }) {
+function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?: string; onClick?: () => void }) {
   return (
-    <button className="flex w-full items-center gap-3 px-[18px] py-2 text-left transition-colors hover:bg-panel-alt">
+    <button onClick={onClick} className="flex w-full items-center gap-3 px-[18px] py-2 text-left transition-colors hover:bg-panel-alt">
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-panel-alt text-[13px]">{icon}</span>
       <span className="min-w-0">
         <span className="block text-[12px] font-semibold text-ink">{label}</span>
@@ -17,18 +18,23 @@ function Item({ icon, label, sub }: { icon: string; label: string; sub?: string 
 }
 
 /** 계정 팝업 — 와이어프레임 app-shell.UserAccountMenu 정본. */
-export function UserMenu({ onClose }: UserMenuProps) {
-  const { signOutUser, demoMode } = useAuth();
+export function UserMenu({ onClose, onChangePassword }: UserMenuProps) {
+  const { signOutUser, user } = useAuth();
+  // 로그인 사용자 정보(자체 로그인). 미로그인/데모 시 기본 표기.
+  const name = user?.name ?? '게스트';
+  const email = user?.email ?? '-';
+  const initials = name.slice(0, 2);
+  const roleSub = user ? `${user.dept} · ${user.position}` : '-';
   return (
     <>
       <div className="fixed inset-0 z-[55]" onClick={onClose} />
       <div className="absolute right-[-4px] top-[calc(100%+12px)] z-[60] w-80 overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.28)]">
         {/* 프로필 헤더 */}
         <div className="flex flex-col items-center gap-2 bg-teal-soft px-[18px] pb-5 pt-[22px]">
-          <div className="grid h-16 w-16 place-items-center rounded-full bg-teal text-[25px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">KS</div>
+          <div className="grid h-16 w-16 place-items-center rounded-full bg-teal text-[25px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">{initials}</div>
           <div className="text-center">
-            <div className="text-sm font-bold text-ink">김승기</div>
-            <div className="text-[11.5px] text-ink2">seunggi.kim@workfit.co.kr</div>
+            <div className="text-sm font-bold text-ink">{name}</div>
+            <div className="text-[11.5px] text-ink2">{email}</div>
           </div>
           <button onClick={onClose} className="mt-1 rounded-full border border-border-hi bg-panel px-4 py-1.5 text-[11.5px] font-bold text-navy">
             내 계정 관리
@@ -36,8 +42,8 @@ export function UserMenu({ onClose }: UserMenuProps) {
         </div>
 
         <div className="border-b border-border py-2">
-          <Item icon="🔑" label="비밀번호 변경" />
-          <Item icon="👤" label="프로필 설정" sub="시스템관리팀 · 관리자" />
+          <Item icon="🔑" label="비밀번호 변경" onClick={() => { onClose(); onChangePassword(); }} />
+          <Item icon="👤" label="프로필 설정" sub={roleSub} />
           <Item icon="🔔" label="알림 설정" sub="설비 알람 · SPC 위반 수신 중" />
           <Item icon="🌐" label="언어 / 지역" sub="한국어 (Korea)" />
         </div>
@@ -59,7 +65,7 @@ export function UserMenu({ onClose }: UserMenuProps) {
           <button
             onClick={() => {
               onClose();
-              if (!demoMode) void signOutUser();
+              void signOutUser();
             }}
             className="flex-1 py-3 text-[11.5px] font-bold text-danger hover:bg-panel-alt"
           >

@@ -11,8 +11,9 @@ import LoginScreen from './LoginScreen';
 const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
 
 /**
- * 인증 게이트 — 로그인한 사용자(또는 데모 모드)에게만 앱 셸을 노출.
- * Firebase 미설정 시 demoMode=true 로 통과(seed 폴백 유지).
+ * 인증 게이트 — 로그인한 사용자에게만 앱 셸을 노출.
+ * 자체 로그인(users 대조)은 seed 폴백으로도 동작하므로 demoMode 통과 개념은 없다.
+ * VITE_AUTH_ENABLED="true" 일 때만 게이트가 활성화된다.
  */
 export default function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading, demoMode } = useAuth();

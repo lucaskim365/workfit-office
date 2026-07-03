@@ -1,42 +1,59 @@
-import { useState, type FormEvent } from 'react';
-import { FirebaseError } from 'firebase/app';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthProvider';
+import { AuthError, type AuthErrorCode } from '@/data/auth/auth.repo';
+import { companyInfoRepo } from '@/data/companyInfo/companyInfo.repo';
 
-/** Firebase Auth 에러코드 → 한국어 메시지. */
+/** 자체 로그인 실패 코드 → 한국어 메시지. */
 function authErrorMessage(err: unknown): string {
-  if (err instanceof FirebaseError) {
-    switch (err.code) {
-      case 'auth/invalid-email':
-        return '이메일 형식이 올바르지 않습니다.';
-      case 'auth/user-disabled':
-        return '비활성화된 계정입니다.';
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        return '이메일 또는 비밀번호가 올바르지 않습니다.';
-      case 'auth/too-many-requests':
-        return '로그인 시도가 많습니다. 잠시 후 다시 시도하세요.';
-      default:
-        return `로그인에 실패했습니다. (${err.code})`;
-    }
+  if (err instanceof AuthError) {
+    const map: Record<AuthErrorCode, string> = {
+      NOT_FOUND: '사번 또는 이메일이 올바르지 않습니다.',
+      WRONG_PASSWORD: '비밀번호가 올바르지 않습니다.',
+      LOCKED: '잠긴 계정입니다. 관리자에게 문의하세요.',
+      DISABLED: '사용할 수 없는 계정입니다. 관리자에게 문의하세요.',
+    };
+    return map[err.code];
   }
   return '로그인 중 오류가 발생했습니다.';
 }
 
-/** 로그인 화면 — 셸 진입 전 전체화면 게이트. */
+/** 로그인 화면 — 셸 진입 전 전체화면 게이트. 상단에 회사 로고/명칭 표시. */
 export default function LoginScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 회사 브랜딩(로고/명칭) — QueryProvider 밖이므로 repo 직접 호출.
+  const [logoUrl, setLogoUrl] = useState('');
+  const [companyName, setCompanyName] = useState('스마트 MES');
+  const [sysName, setSysName] = useState('생산 관리 플랫폼');
+
+  useEffect(() => {
+    let alive = true;
+    companyInfoRepo
+      .get()
+      .then((c) => {
+        if (!alive) return;
+        setLogoUrl(c.logoUrl || '');
+        if (c.name) setCompanyName(c.name);
+        if (c.sysName) setSysName(c.sysName);
+      })
+      .catch(() => {
+        /* 브랜딩 조회 실패 시 기본 문구 유지 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await signIn(email.trim(), password);
+      await signIn(loginId.trim(), password);
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -47,27 +64,33 @@ export default function LoginScreen() {
   return (
     <div className="grid min-h-screen place-items-center bg-bg-deep px-4">
       <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.18)]">
-        <div className="flex flex-col items-center gap-2 bg-navy px-6 pb-6 pt-8">
-          <div className="grid h-14 w-14 place-items-center rounded-xl bg-teal text-[22px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">
-            M
-          </div>
+        <div className="flex flex-col items-center gap-3 bg-navy px-6 pb-6 pt-8">
+          {logoUrl ? (
+            <div className="grid h-16 w-full max-w-[220px] place-items-center rounded-xl bg-white/95 px-4 py-3">
+              <img src={logoUrl} alt={companyName} className="h-full w-full object-contain" />
+            </div>
+          ) : (
+            <div className="grid h-14 w-14 place-items-center rounded-xl bg-teal text-[22px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">
+              {companyName.charAt(0) || 'M'}
+            </div>
+          )}
           <div className="text-center">
-            <div className="text-base font-bold text-white">스마트 MES</div>
-            <div className="text-[11.5px] text-white/70">생산 관리 플랫폼</div>
+            <div className="text-base font-bold text-white">{companyName}</div>
+            <div className="text-[11.5px] text-white/70">{sysName}</div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-6 py-6">
           <label className="flex flex-col gap-1">
-            <span className="text-[11.5px] font-semibold text-ink2">이메일</span>
+            <span className="text-[11.5px] font-semibold text-ink2">사번 또는 이메일</span>
             <input
-              type="email"
+              type="text"
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
               required
               className="rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal"
-              placeholder="you@company.co.kr"
+              placeholder="A12345 또는 you@company.co.kr"
             />
           </label>
           <label className="flex flex-col gap-1">
