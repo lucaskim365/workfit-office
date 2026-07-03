@@ -53,17 +53,19 @@ export const userRepo = {
   /** 신규 등록 — id 채번 후 저장. */
   async create(values: UserFormValues): Promise<User> {
     const all = await this.list();
-    // 신규 사용자는 공통 초기 비밀번호를 부여해 바로 로그인 가능하게 한다.
-    // (로그인 후 비밀번호 변경으로 교체) — 로그인 연동.
-    const user = userSchema.parse({ ...values, password: DEFAULT_USER_PASSWORD, id: nextId(all), lastLogin: '-' });
+    // 초기 비밀번호: 입력값 우선, 비우면 공통 기본값(mes1234) 부여 → 등록 즉시 로그인 가능.
+    const password = values.password?.trim() || DEFAULT_USER_PASSWORD;
+    const user = userSchema.parse({ ...values, password, id: nextId(all), lastLogin: '-' });
     await this.save(user);
     return user;
   },
 
-  /** 기존 사용자 수정 — lastLogin 등 시스템 필드 보존. */
+  /** 기존 사용자 수정 — lastLogin 등 시스템 필드 보존. 비밀번호는 입력 시에만 변경. */
   async update(id: string, values: UserFormValues): Promise<void> {
     const existing = (await this.list()).find((u) => u.id === id);
-    await this.save(userSchema.parse({ ...existing, ...values, id }));
+    // 비밀번호를 비워두면 기존 비밀번호 보존, 입력하면 해당 값으로 변경.
+    const password = values.password?.trim() || existing?.password || '';
+    await this.save(userSchema.parse({ ...existing, ...values, password, id }));
   },
 
   /** 등록/수정(upsert). */

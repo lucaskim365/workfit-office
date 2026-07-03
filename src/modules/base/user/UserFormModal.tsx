@@ -18,6 +18,7 @@ const EMPTY: UserFormValues = {
   roleGroup: 'OPERATOR',
   email: '',
   status: '사용',
+  password: '',
 };
 
 interface UserFormModalProps {
@@ -50,6 +51,7 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             roleGroup: initial.roleGroup as UserFormValues['roleGroup'],
             email: initial.email,
             status: initial.status,
+            password: '', // 수정 시 항상 빈칸(비우면 기존 비번 보존)
           }
         : EMPTY,
     );
@@ -105,11 +107,17 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             <TextField {...register('email')} invalid={!!errors.email} placeholder="user@workfit.co.kr" />
           </Field>
         </div>
-        {!initial && (
-          <div className="col-span-2 rounded-lg bg-blue-soft px-3 py-2 text-[11.5px] text-navy">
-            🔑 신규 사용자는 초기 비밀번호 <b>{DEFAULT_USER_PASSWORD}</b> 로 등록되어 바로 로그인할 수 있습니다. (로그인 후 변경 권장)
-          </div>
-        )}
+        <div className="col-span-2">
+          <Field label={initial ? '비밀번호 변경' : '초기 비밀번호'} error={errors.password?.message}>
+            <TextField
+              type="password"
+              autoComplete="new-password"
+              {...register('password')}
+              invalid={!!errors.password}
+              placeholder={initial ? '변경 시에만 입력 (비우면 기존 유지)' : `비우면 기본값 ${DEFAULT_USER_PASSWORD}`}
+            />
+          </Field>
+        </div>
       </form>
     </Modal>
   );

@@ -41,5 +41,10 @@ export const userFormSchema = z.object({
   roleGroup: z.enum(ROLE_GROUPS),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),
+  /**
+   * 초기/변경 비밀번호(선택). 신규 등록 시 비우면 기본값(mes1234) 부여,
+   * 수정 시 비우면 기존 비밀번호 보존. repo.create/update 에서 처리.
+   */
+  password: z.string().max(50).optional(),
 });
 export type UserFormValues = z.infer<typeof userFormSchema>;
