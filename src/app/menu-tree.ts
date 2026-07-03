@@ -37,6 +37,20 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_BASE_PROCREG', name: '공정등록', url: '/base/process', icon: '⚙', order: 10, use: true },
       { id: 'S_BASE_ROUTING', name: '공정라우팅', url: '/base/routing', icon: '⛓', order: 20, use: true },
     ] },
+    { id: 'G_SYS_USER', name: '사용자/권한', icon: '◫', order: 40, use: true, children: [
+      { id: 'S_SYS_USER', name: '사용자 관리', url: '/sys/user', icon: '◫', order: 10, use: true },
+      { id: 'S_SYS_AUTH', name: '권한 관리', url: '/sys/auth', icon: '✦', order: 20, use: true },
+      { id: 'S_SYS_MENU', name: '메뉴 관리', url: '/sys/menu', icon: '▦', order: 30, use: true },
+      { id: 'S_SYS_LOG', name: '로그 관리', url: '/sys/log', icon: '◷', order: 40, use: true },
+    ] },
+    { id: 'G_SYS_GLOBAL', name: '글로벌/운영', icon: '⌗', order: 50, use: true, children: [
+      { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 5, use: true },
+      { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', icon: '⌗', order: 10, use: true },
+      { id: 'S_SYS_CAL', name: '공장 달력', url: '/sys/calendar', icon: '▤', order: 20, use: true },
+      { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', icon: '⚙', order: 30, use: true },
+      { id: 'S_SYS_BACKUP', name: '데이터 백업', url: '/sys/backup', icon: '⛁', order: 40, use: true },
+      { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', icon: '⇄', order: 50, use: true },
+    ] },
   ] },
 
   /* ── 영업 관리 ── */
@@ -298,24 +312,6 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_REP_KPI', name: '종합 KPI 대시보드', url: '/report/kpi', icon: '▦', order: 10, use: true },
       { id: 'S_REP_PERIOD', name: '기간 비교 트렌드', url: '/report/period', icon: '↗', order: 20, use: true },
       { id: 'S_REP_SCORE', name: '부서/라인 스코어카드', url: '/report/scorecard', icon: '✦', order: 30, use: true },
-    ] },
-  ] },
-
-  /* ── 시스템 관리 ── */
-  { id: 'M_SYS', name: '시스템 관리', icon: '⚐', order: 80, use: true, children: [
-    { id: 'G_SYS_USER', name: '사용자/권한', icon: '◫', order: 10, use: true, children: [
-      { id: 'S_SYS_USER', name: '사용자 관리', url: '/sys/user', icon: '◫', order: 10, use: true },
-      { id: 'S_SYS_AUTH', name: '권한 관리', url: '/sys/auth', icon: '✦', order: 20, use: true },
-      { id: 'S_SYS_MENU', name: '메뉴 관리', url: '/sys/menu', icon: '▦', order: 30, use: true },
-      { id: 'S_SYS_LOG', name: '로그 관리', url: '/sys/log', icon: '◷', order: 40, use: true },
-    ] },
-    { id: 'G_SYS_GLOBAL', name: '글로벌/운영', icon: '⌗', order: 20, use: true, children: [
-      { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 5, use: true },
-      { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', icon: '⌗', order: 10, use: true },
-      { id: 'S_SYS_CAL', name: '공장 달력', url: '/sys/calendar', icon: '▤', order: 20, use: true },
-      { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', icon: '⚙', order: 30, use: true },
-      { id: 'S_SYS_BACKUP', name: '데이터 백업', url: '/sys/backup', icon: '⛁', order: 40, use: true },
-      { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', icon: '⇄', order: 50, use: true },
     ] },
   ] },
 ];
