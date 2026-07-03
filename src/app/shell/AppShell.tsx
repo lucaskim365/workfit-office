@@ -7,7 +7,6 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock } from './QuickDock';
-import { ToastFeed } from './ToastFeed';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -146,7 +145,7 @@ export default function AppShell() {
       </div>
 
       <QuickDock scrolling={scrolling} />
-      <ToastFeed />
+      {/* 실시간 알림 토스트 피드 중지 — 필요 시 <ToastFeed /> 복원 */}
     </div>
   );
 }
