@@ -23,7 +23,7 @@ export function UserMenu({ onClose, onChangePassword }: UserMenuProps) {
   // 로그인 사용자 정보(자체 로그인). 미로그인/데모 시 기본 표기.
   const name = user?.name ?? '게스트';
   const email = user?.email ?? '-';
-  const initials = name.slice(0, 2);
+  const initials = name.slice(-2);
   const roleSub = user ? `${user.dept} · ${user.position}` : '-';
   return (
     <>
