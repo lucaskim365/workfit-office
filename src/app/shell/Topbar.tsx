@@ -5,14 +5,6 @@ import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
 import ChangePasswordModal from '@/app/auth/ChangePasswordModal';
 
-const NOTICE_TICKER = [
-  '[WorkFit] M-line · Fab1 정상 가동 중',
-  'MES v5.2 정기 배포 안내 (06/12 02:00)',
-  '수입검사 기준 변경 — 신규 항목 적용',
-  '설비 가동 코드 표준 개정 공지',
-  '2분기 품질 교육 일정 안내 (06/20)',
-];
-
 interface TopbarProps {
   activeModuleId: string;
   activeUrl: string;
@@ -110,25 +102,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
         </nav>
       </div>
 
-      {/* 공지 마퀴 */}
-      <div className="flex h-[30px] min-w-[48px] flex-1 items-center gap-2 overflow-hidden rounded-[7px] bg-white/10 px-3">
-        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-[#5fe0d8]">📢 공지</span>
-        <span className="h-3.5 w-px shrink-0 bg-white/20" />
-        <div className="flex-1 overflow-hidden">
-          <div className="mes-marquee flex w-max">
-            {[0, 1].map((k) => (
-              <span key={k} className="inline-flex gap-6 pr-6 text-[11px] font-medium text-[#dfe6f2]">
-                {NOTICE_TICKER.map((n, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5">
-                    <span className="h-1 w-1 rounded-full bg-[#5fe0d8]" />
-                    {n}
-                  </span>
-                ))}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* 공지 마퀴 숨김 — 우측(날짜·계정)을 오른쪽으로 밀기 위한 spacer */}
+      <div className="flex-1" />
 
       {/* 날짜 + 계정 */}
       <div className="flex shrink-0 items-center gap-2.5">
