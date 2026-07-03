@@ -32,7 +32,7 @@ function Brand() {
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick }: TopbarProps) {
   const [pwOpen, setPwOpen] = useState(false);
   return (
-    <header className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 bg-[#475569] px-3.5">
+    <header className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 bg-[#64748b] px-3.5">
       <div className="flex shrink-0 items-center gap-7">
         <Brand />
         <nav className="flex gap-0.5">
