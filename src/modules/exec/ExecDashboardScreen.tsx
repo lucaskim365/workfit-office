@@ -5,6 +5,7 @@ import { LineChart } from '@/shared/ui/charts/LineChart';
 import { C, RHead, RParam, RLegend, ProgBar, FField, FSel } from '../report/_report';
 import { getExecDashboardData, type ExecAlert } from './mock';
 import { PerformanceSection } from './PerformanceSection';
+import factoryOverview from '@/assets/exec-factory-overview.png';
 
 const TONE_COLOR: Record<ExecAlert['tone'], string> = {
   err: C.err,
@@ -36,6 +37,15 @@ export default function ExecDashboardScreen() {
       <RParam period={d.period}>
         <FField label="공장"><FSel value={d.company} w={80} /></FField>
       </RParam>
+
+      {/* ── 공장 전경 개요 ── */}
+      <Card bodyClassName="p-0" className="overflow-hidden">
+        <img
+          src={factoryOverview}
+          alt="공장 전경 개요"
+          className="block w-full object-cover"
+        />
+      </Card>
 
       {/* ── 성과 관리(매출·거래처) — 상단 배치 ── */}
       <SecHead>성과 관리 · 매출/거래처</SecHead>
