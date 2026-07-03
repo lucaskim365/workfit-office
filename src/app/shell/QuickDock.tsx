@@ -150,7 +150,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
         <img src={profilePhoto} alt="홍채원" className="h-[54px] w-[54px] shrink-0 rounded-full border-2 border-white/75 object-cover" />
         <div className="min-w-0 flex-1 text-white">
           <div className="text-[15.5px] font-extrabold tracking-tight">홍채원 <span className="text-[11.5px] font-semibold opacity-90">사원</span></div>
-          <div className="mt-0.5 text-[10.5px] opacity-90">개발팀 · 사원</div>
+          <div className="mt-0.5 text-[10.5px] opacity-90">개발팀</div>
         </div>
         <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-white/20 text-[14px] text-white">
           🔔
