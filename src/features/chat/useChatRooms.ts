@@ -71,6 +71,7 @@ export function useInviteMembers() {
         senderName: '',
         text: `${inviterName}님이 ${inviteeNames.join(', ')}님을 초대했습니다`,
         type: 'system',
+        attachment: null,
         at: nowLocalIso(),
         readBy: [],
       });
@@ -94,6 +95,7 @@ export function useLeaveRoom() {
         senderName: '',
         text: `${userName}님이 나갔습니다`,
         type: 'system',
+        attachment: null,
         at: nowLocalIso(),
         readBy: [],
       });
@@ -121,6 +123,7 @@ export function useDeleteRoom() {
         senderName: '',
         text: `관리자 ${adminName}님이 이 방을 삭제했습니다`,
         type: 'system',
+        attachment: null,
         at: nowLocalIso(),
         readBy: [],
       });

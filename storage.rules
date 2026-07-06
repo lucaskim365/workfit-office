@@ -14,6 +14,15 @@ service firebase.storage {
             && request.resource.contentType.matches('image/.*'));
     }
 
+    // 사내 메신저 첨부(이미지·일반 파일). 데모 단계 UI 게이트 — 자체 로그인이라
+    // request.auth 가 null. 실보안(방 참여자만 접근)은 Firebase Auth 도입 후 강화.
+    // 삭제 또는 10MB 이하 업로드만 허용(타입 무제한).
+    match /chat/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource == null
+        || request.resource.size < 10 * 1024 * 1024;
+    }
+
     // 그 외 전체 차단(기본 거부)
     match /{allPaths=**} {
       allow read, write: if false;

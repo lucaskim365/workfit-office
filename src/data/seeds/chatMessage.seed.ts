@@ -1,11 +1,14 @@
-import type { ChatMessage } from '@/domain/chatMessage/schema';
+import { z } from 'zod';
+import type { chatMessageSchema } from '@/domain/chatMessage/schema';
 
 /**
  * 채팅 메시지 시드 — 방별 대화 흐름(시연용).
  * readBy 는 "나"(U001 김승기) 관점의 미읽음을 재현: RM-0001 3건·RM-0002 1건 미읽음, 나머지 0.
  * ([[메신저_개발_계획서.md]] Phase 0)
+ *
+ * 입력 타입(z.input)으로 선언 — attachment 등 기본값 필드는 생략 가능(repo parse 시 채움).
  */
-export const CHAT_MESSAGE_SEED: ChatMessage[] = [
+export const CHAT_MESSAGE_SEED: z.input<typeof chatMessageSchema>[] = [
   // ── RM-0001 생산1팀 단톡방 (마지막 3건 U001 미읽음) ──
   { id: 'RM-0001-M001', roomId: 'RM-0001', senderId: 'U002', senderName: '문성민', text: '오늘 3라인 계획 대비 진행 어떤가요?', type: 'text', at: '2026-07-06T08:10:00', readBy: ['U001', 'U002', 'U008'] },
   { id: 'RM-0001-M002', roomId: 'RM-0001', senderId: 'U001', senderName: '김승기', text: '네 순조롭습니다. 오전 목표 달성했어요', type: 'text', at: '2026-07-06T08:15:00', readBy: ['U001', 'U002', 'U008'] },

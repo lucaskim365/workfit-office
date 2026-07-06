@@ -42,6 +42,7 @@ export function useSendMessage(roomId: string) {
         senderName,
         text,
         type: 'text',
+        attachment: null,
         at,
         readBy: [senderId],
       };
@@ -59,6 +60,7 @@ export function useSendMessage(roomId: string) {
         senderName,
         text,
         type: 'text',
+        attachment: null,
         at: nowLocalIso(),
         readBy: [senderId],
       };
@@ -70,6 +72,41 @@ export function useSendMessage(roomId: string) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+    },
+  });
+}
+
+/** 첨부 전송 — Storage 업로드 → image/file 메시지 append + 방 lastMessage 갱신. */
+export function useSendAttachment(roomId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ file, senderId, senderName }: { file: File; senderId: string; senderName: string }) => {
+      const attachment = await chatMessageRepo.uploadAttachment(roomId, file);
+      const isImage = attachment.mime.startsWith('image/');
+      const at = nowLocalIso();
+      const message: ChatMessage = {
+        id: `${roomId}-${Date.now()}`,
+        roomId,
+        senderId,
+        senderName,
+        text: '',
+        type: isImage ? 'image' : 'file',
+        attachment,
+        at,
+        readBy: [senderId],
+      };
+      await chatMessageRepo.append(message);
+      await chatRoomRepo.updateLastMessage(roomId, {
+        text: isImage ? '📷 사진' : `📎 ${attachment.name}`,
+        at,
+        senderId,
+      });
+      return message;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
       qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
     },

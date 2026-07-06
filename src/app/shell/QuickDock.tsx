@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom } from '@/features/chat/useChatRooms';
-import { useChatThread, useSendMessage, useMarkRead } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
-import type { ChatMessage } from '@/domain/chatMessage/schema';
+import { MAX_ATTACHMENT_BYTES, type ChatMessage } from '@/domain/chatMessage/schema';
 
 interface Tool {
   key: string;
@@ -326,6 +326,7 @@ function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me
 function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom; me: string; meName: string; isAdmin: boolean; onBack: () => void }) {
   const { data: messages = [] } = useChatThread(room.id);
   const send = useSendMessage(room.id);
+  const sendFile = useSendAttachment(room.id);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -333,7 +334,23 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const readonly = room.type === 'notice';
+
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 같은 파일 재선택 허용
+    if (!file || sendFile.isPending) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      window.alert(`파일이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
+      return;
+    }
+    try {
+      await sendFile.mutateAsync({ file, senderId: me, senderName: meName });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
+    }
+  };
   // 나가기: 그룹 방만(1:1·공지는 제외). 삭제: 관리자만(모든 방).
   const canLeave = room.type === 'group';
   const canDelete = isAdmin;
@@ -421,13 +438,22 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
         <div className="shrink-0 border-t border-border bg-panel-alt px-4 py-3 text-center text-[11px] text-ink3">공지 전용 방입니다</div>
       ) : (
         <div className="shrink-0 border-t border-border bg-panel p-3">
-          <div className="flex items-center gap-2 rounded-full border border-border-hi bg-panel py-1.5 pl-4 pr-1.5">
+          <div className="flex items-center gap-1.5 rounded-full border border-border-hi bg-panel py-1.5 pl-2 pr-1.5">
+            <input ref={fileRef} type="file" className="hidden" onChange={onPickFile} />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={sendFile.isPending}
+              title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
+              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-[16px] text-ink3 hover:bg-panel-alt disabled:opacity-40"
+            >
+              📎
+            </button>
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
               // 한글 IME 조합 중(isComposing) Enter 는 조합 확정용이라 무시 — 중복/부분 전송 방지.
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
-              placeholder="메시지를 입력하세요…"
+              placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
               className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
             <button onClick={submit} className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white">↑</button>
@@ -436,6 +462,13 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
       )}
     </div>
   );
+}
+
+/** 바이트 → 사람이 읽는 크기(KB/MB). */
+function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: boolean }) {
@@ -447,13 +480,44 @@ function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: bo
     );
   }
   const mine = m.senderId === me;
+  const att = m.attachment;
+
+  let body: ReactNode;
+  if (m.type === 'image' && att) {
+    body = (
+      <a href={att.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border">
+        <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
+      </a>
+    );
+  } else if (m.type === 'file' && att) {
+    body = (
+      <a
+        href={att.url}
+        target="_blank"
+        rel="noreferrer"
+        download={att.name}
+        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}
+      >
+        <span className="text-[18px]">📄</span>
+        <span className="min-w-0">
+          <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
+          <span className={`block text-[10px] ${mine ? 'text-white/75' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+        </span>
+      </a>
+    );
+  } else {
+    body = (
+      <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.text}</div>
+    );
+  }
+
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
         <div className="min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
-          <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.text}</div>
+          {body}
         </div>
       </div>
     </div>

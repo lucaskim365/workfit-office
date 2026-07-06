@@ -1,6 +1,12 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
-import { chatMessageSchema, type ChatMessage } from '@/domain/chatMessage/schema';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage, isFirebaseConfigured } from '@/shared/lib/firebase';
+import {
+  chatMessageSchema,
+  MAX_ATTACHMENT_BYTES,
+  type ChatMessage,
+  type Attachment,
+} from '@/domain/chatMessage/schema';
 import { CHAT_MESSAGE_SEED } from '@/data/seeds/chatMessage.seed';
 
 /**
@@ -39,6 +45,33 @@ export const chatMessageRepo = {
       }
     }
     return acc;
+  },
+
+  /**
+   * 첨부 파일 업로드 → Storage `chat/{roomId}/` 에 저장하고 첨부 메타 반환.
+   * 데모 한정 10MB 제한(storage.rules 와 동일). Firebase 미설정 시 base64 data URL 폴백.
+   * ([[companyInfo.repo]] uploadLogo 패턴 재사용)
+   */
+  async uploadAttachment(roomId: string, file: File): Promise<Attachment> {
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`파일이 너무 큽니다(최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
+    }
+    const meta = { name: file.name, size: file.size, mime: file.type || 'application/octet-stream' };
+    if (isFirebaseConfigured && storage) {
+      const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
+      const path = `chat/${roomId}/${Date.now()}-${safe}`;
+      const r = ref(storage, path);
+      await uploadBytes(r, file, { contentType: meta.mime });
+      const url = await getDownloadURL(r);
+      return { url, ...meta };
+    }
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    return { url, ...meta };
   },
 
   /** 메시지 추가(전송). 문서 ID = 메시지 ID. */
