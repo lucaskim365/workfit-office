@@ -387,7 +387,8 @@ function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: str
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              // 한글 IME 조합 중(isComposing) Enter 는 조합 확정용이라 무시 — 중복/부분 전송 방지.
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
               placeholder="메시지를 입력하세요…"
               className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
