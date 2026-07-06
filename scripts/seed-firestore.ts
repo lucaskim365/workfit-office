@@ -138,6 +138,8 @@ import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
 import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
 import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
 import { SYS_ADMIN_SEED } from '@/data/seeds/sysAdmin.seed';
+import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
+import { CHAT_MESSAGE_SEED } from '@/data/seeds/chatMessage.seed';
 
 interface SeedTable<T> {
   coll: string;
@@ -268,6 +270,8 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'interfaces', docs: SYS_INTERFACE_SEED, id: (d) => d.id },
   { coll: 'systemLogs', docs: SYSTEM_LOG_SEED, id: (d) => d.id },
   { coll: 'sysAdmins', docs: SYS_ADMIN_SEED, id: (d) => d.id },
+  { coll: 'chatRooms', docs: CHAT_ROOM_SEED, id: (d) => d.id },
+  { coll: 'chatMessages', docs: CHAT_MESSAGE_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

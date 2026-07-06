@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { useChatThread, useSendMessage, useMarkRead } from '@/features/chat/useChatThread';
+import type { ChatRoom } from '@/domain/chatRoom/schema';
+import type { ChatMessage } from '@/domain/chatMessage/schema';
 
 interface Tool {
   key: string;
@@ -229,38 +234,169 @@ function ChatbotPanel() {
 }
 
 /* ---------- 메신저 ---------- */
+/** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
+function fmtTime(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (d.toDateString() === now.toDateString()) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const yst = new Date(now);
+  yst.setDate(now.getDate() - 1);
+  if (d.toDateString() === yst.toDateString()) return '어제';
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+}
+
+/** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
 function MessengerPanel() {
-  const chats = [
-    { name: '생산1팀 단톡방', last: '교대 인수인계 완료했습니다', t: '14:21', n: 3, grp: true, color: '#e6960c' },
-    { name: '이순신 (설비보전)', last: 'CMP02 점검 끝났어요', t: '14:05', n: 1, color: '#3a6ee0' },
-    { name: '품질보증팀', last: 'SPC 룰 위반 건 확인 부탁', t: '13:48', n: 0, grp: true, color: '#17a89a' },
-    { name: '유관순 (현장관리)', last: '👍', t: '13:30', n: 0, color: '#e0483b' },
-    { name: '공지방 · MES 운영', last: '[공지] v5.2 배포 안내', t: '11:02', n: 0, grp: true, color: '#1f2f55' },
-    { name: '강감찬 (생산2팀)', last: '자재 입고 언제 되나요?', t: '어제', n: 0, color: '#8b5cf6' },
-  ];
+  const { user } = useAuth();
+  const me = user?.id ?? 'U001';
+  const meName = user?.name ?? '김승기';
+  const [openRoomId, setOpenRoomId] = useState<string | null>(null);
+  const { data: rooms = [] } = useChatRooms(me);
+  const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
+
+  if (openRoom) {
+    return <MessengerThread room={openRoom} me={me} meName={meName} onBack={() => setOpenRoomId(null)} />;
+  }
+  return <MessengerList rooms={rooms} me={me} onOpen={setOpenRoomId} />;
+}
+
+function MessengerList({ rooms, me, onOpen }: { rooms: ChatRoom[]; me: string; onOpen: (id: string) => void }) {
+  const { data: unread = {} } = useUnreadCounts(me);
+  const [q, setQ] = useState('');
+  const kw = q.trim().toLowerCase();
+  const filtered = kw ? rooms.filter((r) => r.name.toLowerCase().includes(kw)) : rooms;
+
   return (
     <div>
       <div className="border-b border-border bg-panel px-4 py-3">
         <div className="flex items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
           <span className="text-[12px] text-ink3">🔍</span>
-          <span className="text-[11.5px] text-ink3">이름, 채팅방 검색</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="이름, 채팅방 검색"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
+          />
         </div>
       </div>
-      {chats.map((c, i) => (
-        <button key={i} className="flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] text-[17px] font-bold" style={{ background: c.color + '22', color: c.color }}>{c.grp ? '👥' : c.name[0]}</span>
-          <div className="min-w-0 flex-1">
-            <div className="flex justify-between gap-2">
-              <span className="truncate text-[12.5px] font-bold text-ink">{c.name}</span>
-              <span className="shrink-0 text-[10px] tabular-nums text-ink3">{c.t}</span>
+      {filtered.map((r) => {
+        const n = unread[r.id] ?? 0;
+        return (
+          <button
+            key={r.id}
+            onClick={() => onOpen(r.id)}
+            className="flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt"
+          >
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] text-[17px] font-bold" style={{ background: r.color + '22', color: r.color }}>
+              {r.type === 'direct' ? r.name[0] : '👥'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex justify-between gap-2">
+                <span className="truncate text-[12.5px] font-bold text-ink">{r.name}</span>
+                <span className="shrink-0 text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
+              </div>
+              <div className="mt-0.5 flex justify-between gap-2">
+                <span className="truncate text-[11.5px] text-ink3">{r.lastMessage?.text ?? '대화를 시작해보세요'}</span>
+                {n > 0 && <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger px-[5px] text-[9.5px] font-extrabold text-white">{n}</span>}
+              </div>
             </div>
-            <div className="mt-0.5 flex justify-between gap-2">
-              <span className="truncate text-[11.5px] text-ink3">{c.last}</span>
-              {c.n > 0 && <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger px-[5px] text-[9.5px] font-extrabold text-white">{c.n}</span>}
-            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: string; meName: string; onBack: () => void }) {
+  const { data: messages = [] } = useChatThread(room.id);
+  const send = useSendMessage(room.id);
+  const markRead = useMarkRead();
+  const [text, setText] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const readonly = room.type === 'notice';
+
+  // 방 진입 시 읽음 처리.
+  useEffect(() => {
+    markRead.mutate({ roomId: room.id, userId: me });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id, me]);
+
+  // 새 메시지 도착 시 하단으로 스크롤.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    send.mutate({ text: t, senderId: me, senderName: meName });
+    setText('');
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* 대화 서브헤더 */}
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-3 py-2.5">
+        <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
+          {room.type === 'direct' ? room.name[0] : '👥'}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12.5px] font-bold text-ink">{room.name}</div>
+          {room.type !== 'direct' && <div className="text-[10px] text-ink3">{room.members.length}명</div>}
+        </div>
+      </div>
+
+      {/* 메시지 */}
+      <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+        {messages.map((m) => (
+          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} />
+        ))}
+      </div>
+
+      {/* 입력창 / 공지 안내 */}
+      {readonly ? (
+        <div className="shrink-0 border-t border-border bg-panel-alt px-4 py-3 text-center text-[11px] text-ink3">공지 전용 방입니다</div>
+      ) : (
+        <div className="shrink-0 border-t border-border bg-panel p-3">
+          <div className="flex items-center gap-2 rounded-full border border-border-hi bg-panel py-1.5 pl-4 pr-1.5">
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              placeholder="메시지를 입력하세요…"
+              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
+            />
+            <button onClick={submit} className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white">↑</button>
           </div>
-        </button>
-      ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: boolean }) {
+  if (m.type === 'system') {
+    return (
+      <div className="my-1 flex justify-center">
+        <span className="rounded-full bg-panel-alt px-3 py-1 text-[10.5px] text-ink3">{m.text}</span>
+      </div>
+    );
+  }
+  const mine = m.senderId === me;
+  return (
+    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+        {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
+        <div className="min-w-0">
+          {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.text}</div>
+        </div>
+      </div>
     </div>
   );
 }
