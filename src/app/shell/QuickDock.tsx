@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useMarkRead } from '@/features/chat/useChatThread';
+import { useUsers } from '@/features/user/useUsers';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
 
@@ -254,16 +255,26 @@ function MessengerPanel() {
   const me = user?.id ?? 'U001';
   const meName = user?.name ?? '김승기';
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
 
+  if (composing) {
+    return (
+      <NewRoomView
+        me={me}
+        onCancel={() => setComposing(false)}
+        onCreated={(id) => { setComposing(false); setOpenRoomId(id); }}
+      />
+    );
+  }
   if (openRoom) {
     return <MessengerThread room={openRoom} me={me} meName={meName} onBack={() => setOpenRoomId(null)} />;
   }
-  return <MessengerList rooms={rooms} me={me} onOpen={setOpenRoomId} />;
+  return <MessengerList rooms={rooms} me={me} onOpen={setOpenRoomId} onCompose={() => setComposing(true)} />;
 }
 
-function MessengerList({ rooms, me, onOpen }: { rooms: ChatRoom[]; me: string; onOpen: (id: string) => void }) {
+function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me: string; onOpen: (id: string) => void; onCompose: () => void }) {
   const { data: unread = {} } = useUnreadCounts(me);
   const [q, setQ] = useState('');
   const kw = q.trim().toLowerCase();
@@ -271,8 +282,8 @@ function MessengerList({ rooms, me, onOpen }: { rooms: ChatRoom[]; me: string; o
 
   return (
     <div>
-      <div className="border-b border-border bg-panel px-4 py-3">
-        <div className="flex items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
+      <div className="flex items-center gap-2 border-b border-border bg-panel px-4 py-3">
+        <div className="flex flex-1 items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
           <span className="text-[12px] text-ink3">🔍</span>
           <input
             value={q}
@@ -281,6 +292,7 @@ function MessengerList({ rooms, me, onOpen }: { rooms: ChatRoom[]; me: string; o
             className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
           />
         </div>
+        <button onClick={onCompose} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber text-[19px] leading-none text-white">＋</button>
       </div>
       {filtered.map((r) => {
         const n = unread[r.id] ?? 0;
@@ -315,6 +327,7 @@ function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: str
   const send = useSendMessage(room.id);
   const markRead = useMarkRead();
   const [text, setText] = useState('');
+  const [inviting, setInviting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const readonly = room.type === 'notice';
 
@@ -337,6 +350,10 @@ function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: str
     setText('');
   };
 
+  if (inviting) {
+    return <InviteView room={room} meName={meName} onCancel={() => setInviting(false)} onDone={() => setInviting(false)} />;
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* 대화 서브헤더 */}
@@ -349,6 +366,9 @@ function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: str
           <div className="truncate text-[12.5px] font-bold text-ink">{room.name}</div>
           {room.type !== 'direct' && <div className="text-[10px] text-ink3">{room.members.length}명</div>}
         </div>
+        {room.type === 'group' && (
+          <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
+        )}
       </div>
 
       {/* 메시지 */}
@@ -396,6 +416,138 @@ function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: bo
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.text}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** 사용자 다중 선택 리스트(로그인 가능한 '사용' 계정만). 방 생성·초대 공용. */
+function MemberPicker({ exclude, selected, onToggle }: { exclude: string[]; selected: string[]; onToggle: (id: string) => void }) {
+  const { data: users = [] } = useUsers();
+  const [q, setQ] = useState('');
+  const kw = q.trim().toLowerCase();
+  const candidates = users
+    .filter((u) => u.status === '사용' && !exclude.includes(u.id))
+    .filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
+
+  return (
+    <div>
+      <div className="border-b border-border bg-panel px-4 py-3">
+        <div className="flex items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
+          <span className="text-[12px] text-ink3">🔍</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="이름, 부서 검색"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
+          />
+        </div>
+      </div>
+      {candidates.map((u) => {
+        const on = selected.includes(u.id);
+        return (
+          <button
+            key={u.id}
+            onClick={() => onToggle(u.id)}
+            className="flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-2.5 text-left transition-colors hover:bg-panel-alt"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-soft text-[13px] font-bold text-teal">{u.name[0]}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-semibold text-ink">{u.name}</div>
+              <div className="truncate text-[10.5px] text-ink3">{u.dept} · {u.position}</div>
+            </div>
+            <span className={`grid h-[19px] w-[19px] shrink-0 place-items-center rounded-full border text-[10px] font-bold ${on ? 'border-amber bg-amber text-white' : 'border-border-hi text-transparent'}`}>✓</span>
+          </button>
+        );
+      })}
+      {candidates.length === 0 && <div className="px-4 py-10 text-center text-[11.5px] text-ink3">선택할 대상이 없습니다</div>}
+    </div>
+  );
+}
+
+/** 새 대화 만들기 — 멤버 다중 선택 → 1명은 1:1, 2명↑은 그룹방 생성. */
+function NewRoomView({ me, onCancel, onCreated }: { me: string; onCancel: () => void; onCreated: (id: string) => void }) {
+  const { data: users = [] } = useUsers();
+  const create = useCreateRoom();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [name, setName] = useState('');
+  const isGroup = selected.length >= 2;
+  const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const pickedNames = users.filter((u) => selected.includes(u.id)).map((u) => u.name);
+
+  const submit = async () => {
+    if (!selected.length || create.isPending) return;
+    const roomName = isGroup ? (name.trim() || pickedNames.join(', ')) : (pickedNames[0] ?? '새 대화');
+    const room = await create.mutateAsync({
+      name: roomName,
+      type: isGroup ? 'group' : 'direct',
+      members: [me, ...selected],
+    });
+    onCreated(room.id);
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-3 py-2.5">
+        <button onClick={onCancel} title="취소" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
+        <div className="flex-1 text-[12.5px] font-bold text-ink">새 대화</div>
+        <button
+          onClick={submit}
+          disabled={!selected.length || create.isPending}
+          className="rounded-lg bg-amber px-3 py-1.5 text-[11.5px] font-bold text-white transition-opacity disabled:opacity-40"
+        >
+          {isGroup ? `그룹 만들기 (${selected.length})` : '대화 시작'}
+        </button>
+      </div>
+      {isGroup && (
+        <div className="shrink-0 border-b border-border bg-panel px-4 py-2.5">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={pickedNames.join(', ')}
+            className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none placeholder:text-ink3"
+          />
+        </div>
+      )}
+      <div className="menu-scroll min-h-0 flex-1 overflow-y-auto">
+        <MemberPicker exclude={[me]} selected={selected} onToggle={toggle} />
+      </div>
+    </div>
+  );
+}
+
+/** 그룹 멤버 초대 — 비참여자 다중 선택 → members 확장 + 시스템 메시지. */
+function InviteView({ room, meName, onCancel, onDone }: { room: ChatRoom; meName: string; onCancel: () => void; onDone: () => void }) {
+  const { data: users = [] } = useUsers();
+  const invite = useInviteMembers();
+  const [selected, setSelected] = useState<string[]>([]);
+  const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const submit = async () => {
+    if (!selected.length || invite.isPending) return;
+    const inviteeNames = users.filter((u) => selected.includes(u.id)).map((u) => u.name);
+    await invite.mutateAsync({ roomId: room.id, userIds: selected, inviterName: meName, inviteeNames });
+    onDone();
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-3 py-2.5">
+        <button onClick={onCancel} title="취소" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12.5px] font-bold text-ink">멤버 초대</div>
+          <div className="text-[10px] text-ink3">{room.name}</div>
+        </div>
+        <button
+          onClick={submit}
+          disabled={!selected.length || invite.isPending}
+          className="rounded-lg bg-amber px-3 py-1.5 text-[11.5px] font-bold text-white transition-opacity disabled:opacity-40"
+        >
+          초대 ({selected.length})
+        </button>
+      </div>
+      <div className="menu-scroll min-h-0 flex-1 overflow-y-auto">
+        <MemberPicker exclude={room.members} selected={selected} onToggle={toggle} />
       </div>
     </div>
   );

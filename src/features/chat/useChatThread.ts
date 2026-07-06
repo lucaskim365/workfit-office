@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
+import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
 
 /**
@@ -9,17 +10,6 @@ import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
  * ([[data-layer-pattern]] 정본 패턴 / [[메신저_개발_계획서.md]] Phase 1)
  */
 export const CHAT_THREAD_KEY = 'chatThread';
-
-/**
- * 시드와 동일한 로컬 나이브 타임스탬프 'YYYY-MM-DDTHH:mm:ss'.
- * ⚠ new Date().toISOString() 은 UTC(KST-9h)로 찍혀, 로컬 시각으로 저장된
- *    시드 메시지보다 앞서 정렬돼 대화 순서가 뒤섞인다. 반드시 로컬 포맷으로.
- */
-function localStamp(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
 
 /** 방의 메시지(시간 오름차순). */
 export function useChatThread(roomId?: string) {
@@ -44,7 +34,7 @@ export function useSendMessage(roomId: string) {
 
   return useMutation({
     mutationFn: async ({ text, senderId, senderName }: SendVars) => {
-      const at = localStamp();
+      const at = nowLocalIso();
       const message: ChatMessage = {
         id: `${roomId}-${Date.now()}`,
         roomId,
@@ -69,7 +59,7 @@ export function useSendMessage(roomId: string) {
         senderName,
         text,
         type: 'text',
-        at: localStamp(),
+        at: nowLocalIso(),
         readBy: [senderId],
       };
       qc.setQueryData<ChatMessage[]>(key, [...(prev ?? []), optimistic]);
