@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ChangeEvent, ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
@@ -7,7 +8,7 @@ import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeav
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
-import { MAX_ATTACHMENT_BYTES, type ChatMessage } from '@/domain/chatMessage/schema';
+import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 
 interface Tool {
   key: string;
@@ -333,6 +334,7 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
   const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [viewer, setViewer] = useState<Attachment | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const readonly = room.type === 'notice';
@@ -429,9 +431,11 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
       {/* 메시지 */}
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {messages.map((m) => (
-          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} />
+          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} onOpenImage={setViewer} />
         ))}
       </div>
+
+      {viewer && <ImageViewer att={viewer} onClose={() => setViewer(null)} />}
 
       {/* 입력창 / 공지 안내 */}
       {readonly ? (
@@ -471,7 +475,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: boolean }) {
+function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: string; group: boolean; onOpenImage: (att: Attachment) => void }) {
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
@@ -485,9 +489,9 @@ function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: bo
   let body: ReactNode;
   if (m.type === 'image' && att) {
     body = (
-      <a href={att.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border">
+      <button onClick={() => onOpenImage(att)} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
         <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
-      </a>
+      </button>
     );
   } else if (m.type === 'file' && att) {
     body = (
@@ -521,6 +525,46 @@ function MessageBubble({ m, me, group }: { m: ChatMessage; me: string; group: bo
         </div>
       </div>
     </div>
+  );
+}
+
+/** 이미지 라이트박스 — 첨부 이미지를 앱 내 오버레이로 원본 표시. Esc·배경·✕ 로 닫기. */
+function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // 도크(aside)의 stacking context 밖(body)으로 portal — 뷰포트 전체를 덮도록.
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/85 p-6"
+    >
+      {/* 상단 바: 파일명 + 다운로드 + 닫기 */}
+      <div className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{att.name}</span>
+        <a
+          href={att.url}
+          target="_blank"
+          rel="noreferrer"
+          download={att.name}
+          title="다운로드"
+          className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[15px] hover:bg-white/25"
+        >
+          ⤓
+        </a>
+        <button onClick={onClose} title="닫기(Esc)" className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[16px] hover:bg-white/25">✕</button>
+      </div>
+      <img
+        src={att.url}
+        alt={att.name}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[86vh] max-w-full rounded-lg object-contain shadow-2xl"
+      />
+    </div>,
+    document.body,
   );
 }
 
