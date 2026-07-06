@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
@@ -254,6 +254,7 @@ function MessengerPanel() {
   const { user } = useAuth();
   const me = user?.id ?? 'U001';
   const meName = user?.name ?? '김승기';
+  const isAdmin = user?.roleGroup === 'ADMIN';
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
@@ -269,7 +270,7 @@ function MessengerPanel() {
     );
   }
   if (openRoom) {
-    return <MessengerThread room={openRoom} me={me} meName={meName} onBack={() => setOpenRoomId(null)} />;
+    return <MessengerThread room={openRoom} me={me} meName={meName} isAdmin={isAdmin} onBack={() => setOpenRoomId(null)} />;
   }
   return <MessengerList rooms={rooms} me={me} onOpen={setOpenRoomId} onCompose={() => setComposing(true)} />;
 }
@@ -322,14 +323,33 @@ function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me
   );
 }
 
-function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: string; meName: string; onBack: () => void }) {
+function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom; me: string; meName: string; isAdmin: boolean; onBack: () => void }) {
   const { data: messages = [] } = useChatThread(room.id);
   const send = useSendMessage(room.id);
   const markRead = useMarkRead();
+  const leave = useLeaveRoom();
+  const remove = useDeleteRoom();
   const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const readonly = room.type === 'notice';
+  // 나가기: 그룹 방만(1:1·공지는 제외). 삭제: 관리자만(모든 방).
+  const canLeave = room.type === 'group';
+  const canDelete = isAdmin;
+
+  const onLeave = async () => {
+    if (leave.isPending) return;
+    if (!window.confirm(`'${room.name}' 방에서 나가시겠어요?\n대화 내용은 보존됩니다.`)) return;
+    await leave.mutateAsync({ roomId: room.id, userId: me, userName: meName });
+    onBack();
+  };
+  const onDelete = async () => {
+    if (remove.isPending) return;
+    if (!window.confirm(`'${room.name}' 방을 삭제하시겠어요?\n목록에서 숨겨지지만 대화 내용은 보존되어 관리자가 조회할 수 있습니다.`)) return;
+    await remove.mutateAsync({ roomId: room.id, adminId: me, adminName: meName });
+    onBack();
+  };
 
   // 방 진입 시 읽음 처리.
   useEffect(() => {
@@ -368,6 +388,24 @@ function MessengerThread({ room, me, meName, onBack }: { room: ChatRoom; me: str
         </div>
         {room.type === 'group' && (
           <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
+        )}
+        {(canLeave || canDelete) && (
+          <div className="relative shrink-0">
+            <button onClick={() => setMenuOpen((v) => !v)} title="더보기" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] leading-none text-ink2 hover:bg-panel-alt">⋮</button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-8 z-20 w-32 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg">
+                  {canLeave && (
+                    <button onClick={() => { setMenuOpen(false); onLeave(); }} className="block w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt">방 나가기</button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => { setMenuOpen(false); onDelete(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">방 삭제</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
 

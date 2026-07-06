@@ -28,6 +28,13 @@ export const chatRoomSchema = z.object({
   color: z.string().default('#e6960c'),
   lastMessage: lastMessageSchema.nullable().default(null),
   createdAt: z.string().default(''),
+  /**
+   * 소프트 삭제(아카이브) 표시. 빈 문자열 = 활성. 값이 있으면 삭제 시각(관리자 삭제).
+   * ⚠ 삭제해도 chatMessages(대화 내용)는 보존 — 어드민 감사/조회용. 목록에서만 숨김.
+   */
+  deletedAt: z.string().default(''),
+  /** 삭제를 실행한 관리자 users.id(감사 추적용). */
+  deletedBy: z.string().default(''),
 });
 
 export type ChatRoom = z.infer<typeof chatRoomSchema>;

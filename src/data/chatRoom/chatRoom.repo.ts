@@ -47,8 +47,11 @@ export interface CreateRoomInput {
 }
 
 export const chatRoomRepo = {
-  /** 방 목록. memberId 지정 시 그 사용자가 참여한 방만. */
-  async list(memberId?: string): Promise<ChatRoom[]> {
+  /**
+   * 방 목록. memberId 지정 시 그 사용자가 참여한 방만.
+   * 기본은 소프트삭제된 방 제외. includeDeleted=true 는 어드민 감사 조회용(삭제방 포함).
+   */
+  async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
     let rows: ChatRoom[];
     if (isFirebaseConfigured && db) {
       const fdb = db;
@@ -57,13 +60,15 @@ export const chatRoomRepo = {
     } else {
       rows = memory;
     }
+    if (!opts?.includeDeleted) rows = rows.filter((r) => !r.deletedAt);
     const scoped = memberId ? rows.filter((r) => r.members.includes(memberId)) : rows;
     return sortByRecent(scoped);
   },
 
   async get(id: string): Promise<ChatRoom | null> {
     if (isFirebaseConfigured && db) {
-      const rows = await this.list();
+      // 삭제방도 조회 가능해야 함(삭제 직후 시스템 메시지 append 등) → includeDeleted.
+      const rows = await this.list(undefined, { includeDeleted: true });
       return rows.find((r) => r.id === id) ?? null;
     }
     return memory.find((r) => r.id === id) ?? null;
@@ -84,9 +89,11 @@ export const chatRoomRepo = {
 
   /** 신규 방 생성. 1:1(direct)은 동일 참여자 조합이 이미 있으면 그 방을 재사용(중복 방지). */
   async create(input: CreateRoomInput): Promise<ChatRoom> {
-    const all = await this.list();
+    // ⚠ 채번은 삭제방 포함 전체 기준 — 소프트삭제된 방 ID 재사용으로 보존 대화를 덮어쓰면 안 됨.
+    const all = await this.list(undefined, { includeDeleted: true });
     if (input.type === 'direct') {
-      const existing = all.find((r) => r.type === 'direct' && sameMembers(r.members, input.members));
+      // 재사용은 살아있는 방만. 삭제된 1:1 은 무시하고 새 방을 만든다.
+      const existing = all.find((r) => !r.deletedAt && r.type === 'direct' && sameMembers(r.members, input.members));
       if (existing) return existing;
     }
     const room = chatRoomSchema.parse({
@@ -108,6 +115,23 @@ export const chatRoomRepo = {
     if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
     const merged = Array.from(new Set([...room.members, ...userIds]));
     await this.save({ ...room, members: merged });
+  },
+
+  /** 방 나가기(탈퇴) — members 에서 userId 제거. 대화 내용은 보존. */
+  async leave(id: string, userId: string): Promise<void> {
+    const room = await this.get(id);
+    if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
+    await this.save({ ...room, members: room.members.filter((m) => m !== userId) });
+  },
+
+  /**
+   * 방 소프트 삭제(아카이브) — 관리자 전용. deletedAt/deletedBy 만 세팅하고
+   * 문서·chatMessages 는 그대로 보존한다(어드민 감사/조회용). 목록에서만 숨김.
+   */
+  async softDelete(id: string, adminId: string): Promise<void> {
+    const room = await this.get(id);
+    if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
+    await this.save({ ...room, deletedAt: nowLocalIso(), deletedBy: adminId });
   },
 
   /** 새 메시지 전송 시 목록 표시용 lastMessage 갱신. */

@@ -81,3 +81,54 @@ export function useInviteMembers() {
     },
   });
 }
+
+/** 방 나가기(탈퇴) — members 에서 제거 + "○○님이 나갔습니다" 시스템 메시지. 대화는 보존. */
+export function useLeaveRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roomId, userId, userName }: { roomId: string; userId: string; userName: string }) => {
+      await chatMessageRepo.append({
+        id: `${roomId}-sys-${Date.now()}`,
+        roomId,
+        senderId: '',
+        senderName: '',
+        text: `${userName}님이 나갔습니다`,
+        type: 'system',
+        at: nowLocalIso(),
+        readBy: [],
+      });
+      await chatRoomRepo.leave(roomId, userId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+    },
+  });
+}
+
+/**
+ * 방 삭제(소프트/아카이브) — 관리자 전용. 목록에서 숨기되 대화(chatMessages)는 보존.
+ * 삭제 이력을 보존 로그에 남기도록 시스템 메시지도 추가(어드민 감사용).
+ */
+export function useDeleteRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roomId, adminId, adminName }: { roomId: string; adminId: string; adminName: string }) => {
+      await chatMessageRepo.append({
+        id: `${roomId}-sys-${Date.now()}`,
+        roomId,
+        senderId: '',
+        senderName: '',
+        text: `관리자 ${adminName}님이 이 방을 삭제했습니다`,
+        type: 'system',
+        at: nowLocalIso(),
+        readBy: [],
+      });
+      await chatRoomRepo.softDelete(roomId, adminId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+    },
+  });
+}
