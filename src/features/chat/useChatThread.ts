@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
-import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from './useChatRooms';
+import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -16,6 +16,7 @@ export function useChatThread(roomId?: string) {
     queryKey: [CHAT_THREAD_KEY, roomId ?? null],
     queryFn: () => chatMessageRepo.listByRoom(roomId!),
     enabled: !!roomId,
+    refetchInterval: CHAT_POLL_MS,
   });
 }
 

@@ -287,13 +287,24 @@ function readEnv(key: string): string | undefined {
 }
 
 const DRY = process.argv.includes('--dry');
+/** --only=chatRooms,chatMessages → 지정 컬렉션만 적재(그 외 스킵). 미지정 시 전체. */
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const ONLY = onlyArg
+  ? onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean)
+  : null;
 
 async function main() {
-  const total = TABLES.reduce((n, t) => n + t.docs.length, 0);
-  console.log(`시드 ${TABLES.length}개 컬렉션 · 문서 ${total}건`);
+  if (ONLY) {
+    const known = new Set(TABLES.map((t) => t.coll));
+    const unknown = ONLY.filter((c) => !known.has(c));
+    if (unknown.length) throw new Error(`알 수 없는 컬렉션(--only): ${unknown.join(', ')}`);
+  }
+  const tables = ONLY ? TABLES.filter((t) => ONLY.includes(t.coll)) : TABLES;
+  const total = tables.reduce((n, t) => n + t.docs.length, 0);
+  console.log(`시드 ${tables.length}개 컬렉션 · 문서 ${total}건${ONLY ? ` (--only: ${ONLY.join(', ')})` : ''}`);
 
   if (DRY) {
-    for (const t of TABLES) console.log(`  ${t.coll.padEnd(16)} ${t.docs.length}건`);
+    for (const t of tables) console.log(`  ${t.coll.padEnd(16)} ${t.docs.length}건`);
     console.log('[dry] Firestore 접근 없이 검증만 수행했습니다.');
     return;
   }
@@ -317,7 +328,7 @@ async function main() {
   const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
   console.log(`타깃: project=${projectId} db=${databaseId ?? '(default)'}`);
 
-  for (const t of TABLES) {
+  for (const t of tables) {
     // Firestore batch 최대 500건 → 청크로 분할.
     for (let i = 0; i < t.docs.length; i += 450) {
       const batch = db.batch();
