@@ -61,7 +61,12 @@ export const chatMessageRepo = {
       const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
       const path = `chat/${roomId}/${Date.now()}-${safe}`;
       const r = ref(storage, path);
-      await uploadBytes(r, file, { contentType: meta.mime });
+      // 다운로드 시 원본 파일명 보존: Content-Disposition 에 RFC 5987(UTF-8) 인코딩된 파일명 지정.
+      // (한글 등 비ASCII 대비 filename* 사용)
+      await uploadBytes(r, file, {
+        contentType: meta.mime,
+        contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      });
       const url = await getDownloadURL(r);
       return { url, ...meta };
     }

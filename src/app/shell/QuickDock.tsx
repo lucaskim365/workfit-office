@@ -495,19 +495,18 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
     );
   } else if (m.type === 'file' && att) {
     body = (
-      <a
-        href={att.url}
-        target="_blank"
-        rel="noreferrer"
-        download={att.name}
-        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}
+      <button
+        type="button"
+        onClick={() => downloadAttachment(att)}
+        title="다운로드"
+        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}
       >
         <span className="text-[18px]">📄</span>
         <span className="min-w-0">
           <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
           <span className={`block text-[10px] ${mine ? 'text-white/75' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
-      </a>
+      </button>
     );
   } else {
     body = (
@@ -528,6 +527,23 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
   );
 }
 
+/**
+ * 첨부 다운로드 — 원본 파일명 보존.
+ * 업로드 시 Storage 객체에 `Content-Disposition: attachment; filename*=…`(원본명)을 심어두므로,
+ * 앵커 클릭만으로 원본 파일명 다운로드가 강제된다(cross-origin 이라 `download` 속성 자체는 무시돼도
+ * 응답 헤더가 우선). Firebase 미설정 폴백의 base64 data URL 은 same-origin 이라 `download` 속성이
+ * 그대로 적용된다. (blob fetch 는 Storage 버킷 CORS 미설정 시 차단되어 쓰지 않음)
+ */
+function downloadAttachment(att: Attachment) {
+  const a = document.createElement('a');
+  a.href = att.url;
+  a.download = att.name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /** 이미지 라이트박스 — 첨부 이미지를 앱 내 오버레이로 원본 표시. Esc·배경·✕ 로 닫기. */
 function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void }) {
   useEffect(() => {
@@ -545,16 +561,14 @@ function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void })
       {/* 상단 바: 파일명 + 다운로드 + 닫기 */}
       <div className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{att.name}</span>
-        <a
-          href={att.url}
-          target="_blank"
-          rel="noreferrer"
-          download={att.name}
+        <button
+          type="button"
+          onClick={() => downloadAttachment(att)}
           title="다운로드"
           className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[15px] hover:bg-white/25"
         >
           ⤓
-        </a>
+        </button>
         <button onClick={onClose} title="닫기(Esc)" className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[16px] hover:bg-white/25">✕</button>
       </div>
       <img
