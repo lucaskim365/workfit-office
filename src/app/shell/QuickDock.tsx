@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { ChangeEvent, ReactNode } from 'react';
+import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { Pill } from '@/shared/ui/Pill';
 import profilePhoto from '@/assets/profile-honchaewon.png';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -545,18 +545,90 @@ function downloadAttachment(att: Attachment) {
 }
 
 /** 이미지 라이트박스 — 첨부 이미지를 앱 내 오버레이로 원본 표시. Esc·배경·✕ 로 닫기. */
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 6;
+
 function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void }) {
+  // scale(배율) + tx/ty(픽셀 이동). transform-origin 은 중앙 기준.
+  const [z, setZ] = useState({ scale: 1, tx: 0, ty: 0 });
+  const [panning, setPanning] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ startX: 0, startY: 0, baseTx: 0, baseTy: 0, moved: false });
+
+  // 이미지가 바뀌면 배율/이동 초기화.
+  useEffect(() => { setZ({ scale: 1, tx: 0, ty: 0 }); }, [att.url]);
+
+  const clamp = (n: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n));
+
+  /** 배율 변경 — (cx,cy) 화면 좌표를 고정점으로 확대(미지정 시 중앙 기준). */
+  const applyZoom = useCallback((calc: (prev: number) => number, cx?: number, cy?: number) => {
+    setZ((prev) => {
+      const s2 = clamp(calc(prev.scale));
+      if (s2 === prev.scale) return prev;
+      if (s2 <= ZOOM_MIN) return { scale: ZOOM_MIN, tx: 0, ty: 0 };
+      const el = containerRef.current;
+      let { tx, ty } = prev;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const dx = (cx ?? r.left + r.width / 2) - (r.left + r.width / 2);
+        const dy = (cy ?? r.top + r.height / 2) - (r.top + r.height / 2);
+        const k = s2 / prev.scale;
+        tx = tx * k + dx * (1 - k);
+        ty = ty * k + dy * (1 - k);
+      }
+      return { scale: s2, tx, ty };
+    });
+  }, []);
+
+  const reset = useCallback(() => setZ({ scale: 1, tx: 0, ty: 0 }), []);
+
+  // 키보드: Esc 닫기, +/- 줌, 0 원본.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === '+' || e.key === '=') applyZoom((s) => s * 1.4);
+      else if (e.key === '-' || e.key === '_') applyZoom((s) => s / 1.4);
+      else if (e.key === '0') reset();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, applyZoom, reset]);
+
+  const onWheel = (e: WheelEvent) => {
+    applyZoom((s) => s * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+  };
+  const onDoubleClick = (e: MouseEvent) => {
+    applyZoom((s) => (s > 1 ? 1 : 2.5), e.clientX, e.clientY);
+  };
+  const onPointerDown = (e: PointerEvent) => {
+    if (z.scale <= 1) return; // 원본 크기에선 팬 없음(배경 클릭 닫기 유지)
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { startX: e.clientX, startY: e.clientY, baseTx: z.tx, baseTy: z.ty, moved: false };
+    setPanning(true);
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (!panning) return;
+    const dx = e.clientX - drag.current.startX;
+    const dy = e.clientY - drag.current.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.current.moved = true;
+    setZ((prev) => ({ ...prev, tx: drag.current.baseTx + dx, ty: drag.current.baseTy + dy }));
+  };
+  const onPointerUp = (e: PointerEvent) => {
+    if (!panning) return;
+    setPanning(false);
+    if (drag.current.moved) e.stopPropagation();
+  };
+
+  const pct = Math.round(z.scale * 100);
 
   // 도크(aside)의 stacking context 밖(body)으로 portal — 뷰포트 전체를 덮도록.
   return createPortal(
     <div
+      ref={containerRef}
       onClick={onClose}
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/85 p-6"
+      onWheel={onWheel}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-black/85 p-6"
     >
       {/* 상단 바: 파일명 + 다운로드 + 닫기 */}
       <div className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
@@ -574,9 +646,30 @@ function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void })
       <img
         src={att.url}
         alt={att.name}
+        draggable={false}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[86vh] max-w-full rounded-lg object-contain shadow-2xl"
+        onDoubleClick={onDoubleClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        style={{
+          transform: `translate(${z.tx}px, ${z.ty}px) scale(${z.scale})`,
+          transformOrigin: 'center center',
+          transition: panning ? 'none' : 'transform 120ms ease-out',
+          cursor: z.scale > 1 ? (panning ? 'grabbing' : 'grab') : 'zoom-in',
+          touchAction: 'none',
+        }}
+        className="max-h-[86vh] max-w-full select-none rounded-lg object-contain shadow-2xl"
       />
+      {/* 하단 줌 컨트롤: 축소 · 배율(클릭 시 원본) · 확대 */}
+      <div
+        className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-white/12 px-1.5 py-1 text-white backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={() => applyZoom((s) => s / 1.4)} title="축소(−)" className="grid h-8 w-8 place-items-center rounded-lg text-[17px] hover:bg-white/20">－</button>
+        <button onClick={reset} title="원본(0)" className="min-w-[52px] rounded-lg px-2 py-1 text-[12px] font-semibold tabular-nums hover:bg-white/20">{pct}%</button>
+        <button onClick={() => applyZoom((s) => s * 1.4)} title="확대(+)" className="grid h-8 w-8 place-items-center rounded-lg text-[17px] hover:bg-white/20">＋</button>
+      </div>
     </div>,
     document.body,
   );
