@@ -23,7 +23,7 @@ const USERS_KEY = 'users';
 const POSITIONS_KEY = 'positions';
 
 /** 직급 서열(작을수록 상위) — positions 마스터 미로드 시 폴백. */
-const POSITION_RANK_FALLBACK: Record<string, number> = { 대표: 1, 본부장: 2, 공장장: 2, 관리자: 3, 팀장: 3, 파트장: 4, 반장: 5, 담당: 6, 사원: 7 };
+const POSITION_RANK_FALLBACK: Record<string, number> = { 대표이사: 1, 상무이사: 2, 이사: 3, 소장: 3, 부장: 4, 차장: 5, 과장: 6, 대리: 7, 연구원: 8, 사원: 9 };
 
 export interface OrgNode {
   dept: Department;

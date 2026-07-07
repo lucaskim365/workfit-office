@@ -2,24 +2,34 @@ import { DEFAULT_USER_PASSWORD, type User } from '@/domain/user/schema';
 
 /**
  * 사용자 시드 — Firebase 미설정 시 폴백 + 초기 seed 소스.
- * (와이어프레임 admin-screens.UserMgmtContent 기준)
+ * Workfit Office 실제 조직도 기준 실명 재직자 12명. 조직도 상 '충원(공석)' 자리는 제외.
+ * position = 직급(직급 마스터와 매칭). jobTitle = 직책(팀장·본부장·팀원 등, 조직도 직책열).
+ * 팀장/본부장 직책은 department.headUserId 와도 연동. managerId = 직속 상급자(상급자 체인 원천).
  *
  * ⚠ password 는 데모 한정 평문. 전 계정 공통 초기 비밀번호 `mes1234`.
- *   자체 로그인(사번 또는 이메일 + 비밀번호)으로 로그인. ([[firebase-backend-setup]])
+ *   자체 로그인(사번 또는 이메일 + 비밀번호). ([[firebase-backend-setup]])
  */
 const DEMO_PW = DEFAULT_USER_PASSWORD;
 
 export const USER_SEED: User[] = [
-  { id: 'U001', empNo: 'A12345', name: '김승기', dept: '시스템관리팀', position: '관리자', roleGroup: 'ADMIN', email: 'seunggi.kim@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 08:41', managerId: null, password: DEMO_PW },
-  { id: 'U002', empNo: 'A67890', name: '문성민', dept: '생산1팀', position: '파트장', roleGroup: 'MT_ADMIN', email: 'seongmin.moon@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 08:12', managerId: 'U008', password: DEMO_PW },
-  { id: 'U003', empNo: 'B22120', name: '이서연', dept: '품질보증팀', position: '담당', roleGroup: 'QC_USER', email: 'seoyeon.lee@workfit.co.kr', status: '사용', lastLogin: '2026-06-22 17:55', managerId: 'U007', password: DEMO_PW },
-  { id: 'U004', empNo: 'B53410', name: '정하윤', dept: '생산2팀', position: '담당', roleGroup: 'MT_USER', email: 'hayoon.jung@workfit.co.kr', status: '잠금', lastLogin: '2026-06-05 09:03', managerId: 'U001', password: DEMO_PW },
-  { id: 'U005', empNo: 'C77201', name: '임건우', dept: '현장관리팀', position: '반장', roleGroup: 'FIELD_ADMIN', email: 'gunwoo.lim@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 07:30', managerId: 'U001', password: DEMO_PW },
-  { id: 'U006', empNo: 'C90112', name: '안중근', dept: '설비보전팀', position: '담당', roleGroup: 'OPERATOR', email: 'jungeun.an@workfit.co.kr', status: '미사용', lastLogin: '2026-05-28 14:20', managerId: 'U001', password: DEMO_PW },
-  { id: 'U007', empNo: 'A21099', name: '윤채원', dept: '품질보증팀', position: '파트장', roleGroup: 'QC_USER', email: 'chaewon.yoon@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 09:02', managerId: 'U001', password: DEMO_PW },
-  { id: 'U008', empNo: 'D45100', name: '박민준', dept: '생산1팀', position: '관리자', roleGroup: 'MT_ADMIN', email: 'minjun.park@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 07:55', managerId: 'U001', password: DEMO_PW },
-  { id: 'U009', empNo: 'D45221', name: '신유진', dept: '생산2팀', position: '담당', roleGroup: 'MT_USER', email: 'yujin.shin@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 06:48', managerId: 'U004', password: DEMO_PW },
-  { id: 'U010', empNo: 'C33012', name: '한소율', dept: '설비보전팀', position: '담당', roleGroup: 'OPERATOR', email: 'soyul.han@workfit.co.kr', status: '사용', lastLogin: '2026-06-22 22:14', managerId: 'U006', password: DEMO_PW },
-  { id: 'U011', empNo: 'B53999', name: '배예린', dept: '품질보증팀', position: '담당', roleGroup: 'QC_USER', email: 'yerin.bae@workfit.co.kr', status: '잠금', lastLogin: '2026-06-15 13:21', managerId: 'U007', password: DEMO_PW },
-  { id: 'U012', empNo: 'D45777', name: '서준호', dept: '자재관리팀', position: '관리자', roleGroup: 'FIELD_ADMIN', email: 'junho.seo@workfit.co.kr', status: '사용', lastLogin: '2026-06-23 08:05', managerId: 'U001', password: DEMO_PW },
+  // 대표이사
+  { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', roleGroup: 'ADMIN', email: 'youngmi.park@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
+  // 대표이사 직속 — 직책 재경이사 / 직급 이사
+  { id: 'U002', empNo: '100002', name: '류지광', dept: '대표이사 직속', position: '이사', jobTitle: '재경이사', roleGroup: 'ADMIN', email: 'jigwang.ryu@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 08:31', managerId: 'U001', password: DEMO_PW },
+  // AX사업본부 — 직책 본부장 / 직급 상무이사, AX Committee 상근 위원 겸직
+  { id: 'U003', empNo: '200001', name: '손승원', dept: 'AX사업본부', position: '상무이사', jobTitle: '본부장', roleGroup: 'ADMIN', email: 'seungwon.son@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 09:02', managerId: 'U001', password: DEMO_PW },
+  // AX Committee — 비상근 외부 위원(로그인 비활성). 직급 없음 → 비상근 표기.
+  { id: 'U004', empNo: '900001', name: '김경일', dept: 'AX Committee', position: '비상근', jobTitle: '위원장', roleGroup: 'ADMIN', email: 'gyeongil.kim@workfit.co.kr', status: '미사용', lastLogin: '-', managerId: 'U001', password: DEMO_PW },
+  { id: 'U005', empNo: '900002', name: '김기중', dept: 'AX Committee', position: '비상근', jobTitle: '부위원장', roleGroup: 'ADMIN', email: 'gijung.kim@workfit.co.kr', status: '미사용', lastLogin: '-', managerId: 'U001', password: DEMO_PW },
+  // 품질관리팀 — 팀장 강윤석(직급 이사)
+  { id: 'U006', empNo: '300001', name: '강윤석', dept: '품질관리팀', position: '이사', jobTitle: '팀장', roleGroup: 'QC_USER', email: 'yoonseok.kang@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 08:12', managerId: 'U003', password: DEMO_PW },
+  { id: 'U007', empNo: '300002', name: '최지혜', dept: '품질관리팀', position: '사원', jobTitle: '팀원', roleGroup: 'QC_USER', email: 'jihye.choi@workfit.co.kr', status: '사용', lastLogin: '2026-07-06 17:55', managerId: 'U006', password: DEMO_PW },
+  // 영업팀 — 팀장 홍형표(직급 부장)
+  { id: 'U008', empNo: '400001', name: '홍형표', dept: '영업팀', position: '부장', jobTitle: '팀장', roleGroup: 'OPERATOR', email: 'hyungpyo.hong@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 07:48', managerId: 'U003', password: DEMO_PW },
+  // 사업관리팀 — 팀장 박명규(부장) / 부팀장 박광래(차장)
+  { id: 'U009', empNo: '500001', name: '박명규', dept: '사업관리팀', position: '부장', jobTitle: '팀장', roleGroup: 'OPERATOR', email: 'myeonggyu.park@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 08:05', managerId: 'U003', password: DEMO_PW },
+  { id: 'U010', empNo: '500002', name: '박광래', dept: '사업관리팀', position: '차장', jobTitle: '부팀장', roleGroup: 'OPERATOR', email: 'gwangrae.park@workfit.co.kr', status: '사용', lastLogin: '2026-07-06 18:20', managerId: 'U009', password: DEMO_PW },
+  // S/W 개발팀 — 팀장 김승기(부장)
+  { id: 'U011', empNo: '600001', name: '김승기', dept: 'S/W 개발팀', position: '부장', jobTitle: '팀장', roleGroup: 'ADMIN', email: 'seunggi.kim@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 08:41', managerId: 'U003', password: DEMO_PW },
+  { id: 'U012', empNo: '600002', name: '홍채원', dept: 'S/W 개발팀', position: '사원', jobTitle: '팀원', roleGroup: 'OPERATOR', email: 'chaewon.hong@workfit.co.kr', status: '사용', lastLogin: '2026-07-07 06:48', managerId: 'U011', password: DEMO_PW },
 ];

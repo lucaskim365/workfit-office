@@ -15,6 +15,7 @@ const EMPTY: UserFormValues = {
   name: '',
   dept: '',
   position: '',
+  jobTitle: '',
   roleGroup: 'OPERATOR',
   email: '',
   status: '사용',
@@ -48,6 +49,7 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             name: initial.name,
             dept: initial.dept,
             position: initial.position,
+            jobTitle: initial.jobTitle ?? '',
             roleGroup: initial.roleGroup as UserFormValues['roleGroup'],
             email: initial.email,
             status: initial.status,
@@ -85,8 +87,11 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
         <Field label="부서" required error={errors.dept?.message}>
           <TextField {...register('dept')} invalid={!!errors.dept} placeholder="생산1팀" />
         </Field>
-        <Field label="직책" required error={errors.position?.message}>
-          <TextField {...register('position')} invalid={!!errors.position} placeholder="담당" />
+        <Field label="직급" required error={errors.position?.message}>
+          <TextField {...register('position')} invalid={!!errors.position} placeholder="과장" />
+        </Field>
+        <Field label="직책" error={errors.jobTitle?.message}>
+          <TextField {...register('jobTitle')} invalid={!!errors.jobTitle} placeholder="팀장 (선택)" />
         </Field>
         <Field label="권한그룹" required error={errors.roleGroup?.message}>
           <SelectField

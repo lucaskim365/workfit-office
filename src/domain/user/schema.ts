@@ -18,7 +18,13 @@ export const userSchema = z.object({
   empNo: z.string().min(1, '사번을 입력하세요').max(20),
   name: z.string().min(1, '이름을 입력하세요').max(30),
   dept: z.string().min(1, '부서를 입력하세요').max(30),
-  position: z.string().min(1, '직책을 입력하세요').max(20),
+  position: z.string().min(1, '직급을 입력하세요').max(20),
+  /**
+   * 직책 — 조직 내 역할(팀장·본부장·부팀장·팀원·위원장 등). 직급(position)과 별개 축.
+   * 팀장/본부장은 부서장(department.headUserId)과도 연동되나, 화면 표기·부팀장/팀원 구분용.
+   * 선택 항목(미지정 허용).
+   */
+  jobTitle: z.string().max(20).default(''),
   roleGroup: z.enum(ROLE_GROUPS),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS).default('사용'),
@@ -43,7 +49,9 @@ export const userFormSchema = z.object({
   empNo: z.string().min(1, '사번을 입력하세요').max(20),
   name: z.string().min(1, '이름을 입력하세요').max(30),
   dept: z.string().min(1, '부서를 입력하세요').max(30),
-  position: z.string().min(1, '직책을 입력하세요').max(20),
+  position: z.string().min(1, '직급을 입력하세요').max(20),
+  /** 직책 — 선택(미지정 허용, 빈 문자열 가능). 직급(position)과 별개. */
+  jobTitle: z.string().max(20),
   roleGroup: z.enum(ROLE_GROUPS),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),

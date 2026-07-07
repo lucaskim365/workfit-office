@@ -2,9 +2,12 @@ import type { ApprovalRouteRule } from '@/domain/approvalRoute/schema';
 
 /**
  * 동적 결재선 룰 시드 — Firebase 미설정 시 폴백 + 초기 seed(데모 룰셋).
- * priority 작을수록 먼저 매칭(구체적 룰 우선). 현재 조직 기준:
- *   생산본부·산하 팀 = deptType '공장'(공장장=생산본부장 U008), 나머지 = '본사'.
- *   직급 rank: 관리자/팀장 3, 파트장 4, 반장 5, 담당 6, 사원 7.
+ * priority 작을수록 먼저 매칭(구체적 룰 우선). 단계는 이름이 아닌 관계형 resolver 라
+ * 조직 개편에도 대체로 그대로 동작한다. Workfit Office 조직(대표이사 → AX사업본부 → 팀) 기준:
+ *   직급 rank: 대표이사 1, 상무이사 2, 이사/소장 3, 부장 4, 차장 5, 과장 6, 대리 7, 연구원 8, 사원 9.
+ *   ⚠ 현 조직엔 deptType '공장'이 없어 ①(RR-FACTORY-EXP)은 매칭되지 않는 휴면 룰이다.
+ *   ⚠ 트리 최상위가 '대표이사'라 ROLE_DIVISION_HEAD(최상위 부서장)는 대표이사로 해석된다.
+ *     본부장(AX사업본부장) 결재 단계가 필요하면 DEPT_HEAD 체인(팀장→본부장→대표)을 사용할 것.
  */
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   // ① 공장 지출결의 — 부서유형=공장이면 금액·직급 무관, 팀장 검토 후 공장장 전결

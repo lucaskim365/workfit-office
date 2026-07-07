@@ -39,7 +39,7 @@ export default function OrgChartScreen() {
   const members = useMemo(() => {
     const list = selNode?.members ?? [];
     if (!kw) return list;
-    return list.filter((m) => m.name.toLowerCase().includes(kw) || m.position.toLowerCase().includes(kw));
+    return list.filter((m) => [m.name, m.position, m.jobTitle].some((v) => v.toLowerCase().includes(kw)));
   }, [selNode, kw]);
 
   const toggle = (id: string) =>
@@ -153,7 +153,7 @@ function MemberCard({ user, manager, isHead }: { user: User; manager: User | und
             <span className="truncate text-[12.5px] font-bold text-ink">{user.name}</span>
             {isHead && <span className="shrink-0 rounded bg-teal/15 px-1.5 py-px text-[9px] font-bold text-teal">부서장</span>}
           </div>
-          <div className="text-[11px] text-ink3">{user.position}</div>
+          <div className="text-[11px] text-ink3">{user.jobTitle ? `${user.jobTitle} · ${user.position}` : user.position}</div>
         </div>
       </div>
       <div className="mt-2 space-y-0.5 text-[10.5px] text-ink3">

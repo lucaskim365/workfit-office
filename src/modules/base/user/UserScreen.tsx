@@ -19,7 +19,7 @@ const STATUS_OPTIONS: Option[] = [
 ];
 const ROLE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...ROLE_GROUPS.map((r) => ({ value: r, label: r }))];
 
-/** 사용자관리 — 필터 + KPI 요약 + 목록(직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
+/** 사용자관리 — 필터 + KPI 요약 + 목록(직급·직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
 export default function UserScreen() {
   const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
@@ -50,7 +50,14 @@ export default function UserScreen() {
     { key: 'empNo', header: '사번', mono: true, sortable: true, width: 100 },
     { key: 'name', header: '이름', sortable: true, width: 90 },
     { key: 'dept', header: '부서', sortable: true },
-    { key: 'position', header: '직책', sortable: true, width: 90 },
+    { key: 'position', header: '직급', sortable: true, width: 84 },
+    {
+      key: 'jobTitle',
+      header: '직책',
+      sortable: true,
+      width: 84,
+      render: (u) => (u.jobTitle ? u.jobTitle : <span className="text-ink3">—</span>),
+    },
     {
       key: 'roleGroup',
       header: '권한그룹',
