@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { positionRepo } from '@/data/position/position.repo';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
+import type { Position } from '@/domain/position/schema';
 
 /**
  * 조직 데이터 훅 — 부서(departments) + 사용자(users) 를 조합해
@@ -18,10 +20,10 @@ import type { User } from '@/domain/user/schema';
  */
 const DEPTS_KEY = 'departments';
 const USERS_KEY = 'users';
+const POSITIONS_KEY = 'positions';
 
-/** 직급 서열(작을수록 상위) — 부서장 자동 판정. */
-const POSITION_RANK: Record<string, number> = { 관리자: 1, 팀장: 1, 파트장: 2, 반장: 3, 담당: 4, 사원: 5 };
-const rankOf = (position: string) => POSITION_RANK[position] ?? 9;
+/** 직급 서열(작을수록 상위) — positions 마스터 미로드 시 폴백. */
+const POSITION_RANK_FALLBACK: Record<string, number> = { 대표: 1, 본부장: 2, 공장장: 2, 관리자: 3, 팀장: 3, 파트장: 4, 반장: 5, 담당: 6, 사원: 7 };
 
 export interface OrgNode {
   dept: Department;
@@ -34,7 +36,10 @@ export interface OrgTree {
   roots: OrgNode[];
   depts: Department[];
   users: User[];
+  positions: Position[];
   userById: (id: string | null | undefined) => User | undefined;
+  /** 직급명 → 서열(작을수록 상위). positions 마스터 우선, 폴백 상수. */
+  rankOf: (position: string) => number;
   managerChain: (userId: string, depth?: number) => User[];
   deptHeadOf: (userId: string) => User | null;
 }
@@ -42,10 +47,16 @@ export interface OrgTree {
 export function useOrgTree() {
   const deptsQ = useQuery({ queryKey: [DEPTS_KEY, null], queryFn: () => departmentRepo.list() });
   const usersQ = useQuery({ queryKey: [USERS_KEY, null], queryFn: () => userRepo.list() });
+  const positionsQ = useQuery({ queryKey: [POSITIONS_KEY, null], queryFn: () => positionRepo.list() });
 
   const data = useMemo<OrgTree>(() => {
     const masters = deptsQ.data ?? [];
     const users = usersQ.data ?? [];
+    const positions = positionsQ.data ?? [];
+
+    // 직급 서열 — 마스터 우선, 없으면 폴백 상수.
+    const rankByName = new Map(positions.map((p) => [p.name, p.rank]));
+    const rankOf = (position: string) => rankByName.get(position) ?? POSITION_RANK_FALLBACK[position] ?? 9;
 
     const usersById = new Map(users.map((u) => [u.id, u]));
     const masterByName = new Map(masters.map((d) => [d.name, d]));
@@ -73,7 +84,7 @@ export function useOrgTree() {
     const names = new Set<string>([...masterByName.keys(), ...membersByDept.keys()]);
     const deptOf = (name: string, idx: number): Department => {
       const m = masterByName.get(name);
-      return m ?? { id: `dept:${name}`, name, parentId: null, headUserId: headIdOfDept(name), order: 1000 + idx };
+      return m ?? { id: `dept:${name}`, name, parentId: null, headUserId: headIdOfDept(name), deptType: '본사', order: 1000 + idx };
     };
 
     const orderedNames = [...names];
@@ -131,8 +142,8 @@ export function useOrgTree() {
     };
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
-    return { roots, depts, users, userById, managerChain, deptHeadOf };
-  }, [deptsQ.data, usersQ.data]);
+    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf };
+  }, [deptsQ.data, usersQ.data, positionsQ.data]);
 
-  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading };
+  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || positionsQ.isLoading };
 }

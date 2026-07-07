@@ -23,6 +23,11 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_BASE_VENDOR', name: '거래처관리', url: '/base/vendor', icon: '▤', order: 20, use: true },
       { id: 'S_BASE_AUTH', name: '그룹권한관리', url: '/base/auth', icon: '✦', order: 30, use: true },
     ] },
+    { id: 'G_BASE_ORG', name: '조직·결재 기준정보', icon: '◫', order: 15, use: true, children: [
+      { id: 'S_BASE_DEPT', name: '부서/조직관리', url: '/base/department', icon: '▤', order: 10, use: true },
+      { id: 'S_BASE_POSITION', name: '직급관리', url: '/base/position', icon: '◫', order: 20, use: true },
+      { id: 'S_BASE_APRULE', name: '결재선 규칙관리', url: '/base/approval-rule', icon: '⚖', order: 30, use: true },
+    ] },
     { id: 'G_BASE_MASTER', name: '마스터 정보', icon: '▦', order: 20, use: true, children: [
       { id: 'S_BASE_CODE', name: '공통코드정보', url: '/base/code', icon: '⌗', order: 10, use: true },
       { id: 'S_BASE_ITEM', name: '품목정보', url: '/base/item', icon: '▦', order: 20, use: true },

@@ -9,6 +9,10 @@ import { z } from 'zod';
  * ([[groupware-feature]] · docs/전자결재_워크플로_개발_계획서.md §3.2)
  * RDB 이관 시 이 정의가 곧 테이블 DDL. ([[DB_이관_대비_설계원칙.md]])
  */
+/** 부서 유형 — 동적 결재선 룰 엔진의 역할 해석·룰 매칭 키(공장장 등). */
+export const DEPT_TYPES = ['본사', '공장', '영업소', '연구소', '기타'] as const;
+export type DeptType = (typeof DEPT_TYPES)[number];
+
 export const departmentSchema = z.object({
   /** 부서 ID(PK, `D###`). */
   id: z.string().min(1),
@@ -18,6 +22,11 @@ export const departmentSchema = z.object({
   parentId: z.string().nullable().default(null),
   /** 부서장 users.id(FK, nullable) → 합의/전결 라우팅. */
   headUserId: z.string().nullable().default(null),
+  /**
+   * 조직 유형 — 본사/공장/영업소 등. 동적 결재선 룰의 부서범위 매칭·역할 해석(공장장)에 사용.
+   * ([[dynamic-route-engine]] · docs/동적_결재선_룰엔진_개발_계획서.md §5.1)
+   */
+  deptType: z.enum(DEPT_TYPES).default('본사'),
   /** 형제 정렬 순서. */
   order: z.number().default(0),
 });

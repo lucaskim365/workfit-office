@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { useAutoLine } from '@/features/gw/useAutoLine';
+import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { STEP_KINDS, type ApprovalStep, type DocType, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
@@ -63,7 +63,7 @@ export function ApprovalLineBuilder({
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
-  const auto = useAutoLine();
+  const route = useRouteEngine();
   const [picker, setPicker] = useState<{ mode: 'add' } | { mode: 'replace'; index: number } | null>(null);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
@@ -93,9 +93,9 @@ export function ApprovalLineBuilder({
     setPicker(null);
   };
 
-  const fillAuto = (withRule: boolean) => {
-    const built = auto.build({ drafterId, docType, amount: withRule ? amount : null });
-    // withRule=false 면 전결규정 없이 체인 전체를 결재로(자동 상신선). true 면 전결규정 절단 반영.
+  const fillAuto = () => {
+    // 동적 결재선 룰 엔진 — 기안자 부서·직급·금액에 맞는 결재선을 생성.
+    const built = route.build({ drafterId, docType, amount });
     onChange(built.length ? built : steps);
   };
 
@@ -110,19 +110,12 @@ export function ApprovalLineBuilder({
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          onClick={() => fillAuto(false)}
-          disabled={auto.isLoading}
+          onClick={fillAuto}
+          disabled={route.isLoading}
+          title="기안자 부서·직급·금액에 맞는 결재선을 룰 엔진으로 자동 생성"
           className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
         >
-          ⚡ 자동 상신선
-        </button>
-        <button
-          type="button"
-          onClick={() => fillAuto(true)}
-          disabled={auto.isLoading}
-          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
-        >
-          📐 전결규정 적용
+          ⚡ 자동 결재선(룰)
         </button>
         <button
           type="button"

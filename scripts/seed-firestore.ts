@@ -137,6 +137,8 @@ import { COMPANY_SITE_SEED } from '@/data/seeds/companySite.seed';
 import { DEPARTMENT_SEED } from '@/data/seeds/department.seed';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { APPROVAL_RULE_SEED } from '@/data/seeds/approvalRule.seed';
+import { POSITION_SEED } from '@/data/seeds/position.seed';
+import { APPROVAL_ROUTE_SEED } from '@/data/seeds/approvalRoute.seed';
 import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
 import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
 import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
@@ -276,8 +278,10 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'chatRooms', docs: CHAT_ROOM_SEED, id: (d) => d.id },
   { coll: 'chatMessages', docs: CHAT_MESSAGE_SEED, id: (d) => d.id },
   { coll: 'departments', docs: DEPARTMENT_SEED, id: (d) => d.id },
+  { coll: 'positions', docs: POSITION_SEED, id: (d) => d.id },
   { coll: 'approvalDocs', docs: APPROVAL_DOC_SEED, id: (d) => d.id },
   { coll: 'approvalRules', docs: APPROVAL_RULE_SEED, id: (d) => d.id },
+  { coll: 'approvalRouteRules', docs: APPROVAL_ROUTE_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

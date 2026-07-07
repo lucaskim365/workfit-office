@@ -11,7 +11,7 @@ import {
 } from '@/domain/approvalDoc/schema';
 import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
-import { useAutoLine } from '@/features/gw/useAutoLine';
+import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DOC_TYPE_ICON } from '@/modules/gw/_gw';
 
@@ -54,17 +54,17 @@ export function ApprovalDraftModal({
   const create = useCreateDraft();
   const save = useSaveDraft();
   const submitM = useSubmitApproval();
-  const auto = useAutoLine();
+  const route = useRouteEngine();
   const busy = create.isPending || save.isPending || submitM.isPending;
 
-  // fixedType(예: 휴가) 신규 작성이면 자동 상신선을 1회 프리필(사용자가 이어서 수정 가능).
+  // fixedType(예: 휴가) 신규 작성이면 룰 엔진으로 결재선을 1회 프리필(사용자가 이어서 수정 가능).
   const prefilled = useRef(false);
   useEffect(() => {
-    if (!fixedType || editDoc || prefilled.current || auto.isLoading) return;
+    if (!fixedType || editDoc || prefilled.current || route.isLoading) return;
     if (steps.length > 0) { prefilled.current = true; return; }
-    const line = auto.build({ drafterId: me.id, docType: fixedType, amount: null });
+    const line = route.build({ drafterId: me.id, docType: fixedType, amount: null });
     if (line.length) { setSteps(line); prefilled.current = true; }
-  }, [fixedType, editDoc, auto, me.id, steps.length]);
+  }, [fixedType, editDoc, route, me.id, steps.length]);
 
   // 반려·회수 문서를 편집 중이면 재상신 흐름(임시저장 버튼 숨김).
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';

@@ -48,7 +48,8 @@ service cloud.firestore {
         'quotes', 'salesCollections', 'accountsReceivable', 'creditLimits', 'salesRevenues', 'taxInvoices',
         'authRoles', 'backupPolicies', 'companySites', 'companyInfo', 'interfaces', 'systemLogs', 'sysAdmins',
         'chatRooms', 'chatMessages',
-        'departments', 'approvalDocs', 'approvalRules'
+        'departments', 'approvalDocs', 'approvalRules',
+        'positions', 'approvalRouteRules'
       ];
     }
 
