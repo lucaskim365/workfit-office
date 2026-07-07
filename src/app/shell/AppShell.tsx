@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
 import { MENU_TREE } from '../menu-tree';
 import { SCREEN_BY_URL, HOME_URL } from './screens';
+import { gwScreen } from './gw-screens';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
@@ -44,7 +45,9 @@ export default function AppShell() {
   const navigate = useNavigate();
   const activeUrl = location.pathname;
 
-  const initialScreen = SCREEN_BY_URL[activeUrl] ?? SCREEN_BY_URL[HOME_URL];
+  // 라우트(URL) → 탭용 화면. MES 메뉴 화면 우선, 없으면 그룹웨어(도크 전용) 합성.
+  const resolveScreen = (url: string) => SCREEN_BY_URL[url] ?? gwScreen(url);
+  const initialScreen = resolveScreen(activeUrl) ?? SCREEN_BY_URL[HOME_URL];
   const [tabs, setTabs] = useState<FlatScreen[]>(initialScreen ? [initialScreen] : []);
   const [collapsed, setCollapsed] = useState(false);
   const [openModule, setOpenModule] = useState<string | null>(null);
@@ -67,7 +70,14 @@ export default function AppShell() {
   useEffect(() => { try { localStorage.setItem('mes_favs', JSON.stringify(favs)); } catch { /* noop */ } }, [favs]);
   useEffect(() => { try { localStorage.setItem('mes_rail_open', JSON.stringify(railOpen)); } catch { /* noop */ } }, [railOpen]);
 
-  const activeScreen = SCREEN_BY_URL[activeUrl];
+  // 현재 라우트에 해당하는 탭이 없으면 자동으로 연다 — 도크(그룹웨어)·딥링크·뒤로가기 모두 커버.
+  // MES 화면은 openTab 이 먼저 추가하므로 여기선 no-op, 그룹웨어는 여기서 탭이 생긴다.
+  useEffect(() => {
+    const s = SCREEN_BY_URL[activeUrl] ?? gwScreen(activeUrl);
+    if (s) setTabs((prev) => (prev.some((t) => t.url === s.url) ? prev : [...prev, s]));
+  }, [activeUrl]);
+
+  const activeScreen = resolveScreen(activeUrl);
   const activeModuleId = activeScreen?.moduleId ?? MENU_TREE[0].id;
   const activeModule = MENU_TREE.find((m) => m.id === activeModuleId) ?? MENU_TREE[0];
 

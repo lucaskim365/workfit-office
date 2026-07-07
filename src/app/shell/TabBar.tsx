@@ -1,4 +1,5 @@
 import type { FlatScreen } from '@/shared/types/menu';
+import { isGwUrl } from './gw-screens';
 
 interface TabBarProps {
   tabs: FlatScreen[];
@@ -15,15 +16,21 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
       <div className="flex min-w-0 flex-1 items-end gap-[3px] overflow-hidden">
         {tabs.map((t) => {
           const a = t.url === activeUrl;
+          const gw = isGwUrl(t.url);
           return (
             <button
               key={t.url}
               onClick={() => onSelect(t.url)}
+              title={gw ? `그룹웨어 · ${t.name}` : t.name}
               className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-t-[7px] pl-3 pr-2 ${
                 a ? 'h-[30px] border-l border-r border-t border-border-hi bg-panel shadow-[0_-1px_2px_rgba(23,34,65,0.04)]' : 'h-[26px] bg-[#dde3ee]'
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
+              {gw ? (
+                <span className="text-[11px] leading-none">{t.icon ?? '▦'}</span>
+              ) : (
+                <span className={`h-1.5 w-1.5 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
+              )}
               <span className={`whitespace-nowrap text-[11px] ${a ? 'font-bold text-ink' : 'font-semibold text-ink2'}`}>{t.name}</span>
               <span
                 onClick={(e) => onClose(t.url, e)}
@@ -61,7 +68,11 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
                     onClick={() => { onSelect(t.url); setMenuOpen(false); }}
                     className={`flex cursor-pointer items-center gap-2 rounded-[7px] px-2.5 py-[7px] ${a ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}
                   >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
+                    {isGwUrl(t.url) ? (
+                      <span className="shrink-0 text-[11px] leading-none">{t.icon ?? '▦'}</span>
+                    ) : (
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
+                    )}
                     <span className={`min-w-0 flex-1 truncate text-[11.5px] ${a ? 'font-bold text-teal' : 'font-medium text-ink2'}`}>{t.name}</span>
                     <span onClick={(e) => onClose(t.url, e)} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-[11px] text-ink3">×</span>
                   </div>
