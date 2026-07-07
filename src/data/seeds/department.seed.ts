@@ -9,7 +9,7 @@ export const DEPARTMENT_SEED: Department[] = [
   // 본부(최상위) — 생산본부는 공장 조직(공장장=headUserId U008)
   { id: 'D100', name: '경영지원본부', parentId: null, headUserId: 'U001', deptType: '본사', order: 1 },
   { id: 'D200', name: '생산본부', parentId: null, headUserId: 'U008', deptType: '공장', order: 2 },
-  { id: 'D300', name: '품질본부', parentId: null, headUserId: 'U007', deptType: '본사', order: 3 },
+  { id: 'D300', name: '품질본부', parentId: null, headUserId: 'U012', deptType: '본사', order: 3 },
   { id: 'D400', name: '설비본부', parentId: null, headUserId: 'U006', deptType: '공장', order: 4 },
   { id: 'D500', name: '자재본부', parentId: null, headUserId: 'U012', deptType: '본사', order: 5 },
   // 팀(하위) — name 은 users.dept 와 매칭. 생산·설비 산하 팀은 공장 소속
