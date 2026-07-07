@@ -22,3 +22,6 @@ serviceAccount.json
 *.log
 .vercel
 .env*
+
+# Claude Code 로컬 설정 (개인별)
+.claude/settings.local.json
