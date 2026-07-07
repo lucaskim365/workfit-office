@@ -13,6 +13,7 @@ import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { DecisionBadge, DOC_TYPE_ICON, fmtDateTime, GwHead, KIND_TONE, StatusBadge, won } from '@/modules/gw/_gw';
 import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
+import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
 /**
  * 전자결재 결재함(§7.2) — 좌 함 탭(대기·상신·완료·참조·임시) + 중 목록 + 우 상세.
@@ -149,6 +150,7 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
   const recallM = useRecallApproval();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
   const [err, setErr] = useState('');
+  const [view, setView] = useState<'timeline' | 'document'>('timeline');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const busy = decide.isPending || submitM.isPending || recallM.isPending;
@@ -191,6 +193,32 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
               {doc.docNo} · {doc.docType} · 기안 {nameOf(doc.drafterId)}({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
             </div>
           </div>
+          {/* 보기 전환 + 인쇄 */}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-border-hi text-[11px] font-semibold">
+              <button
+                onClick={() => setView('timeline')}
+                className={`px-2.5 py-1.5 ${view === 'timeline' ? 'bg-teal-soft text-teal' : 'bg-panel text-ink2 hover:bg-panel-alt'}`}
+              >
+                타임라인
+              </button>
+              <button
+                onClick={() => setView('document')}
+                className={`border-l border-border-hi px-2.5 py-1.5 ${view === 'document' ? 'bg-teal-soft text-teal' : 'bg-panel text-ink2 hover:bg-panel-alt'}`}
+              >
+                문서
+              </button>
+            </div>
+            {view === 'document' && (
+              <button
+                onClick={() => window.print()}
+                title="결재 문서 인쇄"
+                className="rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+              >
+                🖨 인쇄
+              </button>
+            )}
+          </div>
         </div>
         {(doc.amount != null || doc.form) && (
           <div className="mt-2 flex flex-wrap gap-2 text-[11.5px]">
@@ -205,6 +233,10 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {view === 'document' ? (
+          <ApprovalDocumentView doc={doc} />
+        ) : (
+        <>
         {/* 본문 */}
         <div className="whitespace-pre-wrap rounded-xl border border-border bg-panel-alt px-4 py-3 text-[12.5px] leading-relaxed text-ink2">
           {doc.body || <span className="text-ink3">본문 없음</span>}
@@ -237,6 +269,8 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             })}
           </div>
         </div>
+        </>
+        )}
 
         {err && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500">{err}</p>}
 

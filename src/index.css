@@ -103,3 +103,30 @@ body {
   height: 0;
   display: none;
 }
+
+/* ──────────────────────────────────────────────────────────────
+   전자결재 문서 인쇄 — 인쇄 시 결재 문서(.approval-print)만 남기고 앱 UI를 숨긴다.
+   visibility 트릭으로 레이아웃을 보존하며 문서만 노출.
+   ────────────────────────────────────────────────────────────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .approval-print,
+  .approval-print * {
+    visibility: visible;
+  }
+  .approval-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}
