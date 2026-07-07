@@ -110,17 +110,25 @@ export function ApprovalDraftModal({
     const err = validate(false);
     if (err) return setError(err);
     setError('');
-    await persistDraft();
-    onClose();
+    try {
+      await persistDraft();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '저장에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const onSubmit = async () => {
     const err = validate(true);
     if (err) return setError(err);
     setError('');
-    const id = await persistDraft();
-    await submitM.mutateAsync({ id, userId: me.id });
-    onClose();
+    try {
+      const id = await persistDraft();
+      await submitM.mutateAsync({ id, userId: me.id });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '상신에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   return (
