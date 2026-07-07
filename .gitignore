@@ -25,3 +25,6 @@ serviceAccount.json
 
 # Claude Code 로컬 설정 (개인별)
 .claude/settings.local.json
+
+# 앱 확인용 스크린샷(run-app 스킬)
+.screenshots/
