@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from '@/domain/user/schema';
 import {
   DOC_TYPES,
@@ -11,12 +11,14 @@ import {
 } from '@/domain/approvalDoc/schema';
 import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
+import { useAutoLine } from '@/features/gw/useAutoLine';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DOC_TYPE_ICON } from '@/modules/gw/_gw';
 
 /**
  * 상신 모달(§7.2) — 유형 선택 → 결재선 빌더 → 본문/금액/휴가필드 → [임시저장][상신].
  * 신규 작성 또는 임시저장 문서 편집. 상신은 초안 저장 후 엔진 submit 으로 흐른다.
+ * `fixedType` 지정 시 유형을 고정(선택기 숨김)하고 자동 상신선을 프리필한다(휴가 신청 재사용).
  */
 
 /** 날짜 차이(일). endDate 포함. 유효하지 않으면 0. */
@@ -27,8 +29,18 @@ function daysBetween(start: string, end: string): number {
   return Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
 }
 
-export function ApprovalDraftModal({ me, editDoc, onClose }: { me: User; editDoc?: ApprovalDoc | null; onClose: () => void }) {
-  const [docType, setDocType] = useState<DocType>(editDoc?.docType ?? '기안');
+export function ApprovalDraftModal({
+  me,
+  editDoc,
+  fixedType,
+  onClose,
+}: {
+  me: User;
+  editDoc?: ApprovalDoc | null;
+  fixedType?: DocType;
+  onClose: () => void;
+}) {
+  const [docType, setDocType] = useState<DocType>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
   const [body, setBody] = useState(editDoc?.body ?? '');
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
@@ -42,7 +54,17 @@ export function ApprovalDraftModal({ me, editDoc, onClose }: { me: User; editDoc
   const create = useCreateDraft();
   const save = useSaveDraft();
   const submitM = useSubmitApproval();
+  const auto = useAutoLine();
   const busy = create.isPending || save.isPending || submitM.isPending;
+
+  // fixedType(예: 휴가) 신규 작성이면 자동 상신선을 1회 프리필(사용자가 이어서 수정 가능).
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!fixedType || editDoc || prefilled.current || auto.isLoading) return;
+    if (steps.length > 0) { prefilled.current = true; return; }
+    const line = auto.build({ drafterId: me.id, docType: fixedType, amount: null });
+    if (line.length) { setSteps(line); prefilled.current = true; }
+  }, [fixedType, editDoc, auto, me.id, steps.length]);
 
   // 반려·회수 문서를 편집 중이면 재상신 흐름(임시저장 버튼 숨김).
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
@@ -106,27 +128,31 @@ export function ApprovalDraftModal({ me, editDoc, onClose }: { me: User; editDoc
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
-          <div className="text-[15px] font-bold text-ink">{isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : '새 결재 상신'}</div>
+          <div className="text-[15px] font-bold text-ink">
+            {isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : fixedType === '휴가' ? '휴가 신청' : '새 결재 상신'}
+          </div>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt">✕</button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {/* 유형 선택 */}
-          <div className="mb-4">
-            <div className="mb-1.5 text-[11px] font-bold text-ink2">문서 유형</div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {DOC_TYPES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setDocType(t)}
-                  className={`rounded-lg border px-2 py-2 text-[12px] font-semibold ${docType === t ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt text-ink2 hover:border-border-hi'}`}
-                >
-                  {DOC_TYPE_ICON[t]} {t}
-                </button>
-              ))}
+          {/* 유형 선택(고정 유형이면 숨김) */}
+          {!fixedType && (
+            <div className="mb-4">
+              <div className="mb-1.5 text-[11px] font-bold text-ink2">문서 유형</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {DOC_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setDocType(t)}
+                    className={`rounded-lg border px-2 py-2 text-[12px] font-semibold ${docType === t ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt text-ink2 hover:border-border-hi'}`}
+                  >
+                    {DOC_TYPE_ICON[t]} {t}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 제목 */}
           <Field label="제목">

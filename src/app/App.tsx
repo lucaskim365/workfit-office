@@ -15,6 +15,7 @@ const HOME = '/exec';
 // 그룹웨어(도크 전용, menu-tree 밖) — 명시적 라우트로 등록.
 const GwOrgChart = lazy(() => import('@/modules/gw/orgchart/OrgChartScreen'));
 const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
+const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
@@ -244,6 +245,7 @@ export default function App() {
         {/* 그룹웨어(도크 전용) — 조직도 실화면 + 나머지 준비중 랜딩 */}
         <Route path="/gw/orgchart" element={<GwOrgChart />} />
         <Route path="/gw/approval" element={<GwApproval />} />
+        <Route path="/gw/leave" element={<GwLeave />} />
         <Route path="/gw/:app" element={<GwComingSoon />} />
         <Route path="*" element={<PlaceholderScreen />} />
       </Route>
