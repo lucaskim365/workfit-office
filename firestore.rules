@@ -47,7 +47,8 @@ service cloud.firestore {
         'kits', 'lotSplits', 'iqcLinks', 'matScraps', 'matRequisitions',
         'quotes', 'salesCollections', 'accountsReceivable', 'creditLimits', 'salesRevenues', 'taxInvoices',
         'authRoles', 'backupPolicies', 'companySites', 'companyInfo', 'interfaces', 'systemLogs', 'sysAdmins',
-        'chatRooms', 'chatMessages'
+        'chatRooms', 'chatMessages',
+        'departments'
       ];
     }
 

@@ -24,6 +24,12 @@ export const userSchema = z.object({
   status: z.enum(USER_STATUS).default('사용'),
   lastLogin: z.string().default('-'),
   /**
+   * 직속 상급자 users.id (FK, nullable). 그룹웨어 조직도의 보고 계층 표현 +
+   * 전자결재 자동 상신선(상급자 체인)의 원천. 미지정(최상위)이면 null.
+   * ([[groupware-feature]] · docs/전자결재_워크플로_개발_계획서.md §3.1)
+   */
+  managerId: z.string().nullable().default(null),
+  /**
    * 로그인 비밀번호. ⚠ 데모 한정 평문 저장 — 실제 보안 아님.
    * 진짜 인증은 후속(Cloud Function custom token)으로 전환 예정. ([[firebase-backend-setup]])
    */

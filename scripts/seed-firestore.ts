@@ -134,6 +134,7 @@ import { TAX_INVOICE_SEED } from '@/data/seeds/taxInvoice.seed';
 import { AUTH_ROLE_SEED } from '@/data/seeds/authRole.seed';
 import { BACKUP_POLICY_SEED } from '@/data/seeds/backupPolicy.seed';
 import { COMPANY_SITE_SEED } from '@/data/seeds/companySite.seed';
+import { DEPARTMENT_SEED } from '@/data/seeds/department.seed';
 import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
 import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
 import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
@@ -272,6 +273,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'sysAdmins', docs: SYS_ADMIN_SEED, id: (d) => d.id },
   { coll: 'chatRooms', docs: CHAT_ROOM_SEED, id: (d) => d.id },
   { coll: 'chatMessages', docs: CHAT_MESSAGE_SEED, id: (d) => d.id },
+  { coll: 'departments', docs: DEPARTMENT_SEED, id: (d) => d.id },
 ];
 
 /** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */

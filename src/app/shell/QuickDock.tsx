@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { Pill } from '@/shared/ui/Pill';
-import profilePhoto from '@/assets/profile-honchaewon.png';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
@@ -122,19 +122,23 @@ function DockCard({ title, count, children }: { title: string; count?: string; c
 /* ---------- 그룹웨어 (앱 타일 그리드 + 결재 + 공지) ---------- */
 function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const CYAN = '#16b8cf';
+  const nav = useNavigate();
+  const { user } = useAuth();
+  // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
+  const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
   const apps = [
-    { l: '전자결재', icon: '🖋️', badge: '3', hot: true },
-    { l: '일정관리', icon: '📅', hot: true },
-    { l: '메일', icon: '✉️', hot: true },
-    { l: '자원예약', icon: '📦', badge: '99+' },
-    { l: '전자설문', icon: '📋' },
-    { l: '게시판', icon: '📌' },
-    { l: '커뮤니티', icon: '💬' },
-    { l: '문서관리', icon: '🗂️', badge: '9' },
-    { l: '인명관리', icon: '👥' },
-    { l: '업무관리', icon: '📗' },
-    { l: '휴가관리', icon: '🏖️' },
-    { l: '조직도', icon: '🏢' },
+    { l: '전자결재', icon: '🖋️', to: 'approval', badge: '3', hot: true },
+    { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
+    { l: '메일', icon: '✉️', to: 'mail', hot: true },
+    { l: '자원예약', icon: '📦', to: 'resource', badge: '99+' },
+    { l: '전자설문', icon: '📋', to: 'survey' },
+    { l: '게시판', icon: '📌', to: 'board' },
+    { l: '커뮤니티', icon: '💬', to: 'community' },
+    { l: '문서관리', icon: '🗂️', to: 'document', badge: '9' },
+    { l: '인명관리', icon: '👥', to: 'contacts' },
+    { l: '업무관리', icon: '📗', to: 'task' },
+    { l: '휴가관리', icon: '🏖️', to: 'leave' },
+    { l: '조직도', icon: '🏢', to: 'orgchart' },
   ];
   const approvals: [string, string, string][] = [
     ['연차 휴가 신청', '김철수 · 생산1팀', '대기'],
@@ -150,10 +154,14 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     <div className="flex h-full flex-col bg-[#eaf7fb]">
       {/* 프로필 헤더 */}
       <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #34d2de, #14b6cf)' }}>
-        <img src={profilePhoto} alt="홍채원" className="h-[54px] w-[54px] shrink-0 rounded-full border-2 border-white/75 object-cover" />
+        <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border-2 border-white/75 bg-white/25 text-[20px] font-extrabold text-white">
+          {user?.name?.[0] ?? '?'}
+        </span>
         <div className="min-w-0 flex-1 text-white">
-          <div className="text-[15.5px] font-extrabold tracking-tight">홍채원 <span className="text-[11.5px] font-semibold opacity-90">사원</span></div>
-          <div className="mt-0.5 text-[10.5px] opacity-90">개발팀</div>
+          <div className="text-[15.5px] font-extrabold tracking-tight">
+            {user?.name ?? '게스트'} <span className="text-[11.5px] font-semibold opacity-90">{user?.position ?? ''}</span>
+          </div>
+          <div className="mt-0.5 text-[10.5px] opacity-90">{user?.dept ?? '-'}</div>
         </div>
         <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-white/20 text-[14px] text-white">
           🔔
@@ -166,7 +174,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
         <div className="grid grid-cols-4 gap-2">
           {apps.map((a, i) => (
-            <button key={i} className="relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dcecf1] bg-panel shadow-[0_1px_5px_rgba(20,120,140,0.07)]">
+            <button key={i} onClick={() => go(a.to)} title={a.l} className="relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dcecf1] bg-panel shadow-[0_1px_5px_rgba(20,120,140,0.07)] transition-shadow hover:shadow-[0_2px_10px_rgba(20,120,140,0.18)]">
               <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: a.hot ? CYAN : 'transparent', color: a.hot ? '#fff' : '#2a3344' }}>{a.l}</div>
               <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
               {a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
@@ -176,23 +184,31 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
 
         <DockCard title="결재 대기" count="2">
           {approvals.map((a, i) => (
-            <div key={i} className={`flex items-center gap-2.5 py-2.5 ${i < approvals.length - 1 ? 'border-b border-border' : ''}`}>
+            <button
+              key={i}
+              onClick={() => go('approval')}
+              className={`flex w-full items-center gap-2.5 py-2.5 text-left ${i < approvals.length - 1 ? 'border-b border-border' : ''}`}
+            >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a[2] === '대기' ? 'bg-amber' : 'bg-blue'}`} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-semibold text-ink">{a[0]}</div>
                 <div className="text-[10px] text-ink3">{a[1]}</div>
               </div>
               <Pill tone={a[2] === '대기' ? 'warn' : 'info'}>{a[2]}</Pill>
-            </div>
+            </button>
           ))}
         </DockCard>
 
         <DockCard title="공지사항">
           {notices.map((n, i) => (
-            <div key={i} className={`flex justify-between gap-2 py-[9px] ${i < notices.length - 1 ? 'border-b border-border' : ''}`}>
+            <button
+              key={i}
+              onClick={() => go('board')}
+              className={`flex w-full justify-between gap-2 py-[9px] text-left ${i < notices.length - 1 ? 'border-b border-border' : ''}`}
+            >
               <span className="truncate text-[11.5px] font-medium text-ink2">{n[0]}</span>
               <span className="shrink-0 text-[10px] tabular-nums text-ink3">{n[1]}</span>
-            </div>
+            </button>
           ))}
         </DockCard>
       </div>

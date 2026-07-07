@@ -12,6 +12,10 @@ const HOME = '/exec';
  * 각 화면은 React.lazy 로 분리되어 별도 청크로 온디맨드 로드된다(번들 분할).
  * 미구현 화면은 PlaceholderScreen(eager) 사용.
  */
+// 그룹웨어(도크 전용, menu-tree 밖) — 명시적 라우트로 등록.
+const GwOrgChart = lazy(() => import('@/modules/gw/orgchart/OrgChartScreen'));
+const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
+
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
   '/exec': lazy(() => import('@/modules/exec/ExecDashboardScreen')),
@@ -236,6 +240,9 @@ export default function App() {
             />
           );
         })}
+        {/* 그룹웨어(도크 전용) — 조직도 실화면 + 나머지 준비중 랜딩 */}
+        <Route path="/gw/orgchart" element={<GwOrgChart />} />
+        <Route path="/gw/:app" element={<GwComingSoon />} />
         <Route path="*" element={<PlaceholderScreen />} />
       </Route>
     </Routes>
