@@ -189,7 +189,7 @@ functions/               # Cloud Functions (집계·트랜잭션·권한)
 ### 7.0 선행 정리 과제 (Vercel 연동 전 필수)
 | 문제 | 영향 | 조치 |
 |------|------|------|
-| 폴더명 한글·공백·괄호 (`스마트-mes-…(mvp) (1)`) | git/Vercel 경로·URL·CLI 오류 | **ASCII 클린 루트**(`mes-platform/`)로 재구성 |
+| 폴더명 한글·공백·괄호 (`스마트-mes-…(mvp) (1)`) | git/Vercel 경로·URL·CLI 오류 | **ASCII 클린 루트**(`workfit-office/`)로 재구성 |
 | `firebase-applet-config.json` 평문 커밋 | 시크릿·환경 분리 불가 | **환경변수(`VITE_FB_*`)로 이전** |
 | `.env.example`의 `GEMINI_API_KEY` (AI Studio 잔재) | 불필요 | Vercel 환경변수로 대체·정리 |
 | `dev: vite --port=3000 --host=0.0.0.0` | AI Studio 잔재 | 표준 dev 스크립트로 정리 |
@@ -198,7 +198,7 @@ functions/               # Cloud Functions (집계·트랜잭션·권한)
 - **단일 앱 구조로 시작 → Phase 0 후반 모노레포(pnpm workspace) 승격**(처음부터 모노레포는 과설계).
 - 와이어프레임(`mes layout`)·MVP 원본은 `/_reference`로 분리(빌드 대상 제외).
 ```
-mes-platform/            ← git 루트 (ASCII)
+workfit-office/          ← git 루트 (ASCII)
 ├── .nvmrc               ← Node 20
 ├── .gitignore           ← .env*, dist, node_modules
 ├── vercel.json          ← SPA rewrite
