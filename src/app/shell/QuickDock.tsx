@@ -7,6 +7,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
+import { useGwSummary } from '@/features/gw/useGwSummary';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 
@@ -124,10 +125,13 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const CYAN = '#16b8cf';
   const nav = useNavigate();
   const { user } = useAuth();
+  const summary = useGwSummary(user?.id);
   // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
   const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
+  // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
+  const goDoc = (id: string) => { nav(`/gw/approval?doc=${id}`); onClose(); };
   const apps = [
-    { l: '전자결재', icon: '🖋️', to: 'approval', badge: '3', hot: true },
+    { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
     { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
     { l: '메일', icon: '✉️', to: 'mail', hot: true },
     { l: '자원예약', icon: '📦', to: 'resource', badge: '99+' },
@@ -139,11 +143,6 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '업무관리', icon: '📗', to: 'task' },
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },
-  ];
-  const approvals: [string, string, string][] = [
-    ['연차 휴가 신청', '김철수 · 생산1팀', '대기'],
-    ['설비 구매 품의서', '이순신 · 설비보전팀', '대기'],
-    ['외주 가공 계약 검토', '유관순 · 구매팀', '진행'],
   ];
   const notices: [string, string][] = [
     ['[필독] 2분기 안전점검 일정 안내', '06.18'],
@@ -182,21 +181,24 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <DockCard title="결재 대기" count="2">
-          {approvals.map((a, i) => (
+        <DockCard title="결재 대기" count={summary.pendingCount ? String(summary.pendingCount) : undefined}>
+          {summary.pendingDocs.slice(0, 4).map((d, i, arr) => (
             <button
-              key={i}
-              onClick={() => go('approval')}
-              className={`flex w-full items-center gap-2.5 py-2.5 text-left ${i < approvals.length - 1 ? 'border-b border-border' : ''}`}
+              key={d.id}
+              onClick={() => goDoc(d.id)}
+              className={`flex w-full items-center gap-2.5 py-2.5 text-left ${i < arr.length - 1 ? 'border-b border-border' : ''}`}
             >
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a[2] === '대기' ? 'bg-amber' : 'bg-blue'}`} />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] font-semibold text-ink">{a[0]}</div>
-                <div className="text-[10px] text-ink3">{a[1]}</div>
+                <div className="truncate text-[12px] font-semibold text-ink">{d.title}</div>
+                <div className="truncate text-[10px] text-ink3">{d.docNo} · {d.drafterDept || d.docType}</div>
               </div>
-              <Pill tone={a[2] === '대기' ? 'warn' : 'info'}>{a[2]}</Pill>
+              <Pill tone="warn">대기</Pill>
             </button>
           ))}
+          {summary.pendingDocs.length === 0 && (
+            <div className="py-4 text-center text-[11px] text-ink3">결재할 문서가 없습니다.</div>
+          )}
         </DockCard>
 
         <DockCard title="공지사항">

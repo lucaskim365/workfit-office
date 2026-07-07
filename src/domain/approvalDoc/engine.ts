@@ -1,4 +1,4 @@
-import type { ApprovalDoc, ApprovalStep, StepDecision } from './schema';
+import type { ApprovalBox, ApprovalDoc, ApprovalStep, StepDecision } from './schema';
 
 /**
  * 전자결재 상태전이 엔진 — **순수함수**. UI·DB 를 전혀 모른다.
@@ -167,6 +167,31 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
     completedAt: null,
   };
   return { ...fresh, currentSeq: recomputeCurrentSeq(fresh) };
+}
+
+/**
+ * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
+ * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
+ */
+export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): boolean {
+  const involves = doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId);
+  switch (box) {
+    case '대기':
+      return doc.status === '진행중' && currentApproverIds(doc).includes(userId);
+    case '상신':
+      return doc.drafterId === userId && doc.status !== '임시저장';
+    case '완료':
+      return doc.status === '완료' && involves;
+    case '참조':
+      return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+    case '임시':
+      return doc.drafterId === userId && doc.status === '임시저장';
+  }
+}
+
+/** 목록 정렬 기준(최근 상신/생성 우선). */
+export function byRecent(a: ApprovalDoc, b: ApprovalDoc): number {
+  return (b.submittedAt ?? b.createdAt ?? '').localeCompare(a.submittedAt ?? a.createdAt ?? '');
 }
 
 /** 회수 — 아직 아무도 승인하지 않은 진행중 문서를 기안자가 상신 취소. */

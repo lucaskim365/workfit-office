@@ -8,8 +8,9 @@ import {
 } from '@/domain/approvalDoc/schema';
 import {
   applyDecision,
-  currentApproverIds,
+  byRecent,
   isActiveApprover,
+  matchesBox,
   recall as recallDoc,
   submit as submitDoc,
 } from '@/domain/approvalDoc/engine';
@@ -95,28 +96,7 @@ export const approvalDocRepo = {
    */
   async listByBox(userId: string, box: ApprovalBox): Promise<ApprovalDoc[]> {
     const rows = await loadAll();
-    const involves = (d: ApprovalDoc) => d.drafterId === userId || d.steps.some((s) => s.approverId === userId);
-    const sortByRecent = (a: ApprovalDoc, b: ApprovalDoc) =>
-      (b.submittedAt ?? b.createdAt ?? '').localeCompare(a.submittedAt ?? a.createdAt ?? '');
-    let result: ApprovalDoc[];
-    switch (box) {
-      case '대기':
-        result = rows.filter((d) => d.status === '진행중' && currentApproverIds(d).includes(userId));
-        break;
-      case '상신':
-        result = rows.filter((d) => d.drafterId === userId && d.status !== '임시저장');
-        break;
-      case '완료':
-        result = rows.filter((d) => d.status === '완료' && involves(d));
-        break;
-      case '참조':
-        result = rows.filter((d) => d.steps.some((s) => s.kind === '참조' && s.approverId === userId) && d.status !== '임시저장');
-        break;
-      case '임시':
-        result = rows.filter((d) => d.drafterId === userId && d.status === '임시저장');
-        break;
-    }
-    return result.sort(sortByRecent);
+    return rows.filter((d) => matchesBox(d, userId, box)).sort(byRecent);
   },
 
   /** 임시저장 신규 작성 — 채번 + status='임시저장'. */
@@ -145,10 +125,12 @@ export const approvalDocRepo = {
     return created;
   },
 
-  /** 임시저장 편집(상신 전만). 기안자만. */
+  /** 문서 편집 — 임시저장(상신 전) 또는 반려·회수(재상신 전 수정). 진행중·완료는 불가. */
   async saveDraft(id: string, patch: Partial<ApprovalDraftInput>): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (cur.status !== '임시저장') throw new Error('임시저장 상태에서만 수정할 수 있습니다');
+    if (!['임시저장', '반려', '회수'].includes(cur.status)) {
+      throw new Error('임시저장·반려·회수 상태에서만 수정할 수 있습니다');
+    }
     const merged = approvalDocSchema.parse({ ...cur, ...patch });
     await persist(merged);
     return merged;
