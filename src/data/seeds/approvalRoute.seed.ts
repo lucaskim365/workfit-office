@@ -12,7 +12,9 @@ import type { DeptType } from '@/domain/department/schema';
  *     '본부장(손승원)'이 필요하면 PARENT_DEPT_HEAD(level 1) 또는 SPECIFIC_DEPT_HEAD('D200').
  *   - DEPT_HEAD 를 연속 배치하면 소속 부서장 → 상위 부서장으로 자동 승격(팀장→본부장→대표).
  *   - '합의'는 route 엔진에서 순차 합의로 생성된다(병렬 그룹은 수동 결재선에서만).
- *   - deptType '공장' 조직은 없어 관련 룰(RR-EX-FACTORY)은 휴면 예제(active:false).
+ *   - 현재 사업장은 본사 하나뿐 → 모든 부서 deptType='본사'. 부서유형으로는 개별 팀을
+ *     못 가리므로 부서별 특례는 '부서/서브트리'(부서ID)로 지정한다. deptType(공장/영업소/연구소)
+ *     기반 매칭은 향후 사업장 확장 대비 예제로만 남김(RR-EX-FACTORY, active:false).
  *   - 시뮬레이터는 룰을 하나씩 독립 실행하므로, priority가 겹치는 예제도 각각 미리보기 가능.
  *   - 주요 부서 ID: D100 대표이사 · D200 AX사업본부 · D210 품질관리팀 · D220 영업팀 ·
  *     D230 사업관리팀 · D240 S/W 개발팀 · D250 부설기술연구소. 재경이사 류지광=U002.
@@ -35,8 +37,8 @@ const 억 = 100_000_000;
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   // ───────────────────────── 지출결의 (금액 사다리) ─────────────────────────
   {
-    id: 'RR-EXP-SALES', name: '지출결의·영업(영업소): 팀장→재경이사 합의→대표 전결', priority: 6, active: true,
-    docType: '지출결의', deptScope: scType('영업소'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    id: 'RR-EXP-SALES', name: '지출결의·영업팀: 팀장→재경이사 합의→대표 전결', priority: 6, active: true,
+    docType: '지출결의', deptScope: scDept('D220'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '합의', 'U002'), s('ROLE_CEO', '전결')],
   },
   {
@@ -144,17 +146,17 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   },
   {
     id: 'RR-SCOPE-COMMITTEE', name: 'AX Committee(위원회): 대표 직접 결재', priority: 62, active: true,
-    docType: '전체', deptScope: scType('기타'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    docType: '전체', deptScope: scDept('D120'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('ROLE_CEO', '결재')],
   },
   {
-    id: 'RR-SCOPE-RND', name: '연구소·전 문서: 소장→본부장 전결', priority: 64, active: true,
-    docType: '전체', deptScope: scType('연구소'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    id: 'RR-SCOPE-RND', name: '부설기술연구소·전 문서: 소장→본부장 전결', priority: 64, active: true,
+    docType: '전체', deptScope: scSub('D250'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재', null, true), s('PARENT_DEPT_HEAD', '전결', 1)],
   },
   {
-    id: 'RR-SCOPE-SALES', name: '영업(영업소)·전 문서: 팀장→대표 전결', priority: 66, active: true,
-    docType: '전체', deptScope: scType('영업소'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    id: 'RR-SCOPE-SALES', name: '영업팀·전 문서: 팀장→대표 전결', priority: 66, active: true,
+    docType: '전체', deptScope: scDept('D220'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('ROLE_CEO', '전결')],
   },
 
