@@ -1,4 +1,4 @@
-import type { ApprovalStep, DocType, StepKind } from '@/domain/approvalDoc/schema';
+import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
@@ -18,7 +18,7 @@ const RANK_FALLBACK: Record<string, number> = { 대표이사: 1, 상무이사: 2
 
 export interface RouteContext {
   drafter: User;
-  docType: DocType;
+  docType: string;
   amount: number | null;
   users: User[];
   depts: Department[];

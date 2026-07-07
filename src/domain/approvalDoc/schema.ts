@@ -14,7 +14,10 @@ import { z } from 'zod';
  * RDB 이관 시 approvalDocs=헤더 테이블, steps=라인 테이블로 분해. ([[DB_이관_대비_설계원칙.md]])
  */
 
-/** 문서 종류 — 휴가 포함(Phase 3 에서 결재 엔진 재사용). */
+/**
+ * 기본 문서 종류(system 서식). approvalForms 도입 후 docType 은 서식 code(자유 문자열)이며,
+ * 이 상수는 기본 4종 코드 + 기존 하위호환용 참조로만 사용한다.
+ */
 export const DOC_TYPES = ['기안', '품의', '지출결의', '휴가'] as const;
 /** 문서 상태(§4.4 상태머신). */
 export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수'] as const;
@@ -73,7 +76,8 @@ export const approvalDocSchema = z.object({
   id: z.string().min(1),
   /** 문서번호 `AP-YYMMDD-NNN`(counters 채번). */
   docNo: z.string().min(1),
-  docType: z.enum(DOC_TYPES),
+  /** 문서유형 = 결재서식 code(자유 문자열). 기본 4종은 DOC_TYPES 값과 동일. */
+  docType: z.string().min(1),
   title: z.string().min(1, '제목은 필수입니다'),
   /** 기안자·기안부서(비정규화 — 목록 표시 성능). */
   drafterId: z.string().min(1),
@@ -85,8 +89,10 @@ export const approvalDocSchema = z.object({
   amount: z.number().nullable().default(null),
   /** 본문. */
   body: z.string().default(''),
-  /** 유형 확장 필드(휴가=기간·종류 등). 유형별 optional. */
+  /** 유형 확장 필드(휴가=기간·종류 등). 유형별 optional. 휴가 system 서식 전용. */
   form: leaveFormSchema.nullable().default(null),
+  /** 결재서식 동적 필드값 `{ key: value }`. 커스텀 서식·확장 필드 저장(휴가 form 은 별도). */
+  fieldValues: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),

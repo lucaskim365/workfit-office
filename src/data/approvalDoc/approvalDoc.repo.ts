@@ -73,6 +73,8 @@ export interface ApprovalDraftInput {
   amount?: number | null;
   body?: string;
   form?: ApprovalDoc['form'];
+  /** 결재서식 동적 필드값. */
+  fieldValues?: ApprovalDoc['fieldValues'];
 }
 
 export const approvalDocRepo = {
@@ -116,6 +118,7 @@ export const approvalDocRepo = {
       amount: input.amount ?? null,
       body: input.body ?? '',
       form: input.form ?? null,
+      fieldValues: input.fieldValues ?? {},
       currentSeq: 0,
       createdAt: now(),
       submittedAt: null,

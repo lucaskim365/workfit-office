@@ -9,7 +9,7 @@ import {
   type Resolver,
   type RouteStep,
 } from '@/domain/approvalRoute/schema';
-import { DOC_TYPES, type DocType } from '@/domain/approvalDoc/schema';
+import { DOC_TYPES } from '@/domain/approvalDoc/schema';
 import { DEPT_TYPES } from '@/domain/department/schema';
 
 /**
@@ -132,7 +132,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg }:
         <div className="mb-2 text-[11px] font-bold text-ink2">적용 조건</div>
         <div className="grid grid-cols-2 gap-2">
           <F label="문서유형">
-            <select value={rule.docType} onChange={(e) => set({ docType: e.target.value as DocType | '전체' })} className={inp}>
+            <select value={rule.docType} onChange={(e) => set({ docType: e.target.value })} className={inp}>
               <option value="전체">전체</option>
               {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -212,7 +212,7 @@ function RoutePreview({ rule }: { rule: ApprovalRouteRule }) {
   const result = useMemo(() => {
     const drafter = org.users.find((u) => u.id === did);
     if (!drafter) return null;
-    const dt: DocType = rule.docType === '전체' ? '기안' : rule.docType;
+    const dt: string = rule.docType === '전체' ? '기안' : rule.docType;
     return resolveRoute({ drafter, docType: dt, amount: amount === '' ? null : Number(amount), users: org.users, depts: org.depts, positions: org.positions, rules: [rule] });
   }, [rule, did, amount, org.users, org.depts, org.positions]);
 

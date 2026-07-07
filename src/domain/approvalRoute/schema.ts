@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { DOC_TYPES } from '@/domain/approvalDoc/schema';
 import { DEPT_TYPES } from '@/domain/department/schema';
 
 /**
@@ -62,7 +61,8 @@ export const approvalRouteRuleSchema = z.object({
   active: z.boolean().default(true),
   // 적용 조건
   /** 문서유형(전체=모든 유형). */
-  docType: z.union([z.enum(DOC_TYPES), z.literal('전체')]).default('전체'),
+  /** 문서유형 = 서식 code(자유 문자열) 또는 '전체'. */
+  docType: z.string().default('전체'),
   deptScope: deptScopeSchema.default({ kind: '전체', deptId: null, deptType: null }),
   /** 기안자 직급 범위(rank, null=무한). from=상위(작은값)·to=하위(큰값). */
   positionFromRank: z.number().nullable().default(null),

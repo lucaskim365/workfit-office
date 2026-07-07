@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
-import { STEP_KINDS, type ApprovalStep, type DocType, type StepKind } from '@/domain/approvalDoc/schema';
+import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
 
@@ -58,7 +58,7 @@ export function ApprovalLineBuilder({
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
   drafterId: string;
-  docType: DocType;
+  docType: string;
   amount: number | null;
 }) {
   const { data: users = [] } = useUsers();

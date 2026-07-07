@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { approvalRouteRepo } from '@/data/approvalRoute/approvalRoute.repo';
 import { resolveRoute, type RouteResult } from '@/domain/approvalRoute/engine';
-import type { ApprovalStep, DocType } from '@/domain/approvalDoc/schema';
+import type { ApprovalStep } from '@/domain/approvalDoc/schema';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 
 /**
@@ -15,7 +15,7 @@ const RULES_KEY = 'approvalRouteRules';
 
 export interface RouteInput {
   drafterId: string;
-  docType: DocType;
+  docType: string;
   amount: number | null;
 }
 

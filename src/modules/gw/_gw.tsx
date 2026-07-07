@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { DocStatus, DocType, StepDecision, StepKind } from '@/domain/approvalDoc/schema';
+import type { DocStatus, StepDecision, StepKind } from '@/domain/approvalDoc/schema';
 
 /**
  * 그룹웨어 공통 UI — 전자결재/휴가 화면이 공유하는 배지·아이콘·포맷터.
@@ -63,7 +63,8 @@ export const KIND_TONE: Record<StepKind, string> = {
   대결: 'text-amber',
 };
 
-export const DOC_TYPE_ICON: Record<DocType, string> = {
+/** 기본 4종 아이콘 폴백(커스텀 서식은 approvalForms.icon 사용). */
+export const DOC_TYPE_ICON: Record<string, string> = {
   기안: '📝',
   품의: '📑',
   지출결의: '💳',

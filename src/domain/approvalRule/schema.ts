@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { DOC_TYPES } from '@/domain/approvalDoc/schema';
 
 /**
  * 전결규정(approvalRule) 도메인 스키마 — 단일 진실 공급원(SSOT).
@@ -17,7 +16,7 @@ export const approvalRuleSchema = z.object({
   /** 규정 ID(PK). */
   id: z.string().min(1),
   /** 적용 문서유형. */
-  docType: z.enum(DOC_TYPES),
+  docType: z.string(),
   /** 금액 구간 하한(포함). null=하한 없음. */
   amountFrom: z.number().nullable().default(null),
   /** 금액 구간 상한(미만). null=상한 없음(초과 구간). */
