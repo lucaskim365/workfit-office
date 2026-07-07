@@ -5,7 +5,9 @@
       "Bash(git add *)",
       "Bash(git commit -q -m ' *)",
       "Bash(git push *)",
-      "Bash(echo \"pushed: $?\")"
+      "Bash(echo \"pushed: $?\")",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Read(//tmp/**)"
     ]
   }
 }
