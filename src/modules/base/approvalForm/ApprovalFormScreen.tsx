@@ -209,15 +209,28 @@ function FormPreview({ form }: { form: ApprovalForm }) {
           <div className="mb-2 text-[11px] font-bold text-ink2">제목 <span className="font-normal text-ink3">(예시)</span></div>
           <input disabled placeholder="문서 제목" className={`${inp} mb-3 opacity-70`} />
           <div className="grid grid-cols-2 gap-x-4">
-            {form.fields.map((f, i) => {
-              const span = f.width === 'half' ? 'col-span-1' : 'col-span-2';
-              return (
-                <div key={i} className={span}>
-                  <div className="mb-1 text-[11px] font-bold text-ink2">{f.label || f.key}{f.required && ' *'}</div>
-                  <DynamicField field={f} values={values} set={setVals} org={org} />
-                </div>
-              );
-            })}
+            {(() => {
+              const nodes: React.ReactNode[] = [];
+              let lastSection = '';
+              form.fields.forEach((f, i) => {
+                if (f.section && f.section !== lastSection) {
+                  lastSection = f.section;
+                  nodes.push(
+                    <div key={`sec-${f.section}`} className="col-span-2 mt-2 mb-1.5 text-[11px] font-bold text-teal border-b border-teal/15 pb-0.5">
+                      📁 {f.section}
+                    </div>
+                  );
+                }
+                const span = f.width === 'half' ? 'col-span-1' : 'col-span-2';
+                nodes.push(
+                  <div key={f.key || i} className={span}>
+                    <div className="mb-1 text-[11px] font-bold text-ink2">{f.label || f.key}{f.required && ' *'}</div>
+                    <DynamicField field={f} values={values} set={setVals} org={org} />
+                  </div>
+                );
+              });
+              return nodes;
+            })()}
           </div>
         </div>
       ) : (
