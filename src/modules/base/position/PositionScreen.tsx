@@ -73,7 +73,7 @@ export default function PositionScreen() {
               <div className="text-[13px] font-bold text-ink">{sel.id ? `직급 편집 · ${sel.id}` : '새 직급'}</div>
               <Field label="직급명"><input value={sel.name} onChange={(e) => setSel({ ...sel, name: e.target.value })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal" /></Field>
               <Field label="서열(rank, 작을수록 상위)"><input type="number" value={sel.rank} onChange={(e) => setSel({ ...sel, rank: Number(e.target.value) })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal" /></Field>
-              <label className="flex items-center gap-2 text-[12.5px] text-ink2"><input type="checkbox" checked={sel.isDeptHead} onChange={(e) => setSel({ ...sel, isDeptHead: e.target.checked })} /> 부서 책임자 직급(팀장·공장장 등)</label>
+              <label className="flex items-center gap-2 text-[12.5px] text-ink2"><input type="checkbox" checked={sel.isDeptHead} onChange={(e) => setSel({ ...sel, isDeptHead: e.target.checked })} /> 부서 책임자 직급(팀장 등)</label>
               {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setSel(null)} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>

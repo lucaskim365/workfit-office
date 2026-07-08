@@ -102,7 +102,7 @@ export default function ApprovalRuleScreen() {
 const scopeLabel = (r: ApprovalRouteRule) =>
   r.deptScope.kind === '전체' ? '전체부서'
     : r.deptScope.kind === '부서유형' ? `유형=${r.deptScope.deptType}`
-    : `${r.deptScope.kind}=${r.deptScope.deptId}`;
+      : `${r.deptScope.kind}=${r.deptScope.deptId}`;
 
 function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms }: {
   rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
@@ -115,7 +115,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
   const delStep = (i: number) => set({ steps: rule.steps.filter((_, idx) => idx !== i) });
   const moveStep = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= rule.steps.length) return;
-    const next = [...rule.steps]; [next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
+    const next = [...rule.steps];[next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
   };
 
   return (
@@ -148,8 +148,8 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
           </F>
           {rule.deptScope.kind === '부서유형' && (
             <F label="부서 유형">
-              <select value={rule.deptScope.deptType ?? '공장'} onChange={(e) => set({ deptScope: { ...rule.deptScope, deptType: e.target.value as never } })} className={inp}>
-                {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              <select value={rule.deptScope.deptType ?? '본사'} onChange={(e) => set({ deptScope: { ...rule.deptScope, deptType: e.target.value as never } })} className={inp}>
+                {DEPT_TYPES.filter((t) => t !== '공장').map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </F>
           )}
@@ -171,7 +171,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
               <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                {RESOLVERS.map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
+                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
               </select>
               {ARG_HINT[s.resolver] && (
                 <input value={s.arg ?? ''} onChange={(e) => setStep(i, { arg: e.target.value })} placeholder={ARG_HINT[s.resolver]} className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />

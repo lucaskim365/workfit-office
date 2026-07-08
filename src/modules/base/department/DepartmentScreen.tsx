@@ -97,7 +97,7 @@ export default function DepartmentScreen() {
               </Field>
               <Field label="부서 유형">
                 <select value={sel.deptType} onChange={(e) => setSel({ ...sel, deptType: e.target.value as Department['deptType'] })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal">
-                  {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {DEPT_TYPES.filter((t) => t !== '공장' && t !== '영업소').map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
               <Field label="부서장">
