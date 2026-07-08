@@ -29,6 +29,7 @@ const STATUS_TONE: Record<DocStatus, string> = {
   완료: 'bg-teal/15 text-teal',
   반려: 'bg-red-500/12 text-red-500',
   회수: 'bg-amber/15 text-amber',
+  삭제: 'bg-red-500/12 text-red-500',
 };
 
 export function StatusBadge({ status }: { status: DocStatus }) {

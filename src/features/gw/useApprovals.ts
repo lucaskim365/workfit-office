@@ -116,3 +116,30 @@ export function useDelegateStep() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+/** 휴지통으로 보내기 (임시저장만 가능). */
+export function useDeleteToTrash() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => approvalDocRepo.deleteToTrash(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 휴지통에서 복구. */
+export function useRestoreFromTrash() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => approvalDocRepo.restoreFromTrash(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 영구 삭제. */
+export function usePermanentlyDelete() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => approvalDocRepo.permanentlyDelete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}

@@ -8,6 +8,9 @@ import {
   useDecideStep,
   useRecallApproval,
   useSubmitApproval,
+  useDeleteToTrash,
+  useRestoreFromTrash,
+  usePermanentlyDelete,
 } from '@/features/gw/useApprovals';
 import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
@@ -26,6 +29,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   완료: '완료함',
   참조: '참조함',
   임시: '임시저장',
+  삭제: '휴지통',
 };
 
 export default function ApprovalScreen() {
@@ -148,12 +152,15 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
   const decide = useDecideStep();
   const submitM = useSubmitApproval();
   const recallM = useRecallApproval();
+  const deleteM = useDeleteToTrash();
+  const restoreM = useRestoreFromTrash();
+  const permDeleteM = usePermanentlyDelete();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
   const [err, setErr] = useState('');
   const [view, setView] = useState<'timeline' | 'document'>('timeline');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
-  const busy = decide.isPending || submitM.isPending || recallM.isPending;
+  const busy = decide.isPending || submitM.isPending || recallM.isPending || deleteM.isPending || restoreM.isPending || permDeleteM.isPending;
 
   // 내 차례(활성 결재자)의 seq.
   const mySeq = useMemo(() => activeSteps(doc).find((s) => s.approverId === me)?.seq ?? null, [doc, me]);
@@ -161,10 +168,23 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
   const canRecall = iAmDrafter && doc.status === '진행중' && !doc.steps.some((s) => s.kind !== '참조' && s.decision === '승인');
   const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '회수');
   const canEditDraft = iAmDrafter && doc.status === '임시저장';
+  const isInTrash = iAmDrafter && doc.status === '삭제';
 
   const run = async (fn: () => Promise<unknown>) => {
     setErr('');
     try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : '처리 중 오류가 발생했습니다.'); }
+  };
+
+  const toTrash = () => {
+    if (window.confirm('이 임시저장 문서를 휴지통으로 보내시겠습니까?')) {
+      run(() => deleteM.mutateAsync(doc.id));
+    }
+  };
+  const restoreTrash = () => run(() => restoreM.mutateAsync(doc.id));
+  const permDelete = () => {
+    if (window.confirm('이 문서를 영구 삭제하시겠습니까? 복구할 수 없습니다.')) {
+      run(() => permDeleteM.mutateAsync(doc.id));
+    }
   };
 
   const approve = () => mySeq != null && run(() => decide.mutateAsync({ id: doc.id, seq: mySeq, userId: me, decision: '승인' }));
@@ -306,8 +326,15 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
         {canRecall && <button onClick={() => run(() => recallM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-amber hover:text-amber disabled:opacity-50">회수</button>}
         {canEditDraft && (
           <>
+            <button onClick={toTrash} disabled={busy} className="rounded-lg border border-red-500/50 px-3.5 py-2 text-[12.5px] font-bold text-red-500 hover:bg-red-500/5 disabled:opacity-50">삭제</button>
             <button onClick={() => onEdit(doc)} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">편집</button>
             <button onClick={() => run(() => submitM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">상신</button>
+          </>
+        )}
+        {isInTrash && (
+          <>
+            <button onClick={permDelete} disabled={busy} className="rounded-lg border border-red-500/50 px-3.5 py-2 text-[12.5px] font-bold text-red-500 hover:bg-red-500/5 disabled:opacity-50">영구삭제</button>
+            <button onClick={restoreTrash} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">복구</button>
           </>
         )}
         {canResubmit && (
@@ -316,7 +343,7 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             <button onClick={() => run(() => submitM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">재상신</button>
           </>
         )}
-        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && (
+        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && (
           <span className="text-[11px] text-ink3">
             {doc.status === '완료' ? '결재가 완료된 문서입니다.' : doc.status === '진행중' ? '다른 결재자의 차례입니다.' : ''}
           </span>

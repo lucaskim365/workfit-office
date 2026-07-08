@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import {
   approvalDocSchema,
@@ -209,5 +209,34 @@ export const approvalDocRepo = {
     const next = applyDecision(delegated, seq, '승인', { at: now(), comment });
     await persist(next);
     return next;
+  },
+
+  /** 휴지통으로 보내기 (임시저장만 가능) */
+  async deleteToTrash(id: string): Promise<ApprovalDoc> {
+    const cur = await getOrThrow(id);
+    if (cur.status !== '임시저장') throw new Error('임시저장 문서만 휴지통으로 보낼 수 있습니다');
+    const next = { ...cur, status: '삭제' as const };
+    await persist(next);
+    return next;
+  },
+
+  /** 휴지통에서 복구 */
+  async restoreFromTrash(id: string): Promise<ApprovalDoc> {
+    const cur = await getOrThrow(id);
+    if (cur.status !== '삭제') throw new Error('휴지통에 있는 문서가 아닙니다');
+    const next = { ...cur, status: '임시저장' as const };
+    await persist(next);
+    return next;
+  },
+
+  /** 영구 삭제 (휴지통 내 문서만 가능) */
+  async permanentlyDelete(id: string): Promise<void> {
+    const cur = await getOrThrow(id);
+    if (cur.status !== '삭제') throw new Error('휴지통에 있는 문서만 영구 삭제할 수 있습니다');
+    if (isFirebaseConfigured && db) {
+      await deleteDoc(doc(db, COLL, id));
+      return;
+    }
+    memory = memory.filter((m) => m.id !== id);
   },
 };
