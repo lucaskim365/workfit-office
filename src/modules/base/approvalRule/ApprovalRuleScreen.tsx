@@ -99,7 +99,7 @@ export default function ApprovalRuleScreen() {
 const scopeLabel = (r: ApprovalRouteRule) =>
   r.deptScope.kind === '전체' ? '전체부서'
     : r.deptScope.kind === '부서유형' ? `유형=${r.deptScope.deptType}`
-    : `${r.deptScope.kind}=${r.deptScope.deptId}`;
+      : `${r.deptScope.kind}=${r.deptScope.deptId}`;
 
 function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg }: {
   rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
@@ -111,7 +111,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg }:
   const delStep = (i: number) => set({ steps: rule.steps.filter((_, idx) => idx !== i) });
   const moveStep = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= rule.steps.length) return;
-    const next = [...rule.steps]; [next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
+    const next = [...rule.steps];[next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
   };
 
   return (
