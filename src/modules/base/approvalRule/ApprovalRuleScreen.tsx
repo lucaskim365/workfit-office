@@ -9,7 +9,7 @@ import {
   type Resolver,
   type RouteStep,
 } from '@/domain/approvalRoute/schema';
-import { DOC_TYPES } from '@/domain/approvalDoc/schema';
+import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { DEPT_TYPES } from '@/domain/department/schema';
 
 /**
@@ -41,10 +41,13 @@ const blankRule = (): ApprovalRouteRule => ({
 
 export default function ApprovalRuleScreen() {
   const { data: rules = [], isLoading } = useRouteRules();
+  const { data: forms = [] } = useApprovalForms();
   const upsert = useUpsertRouteRule();
   const remove = useRemoveRouteRule();
   const [sel, setSel] = useState<ApprovalRouteRule | null>(null);
   const [msg, setMsg] = useState('');
+
+  const formNameOf = (code: string) => forms.find((f) => f.code === code)?.name ?? code;
 
   const nextId = () => `RR-${rules.length + 1}-${Math.max(0, ...rules.map((r) => Number(r.id.split('-')[1]) || 0)) + 1}`;
   const save = async () => {
@@ -78,7 +81,7 @@ export default function ApprovalRuleScreen() {
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{r.name}</span>
                 {!r.active && <span className="text-[9.5px] text-ink3">중지</span>}
               </div>
-              <div className="text-[10.5px] text-ink3">{r.docType} · {scopeLabel(r)} · {r.steps.length}단계</div>
+              <div className="text-[10.5px] text-ink3">{formNameOf(r.docType)} · {scopeLabel(r)} · {r.steps.length}단계</div>
             </button>
           ))}
         </div>
@@ -86,7 +89,7 @@ export default function ApprovalRuleScreen() {
         {/* 편집 + 시뮬레이터 */}
         <div className="rounded-xl border border-border bg-panel p-4">
           {sel ? (
-            <RuleEditor rule={sel} onChange={setSel} onSave={save} onCancel={() => setSel(null)} onDelete={sel.id ? () => del(sel.id) : undefined} saving={upsert.isPending} msg={msg} />
+            <RuleEditor rule={sel} onChange={setSel} onSave={save} onCancel={() => setSel(null)} onDelete={sel.id ? () => del(sel.id) : undefined} saving={upsert.isPending} msg={msg} forms={forms} />
           ) : (
             <div className="py-20 text-center text-[12px] text-ink3">좌측에서 룰을 선택하거나 추가하세요.</div>
           )}
@@ -101,9 +104,10 @@ const scopeLabel = (r: ApprovalRouteRule) =>
     : r.deptScope.kind === '부서유형' ? `유형=${r.deptScope.deptType}`
     : `${r.deptScope.kind}=${r.deptScope.deptId}`;
 
-function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg }: {
+function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms }: {
   rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
   onSave: () => void; onCancel: () => void; onDelete?: () => void; saving: boolean; msg: string;
+  forms: Array<{ code: string; name: string }>;
 }) {
   const set = (patch: Partial<ApprovalRouteRule>) => onChange({ ...rule, ...patch });
   const setStep = (i: number, patch: Partial<RouteStep>) => set({ steps: rule.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
@@ -134,7 +138,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg }:
           <F label="문서유형">
             <select value={rule.docType} onChange={(e) => set({ docType: e.target.value })} className={inp}>
               <option value="전체">전체</option>
-              {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              {forms.map((f) => <option key={f.code} value={f.code}>{f.name}</option>)}
             </select>
           </F>
           <F label="부서 범위">
