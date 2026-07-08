@@ -86,15 +86,57 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       )}
 
       {/* 서식 동적 상세 */}
-      {detailFields.length > 0 && (
-        <table className="mt-2 w-full border-collapse text-[12px]">
-          <tbody>
-            {detailFields.map((f) => (
-              <MetaRow key={f.key} cells={[[f.label, fieldText(f, doc.fieldValues, org)]]} full />
-            ))}
-          </tbody>
-        </table>
-      )}
+      {(() => {
+        if (detailFields.length === 0) return null;
+
+        const tableRows: React.ReactNode[] = [];
+        let lastSection = '';
+
+        for (let i = 0; i < detailFields.length; i++) {
+          const f = detailFields[i];
+          const val = fieldText(f, doc.fieldValues, org);
+
+          // 섹션 헤더 구분행 추가
+          if (f.section && f.section !== lastSection) {
+            lastSection = f.section;
+            tableRows.push(
+              <tr key={`sec-${f.section}`}>
+                <td colSpan={4} className="border border-[#bbb] bg-[#f8f9fa] px-2.5 py-1.5 text-left font-bold text-teal text-[11px]">
+                  📁 {f.section}
+                </td>
+              </tr>
+            );
+          }
+
+          if (f.width === 'half') {
+            const next = detailFields[i + 1];
+            // 다음 필드가 존재하고, 2열(half)이면서 동일한 섹션일 때만 페어링
+            if (next && next.width === 'half' && next.section === f.section) {
+              const nextVal = fieldText(next, doc.fieldValues, org);
+              tableRows.push(
+                <MetaRow key={f.key} cells={[[f.label, val], [next.label, nextVal]]} />
+              );
+              i++; // 다음 필드는 건너뜀
+            } else {
+              // 짝이 없는 2열 필드는 빈 셀과 묶어서 구조 유지
+              tableRows.push(
+                <MetaRow key={f.key} cells={[[f.label, val], ['', '']]} />
+              );
+            }
+          } else {
+            // 전체 너비 필드
+            tableRows.push(
+              <MetaRow key={f.key} cells={[[f.label, val]]} full />
+            );
+          }
+        }
+
+        return (
+          <table className="mt-2 w-full border-collapse text-[12px]">
+            <tbody>{tableRows}</tbody>
+          </table>
+        );
+      })()}
 
       {/* 본문 */}
       <div className="mt-3 min-h-[220px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
