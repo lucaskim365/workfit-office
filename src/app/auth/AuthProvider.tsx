@@ -42,12 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     (async () => {
       try {
-        const uid = localStorage.getItem(SESSION_KEY);
+        const uid = sessionStorage.getItem(SESSION_KEY);
         if (uid) {
           const users = await userRepo.list();
           const found = users.find((u) => u.id === uid && u.status === '사용');
           if (alive && found) setUser(found);
-          else localStorage.removeItem(SESSION_KEY);
+          else sessionStorage.removeItem(SESSION_KEY);
         }
       } catch {
         /* 복원 실패 시 미로그인으로 처리 */
@@ -62,13 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(loginId: string, password: string) {
     const u = await authRepo.authenticate(loginId, password);
-    localStorage.setItem(SESSION_KEY, u.id);
+    sessionStorage.setItem(SESSION_KEY, u.id);
     setUser(u);
     void authRepo.touchLastLogin(u.id);
   }
 
   async function signOutUser() {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
     setUser(null);
   }
 
