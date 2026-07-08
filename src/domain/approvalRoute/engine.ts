@@ -124,16 +124,25 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
   const ancestors = org.deptAncestors(dept); // [self, parent, ...]
   const headsUp = ancestors.map((d) => org.headOf(d)).filter((x): x is string => !!x);
 
+  const asNumber = (val: unknown, fallback: number): number => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const num = parseInt(val, 10);
+      if (!isNaN(num)) return num;
+    }
+    return fallback;
+  };
+
   switch (step.resolver) {
     case 'MANAGER': {
-      const n = typeof arg === 'number' ? arg : 1;
+      const n = asNumber(arg, 1);
       const chain = org.managerChain(drafter.id);
       return chain.slice(Math.max(0, n - 1)); // n차부터 위로(승격)
     }
     case 'DEPT_HEAD':
       return headsUp; // 소속 부서장 → 상위 부서장 → …
     case 'PARENT_DEPT_HEAD': {
-      const level = typeof arg === 'number' ? arg : 1;
+      const level = asNumber(arg, 1);
       return ancestors.slice(level).map((d) => org.headOf(d)).filter((x): x is string => !!x);
     }
     case 'ROLE_FACTORY_HEAD': {
@@ -153,7 +162,7 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       return top ? [top] : headsUp.slice(-1);
     }
     case 'POSITION_AT_LEAST': {
-      const need = typeof arg === 'number' ? arg : 3;
+      const need = asNumber(arg, 3);
       return org.managerChain(drafter.id).filter((id) => {
         const u = org.userById.get(id);
         return u ? org.rankOf(u.position) <= need : false;
