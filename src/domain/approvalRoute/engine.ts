@@ -151,11 +151,6 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       const h = org.headOf(top);
       return h ? [h, ...headsUp] : [];
     }
-    case 'ROLE_DIVISION_HEAD': {
-      const root = ancestors[ancestors.length - 1]; // 최상위(본부)
-      const h = org.headOf(root);
-      return h ? [h] : [];
-    }
     case 'ROLE_CEO': {
       const chain = org.managerChain(drafter.id);
       const top = chain[chain.length - 1];

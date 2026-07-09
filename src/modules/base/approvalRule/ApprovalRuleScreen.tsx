@@ -21,7 +21,6 @@ const RESOLVER_LABEL: Record<Resolver, string> = {
   DEPT_HEAD: '소속 부서장',
   PARENT_DEPT_HEAD: '상위 부서장(level)',
   ROLE_FACTORY_HEAD: '공장장',
-  ROLE_DIVISION_HEAD: '본부장',
   ROLE_CEO: '대표',
   POSITION_AT_LEAST: '직급 이상',
   SPECIFIC_USER: '특정 사용자',
