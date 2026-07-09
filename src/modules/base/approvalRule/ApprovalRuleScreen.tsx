@@ -23,9 +23,9 @@ const RESOLVER_LABEL: Record<Resolver, string> = {
   ROLE_FACTORY_HEAD: '공장장',
   ROLE_DIVISION_HEAD: '본부장',
   ROLE_CEO: '대표',
-  POSITION_AT_LEAST: '직급 이상(rank)',
-  SPECIFIC_USER: '특정 사용자(id)',
-  SPECIFIC_DEPT_HEAD: '특정 부서장(deptId)',
+  POSITION_AT_LEAST: '직급 이상',
+  SPECIFIC_USER: '특정 사용자',
+  SPECIFIC_DEPT_HEAD: '특정 부서장',
 };
 const ARG_HINT: Partial<Record<Resolver, string>> = {
   MANAGER: 'n(예: 1)', PARENT_DEPT_HEAD: 'level(예: 1)', POSITION_AT_LEAST: 'rank(예: 3)',
@@ -42,12 +42,19 @@ const blankRule = (): ApprovalRouteRule => ({
 export default function ApprovalRuleScreen() {
   const { data: rules = [], isLoading } = useRouteRules();
   const { data: forms = [] } = useApprovalForms();
+  const org = useOrgTree();
   const upsert = useUpsertRouteRule();
   const remove = useRemoveRouteRule();
   const [sel, setSel] = useState<ApprovalRouteRule | null>(null);
   const [msg, setMsg] = useState('');
 
   const formNameOf = (code: string) => forms.find((f) => f.code === code)?.name ?? code;
+  const deptNameOf = (id: string | null) => org.depts.find((d) => d.id === id)?.name ?? (id || '');
+
+  const getScopeLabel = (r: ApprovalRouteRule) =>
+    r.deptScope.kind === '전체' ? '전체부서'
+      : r.deptScope.kind === '부서유형' ? `유형=${r.deptScope.deptType}`
+        : `${r.deptScope.kind}=${deptNameOf(r.deptScope.deptId)}`;
 
   const nextId = () => `RR-${rules.length + 1}-${Math.max(0, ...rules.map((r) => Number(r.id.split('-')[1]) || 0)) + 1}`;
   const save = async () => {
@@ -70,7 +77,6 @@ export default function ApprovalRuleScreen() {
       </div>
 
       <div className="grid grid-cols-[300px_1fr] items-start gap-3.5">
-        {/* 룰 목록(우선순위 순) */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
           <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">룰 목록 <span className="text-ink3">· 우선순위 순 {rules.length}</span></div>
           {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
@@ -81,15 +87,14 @@ export default function ApprovalRuleScreen() {
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{r.name}</span>
                 {!r.active && <span className="text-[9.5px] text-ink3">중지</span>}
               </div>
-              <div className="text-[10.5px] text-ink3">{formNameOf(r.docType)} · {scopeLabel(r)} · {r.steps.length}단계</div>
+              <div className="text-[10.5px] text-ink3">{formNameOf(r.docType)} · {getScopeLabel(r)} · {r.steps.length}단계</div>
             </button>
           ))}
         </div>
 
-        {/* 편집 + 시뮬레이터 */}
         <div className="rounded-xl border border-border bg-panel p-4">
           {sel ? (
-            <RuleEditor rule={sel} onChange={setSel} onSave={save} onCancel={() => setSel(null)} onDelete={sel.id ? () => del(sel.id) : undefined} saving={upsert.isPending} msg={msg} forms={forms} />
+            <RuleEditor rule={sel} onChange={setSel} onSave={save} onCancel={() => setSel(null)} onDelete={sel.id ? () => del(sel.id) : undefined} saving={upsert.isPending} msg={msg} forms={forms} org={org} />
           ) : (
             <div className="py-20 text-center text-[12px] text-ink3">좌측에서 룰을 선택하거나 추가하세요.</div>
           )}
@@ -99,15 +104,11 @@ export default function ApprovalRuleScreen() {
   );
 }
 
-const scopeLabel = (r: ApprovalRouteRule) =>
-  r.deptScope.kind === '전체' ? '전체부서'
-    : r.deptScope.kind === '부서유형' ? `유형=${r.deptScope.deptType}`
-      : `${r.deptScope.kind}=${r.deptScope.deptId}`;
-
-function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms }: {
+function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms, org }: {
   rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
   onSave: () => void; onCancel: () => void; onDelete?: () => void; saving: boolean; msg: string;
   forms: Array<{ code: string; name: string }>;
+  org: ReturnType<typeof useOrgTree>;
 }) {
   const set = (patch: Partial<ApprovalRouteRule>) => onChange({ ...rule, ...patch });
   const setStep = (i: number, patch: Partial<RouteStep>) => set({ steps: rule.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
@@ -125,13 +126,11 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
         <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={rule.active} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
       </div>
 
-      {/* 기본 */}
       <div className="grid grid-cols-2 gap-2">
         <F label="룰 이름"><input value={rule.name} onChange={(e) => set({ name: e.target.value })} className={inp} /></F>
         <F label="우선순위(작을수록 먼저)"><input type="number" value={rule.priority} onChange={(e) => set({ priority: Number(e.target.value) })} className={inp} /></F>
       </div>
 
-      {/* 적용 조건 */}
       <div className="rounded-lg border border-border bg-panel-alt p-2.5">
         <div className="mb-2 text-[11px] font-bold text-ink2">적용 조건</div>
         <div className="grid grid-cols-2 gap-2">
@@ -154,28 +153,110 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
             </F>
           )}
           {(rule.deptScope.kind === '부서' || rule.deptScope.kind === '서브트리') && (
-            <F label="부서 ID"><input value={rule.deptScope.deptId ?? ''} onChange={(e) => set({ deptScope: { ...rule.deptScope, deptId: e.target.value || null } })} placeholder="예: D200" className={inp} /></F>
+            <F label="부서">
+              <select
+                value={rule.deptScope.deptId ?? ''}
+                onChange={(e) => set({ deptScope: { ...rule.deptScope, deptId: e.target.value || null } })}
+                className={inp}
+              >
+                <option value="">(부서 선택)</option>
+                {org.depts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </F>
           )}
-          <F label="직급 rank ≥(상위)"><input type="number" value={rule.positionFromRank ?? ''} onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
-          <F label="직급 rank ≤(하위)"><input type="number" value={rule.positionToRank ?? ''} onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
+          <F label="기안자 직급(이상/상위)">
+            <select
+              value={rule.positionFromRank ?? ''}
+              onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
+              className={inp}
+            >
+              <option value="">(제한 없음)</option>
+              {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                <option key={p.id} value={p.rank}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </F>
+          <F label="기안자 직급(이하/하위)">
+            <select
+              value={rule.positionToRank ?? ''}
+              onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })}
+              className={inp}
+            >
+              <option value="">(제한 없음)</option>
+              {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                <option key={p.id} value={p.rank}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </F>
           <F label="금액 이상"><input type="number" value={rule.amountFrom ?? ''} onChange={(e) => set({ amountFrom: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
           <F label="금액 미만"><input type="number" value={rule.amountTo ?? ''} onChange={(e) => set({ amountTo: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
         </div>
       </div>
 
-      {/* 결재 단계 빌더 */}
       <div>
         <div className="mb-1.5 text-[11px] font-bold text-ink2">결재 단계(관계형)</div>
         <div className="space-y-1.5">
           {rule.steps.map((s, i) => (
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-              <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+              <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
                 {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
               </select>
-              {ARG_HINT[s.resolver] && (
-                <input value={s.arg ?? ''} onChange={(e) => setStep(i, { arg: e.target.value })} placeholder={ARG_HINT[s.resolver]} className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-              )}
+              {s.resolver === 'SPECIFIC_USER' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-48 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(사용자 선택)</option>
+                  {org.users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.dept}, {u.position})
+                    </option>
+                  ))}
+                </select>
+              ) : s.resolver === 'SPECIFIC_DEPT_HEAD' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-40 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(부서 선택)</option>
+                  {org.depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              ) : s.resolver === 'POSITION_AT_LEAST' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-32 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(직급 선택)</option>
+                  {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                    <option key={p.id} value={String(p.rank)}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : ARG_HINT[s.resolver] ? (
+                <input
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value })}
+                  placeholder={ARG_HINT[s.resolver]}
+                  className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                />
+              ) : null}
               <select value={s.kind} onChange={(e) => setStep(i, { kind: e.target.value as RouteStep['kind'] })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold text-ink outline-none">
                 {ROUTE_STEP_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
               </select>
