@@ -47,6 +47,7 @@ export default function ApprovalRuleScreen() {
   const remove = useRemoveRouteRule();
   const [sel, setSel] = useState<ApprovalRouteRule | null>(null);
   const [msg, setMsg] = useState('');
+  const [q, setQ] = useState('');
 
   const formNameOf = (code: string) => forms.find((f) => f.code === code)?.name ?? code;
   const deptNameOf = (id: string | null) => org.depts.find((d) => d.id === id)?.name ?? (id || '');
@@ -66,6 +67,11 @@ export default function ApprovalRuleScreen() {
   };
   const del = async (id: string) => { await remove.mutateAsync(id); if (sel?.id === id) setSel(null); };
 
+  const filteredRules = useMemo(() => {
+    const kw = q.trim().toLowerCase();
+    return rules.filter((r) => r.name.toLowerCase().includes(kw));
+  }, [rules, q]);
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -78,9 +84,19 @@ export default function ApprovalRuleScreen() {
 
       <div className="grid grid-cols-[300px_1fr] items-start gap-3.5">
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">룰 목록 <span className="text-ink3">· 우선순위 순 {rules.length}</span></div>
+          <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2 flex items-center justify-between">
+            <span>룰 목록 <span className="text-ink3">· {filteredRules.length}/{rules.length}</span></span>
+          </div>
+          <div className="border-b border-border p-2">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="룰 이름 검색"
+              className="w-full rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal"
+            />
+          </div>
           {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
-          {rules.map((r) => (
+          {filteredRules.map((r) => (
             <button key={r.id} onClick={() => { setSel(r); setMsg(''); }} className={`flex w-full flex-col gap-0.5 border-b border-border px-3.5 py-2.5 text-left ${sel?.id === r.id ? 'bg-teal-soft/60' : 'hover:bg-panel-alt'}`}>
               <div className="flex items-center gap-1.5">
                 <span className="grid h-5 min-w-5 place-items-center rounded bg-ink3/15 px-1 text-[10px] font-bold text-ink2">{r.priority}</span>
