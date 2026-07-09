@@ -178,13 +178,16 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
   if (doc.status === '삭제') {
     return box === '삭제' && doc.drafterId === userId;
   }
+  if (doc.status === '완료') {
+    return box === '완료' && involves;
+  }
   switch (box) {
     case '대기':
       return doc.status === '진행중' && currentApproverIds(doc).includes(userId);
     case '상신':
       return doc.drafterId === userId && doc.status !== '임시저장';
     case '완료':
-      return doc.status === '완료' && involves;
+      return false;
     case '참조':
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '임시':
