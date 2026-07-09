@@ -224,7 +224,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
               <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
+                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD' && r !== 'PARENT_DEPT_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
               </select>
               {s.resolver === 'SPECIFIC_USER' ? (
                 <select
