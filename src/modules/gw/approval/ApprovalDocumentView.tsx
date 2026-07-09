@@ -1,10 +1,11 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
 import { won } from '@/modules/gw/_gw';
+import logoImg from '@/assets/logo.png';
 
 /**
  * 결재 문서 보기 — 전통 기안문서 양식(우상단 결재란 도장 grid + A4 레이아웃).
@@ -37,6 +38,38 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const { data: forms = [] } = useApprovalForms();
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const posOf = (id: string) => org.userById(id)?.position ?? '';
+
+  const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = logoImg;
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        // 흰색/밝은 회색 계열(R/G/B 모두 200 이상)만 블랙으로 변환
+        if (r > 200 && g > 200 && b > 200 && a > 10) {
+          data[i] = 0;
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      setProcessedLogo(canvas.toDataURL());
+    };
+  }, []);
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
@@ -90,7 +123,13 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
   return (
     <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a]" style={{ maxWidth: 800 }}>
-      <div className="mb-1 text-[11px] font-semibold tracking-wide text-[#888]">WorkFit 그룹웨어 · 전자결재</div>
+      <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
+        <div className="flex items-center gap-2 h-full">
+          <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
+          <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
+        </div>
+        <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
+      </div>
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
