@@ -17,7 +17,7 @@ import { DEPT_TYPES } from '@/domain/department/schema';
  * 기안자 부서·직급·금액별 결재선을 코드 수정 없이 관리. ([[dynamic-route-engine]] §7.4)
  */
 const RESOLVER_LABEL: Record<Resolver, string> = {
-  MANAGER: '직속 상급자(n차)',
+  MANAGER: '직속 상급자',
   DEPT_HEAD: '소속 부서장',
   PARENT_DEPT_HEAD: '상위 부서장(level)',
   ROLE_FACTORY_HEAD: '공장장',
@@ -27,7 +27,7 @@ const RESOLVER_LABEL: Record<Resolver, string> = {
   SPECIFIC_DEPT_HEAD: '특정 부서장',
 };
 const ARG_HINT: Partial<Record<Resolver, string>> = {
-  MANAGER: 'n(예: 1)', PARENT_DEPT_HEAD: 'level(예: 1)', POSITION_AT_LEAST: 'rank(예: 3)',
+  PARENT_DEPT_HEAD: 'level(예: 1)', POSITION_AT_LEAST: 'rank(예: 3)',
   SPECIFIC_USER: 'userId', SPECIFIC_DEPT_HEAD: 'deptId',
 };
 

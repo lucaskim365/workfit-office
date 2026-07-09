@@ -162,9 +162,9 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
 
   // ─────────────────── resolver 활용 예제 ───────────────────
   {
-    id: 'RR-EX-MANAGER', name: '예제·직속 상급자 라인: 1차→2차 전결', priority: 70, active: true,
+    id: 'RR-EX-MANAGER', name: '예제·직속 상급자 라인: 직속 상급자 전결', priority: 70, active: true,
     docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('MANAGER', '결재', 1), s('MANAGER', '전결', 2)],
+    steps: [s('MANAGER', '전결')],
   },
   {
     id: 'RR-EX-POSATLEAST', name: '예제·직급 이상(이사↑) 최초 상급자 전결', priority: 72, active: true,

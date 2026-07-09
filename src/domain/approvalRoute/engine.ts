@@ -135,9 +135,8 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
 
   switch (step.resolver) {
     case 'MANAGER': {
-      const n = asNumber(arg, 1);
       const chain = org.managerChain(drafter.id);
-      return chain.slice(Math.max(0, n - 1)); // n차부터 위로(승격)
+      return chain.slice(0, 1); // 무조건 1차 상급자만 반환
     }
     case 'DEPT_HEAD':
       return headsUp; // 소속 부서장 → 상위 부서장 → …
