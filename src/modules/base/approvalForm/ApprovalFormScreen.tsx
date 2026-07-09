@@ -96,7 +96,11 @@ function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, s
   onDelete?: () => void; onDuplicate?: () => void; saving: boolean; msg: string;
 }) {
   const set = (patch: Partial<ApprovalForm>) => onChange({ ...form, ...patch });
-  const setField = (i: number, patch: Partial<FormField>) => set({ fields: form.fields.map((f, idx) => (idx === i ? { ...f, ...patch } : f)) });
+  const setField = (i: number, patch: Partial<FormField>) => {
+    let nextFields = form.fields.map((f, idx) => (idx === i ? { ...f, ...patch } : f));
+
+    set({ fields: nextFields });
+  };
   const addField = () => set({ fields: [...form.fields, { ...blankField(), key: `field${form.fields.length + 1}` }] });
   const delField = (i: number) => set({ fields: form.fields.filter((_, idx) => idx !== i) });
   const moveField = (i: number, dir: -1 | 1) => {
@@ -107,18 +111,18 @@ function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, s
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="text-[13px] font-bold text-ink">{form.id ? `서식 편집 · ${form.code}` : '새 서식'}{form.system && <span className="ml-2 text-[10px] font-normal text-ink3">(기본 서식 · 코드/삭제 잠금)</span>}</div>
-        <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={form.active} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
+        <div className="text-[13px] font-bold text-ink">{form.id ? `서식 편집 · ${form.code}` : '새 서식'}{form.system && <span className="ml-2 text-[10px] font-normal text-amber-600">(기본 서식 · 양식 잠금)</span>}</div>
+        <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={form.active} disabled={form.system} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
       </div>
 
       {/* 기본 정보 */}
       <div className="grid grid-cols-4 gap-2">
-        <F label="아이콘"><input value={form.icon} onChange={(e) => set({ icon: e.target.value })} className={inp} /></F>
-        <F label="서식명"><input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="출장신청서" className={inp} /></F>
+        <F label="아이콘"><input value={form.icon} disabled={form.system} onChange={(e) => set({ icon: e.target.value })} className={`${inp} disabled:opacity-60`} /></F>
+        <F label="서식명"><input value={form.name} disabled={form.system} onChange={(e) => set({ name: e.target.value })} placeholder="출장신청서" className={`${inp} disabled:opacity-60`} /></F>
         <F label="코드(문서유형)"><input value={form.code} disabled={form.system} onChange={(e) => set({ code: e.target.value })} placeholder="출장" className={`${inp} disabled:opacity-60`} /></F>
-        <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={inp} /></F>
-        <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={inp} /></F></div>
-        <div className="col-span-2"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={inp} /></F></div>
+        <F label="정렬"><input type="number" value={form.order} disabled={form.system} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp} disabled:opacity-60`} /></F>
+        <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} disabled={form.system} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp} disabled:opacity-60`} /></F></div>
+        <div className="col-span-2"><F label="맺음말(인쇄)"><input value={form.closing} disabled={form.system} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp} disabled:opacity-60`} /></F></div>
       </div>
 
       {/* 필드 빌더 */}
@@ -129,35 +133,45 @@ function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, s
             <div key={i} className="rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-                <input value={f.label} onChange={(e) => setField(i, { label: e.target.value })} placeholder="라벨" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                <input value={f.key} onChange={(e) => setField(i, { key: e.target.value })} placeholder="key" className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none" />
-                <select value={f.type} onChange={(e) => setField(i, { type: e.target.value as FieldType })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                <input value={f.label} disabled={form.system} onChange={(e) => setField(i, { label: e.target.value })} placeholder="라벨" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none disabled:opacity-60" />
+                <input value={f.key} disabled={form.system} onChange={(e) => setField(i, { key: e.target.value })} placeholder="key" className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none disabled:opacity-60" />
+                <select value={f.type} disabled={form.system} onChange={(e) => setField(i, { type: e.target.value as FieldType })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none disabled:opacity-60">
                   {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <select value={f.width} onChange={(e) => setField(i, { width: e.target.value as 'half' | 'full' })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                <select value={f.width} disabled={form.system} onChange={(e) => setField(i, { width: e.target.value as 'half' | 'full' })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none disabled:opacity-60">
                   <option value="full">전체</option><option value="half">2열</option>
                 </select>
-                <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
-                {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
-                <div className="ml-auto flex items-center gap-1">
-                  <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
-                  <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
-                  <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
-                </div>
+                <input value={f.section} disabled={form.system} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none disabled:opacity-60" />
+                <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} disabled={form.system} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
+                {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} disabled={form.system} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
+                {!form.system && (
+                  <div className="ml-auto flex items-center gap-1">
+                    <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
+                    <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
+                    <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
+                  </div>
+                )}
               </div>
               {(f.type === '선택' || f.type === '다중선택') && (
-                <input value={f.options.join(', ')} onChange={(e) => setField(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                  placeholder="옵션(콤마 구분): 영업, 교육, 회의" className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                <input value={f.options.join(', ')} disabled={form.system} onChange={(e) => setField(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                  placeholder="옵션(콤마 구분): 영업, 교육, 회의" className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none disabled:opacity-60" />
               )}
             </div>
           ))}
         </div>
-        <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
+        {!form.system && (
+          <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
+        )}
         <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>
       </div>
 
       <FormPreview form={form} />
+
+      {form.system && (
+        <p className="text-[11px] text-amber-600 font-semibold bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 leading-relaxed">
+          ⚠️ 기본 결재서식은 양식 잠금 상태입니다. 양식을 보완하려면 개발 코드의 시드 파일(approvalForm.seed.ts)을 수정하여 배포해야 합니다.
+        </p>
+      )}
 
       {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
       <div className="flex items-center justify-between pt-1">
@@ -167,7 +181,7 @@ function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, s
         </div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
-          <button onClick={onSave} disabled={saving} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
+          <button onClick={onSave} disabled={saving || form.system} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
         </div>
       </div>
     </div>
@@ -185,12 +199,23 @@ function FormPreview({ form }: { form: ApprovalForm }) {
   const sampleDoc = useMemo<ApprovalDoc>(() => {
     const u = org.users;
     const drafter = u[u.length - 1] ?? u[0];
+
+    let leave = null;
+    if (form.code === '휴가') {
+      leave = {
+        leaveType: (values['leaveType'] as string) || '',
+        startDate: (values['period'] as string) || '',
+        endDate: (values['period__end'] as string) || '',
+        days: values['period__days'] ? Number(values['period__days']) : null,
+      };
+    }
+
     return {
       id: 'PREVIEW', docNo: 'AP-000000-000', docType: form.code || '서식', title: `${form.name || '서식'} 미리보기`,
       drafterId: drafter?.id ?? '', drafterDept: drafter?.dept ?? '', status: '진행중',
       steps: u.slice(0, 3).map((x, i) => ({ seq: i + 1, parallelGroup: null, kind: i === 2 ? '전결' : '결재', approverId: x.id, delegatedFromId: null, decision: i === 0 ? '승인' : '대기', decidedAt: null, comment: '' })),
       amount: amountField ? 3_000_000 : null, body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '(본문 미리보기)',
-      form: form.code === '휴가' ? { leaveType: '연차', startDate: '2026-07-10', endDate: '2026-07-12', days: 3 } : null,
+      form: leave as any,
       fieldValues: values, currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);
@@ -212,12 +237,13 @@ function FormPreview({ form }: { form: ApprovalForm }) {
             {(() => {
               const nodes: React.ReactNode[] = [];
               let lastSection = '';
+
               form.fields.forEach((f, i) => {
                 if (f.section && f.section !== lastSection) {
                   lastSection = f.section;
                   nodes.push(
                     <div key={`sec-${f.section}`} className="col-span-2 mt-2 mb-1.5 text-[11px] font-bold text-teal border-b border-teal/15 pb-0.5">
-                      📁 {f.section}
+                      {f.section}
                     </div>
                   );
                 }
@@ -229,6 +255,17 @@ function FormPreview({ form }: { form: ApprovalForm }) {
                   </div>
                 );
               });
+
+              const hasBodyField = form.fields.some((f) => f.key === 'body');
+              if (!hasBodyField) {
+                nodes.push(
+                  <div key="default-body-preview" className="col-span-2 mt-3">
+                    <div className="mb-1 text-[11px] font-bold text-ink2">본문</div>
+                    <textarea disabled placeholder="내용을 입력하세요" rows={4} className={`${inp} resize-none leading-relaxed opacity-70`} />
+                  </div>
+                );
+              }
+
               return nodes;
             })()}
           </div>

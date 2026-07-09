@@ -297,8 +297,14 @@ export function DynamicField({
       );
 
     case '텍스트':
-    default:
+    default: {
+      const isDaysField = field.key.endsWith('__days');
+      if (isDaysField) {
+        const daysVal = sv ? `${sv}일` : '—';
+        return <input disabled value={daysVal} className={`${inp} opacity-70 bg-panel-alt`} />;
+      }
       return <input value={sv} onChange={(e) => set({ [field.key]: e.target.value })} placeholder={field.placeholder} className={inp} />;
+    }
   }
 }
 

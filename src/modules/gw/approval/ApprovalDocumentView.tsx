@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
-import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm } from '@/domain/approvalForm/schema';
+import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
 import { won } from '@/modules/gw/_gw';
 
@@ -43,13 +43,50 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const closing = form?.closing || FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.';
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
-  // 상세표 대상 — body/금액/안내문 제외한 서식 필드.
-  const detailFields = (form?.fields ?? []).filter(
-    (f) => f.type !== '안내문' && f.key !== RESERVED_BODY_KEY && f !== amountField,
+  // 동적 필드 중 안내문과 일수 필드를 제외하고 모두 순서대로 배치
+  const activeFields = (form?.fields ?? []).filter(
+    (f) => f.type !== '안내문' && !f.key.endsWith('__days')
   );
+
+  const longTextFields = activeFields.filter(
+    (f) => f.type === '장문'
+  );
+
+  const isAmountInDetails = amountField ? activeFields.some((f) => f.key === amountField.key) : false;
 
   const drafterName = nameOf(doc.drafterId);
   const steps = [...doc.steps].sort((a, b) => a.seq - b.seq);
+
+  interface LayoutBlock {
+    type: 'table' | 'longtext';
+    section: string;
+    fields: FormField[];
+  }
+
+  const blocks: LayoutBlock[] = [];
+  activeFields.forEach((f) => {
+    const secName = f.section || '';
+    if (f.type === '장문') {
+      blocks.push({
+        type: 'longtext',
+        section: secName,
+        fields: [f],
+      });
+    } else {
+      const lastBlock = blocks[blocks.length - 1];
+      if (lastBlock && lastBlock.type === 'table' && lastBlock.section === secName) {
+        lastBlock.fields.push(f);
+      } else {
+        blocks.push({
+          type: 'table',
+          section: secName,
+          fields: [f],
+        });
+      }
+    }
+  });
+
+  let lastRenderedSection = '';
 
   return (
     <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a]" style={{ maxWidth: 800 }}>
@@ -71,77 +108,91 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       <table className="mt-2 w-full border-collapse text-[12px]">
         <tbody>
           <MetaRow cells={[['제 목', doc.title]]} full />
-          {doc.amount != null && <MetaRow cells={[[amountLabel, `${won(doc.amount)} (부가세 포함)`]]} full />}
+          {doc.amount != null && !isAmountInDetails && (
+            <MetaRow cells={[[amountLabel, `${won(doc.amount)} (부가세 포함)`]]} full />
+          )}
         </tbody>
       </table>
 
-      {/* 휴가 상세(전용 form) */}
-      {doc.form && (
-        <table className="mt-2 w-full border-collapse text-[12px]">
-          <tbody>
-            <MetaRow cells={[['휴가종류', doc.form.leaveType], ['사용일수', `${doc.form.days}일`]]} />
-            <MetaRow cells={[['사용기간', `${doc.form.startDate} ~ ${doc.form.endDate}`]]} full />
-          </tbody>
-        </table>
-      )}
+      {/* 서식 동적 상세 블록 렌더링 (순서 보존 및 섹션별 테이블/독립 장문박스 배치) */}
+      {blocks.length > 0 && (
+        <div className="space-y-3.5 mt-2">
+          {blocks.map((block, blockIdx) => {
+            const showSectionHeader = block.section && block.section !== lastRenderedSection;
+            if (block.section) {
+              lastRenderedSection = block.section;
+            }
 
-      {/* 서식 동적 상세 */}
-      {(() => {
-        if (detailFields.length === 0) return null;
-
-        const tableRows: React.ReactNode[] = [];
-        let lastSection = '';
-
-        for (let i = 0; i < detailFields.length; i++) {
-          const f = detailFields[i];
-          const val = fieldText(f, doc.fieldValues, org);
-
-          // 섹션 헤더 구분행 추가
-          if (f.section && f.section !== lastSection) {
-            lastSection = f.section;
-            tableRows.push(
-              <tr key={`sec-${f.section}`}>
-                <td colSpan={4} className="border border-[#bbb] bg-[#f8f9fa] px-2.5 py-1.5 text-left font-bold text-teal text-[11px]">
-                  📁 {f.section}
-                </td>
-              </tr>
-            );
-          }
-
-          if (f.width === 'half') {
-            const next = detailFields[i + 1];
-            // 다음 필드가 존재하고, 2열(half)이면서 동일한 섹션일 때만 페어링
-            if (next && next.width === 'half' && next.section === f.section) {
-              const nextVal = fieldText(next, doc.fieldValues, org);
-              tableRows.push(
-                <MetaRow key={f.key} cells={[[f.label, val], [next.label, nextVal]]} />
-              );
-              i++; // 다음 필드는 건너뜀
-            } else {
-              // 짝이 없는 2열 필드는 빈 셀과 묶어서 구조 유지
-              tableRows.push(
-                <MetaRow key={f.key} cells={[[f.label, val], ['', '']]} />
+            if (block.type === 'longtext') {
+              const f = block.fields[0];
+              const val = fieldText(f, doc.fieldValues, org);
+              return (
+                <div key={blockIdx} className="space-y-1">
+                  {showSectionHeader && (
+                    <div className="text-[11px] font-bold text-teal mt-2.5">
+                      {block.section}
+                    </div>
+                  )}
+                  <div className="text-[11px] font-semibold text-ink2 mb-0.5">
+                    {f.label}
+                  </div>
+                  <div className="min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+                    {val || ' '}
+                  </div>
+                </div>
               );
             }
-          } else {
-            // 전체 너비 필드
-            tableRows.push(
-              <MetaRow key={f.key} cells={[[f.label, val]]} full />
+
+            // table 타입 블록 렌더링
+            const tableRows: React.ReactNode[] = [];
+            const fields = block.fields;
+
+            for (let i = 0; i < fields.length; i++) {
+              const f = fields[i];
+              const val = fieldText(f, doc.fieldValues, org);
+
+              if (f.width === 'half') {
+                const next = fields[i + 1];
+                if (next && next.width === 'half') {
+                  const nextVal = fieldText(next, doc.fieldValues, org);
+                  tableRows.push(
+                    <MetaRow key={f.key} cells={[[f.label, val], [next.label, nextVal]]} />
+                  );
+                  i++;
+                } else {
+                  tableRows.push(
+                    <MetaRow key={f.key} cells={[[f.label, val], ['', '']]} />
+                  );
+                }
+              } else {
+                tableRows.push(
+                  <MetaRow key={f.key} cells={[[f.label, val]]} full />
+                );
+              }
+            }
+
+            return (
+              <div key={blockIdx} className="space-y-1">
+                {showSectionHeader && (
+                  <div className="text-[11px] font-bold text-teal mt-2.5">
+                    {block.section}
+                  </div>
+                )}
+                <table className="w-full border-collapse text-[12px]">
+                  <tbody>{tableRows}</tbody>
+                </table>
+              </div>
             );
-          }
-        }
+          })}
+        </div>
+      )}
 
-        return (
-          <table className="mt-2 w-full border-collapse text-[12px]">
-            <tbody>{tableRows}</tbody>
-          </table>
-        );
-      })()}
-
-      {/* 본문 */}
-      <div className="mt-3 min-h-[220px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
-        {doc.body || ' '}
-      </div>
+      {/* 본문 (양식에 정의된 장문 필드가 하나도 없는 경우에만 폴백 노출) */}
+      {longTextFields.length === 0 && (
+        <div className="mt-3 min-h-[220px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+          {doc.body || ' '}
+        </div>
+      )}
 
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         <div>{closing}</div>

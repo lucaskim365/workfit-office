@@ -18,7 +18,30 @@ export const approvalFormRepo = {
   async list(): Promise<ApprovalForm[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      return snap.docs.map((d) => approvalFormSchema.parse(d.data())).sort(byOrder);
+      const list = snap.docs.map((d) => approvalFormSchema.parse(d.data())).sort(byOrder);
+      
+      // 자동 마이그레이션 및 동기화: Firestore의 기본 서식(system: true) 필드가 코드 시드와 불일치 시 자동 동기화 및 강제 덮어쓰기
+      for (const seedForm of APPROVAL_FORM_SEED.filter((f) => f.system)) {
+        const dbForm = list.find((f) => f.id === seedForm.id);
+        
+        const isMismatched = !dbForm || 
+          JSON.stringify(dbForm.fields) !== JSON.stringify(seedForm.fields) ||
+          dbForm.name !== seedForm.name ||
+          dbForm.docTitle !== seedForm.docTitle ||
+          dbForm.closing !== seedForm.closing ||
+          dbForm.icon !== seedForm.icon;
+
+        if (isMismatched) {
+          const valid = approvalFormSchema.parse(seedForm);
+          await setDoc(doc(db, COLL, valid.id), valid);
+          if (dbForm) {
+            Object.assign(dbForm, seedForm);
+          } else {
+            list.push(valid);
+          }
+        }
+      }
+      return list;
     }
     return [...memory].sort(byOrder);
   },
