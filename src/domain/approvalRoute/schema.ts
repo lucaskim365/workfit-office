@@ -26,7 +26,7 @@ export const RESOLVERS = [
 export type Resolver = (typeof RESOLVERS)[number];
 
 /** 결재 단계 구분(ApprovalStep.kind 로 매핑, 검토=결재의 표시변형). */
-export const ROUTE_STEP_KINDS = ['결재', '검토', '합의', '참조', '전결'] as const;
+export const ROUTE_STEP_KINDS = ['결재', '검토', '참조', '전결'] as const;
 export type RouteStepKind = (typeof ROUTE_STEP_KINDS)[number];
 
 /** 부서 적용 범위(§5.4). */

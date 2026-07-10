@@ -65,7 +65,6 @@ export function ApprovalLineBuilder({
   const org = useOrgTree();
   const route = useRouteEngine();
   const [picker, setPicker] = useState<{ mode: 'add' } | { mode: 'replace'; index: number } | null>(null);
-  const [addParallel, setAddParallel] = useState(false);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -77,7 +76,6 @@ export function ApprovalLineBuilder({
   const emit = (next: EditStep[]) => onChange(toSteps(next));
 
   const setKind = (i: number, kind: StepKind) => emit(edits.map((e, idx) => (idx === i ? { ...e, kind } : e)));
-  const toggleLink = (i: number) => emit(edits.map((e, idx) => (idx === i ? { ...e, linkedPrev: !e.linkedPrev } : e)));
   const remove = (i: number) => emit(edits.filter((_, idx) => idx !== i).map((e, idx) => (idx === 0 ? { ...e, linkedPrev: false } : e)));
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;

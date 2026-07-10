@@ -195,7 +195,7 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
     case '수신':
       return false;
     case '참조':
-      return doc.status !== '완료' && doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+      return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '임시':
       return doc.drafterId === userId && doc.status === '임시저장';
     case '삭제':

@@ -97,7 +97,7 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full px-6">
       <GwHead
         icon="🖋️"
         name="전자결재"
@@ -111,7 +111,7 @@ export default function ApprovalScreen() {
         }
       />
 
-      <div className="mt-5 grid grid-cols-[150px_300px_1fr_220px] gap-4">
+      <div className="mt-5 grid grid-cols-[160px_320px_1fr_240px] gap-4">
         {/* 좌: 함 탭 */}
         <div className="rounded-xl border border-border bg-panel p-2">
           {APPROVAL_BOXES.map((b) => (
@@ -133,7 +133,7 @@ export default function ApprovalScreen() {
         {/* 중: 목록 */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
           <div className="border-b border-border px-3.5 py-2.5 text-[12px] font-bold text-ink2">{BOX_LABEL[box]} <span className="text-ink3">· {list.length}</span></div>
-          <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
+          <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
             {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
             {!isLoading && list.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
             {list.map((d) => (
