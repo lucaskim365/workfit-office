@@ -3,6 +3,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 interface UserMenuProps {
   onClose: () => void;
   onChangePassword: () => void;
+  onThemeOpen: () => void;
 }
 
 function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?: string; onClick?: () => void }) {
@@ -18,7 +19,7 @@ function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?
 }
 
 /** 계정 팝업 — 와이어프레임 app-shell.UserAccountMenu 정본. */
-export function UserMenu({ onClose, onChangePassword }: UserMenuProps) {
+export function UserMenu({ onClose, onChangePassword, onThemeOpen }: UserMenuProps) {
   const { signOutUser, user } = useAuth();
   // 로그인 사용자 정보(자체 로그인). 미로그인/데모 시 기본 표기.
   const name = user?.name ?? '게스트';
@@ -43,6 +44,7 @@ export function UserMenu({ onClose, onChangePassword }: UserMenuProps) {
 
         <div className="border-b border-border py-2">
           <Item icon="🔑" label="비밀번호 변경" onClick={() => { onClose(); onChangePassword(); }} />
+          <Item icon="🎨" label="테마 설정 (Custom)" sub="메인 / 포인트 색상 변경" onClick={() => { onClose(); onThemeOpen(); }} />
           <Item icon="👤" label="프로필 설정" sub={roleSub} />
           <Item icon="🔔" label="알림 설정" sub="설비 알람 · SPC 위반 수신 중" />
           <Item icon="🌐" label="언어 / 지역" sub="한국어 (Korea)" />

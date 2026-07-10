@@ -1,12 +1,21 @@
 @import 'tailwindcss';
 
+:root {
+  --color-header-bg: #dbeafe;
+  --color-header-text: #1c2536;
+  --color-teal-custom: #99bbff;
+  --color-teal-text: #1c2536;
+  --color-navy-custom: #1243b5;
+  --color-navy-text: #ffffff;
+}
+
 /* ──────────────────────────────────────────────────────────────
    디자인 토큰 (와이어프레임 `mes layout` 정본 → Tailwind 4 @theme)
    인라인 스타일 폐기 원칙: 색·폰트는 항상 이 토큰을 통해 사용.
    ────────────────────────────────────────────────────────────── */
 @theme {
-  --color-bg: #eef1f6;
-  --color-bg-deep: #e6eaf2;
+  --color-bg: #f3f6fa;
+  --color-bg-deep: #ebf0f7;
   --color-panel: #ffffff;
   --color-panel-alt: #f7f9fc;
 
@@ -17,9 +26,9 @@
   --color-ink2: #56607a;
   --color-ink3: #8b95ab;
 
-  --color-navy: #1f2f55;
+  --color-navy: var(--color-navy-custom);
   --color-navy-deep: #172241;
-  --color-teal: #17a89a;
+  --color-teal: var(--color-teal-custom);
   --color-teal-soft: #dcf3f0;
   --color-blue: #3a6ee0;
   --color-blue-soft: #e7eefc;
@@ -29,6 +38,17 @@
 
   --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
+
+/* 전역 색상 및 가독성 텍스트 대비 오버라이드 */
+.bg-navy {
+  background-color: var(--color-navy-custom) !important;
+  color: var(--color-navy-text) !important;
+}
+.bg-teal {
+  background-color: var(--color-teal-custom) !important;
+  color: var(--color-teal-text) !important;
+}
+
 
 html,
 body,

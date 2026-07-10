@@ -9,11 +9,11 @@ interface ToastData {
 }
 
 const TOAST_SAMPLES: ToastData[] = [
-  { type: '메신저', who: '이순신 (설비보전)', text: 'CMP02 점검 끝났어요. 가동 재개합니다.', icon: '💬', color: '#e6960c' },
+  { type: '메신저', who: '이순신 (설비보전)', text: 'CMP02 점검 끝났어요. 가동 재개합니다.', icon: '✉', color: '#eecfa2' },
   { type: '메일', who: '품질보증팀', text: '[메일] SPC 룰 위반 건 확인 요청드립니다.', icon: '✉️', color: '#3a6ee0' },
   { type: '공지', who: 'MES 운영', text: 'v5.2 정기 배포 안내 (06/12 02:00)', icon: '📢', color: '#16b8cf' },
   { type: '알람', who: 'ETCH01', text: '챔버 온도 상한 근접 — 확인 필요', icon: '⚠️', color: '#e0483b' },
-  { type: '메신저', who: '생산1팀 단톡방', text: '교대 인수인계 완료했습니다 👍', icon: '💬', color: '#e6960c' },
+  { type: '메신저', who: '생산1팀 단톡방', text: '교대 인수인계 완료했습니다 👍', icon: '✉', color: '#eecfa2' },
   { type: '결재', who: '전자결재', text: '연차 휴가 신청이 승인되었습니다.', icon: '🖋️', color: '#6c5ce7' },
   { type: '메일', who: '구매팀', text: '[메일] PO-260611-05 입고 일정 변경', icon: '✉️', color: '#3a6ee0' },
   { type: '알람', who: 'OVEN05', text: '가스 유량 편차 발생 (WARN)', icon: '⚠️', color: '#e6960c' },

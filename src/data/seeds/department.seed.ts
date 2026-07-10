@@ -11,7 +11,6 @@ export const DEPARTMENT_SEED: Department[] = [
   { id: 'D100', name: '대표이사', parentId: null, headUserId: 'U001', deptType: '본사', order: 1 },
   // 대표이사 직속 · 위원회 · 사업본부(대표이사 산하)
   { id: 'D110', name: '대표이사 직속', parentId: 'D100', headUserId: 'U002', deptType: '본사', order: 1 },
-  { id: 'D120', name: 'AX Committee', parentId: 'D100', headUserId: 'U004', deptType: '본사', order: 2 },
   { id: 'D200', name: 'AX사업본부', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 3 },
   // AX사업본부 산하 팀 — 현재 사업장은 본사 하나뿐(공장·영업소 없음) → 전부 본사
   { id: 'D210', name: '품질관리팀', parentId: 'D200', headUserId: 'U006', deptType: '본사', order: 1 },

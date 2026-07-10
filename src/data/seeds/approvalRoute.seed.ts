@@ -144,11 +144,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
     docType: '전체', deptScope: scSub('D210'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('ROLE_CEO', '참조')],
   },
-  {
-    id: 'RR-SCOPE-COMMITTEE', name: 'AX Committee(위원회): 대표 직접 결재', priority: 62, active: true,
-    docType: '전체', deptScope: scDept('D120'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('ROLE_CEO', '결재')],
-  },
+
   {
     id: 'RR-SCOPE-RND', name: '부설기술연구소·전 문서: 소장→본부장 전결', priority: 64, active: true,
     docType: '전체', deptScope: scSub('D250'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,

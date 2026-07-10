@@ -27,8 +27,8 @@ export default function LoginScreen() {
 
   // 회사 브랜딩(로고/명칭) — QueryProvider 밖이므로 repo 직접 호출.
   const [logoUrl, setLogoUrl] = useState('');
-  const [companyName, setCompanyName] = useState('스마트 MES');
-  const [sysName, setSysName] = useState('생산 관리 플랫폼');
+  const [companyName, setCompanyName] = useState('WorkFit');
+  const [sysName, setSysName] = useState('Intranet Portal');
 
   useEffect(() => {
     let alive = true;

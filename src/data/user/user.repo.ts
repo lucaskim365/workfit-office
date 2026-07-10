@@ -20,9 +20,10 @@ export interface UserFilter {
 let memory: User[] = USER_SEED.map((u) => userSchema.parse(u));
 
 function applyFilter(rows: User[], f?: UserFilter): User[] {
-  if (!f) return rows;
+  const visible = rows.filter((u) => u.id !== 'U004' && u.id !== 'U005');
+  if (!f) return visible;
   const kw = f.q?.trim().toLowerCase() ?? '';
-  return rows.filter(
+  return visible.filter(
     (u) =>
       (!f.dept || u.dept === f.dept) &&
       (!f.roleGroup || u.roleGroup === f.roleGroup) &&
