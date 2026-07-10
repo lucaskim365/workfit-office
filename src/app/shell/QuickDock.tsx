@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { Pill } from '@/shared/ui/Pill';
@@ -8,6 +8,7 @@ import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeav
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useGwSummary } from '@/features/gw/useGwSummary';
+import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 
@@ -19,10 +20,18 @@ interface Tool {
 }
 
 const DOCK_TOOLS: Tool[] = [
-  { key: 'gw', label: '그룹웨어', icon: '▦', color: '#a3dde5' },
-  { key: 'bot', label: '위디', icon: '✦', color: '#a0ddd6' },
+  { key: 'gw', label: '그룹웨어', icon: '▦', color: '#c7ecc5' },
+  { key: 'bot', label: '위디', icon: '✦', color: '#a9c8f5' },
   { key: 'msg', label: '메신저', icon: '✉', color: '#eecfa2' },
 ];
+
+function getRoomDisplayName(room: ChatRoom, me: string, users: any[]): string {
+  if (room.type !== 'direct') return room.name;
+  const otherId = room.members.find((m) => m !== me);
+  if (!otherId) return room.name;
+  const u = users.find((x) => x.id === otherId);
+  return u ? `${u.name} ${u.position}` : room.name;
+}
 
 const PANEL_W = 384;
 
@@ -45,7 +54,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
         style={{ 
           width: PANEL_W, 
           right: open ? 0 : -(PANEL_W + 12),
-          backgroundColor: open === 'gw' ? '#f0f7f9' : open === 'bot' ? '#f0f9f8' : open === 'msg' ? '#faf6f0' : '#f3f6fa'
+          backgroundColor: open === 'gw' ? '#f2faf3' : open === 'bot' ? '#eaf2ff' : open === 'msg' ? '#faf6f0' : '#f3f6fa'
         }}
         className="fixed bottom-0 top-0 z-[73] flex flex-col shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
       >
@@ -94,7 +103,7 @@ function DockCard({ title, count, children }: { title: string; count?: string; c
 
 /* ---------- 그룹웨어 (앱 타일 그리드 + 결재 + 공지) ---------- */
 function GroupwarePanel({ onClose }: { onClose: () => void }) {
-  const CYAN = '#16b8cf';
+  const CYAN = '#a2d8a0';
   const nav = useNavigate();
   const { user } = useAuth();
   const summary = useGwSummary(user?.id);
@@ -122,9 +131,9 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     ['사내 동호회 지원금 신청', '06.12'],
   ];
   return (
-    <div className="flex h-full flex-col bg-[#f0f7f9]">
+    <div className="flex h-full flex-col bg-[#f2faf3]">
       {/* 프로필 헤더 */}
-      <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #a3dde5, #88cdd6)' }}>
+      <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #c7ecc5, #a2d8a0)' }}>
         <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border-2 border-ink/20 bg-white/40 text-[20px] font-extrabold text-ink">
           {user?.name?.[0] ?? '?'}
         </span>
@@ -136,17 +145,17 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
         </div>
         <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">
           🔔
-          <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#a3dde5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">1</span>
+          <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#c7ecc5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">1</span>
         </button>
         <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">✕</button>
       </header>
-
+ 
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
         <div className="grid grid-cols-4 gap-2">
           {apps.map((a, i) => (
-            <button key={i} onClick={() => go(a.to)} title={a.l} className="relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dcecf1] bg-panel shadow-[0_1px_5px_rgba(20,120,140,0.07)] transition-shadow hover:shadow-[0_2px_10px_rgba(20,120,140,0.18)]">
-              <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: a.hot ? CYAN : 'transparent', color: a.hot ? '#fff' : '#2a3344' }}>{a.l}</div>
+            <button key={i} onClick={() => go(a.to)} title={a.l} className="relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]">
+              <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: a.hot ? CYAN : 'transparent', color: a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
               <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
               {a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
             </button>
@@ -207,7 +216,12 @@ function ChatbotPanel() {
           <div key={i} className={`flex ${m.who === 'me' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex max-w-[82%] gap-2 ${m.who === 'me' ? 'flex-row-reverse' : 'flex-row'}`}>
               {m.who === 'bot' && <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-teal-soft text-[14px] text-teal">✦</span>}
-              <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${m.who === 'me' ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.t}</div>
+              <div
+                style={m.who === 'me' ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+                className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${m.who === 'me' ? '' : 'border border-border bg-panel text-ink'}`}
+              >
+                {m.t}
+              </div>
             </div>
           </div>
         ))}
@@ -249,7 +263,25 @@ function MessengerPanel() {
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
+  const { data: users = [] } = useUsers();
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
+
+  // 방 입장 시 자동으로 숨김(삭제) 해제 처리
+  useEffect(() => {
+    if (openRoomId) {
+      try {
+        const hiddenKey = `workfit-hidden-rooms-${me}`;
+        const hiddenStr = localStorage.getItem(hiddenKey);
+        const hidden: string[] = hiddenStr ? JSON.parse(hiddenStr) : [];
+        if (hidden.includes(openRoomId)) {
+          const next = hidden.filter((id) => id !== openRoomId);
+          localStorage.setItem(hiddenKey, JSON.stringify(next));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [openRoomId, me]);
 
   if (composing) {
     return (
@@ -261,19 +293,78 @@ function MessengerPanel() {
     );
   }
   if (openRoom) {
-    return <MessengerThread room={openRoom} me={me} meName={meName} isAdmin={isAdmin} onBack={() => setOpenRoomId(null)} />;
+    return <MessengerThread room={openRoom} me={me} meName={meName} isAdmin={isAdmin} users={users} onBack={() => setOpenRoomId(null)} />;
   }
-  return <MessengerList rooms={rooms} me={me} onOpen={setOpenRoomId} onCompose={() => setComposing(true)} />;
+  return <MessengerList rooms={rooms} me={me} users={users} onOpen={setOpenRoomId} onCompose={() => setComposing(true)} />;
 }
 
-function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me: string; onOpen: (id: string) => void; onCompose: () => void }) {
+function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoom[]; me: string; users: any[]; onOpen: (id: string) => void; onCompose: () => void }) {
   const { data: unread = {} } = useUnreadCounts(me);
   const [q, setQ] = useState('');
   const kw = q.trim().toLowerCase();
-  const filtered = kw ? rooms.filter((r) => r.name.toLowerCase().includes(kw)) : rooms;
+
+  // 📌 Pinned rooms state
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
+    try {
+      const val = localStorage.getItem('workfit-pinned-rooms');
+      return val ? JSON.parse(val) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const togglePin = (roomId: string) => {
+    const next = pinnedIds.includes(roomId)
+      ? pinnedIds.filter((id) => id !== roomId)
+      : [...pinnedIds, roomId];
+    setPinnedIds(next);
+    localStorage.setItem('workfit-pinned-rooms', JSON.stringify(next));
+  };
+
+  // 🗑️ Hidden rooms state
+  const [hiddenIds] = useState<string[]>(() => {
+    try {
+      const val = localStorage.getItem(`workfit-hidden-rooms-${me}`);
+      return val ? JSON.parse(val) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Context menu state
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number; roomId: string } | null>(null);
+
+  const visibleRooms = useMemo(() => {
+    return rooms.filter((r) => {
+      const isHidden = hiddenIds.includes(r.id);
+      const hasUnread = (unread[r.id] ?? 0) > 0;
+      return !isHidden || hasUnread;
+    });
+  }, [rooms, hiddenIds, unread]);
+
+  const roomsWithNames = useMemo(() => {
+    return visibleRooms.map((r) => ({
+      ...r,
+      displayName: getRoomDisplayName(r, me, users)
+    }));
+  }, [visibleRooms, me, users]);
+
+  const filtered = kw ? roomsWithNames.filter((r) => r.displayName.toLowerCase().includes(kw)) : roomsWithNames;
+
+  const sortedRooms = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aPinned = pinnedIds.includes(a.id);
+      const bPinned = pinnedIds.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      const aTime = a.lastMessage?.at ? new Date(a.lastMessage.at).getTime() : 0;
+      const bTime = b.lastMessage?.at ? new Date(b.lastMessage.at).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [filtered, pinnedIds]);
 
   return (
-    <div>
+    <div className="relative">
       <div className="flex items-center gap-2 border-b border-border bg-panel px-4 py-3">
         <div className="flex flex-1 items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
           <span className="text-[12px] text-ink3">🔍</span>
@@ -286,20 +377,28 @@ function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me
         </div>
         <button onClick={onCompose} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber text-[19px] leading-none text-white">＋</button>
       </div>
-      {filtered.map((r) => {
+      {sortedRooms.map((r) => {
         const n = unread[r.id] ?? 0;
+        const isPinned = pinnedIds.includes(r.id);
         return (
           <button
             key={r.id}
             onClick={() => onOpen(r.id)}
-            className="flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenuPos({ x: e.clientX, y: e.clientY, roomId: r.id });
+            }}
+            className={`flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt ${isPinned ? 'bg-panel-alt/45' : ''}`}
           >
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] text-[17px] font-bold" style={{ background: r.color + '22', color: r.color }}>
-              {r.type === 'direct' ? r.name[0] : '👥'}
+              {r.type === 'direct' ? r.displayName[0] : '👥'}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex justify-between gap-2">
-                <span className="truncate text-[12.5px] font-bold text-ink">{r.name}</span>
+                <span className="truncate text-[12.5px] font-bold text-ink">
+                  {r.displayName}
+                  {isPinned && <span className="ml-1 text-[10px]" title="상단 고정됨">📌</span>}
+                </span>
                 <span className="shrink-0 text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
               </div>
               <div className="mt-0.5 flex justify-between gap-2">
@@ -310,11 +409,30 @@ function MessengerList({ rooms, me, onOpen, onCompose }: { rooms: ChatRoom[]; me
           </button>
         );
       })}
+
+      {/* 우클릭 컨텍스트 메뉴 */}
+      {menuPos && (
+        <>
+          <div className="fixed inset-0 z-[99]" onClick={() => setMenuPos(null)} onContextMenu={(e) => { e.preventDefault(); setMenuPos(null); }} />
+          <div 
+            className="fixed z-[100] w-28 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg"
+            style={{ top: menuPos.y, left: menuPos.x }}
+          >
+            <button 
+              onClick={() => { togglePin(menuPos.roomId); setMenuPos(null); }} 
+              className="block w-full px-3 py-2 text-left text-[11.5px] text-ink hover:bg-panel-alt transition-colors"
+            >
+              {pinnedIds.includes(menuPos.roomId) ? '📌 고정 해제' : '📌 상단 고정'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom; me: string; meName: string; isAdmin: boolean; onBack: () => void }) {
+function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: ChatRoom; me: string; meName: string; isAdmin: boolean; users: any[]; onBack: () => void }) {
+  const displayName = getRoomDisplayName(room, me, users);
   const { data: messages = [] } = useChatThread(room.id);
   const send = useSendMessage(room.id);
   const sendFile = useSendAttachment(room.id);
@@ -328,6 +446,20 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const readonly = room.type === 'notice';
+
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredMessages = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => {
+      if (m.type === 'system') return false;
+      const textMatch = m.text?.toLowerCase().includes(q);
+      const fileMatch = m.attachment?.name?.toLowerCase().includes(q);
+      return textMatch || fileMatch;
+    });
+  }, [messages, searchQuery]);
 
   const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -359,6 +491,21 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
     await remove.mutateAsync({ roomId: room.id, adminId: me, adminName: meName });
     onBack();
   };
+  const onDeleteDirect = () => {
+    if (!window.confirm('채팅방을 목록에서 삭제하시겠어요?\n(새로운 대화를 시작하면 이전 대화가 다시 표시됩니다.)')) return;
+    try {
+      const hiddenKey = `workfit-hidden-rooms-${me}`;
+      const hiddenStr = localStorage.getItem(hiddenKey);
+      const hidden = hiddenStr ? JSON.parse(hiddenStr) : [];
+      if (!hidden.includes(room.id)) {
+        hidden.push(room.id);
+        localStorage.setItem(hiddenKey, JSON.stringify(hidden));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    onBack();
+  };
 
   // 방 진입 시 읽음 처리.
   useEffect(() => {
@@ -370,7 +517,7 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length]);
+  }, [filteredMessages.length]);
 
   const submit = () => {
     const t = text.trim();
@@ -386,19 +533,29 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
   return (
     <div className="flex h-full flex-col">
       {/* 대화 서브헤더 */}
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-panel px-2.5 py-2.5">
         <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
-          {room.type === 'direct' ? room.name[0] : '👥'}
+          {room.type === 'direct' ? displayName[0] : '👥'}
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[12.5px] font-bold text-ink">{room.name}</div>
+        <div className="min-w-0 flex-1 ml-0.5">
+          <div className="truncate text-[12.5px] font-bold text-ink">{displayName}</div>
           {room.type !== 'direct' && <div className="text-[10px] text-ink3">{room.members.length}명</div>}
         </div>
+        <button
+          onClick={() => {
+            setShowSearch((prev) => !prev);
+            if (showSearch) setSearchQuery('');
+          }}
+          title="대화 검색"
+          className={`grid h-7 w-7 place-items-center rounded-lg text-[15px] hover:bg-panel-alt ${showSearch ? 'text-amber bg-panel-alt' : 'text-ink2'}`}
+        >
+          🔍
+        </button>
         {room.type === 'group' && (
           <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
         )}
-        {(canLeave || canDelete) && (
+        {(canLeave || canDelete || room.type === 'direct') && (
           <div className="relative shrink-0">
             <button onClick={() => setMenuOpen((v) => !v)} title="더보기" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] leading-none text-ink2 hover:bg-panel-alt">⋮</button>
             {menuOpen && (
@@ -411,6 +568,9 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
                   {canDelete && (
                     <button onClick={() => { setMenuOpen(false); onDelete(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">방 삭제</button>
                   )}
+                  {room.type === 'direct' && (
+                    <button onClick={() => { setMenuOpen(false); onDeleteDirect(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">채팅방 삭제</button>
+                  )}
                 </div>
               </>
             )}
@@ -418,11 +578,37 @@ function MessengerThread({ room, me, meName, isAdmin, onBack }: { room: ChatRoom
         )}
       </div>
 
+      {/* 대화 내 실시간 검색창 */}
+      {showSearch && (
+        <div className="shrink-0 border-b border-border bg-panel px-4 py-2">
+          <div className="flex items-center gap-2 rounded-full border border-border-hi bg-panel px-3 py-1.5">
+            <span className="text-[11px] text-ink3">🔍</span>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="메시지 또는 첨부파일명 검색..."
+              className="w-full bg-transparent text-[11px] text-ink outline-none placeholder:text-ink3"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-[10px] text-ink3 hover:text-ink w-4 h-4 grid place-items-center rounded bg-black/5"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 메시지 */}
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-        {messages.map((m) => (
+        {filteredMessages.map((m) => (
           <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} onOpenImage={setViewer} />
         ))}
+        {filteredMessages.length === 0 && searchQuery && (
+          <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
+        )}
       </div>
 
       {viewer && <ImageViewer att={viewer} onClose={() => setViewer(null)} />}
@@ -489,18 +675,24 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
         type="button"
         onClick={() => downloadAttachment(att)}
         title="다운로드"
-        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}
+        style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
       >
         <span className="text-[18px]">📄</span>
         <span className="min-w-0">
           <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
-          <span className={`block text-[10px] ${mine ? 'text-white/75' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
       </button>
     );
   } else {
     body = (
-      <div className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? 'bg-blue text-white' : 'border border-border bg-panel text-ink'}`}>{m.text}</div>
+      <div
+        style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+        className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+      >
+        {m.text}
+      </div>
     );
   }
 
@@ -665,46 +857,113 @@ function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void })
   );
 }
 
-/** 사용자 다중 선택 리스트(로그인 가능한 '사용' 계정만). 방 생성·초대 공용. */
-function MemberPicker({ exclude, selected, onToggle }: { exclude: string[]; selected: string[]; onToggle: (id: string) => void }) {
-  const { data: users = [] } = useUsers();
-  const [q, setQ] = useState('');
-  const kw = q.trim().toLowerCase();
-  const candidates = users
-    .filter((u) => u.status === '사용' && !exclude.includes(u.id))
-    .filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
+function OrgTreeNode({
+  node,
+  exclude,
+  selected,
+  onToggle,
+  expanded,
+  toggleExpand,
+  isExpanded,
+}: {
+  node: OrgNode;
+  exclude: string[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  expanded: Record<string, boolean>;
+  toggleExpand: (id: string) => void;
+  isExpanded: (id: string) => boolean;
+}) {
+  const { rankOf } = useOrgTree();
+  const show = isExpanded(node.dept.id);
+  const deptUsers = useMemo(() => {
+    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id));
+    return filtered.sort((a, b) => rankOf(a.position) - rankOf(b.position));
+  }, [node.members, exclude, rankOf]);
+
+  const hasContent = deptUsers.length > 0 || node.children.length > 0;
+  if (!hasContent) return null;
 
   return (
-    <div>
-      <div className="border-b border-border bg-panel px-4 py-3">
-        <div className="flex items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
-          <span className="text-[12px] text-ink3">🔍</span>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="이름, 부서 검색"
-            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
-          />
-        </div>
+    <div className="flex flex-col mt-0.5">
+      {/* 부서명 행 */}
+      <div 
+        onClick={() => toggleExpand(node.dept.id)}
+        className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-black/5"
+      >
+        <span className="text-[10px] text-ink3 w-3 h-3 grid place-items-center">
+          {show ? '▼' : '▶'}
+        </span>
+        <span className="text-[12px] font-bold text-ink2">{node.dept.name}</span>
+        <span className="text-[10px] text-ink3">({node.members.filter((u) => u.status === '사용').length})</span>
       </div>
-      {candidates.map((u) => {
-        const on = selected.includes(u.id);
-        return (
-          <button
-            key={u.id}
-            onClick={() => onToggle(u.id)}
-            className="flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-2.5 text-left transition-colors hover:bg-panel-alt"
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-soft text-[13px] font-bold text-teal">{u.name[0]}</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[12.5px] font-semibold text-ink">{u.name}</div>
-              <div className="truncate text-[10.5px] text-ink3">{u.dept} · {u.position}</div>
-            </div>
-            <span className={`grid h-[19px] w-[19px] shrink-0 place-items-center rounded-full border text-[10px] font-bold ${on ? 'border-amber bg-amber text-white' : 'border-border-hi text-transparent'}`}>✓</span>
-          </button>
-        );
-      })}
-      {candidates.length === 0 && <div className="px-4 py-10 text-center text-[11.5px] text-ink3">선택할 대상이 없습니다</div>}
+
+      {/* 펼쳐진 하위 및 구성원 */}
+      {show && (
+        <div className="flex flex-col pl-3.5 border-l border-border/50 ml-3.5 my-0.5 gap-0.5">
+          {deptUsers.map((u) => {
+            const on = selected.includes(u.id);
+            return (
+              <button
+                key={u.id}
+                onClick={() => onToggle(u.id)}
+                className="flex items-center gap-3 py-1.5 px-2 rounded-lg text-left hover:bg-panel-alt transition-colors w-full"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
+                  {u.name[0]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[12px] font-medium text-ink">{u.name}</span>
+                  <span className="text-[10px] text-ink3 ml-1.5">{u.position}</span>
+                </div>
+                <span className={`grid h-[17px] w-[17px] shrink-0 place-items-center rounded-full border text-[9px] font-bold ${on ? 'border-amber bg-amber text-white' : 'border-border-hi text-transparent'}`}>✓</span>
+              </button>
+            );
+          })}
+
+          {node.children.map((child) => (
+            <OrgTreeNode
+              key={child.dept.id}
+              node={child}
+              exclude={exclude}
+              selected={selected}
+              onToggle={onToggle}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              isExpanded={isExpanded}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 사용자 다중 선택 리스트(조직도 트리 구조). 방 생성·초대 공용. */
+function MemberPicker({ exclude, selected, onToggle }: { exclude: string[]; selected: string[]; onToggle: (id: string) => void }) {
+  const { roots, isLoading } = useOrgTree();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const toggleExpand = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  const isExpanded = (id: string) => expanded[id] !== false; // 기본값 펼침
+
+  if (isLoading) {
+    return <div className="p-10 text-center text-[12px] text-ink3">조직도를 불러오는 중...</div>;
+  }
+
+  return (
+    <div className="p-3.5 flex flex-col gap-0.5 select-none">
+      {roots.map((root) => (
+        <OrgTreeNode
+          key={root.dept.id}
+          node={root}
+          exclude={exclude}
+          selected={selected}
+          onToggle={onToggle}
+          expanded={expanded}
+          toggleExpand={toggleExpand}
+          isExpanded={isExpanded}
+        />
+      ))}
     </div>
   );
 }
