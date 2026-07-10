@@ -21,7 +21,7 @@ interface Tool {
 
 const DOCK_TOOLS: Tool[] = [
   { key: 'gw', label: '그룹웨어', icon: '▦', color: '#c7ecc5' },
-  { key: 'bot', label: '위디', icon: '✦', color: '#a9c8f5' },
+  { key: 'bot', label: 'Widdy', icon: '✦', color: '#a9c8f5' },
   { key: 'msg', label: '메신저', icon: '✉', color: '#eecfa2' },
 ];
 
@@ -75,8 +75,8 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
 
       {/* 슬라이드 패널 */}
       <aside
-        style={{ 
-          width: PANEL_W, 
+        style={{
+          width: PANEL_W,
           right: open ? 0 : -(PANEL_W + 12),
           backgroundColor: open === 'gw' ? '#f2faf3' : open === 'bot' ? '#eaf2ff' : open === 'msg' ? '#faf6f0' : '#f3f6fa'
         }}
@@ -235,7 +235,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
         </button>
         <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">✕</button>
       </header>
- 
+
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
         <div className="grid grid-cols-4 gap-2">
@@ -285,11 +285,11 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ---------- 위디 ---------- */
+/* ---------- Widdy ---------- */
 function ChatbotPanel() {
   const chips = ['오늘 생산 실적 알려줘', '설비 알람 현황', '재고 부족 품목', '결재 상신 방법'];
   const msgs: { who: 'bot' | 'me'; t: string }[] = [
-    { who: 'bot', t: '안녕하세요, 김승기님 👋\n위디입니다. 무엇을 도와드릴까요?' },
+    { who: 'bot', t: '안녕하세요, 김승기님 👋\nWiddy입니다. 무엇을 도와드릴까요?' },
     { who: 'me', t: '오늘 M-Line 생산 실적 알려줘' },
     { who: 'bot', t: '오늘 M-Line 실적은 4,182 EA로 목표 대비 104.5% 달성했습니다. 종합 가동률(OEE)은 87.4%입니다. 📈' },
     { who: 'me', t: '불량률은 어때?' },
@@ -500,12 +500,12 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
       {menuPos && (
         <>
           <div className="fixed inset-0 z-[99]" onClick={() => setMenuPos(null)} onContextMenu={(e) => { e.preventDefault(); setMenuPos(null); }} />
-          <div 
+          <div
             className="fixed z-[100] w-28 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg"
             style={{ top: menuPos.y, left: menuPos.x }}
           >
-            <button 
-              onClick={() => { togglePin(menuPos.roomId); setMenuPos(null); }} 
+            <button
+              onClick={() => { togglePin(menuPos.roomId); setMenuPos(null); }}
               className="block w-full px-3 py-2 text-left text-[11.5px] text-ink hover:bg-panel-alt transition-colors"
             >
               {pinnedIds.includes(menuPos.roomId) ? '📌 고정 해제' : '📌 상단 고정'}
@@ -973,7 +973,7 @@ function OrgTreeNode({
   return (
     <div className="flex flex-col mt-0.5">
       {/* 부서명 행 */}
-      <div 
+      <div
         onClick={() => toggleExpand(node.dept.id)}
         className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer hover:bg-black/5"
       >

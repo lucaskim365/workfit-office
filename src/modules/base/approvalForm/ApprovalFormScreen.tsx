@@ -1,32 +1,55 @@
-import { useMemo, useState } from 'react';
-import { useApprovalForms, useUpsertApprovalForm, useRemoveApprovalForm } from '@/features/gw/useApprovalForms';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import {
+  useApprovalForms,
+  useUpsertApprovalForm,
+  useRemoveApprovalForm,
+  useApprovalFolders,
+  useUpsertApprovalFolder,
+  useRemoveApprovalFolder,
+} from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { FIELD_TYPES, RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FormField, type FieldType, type FieldValue } from '@/domain/approvalForm/schema';
+import { FIELD_TYPES, RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FormField, type FieldType, type FieldValue, type ApprovalFolder } from '@/domain/approvalForm/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { DynamicField } from '@/modules/gw/approval/formFields';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
 /**
- * 결재서식 관리 (기준정보) — 문서 서식 CRUD + 필드 빌더 + 미리보기(상신폼/인쇄).
- * 코드 수정 없이 결재 문서유형을 추가·편집·삭제·디자인. ([[dynamic-route-engine]] 동형 패턴)
- * (docs/결재서식_문서관리_개발_계획서.md)
+ * 결재서식 관리 (기준정보) — 문서 서식 CRUD + 필드 빌더 + 미리보기(상신폼/인쇄) + 폴더 기능.
  */
 
 const blankField = (): FormField => ({
   key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false,
 });
 
-const blankForm = (): ApprovalForm => ({
-  id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false,
+const blankForm = (folderId: string | null = null): ApprovalForm => ({
+  id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false, folderId,
   fields: [{ ...blankField(), key: 'body', label: '본문', type: '장문', required: true }],
 });
 
 export default function ApprovalFormScreen() {
   const { data: forms = [], isLoading } = useApprovalForms();
+  const { data: folders = [] } = useApprovalFolders();
   const upsert = useUpsertApprovalForm();
   const remove = useRemoveApprovalForm();
+
+  const upsertFolder = useUpsertApprovalFolder();
+  const removeFolder = useRemoveApprovalFolder();
+
   const [sel, setSel] = useState<ApprovalForm | null>(null);
   const [msg, setMsg] = useState('');
+
+  // 현재 선택된 폴더 필터 (null 이면 전체, 'root' 이면 루트 미지정 서식들)
+  const [selFolderId, setSelFolderId] = useState<string | null>(null);
+
+  // 폴더 컨텍스트 메뉴 상태
+  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: ApprovalFolder } | null>(null);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = () => setFolderMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   const save = async () => {
     if (!sel) return;
@@ -46,22 +69,93 @@ export default function ApprovalFormScreen() {
     setMsg('');
   };
 
+  // 폴더 추가
+  const addFolder = async () => {
+    const name = prompt('새 폴더 이름을 입력하세요:');
+    if (!name || !name.trim()) return;
+    const id = `fld-${Date.now()}`;
+    await upsertFolder.mutateAsync({ id, name: name.trim(), order: folders.length + 1 });
+  };
+
+  // 폴더 이름 변경
+  const renameFolder = async (folder: ApprovalFolder) => {
+    const name = prompt('변경할 폴더 이름을 입력하세요:', folder.name);
+    if (!name || !name.trim() || name.trim() === folder.name) return;
+    await upsertFolder.mutateAsync({ ...folder, name: name.trim() });
+  };
+
+  // 폴더 삭제 (내부 서식은 루트로 구출)
+  const delFolder = async (folder: ApprovalFolder) => {
+    if (!confirm(`'${folder.name}' 폴더를 삭제하시겠습니까?\n내부에 속해있던 서식은 최상위 루트로 이동됩니다.`)) return;
+    await removeFolder.mutateAsync(folder.id);
+    if (selFolderId === folder.id) setSelFolderId(null);
+  };
+
+  // 폴더별 필터링된 서식 리스트
+  const filteredForms = useMemo(() => {
+    if (selFolderId === null) return forms;
+    if (selFolderId === 'root') return forms.filter((f) => !f.folderId);
+    return forms.filter((f) => f.folderId === selFolderId);
+  }, [forms, selFolderId]);
+
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-3.5 relative">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">결재서식 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">기준 정보 / 결재서식 관리 · 전자결재 문서 양식(유형·필드·격식) 디자인</p>
         </div>
-        <button onClick={() => { setSel(blankForm()); setMsg(''); }} className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90">+ 서식 추가</button>
+        <button onClick={() => { setSel(blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null)); setMsg(''); }} className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90">+ 서식 추가</button>
       </div>
 
-      <div className="grid grid-cols-[280px_1fr] items-start gap-3.5">
+      <div className="grid grid-cols-[200px_280px_1fr] items-start gap-3.5">
+        {/* 폴더 목록 */}
+        <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-panel">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2 text-[11.5px] font-bold text-ink2">
+            <span>폴더 분류</span>
+            <button onClick={addFolder} className="text-[10px] text-teal hover:underline">+ 폴더</button>
+          </div>
+          <div className="p-1.5 space-y-0.5">
+            <button
+              onClick={() => setSelFolderId(null)}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === null ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+            >
+              <span>📁 전체 서식</span>
+              <span className="text-[10.5px] opacity-60">{forms.length}</span>
+            </button>
+            <button
+              onClick={() => setSelFolderId('root')}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === 'root' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+            >
+              <span>📁 루트(미지정)</span>
+              <span className="text-[10.5px] opacity-60">{forms.filter(f => !f.folderId).length}</span>
+            </button>
+            <div className="my-1 border-t border-border-hi" />
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setSelFolderId(f.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setFolderMenu({ x: e.clientX, y: e.clientY, folder: f });
+                }}
+                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+              >
+                <span className="truncate">📁 {f.name}</span>
+                <span className="text-[10.5px] opacity-60">
+                  {forms.filter((form) => form.folderId === f.id).length}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* 서식 목록 */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">서식 목록 <span className="text-ink3">· {forms.length}</span></div>
+          <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">서식 목록 <span className="text-ink3">· {filteredForms.length}</span></div>
           {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
-          {forms.map((f) => (
+          {!isLoading && filteredForms.length === 0 && <div className="py-12 text-center text-[12.5px] text-ink3">서식이 없습니다.</div>}
+          {filteredForms.map((f) => (
             <button key={f.id} onClick={() => { setSel(f); setMsg(''); }} className={`flex w-full items-center gap-2 border-b border-border px-3.5 py-2.5 text-left ${sel?.id === f.id ? 'bg-teal-soft/60' : 'hover:bg-panel-alt'}`}>
               <span className="text-[16px]">{f.icon}</span>
               <span className="min-w-0 flex-1">
@@ -79,7 +173,7 @@ export default function ApprovalFormScreen() {
         {/* 편집기 + 미리보기 */}
         <div className="rounded-xl border border-border bg-panel p-4">
           {sel ? (
-            <FormEditor form={sel} onChange={setSel} onSave={save} onCancel={() => setSel(null)}
+            <FormEditor form={sel} folders={folders} onChange={setSel} onSave={save} onCancel={() => setSel(null)}
               onDelete={sel.system || !sel.id ? undefined : () => del(sel)} onDuplicate={sel.id ? () => duplicate(sel) : undefined}
               saving={upsert.isPending} msg={msg} />
           ) : (
@@ -87,18 +181,39 @@ export default function ApprovalFormScreen() {
           )}
         </div>
       </div>
+
+      {/* 폴더 컨텍스트 우클릭 메뉴 */}
+      {folderMenu && (
+        <div
+          ref={folderMenuRef}
+          className="fixed z-[100] w-32 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg"
+          style={{ top: folderMenu.y, left: folderMenu.x }}
+        >
+          <button
+            onClick={() => renameFolder(folderMenu.folder)}
+            className="block w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt transition-colors"
+          >
+            ✏️ 이름 변경
+          </button>
+          <button
+            onClick={() => delFolder(folderMenu.folder)}
+            className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt transition-colors"
+          >
+            🗑️ 폴더 삭제
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, saving, msg }: {
-  form: ApprovalForm; onChange: (f: ApprovalForm) => void; onSave: () => void; onCancel: () => void;
+function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDuplicate, saving, msg }: {
+  form: ApprovalForm; folders: ApprovalFolder[]; onChange: (f: ApprovalForm) => void; onSave: () => void; onCancel: () => void;
   onDelete?: () => void; onDuplicate?: () => void; saving: boolean; msg: string;
 }) {
   const set = (patch: Partial<ApprovalForm>) => onChange({ ...form, ...patch });
   const setField = (i: number, patch: Partial<FormField>) => {
     let nextFields = form.fields.map((f, idx) => (idx === i ? { ...f, ...patch } : f));
-
     set({ fields: nextFields });
   };
   const addField = () => set({ fields: [...form.fields, { ...blankField(), key: `field${form.fields.length + 1}` }] });
@@ -120,9 +235,20 @@ function FormEditor({ form, onChange, onSave, onCancel, onDelete, onDuplicate, s
         <F label="아이콘"><input value={form.icon} disabled={form.system} onChange={(e) => set({ icon: e.target.value })} className={`${inp} disabled:opacity-60`} /></F>
         <F label="서식명"><input value={form.name} disabled={form.system} onChange={(e) => set({ name: e.target.value })} placeholder="출장신청서" className={`${inp} disabled:opacity-60`} /></F>
         <F label="코드(문서유형)"><input value={form.code} disabled={form.system} onChange={(e) => set({ code: e.target.value })} placeholder="출장" className={`${inp} disabled:opacity-60`} /></F>
+        <F label="소속 폴더">
+          <select
+            value={form.folderId || ''}
+            disabled={form.system}
+            onChange={(e) => set({ folderId: e.target.value || null })}
+            className={`${inp} disabled:opacity-60`}
+          >
+            <option value="">루트 (미지정)</option>
+            {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </F>
         <F label="정렬"><input type="number" value={form.order} disabled={form.system} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp} disabled:opacity-60`} /></F>
-        <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} disabled={form.system} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp} disabled:opacity-60`} /></F></div>
-        <div className="col-span-2"><F label="맺음말(인쇄)"><input value={form.closing} disabled={form.system} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp} disabled:opacity-60`} /></F></div>
+        <div className="col-span-3"><F label="격식 문서명(인쇄)"><input value={form.docTitle} disabled={form.system} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp} disabled:opacity-60`} /></F></div>
+        <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} disabled={form.system} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp} disabled:opacity-60`} /></F></div>
       </div>
 
       {/* 필드 빌더 */}

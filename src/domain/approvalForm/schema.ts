@@ -68,8 +68,18 @@ export const approvalFormSchema = z.object({
   order: z.number().default(0),
   /** 기본 4종 보호(삭제 방지). 복제는 허용. */
   system: z.boolean().default(false),
+  /** 소속 폴더 ID (null이면 최상위 루트) */
+  folderId: z.string().nullable().default(null),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
+
+/** 폴더(Folder) 도메인 스키마 추가 */
+export const approvalFolderSchema = z.object({
+  id: z.string(),              // 폴더 식별자
+  name: z.string().min(1, '폴더명은 필수입니다'), // 폴더 이름
+  order: z.number().default(0) // 정렬 순서
+});
+export type ApprovalFolder = z.infer<typeof approvalFolderSchema>;
 
 /** 예약 필드 키 — 문서 1급 컬럼에 바인딩. */
 export const RESERVED_BODY_KEY = 'body';

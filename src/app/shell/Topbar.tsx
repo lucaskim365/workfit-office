@@ -74,9 +74,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                 <button
                   onClick={() => setOpenModule(isOpen ? null : m.id)}
                   style={{ color: 'var(--color-header-text)', opacity: active || isOpen ? 1 : 0.7 }}
-                  className={`flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${
-                    active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
-                  }`}
+                  className={`flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
+                    }`}
                 >
                   <MenuGlyph glyph={m.icon} size={18} />
                   <span className={`whitespace-nowrap text-[11px] ${active ? 'font-bold' : 'font-semibold'}`}>{m.name}</span>
@@ -109,9 +108,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                                 <button
                                   key={s.id}
                                   onClick={() => onPick({ id: s.id, name: s.name, url: s.url!, icon: s.icon, moduleId: m.id, moduleName: m.name, groupId: g.id, groupName: g.name })}
-                                  className={`flex w-full items-center gap-2 rounded-[7px] py-[7px] pl-4 pr-2.5 text-left transition-colors ${
-                                    cur ? 'bg-teal-soft' : 'hover:bg-panel-alt'
-                                  }`}
+                                  className={`flex w-full items-center gap-2 rounded-[7px] py-[7px] pl-4 pr-2.5 text-left transition-colors ${cur ? 'bg-teal-soft' : 'hover:bg-panel-alt'
+                                    }`}
                                 >
                                   <span className="flex w-[15px] shrink-0 justify-center">
                                     <MenuGlyph glyph={s.icon} size={14} color={cur ? 'var(--color-teal)' : 'var(--color-ink3)'} />
@@ -148,7 +146,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           </button>
           <button
             onClick={() => setDockOpen(dockOpen === 'bot' ? null : 'bot')}
-            title="위디"
+            title="Widdy"
             style={{ color: dockOpen === 'bot' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'bot' ? 1 : 0.7 }}
             className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
           >

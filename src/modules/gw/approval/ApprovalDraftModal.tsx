@@ -4,7 +4,7 @@ import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType } f
 import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
-import { useActiveApprovalForms } from '@/features/gw/useApprovalForms';
+import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
@@ -187,6 +187,16 @@ export function ApprovalDraftModal({
     }
   }
 
+  const { data: folders = [] } = useApprovalFolders();
+  // 모달 내 문서 유형 선택 시 적용할 폴더 카테고리 상태 (null = 전체, 'root' = 루트 서식, 혹은 폴더 ID)
+  const [activeFolderTab, setActiveFolderTab] = useState<string | null>(null);
+
+  const displayedForms = useMemo(() => {
+    if (!activeFolderTab) return forms;
+    if (activeFolderTab === 'root') return forms.filter((f) => !f.folderId);
+    return forms.filter((f) => f.folderId === activeFolderTab);
+  }, [forms, activeFolderTab]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={onClose}>
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -198,18 +208,50 @@ export function ApprovalDraftModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {/* 서식(문서유형) 선택 */}
+          {/* 서식(문서유형) 폴더별 탭 선택 */}
           {!fixedType && (
             <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-bold text-ink2">문서 유형</div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {forms.map((fm) => (
-                  <button key={fm.code} type="button" onClick={() => setCode(fm.code)}
-                    className={`rounded-lg border px-2 py-2 text-[12px] font-semibold ${code === fm.code ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt text-ink2 hover:border-border-hi'}`}>
-                    {fm.icon} {fm.name}
+              <div className="mb-1.5 text-[11px] font-bold text-ink2">문서 유형 분류</div>
+              {/* 폴더 카테고리 탭 */}
+              <div className="mb-2 flex flex-wrap gap-1 border-b border-border pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveFolderTab(null)}
+                  className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === null ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
+                >
+                  전체 ({forms.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFolderTab('root')}
+                  className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === 'root' ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
+                >
+                  기타 ({forms.filter(f => !f.folderId).length})
+                </button>
+                {folders.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setActiveFolderTab(f.id)}
+                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === f.id ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
+                  >
+                    {f.name} ({forms.filter(form => form.folderId === f.id).length})
                   </button>
                 ))}
               </div>
+              {/* 서식 버튼 그리드 */}
+              {displayedForms.length === 0 ? (
+                <div className="py-4 text-center text-[11.5px] text-ink3">분류에 속한 서식이 없습니다.</div>
+              ) : (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {displayedForms.map((fm) => (
+                    <button key={fm.code} type="button" onClick={() => setCode(fm.code)}
+                      className={`rounded-lg border px-2 py-2 text-[12px] font-semibold ${code === fm.code ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt text-ink2 hover:border-border-hi'}`}>
+                      {fm.icon} {fm.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
