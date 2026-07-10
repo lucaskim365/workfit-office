@@ -19,18 +19,16 @@ interface Tool {
 }
 
 const DOCK_TOOLS: Tool[] = [
-  { key: 'gw', label: '그룹웨어', icon: '▦', color: '#16b8cf' },
-  { key: 'bot', label: '위디', icon: '✦', color: '#17a89a' },
-  { key: 'msg', label: '메신저', icon: '💬', color: '#e6960c' },
+  { key: 'gw', label: '그룹웨어', icon: '▦', color: '#a3dde5' },
+  { key: 'bot', label: '위디', icon: '✦', color: '#a0ddd6' },
+  { key: 'msg', label: '메신저', icon: '✉', color: '#eecfa2' },
 ];
 
 const PANEL_W = 384;
 
 /** 우측 가장자리 퀵 도크(세로 책갈피 탭 + 슬라이드 패널). 와이어프레임 quick-dock.jsx 정본.
  * scrolling: 본문 스크롤 중이면 탭을 더 밀어내고 흐리게(양보) → 멈추면 복귀. */
-export function QuickDock({ scrolling = false }: { scrolling?: boolean }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const [hover, setHover] = useState<string | null>(null);
+export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v: string | null) => void }) {
   const tool = DOCK_TOOLS.find((t) => t.key === open);
 
   return (
@@ -42,40 +40,14 @@ export function QuickDock({ scrolling = false }: { scrolling?: boolean }) {
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
       />
 
-      {/* 세로 책갈피 탭 */}
-      <div className="fixed right-0 top-1/2 z-[72] flex -translate-y-1/2 flex-col items-end">
-        {DOCK_TOOLS.map((t, i) => {
-          const peeked = hover === t.key || open === t.key;
-          const first = i === 0;
-          const last = i === DOCK_TOOLS.length - 1;
-          // 평상시 22px만 노출, 스크롤 중엔 40px까지 양보(+흐리게), 호버/열림 시 완전 노출.
-          const tx = peeked ? 0 : scrolling ? 40 : 22;
-          return (
-            <button
-              key={t.key}
-              onMouseEnter={() => setHover(t.key)}
-              onMouseLeave={() => setHover(null)}
-              onClick={() => setOpen(open === t.key ? null : t.key)}
-              style={{
-                background: t.color,
-                transform: `translateX(${tx}px)`,
-                opacity: !peeked && scrolling ? 0.35 : 1,
-                borderRadius: `${first ? 12 : 0}px 0 0 ${last ? 12 : 0}px`,
-                boxShadow: '-4px 4px 14px rgba(16,24,48,.22)',
-              }}
-              className="flex w-8 flex-col-reverse items-center gap-2 pb-3.5 pt-3 text-white transition-[transform,opacity] duration-200"
-            >
-              <span className="rotate-[-90deg] text-base leading-none">{t.icon}</span>
-              <span className="text-[12.5px] font-bold tracking-wide [writing-mode:sideways-lr]">{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* 슬라이드 패널 */}
       <aside
-        style={{ width: PANEL_W, right: open ? 0 : -(PANEL_W + 12) }}
-        className="fixed bottom-0 top-0 z-[73] flex flex-col bg-bg shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
+        style={{ 
+          width: PANEL_W, 
+          right: open ? 0 : -(PANEL_W + 12),
+          backgroundColor: open === 'gw' ? '#f0f7f9' : open === 'bot' ? '#f0f9f8' : open === 'msg' ? '#faf6f0' : '#f3f6fa'
+        }}
+        className="fixed bottom-0 top-0 z-[73] flex flex-col shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
       >
         {tool && tool.key === 'gw' && <GroupwarePanel onClose={() => setOpen(null)} />}
         {tool && tool.key !== 'gw' && (
@@ -95,12 +67,12 @@ export function QuickDock({ scrolling = false }: { scrolling?: boolean }) {
 function DockHeader({ tool, onClose }: { tool: Tool; onClose: () => void }) {
   return (
     <header style={{ background: tool.color }} className="flex h-14 shrink-0 items-center justify-between px-4">
-      <span className="flex items-center gap-2.5 text-white">
+      <span className="flex items-center gap-2.5 text-ink">
         <span className="text-[17px]">{tool.icon}</span>
         <span className="text-[14.5px] font-extrabold">{tool.label}</span>
       </span>
-      <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-white/20 text-[15px] text-white">
-        ›
+      <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[13px] text-ink hover:bg-black/15 transition-colors">
+        ✕
       </button>
     </header>
   );
@@ -150,23 +122,23 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     ['사내 동호회 지원금 신청', '06.12'],
   ];
   return (
-    <div className="flex h-full flex-col bg-[#eaf7fb]">
+    <div className="flex h-full flex-col bg-[#f0f7f9]">
       {/* 프로필 헤더 */}
-      <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #34d2de, #14b6cf)' }}>
-        <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border-2 border-white/75 bg-white/25 text-[20px] font-extrabold text-white">
+      <header className="flex shrink-0 items-center gap-3 px-4 pb-[18px] pt-4" style={{ background: 'linear-gradient(135deg, #a3dde5, #88cdd6)' }}>
+        <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border-2 border-ink/20 bg-white/40 text-[20px] font-extrabold text-ink">
           {user?.name?.[0] ?? '?'}
         </span>
-        <div className="min-w-0 flex-1 text-white">
+        <div className="min-w-0 flex-1 text-ink">
           <div className="text-[15.5px] font-extrabold tracking-tight">
             {user?.name ?? '게스트'} <span className="text-[11.5px] font-semibold opacity-90">{user?.position ?? ''}</span>
           </div>
           <div className="mt-0.5 text-[10.5px] opacity-90">{user?.dept ?? '-'}</div>
         </div>
-        <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-white/20 text-[14px] text-white">
+        <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">
           🔔
-          <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">1</span>
+          <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#a3dde5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">1</span>
         </button>
-        <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-white/20 text-[16px] text-white">›</button>
+        <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">✕</button>
       </header>
 
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}

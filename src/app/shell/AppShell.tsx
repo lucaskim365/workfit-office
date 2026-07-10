@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
 import { MENU_TREE } from '../menu-tree';
@@ -8,6 +8,7 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock } from './QuickDock';
+import { applyTheme } from './ThemeCustomizerModal';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -56,16 +57,16 @@ export default function AppShell() {
   const [query, setQuery] = useState('');
   const [favs, setFavs] = useState<string[]>(() => loadJSON('mes_favs', []));
   const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
+  const [dockOpen, setDockOpen] = useState<string | null>(null);
 
-  // 본문 스크롤 중에는 우측 퀵 도크를 비켜나게(yield) 한다 — 멈추면 650ms 뒤 복귀.
-  const [scrolling, setScrolling] = useState(false);
-  const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const onMainScroll = () => {
-    setScrolling(true);
-    clearTimeout(scrollTimer.current);
-    scrollTimer.current = setTimeout(() => setScrolling(false), 650);
-  };
-  useEffect(() => () => clearTimeout(scrollTimer.current), []);
+  useEffect(() => {
+    const headerBg = localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe';
+    const pointColor = localStorage.getItem('custom_theme_point_color') ?? '#99bbff';
+    const btnColor = localStorage.getItem('custom_theme_btn_color') ?? '#1243b5';
+    applyTheme(headerBg, pointColor, btnColor);
+  }, []);
+
+
 
   useEffect(() => { try { localStorage.setItem('mes_favs', JSON.stringify(favs)); } catch { /* noop */ } }, [favs]);
   useEffect(() => { try { localStorage.setItem('mes_rail_open', JSON.stringify(railOpen)); } catch { /* noop */ } }, [railOpen]);
@@ -111,6 +112,8 @@ export default function AppShell() {
         userOpen={userOpen}
         setUserOpen={setUserOpen}
         onPick={openTab}
+        dockOpen={dockOpen}
+        setDockOpen={setDockOpen}
       />
 
       {/* 모듈 드롭다운 딤 */}
@@ -140,7 +143,7 @@ export default function AppShell() {
             menuOpen={tabMenuOpen}
             setMenuOpen={setTabMenuOpen}
           />
-          <main onScroll={onMainScroll} className="content-scroll min-h-0 flex-1 overflow-auto bg-bg pr-3">
+          <main className="content-scroll min-h-0 flex-1 overflow-auto bg-bg pr-3">
             {tabs.length === 0 ? (
               <NoTab />
             ) : (
@@ -154,7 +157,7 @@ export default function AppShell() {
         </div>
       </div>
 
-      <QuickDock scrolling={scrolling} />
+      <QuickDock open={dockOpen} setOpen={setDockOpen} />
       {/* 실시간 알림 토스트 피드 중지 — 필요 시 <ToastFeed /> 복원 */}
     </div>
   );

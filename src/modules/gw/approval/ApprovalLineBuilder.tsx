@@ -65,6 +65,7 @@ export function ApprovalLineBuilder({
   const org = useOrgTree();
   const route = useRouteEngine();
   const [picker, setPicker] = useState<{ mode: 'add' } | { mode: 'replace'; index: number } | null>(null);
+  const [addParallel, setAddParallel] = useState(false);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -88,9 +89,13 @@ export function ApprovalLineBuilder({
   };
   const pick = (userId: string) => {
     if (!picker) return;
-    if (picker.mode === 'add') emit([...edits, { approverId: userId, kind: '결재', linkedPrev: false }]);
-    else emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: userId } : e)));
+    if (picker.mode === 'add') {
+      emit([...edits, { approverId: userId, kind: addParallel ? '합의' : '결재', linkedPrev: addParallel }]);
+    } else {
+      emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: userId } : e)));
+    }
     setPicker(null);
+    setAddParallel(false);
   };
 
   const fillAuto = () => {
@@ -187,8 +192,19 @@ export function ApprovalLineBuilder({
       {picker && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
           <div className="max-h-[70vh] w-full max-w-sm overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(ev) => ev.stopPropagation()}>
-            <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink">
-              {picker.mode === 'add' ? '결재자 추가' : '결재자 변경'}
+            <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between">
+              <span>{picker.mode === 'add' ? '결재자 추가' : '결재자 변경'}</span>
+              {picker.mode === 'add' && edits.length > 0 && (
+                <label className="flex items-center gap-1 text-[11px] font-normal text-ink2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={addParallel}
+                    onChange={(e) => setAddParallel(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
+                  />
+                  병렬(합의)로 추가
+                </label>
+              )}
             </div>
             <UserPickList users={users.filter((u) => u.status === '사용')} onPick={pick} />
           </div>
