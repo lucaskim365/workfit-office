@@ -22,13 +22,7 @@ const INITIAL_FOLDER_SEED: ApprovalFolder[] = [
 let memory: ApprovalForm[] = APPROVAL_FORM_SEED.map((x) => approvalFormSchema.parse(x));
 let memoryFolders: ApprovalFolder[] = INITIAL_FOLDER_SEED.map((x) => approvalFolderSchema.parse(x));
 
-// 시드 폼에 기본 매핑 추가 (예: 휴가는 인사, 출장은 총무 등)
-memory.forEach((form) => {
-  if (form.id === '휴가') form.folderId = 'fld-hr';
-  if (form.id === '출장') form.folderId = 'fld-ga';
-  if (form.id === '지출결의') form.folderId = 'fld-ga';
-  if (form.id === '품의') form.folderId = 'fld-req';
-});
+
 
 const byOrder = (a: ApprovalForm, b: ApprovalForm) => a.order - b.order || a.name.localeCompare(b.name);
 const byFolderOrder = (a: ApprovalFolder, b: ApprovalFolder) => a.order - b.order || a.name.localeCompare(b.name);
@@ -39,18 +33,22 @@ export const approvalFormRepo = {
       const snap = await getDocs(collection(db, COLL));
       const list = snap.docs.map((d) => approvalFormSchema.parse(d.data())).sort(byOrder);
       
-      // 자동 마이그레이션 및 동기화: Firestore의 기본 서식(system: true) 필드가 코드 시드와 불일치 시 자동 동기화 및 강제 덮어쓰기
-      for (const seedForm of APPROVAL_FORM_SEED.filter((f) => f.system)) {
+      // 자동 마이그레이션 및 동기화: Firestore에 코드 시드의 서식들을 보급
+      for (const seedForm of APPROVAL_FORM_SEED) {
         const dbForm = list.find((f) => f.id === seedForm.id);
         
-        const isMismatched = !dbForm || 
+        // 1. DB에 서식이 아예 존재하지 않으면 무조건 생성 (최초 보급)
+        // 2. system: true 인 잠금 서식이고, 시드 파일 대비 내용 불일치 시 덮어쓰기
+        const shouldWrite = !dbForm || (seedForm.system && (
           JSON.stringify(dbForm.fields) !== JSON.stringify(seedForm.fields) ||
           dbForm.name !== seedForm.name ||
           dbForm.docTitle !== seedForm.docTitle ||
           dbForm.closing !== seedForm.closing ||
-          dbForm.icon !== seedForm.icon;
+          dbForm.icon !== seedForm.icon ||
+          dbForm.folderId !== seedForm.folderId
+        ));
 
-        if (isMismatched) {
+        if (shouldWrite) {
           const valid = approvalFormSchema.parse(seedForm);
           await setDoc(doc(db, COLL, valid.id), valid);
           if (dbForm) {
@@ -60,7 +58,7 @@ export const approvalFormRepo = {
           }
         }
       }
-      return list;
+      return list.sort(byOrder);
     }
     return [...memory].sort(byOrder);
   },

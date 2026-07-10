@@ -75,9 +75,12 @@ export function ApprovalDraftModal({
   // 금액 입력값(amountNum)을 동적 필드 values[amountField.key]에 실시간 동기화
   useEffect(() => {
     if (amountField) {
-      setVals({ [amountField.key]: amountNum ?? '' });
+      const nextVal = amountNum ?? '';
+      if (values[amountField.key] !== nextVal) {
+        setVals({ [amountField.key]: nextVal });
+      }
     }
-  }, [amountField, amountNum]);
+  }, [amountField, amountNum, values]);
 
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
