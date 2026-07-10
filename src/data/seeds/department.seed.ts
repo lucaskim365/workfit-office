@@ -2,7 +2,7 @@ import type { Department } from '@/domain/department/schema';
 
 /**
  * 부서 시드 — Firebase 미설정 시 폴백 + 초기 seed 소스.
- * Workfit Office 실제 조직도(대표이사 → AX Committee / 대표이사 직속 / AX사업본부 → 산하 팀).
+ * Workfit Office 실제 조직도(대표이사 → 대표이사 직속 / AX사업본부 → 산하 팀).
  * name 은 user.seed 의 dept 문자열과 정확히 일치. headUserId 는 부서장(팀장/본부장) 역할
  * 사용자로 합의·전결 라우팅에 사용. 조직도 상 '충원(공석)' 자리는 실명자 미등록으로 제외.
  */
