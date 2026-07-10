@@ -91,6 +91,50 @@ export default function ApprovalFormScreen() {
     if (selFolderId === folder.id) setSelFolderId(null);
   };
 
+  // 폴더 드래그 앤 드롭 정렬 상태
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  // 로컬 폴더 순서 상태 (드래그앤드롭 즉시 렌더용)
+  const [localFolders, setLocalFolders] = useState<ApprovalFolder[]>([]);
+
+  useEffect(() => {
+    if (draggedIdx === null) {
+      setLocalFolders(folders);
+    }
+  }, [folders, draggedIdx]);
+
+  const handleDragStart = (idx: number) => {
+    setDraggedIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) return;
+
+    // 로컬 데이터 순서를 교환하여 화면을 실시간으로 다시 렌더링
+    const nextFolders = [...localFolders];
+    const draggedItem = nextFolders[draggedIdx];
+    nextFolders.splice(draggedIdx, 1);
+    nextFolders.splice(targetIdx, 0, draggedItem);
+    
+    setLocalFolders(nextFolders);
+    setDraggedIdx(targetIdx);
+  };
+
+  const handleDragEnd = async () => {
+    if (draggedIdx === null) return;
+    setDraggedIdx(null);
+
+    // 정렬 완료된 localFolders 기준으로 order 속성을 매핑하여 DB 일괄 업데이트
+    for (let i = 0; i < localFolders.length; i++) {
+      const f = localFolders[i];
+      const nextOrder = i + 1;
+      if (f.order !== nextOrder) {
+        await upsertFolder.mutateAsync({ ...f, order: nextOrder });
+      }
+    }
+  };
+
   // 폴더별 필터링된 서식 리스트
   const filteredForms = useMemo(() => {
     if (selFolderId === null) return forms;
@@ -131,15 +175,21 @@ export default function ApprovalFormScreen() {
               <span className="text-[10.5px] opacity-60">{forms.filter(f => !f.folderId).length}</span>
             </button>
             <div className="my-1 border-t border-border-hi" />
-            {folders.map((f) => (
+            {localFolders.map((f, idx) => (
               <button
                 key={f.id}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragEnd={handleDragEnd}
                 onClick={() => setSelFolderId(f.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setFolderMenu({ x: e.clientX, y: e.clientY, folder: f });
                 }}
-                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] cursor-grab active:cursor-grabbing transition-all ${
+                  selFolderId === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'
+                } ${draggedIdx === idx ? 'opacity-30 border border-dashed border-teal scale-95' : ''}`}
               >
                 <span className="truncate">📁 {f.name}</span>
                 <span className="text-[10.5px] opacity-60">
