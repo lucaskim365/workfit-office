@@ -3,6 +3,8 @@ import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { chatRoomSchema, type ChatRoom, type ChatRoomType, type LastMessage } from '@/domain/chatRoom/schema';
 import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
+import { departmentRepo } from '@/data/department/department.repo';
+import { userRepo } from '@/data/user/user.repo';
 
 /**
  * 채팅방 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
@@ -60,6 +62,55 @@ export const chatRoomRepo = {
     } else {
       rows = memory;
     }
+
+    // 부서별 단톡방 동적 개설 및 참여 동기화
+    try {
+      const depts = await departmentRepo.list();
+      const users = await userRepo.list();
+      
+      for (const dept of depts) {
+        const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);
+        if (deptMembers.length === 0) continue;
+        
+        const roomId = `RM-DEPT-${dept.id}`;
+        const idx = rows.findIndex((r) => r.id === roomId);
+        
+        if (idx < 0) {
+          const newRoom = chatRoomSchema.parse({
+            id: roomId,
+            name: `${dept.name} 단체방`,
+            type: 'group',
+            members: deptMembers,
+            color: ROOM_COLORS[Math.abs(roomId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
+            lastMessage: { text: `${dept.name} 단체방이 개설되었습니다.`, at: nowLocalIso(), senderId: 'system' },
+            createdAt: nowLocalIso(),
+          });
+          // Save and push
+          if (isFirebaseConfigured && db) {
+            await setDoc(doc(db, COLL, newRoom.id), newRoom);
+          } else {
+            memory.push(newRoom);
+          }
+          rows.push(newRoom);
+        } else {
+          // 구성원이 다르면 최신화
+          const existingRoom = rows[idx];
+          if (!sameMembers(existingRoom.members, deptMembers)) {
+            const updated = { ...existingRoom, members: deptMembers };
+            if (isFirebaseConfigured && db) {
+              await setDoc(doc(db, COLL, updated.id), updated);
+            } else {
+              const mi = memory.findIndex((r) => r.id === roomId);
+              if (mi >= 0) memory[mi] = updated;
+            }
+            rows[idx] = updated;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to sync department rooms:', e);
+    }
+
     if (!opts?.includeDeleted) rows = rows.filter((r) => !r.deletedAt);
     const scoped = memberId ? rows.filter((r) => r.members.includes(memberId)) : rows;
     return sortByRecent(scoped);

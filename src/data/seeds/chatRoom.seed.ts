@@ -11,15 +11,6 @@ import type { chatRoomSchema } from '@/domain/chatRoom/schema';
  */
 export const CHAT_ROOM_SEED: z.input<typeof chatRoomSchema>[] = [
   {
-    id: 'RM-0001',
-    name: '생산1팀 단톡방',
-    type: 'group',
-    members: ['U001', 'U002', 'U008'],
-    color: '#e6960c',
-    lastMessage: { text: '교대 인수인계 완료했습니다', at: '2026-07-06T14:21:00', senderId: 'U008' },
-    createdAt: '2026-06-30T09:00:00',
-  },
-  {
     id: 'RM-0002',
     name: '안중근 (설비보전)',
     type: 'direct',
@@ -27,15 +18,6 @@ export const CHAT_ROOM_SEED: z.input<typeof chatRoomSchema>[] = [
     color: '#3a6ee0',
     lastMessage: { text: 'CMP02 점검 끝났어요', at: '2026-07-06T14:05:00', senderId: 'U006' },
     createdAt: '2026-07-01T10:30:00',
-  },
-  {
-    id: 'RM-0003',
-    name: '품질보증팀',
-    type: 'group',
-    members: ['U001', 'U003', 'U007', 'U011'],
-    color: '#17a89a',
-    lastMessage: { text: 'SPC 룰 위반 건 확인 부탁드려요', at: '2026-07-06T13:48:00', senderId: 'U007' },
-    createdAt: '2026-06-28T08:40:00',
   },
   {
     id: 'RM-0004',

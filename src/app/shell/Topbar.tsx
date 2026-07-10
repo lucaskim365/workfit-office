@@ -142,7 +142,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             onClick={() => setDockOpen(dockOpen === 'gw' ? null : 'gw')}
             title="그룹웨어"
             style={{ color: dockOpen === 'gw' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'gw' ? 1 : 0.7 }}
-            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] transition-colors hover:bg-white/[0.08]"
+            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
           >
             ▦
           </button>
@@ -150,7 +150,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             onClick={() => setDockOpen(dockOpen === 'bot' ? null : 'bot')}
             title="위디"
             style={{ color: dockOpen === 'bot' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'bot' ? 1 : 0.7 }}
-            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] transition-colors hover:bg-white/[0.08]"
+            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
           >
             ✦
           </button>
@@ -158,7 +158,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             onClick={() => setDockOpen(dockOpen === 'msg' ? null : 'msg')}
             title="메신저"
             style={{ color: dockOpen === 'msg' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'msg' ? 1 : 0.7 }}
-            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] transition-colors hover:bg-white/[0.08]"
+            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
           >
             ✉
           </button>
