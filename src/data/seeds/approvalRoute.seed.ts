@@ -39,12 +39,12 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-EXP-SALES', name: '지출결의·영업팀: 팀장→재경이사 합의→대표 전결', priority: 6, active: true,
     docType: '지출결의', deptScope: scDept('D220'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '합의', 'U002'), s('ROLE_CEO', '전결')],
+    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
   },
   {
     id: 'RR-EXP-IT', name: '지출결의·S/W개발팀 고가 IT장비(300만↑): 팀장→본부장→재경이사 합의→대표 전결', priority: 7, active: true,
     docType: '지출결의', deptScope: scDept('D240'), positionFromRank: null, positionToRank: null, amountFrom: 300 * 만, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '합의', 'U002'), s('ROLE_CEO', '전결')],
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
   },
   {
     id: 'RR-EXP-MGR', name: '지출결의·책임자(이사↑) 기안: 본부장→대표 전결', priority: 8, active: true,
@@ -54,7 +54,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-EXP-XL', name: '지출결의·초고액(1억↑): 팀장→본부장→재경이사 합의→대표 전결', priority: 10, active: true,
     docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 억, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '합의', 'U002'), s('ROLE_CEO', '전결')],
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
   },
   {
     id: 'RR-EXP-L', name: '지출결의·고액(2천만~1억): 팀장→본부장→대표 전결', priority: 12, active: true,
@@ -64,7 +64,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-EXP-M2', name: '지출결의·준고액(500만~2천만): 팀장→재경이사 합의→본부장 전결', priority: 14, active: true,
     docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 500 * 만, amountTo: 2000 * 만,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '합의', 'U002'), s('PARENT_DEPT_HEAD', '전결', 1)],
+    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('PARENT_DEPT_HEAD', '전결', 1)],
   },
   {
     id: 'RR-EXP-M1', name: '지출결의·중액(100만~500만): 팀장→본부장 전결', priority: 16, active: true,
@@ -103,7 +103,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-DRAFT-POLICY', name: '기안·사업관리팀 정책(합의형): 팀장→품질 합의→대표', priority: 38, active: true,
     docType: '기안', deptScope: scDept('D230'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_DEPT_HEAD', '합의', 'D210'), s('ROLE_CEO', '결재')],
+    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_DEPT_HEAD', '결재', 'D210'), s('ROLE_CEO', '결재')],
   },
   {
     id: 'RR-DRAFT-HQ', name: '기안·본부 직속: 대표 결재', priority: 40, active: true,
@@ -170,7 +170,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-EX-SPECIFIC-USER', name: '예제·재경이사(류지광) 필수 합의 라인', priority: 74, active: true,
     docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '합의', 'U002'), s('ROLE_CEO', '전결')],
+    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
   },
   {
     id: 'RR-EX-SPECIFIC-DEPT', name: '예제·특정 부서장(S/W개발팀장) 지정 결재', priority: 76, active: true,

@@ -35,10 +35,34 @@ function getRoomDisplayName(room: ChatRoom, me: string, users: any[]): string {
 
 const PANEL_W = 384;
 
+/** 메신저 알림 아이템 타입 (추후 실시간 알림 서비스로 교체 예정). */
+interface MsgNoti {
+  id: string;
+  from: string;
+  roomName: string;
+  text: string;
+  at: string;
+  read: boolean;
+}
+
+/** 목업 메신저 알림 데이터. */
+const MOCK_MSG_NOTIS: MsgNoti[] = [
+  { id: 'm1', from: '이순신 (설비보전)', roomName: '설비보전팀 단톡방', text: 'CMP02 점검 끝났어요. 가동 재개합니다.', at: '07/09 16:12', read: false },
+  { id: 'm2', from: '김체찰 (품질보증)', roomName: '품질보증팀', text: 'SPC 룰 위반 건 확인 부탁드립니다.', at: '07/09 14:55', read: false },
+  { id: 'm3', from: '확인 (생산업무)', roomName: '생산1팀 단톡방', text: '교대 인수인계 완료했습니다 👍', at: '07/09 08:31', read: true },
+  { id: 'm4', from: '신영희 (구매)', roomName: '1:1 대화', text: 'PO-260611-05 입고 일정 변경되었어요.', at: '07/08 17:44', read: true },
+];
+
 /** 우측 가장자리 퀵 도크(세로 책갈피 탭 + 슬라이드 패널). 와이어프레임 quick-dock.jsx 정본.
  * scrolling: 본문 스크롤 중이면 탭을 더 밀어내고 흐리게(양보) → 멈추면 복귀. */
 export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v: string | null) => void }) {
   const tool = DOCK_TOOLS.find((t) => t.key === open);
+  const [msgNotis, setMsgNotis] = useState<MsgNoti[]>(MOCK_MSG_NOTIS);
+  const [msgNotiView, setMsgNotiView] = useState(false);
+  const msgUnread = msgNotis.filter((n) => !n.read).length;
+
+  // 메신저 패널이 닫힐때 알림 뷰도 닫음.
+  useEffect(() => { if (open !== 'msg') setMsgNotiView(false); }, [open]);
 
   return (
     <>
@@ -61,10 +85,53 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
         {tool && tool.key === 'gw' && <GroupwarePanel onClose={() => setOpen(null)} />}
         {tool && tool.key !== 'gw' && (
           <>
-            <DockHeader tool={tool} onClose={() => setOpen(null)} />
-            <div className="menu-scroll min-h-0 flex-1 overflow-y-auto">
-              {tool.key === 'bot' && <ChatbotPanel />}
-              {tool.key === 'msg' && <MessengerPanel />}
+            <DockHeader
+              tool={tool}
+              onClose={() => setOpen(null)}
+              notiCount={tool.key === 'msg' ? msgUnread : undefined}
+              notiView={tool.key === 'msg' ? msgNotiView : undefined}
+              onNoti={tool.key === 'msg' ? () => { setMsgNotiView((v) => !v); setMsgNotis((list) => list.map((n) => ({ ...n, read: true }))); } : undefined}
+            />
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              {/* 메신저 패널 */}
+              <div className="menu-scroll h-full overflow-y-auto">
+                {tool.key === 'bot' && <ChatbotPanel />}
+                {tool.key === 'msg' && <MessengerPanel />}
+              </div>
+              {/* 메신저 알림 기록 슬라이드 오버레이 */}
+              {tool.key === 'msg' && (
+                <div
+                  className="absolute inset-0 flex flex-col overflow-hidden bg-[#faf6f0] transition-transform duration-300"
+                  style={{ transform: msgNotiView ? 'translateX(0)' : 'translateX(100%)' }}
+                >
+                  <div className="border-b border-border px-4 py-2.5">
+                    <p className="text-[11px] text-ink3">메신저 알림 기록</p>
+                  </div>
+                  <div className="menu-scroll flex-1 overflow-y-auto">
+                    {msgNotis.length === 0 ? (
+                      <div className="py-12 text-center text-[12px] text-ink3">알림이 없습니다.</div>
+                    ) : (
+                      msgNotis.map((n) => (
+                        <div
+                          key={n.id}
+                          className={`flex items-start gap-3 border-b border-border px-4 py-3 ${n.read ? 'opacity-55' : ''}`}
+                        >
+                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eecfa2] text-[15px]">✉</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="truncate text-[11.5px] font-bold text-ink">{n.from}</span>
+                              <span className="shrink-0 text-[10px] text-ink3">{n.at}</span>
+                            </div>
+                            <div className="text-[10.5px] text-ink3">{n.roomName}</div>
+                            <div className="mt-0.5 truncate text-[11.5px] text-ink2">{n.text}</div>
+                          </div>
+                          {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-danger" />}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -73,16 +140,35 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
   );
 }
 
-function DockHeader({ tool, onClose }: { tool: Tool; onClose: () => void }) {
+function DockHeader({ tool, onClose, notiCount, notiView, onNoti }: { tool: Tool; onClose: () => void; notiCount?: number; notiView?: boolean; onNoti?: () => void }) {
   return (
     <header style={{ background: tool.color }} className="flex h-14 shrink-0 items-center justify-between px-4">
       <span className="flex items-center gap-2.5 text-ink">
         <span className="text-[17px]">{tool.icon}</span>
-        <span className="text-[14.5px] font-extrabold">{tool.label}</span>
+        <span className="text-[14.5px] font-extrabold">
+          {notiView ? '메신저 알림' : tool.label}
+        </span>
       </span>
-      <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[13px] text-ink hover:bg-black/15 transition-colors">
-        ✕
-      </button>
+      <div className="flex items-center gap-1">
+        {/* 메신저 전용 알림 벨 아이콘 (notiView일 때는 닫기 버튼으로 표시) */}
+        {onNoti && (
+          <button
+            onClick={onNoti}
+            title={notiView ? '메신저로 돌아가기' : '알림 기록'}
+            className="relative grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors"
+          >
+            {notiView ? '←' : '🔔'}
+            {!notiView && notiCount != null && notiCount > 0 && (
+              <span className="absolute -right-[3px] -top-[3px] grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-[rgba(0,0,0,0.12)] bg-danger px-[2px] text-[8px] font-extrabold text-white">
+                {notiCount}
+              </span>
+            )}
+          </button>
+        )}
+        <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[13px] text-ink hover:bg-black/15 transition-colors">
+          ✕
+        </button>
+      </div>
     </header>
   );
 }

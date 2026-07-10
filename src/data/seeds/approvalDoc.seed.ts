@@ -158,8 +158,8 @@ export const APPROVAL_DOC_SEED: ApprovalDoc[] = [
     drafterDept: 'S/W 개발팀',
     status: '진행중',
     steps: [
-      step(1, 'U006', '합의', '대기', { parallelGroup: 'G1' }),
-      step(2, 'U009', '합의', '대기', { parallelGroup: 'G1' }),
+      step(1, 'U006', '결재', '대기', { parallelGroup: 'G1' }),
+      step(2, 'U009', '결재', '대기', { parallelGroup: 'G1' }),
       step(3, 'U001', '결재'),
     ],
     amount: null,

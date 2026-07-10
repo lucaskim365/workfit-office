@@ -179,7 +179,11 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
     return box === '삭제' && doc.drafterId === userId;
   }
   if (doc.status === '완료') {
-    return box === '완료' && involves;
+    if (box === '완료') return involves;
+    if (box === '수신') {
+      return doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+    }
+    return false;
   }
   switch (box) {
     case '대기':
@@ -188,14 +192,19 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
       return doc.drafterId === userId && doc.status !== '임시저장';
     case '완료':
       return false;
+    case '수신':
+      return false;
     case '참조':
-      return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+      return doc.status !== '완료' && doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '임시':
       return doc.drafterId === userId && doc.status === '임시저장';
     case '삭제':
       return false;
   }
 }
+
+
+
 
 /** 목록 정렬 기준(최근 상신/생성 우선). */
 export function byRecent(a: ApprovalDoc, b: ApprovalDoc): number {

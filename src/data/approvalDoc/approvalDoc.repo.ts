@@ -28,12 +28,23 @@ import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
  */
 const COLL = 'approvalDocs';
 
-let memory: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse(d));
+function migrateDoc(data: any): any {
+  if (!data || !Array.isArray(data.steps)) return data;
+  return {
+    ...data,
+    steps: data.steps.map((s: any) => ({
+      ...s,
+      kind: s.kind === '합의' ? '결재' : s.kind,
+    })),
+  };
+}
+
+let memory: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse(migrateDoc(d)));
 
 async function loadAll(): Promise<ApprovalDoc[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => approvalDocSchema.parse(d.data()));
+    return snap.docs.map((d) => approvalDocSchema.parse(migrateDoc(d.data())));
   }
   return memory;
 }

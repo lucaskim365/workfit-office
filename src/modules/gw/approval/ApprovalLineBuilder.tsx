@@ -90,12 +90,11 @@ export function ApprovalLineBuilder({
   const pick = (userId: string) => {
     if (!picker) return;
     if (picker.mode === 'add') {
-      emit([...edits, { approverId: userId, kind: addParallel ? '합의' : '결재', linkedPrev: addParallel }]);
+      emit([...edits, { approverId: userId, kind: '결재', linkedPrev: false }]);
     } else {
       emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: userId } : e)));
     }
     setPicker(null);
-    setAddParallel(false);
   };
 
   const fillAuto = () => {
@@ -136,12 +135,6 @@ export function ApprovalLineBuilder({
       <div className="space-y-1.5">
         {edits.map((e, i) => (
           <div key={i} className="rounded-lg border border-border bg-panel-alt px-2.5 py-2">
-            {i > 0 && (
-              <label className="mb-1 flex items-center gap-1 text-[10px] text-ink3">
-                <input type="checkbox" checked={e.linkedPrev} onChange={() => toggleLink(i)} className="h-3 w-3" />
-                이전 단계와 병렬(합의)
-              </label>
-            )}
             <div className="flex items-center gap-2">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
               <button
@@ -194,17 +187,6 @@ export function ApprovalLineBuilder({
           <div className="max-h-[70vh] w-full max-w-sm overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(ev) => ev.stopPropagation()}>
             <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between">
               <span>{picker.mode === 'add' ? '결재자 추가' : '결재자 변경'}</span>
-              {picker.mode === 'add' && edits.length > 0 && (
-                <label className="flex items-center gap-1 text-[11px] font-normal text-ink2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={addParallel}
-                    onChange={(e) => setAddParallel(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
-                  />
-                  병렬(합의)로 추가
-                </label>
-              )}
             </div>
             <UserPickList users={users.filter((u) => u.status === '사용')} onPick={pick} />
           </div>
