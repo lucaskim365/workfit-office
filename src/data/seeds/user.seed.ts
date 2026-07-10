@@ -2,7 +2,7 @@ import { DEFAULT_USER_PASSWORD, type User } from '@/domain/user/schema';
 
 /**
  * 사용자 시드 — Firebase 미설정 시 폴백 + 초기 seed 소스.
- * Workfit Office 실제 조직도 기준 실명 재직자 12명. 조직도 상 '충원(공석)' 자리는 제외.
+ * Workfit Office 실제 조직도 기준 실명 재직자 10명. 조직도 상 '충원(공석)' 자리는 제외.
  * position = 직급(직급 마스터와 매칭). jobTitle = 직책(팀장·본부장·팀원 등, 조직도 직책열).
  * 팀장/본부장 직책은 department.headUserId 와도 연동. managerId = 직속 상급자(상급자 체인 원천).
  *
@@ -18,9 +18,6 @@ export const USER_SEED: User[] = [
   { id: 'U002', empNo: '100002', name: '류지광', dept: '대표이사 직속', position: '이사', jobTitle: '재경이사', roleGroup: 'ADMIN', email: 'jgryu@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:31', managerId: 'U001', password: DEMO_PW },
   // AX사업본부 — 직책 본부장 / 직급 상무이사
   { id: 'U003', empNo: '200001', name: '손승원', dept: 'AX사업본부', position: '상무이사', jobTitle: '본부장', roleGroup: 'ADMIN', email: 'smartfactory@workfit.kr', status: '사용', lastLogin: '2026-07-07 09:02', managerId: 'U001', password: DEMO_PW },
-  // AX Committee — 비상근 외부 위원(로그인 비활성). 직급 없음 → 비상근 표기.
-  { id: 'U004', empNo: '900001', name: '김경일', dept: 'AX Committee', position: '비상근', jobTitle: '위원장', roleGroup: 'ADMIN', email: 'gikim@workfit.kr', status: '미사용', lastLogin: '-', managerId: 'U001', password: DEMO_PW },
-  { id: 'U005', empNo: '900002', name: '김기중', dept: 'AX Committee', position: '비상근', jobTitle: '부위원장', roleGroup: 'ADMIN', email: 'gjkim@workfit.kr', status: '미사용', lastLogin: '-', managerId: 'U001', password: DEMO_PW },
   // 품질관리팀 — 팀장 강윤석(직급 이사)
   { id: 'U006', empNo: '300001', name: '강윤석', dept: '품질관리팀', position: '이사', jobTitle: '팀장', roleGroup: 'QC_USER', email: 'yskang@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:12', managerId: 'U003', password: DEMO_PW },
   { id: 'U007', empNo: '300002', name: '최지혜', dept: '품질관리팀', position: '사원', jobTitle: '팀원', roleGroup: 'QC_USER', email: 'jhchoi@workfit.kr', status: '사용', lastLogin: '2026-07-06 17:55', managerId: 'U006', password: DEMO_PW },
