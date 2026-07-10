@@ -134,6 +134,8 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
   };
 
   switch (step.resolver) {
+    case 'DRAFTER':
+      return [drafter.id];
     case 'MANAGER': {
       const chain = org.managerChain(drafter.id);
       return chain.slice(0, 1); // 무조건 1차 상급자만 반환
@@ -182,12 +184,20 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
   let seq = 1;
   for (const rs of rule.steps) {
     const candidates = resolveCandidates(rs, drafter, org);
-    const pick = candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
+    
+    // resolver 가 DRAFTER 인 경우에는 '자기 기안자 제외' 또는 '중복 제외' 필터를 완전히 우회
+    const pick = rs.resolver === 'DRAFTER'
+      ? candidates.find((id) => org.userById.has(id))
+      : candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
+
     if (!pick) {
       if (rs.optional) continue;
       continue; // 해석 불가 → 스킵(폴백은 상위에서 처리)
     }
-    used.add(pick);
+    
+    if (rs.resolver !== 'DRAFTER') {
+      used.add(pick);
+    }
     const kind = toStepKind(rs.kind);
     steps.push({ seq: seq++, parallelGroup: null, kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
     if (kind === '전결') break; // 전결 이후 절단

@@ -9,6 +9,8 @@ import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
+import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 /**
  * 상신 모달(§7.2) — 서식 선택 → 결재선 빌더 → 서식 필드/본문 → [임시저장][상신].
@@ -45,13 +47,15 @@ export function ApprovalDraftModal({
     return initialVals;
   });
   const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
+  const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
   const create = useCreateDraft();
   const save = useSaveDraft();
   const submitM = useSubmitApproval();
   const route = useRouteEngine();
-  const busy = create.isPending || save.isPending || submitM.isPending;
+  const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
   const amountField = form ? amountFieldOf(form) : undefined;
@@ -62,6 +66,46 @@ export function ApprovalDraftModal({
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
 
   const amountNum = isAmount && amount.trim() ? Number(amount.replace(/[^0-9]/g, '')) : null;
+
+  // 파일 업로드 핸들러 (Firebase Storage 연동 및 로컬 Mock 지원)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setError('');
+
+    try {
+      const newFiles: { name: string; url: string }[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        if (isFirebaseConfigured && storage) {
+          // Live Firebase Storage 업로드
+          const path = `approvals/${Date.now()}_${file.name}`;
+          const fileRef = ref(storage, path);
+          await uploadBytes(fileRef, file);
+          const downloadUrl = await getDownloadURL(fileRef);
+          newFiles.push({ name: file.name, url: downloadUrl });
+        } else {
+          // 로컬 데모 모드 (Graceful Fallback - mock URL)
+          await new Promise((resolve) => setTimeout(resolve, 800)); // 시뮬레이팅 로딩
+          newFiles.push({
+            name: file.name,
+            url: `https://example.com/mock-attachments/${Date.now()}_${file.name}`,
+          });
+        }
+      }
+      setAttachments((prev) => [...prev, ...newFiles]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '파일 업로드에 실패했습니다.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   // fixedType(휴가) 신규 작성이면 룰 엔진으로 결재선 1회 프리필.
   const prefilled = useRef(false);
@@ -108,6 +152,7 @@ export function ApprovalDraftModal({
       body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : body.trim(),
       form: leave,
       fieldValues: values,
+      attachments,
     };
   };
 
@@ -276,6 +321,55 @@ export function ApprovalDraftModal({
           <div className="mt-2">
             <div className="mb-1.5 text-[11px] font-bold text-ink2">결재선</div>
             <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} />
+          </div>
+
+          {/* 파일 첨부 영역 */}
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="mb-1.5 text-[11px] font-bold text-ink2">📎 첨부 파일</div>
+            
+            {/* 파일 드롭존 */}
+            <div className="relative flex flex-col items-center justify-center rounded-xl border border-dashed border-border-hi bg-panel-alt p-4 transition-colors hover:border-teal/50 hover:bg-teal-soft/10">
+              <input
+                type="file"
+                multiple
+                onChange={handleFileUpload}
+                disabled={uploading}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              />
+              <div className="flex flex-col items-center text-center">
+                <span className="text-[20px] text-ink3 mb-1">📁</span>
+                <span className="text-[11.5px] font-semibold text-ink2">파일을 드래그하거나 클릭하여 추가하세요</span>
+                <span className="text-[10px] text-ink3 mt-0.5">최대 파일 제한 없음 (로컬/서버 실시간 저장)</span>
+              </div>
+            </div>
+
+            {/* 업로드 로딩 표시 */}
+            {uploading && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-teal">
+                <span className="animate-spin text-[12px]">🌀</span> 업로드 중...
+              </div>
+            )}
+
+            {/* 첨부파일 리스트 */}
+            {attachments.length > 0 && (
+              <div className="mt-2.5 space-y-1">
+                {attachments.map((file, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-lg bg-panel-alt px-2.5 py-1.5 border border-border">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[11.5px]">📄</span>
+                      <span className="truncate text-[11.5px] font-medium text-ink2">{file.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(idx)}
+                      className="ml-2 text-[12px] font-bold text-ink3 hover:text-red-500 hover:bg-red-500/5 rounded-md px-1.5 py-0.5"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500">{error}</p>}

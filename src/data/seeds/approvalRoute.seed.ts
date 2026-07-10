@@ -1,5 +1,4 @@
 import type { ApprovalRouteRule, RouteStep, Resolver, RouteStepKind } from '@/domain/approvalRoute/schema';
-import type { DeptType } from '@/domain/department/schema';
 
 /**
  * 동적 결재선 룰 시드 — Firebase 미설정 시 폴백 + 초기 seed(예제 룰셋).
@@ -27,170 +26,193 @@ const s = (resolver: Resolver, kind: RouteStepKind, arg: string | number | null 
 
 /** 부서범위 축약. */
 const scAll = { kind: '전체', deptId: null, deptType: null } as const;
-const scDept = (deptId: string) => ({ kind: '부서' as const, deptId, deptType: null });
-const scSub = (deptId: string) => ({ kind: '서브트리' as const, deptId, deptType: null });
-const scType = (deptType: DeptType) => ({ kind: '부서유형' as const, deptId: null, deptType });
 
 const 만 = 10_000;
-const 억 = 100_000_000;
 
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
-  // ───────────────────────── 지출결의 (금액 사다리) ─────────────────────────
+  // ==========================================
+  // 1. 인사 분류 (휴가, 연장근로, 외근)
+  // ==========================================
+
+  // --- 휴가원 ---
   {
-    id: 'RR-EXP-SALES', name: '지출결의·영업팀: 팀장→재경이사 합의→대표 전결', priority: 6, active: true,
-    docType: '지출결의', deptScope: scDept('D220'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
+    id: 'RR-LEAVE-MEMBER', name: '휴가·팀원 기안: 팀장 전결', priority: 1, active: true,
+    docType: '휴가', deptScope: scAll, positionFromRank: 5, positionToRank: 9, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결')],
   },
   {
-    id: 'RR-EXP-IT', name: '지출결의·S/W개발팀 고가 IT장비(300만↑): 팀장→본부장→재경이사 합의→대표 전결', priority: 7, active: true,
-    docType: '지출결의', deptScope: scDept('D240'), positionFromRank: null, positionToRank: null, amountFrom: 300 * 만, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
+    id: 'RR-LEAVE-LEADER', name: '휴가·팀장 기안: 본부장 전결 (대표 참조)', priority: 2, active: true,
+    docType: '휴가', deptScope: scAll, positionFromRank: 4, positionToRank: 4, amountFrom: null, amountTo: null,
+    steps: [s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
   {
-    id: 'RR-EXP-MGR', name: '지출결의·책임자(이사↑) 기안: 본부장→대표 전결', priority: 8, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: 3, amountFrom: null, amountTo: null,
-    steps: [s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+    id: 'RR-LEAVE-EXEC', name: '휴가·임원 기안: 대표이사 전결', priority: 3, active: true,
+    docType: '휴가', deptScope: scAll, positionFromRank: 3, positionToRank: 3, amountFrom: null, amountTo: null,
+    steps: [s('ROLE_CEO', '전결')],
+  },
+
+  // --- 외근 신청서 ---
+  {
+    id: 'RR-OUTSIDE-MEMBER', name: '외근·팀원 기안: 팀장 전결 (본부장 참조)', priority: 4, active: true,
+    docType: '외근', deptScope: scAll, positionFromRank: 5, positionToRank: 9, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
   },
   {
-    id: 'RR-EXP-XL', name: '지출결의·초고액(1억↑): 팀장→본부장→재경이사 합의→대표 전결', priority: 10, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 억, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
+    id: 'RR-OUTSIDE-LEADER', name: '외근·팀장 기안: 본부장 전결 (대표 참조)', priority: 5, active: true,
+    docType: '외근', deptScope: scAll, positionFromRank: 4, positionToRank: 4, amountFrom: null, amountTo: null,
+    steps: [s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
+
+  // --- 연장근로 신청서 ---
   {
-    id: 'RR-EXP-L', name: '지출결의·고액(2천만~1억): 팀장→본부장→대표 전결', priority: 12, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 2000 * 만, amountTo: 억,
+    id: 'RR-OVERTIME-ALL', name: '연장근로·공통: 팀장 거쳐 본부장 전결 (대표 참조)', priority: 6, active: true,
+    docType: '연장근로', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
+  },
+
+  // ==========================================
+  // 2. 총무 분류 (출장, 지출결의, 비용청구, 보험신청, 운반비청구, 인장날인, 공문발송, 접대비품의)
+  // ==========================================
+
+  // --- 출장 신청/비용 정산서 ---
+  {
+    id: 'RR-TRIP-L', name: '출장·고액(300만 이상): 팀장➔본부장➔대표이사 전결', priority: 10, active: true,
+    docType: '출장', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 300 * 만, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
   },
   {
-    id: 'RR-EXP-M2', name: '지출결의·준고액(500만~2천만): 팀장→재경이사 합의→본부장 전결', priority: 14, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 500 * 만, amountTo: 2000 * 만,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('PARENT_DEPT_HEAD', '전결', 1)],
+    id: 'RR-TRIP-S', name: '출장·소액(300만 미만): 팀장➔본부장 전결 (해외 출장은 대표 참조)', priority: 11, active: true,
+    docType: '출장', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 300 * 만,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조', null, true)], // 대표이사 optional 참조
+  },
+
+  // --- 지출결의서 ---
+  {
+    id: 'RR-EXPENSE-L', name: '지출결의·고액(300만 이상): 팀장➔본부장➔대표이사 전결', priority: 12, active: true,
+    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 300 * 만, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
   },
   {
-    id: 'RR-EXP-M1', name: '지출결의·중액(100만~500만): 팀장→본부장 전결', priority: 16, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 100 * 만, amountTo: 500 * 만,
+    id: 'RR-EXPENSE-S', name: '지출결의·소액(300만 미만): 팀장➔본부장 전결', priority: 13, active: true,
+    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 300 * 만,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
+  },
+
+  // --- 비용 청구서 ---
+  {
+    id: 'RR-COST-ALL', name: '비용청구·공통: 팀장 전결 (본부장 참조)', priority: 14, active: true,
+    docType: '비용청구', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
+  },
+
+  // --- 보험 관련 신청서 ---
+  {
+    id: 'RR-INSURANCE-ALL', name: '보험신청·공통: 팀장➔본부장➔대표이사 전결', priority: 15, active: true,
+    docType: '보험신청', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // --- 운반비 청구서 ---
+  {
+    id: 'RR-DELIVERY-ALL', name: '운반비청구·공통: 팀장 전결', priority: 16, active: true,
+    docType: '운반비청구', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결')],
+  },
+
+  // --- 인장 날인 요청서 ---
+  {
+    id: 'RR-SEAL-ALL', name: '인장날인·공통: 팀장➔본부장➔대표이사 전결', priority: 17, active: true,
+    docType: '인장날인', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // --- 공문 발송 신청서 ---
+  {
+    id: 'RR-PUBLISH-ALL', name: '공문발송·공통: 팀장➔본부장➔대표이사 전결', priority: 18, active: true,
+    docType: '공문발송', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // --- 접대비 품의서 ---
+  {
+    id: 'RR-RECEPTION-ALL', name: '접대비품의·공통: 팀장➔본부장➔대표이사 전결', priority: 19, active: true,
+    docType: '접대비품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // ==========================================
+  // 3. 품의 분류 (품의, 원자재품의, 외주개발용역, 소모품신청)
+  // ==========================================
+
+  // --- 일반 품의서 (자산 / 비품 / 일반경비) ---
+  {
+    id: 'RR-PURCHASE-XL', name: '품의·고액(500만 이상): 팀장➔본부장➔대표이사 전결', priority: 30, active: true,
+    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 500 * 만, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+  {
+    id: 'RR-PURCHASE-M', name: '품의·중액(10만 이상 500만 미만): 팀장➔본부장 전결 (대표이사 참조)', priority: 31, active: true,
+    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 10 * 만, amountTo: 500 * 만,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
+  },
+  {
+    id: 'RR-PURCHASE-S', name: '품의·소액(10만 미만): 팀장 전결', priority: 32, active: true,
+    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 10 * 만,
+    steps: [s('DEPT_HEAD', '전결')],
+  },
+
+  // --- 원자재 품의서 ---
+  {
+    id: 'RR-MATERIAL-L', name: '원자재품의·고액(1000만 이상): 팀장➔본부장➔대표이사 전결', priority: 33, active: true,
+    docType: '원자재품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 1000 * 만, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+  {
+    id: 'RR-MATERIAL-S', name: '원자재품의·소액(1000만 미만): 팀장➔본부장 전결 (대표이사 참조)', priority: 34, active: true,
+    docType: '원자재품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 1000 * 만,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
+  },
+
+  // --- 외주개발/용역비 품의서 ---
+  {
+    id: 'RR-OUTSOURCE-ALL', name: '외주개발용역·공통: 팀장➔본부장➔대표이사 전결', priority: 35, active: true,
+    docType: '외주개발용역', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // --- 소모품 신청서 ---
+  {
+    id: 'RR-OFFICE-SUPPLY-L', name: '소모품신청·고액(10만 이상): 팀장➔본부장 전결', priority: 36, active: true,
+    docType: '소모품신청', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 10 * 만, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
   },
   {
-    id: 'RR-EXP-S', name: '지출결의·소액(~100만): 팀장 전결', priority: 18, active: true,
-    docType: '지출결의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 100 * 만,
+    id: 'RR-OFFICE-SUPPLY-S', name: '소모품신청·소액(10만 미만): 팀장 전결', priority: 37, active: true,
+    docType: '소모품신청', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 10 * 만,
     steps: [s('DEPT_HEAD', '전결')],
   },
 
-  // ───────────────────────── 품의 ─────────────────────────
+  // ==========================================
+  // 4. 경조사 분류 (경조지원)
+  // ==========================================
+
+  // --- 경조 지원 신청서 ---
   {
-    id: 'RR-PUR-QC', name: '품의·품질관리팀: 팀장→본부장 전결(대표 참조)', priority: 28, active: true,
-    docType: '품의', deptScope: scSub('D210'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('ROLE_CEO', '참조'), s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-  {
-    id: 'RR-PUR-L', name: '품의·고액(1천만↑): 팀장→본부장→대표 전결', priority: 30, active: true,
-    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 1000 * 만, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
-  },
-  {
-    id: 'RR-PUR-M', name: '품의·중액(100만~1천만): 팀장→본부장 전결(재경이사 참조)', priority: 32, active: true,
-    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 100 * 만, amountTo: 1000 * 만,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '참조', 'U002'), s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-  {
-    id: 'RR-PUR-S', name: '품의·소액(~100만): 팀장 전결', priority: 34, active: true,
-    docType: '품의', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 100 * 만,
-    steps: [s('DEPT_HEAD', '전결')],
+    id: 'RR-CONDOLENCE-ALL', name: '경조지원·공통: 팀장➔본부장 전결 (대표이사 참조)', priority: 40, active: true,
+    docType: '경조지원', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
 
-  // ───────────────────────── 기안 ─────────────────────────
+  // ==========================================
+  // 5. 공통 기안서 & 전역 폴백 룰
+  // ==========================================
   {
-    id: 'RR-DRAFT-POLICY', name: '기안·사업관리팀 정책(합의형): 팀장→품질 합의→대표', priority: 38, active: true,
-    docType: '기안', deptScope: scDept('D230'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_DEPT_HEAD', '결재', 'D210'), s('ROLE_CEO', '결재')],
-  },
-  {
-    id: 'RR-DRAFT-HQ', name: '기안·본부 직속: 대표 결재', priority: 40, active: true,
-    docType: '기안', deptScope: scDept('D200'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('ROLE_CEO', '결재')],
-  },
-  {
-    id: 'RR-DRAFT-MGR', name: '기안·책임자(이사↑) 기안: 본부장 결재', priority: 42, active: true,
-    docType: '기안', deptScope: scAll, positionFromRank: null, positionToRank: 3, amountFrom: null, amountTo: null,
-    steps: [s('PARENT_DEPT_HEAD', '결재', 1)],
-  },
-  {
-    id: 'RR-DRAFT-GEN', name: '기안·일반: 팀장 결재', priority: 44, active: true,
+    id: 'RR-GENERAL-DRAFT', name: '기안서·공통: 팀장 전결', priority: 90, active: true,
     docType: '기안', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재')],
-  },
-
-  // ───────────────────────── 휴가 ─────────────────────────
-  {
-    id: 'RR-LEAVE-EXEC', name: '휴가·임원(상무↑): 대표 전결', priority: 48, active: true,
-    docType: '휴가', deptScope: scAll, positionFromRank: null, positionToRank: 2, amountFrom: null, amountTo: null,
-    steps: [s('ROLE_CEO', '전결')],
-  },
-  {
-    id: 'RR-LEAVE-MGR', name: '휴가·팀장 본인(이사↑): 본부장 전결', priority: 50, active: true,
-    docType: '휴가', deptScope: scAll, positionFromRank: null, positionToRank: 3, amountFrom: null, amountTo: null,
-    steps: [s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-  {
-    id: 'RR-LEAVE-GEN', name: '휴가·일반: 팀장 전결', priority: 52, active: true,
-    docType: '휴가', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결')],
   },
-
-  // ─────────────────── 부서/유형 스코프 (전 문서유형) ───────────────────
   {
-    id: 'RR-SCOPE-QC', name: '품질관리팀·전 문서: 팀장 결재(대표 참조)', priority: 60, active: true,
-    docType: '전체', deptScope: scSub('D210'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('ROLE_CEO', '참조')],
-  },
-
-  {
-    id: 'RR-SCOPE-RND', name: '부설기술연구소·전 문서: 소장→본부장 전결', priority: 64, active: true,
-    docType: '전체', deptScope: scSub('D250'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재', null, true), s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-  {
-    id: 'RR-SCOPE-SALES', name: '영업팀·전 문서: 팀장→대표 전결', priority: 66, active: true,
-    docType: '전체', deptScope: scDept('D220'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('ROLE_CEO', '전결')],
-  },
-
-  // ─────────────────── resolver 활용 예제 ───────────────────
-  {
-    id: 'RR-EX-MANAGER', name: '예제·직속 상급자 라인: 직속 상급자 전결', priority: 70, active: true,
-    docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('MANAGER', '전결')],
-  },
-  {
-    id: 'RR-EX-POSATLEAST', name: '예제·직급 이상(이사↑) 최초 상급자 전결', priority: 72, active: true,
-    docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('POSITION_AT_LEAST', '전결', 3)],
-  },
-  {
-    id: 'RR-EX-SPECIFIC-USER', name: '예제·재경이사(류지광) 필수 합의 라인', priority: 74, active: true,
-    docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('SPECIFIC_USER', '결재', 'U002'), s('ROLE_CEO', '전결')],
-  },
-  {
-    id: 'RR-EX-SPECIFIC-DEPT', name: '예제·특정 부서장(S/W개발팀장) 지정 결재', priority: 76, active: true,
-    docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('SPECIFIC_DEPT_HEAD', '결재', 'D240'), s('ROLE_CEO', '전결')],
-  },
-  {
-    id: 'RR-EX-LADDER', name: '예제·부서 계층 사다리: 팀장→본부장→대표 전결', priority: 78, active: true,
-    docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('PARENT_DEPT_HEAD', '전결', 2)],
-  },
-  {
-    id: 'RR-EX-FACTORY', name: '(휴면 예제) 공장 지출: 팀장 검토→공장장 전결 — 현재 공장 조직 없음', priority: 80, active: false,
-    docType: '지출결의', deptScope: scType('공장'), positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '검토', null, true), s('ROLE_FACTORY_HEAD', '전결')],
-  },
-
-  // ───────────────────────── 전역 폴백 ─────────────────────────
-  {
-    id: 'RR-FALLBACK', name: '전역 폴백·부서장 전결(모든 유형)', priority: 95, active: true,
+    id: 'RR-FALLBACK', name: '전역 폴백·부서장 전결(모든 유형)', priority: 99, active: true,
     docType: '전체', deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결')],
   },

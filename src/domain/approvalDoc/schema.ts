@@ -93,6 +93,11 @@ export const approvalDocSchema = z.object({
   form: leaveFormSchema.nullable().default(null),
   /** 결재서식 동적 필드값 `{ key: value }`. 커스텀 서식·확장 필드 저장(휴가 form 은 별도). */
   fieldValues: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+  /** 첨부 파일 리스트 */
+  attachments: z.array(z.object({
+    name: z.string(), // 원본 파일명
+    url: z.string(),  // 다운로드 URL
+  })).default([]),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),

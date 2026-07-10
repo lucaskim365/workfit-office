@@ -233,6 +233,28 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         </div>
       )}
 
+      {/* 첨부파일 다운로드 영역 */}
+      {doc.attachments && doc.attachments.length > 0 && (
+        <div className="mt-6 border-t border-[#bbb] pt-3">
+          <div className="text-[11px] font-bold text-teal mb-2">📎 첨부 파일 목록 ({doc.attachments.length})</div>
+          <div className="space-y-1.5">
+            {doc.attachments.map((file, idx) => (
+              <a
+                key={idx}
+                href={file.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded border border-[#ddd] bg-[#fafafa] px-3 py-2 text-[12px] text-ink hover:bg-[#eee] transition-colors max-w-md"
+              >
+                <span className="text-[14px]">📄</span>
+                <span className="font-semibold underline truncate flex-1">{file.name}</span>
+                <span className="text-[10px] text-[#666]">다운로드 ➔</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         <div>{closing}</div>
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>

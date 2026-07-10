@@ -1,4 +1,4 @@
-import type { ApprovalDoc, ApprovalStep, StepDecision, StepKind } from '@/domain/approvalDoc/schema';
+import type { ApprovalStep, StepDecision, StepKind } from '@/domain/approvalDoc/schema';
 
 /**
  * 전자결재 문서 시드 — Firebase 미설정 시 폴백 + 초기 seed + 결재함 시연 데이터.
@@ -34,7 +34,7 @@ function step(
   };
 }
 
-export const APPROVAL_DOC_SEED: ApprovalDoc[] = [
+export const APPROVAL_DOC_SEED: any[] = [
   // 1) 임시저장 — 상신 전(임시저장함).
   {
     id: 'AP-260703-001',

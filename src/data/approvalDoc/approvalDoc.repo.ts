@@ -32,6 +32,7 @@ function migrateDoc(data: any): any {
   if (!data || !Array.isArray(data.steps)) return data;
   return {
     ...data,
+    attachments: data.attachments ?? [],
     steps: data.steps.map((s: any) => ({
       ...s,
       kind: s.kind === '합의' ? '결재' : s.kind,
@@ -86,6 +87,8 @@ export interface ApprovalDraftInput {
   form?: ApprovalDoc['form'];
   /** 결재서식 동적 필드값. */
   fieldValues?: ApprovalDoc['fieldValues'];
+  /** 첨부 파일 목록 */
+  attachments?: ApprovalDoc['attachments'];
 }
 
 export const approvalDocRepo = {
@@ -130,6 +133,7 @@ export const approvalDocRepo = {
       body: input.body ?? '',
       form: input.form ?? null,
       fieldValues: input.fieldValues ?? {},
+      attachments: input.attachments ?? [],
       currentSeq: 0,
       createdAt: now(),
       submittedAt: null,

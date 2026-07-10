@@ -381,7 +381,9 @@ function FormPreview({ form }: { form: ApprovalForm }) {
       steps: u.slice(0, 3).map((x, i) => ({ seq: i + 1, parallelGroup: null, kind: i === 2 ? '전결' : '결재', approverId: x.id, delegatedFromId: null, decision: i === 0 ? '승인' : '대기', decidedAt: null, comment: '' })),
       amount: amountField ? 3_000_000 : null, body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '(본문 미리보기)',
       form: leave as any,
-      fieldValues: values, currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
+      fieldValues: values,
+      attachments: [],
+      currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);
 
