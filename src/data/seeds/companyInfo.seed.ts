@@ -9,7 +9,7 @@ export const COMPANY_INFO_SEED: CompanyInfo[] = [
   {
     id: 'main',
     name: '워크핏(주)',
-    nameEn: 'WorkFit Technology Co., Ltd.',
+    nameEn: 'WorkFit Co., Ltd.',
     bizNo: '142-81-04567',
     corpNo: '110111-3456789',
     ceo: '김경영',

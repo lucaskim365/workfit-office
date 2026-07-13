@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthProvider';
 import { AuthError, type AuthErrorCode } from '@/data/auth/auth.repo';
 import { companyInfoRepo } from '@/data/companyInfo/companyInfo.repo';
+import defaultLogo from '@/assets/logo.png';
 
 /** 자체 로그인 실패 코드 → 한국어 메시지. */
 function authErrorMessage(err: unknown): string {
@@ -65,11 +66,11 @@ export default function LoginScreen() {
     <div className="grid min-h-screen place-items-center bg-bg-deep px-4">
       <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.18)]">
         <div className="flex flex-col items-center gap-3 bg-navy px-6 pb-6 pt-8">
-          {logoUrl ? (
+          {(logoUrl || defaultLogo) ? (
             // 남색 헤더 위에 로고 직접 배치(흰 로고도 보이도록). 원본 비율 유지 +
             // 최대 높이/너비 제한으로 어떤 비율의 로고든 박스를 넘치지 않게 담는다.
             <img
-              src={logoUrl}
+              src={logoUrl || defaultLogo}
               alt={companyName}
               className="max-h-16 w-auto max-w-[240px] object-contain"
             />
