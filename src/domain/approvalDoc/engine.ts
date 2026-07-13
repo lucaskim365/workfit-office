@@ -181,7 +181,8 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
   if (doc.status === '완료') {
     if (box === '완료') return involves;
     if (box === '수신') {
-      return doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+      const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
+      return isExecutorDrafter || doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     }
     return false;
   }
