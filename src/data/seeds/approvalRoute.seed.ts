@@ -108,18 +108,6 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
 
-  // --- 지출결의서 ---
-  {
-    id: 'RR-EXPENSE-L', name: '지출결의·고액(300만 이상): 팀장➔본부장➔대표이사 전결', priority: 16, active: true,
-    docType: '지출결의', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 300 * 만, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
-  },
-  {
-    id: 'RR-EXPENSE-S', name: '지출결의·소액(300만 미만): 팀장➔본부장 전결', priority: 17, active: true,
-    docType: '지출결의', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: 0, amountTo: 300 * 만,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-
   // --- 식대 신청서 ---
   {
     id: 'RR-SIKDAE-ALL', name: '식대·공통: 팀장 전결 (본부장 참조)', priority: 18, active: true,

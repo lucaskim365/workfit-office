@@ -76,17 +76,6 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
     ],
   },
   {
-    id: '지출결의', code: '지출결의', name: '지출결의서', icon: '💳', docTitle: '지 출 결 의 서',
-    closing: '위와 같이 지출을 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 7, system: false, folderId: 'fld-ga',
-    fields: [
-      f({ key: 'amount', label: '지출금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
-      f({ key: 'accountSubject', label: '지출계정과목', type: '선택', required: true, width: 'half', options: ['복리후생비', '소모품비', '여비교통비', '접대비', '비품', '임차료', '보험료', '기타'] }),
-      f({ key: 'bank', label: '은행', type: '텍스트', required: true, width: 'half', section: '입금정보' }),
-      f({ key: 'accountHolder', label: '예금주', type: '텍스트', required: true, width: 'half', section: '입금정보' }),
-      f({ key: 'accountNumber', label: '계좌번호', type: '텍스트', required: true, width: 'full', section: '입금정보' }),
-    ],
-  },
-  {
     id: '식대', code: '식대', name: '식대 신청서', icon: '🍲', docTitle: '식 대 신 청 서',
     closing: '위와 같이 식대를 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 8, system: false, folderId: 'fld-ga',
     fields: [
