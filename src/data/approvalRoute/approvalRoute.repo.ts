@@ -32,7 +32,16 @@ export const approvalRouteRepo = {
       // 2. 개별 규칙 내용 동기화 (기존 데이터와 다르면 덮어쓰기)
       for (const seed of APPROVAL_ROUTE_SEED) {
         const dbRule = rows.find((r) => r.id === seed.id);
-        const shouldWrite = !dbRule;
+        const shouldWrite = !dbRule || 
+          JSON.stringify(dbRule.steps) !== JSON.stringify(seed.steps) ||
+          dbRule.name !== seed.name ||
+          dbRule.priority !== seed.priority ||
+          dbRule.docType !== seed.docType ||
+          dbRule.amountFrom !== seed.amountFrom ||
+          dbRule.amountTo !== seed.amountTo ||
+          dbRule.active !== seed.active ||
+          dbRule.conditionKey !== seed.conditionKey ||
+          JSON.stringify(dbRule.conditionValues) !== JSON.stringify(seed.conditionValues);
 
         if (shouldWrite) {
           const valid = approvalRouteRuleSchema.parse(seed);
