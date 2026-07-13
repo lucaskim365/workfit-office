@@ -107,14 +107,22 @@ export function ApprovalDraftModal({
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // fixedType(휴가) 신규 작성이면 룰 엔진으로 결재선 1회 프리필.
-  const prefilled = useRef(false);
+  // 실시간 결재선 규칙 엔진 연동
+  const lastAutoSteps = useRef<string>('');
   useEffect(() => {
-    if (!fixedType || editDoc || prefilled.current || route.isLoading) return;
-    if (steps.length > 0) { prefilled.current = true; return; }
-    const line = route.build({ drafterId: me.id, docType: fixedType, amount: null });
-    if (line.length) { setSteps(line); prefilled.current = true; }
-  }, [fixedType, editDoc, route, me.id, steps.length]);
+    if (route.isLoading || !code) return;
+    const line = route.build({ drafterId: me.id, docType: code, amount: amountNum, docData: values });
+    const lineStr = JSON.stringify(line);
+    const currentStr = JSON.stringify(steps);
+
+    // steps가 비어있거나, 이전 자동계산 결과와 일치하는 경우(즉, 수동 편집하지 않음) 자동 업데이트
+    if (steps.length === 0 || currentStr === lastAutoSteps.current) {
+      if (currentStr !== lineStr) {
+        setSteps(line);
+        lastAutoSteps.current = lineStr;
+      }
+    }
+  }, [code, amountNum, values, route, me.id, steps]);
 
   // 금액 입력값(amountNum)을 동적 필드 values[amountField.key]에 실시간 동기화
   useEffect(() => {
@@ -199,6 +207,17 @@ export function ApprovalDraftModal({
   const fieldNodes: React.ReactNode[] = [];
   let lastSection = '';
   for (const field of form?.fields ?? []) {
+    // visibleIf 조건부 필드 노출 검사
+    if (field.visibleIf) {
+      const parts = field.visibleIf.split(':');
+      if (parts.length === 2) {
+        const [condKey, condVal] = parts;
+        if (String(values[condKey] ?? '') !== condVal) {
+          continue; // 조건 미충족 시 노출 안 함
+        }
+      }
+    }
+
     if (field.section && field.section !== lastSection) {
       lastSection = field.section;
       fieldNodes.push(<div key={`sec-${field.section}`} className="col-span-2 mt-1 text-[11px] font-bold text-teal">{field.section}</div>);
@@ -320,7 +339,7 @@ export function ApprovalDraftModal({
           {/* 결재선 빌더 */}
           <div className="mt-2">
             <div className="mb-1.5 text-[11px] font-bold text-ink2">결재선</div>
-            <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} />
+            <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
           </div>
 
           {/* 파일 첨부 영역 */}

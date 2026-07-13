@@ -48,6 +48,8 @@ export const formFieldSchema = z.object({
   section: z.string().default(''),
   /** 이 필드값이 결재선 금액매칭 amount 로 승격됨(서식당 0~1개, type='금액'). */
   isAmountKey: z.boolean().default(false),
+  /** 특정 선택형 필드값에 따라서만 노출 (형식: "상위필드키:값", 예: "insuranceType:자동차보험") */
+  visibleIf: z.string().nullable().default(null),
 });
 export type FormField = z.infer<typeof formFieldSchema>;
 

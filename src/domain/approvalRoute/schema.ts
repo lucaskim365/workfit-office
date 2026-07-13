@@ -63,6 +63,10 @@ export const approvalRouteRuleSchema = z.object({
   /** 문서유형(전체=모든 유형). */
   /** 문서유형 = 서식 code(자유 문자열) 또는 '전체'. */
   docType: z.string().default('전체'),
+  /** 서식 내 드롭다운 매칭 키값 (선택형 필드 key와 매칭) */
+  conditionKey: z.string().nullable().default(null),
+  /** 매칭할 서브 카테고리 값 목록 */
+  conditionValues: z.array(z.string()).default([]),
   deptScope: deptScopeSchema.default({ kind: '전체', deptId: null, deptType: null }),
   /** 기안자 직급 범위(rank, null=무한). from=상위(작은값)·to=하위(큰값). */
   positionFromRank: z.number().nullable().default(null),

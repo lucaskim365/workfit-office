@@ -11,6 +11,7 @@ import {
 } from '@/domain/approvalRoute/schema';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { DEPT_TYPES } from '@/domain/department/schema';
+import type { ApprovalForm } from '@/domain/approvalForm/schema';
 
 /**
  * 결재선 규칙관리 (기준정보) — 동적 결재선 룰 CRUD + 단계 빌더 + 시뮬레이터.
@@ -34,6 +35,7 @@ const ARG_HINT: Partial<Record<Resolver, string>> = {
 
 const blankRule = (): ApprovalRouteRule => ({
   id: '', name: '', priority: 50, active: true, docType: '전체',
+  conditionKey: null, conditionValues: [],
   deptScope: { kind: '전체', deptId: null, deptType: null },
   positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
   steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false }],
@@ -123,7 +125,7 @@ export default function ApprovalRuleScreen() {
 function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms, org }: {
   rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
   onSave: () => void; onCancel: () => void; onDelete?: () => void; saving: boolean; msg: string;
-  forms: Array<{ code: string; name: string }>;
+  forms: ApprovalForm[];
   org: ReturnType<typeof useOrgTree>;
 }) {
   const set = (patch: Partial<ApprovalRouteRule>) => onChange({ ...rule, ...patch });
@@ -134,6 +136,11 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
     const j = i + dir; if (j < 0 || j >= rule.steps.length) return;
     const next = [...rule.steps];[next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
   };
+
+  const selectedForm = useMemo(() => forms.find((f) => f.code === rule.docType), [forms, rule.docType]);
+  const dropdownFields = useMemo(() => {
+    return selectedForm?.fields.filter((f) => f.type === '선택') ?? [];
+  }, [selectedForm]);
 
   return (
     <div className="space-y-4">
@@ -151,11 +158,52 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
         <div className="mb-2 text-[11px] font-bold text-ink2">적용 조건</div>
         <div className="grid grid-cols-2 gap-2">
           <F label="문서유형">
-            <select value={rule.docType} onChange={(e) => set({ docType: e.target.value })} className={inp}>
+            <select value={rule.docType} onChange={(e) => set({ docType: e.target.value, conditionKey: null, conditionValues: [] })} className={inp}>
               <option value="전체">전체</option>
               {forms.map((f) => <option key={f.code} value={f.code}>{f.name}</option>)}
             </select>
           </F>
+          {dropdownFields.length > 0 && (
+            <F label="세부 구분 키 (드롭다운 필드)">
+              <select
+                value={rule.conditionKey ?? ''}
+                onChange={(e) => set({ conditionKey: e.target.value || null, conditionValues: [] })}
+                className={inp}
+              >
+                <option value="">(없음)</option>
+                {dropdownFields.map((df) => (
+                  <option key={df.key} value={df.key}>{df.label}</option>
+                ))}
+              </select>
+            </F>
+          )}
+          {rule.conditionKey && (
+            <div className="col-span-2">
+              <F label="세부 구분 값 (다중 선택)">
+                <div className="flex flex-wrap gap-1 mt-1 rounded border border-border bg-panel p-2">
+                  {(dropdownFields.find((df) => df.key === rule.conditionKey)?.options ?? []).map((opt) => {
+                    const checked = rule.conditionValues.includes(opt);
+                    return (
+                      <label key={opt} className="flex items-center gap-1 text-[11px] font-medium text-ink2 mr-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextValues = e.target.checked
+                              ? [...rule.conditionValues, opt]
+                              : rule.conditionValues.filter((v) => v !== opt);
+                            set({ conditionValues: nextValues });
+                          }}
+                          className="rounded border-border"
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
+                </div>
+              </F>
+            </div>
+          )}
           <F label="부서 범위">
             <select value={rule.deptScope.kind} onChange={(e) => set({ deptScope: { ...rule.deptScope, kind: e.target.value as never } })} className={inp}>
               {['전체', '부서', '서브트리', '부서유형'].map((k) => <option key={k} value={k}>{k}</option>)}
@@ -224,7 +272,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
               <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD' && r !== 'PARENT_DEPT_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
+                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
               </select>
               {s.resolver === 'SPECIFIC_USER' ? (
                 <select
