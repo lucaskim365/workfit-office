@@ -53,6 +53,15 @@ export const formFieldSchema = z.object({
   visibleIf: z.string().nullable().default(null),
   /** 이 선택 필드가 상단 탭 분리 기준으로 작동하는지 여부 */
   isTabSelector: z.boolean().optional().default(false),
+  /**
+   * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
+   * width/section 을 독립적으로 다르게 설정하기 위한 맵.
+   * 키 = 탭 옵션값(예: "반차"), 값 = 오버라이드 속성.
+   */
+  tabOverrides: z.record(z.string(), z.object({
+    width: z.enum(['half', 'full']).optional(),
+    section: z.string().optional(),
+  })).optional().default({}),
 });
 export type FormField = z.infer<typeof formFieldSchema>;
 

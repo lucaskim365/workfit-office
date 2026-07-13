@@ -106,9 +106,23 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
     fields: FormField[];
   }
 
+  // tabOverrides 적용을 위해 탭 분할 선택 필드와 현재 탭 값을 미리 추출
+  const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
+  const currentTabValue = tabSelectorField ? String(doc.fieldValues[tabSelectorField.key] ?? '') : '';
+  /** 공통 필드에 tabOverrides를 적용한 effective width/section 반환 */
+  const effectiveFieldProps = (f: FormField) => {
+    const isCommon = !f.visibleIf;
+    const override: { width?: 'full' | 'half'; section?: string } =
+      (isCommon && currentTabValue && f.tabOverrides?.[currentTabValue]) || {};
+    return {
+      width: (override.width ?? f.width) as 'full' | 'half',
+      section: override.section ?? f.section,
+    };
+  };
+
   const blocks: LayoutBlock[] = [];
   activeFields.forEach((f) => {
-    const secName = f.section || '';
+    const { section: secName } = effectiveFieldProps(f);
     if (f.type === '장문') {
       blocks.push({
         type: 'longtext',
@@ -287,10 +301,12 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
             for (let i = 0; i < fields.length; i++) {
               const f = fields[i];
               const val = fieldText(f, doc.fieldValues, org);
+              const { width: fw } = effectiveFieldProps(f);
 
-              if (f.width === 'half') {
+              if (fw === 'half') {
                 const next = fields[i + 1];
-                if (next && next.width === 'half') {
+                const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
+                if (next && nw === 'half') {
                   const nextVal = fieldText(next, doc.fieldValues, org);
                   tableRows.push(
                     <MetaRow key={f.key} cells={[[f.label, val], [next.label, nextVal]]} />

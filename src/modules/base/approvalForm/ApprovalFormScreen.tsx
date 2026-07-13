@@ -18,7 +18,7 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  */
 
 const blankField = (): FormField => ({
-  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false,
+  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, tabOverrides: {},
 });
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
@@ -352,12 +352,26 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
             })
             .map(({ f, i }) => {
               const isCommonInTab = selTab !== '공통' && !f.visibleIf;
+              // 공통 필드를 선택지 탭에서 볼 때는 tabOverrides에서 effective 값 읽기
+              const override: { width?: 'full' | 'half'; section?: string } =
+                isCommonInTab ? (f.tabOverrides?.[selTab] ?? {}) : {};
+              const effectiveWidth = (override.width ?? f.width) as 'full' | 'half';
+              const effectiveSection = override.section ?? f.section;
+
+              const setTabOverride = (patch: { width?: 'full' | 'half'; section?: string }) => {
+                const newOverrides = {
+                  ...(f.tabOverrides ?? {}),
+                  [selTab]: { ...(f.tabOverrides?.[selTab] ?? {}), ...patch },
+                };
+                setField(i, { tabOverrides: newOverrides });
+              };
+
               return (
                 <div
                   key={i}
                   className={`rounded-lg border px-2 py-1.5 ${
                     isCommonInTab
-                      ? 'border-border/50 bg-panel/60 opacity-80'
+                      ? 'border-border/50 bg-panel/60'
                       : 'border-border bg-panel-alt'
                   }`}
                 >
@@ -366,15 +380,50 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                     {isCommonInTab && (
                       <span className="rounded bg-border px-1 py-0.5 text-[9px] font-bold text-ink3">공통</span>
                     )}
-                    <input value={f.label} onChange={(e) => setField(i, { label: e.target.value })} placeholder="라벨" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                    <input value={f.key} onChange={(e) => setField(i, { key: e.target.value })} placeholder="key" className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none" />
-                    <select value={f.type} onChange={(e) => setField(i, { type: e.target.value as FieldType })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                    <input
+                      value={f.label}
+                      onChange={(e) => setField(i, { label: e.target.value })}
+                      placeholder="라벨"
+                      disabled={isCommonInTab}
+                      className={`w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    />
+                    <input
+                      value={f.key}
+                      onChange={(e) => setField(i, { key: e.target.value })}
+                      placeholder="key"
+                      disabled={isCommonInTab}
+                      className={`w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    />
+                    <select
+                      value={f.type}
+                      onChange={(e) => setField(i, { type: e.target.value as FieldType })}
+                      disabled={isCommonInTab}
+                      className={`rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
                       {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <select value={f.width} onChange={(e) => setField(i, { width: e.target.value as 'half' | 'full' })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                    {/* width: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
+                    <select
+                      value={effectiveWidth}
+                      onChange={(e) => {
+                        const val = e.target.value as 'half' | 'full';
+                        if (isCommonInTab) setTabOverride({ width: val });
+                        else setField(i, { width: val });
+                      }}
+                      className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                    >
                       <option value="full">전체</option><option value="half">2열</option>
                     </select>
-                    <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                    {/* section: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
+                    <input
+                      value={effectiveSection}
+                      onChange={(e) => {
+                        if (isCommonInTab) setTabOverride({ section: e.target.value });
+                        else setField(i, { section: e.target.value });
+                      }}
+                      placeholder="섹션"
+                      className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                    />
                     {!isCommonInTab && (
                       <select
                         value={f.visibleIf ?? ''}
@@ -407,9 +456,9 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                       </label>
                     )}
                     <div className="ml-auto flex items-center gap-1">
-                      <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
-                      <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
-                      <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
+                      {!isCommonInTab && <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>}
+                      {!isCommonInTab && <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>}
+                      {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
                     </div>
                   </div>
                   {(f.type === '선택' || f.type === '다중선택') && (

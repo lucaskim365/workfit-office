@@ -204,6 +204,10 @@ export function ApprovalDraftModal({
   };
 
   // 필드 렌더 — 섹션 구분 + 2열 배치. body/amount 예약 필드는 전용 위젯으로.
+  // tabOverrides: 탭 분할 서식에서 공통 필드의 탭별 독립 width/section 적용
+  const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
+  const currentTabValue = tabSelectorField ? String(values[tabSelectorField.key] ?? '') : '';
+
   const fieldNodes: React.ReactNode[] = [];
   let lastSection = '';
   for (const field of form?.fields ?? []) {
@@ -218,11 +222,18 @@ export function ApprovalDraftModal({
       }
     }
 
-    if (field.section && field.section !== lastSection) {
-      lastSection = field.section;
-      fieldNodes.push(<div key={`sec-${field.section}`} className="col-span-2 mt-1 text-[11px] font-bold text-teal">{field.section}</div>);
+    // tabOverrides 적용: 공통 필드(visibleIf=null)이고 현재 탭값이 있으면 오버라이드
+    const isCommonField = !field.visibleIf;
+    const override: { width?: 'full' | 'half'; section?: string } =
+      (isCommonField && currentTabValue && field.tabOverrides?.[currentTabValue]) || {};
+    const effectiveWidth = (override.width ?? field.width) as 'full' | 'half';
+    const effectiveSection = override.section ?? field.section;
+
+    if (effectiveSection && effectiveSection !== lastSection) {
+      lastSection = effectiveSection;
+      fieldNodes.push(<div key={`sec-${effectiveSection}`} className="col-span-2 mt-1 text-[11px] font-bold text-teal">{effectiveSection}</div>);
     }
-    const span = field.width === 'half' ? 'col-span-1' : 'col-span-2';
+    const span = effectiveWidth === 'half' ? 'col-span-1' : 'col-span-2';
     if (field.type === '금액' && field === amountField) {
       fieldNodes.push(
         <div key={field.key} className={span}><Field label={field.label}>
