@@ -8,7 +8,7 @@ import type { CompanyInfo } from '@/domain/companyInfo/schema';
 export const COMPANY_INFO_SEED: CompanyInfo[] = [
   {
     id: 'main',
-    name: '워크핏테크놀로지(주)',
+    name: '워크핏(주)',
     nameEn: 'WorkFit Technology Co., Ltd.',
     bizNo: '142-81-04567',
     corpNo: '110111-3456789',

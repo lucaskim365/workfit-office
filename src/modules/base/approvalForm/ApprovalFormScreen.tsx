@@ -18,7 +18,7 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  */
 
 const blankField = (): FormField => ({
-  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null,
+  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false,
 });
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
@@ -261,12 +261,29 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   form: ApprovalForm; folders: ApprovalFolder[]; onChange: (f: ApprovalForm) => void; onSave: () => void; onCancel: () => void;
   onDelete?: () => void; onDuplicate?: () => void; saving: boolean; msg: string;
 }) {
+  const [selTab, setSelTab] = useState('공통');
+  const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
+
+  useEffect(() => {
+    if (!tabSelectorField) {
+      setSelTab('공통');
+    } else if (!tabSelectorField.options.includes(selTab) && selTab !== '공통') {
+      setSelTab('공통');
+    }
+  }, [tabSelectorField, selTab]);
+
   const set = (patch: Partial<ApprovalForm>) => onChange({ ...form, ...patch });
   const setField = (i: number, patch: Partial<FormField>) => {
     let nextFields = form.fields.map((f, idx) => (idx === i ? { ...f, ...patch } : f));
+    if (patch.isTabSelector) {
+      nextFields = nextFields.map((f, idx) => (idx === i ? f : { ...f, isTabSelector: false }));
+    }
     set({ fields: nextFields });
   };
-  const addField = () => set({ fields: [...form.fields, { ...blankField(), key: `field${form.fields.length + 1}` }] });
+  const addField = () => {
+    const visibleIf = selTab === '공통' ? null : `${tabSelectorField?.key}:${selTab}`;
+    set({ fields: [...form.fields, { ...blankField(), key: `field${form.fields.length + 1}`, visibleIf }] });
+  };
   const delField = (i: number) => set({ fields: form.fields.filter((_, idx) => idx !== i) });
   const moveField = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= form.fields.length) return;
@@ -302,50 +319,92 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
 
       {/* 필드 빌더 */}
       <div>
-        <div className="mb-1.5 text-[11px] font-bold text-ink2">입력 필드</div>
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-[11px] font-bold text-ink2">입력 필드</div>
+        </div>
+
+        {tabSelectorField && (
+          <div className="mb-3 flex flex-wrap gap-1 border-b border-border pb-1">
+            {['공통', ...tabSelectorField.options].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setSelTab(tab)}
+                className={`rounded-t-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                  selTab === tab
+                    ? 'bg-teal text-white'
+                    : 'bg-panel-alt text-ink2 hover:bg-border/40'
+                }`}
+              >
+                {tab === '공통' ? '🏢 공통 양식' : `📌 ${tab}`}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-1.5">
-          {form.fields.map((f, i) => (
-            <div key={i} className="rounded-lg border border-border bg-panel-alt px-2 py-1.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-                <input value={f.label} onChange={(e) => setField(i, { label: e.target.value })} placeholder="라벨" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                <input value={f.key} onChange={(e) => setField(i, { key: e.target.value })} placeholder="key" className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none" />
-                <select value={f.type} onChange={(e) => setField(i, { type: e.target.value as FieldType })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                  {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <select value={f.width} onChange={(e) => setField(i, { width: e.target.value as 'half' | 'full' })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                  <option value="full">전체</option><option value="half">2열</option>
-                </select>
-                <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                <select
-                  value={f.visibleIf ?? ''}
-                  onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
-                  className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                >
-                  <option value="">언제나 노출</option>
-                  {form.fields
-                    .filter((other) => other.type === '선택' && other.key && other.label)
-                    .flatMap((other) =>
-                      other.options.map((opt) => (
-                        <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
-                          [{other.label}] "{opt}" 일 때
-                        </option>
-                      ))
-                    )}
-                </select>
-                <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
-                {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
-                <div className="ml-auto flex items-center gap-1">
-                  <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
-                  <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
-                  <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
+          {form.fields
+            .map((f, i) => ({ f, i }))
+            .filter(({ f }) => {
+              if (selTab === '공통') {
+                return !f.visibleIf;
+              } else {
+                return f.visibleIf === `${tabSelectorField?.key}:${selTab}`;
+              }
+            })
+            .map(({ f, i }) => (
+              <div key={i} className="rounded-lg border border-border bg-panel-alt px-2 py-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
+                  <input value={f.label} onChange={(e) => setField(i, { label: e.target.value })} placeholder="라벨" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                  <input value={f.key} onChange={(e) => setField(i, { key: e.target.value })} placeholder="key" className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none" />
+                  <select value={f.type} onChange={(e) => setField(i, { type: e.target.value as FieldType })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                    {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select value={f.width} onChange={(e) => setField(i, { width: e.target.value as 'half' | 'full' })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                    <option value="full">전체</option><option value="half">2열</option>
+                  </select>
+                  <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                  <select
+                    value={f.visibleIf ?? ''}
+                    onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
+                    className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                  >
+                    <option value="">언제나 노출</option>
+                    {form.fields
+                      .filter((other) => other.type === '선택' && other.key && other.label)
+                      .flatMap((other) =>
+                        other.options.map((opt) => (
+                          <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
+                            [{other.label}] "{opt}" 일 때
+                          </option>
+                        ))
+                      )}
+                  </select>
+                  <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
+                  {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
+                  {f.type === '선택' && (
+                    <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={f.isTabSelector ?? false}
+                        onChange={(e) => setField(i, { isTabSelector: e.target.checked })}
+                        className="h-3 w-3"
+                      />
+                      탭분할
+                    </label>
+                  )}
+                  <div className="ml-auto flex items-center gap-1">
+                    <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
+                    <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
+                    <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
+                  </div>
                 </div>
+                {(f.type === '선택' || f.type === '다중선택') && (
+                  <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
+                )}
               </div>
-              {(f.type === '선택' || f.type === '다중선택') && (
-                <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
-              )}
-            </div>
-          ))}
+            ))}
         </div>
         <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
         <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>

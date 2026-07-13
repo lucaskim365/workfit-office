@@ -8,7 +8,7 @@ import type { ApprovalForm, FormField } from '@/domain/approvalForm/schema';
  */
 
 const f = (field: Partial<FormField> & Pick<FormField, 'key' | 'label' | 'type'>): FormField => ({
-  required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, ...field,
+  required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, ...field,
 });
 
 export const APPROVAL_FORM_SEED: ApprovalForm[] = [
