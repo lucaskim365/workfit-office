@@ -317,7 +317,22 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                   <option value="full">전체</option><option value="half">2열</option>
                 </select>
                 <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
-                <input value={f.visibleIf ?? ''} onChange={(e) => setField(i, { visibleIf: e.target.value || null })} placeholder="노출조건(Key:값)" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                <select
+                  value={f.visibleIf ?? ''}
+                  onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
+                  className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">언제나 노출</option>
+                  {form.fields
+                    .filter((other) => other.type === '선택' && other.key && other.label)
+                    .flatMap((other) =>
+                      other.options.map((opt) => (
+                        <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
+                          [{other.label}] "{opt}" 일 때
+                        </option>
+                      ))
+                    )}
+                </select>
                 <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
                 {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
                 <div className="ml-auto flex items-center gap-1">
@@ -406,6 +421,16 @@ function FormPreview({ form }: { form: ApprovalForm }) {
               let lastSection = '';
 
               form.fields.forEach((f, i) => {
+                if (f.visibleIf) {
+                  const parts = f.visibleIf.split(':');
+                  if (parts.length === 2) {
+                    const [condKey, condVal] = parts;
+                    if (String(values[condKey] ?? '') !== condVal) {
+                      return;
+                    }
+                  }
+                }
+
                 if (f.section && f.section !== lastSection) {
                   lastSection = f.section;
                   nodes.push(
