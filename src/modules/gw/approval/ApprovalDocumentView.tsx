@@ -91,7 +91,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const steps = [...doc.steps].sort((a, b) => a.seq - b.seq);
 
   interface LayoutBlock {
-    type: 'table' | 'longtext';
+    type: 'table' | 'longtext' | 'table-field';
     section: string;
     fields: FormField[];
   }
@@ -102,6 +102,12 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
     if (f.type === '장문') {
       blocks.push({
         type: 'longtext',
+        section: secName,
+        fields: [f],
+      });
+    } else if (f.type === '표') {
+      blocks.push({
+        type: 'table-field',
         section: secName,
         fields: [f],
       });
@@ -177,6 +183,88 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                   </div>
                   <div className="min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
                     {val || ' '}
+                  </div>
+                </div>
+              );
+            }
+
+            if (block.type === 'table-field') {
+              const f = block.fields[0];
+              const val = doc.fieldValues[f.key];
+              const defaultCols = f.options.length > 0 ? f.options : ['품목명', '수량', '가격', '비고'];
+              let cols: string[] = [...defaultCols];
+              let rows: Array<Record<string, string>> = [];
+              let tableWidth = '100%';
+              let colWidths: Record<string, string> = {};
+              try {
+                if (typeof val === 'string' && val) {
+                  const parsed = JSON.parse(val);
+                  if (parsed && typeof parsed === 'object') {
+                    if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
+                      cols = parsed.cols;
+                      rows = parsed.rows;
+                      tableWidth = parsed.tableWidth || '100%';
+                      colWidths = parsed.colWidths || {};
+                    } else if (Array.isArray(parsed)) {
+                      rows = parsed;
+                      cols = defaultCols;
+                    }
+                  }
+                }
+              } catch (e) {
+                // ignore
+              }
+
+              return (
+                <div key={blockIdx} className="space-y-1">
+                  {showSectionHeader && (
+                    <div className="text-[11px] font-bold text-teal mt-2.5">
+                      {block.section}
+                    </div>
+                  )}
+                  <div className="text-[11px] font-semibold text-[#888] mb-0.5">
+                    {f.label}
+                  </div>
+                  <div className="overflow-x-auto border border-[#bbb] p-2 bg-white">
+                    <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: tableWidth, minWidth: tableWidth === '100%' ? '500px' : 'auto' }}>
+                      <colgroup>
+                        {cols.map((col, cIdx) => (
+                          <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                        ))}
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
+                          {cols.map((col) => (
+                            <th key={col} className="p-2 border border-[#eee] font-bold text-[#555]">{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
+                            {cols.map((col) => {
+                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                              const cellVal = row[col] ?? '';
+                              const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                                ? Number(cellVal.replace(/,/g, '')).toLocaleString()
+                                : cellVal;
+                              return (
+                                <td key={col} className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}>
+                                  {displayVal || '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        {rows.length === 0 && (
+                          <tr>
+                            <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
+                              등록된 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );

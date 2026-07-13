@@ -52,13 +52,7 @@ export const approvalFormRepo = {
         
         // 1. DB에 서식이 아예 존재하지 않으면 무조건 생성 (최초 보급)
         // 2. system: true 인 잠금 서식이고, 시드 파일 대비 내용 불일치 시 덮어쓰기
-        const shouldWrite = !dbForm || 
-          JSON.stringify(dbForm.fields) !== JSON.stringify(seedForm.fields) ||
-          dbForm.name !== seedForm.name ||
-          dbForm.docTitle !== seedForm.docTitle ||
-          dbForm.closing !== seedForm.closing ||
-          dbForm.icon !== seedForm.icon ||
-          dbForm.folderId !== seedForm.folderId;
+        const shouldWrite = !dbForm;
 
         if (shouldWrite) {
           const valid = approvalFormSchema.parse(seedForm);

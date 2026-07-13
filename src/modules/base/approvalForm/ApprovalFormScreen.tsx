@@ -327,8 +327,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                 </div>
               </div>
               {(f.type === '선택' || f.type === '다중선택') && (
-                <input value={f.options.join(', ')} onChange={(e) => setField(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                  placeholder="옵션(콤마 구분): 영업, 교육, 회의" className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
               )}
             </div>
           ))}
@@ -450,4 +449,25 @@ function FormPreview({ form }: { form: ApprovalForm }) {
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="mb-0.5 block text-[10.5px] font-semibold text-ink3">{label}</span>{children}</label>;
+}
+
+function OptionsInput({ value, onChange }: { value: string[]; onChange: (val: string[]) => void }) {
+  const [text, setText] = useState(value.join(', '));
+  
+  useEffect(() => {
+    setText(value.join(', '));
+  }, [value]);
+
+  return (
+    <input
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = text.split(',').map((s) => s.trim()).filter(Boolean);
+        onChange(parsed);
+      }}
+      placeholder="옵션(콤마 구분): 영업, 교육, 회의"
+      className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+    />
+  );
 }

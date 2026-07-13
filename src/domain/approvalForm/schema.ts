@@ -25,6 +25,7 @@ export const FIELD_TYPES = [
   '사용자', // 조직도 사용자 id
   '부서', // 부서명
   '안내문', // 입력 없음(작성 가이드)
+  '표', // 동적 입력 테이블
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 

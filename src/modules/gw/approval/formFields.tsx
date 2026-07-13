@@ -296,6 +296,236 @@ export function DynamicField({
         </select>
       );
 
+    case '표': {
+      const defaultCols = field.options.length > 0 ? field.options : ['품목명', '수량', '가격', '비고'];
+      let cols: string[] = [...defaultCols];
+      let rows: Array<Record<string, string>> = [];
+      let tableWidth = '100%';
+      let colWidths: Record<string, string> = {};
+      try {
+        if (typeof v === 'string' && v) {
+          const parsed = JSON.parse(v);
+          if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
+              cols = parsed.cols;
+              rows = parsed.rows;
+              tableWidth = parsed.tableWidth || '100%';
+              colWidths = parsed.colWidths || {};
+            } else if (Array.isArray(parsed)) {
+              rows = parsed;
+              cols = defaultCols;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      const updateCell = (rowIndex: number, col: string, value: string) => {
+        const nextRows = rows.map((row, idx) => (idx === rowIndex ? { ...row, [col]: value } : row));
+        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+      };
+
+      const addRow = () => {
+        const newRow = cols.reduce((acc, col) => ({ ...acc, [col]: '' }), {});
+        const nextRows = [...rows, newRow];
+        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+      };
+
+      const removeRow = (rowIndex: number) => {
+        const nextRows = rows.filter((_, idx) => idx !== rowIndex);
+        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+      };
+
+      const addCol = () => {
+        let index = 1;
+        let newCol = `열${index}`;
+        while (cols.includes(newCol)) {
+          index++;
+          newCol = `열${index}`;
+        }
+        const nextCols = [...cols, newCol];
+        const nextRows = rows.map((row) => ({ ...row, [newCol]: '' }));
+        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths }) });
+      };
+
+      const removeCol = (colName: string) => {
+        const nextCols = cols.filter((c) => c !== colName);
+        const nextRows = rows.map((row) => {
+          const newRow = { ...row };
+          delete newRow[colName];
+          return newRow;
+        });
+        const nextWidths = { ...colWidths };
+        delete nextWidths[colName];
+        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextWidths }) });
+      };
+
+      const renameCol = (oldCol: string, newCol: string) => {
+        if (!newCol || newCol === oldCol || cols.includes(newCol)) return;
+        const nextCols = cols.map((c) => (c === oldCol ? newCol : c));
+        const nextRows = rows.map((row) => {
+          const newRow = { ...row };
+          newRow[newCol] = row[oldCol] ?? '';
+          delete newRow[oldCol];
+          return newRow;
+        });
+        const nextWidths = { ...colWidths };
+        if (nextWidths[oldCol]) {
+          nextWidths[newCol] = nextWidths[oldCol];
+          delete nextWidths[oldCol];
+        }
+        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextWidths }) });
+      };
+
+      const handleResizeStart = (e: React.MouseEvent, colName: string) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const parentTh = e.currentTarget.parentElement;
+        const startWidth = parentTh ? parentTh.getBoundingClientRect().width : 120;
+        
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          const dx = moveEvent.clientX - startX;
+          const newWidth = Math.max(40, startWidth + dx);
+          const nextWidths = { ...colWidths, [colName]: `${newWidth}px` };
+          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths: nextWidths }) });
+        };
+
+        const handleMouseUp = () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+      };
+
+      const changeWidth = (w: string) => {
+        set({ [field.key]: JSON.stringify({ cols, rows, tableWidth: w, colWidths }) });
+      };
+
+      return (
+        <div className="mt-1 rounded-lg border border-border bg-panel p-2">
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <span className="text-[11px] font-semibold text-ink2">표 편집기</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-ink3">가로폭:</span>
+              <select
+                value={tableWidth}
+                onChange={(e) => changeWidth(e.target.value)}
+                className="rounded border border-border bg-panel-alt px-1.5 py-0.5 text-[10.5px] text-ink focus:outline-none focus:border-teal"
+              >
+                <option value="100%">100% (전체)</option>
+                <option value="80%">80%</option>
+                <option value="60%">60%</option>
+                <option value="50%">50% (절반)</option>
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="table-fixed border-collapse text-left text-[11.5px] border border-border" style={{ width: tableWidth, minWidth: tableWidth === '100%' ? '500px' : 'auto' }}>
+              <colgroup>
+                {cols.map((col, cIdx) => (
+                  <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                ))}
+                <col style={{ width: '45px' }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border bg-panel-alt">
+                  {cols.map((col, cIdx) => (
+                    <th key={cIdx} className="p-1.5 font-bold text-ink2 relative group border-r border-border min-w-[50px]">
+                      <div className="flex items-center gap-1 pr-2">
+                        <input
+                          defaultValue={col}
+                          key={`${col}-${cIdx}`}
+                          onBlur={(e) => renameCol(col, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              renameCol(col, (e.target as HTMLInputElement).value);
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="bg-transparent border-none w-full text-[11.5px] font-bold text-ink2 focus:outline-none focus:bg-panel p-0.5 rounded"
+                        />
+                        {cols.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeCol(col)}
+                            className="opacity-0 group-hover:opacity-100 text-ink3 hover:text-red-500 text-[10px] ml-1"
+                            title="열 삭제"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleResizeStart(e, col)}
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal bg-[#ddd]/30 group-hover:bg-[#ddd] active:bg-teal transition-colors"
+                        style={{ zIndex: 10 }}
+                        title="드래그하여 열 너비 조절"
+                      />
+                    </th>
+                  ))}
+                  <th className="p-1.5 text-center font-bold text-ink3">
+                    <button
+                      type="button"
+                      onClick={addCol}
+                      className="rounded bg-teal/10 px-1.5 py-0.5 text-[9.5px] font-bold text-teal hover:bg-teal/20"
+                      title="열 추가"
+                    >
+                      + 열 추가
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rIdx) => (
+                  <tr key={rIdx} className="border-b border-border/50 hover:bg-panel-alt/30">
+                    {cols.map((col) => {
+                      const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                      return (
+                        <td key={col} className="p-1 border-r border-border">
+                          <input
+                            value={row[col] ?? ''}
+                            onChange={(e) => updateCell(rIdx, col, e.target.value)}
+                            placeholder={isNumLike ? '0' : ''}
+                            className="w-full rounded border border-border bg-panel-alt px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className="p-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => removeRow(rIdx)}
+                        className="text-[12px] text-ink3 hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={cols.length + 1} className="py-4 text-center text-ink3 text-[11px]">
+                      표가 비어 있습니다. 아래 버튼을 눌러 행을 추가하세요.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            onClick={addRow}
+            className="mt-2 w-full rounded border border-dashed border-border-hi py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+          >
+            + 행 추가
+          </button>
+        </div>
+      );
+    }
+
     case '텍스트':
     default: {
       const isDaysField = field.key.endsWith('__days');
@@ -312,6 +542,8 @@ export function DynamicField({
 export function fieldText(field: FormField, values: Record<string, FieldValue>, org?: OrgLite): string {
   const v = values[field.key];
   switch (field.type) {
+    case '표':
+      return '(표 형식 데이터)';
     case '금액':
       return v ? `₩${Number(v).toLocaleString()}` : '—';
     case '기간': {
