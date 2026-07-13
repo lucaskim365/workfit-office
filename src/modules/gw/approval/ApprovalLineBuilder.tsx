@@ -54,12 +54,14 @@ export function ApprovalLineBuilder({
   drafterId,
   docType,
   amount,
+  docData,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
   drafterId: string;
   docType: string;
   amount: number | null;
+  docData?: Record<string, any> | null;
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
@@ -97,7 +99,7 @@ export function ApprovalLineBuilder({
 
   const fillAuto = () => {
     // 동적 결재선 룰 엔진 — 기안자 부서·직급·금액에 맞는 결재선을 생성.
-    const built = route.build({ drafterId, docType, amount });
+    const built = route.build({ drafterId, docType, amount, docData });
     onChange(built.length ? built : steps);
   };
 

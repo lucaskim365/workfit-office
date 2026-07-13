@@ -24,6 +24,7 @@ export interface RouteContext {
   depts: Department[];
   positions: Position[];
   rules: ApprovalRouteRule[];
+  docData?: Record<string, any> | null;
 }
 
 export interface RouteResult {
@@ -111,6 +112,12 @@ function ruleMatches(rule: ApprovalRouteRule, ctx: RouteContext, org: Org): bool
   const amt = ctx.amount ?? 0;
   if (rule.amountFrom != null && amt < rule.amountFrom) return false;
   if (rule.amountTo != null && amt >= rule.amountTo) return false;
+
+  // 드롭다운 하위 조건 체크
+  if (rule.conditionKey && rule.conditionValues && rule.conditionValues.length > 0) {
+    const val = ctx.docData ? String(ctx.docData[rule.conditionKey] ?? '') : '';
+    if (!rule.conditionValues.includes(val)) return false;
+  }
   return true;
 }
 
@@ -180,24 +187,19 @@ const toStepKind = (k: RouteStep['kind']): StepKind => (k === '검토' ? '결재
 /** 매칭 룰의 관계형 단계를 실인물로 해석해 ApprovalStep[] 생성. */
 function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalStep[] {
   const steps: ApprovalStep[] = [];
-  const used = new Set<string>([drafter.id]);
+  const used = new Set<string>();
   let seq = 1;
   for (const rs of rule.steps) {
     const candidates = resolveCandidates(rs, drafter, org);
     
-    // resolver 가 DRAFTER 인 경우에는 '자기 기안자 제외' 또는 '중복 제외' 필터를 완전히 우회
-    const pick = rs.resolver === 'DRAFTER'
-      ? candidates.find((id) => org.userById.has(id))
-      : candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
+    const pick = candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
 
     if (!pick) {
       if (rs.optional) continue;
       continue; // 해석 불가 → 스킵(폴백은 상위에서 처리)
     }
     
-    if (rs.resolver !== 'DRAFTER') {
-      used.add(pick);
-    }
+    used.add(pick);
     const kind = toStepKind(rs.kind);
     steps.push({ seq: seq++, parallelGroup: null, kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
     if (kind === '전결') break; // 전결 이후 절단

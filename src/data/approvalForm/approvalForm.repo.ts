@@ -29,24 +29,36 @@ const byFolderOrder = (a: ApprovalFolder, b: ApprovalFolder) => a.order - b.orde
 
 export const approvalFormRepo = {
   async list(): Promise<ApprovalForm[]> {
+    const obsoleteFormIds = [
+      '출장', '보험신청', '운반비청구', '공문발송', '접대비품의',
+      '비용청구', '단체상해보험변경', '단체상해보험재가입', '화재보험', '자동차보험',
+      '우편택배청구', '퀵서비스청구', '일반공문', '법률문서', '접대비내', '접대비초과', '지출결의'
+    ];
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));
-      const list = snap.docs.map((d) => approvalFormSchema.parse(d.data())).sort(byOrder);
+      let list = snap.docs.map((d) => approvalFormSchema.parse(d.data()));
       
+      // 구 서식(obsolete) 삭제
+      for (const obsId of obsoleteFormIds) {
+        if (list.some((f) => f.id === obsId)) {
+          await deleteDoc(doc(db, COLL, obsId));
+          list = list.filter((f) => f.id !== obsId);
+        }
+      }
+
       // 자동 마이그레이션 및 동기화: Firestore에 코드 시드의 서식들을 보급
       for (const seedForm of APPROVAL_FORM_SEED) {
         const dbForm = list.find((f) => f.id === seedForm.id);
         
         // 1. DB에 서식이 아예 존재하지 않으면 무조건 생성 (최초 보급)
         // 2. system: true 인 잠금 서식이고, 시드 파일 대비 내용 불일치 시 덮어쓰기
-        const shouldWrite = !dbForm || (seedForm.system && (
+        const shouldWrite = !dbForm || 
           JSON.stringify(dbForm.fields) !== JSON.stringify(seedForm.fields) ||
           dbForm.name !== seedForm.name ||
           dbForm.docTitle !== seedForm.docTitle ||
           dbForm.closing !== seedForm.closing ||
           dbForm.icon !== seedForm.icon ||
-          dbForm.folderId !== seedForm.folderId
-        ));
+          dbForm.folderId !== seedForm.folderId;
 
         if (shouldWrite) {
           const valid = approvalFormSchema.parse(seedForm);
@@ -60,6 +72,7 @@ export const approvalFormRepo = {
       }
       return list.sort(byOrder);
     }
+    memory = memory.filter((m) => !obsoleteFormIds.includes(m.id));
     return [...memory].sort(byOrder);
   },
 
@@ -86,14 +99,16 @@ export const approvalFormRepo = {
   async listFolders(): Promise<ApprovalFolder[]> {
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL_FOLDERS));
-      if (snap.empty) {
-        // DB 최초 진입 시 목업 폴더들을 Firestore에 넣어줍니다.
-        for (const f of INITIAL_FOLDER_SEED) {
+      const list = snap.docs.map((d) => approvalFolderSchema.parse(d.data()));
+      
+      // 인사, 총무, 품의, 경조사 폴더 유실 방지 및 자동 복구
+      for (const f of INITIAL_FOLDER_SEED) {
+        if (!list.some((ex) => ex.id === f.id)) {
           await setDoc(doc(db, COLL_FOLDERS, f.id), f);
+          list.push(f);
         }
-        return [...INITIAL_FOLDER_SEED].sort(byFolderOrder);
       }
-      return snap.docs.map((d) => approvalFolderSchema.parse(d.data())).sort(byFolderOrder);
+      return list.sort(byFolderOrder);
     }
     return [...memoryFolders].sort(byFolderOrder);
   },

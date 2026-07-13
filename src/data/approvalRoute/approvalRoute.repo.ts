@@ -19,21 +19,41 @@ export const approvalRouteRepo = {
       const snap = await getDocs(collection(db, COLL));
       rows = snap.docs.map((d) => approvalRouteRuleSchema.parse(d.data()));
       
-      // 마이그레이션: Firestore 데이터베이스의 룰 개수가 시드 데이터(22개)와 불일치하거나 비어있으면 
-      // 기존 룰을 모두 최신 시드로 강제 마이그레이션 동기화
-      if (rows.length === 0 || rows.length !== APPROVAL_ROUTE_SEED.length || rows.some(r => r.id.startsWith('RR-EXP-'))) {
-        // 기존 룰 전체 삭제 후 재배포
-        for (const r of rows) {
+      // 1. 구 버전 규칙이나 시드에서 제외된 구 룰 정리
+      const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));
+      for (const r of rows) {
+        const isObsolete = (r.id.startsWith('RR-') && !seedIds.has(r.id)) || r.id.startsWith('RR-EXP-');
+        if (isObsolete) {
           await deleteDoc(doc(db, COLL, r.id));
+          rows = rows.filter((x) => x.id !== r.id);
         }
-        rows = [];
-        for (const seed of APPROVAL_ROUTE_SEED) {
+      }
+
+      // 2. 개별 규칙 내용 동기화 (기존 데이터와 다르면 덮어쓰기)
+      for (const seed of APPROVAL_ROUTE_SEED) {
+        const dbRule = rows.find((r) => r.id === seed.id);
+        const shouldWrite = !dbRule;
+
+        if (shouldWrite) {
           const valid = approvalRouteRuleSchema.parse(seed);
           await setDoc(doc(db, COLL, valid.id), valid);
-          rows.push(valid);
+          if (dbRule) {
+            Object.assign(dbRule, seed);
+          } else {
+            rows.push(valid);
+          }
         }
       }
     } else {
+      // 로컬/메모리 모드 갱신
+      const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));
+      memory = memory.filter((r) => !r.id.startsWith('RR-') || seedIds.has(r.id));
+      for (const seed of APPROVAL_ROUTE_SEED) {
+        const valid = approvalRouteRuleSchema.parse(seed);
+        const idx = memory.findIndex((m) => m.id === valid.id);
+        if (idx >= 0) memory[idx] = valid;
+        else memory.push(valid);
+      }
       rows = memory;
     }
     return [...rows].sort((a, b) => a.priority - b.priority);

@@ -18,7 +18,7 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  */
 
 const blankField = (): FormField => ({
-  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false,
+  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null,
 });
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
@@ -317,6 +317,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                   <option value="full">전체</option><option value="half">2열</option>
                 </select>
                 <input value={f.section} onChange={(e) => setField(i, { section: e.target.value })} placeholder="섹션" className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
+                <input value={f.visibleIf ?? ''} onChange={(e) => setField(i, { visibleIf: e.target.value || null })} placeholder="노출조건(Key:값)" className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none" />
                 <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
                 {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
                 <div className="ml-auto flex items-center gap-1">

@@ -17,6 +17,7 @@ export interface RouteInput {
   drafterId: string;
   docType: string;
   amount: number | null;
+  docData?: Record<string, any> | null;
 }
 
 export function useApprovalRouteRules() {
@@ -29,7 +30,7 @@ export function useRouteEngine() {
 
   /** 상세 결과(steps + 매칭 룰) — 시뮬레이터용. */
   const resolve = useCallback(
-    ({ drafterId, docType, amount }: RouteInput): RouteResult => {
+    ({ drafterId, docType, amount, docData }: RouteInput): RouteResult => {
       const drafter = org.users.find((u) => u.id === drafterId);
       if (!drafter) return { steps: [], rule: null };
       return resolveRoute({
@@ -40,6 +41,7 @@ export function useRouteEngine() {
         depts: org.depts,
         positions: org.positions,
         rules: rulesQ.data ?? [],
+        docData,
       });
     },
     [org.users, org.depts, org.positions, rulesQ.data],
