@@ -77,9 +77,19 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
   // 동적 필드 중 안내문과 일수 필드를 제외하고 모두 순서대로 배치
-  const activeFields = (form?.fields ?? []).filter(
-    (f) => f.type !== '안내문' && !f.key.endsWith('__days')
-  );
+  const activeFields = (form?.fields ?? []).filter((f) => {
+    if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+    if (f.visibleIf) {
+      const parts = f.visibleIf.split(':');
+      if (parts.length === 2) {
+        const [condKey, condVal] = parts;
+        if (String(doc.fieldValues[condKey] ?? '') !== condVal) {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
 
   const longTextFields = activeFields.filter(
     (f) => f.type === '장문'
