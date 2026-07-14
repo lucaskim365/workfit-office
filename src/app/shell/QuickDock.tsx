@@ -762,7 +762,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
       {/* 메시지 */}
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {filteredMessages.map((m) => (
-          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} onOpenImage={setViewer} />
+          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} />
         ))}
         {filteredMessages.length === 0 && searchQuery && (
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
@@ -809,7 +809,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: string; group: boolean; onOpenImage: (att: Attachment) => void }) {
+function MessageBubble({ m, me, group, roomMembers, onOpenImage }: { m: ChatMessage; me: string; group: boolean; roomMembers: string[]; onOpenImage: (att: Attachment) => void }) {
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
@@ -819,6 +819,18 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
   }
   const mine = m.senderId === me;
   const att = m.attachment;
+
+  // 전송 시각 포맷 (HH:MM)
+  const fmtBubbleTime = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  // 안 읽은 인원 수: 방 멤버 중 readBy 에 없는 사람 수 (본인 제외)
+  const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body: ReactNode;
   if (m.type === 'image' && att) {
@@ -854,6 +866,19 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
     );
   }
 
+  // 말풍선 하단 메타 (시각 + 읽음 수)
+  const bubbleMeta = (
+    <div className={`mt-0.5 flex items-center gap-1 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+      {/* 읽음 카운트: 내 메시지이고 안 읽은 사람이 있을 때만 노란색 숫자 표시 (카카오톡 '1' 스타일) */}
+      {mine && unreadCount > 0 && (
+        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#e6960c' }}>
+          {unreadCount}
+        </span>
+      )}
+      <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+    </div>
+  );
+
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -861,6 +886,7 @@ function MessageBubble({ m, me, group, onOpenImage }: { m: ChatMessage; me: stri
         <div className="min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {body}
+          {bubbleMeta}
         </div>
       </div>
     </div>
