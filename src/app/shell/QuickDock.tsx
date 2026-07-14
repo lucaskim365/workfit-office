@@ -20,9 +20,9 @@ interface Tool {
 }
 
 const DOCK_TOOLS: Tool[] = [
-  { key: 'gw', label: '그룹웨어', icon: '▦', color: '#c7ecc5' },
+  { key: 'gw', label: '그룹웨어', icon: '🌐', color: '#c7ecc5' },
   { key: 'bot', label: 'Widdy', icon: '✦', color: '#a9c8f5' },
-  { key: 'msg', label: '메신저', icon: '✉', color: '#eecfa2' },
+  { key: 'msg', label: '메신저', icon: '👤', color: '#eecfa2' },
 ];
 
 function getRoomDisplayName(room: ChatRoom, me: string, users: any[]): string {
@@ -116,7 +116,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
                           key={n.id}
                           className={`flex items-start gap-3 border-b border-border px-4 py-3 ${n.read ? 'opacity-55' : ''}`}
                         >
-                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eecfa2] text-[15px]">✉</span>
+                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eecfa2] text-[15px]">👤</span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
                               <span className="truncate text-[11.5px] font-bold text-ink">{n.from}</span>
@@ -239,13 +239,26 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
         <div className="grid grid-cols-4 gap-2">
-          {apps.map((a, i) => (
-            <button key={i} onClick={() => go(a.to)} title={a.l} className="relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]">
-              <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: a.hot ? CYAN : 'transparent', color: a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
-              <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
-              {a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
-            </button>
-          ))}
+          {apps.map((a, i) => {
+            const enabled = a.to === 'approval';
+            return (
+              <button
+                key={i}
+                onClick={() => { if (enabled) go(a.to); }}
+                disabled={!enabled}
+                title={enabled ? a.l : `${a.l} (준비 중)`}
+                className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow ${
+                  enabled 
+                    ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]' 
+                    : 'opacity-40 cursor-not-allowed filter grayscale'
+                }`}
+              >
+                <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: enabled && a.hot ? CYAN : 'transparent', color: enabled && a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
+                <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
+                {enabled && a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
+              </button>
+            );
+          })}
         </div>
 
         <DockCard title="결재 대기" count={summary.pendingCount ? String(summary.pendingCount) : undefined}>
@@ -270,14 +283,13 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
 
         <DockCard title="공지사항">
           {notices.map((n, i) => (
-            <button
+            <div
               key={i}
-              onClick={() => go('board')}
-              className={`flex w-full justify-between gap-2 py-[9px] text-left ${i < notices.length - 1 ? 'border-b border-border' : ''}`}
+              className={`flex w-full justify-between gap-2 py-[9px] text-left ${i < notices.length - 1 ? 'border-b border-border' : ''} opacity-60`}
             >
               <span className="truncate text-[11.5px] font-medium text-ink2">{n[0]}</span>
               <span className="shrink-0 text-[10px] tabular-nums text-ink3">{n[1]}</span>
-            </button>
+            </div>
           ))}
         </DockCard>
       </div>

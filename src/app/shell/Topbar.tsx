@@ -63,16 +63,31 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       <div className="flex shrink-0 items-center gap-7">
         <Brand />
         <nav className="flex gap-0.5">
-          {MENU_TREE.map((m) => {
+          {MENU_TREE.filter((m) => m.use !== false).map((m) => {
             const active = m.id === activeModuleId;
-            const isOpen = openModule === m.id;
+            const isSpecial = m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
+            const isOpen = isSpecial
+              ? (m.id === 'M_GW' && dockOpen === 'gw') ||
+                (m.id === 'M_WIDDY' && dockOpen === 'bot') ||
+                (m.id === 'M_MSG' && dockOpen === 'msg')
+              : openModule === m.id;
             const groups = (m.children ?? []).filter((g) => g.use !== false);
             const screenCount = groups.reduce((s, g) => s + (g.children?.filter((x) => x.use !== false).length ?? 0), 0);
             const cols = groups.length > 3 ? 3 : groups.length > 1 ? 2 : 1;
             return (
               <div key={m.id} className="relative">
                 <button
-                  onClick={() => setOpenModule(isOpen ? null : m.id)}
+                  onClick={() => {
+                    if (m.id === 'M_GW') {
+                      setDockOpen(dockOpen === 'gw' ? null : 'gw');
+                    } else if (m.id === 'M_WIDDY') {
+                      setDockOpen(dockOpen === 'bot' ? null : 'bot');
+                    } else if (m.id === 'M_MSG') {
+                      setDockOpen(dockOpen === 'msg' ? null : 'msg');
+                    } else {
+                      setOpenModule(isOpen ? null : m.id);
+                    }
+                  }}
                   style={{ color: 'var(--color-header-text)', opacity: active || isOpen ? 1 : 0.7 }}
                   className={`flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
                     }`}
@@ -81,7 +96,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                   <span className={`whitespace-nowrap text-[11px] ${active ? 'font-bold' : 'font-semibold'}`}>{m.name}</span>
                 </button>
 
-                {isOpen && (
+                {isOpen && !isSpecial && (
                   <div
                     ref={panelRef}
                     className="absolute left-1/2 top-[calc(100%+10px)] z-[60] flex max-h-[calc(100vh-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)]"
@@ -134,34 +149,6 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
       {/* 날짜 + 계정 */}
       <div className="flex shrink-0 items-center gap-3">
-        {/* 퀵 도크 바로가기 아이콘 3종 */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setDockOpen(dockOpen === 'gw' ? null : 'gw')}
-            title="그룹웨어"
-            style={{ color: dockOpen === 'gw' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'gw' ? 1 : 0.7 }}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
-          >
-            ▦
-          </button>
-          <button
-            onClick={() => setDockOpen(dockOpen === 'bot' ? null : 'bot')}
-            title="Widdy"
-            style={{ color: dockOpen === 'bot' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'bot' ? 1 : 0.7 }}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
-          >
-            ✦
-          </button>
-          <button
-            onClick={() => setDockOpen(dockOpen === 'msg' ? null : 'msg')}
-            title="메신저"
-            style={{ color: dockOpen === 'msg' ? 'var(--color-teal)' : 'var(--color-header-text)', opacity: dockOpen === 'msg' ? 1 : 0.7 }}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[21px] transition-colors hover:bg-white/[0.08]"
-          >
-            ✉
-          </button>
-        </div>
-
         <span style={{ color: 'var(--color-header-text)', opacity: 0.7 }} className="text-[11px] tabular-nums">2026-06-10 09:00</span>
         <div className="relative">
           <button

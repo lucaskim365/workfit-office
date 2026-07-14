@@ -80,7 +80,7 @@ export const MENU_TREE: MenuNode[] = [
   ] },
 
   /* ── 생산 관리 ── */
-  { id: 'M_PROD', name: '생산 관리', icon: '⚙', order: 30, use: true, children: [
+  { id: 'M_PROD', name: '생산 관리', icon: '⚙', order: 30, use: false, children: [
     { id: 'G_PROD_MASTER', name: '생산 기준정보', icon: '⌗', order: 10, use: true, children: [
       { id: 'S_PROD_BOM', name: 'BOM(자재명세서) 조회', url: '/prod/bom', icon: '⌗', order: 10, use: true },
       { id: 'S_PROD_ROUTING', name: '공정(Routing) 마스터', url: '/prod/routing', icon: '⚙', order: 20, use: true },
@@ -120,7 +120,7 @@ export const MENU_TREE: MenuNode[] = [
   ] },
 
   /* ── 설비 관리 ── */
-  { id: 'M_EQ', name: '설비 관리', icon: '◷', order: 40, use: true, children: [
+  { id: 'M_EQ', name: '설비 관리', icon: '◷', order: 40, use: false, children: [
     { id: 'G_EQ_BASE', name: '설비 기준정보 관리', icon: '▤', order: 10, use: true, children: [
       { id: 'S_EQ_MASTER', name: '설비 마스터 등록', url: '/equip/master', icon: '◫', order: 10, use: true },
       { id: 'S_EQ_SPEC', name: '설비 스펙·제원 관리', url: '/equip/spec', icon: '⊞', order: 20, use: true },
@@ -173,7 +173,7 @@ export const MENU_TREE: MenuNode[] = [
   ] },
 
   /* ── 품질 관리 ── */
-  { id: 'M_QUAL', name: '품질 관리', icon: '✦', order: 50, use: true, children: [
+  { id: 'M_QUAL', name: '품질 관리', icon: '✦', order: 50, use: false, children: [
     { id: 'G_QUAL_MASTER', name: '품질 기준정보', icon: '⌗', order: 10, use: true, children: [
       { id: 'S_QUAL_ITEM', name: '품질 검사 항목 마스터', url: '/qual/insp-item', icon: '⌗', order: 10, use: true },
       { id: 'S_QUAL_SPEC', name: '제품/공정별 검사 기준 설정', url: '/qual/insp-spec', icon: '▦', order: 20, use: true },
@@ -222,7 +222,7 @@ export const MENU_TREE: MenuNode[] = [
   ] },
 
   /* ── 자재관리 ── */
-  { id: 'M_MAT', name: '자재관리', icon: '⬓', order: 60, use: true, children: [
+  { id: 'M_MAT', name: '자재관리', icon: '⬓', order: 60, use: false, children: [
     { id: 'G_MAT_BASE', name: '기준정보/설정', icon: '⌗', order: 5, use: true, children: [
       { id: 'S_MAT_SAFETY', name: '안전재고 및 발주점 관리', url: '/mat/safety-stock', icon: '⚠', order: 10, use: true },
       { id: 'S_MAT_FIFO', name: '자재 선입선출(FIFO) 룰 관리', url: '/mat/fifo-rule', icon: '⇄', order: 20, use: true },
@@ -316,6 +316,11 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_REP_SCORE', name: '부서/라인 스코어카드', url: '/report/scorecard', icon: '✦', order: 30, use: true },
     ] },
   ] },
+
+  /* ── 퀵 도크 (그룹웨어, Widdy, 메신저) ── */
+  { id: 'M_GW', name: '그룹웨어', icon: '🌐', order: 80, use: true, children: [] },
+  { id: 'M_WIDDY', name: 'Widdy', icon: '✦', order: 85, use: true, children: [] },
+  { id: 'M_MSG', name: '메신저', icon: '👤', order: 90, use: true, children: [] },
 ];
 
 /** 모듈의 첫 화면 URL (상단 내비 클릭 시 진입점). */
