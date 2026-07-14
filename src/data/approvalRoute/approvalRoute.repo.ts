@@ -19,10 +19,11 @@ export const approvalRouteRepo = {
       const snap = await getDocs(collection(db, COLL));
       rows = snap.docs.map((d) => approvalRouteRuleSchema.parse(d.data()));
       
-      // 1. 구 버전 규칙이나 시드에서 제외된 구 룰 정리
+      // 1. 구 버전 규칙이나 시드에서 제외된 구 룰 정리 (사용자가 새로 생성한 룰은 보존)
       const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));
       for (const r of rows) {
-        const isObsolete = (r.id.startsWith('RR-') && !seedIds.has(r.id)) || r.id.startsWith('RR-EXP-');
+        const isUserRule = /RR-\d+-\d+/.test(r.id);
+        const isObsolete = !isUserRule && ((r.id.startsWith('RR-') && !seedIds.has(r.id)) || r.id.startsWith('RR-EXP-'));
         if (isObsolete) {
           await deleteDoc(doc(db, COLL, r.id));
           rows = rows.filter((x) => x.id !== r.id);
@@ -47,7 +48,12 @@ export const approvalRouteRepo = {
     } else {
       // 로컬/메모리 모드 갱신
       const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));
-      memory = memory.filter((r) => !r.id.startsWith('RR-') || seedIds.has(r.id));
+      // 사용자가 생성한 룰(RR-숫자-숫자)은 메모리에서 필터 아웃되지 않도록 보존
+      memory = memory.filter((r) => {
+        const isUserRule = /RR-\d+-\d+/.test(r.id);
+        if (isUserRule) return true;
+        return !r.id.startsWith('RR-') || seedIds.has(r.id);
+      });
       for (const seed of APPROVAL_ROUTE_SEED) {
         const valid = approvalRouteRuleSchema.parse(seed);
         const idx = memory.findIndex((m) => m.id === valid.id);

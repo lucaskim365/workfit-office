@@ -362,7 +362,23 @@ function RoutePreview({ rule }: { rule: ApprovalRouteRule }) {
     const drafter = org.users.find((u) => u.id === did);
     if (!drafter) return null;
     const dt: string = rule.docType === '전체' ? '기안' : rule.docType;
-    return resolveRoute({ drafter, docType: dt, amount: amount === '' ? null : Number(amount), users: org.users, depts: org.depts, positions: org.positions, rules: [rule] });
+    
+    // 시뮬레이터 룰 매칭을 위한 모의 데이터 구성 (conditionKey가 있는 경우 매칭값 자동 주입)
+    const docData: Record<string, any> = {};
+    if (rule.conditionKey && rule.conditionValues && rule.conditionValues.length > 0) {
+      docData[rule.conditionKey] = rule.conditionValues[0];
+    }
+
+    return resolveRoute({
+      drafter,
+      docType: dt,
+      amount: amount === '' ? null : Number(amount),
+      users: org.users,
+      depts: org.depts,
+      positions: org.positions,
+      rules: [rule],
+      docData,
+    });
   }, [rule, did, amount, org.users, org.depts, org.positions]);
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;

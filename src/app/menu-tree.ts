@@ -28,6 +28,7 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_BASE_POSITION', name: '직급관리', url: '/base/position', icon: '◫', order: 20, use: true },
       { id: 'S_BASE_APRULE', name: '결재선 규칙관리', url: '/base/approval-rule', icon: '⚖', order: 30, use: true },
       { id: 'S_BASE_APFORM', name: '결재서식 관리', url: '/base/approval-form', icon: '📄', order: 40, use: true },
+      { id: 'S_BASE_APMON', name: '결재문서 모니터링', url: '/base/approval-monitor', icon: '🔍', order: 50, use: true },
     ] },
     { id: 'G_BASE_MASTER', name: '마스터 정보', icon: '▦', order: 20, use: true, children: [
       { id: 'S_BASE_CODE', name: '공통코드정보', url: '/base/code', icon: '⌗', order: 10, use: true },
