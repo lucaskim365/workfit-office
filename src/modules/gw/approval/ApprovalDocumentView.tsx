@@ -402,13 +402,18 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         <div>{closing}</div>
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
-        <div className="mt-1 flex items-center justify-center gap-2">
+        <div className="mt-1 flex items-center justify-center gap-1">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-          {sealOf(doc.drafterId) ? (
-            <img src={sealOf(doc.drafterId)} alt="인감" className="ml-1 h-[36px] w-[36px] object-contain" />
-          ) : (
-            <span className="text-[#c0392b]">(인)</span>
-          )}
+          <span className="relative inline-flex h-9 w-9 items-center justify-center select-none">
+            <span className="text-[12.5px] font-bold text-[#c0392b] z-10">(인)</span>
+            {sealOf(doc.drafterId) && (
+              <img
+                src={sealOf(doc.drafterId)}
+                alt="인감"
+                className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
+              />
+            )}
+          </span>
         </div>
       </div>
     </div>
@@ -423,9 +428,9 @@ function ApprovalStampBox({ steps, nameOf, posOf, sealOf }: { steps: ApprovalSte
       <div className="flex">
         {steps.map((s) => (
           <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
-            <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{s.kind}</div>
+            <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{posOf(s.approverId) || ' '}</div>
             <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} sealUrl={sealOf(s.approverId)} /></div>
-            <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : posOf(s.approverId)) || ' '}</div>
+            <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
           </div>
         ))}
       </div>
@@ -453,7 +458,9 @@ function Stamp({ step, name, sealUrl }: { step: ApprovalStep; name: string; seal
   if (step.decision === '반려')
     return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
   if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
-  return <span className="text-[9px] text-[#bbb]">{name}<br />(대기)</span>;
+  
+  // 대기 상태일 때는 결재란 내 인감 영역에 연회색으로 결재단계(s.kind) 표시
+  return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
 }
 
 function MetaRow({ cells, full }: { cells: [string, string][]; full?: boolean }) {
