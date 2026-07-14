@@ -23,6 +23,14 @@ service firebase.storage {
         || request.resource.size < 10 * 1024 * 1024;
     }
 
+    // 인감(도장) 이미지
+    match /seals/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource == null
+        || (request.resource.size < 5 * 1024 * 1024
+            && request.resource.contentType.matches('image/.*'));
+    }
+
     // 그 외 전체 차단(기본 거부)
     match /{allPaths=**} {
       allow read, write: if false;
