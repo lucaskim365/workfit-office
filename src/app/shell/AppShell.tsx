@@ -159,6 +159,23 @@ export default function AppShell() {
 
       <QuickDock open={dockOpen} setOpen={setDockOpen} />
       {/* 실시간 알림 토스트 피드 중지 — 필요 시 <ToastFeed /> 복원 */}
+
+      {/* 하단 푸터 */}
+      <footer
+        style={{ backgroundColor: 'var(--color-header-bg)', color: 'var(--color-header-text)' }}
+        className="shrink-0 flex items-center justify-center gap-2 px-4 py-1.5 text-[10px] opacity-70"
+      >
+        <span>© {new Date().getFullYear()} WorkFit</span>
+        <span>·</span>
+        <a
+          href="https://www.workfit.kr/ko"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:opacity-100 transition-opacity"
+        >
+          공식 홈페이지
+        </a>
+      </footer>
     </div>
   );
 }
