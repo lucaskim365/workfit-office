@@ -76,6 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function changePassword(currentPassword: string, newPassword: string) {
     if (!user) throw new Error('로그인 상태가 아닙니다.');
+    
+    const pwRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{9,}$/;
+    if (!pwRegex.test(newPassword)) {
+      throw new Error('비밀번호는 영문자, 숫자, 특수기호가 포함된 9자 이상이어야 합니다.');
+    }
+    
     const updated = await authRepo.changePassword(user.id, currentPassword, newPassword);
     setUser(updated); // 세션 내 비밀번호 최신화(이후 변경 검증 정확)
   }

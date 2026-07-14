@@ -1,5 +1,5 @@
-import { lazy as reactLazy, type ComponentType } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy as reactLazy, useEffect, type ComponentType } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import AppShell from './shell/AppShell';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
@@ -256,7 +256,16 @@ import { useNotifications } from '@/features/notification/useNotifications';
 
 export default function App() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   useNotifications(user?.id);
+
+  // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동
+  useEffect(() => {
+    if (user && user.password === 'mes1234') {
+      window.alert('보안을 위해 초기 비밀번호(mes1234)를 반드시 변경해 주세요.');
+      navigate('/profile');
+    }
+  }, [user, navigate]);
 
   return (
     <Routes>

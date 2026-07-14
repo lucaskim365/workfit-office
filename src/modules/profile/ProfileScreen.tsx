@@ -52,7 +52,14 @@ export default function ProfileScreen() {
   const handleChangePw = async () => {
     setPwErr(''); setPwMsg('');
     if (!curPw) { setPwErr('현재 비밀번호를 입력하세요.'); return; }
-    if (newPw.length < 4) { setPwErr('새 비밀번호는 4자 이상이어야 합니다.'); return; }
+    
+    // 영문자, 숫자, 특수기호 포함 9자 이상 검증
+    const pwRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{9,}$/;
+    if (!pwRegex.test(newPw)) {
+      setPwErr('비밀번호는 영문자, 숫자, 특수기호가 포함된 9자 이상이어야 합니다.');
+      return;
+    }
+    
     if (newPw !== confirmPw) { setPwErr('새 비밀번호가 일치하지 않습니다.'); return; }
     setSavingPw(true);
     try {
