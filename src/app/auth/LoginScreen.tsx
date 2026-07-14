@@ -65,7 +65,7 @@ export default function LoginScreen() {
   return (
     <div className="grid min-h-screen place-items-center bg-bg-deep px-4">
       <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.18)]">
-        <div className="flex flex-col items-center gap-3 bg-navy px-6 pb-6 pt-8">
+        <div className="flex flex-col items-center gap-3 bg-[#6a8dc9] px-6 pb-6 pt-8">
           {(logoUrl || defaultLogo) ? (
             // 남색 헤더 위에 로고 직접 배치(흰 로고도 보이도록). 원본 비율 유지 +
             // 최대 높이/너비 제한으로 어떤 비율의 로고든 박스를 넘치지 않게 담는다.

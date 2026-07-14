@@ -13,10 +13,12 @@ import {
   matchesBox,
   recall as recallDoc,
   submit as submitDoc,
+  currentApproverIds,
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
+import { userRepo } from '@/data/user/user.repo';
 
 /**
  * 전자결재 문서 Repository — 채번(counters) + **순수 엔진**(domain/approvalDoc/engine)
@@ -160,6 +162,27 @@ export const approvalDocRepo = {
     if (cur.drafterId !== userId) throw new Error('기안자만 상신할 수 있습니다');
     const next = submitDoc(cur, now());
     await persist(next);
+
+    // 알림 생성 연동
+    try {
+      const activeApprovers = currentApproverIds(next);
+      const users = await userRepo.list();
+      const drafterUser = users.find((u) => u.id === next.drafterId);
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      for (const appUserId of activeApprovers) {
+        await notificationRepo.create({
+          userId: appUserId,
+          type: '결재',
+          title: '결재 요청',
+          text: `[${next.title}] 결재선에 본인의 차례가 되었습니다.`,
+          senderName: drafterUser?.name ?? '기안자',
+          linkUrl: `/gw/approval?doc=${next.id}`,
+        });
+      }
+    } catch (e) {
+      console.error('상신 알림 전송 실패:', e);
+    }
+
     return next;
   },
 
@@ -171,6 +194,67 @@ export const approvalDocRepo = {
     }
     const next = applyDecision(cur, seq, '승인', { at: now(), comment });
     await persist(next);
+
+    // 알림 생성 연동
+    try {
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      const users = await userRepo.list();
+      const approverUser = users.find((u) => u.id === userId);
+
+      if (next.status === '완료') {
+        // 기안자에게 완료 알림
+        await notificationRepo.create({
+          userId: next.drafterId,
+          type: '결재',
+          title: '결재 완료',
+          text: `[${next.title}] 결재가 최종 승인(완료)되었습니다.`,
+          senderName: approverUser?.name ?? '결재자',
+          linkUrl: `/gw/approval?doc=${next.id}`,
+        });
+
+        // 수신처 알림
+        for (const rec of next.recipients || []) {
+          if (rec.type === 'user') {
+            await notificationRepo.create({
+              userId: rec.id,
+              type: '결재',
+              title: '수신 문서 알림',
+              text: `[${next.title}] 수신/시행 문서가 배달되었습니다.`,
+              senderName: '시스템',
+              linkUrl: `/gw/approval?doc=${next.id}`,
+            });
+          } else if (rec.type === 'dept') {
+            const deptUsers = users.filter((u) => u.dept === rec.name);
+            for (const du of deptUsers) {
+              await notificationRepo.create({
+                userId: du.id,
+                type: '결재',
+                title: '수신 문서 알림',
+                text: `[${next.title}] 부서 수신/시행 문서가 배달되었습니다.`,
+                senderName: '시스템',
+                linkUrl: `/gw/approval?doc=${next.id}`,
+              });
+            }
+          }
+        }
+      } else if (next.status === '진행중') {
+        // 다음 결재자들에게 알림
+        const activeApprovers = currentApproverIds(next);
+        for (const appUserId of activeApprovers) {
+          await notificationRepo.create({
+            userId: appUserId,
+            type: '결재',
+            title: '결재 요청',
+            text: `[${next.title}] 결재선에 본인의 차례가 되었습니다.`,
+            senderName: approverUser?.name ?? '이전 결재자',
+            linkUrl: `/gw/approval?doc=${next.id}`,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('승인 알림 전송 실패:', e);
+    }
+
     return next;
   },
 
@@ -182,6 +266,25 @@ export const approvalDocRepo = {
     }
     const next = applyDecision(cur, seq, '반려', { at: now(), comment });
     await persist(next);
+
+    // 알림 생성 연동
+    try {
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      const users = await userRepo.list();
+      const approverUser = users.find((u) => u.id === userId);
+
+      await notificationRepo.create({
+        userId: next.drafterId,
+        type: '결재',
+        title: '결재 반려',
+        text: `[${next.title}] 결재가 반려되었습니다. (사유: ${comment})`,
+        senderName: approverUser?.name ?? '결재자',
+        linkUrl: `/gw/approval?doc=${next.id}`,
+      });
+    } catch (e) {
+      console.error('반려 알림 전송 실패:', e);
+    }
+
     return next;
   },
 

@@ -53,12 +53,7 @@ const NOTI_META: Record<ApprovalNoti['kind'], { icon: string; color: string; lab
 };
 
 /** 목업 알림 데이터 (추후 실시간 알림 서비스로 교체). */
-const MOCK_NOTIS: ApprovalNoti[] = [
-  { id: 'n1', kind: '결재요청', title: '마우스 구매', docId: 'AP-260702-002', at: '07/09 16:08', read: false },
-  { id: 'n2', kind: '반려', title: '영업팀 전시회 참가 지출결의', docId: 'AP-260701-005', at: '07/01 18:22', read: false },
-  { id: 'n3', kind: '승인', title: '품질관리팀 검사 표준 개정 기안', docId: 'AP-260701-004', at: '07/01 06:20', read: true },
-  { id: 'n4', kind: '참조', title: 'S/W 개발팀 개발 장비 구매 품의', docId: 'AP-260702-002', at: '07/02 00:35', read: true },
-];
+const MOCK_NOTIS: ApprovalNoti[] = [];
 
 export default function ApprovalScreen() {
   const { user } = useAuth();

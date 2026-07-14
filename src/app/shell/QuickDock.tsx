@@ -11,6 +11,7 @@ import { useGwSummary } from '@/features/gw/useGwSummary';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
 
 interface Tool {
   key: string;
@@ -46,12 +47,7 @@ interface MsgNoti {
 }
 
 /** 목업 메신저 알림 데이터. */
-const MOCK_MSG_NOTIS: MsgNoti[] = [
-  { id: 'm1', from: '이순신 (설비보전)', roomName: '설비보전팀 단톡방', text: 'CMP02 점검 끝났어요. 가동 재개합니다.', at: '07/09 16:12', read: false },
-  { id: 'm2', from: '김체찰 (품질보증)', roomName: '품질보증팀', text: 'SPC 룰 위반 건 확인 부탁드립니다.', at: '07/09 14:55', read: false },
-  { id: 'm3', from: '확인 (생산업무)', roomName: '생산1팀 단톡방', text: '교대 인수인계 완료했습니다 👍', at: '07/09 08:31', read: true },
-  { id: 'm4', from: '신영희 (구매)', roomName: '1:1 대화', text: 'PO-260611-05 입고 일정 변경되었어요.', at: '07/08 17:44', read: true },
-];
+const MOCK_MSG_NOTIS: MsgNoti[] = [];
 
 /** 우측 가장자리 퀵 도크(세로 책갈피 탭 + 슬라이드 패널). 와이어프레임 quick-dock.jsx 정본.
  * scrolling: 본문 스크롤 중이면 탭을 더 밀어내고 흐리게(양보) → 멈추면 복귀. */
@@ -193,6 +189,12 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
   const { user } = useAuth();
   const summary = useGwSummary(user?.id);
+  const notis = useNotifications(user?.id);
+  const unreadCount = notis.filter((n) => !n.read).length;
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  const [showNotiPanel, setShowNotiPanel] = useState(false);
+
   // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
   const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
@@ -229,12 +231,72 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
           </div>
           <div className="mt-0.5 text-[10.5px] opacity-90">{user?.dept ?? '-'}</div>
         </div>
-        <button title="알림" className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">
+        <button
+          onClick={() => {
+            setShowNotiPanel(!showNotiPanel);
+          }}
+          title="알림"
+          className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors"
+        >
           🔔
-          <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#c7ecc5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">1</span>
+          {unreadCount > 0 && (
+            <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#c7ecc5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">
+              {unreadCount}
+            </span>
+          )}
         </button>
         <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">✕</button>
       </header>
+
+      {/* 알림 레이어 */}
+      {showNotiPanel && (
+        <div className="absolute inset-x-0 top-[88px] z-50 flex max-h-[360px] flex-col border-b border-border bg-panel shadow-lg">
+          <div className="flex items-center justify-between border-b border-border px-3.5 py-2 text-[11px] font-bold text-ink2">
+            <span>실시간 알림 ({unreadCount})</span>
+            {unreadCount > 0 && (
+              <button
+                onClick={() => user?.id && markAllRead.mutate(user.id)}
+                className="text-[10px] text-teal hover:underline"
+              >
+                모두 읽음
+              </button>
+            )}
+          </div>
+          <div className="content-scroll min-h-0 flex-1 overflow-y-auto p-1.5 space-y-1">
+            {notis.length === 0 ? (
+              <div className="py-8 text-center text-[11.5px] text-ink3">알림이 없습니다.</div>
+            ) : (
+              notis.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => {
+                    markRead.mutate(n.id);
+                    setShowNotiPanel(false);
+                    if (n.linkUrl) {
+                      nav(n.linkUrl);
+                      onClose();
+                    }
+                  }}
+                  className={`flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left transition-colors ${
+                    n.read ? 'opacity-65 hover:bg-panel-alt' : 'bg-teal-soft/30 hover:bg-teal-soft/50'
+                  }`}
+                >
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-panel border text-[13px]">
+                    {n.type === '결재' ? '🖋️' : n.type === '메신저' ? '👤' : '📢'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11.5px] font-bold text-ink">{n.title}</span>
+                      <span className="text-[9.5px] text-ink3">{n.senderName}</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-normal text-ink2">{n.text}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">

@@ -231,7 +231,13 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/report/scorecard': lazy(() => import('@/modules/report/scorecard/ReportScorecardScreen')),
 };
 
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useNotifications } from '@/features/notification/useNotifications';
+
 export default function App() {
+  const { user } = useAuth();
+  useNotifications(user?.id);
+
   return (
     <Routes>
       <Route element={<AppShell />}>
