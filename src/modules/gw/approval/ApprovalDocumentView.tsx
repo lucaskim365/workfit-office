@@ -352,10 +352,10 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         </div>
       )}
 
-      {/* 본문 (양식에 정의된 장문 필드가 하나도 없는 경우에만 폴백 노출) */}
-      {longTextFields.length === 0 && (
-        <div className="mt-3 min-h-[220px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
-          {doc.body || ' '}
+      {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
+      {longTextFields.length === 0 && doc.body && doc.body.trim() !== '' && doc.body !== '(본문 미리보기)' && (
+        <div className="mt-3 min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+          {doc.body}
         </div>
       )}
 

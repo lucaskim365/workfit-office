@@ -211,6 +211,27 @@ export function DynamicField({
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
 
+  const [localColWidths, setLocalColWidths] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (field.type === '표') {
+      let w: Record<string, string> = {};
+      if (field.placeholder) {
+        try {
+          const cfg = JSON.parse(field.placeholder);
+          if (cfg && cfg.colWidths) w = cfg.colWidths;
+        } catch (e) {}
+      }
+      if (typeof v === 'string' && v) {
+        try {
+          const parsed = JSON.parse(v);
+          if (parsed && parsed.colWidths) w = parsed.colWidths;
+        } catch (e) {}
+      }
+      setLocalColWidths(w);
+    }
+  }, [v, field.placeholder, field.type]);
+
   switch (field.type) {
     case '안내문':
       return <div className="rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] text-ink3">{field.placeholder || field.label}</div>;
@@ -357,16 +378,20 @@ export function DynamicField({
         const parentTh = e.currentTarget.parentElement;
         const startWidth = parentTh ? parentTh.getBoundingClientRect().width : 120;
         
+        let currentWidth = startWidth;
+
         const handleMouseMove = (moveEvent: MouseEvent) => {
           const dx = moveEvent.clientX - startX;
-          const newWidth = Math.max(40, startWidth + dx);
-          const nextWidths = { ...colWidths, [colName]: `${newWidth}px` };
-          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths: nextWidths }) });
+          currentWidth = Math.max(40, startWidth + dx);
+          setLocalColWidths((prev) => ({ ...prev, [colName]: `${currentWidth}px` }));
         };
 
         const handleMouseUp = () => {
           window.removeEventListener('mousemove', handleMouseMove);
           window.removeEventListener('mouseup', handleMouseUp);
+          
+          const nextWidths = { ...colWidths, [colName]: `${currentWidth}px` };
+          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths: nextWidths }) });
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -399,7 +424,7 @@ export function DynamicField({
             <table className="table-fixed border-collapse text-left text-[11.5px] border border-border" style={{ width: tableWidth, minWidth: tableWidth === '100%' ? '500px' : 'auto' }}>
               <colgroup>
                 {cols.map((col, cIdx) => (
-                  <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                  <col key={cIdx} style={{ width: localColWidths[col] || 'auto' }} />
                 ))}
                 <col style={{ width: '45px' }} />
               </colgroup>
