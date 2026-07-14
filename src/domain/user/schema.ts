@@ -40,6 +40,11 @@ export const userSchema = z.object({
    * 진짜 인증은 후속(Cloud Function custom token)으로 전환 예정. ([[firebase-backend-setup]])
    */
   password: z.string().default(''),
+  /**
+   * 인감(도장) 이미지 URL. Firebase Storage 업로드 URL 또는 base64 data URL(데모 폴백).
+   * 전자결재 문서 서명란에 표시된다. 미등록 시 빈 문자열.
+   */
+  sealUrl: z.string().default(''),
 });
 
 export type User = z.infer<typeof userSchema>;

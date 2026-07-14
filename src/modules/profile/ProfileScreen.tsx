@@ -1,0 +1,254 @@
+import { useRef, useState } from 'react';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useNavigate } from 'react-router-dom';
+import { useUploadSeal } from '@/features/user/useUploadSeal';
+
+/**
+ * 개인 프로필 설정 화면 — /profile 라우트.
+ * 모든 사용자가 자신의 이메일, 비밀번호, 인감(도장) 이미지를 관리할 수 있다.
+ */
+export default function ProfileScreen() {
+  const { user, changePassword, updateProfile } = useAuth();
+  const navigate = useNavigate();
+  const { upload, uploading } = useUploadSeal();
+  const sealInputRef = useRef<HTMLInputElement>(null);
+
+  /* ── 기본 정보 편집 상태 ── */
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [infoMsg, setInfoMsg] = useState('');
+  const [infoErr, setInfoErr] = useState('');
+  const [savingInfo, setSavingInfo] = useState(false);
+
+  /* ── 비밀번호 변경 상태 ── */
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwMsg, setPwMsg] = useState('');
+  const [pwErr, setPwErr] = useState('');
+  const [savingPw, setSavingPw] = useState(false);
+
+  /* ── 인감 이미지 상태 ── */
+  const [sealPreview, setSealPreview] = useState<string>(user?.sealUrl ?? '');
+  const [sealMsg, setSealMsg] = useState('');
+  const [sealErr, setSealErr] = useState('');
+
+  if (!user) return null;
+
+  /* ── 핸들러: 기본 정보 저장 ── */
+  const handleSaveInfo = async () => {
+    if (!email.trim()) { setInfoErr('이메일을 입력하세요.'); return; }
+    setSavingInfo(true); setInfoErr(''); setInfoMsg('');
+    try {
+      await updateProfile({ email: email.trim() });
+      setInfoMsg('저장되었습니다.');
+    } catch (e) {
+      setInfoErr(e instanceof Error ? e.message : '저장에 실패했습니다.');
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
+  /* ── 핸들러: 비밀번호 변경 ── */
+  const handleChangePw = async () => {
+    setPwErr(''); setPwMsg('');
+    if (!curPw) { setPwErr('현재 비밀번호를 입력하세요.'); return; }
+    if (newPw.length < 4) { setPwErr('새 비밀번호는 4자 이상이어야 합니다.'); return; }
+    if (newPw !== confirmPw) { setPwErr('새 비밀번호가 일치하지 않습니다.'); return; }
+    setSavingPw(true);
+    try {
+      await changePassword(curPw, newPw);
+      setCurPw(''); setNewPw(''); setConfirmPw('');
+      setPwMsg('비밀번호가 변경되었습니다.');
+    } catch (e) {
+      setPwErr(e instanceof Error ? e.message : '변경에 실패했습니다.');
+    } finally {
+      setSavingPw(false);
+    }
+  };
+
+  /* ── 핸들러: 인감 이미지 선택 ── */
+  const handleSealFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setSealErr('파일이 너무 큽니다. 5MB 이내로 선택하세요.'); return; }
+    setSealErr(''); setSealMsg('');
+    try {
+      const url = await upload(user.id, file);
+      setSealPreview(url);
+      await updateProfile({ sealUrl: url });
+      setSealMsg('인감 이미지가 저장되었습니다.');
+    } catch (e) {
+      setSealErr(e instanceof Error ? e.message : '업로드에 실패했습니다.');
+    }
+  };
+
+  /* ── 핸들러: 인감 이미지 삭제 ── */
+  const handleDeleteSeal = async () => {
+    if (!window.confirm('인감 이미지를 삭제하시겠습니까?')) return;
+    setSealErr(''); setSealMsg('');
+    try {
+      await updateProfile({ sealUrl: '' });
+      setSealPreview('');
+      setSealMsg('인감 이미지가 삭제되었습니다.');
+    } catch (e) {
+      setSealErr(e instanceof Error ? e.message : '삭제에 실패했습니다.');
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6 pb-12">
+      {/* 헤더 */}
+      <div className="flex items-center gap-3 pb-1">
+        <button
+          onClick={() => navigate(-1)}
+          className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt"
+        >
+          ←
+        </button>
+        <h1 className="text-[17px] font-extrabold text-ink">프로필 설정</h1>
+      </div>
+
+      {/* ① 기본 정보 */}
+      <section className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="h-4 w-1 rounded-sm bg-teal" />
+          <h2 className="text-[13px] font-extrabold text-ink">기본 정보</h2>
+        </div>
+
+        {/* 읽기 전용 필드 */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
+          {[
+            ['이름', user.name],
+            ['사번', user.empNo],
+            ['부서', user.dept],
+            ['직급', user.position],
+            ['직책', user.jobTitle || '—'],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <div className="mb-0.5 text-[10.5px] font-bold text-ink3">{label}</div>
+              <div className="rounded-lg border border-border bg-panel-alt px-3 py-2 text-[12.5px] text-ink2">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* 편집 가능: 이메일 */}
+        <div className="mb-4">
+          <label className="mb-0.5 block text-[10.5px] font-bold text-ink3">이메일</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-border-hi bg-transparent px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+          />
+        </div>
+
+        {infoMsg && <p className="mb-2 text-[11.5px] font-semibold text-teal">{infoMsg}</p>}
+        {infoErr && <p className="mb-2 text-[11.5px] font-semibold text-danger">{infoErr}</p>}
+
+        <button
+          onClick={handleSaveInfo}
+          disabled={savingInfo}
+          className="rounded-lg bg-navy px-5 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {savingInfo ? '저장 중…' : '정보 저장'}
+        </button>
+      </section>
+
+      {/* ② 비밀번호 변경 */}
+      <section className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="h-4 w-1 rounded-sm bg-teal" />
+          <h2 className="text-[13px] font-extrabold text-ink">비밀번호 변경</h2>
+        </div>
+
+        <div className="space-y-3 mb-4">
+          {[
+            { label: '현재 비밀번호', value: curPw, setter: setCurPw },
+            { label: '새 비밀번호', value: newPw, setter: setNewPw },
+            { label: '새 비밀번호 확인', value: confirmPw, setter: setConfirmPw },
+          ].map(({ label, value, setter }) => (
+            <div key={label}>
+              <label className="mb-0.5 block text-[10.5px] font-bold text-ink3">{label}</label>
+              <input
+                type="password"
+                value={value}
+                onChange={(e) => setter(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-border-hi bg-transparent px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+              />
+            </div>
+          ))}
+        </div>
+
+        {pwMsg && <p className="mb-2 text-[11.5px] font-semibold text-teal">{pwMsg}</p>}
+        {pwErr && <p className="mb-2 text-[11.5px] font-semibold text-danger">{pwErr}</p>}
+
+        <button
+          onClick={handleChangePw}
+          disabled={savingPw}
+          className="rounded-lg bg-navy px-5 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {savingPw ? '변경 중…' : '비밀번호 변경'}
+        </button>
+      </section>
+
+      {/* ③ 인감(도장) 이미지 */}
+      <section className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="h-4 w-1 rounded-sm bg-teal" />
+          <h2 className="text-[13px] font-extrabold text-ink">인감(도장) 이미지</h2>
+        </div>
+        <p className="mb-5 text-[11px] text-ink3">
+          전자결재 문서 서명란에 표시될 인감 이미지입니다. PNG / JPG · 최대 5MB · 300×300px으로 자동 리사이즈됩니다.
+        </p>
+
+        <div className="flex items-start gap-6">
+          {/* 인감 미리보기 */}
+          <div
+            className="flex h-[100px] w-[100px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border-hi bg-panel-alt text-center overflow-hidden"
+          >
+            {sealPreview ? (
+              <img src={sealPreview} alt="인감" className="h-full w-full object-contain" />
+            ) : (
+              <div className="space-y-1">
+                <div className="grid h-[56px] w-[56px] mx-auto place-items-center rounded-full border-2 border-[#c0392b] text-[12px] font-bold text-[#c0392b]">
+                  {user.name.slice(-2)}
+                </div>
+                <div className="text-[9px] text-ink3">미등록</div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 pt-1">
+            <input
+              ref={sealInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleSealFile}
+            />
+            <button
+              onClick={() => sealInputRef.current?.click()}
+              disabled={uploading}
+              className="rounded-lg border border-border-hi bg-panel-alt px-4 py-2 text-[12px] font-semibold text-ink hover:bg-border/30 disabled:opacity-50"
+            >
+              {uploading ? '업로드 중…' : sealPreview ? '이미지 변경' : '이미지 등록'}
+            </button>
+            {sealPreview && (
+              <button
+                onClick={handleDeleteSeal}
+                className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5"
+              >
+                이미지 삭제
+              </button>
+            )}
+          </div>
+        </div>
+
+        {sealMsg && <p className="mt-3 text-[11.5px] font-semibold text-teal">{sealMsg}</p>}
+        {sealErr && <p className="mt-3 text-[11.5px] font-semibold text-danger">{sealErr}</p>}
+      </section>
+    </div>
+  );
+}

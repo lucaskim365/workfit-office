@@ -11,7 +11,7 @@ import { DEFAULT_USER_PASSWORD, type User } from '@/domain/user/schema';
  */
 const DEMO_PW = DEFAULT_USER_PASSWORD;
 
-export const USER_SEED: User[] = [
+export const USER_SEED: Omit<User, 'sealUrl'>[] = [
   // 대표이사
   { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', roleGroup: 'ADMIN', email: 'ympark@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
   // 대표이사 직속 — 직책 재경이사 / 직급 이사

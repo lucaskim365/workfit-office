@@ -4,7 +4,6 @@ import { MENU_TREE } from '../menu-tree';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
-import ChangePasswordModal from '@/app/auth/ChangePasswordModal';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
@@ -44,7 +43,6 @@ function Brand({ logoUrl, onLogoClick }: { logoUrl?: string; onLogoClick?: () =>
 }
 
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick, dockOpen, setDockOpen }: TopbarProps) {
-  const [pwOpen, setPwOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   // 열린 드롭다운이 화면 좌/우 가장자리를 넘어가면 안쪽으로 밀어주는 보정값(px).
   const panelRef = useRef<HTMLDivElement>(null);
@@ -175,14 +173,12 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           {userOpen && (
             <UserMenu
               onClose={() => setUserOpen(false)}
-              onChangePassword={() => setPwOpen(true)}
               onThemeOpen={() => setThemeOpen(true)}
             />
           )}
         </div>
       </div>
 
-      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
       {themeOpen && <ThemeCustomizerModal open={themeOpen} onClose={() => setThemeOpen(false)} />}
     </header>
   );

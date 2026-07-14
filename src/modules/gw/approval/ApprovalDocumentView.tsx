@@ -38,6 +38,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const { data: forms = [] } = useApprovalForms();
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const posOf = (id: string) => org.userById(id)?.position ?? '';
+  const sealOf = (id: string) => org.userById(id)?.sealUrl ?? '';
 
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
@@ -163,7 +164,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        <ApprovalStampBox steps={steps} nameOf={nameOf} posOf={posOf} />
+        <ApprovalStampBox steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} />
       </div>
 
       <table className="w-full border-collapse text-[12px]">
@@ -401,16 +402,20 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         <div>{closing}</div>
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
-        <div className="mt-1">
+        <div className="mt-1 flex items-center justify-center gap-2">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-          <span className="text-[#c0392b]">(인)</span>
+          {sealOf(doc.drafterId) ? (
+            <img src={sealOf(doc.drafterId)} alt="인감" className="ml-1 h-[36px] w-[36px] object-contain" />
+          ) : (
+            <span className="text-[#c0392b]">(인)</span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function ApprovalStampBox({ steps, nameOf, posOf }: { steps: ApprovalStep[]; nameOf: (id: string) => string; posOf: (id: string) => string }) {
+function ApprovalStampBox({ steps, nameOf, posOf, sealOf }: { steps: ApprovalStep[]; nameOf: (id: string) => string; posOf: (id: string) => string; sealOf: (id: string) => string }) {
   if (steps.length === 0) return null;
   return (
     <div className="flex shrink-0 border border-[#333] text-center">
@@ -419,7 +424,7 @@ function ApprovalStampBox({ steps, nameOf, posOf }: { steps: ApprovalStep[]; nam
         {steps.map((s) => (
           <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
             <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{s.kind}</div>
-            <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} /></div>
+            <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} sealUrl={sealOf(s.approverId)} /></div>
             <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : posOf(s.approverId)) || ' '}</div>
           </div>
         ))}
@@ -428,8 +433,21 @@ function ApprovalStampBox({ steps, nameOf, posOf }: { steps: ApprovalStep[]; nam
   );
 }
 
-function Stamp({ step, name }: { step: ApprovalStep; name: string }) {
+function Stamp({ step, name, sealUrl }: { step: ApprovalStep; name: string; sealUrl: string }) {
   if (step.kind === '참조') return <span className="text-[10px] text-[#888]">열람<br />{name}</span>;
+
+  // 인감 이미지가 있고 결재/반려/보류가 완료된 경우 인감 이미지 우선 표시
+  if (sealUrl && (step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
+    return (
+      <div className="relative flex h-[44px] w-[44px] items-center justify-center">
+        <img src={sealUrl} alt="인감" className="h-full w-full object-contain" style={{ opacity: step.decision === '반려' ? 0.6 : 1 }} />
+        {step.decision === '반려' && (
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b]" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
+        )}
+      </div>
+    );
+  }
+
   if (step.decision === '승인')
     return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold leading-tight text-[#c0392b]">{name}</span>;
   if (step.decision === '반려')
