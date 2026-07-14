@@ -103,6 +103,9 @@ export const notificationRepo = {
         const list = snapshot.docs.map((d) => notificationSchema.parse(d.data()));
         list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         callback(list);
+      }, (err) => {
+        console.warn('Firestore notifications subscription failed (possibly permission-denied). Fallback to empty list:', err);
+        callback([]);
       });
     } else {
       const listener = () => {

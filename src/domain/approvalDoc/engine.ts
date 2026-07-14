@@ -185,6 +185,7 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
       const isCustomRecipient = doc.recipients?.some((r) => {
         if (r.type === 'user') return r.id === userId;
         if (r.type === 'dept' && userDeptName) return r.name === userDeptName || r.id === userDeptName;
+        if (r.type === 'drafter') return doc.drafterId === userId;
         return false;
       }) ?? false;
       return isExecutorDrafter || isCustomRecipient || doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);

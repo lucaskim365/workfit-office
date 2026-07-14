@@ -115,6 +115,9 @@ export function ApprovalDraftModal({
   useEffect(() => {
     if (!form || editDoc) return; // 수정 모드일 때는 기존 문서의 수신처를 따르므로 스킵
     const defaultRecipients: ApprovalRecipient[] = [];
+    if (form.recipientDrafter) {
+      defaultRecipients.push({ id: 'drafter', name: '기안자 본인', type: 'drafter' });
+    }
     if (form.recipientDeptId) {
       const dept = org.depts.find((d) => d.id === form.recipientDeptId);
       if (dept) {
@@ -377,25 +380,41 @@ export function ApprovalDraftModal({
             <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
           </div>
 
-          {/* 수신처(시행처) 지정 */}
-          <div className="mt-4 border-t border-border pt-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[11px] font-bold text-ink2">수신처 (시행처)</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRecipientPicker(!showRecipientPicker);
-                  setPickerTargetId('');
-                }}
-                className="rounded bg-teal-soft px-2 py-0.5 text-[10.5px] font-bold text-teal hover:bg-teal/10"
-              >
-                + 수신처 추가
-              </button>
+          {/* 수신처(시행처) 지정 - 차별화된 별도 카드형 디자인 */}
+          <div className="mt-4 rounded-xl border border-blue/20 bg-blue-soft/10 p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-[12.5px] font-bold text-blue">📨 수신처 (시행처) 설정</div>
+                <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 곳을 정합니다.</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!recipients.some((r) => r.id === 'drafter')) {
+                      setRecipients((prev) => [...prev, { id: 'drafter', name: '기안자 본인', type: 'drafter' }]);
+                    }
+                  }}
+                  className="rounded-lg bg-blue-soft px-2 py-1 text-[10px] font-bold text-blue hover:bg-blue/20 transition-colors"
+                >
+                  👤 기안자 본인
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecipientPicker(!showRecipientPicker);
+                    setPickerTargetId('');
+                  }}
+                  className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
+                >
+                  + 수신처 추가
+                </button>
+              </div>
             </div>
 
             {/* 수신처 추가 폼 */}
             {showRecipientPicker && (
-              <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel-alt p-2.5 border border-border">
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
                 <select
                   value={pickerType}
                   onChange={(e) => {
@@ -456,19 +475,19 @@ export function ApprovalDraftModal({
 
             {/* 수신처 목록 태그 */}
             {recipients.length === 0 ? (
-              <p className="text-[11.5px] text-ink3 pl-1">지정된 수신처가 없습니다. (승인 완료 후 추가 전송 없음)</p>
+              <p className="text-[11px] text-ink3 pl-1">지정된 수신처가 없습니다.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5 pl-1">
                 {recipients.map((r) => (
                   <span
                     key={r.id}
-                    className="flex items-center gap-1 rounded-md bg-teal-soft/60 border border-teal/20 px-2 py-0.5 text-[11px] font-semibold text-teal"
+                    className="flex items-center gap-1 rounded-md bg-panel border border-blue/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue shadow-sm"
                   >
-                    {r.type === 'dept' ? '📁' : '👤'} {r.name}
+                    {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
                     <button
                       type="button"
                       onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
-                      className="ml-1 font-bold text-teal/70 hover:text-red-500"
+                      className="ml-1 font-bold text-blue/60 hover:text-red-500"
                     >
                       ✕
                     </button>

@@ -88,6 +88,8 @@ export const approvalFormSchema = z.object({
   recipientDeptId: z.string().nullable().optional(),
   /** 기본 수신 사용자 ID */
   recipientUserId: z.string().nullable().optional(),
+  /** 기안자 본인을 기본 수신처로 지정 여부 */
+  recipientDrafter: z.boolean().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

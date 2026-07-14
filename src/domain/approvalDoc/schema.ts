@@ -74,7 +74,7 @@ export type LeaveForm = z.infer<typeof leaveFormSchema>;
 export const approvalRecipientSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(['user', 'dept']),
+  type: z.enum(['user', 'dept', 'drafter']),
 });
 export type ApprovalRecipient = z.infer<typeof approvalRecipientSchema>;
 

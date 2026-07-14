@@ -302,6 +302,18 @@ export function DynamicField({
       let rows: Array<Record<string, string>> = [];
       let tableWidth = '100%';
       let colWidths: Record<string, string> = {};
+
+      // 서식 템플릿에 저장된 기본 너비/가로폭 속성 적용
+      if (field.placeholder) {
+        try {
+          const cfg = JSON.parse(field.placeholder);
+          if (cfg && typeof cfg === 'object') {
+            if (cfg.tableWidth) tableWidth = cfg.tableWidth;
+            if (cfg.colWidths) colWidths = cfg.colWidths;
+          }
+        } catch (e) {}
+      }
+
       try {
         if (typeof v === 'string' && v) {
           const parsed = JSON.parse(v);
@@ -309,8 +321,8 @@ export function DynamicField({
             if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
               cols = parsed.cols;
               rows = parsed.rows;
-              tableWidth = parsed.tableWidth || '100%';
-              colWidths = parsed.colWidths || {};
+              tableWidth = parsed.tableWidth || tableWidth;
+              colWidths = parsed.colWidths || colWidths;
             } else if (Array.isArray(parsed)) {
               rows = parsed;
               cols = defaultCols;
@@ -337,46 +349,7 @@ export function DynamicField({
         set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
       };
 
-      const addCol = () => {
-        let index = 1;
-        let newCol = `열${index}`;
-        while (cols.includes(newCol)) {
-          index++;
-          newCol = `열${index}`;
-        }
-        const nextCols = [...cols, newCol];
-        const nextRows = rows.map((row) => ({ ...row, [newCol]: '' }));
-        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths }) });
-      };
 
-      const removeCol = (colName: string) => {
-        const nextCols = cols.filter((c) => c !== colName);
-        const nextRows = rows.map((row) => {
-          const newRow = { ...row };
-          delete newRow[colName];
-          return newRow;
-        });
-        const nextWidths = { ...colWidths };
-        delete nextWidths[colName];
-        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextWidths }) });
-      };
-
-      const renameCol = (oldCol: string, newCol: string) => {
-        if (!newCol || newCol === oldCol || cols.includes(newCol)) return;
-        const nextCols = cols.map((c) => (c === oldCol ? newCol : c));
-        const nextRows = rows.map((row) => {
-          const newRow = { ...row };
-          newRow[newCol] = row[oldCol] ?? '';
-          delete newRow[oldCol];
-          return newRow;
-        });
-        const nextWidths = { ...colWidths };
-        if (nextWidths[oldCol]) {
-          nextWidths[newCol] = nextWidths[oldCol];
-          delete nextWidths[oldCol];
-        }
-        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextWidths }) });
-      };
 
       const handleResizeStart = (e: React.MouseEvent, colName: string) => {
         e.preventDefault();
@@ -435,28 +408,9 @@ export function DynamicField({
                   {cols.map((col, cIdx) => (
                     <th key={cIdx} className="p-1.5 font-bold text-ink2 relative group border-r border-border min-w-[50px]">
                       <div className="flex items-center gap-1 pr-2">
-                        <input
-                          defaultValue={col}
-                          key={`${col}-${cIdx}`}
-                          onBlur={(e) => renameCol(col, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              renameCol(col, (e.target as HTMLInputElement).value);
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          className="bg-transparent border-none w-full text-[11.5px] font-bold text-ink2 focus:outline-none focus:bg-panel p-0.5 rounded"
-                        />
-                        {cols.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeCol(col)}
-                            className="opacity-0 group-hover:opacity-100 text-ink3 hover:text-red-500 text-[10px] ml-1"
-                            title="열 삭제"
-                          >
-                            ✕
-                          </button>
-                        )}
+                        <span className="w-full text-[11.5px] font-bold text-ink2 p-0.5 select-none">
+                          {col}
+                        </span>
                       </div>
                       <div
                         onMouseDown={(e) => handleResizeStart(e, col)}
@@ -466,16 +420,7 @@ export function DynamicField({
                       />
                     </th>
                   ))}
-                  <th className="p-1.5 text-center font-bold text-ink3">
-                    <button
-                      type="button"
-                      onClick={addCol}
-                      className="rounded bg-teal/10 px-1.5 py-0.5 text-[9.5px] font-bold text-teal hover:bg-teal/20"
-                      title="열 추가"
-                    >
-                      + 열 추가
-                    </button>
-                  </th>
+                  <th className="p-1.5 w-[45px]"></th>
                 </tr>
               </thead>
               <tbody>

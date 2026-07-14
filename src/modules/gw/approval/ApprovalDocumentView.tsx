@@ -220,6 +220,18 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
               let rows: Array<Record<string, string>> = [];
               let tableWidth = '100%';
               let colWidths: Record<string, string> = {};
+
+              // 서식 템플릿에 지정된 기본 너비/가로폭 속성 적용
+              if (f.placeholder) {
+                try {
+                  const cfg = JSON.parse(f.placeholder);
+                  if (cfg && typeof cfg === 'object') {
+                    if (cfg.tableWidth) tableWidth = cfg.tableWidth;
+                    if (cfg.colWidths) colWidths = cfg.colWidths;
+                  }
+                } catch (e) {}
+              }
+
               try {
                 if (typeof val === 'string' && val) {
                   const parsed = JSON.parse(val);
@@ -227,8 +239,8 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                     if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
                       cols = parsed.cols;
                       rows = parsed.rows;
-                      tableWidth = parsed.tableWidth || '100%';
-                      colWidths = parsed.colWidths || {};
+                      tableWidth = parsed.tableWidth || tableWidth;
+                      colWidths = parsed.colWidths || colWidths;
                     } else if (Array.isArray(parsed)) {
                       rows = parsed;
                       cols = defaultCols;
@@ -379,7 +391,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                 key={r.id}
                 className="rounded border border-[#ddd] bg-[#fafafa] px-2.5 py-1 text-[11.5px] font-semibold text-[#444] inline-flex items-center gap-1"
               >
-                {r.type === 'dept' ? '📁' : '👤'} {r.name}
+                {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
               </span>
             ))}
           </div>
