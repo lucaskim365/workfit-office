@@ -1,8 +1,26 @@
-import { lazy, type ComponentType } from 'react';
+import { lazy as reactLazy, type ComponentType } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './shell/AppShell';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
+
+/**
+ * Custom lazy loading wrapper that catches chunk loading failures
+ * (usually caused by file hash mismatch after a new Vercel deployment)
+ * and automatically triggers a window reload to fetch the latest assets.
+ */
+function lazy<T extends ComponentType<any>>(factory: () => Promise<{ default: T }>) {
+  return reactLazy(async () => {
+    try {
+      return await factory();
+    } catch (error) {
+      console.error('Failed to load component chunk, reloading page...', error);
+      window.location.reload();
+      // Return a pending promise to prevent rendering broken components during reload
+      return new Promise<{ default: T }>(() => {});
+    }
+  });
+}
 
 const SCREENS = flattenScreens();
 const HOME = '/exec';

@@ -369,6 +369,23 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         </div>
       )}
 
+      {/* 수신(시행)처 목록 */}
+      {doc.recipients && doc.recipients.length > 0 && (
+        <div className="mt-6 border-t border-[#bbb] pt-3">
+          <div className="text-[11px] font-bold text-teal mb-2">📥 수신 (시행)처 ({doc.recipients.length})</div>
+          <div className="flex flex-wrap gap-1.5">
+            {doc.recipients.map((r) => (
+              <span
+                key={r.id}
+                className="rounded border border-[#ddd] bg-[#fafafa] px-2.5 py-1 text-[11.5px] font-semibold text-[#444] inline-flex items-center gap-1"
+              >
+                {r.type === 'dept' ? '📁' : '👤'} {r.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         <div>{closing}</div>
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>

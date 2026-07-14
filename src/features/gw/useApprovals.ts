@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { byRecent, matchesBox } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { useUsers } from '@/features/user/useUsers';
 
 /**
  * 전자결재 데이터 훅 — 화면(UI)이 repository 대신 호출하는 React 바인딩.
@@ -26,17 +27,19 @@ export interface ApprovalBoxes {
 /** userId 관점의 결재함 5탭 도출(대기·상신·완료·참조·임시) + 카운트. */
 export function useApprovalBoxes(userId: string | undefined): ApprovalBoxes {
   const q = useAllApprovals();
+  const { data: users = [] } = useUsers();
+  const user = useMemo(() => users.find((u) => u.id === userId), [users, userId]);
   return useMemo(() => {
     const rows = q.data ?? [];
     const byBox = {} as Record<ApprovalBox, ApprovalDoc[]>;
     const counts = {} as Record<ApprovalBox, number>;
     for (const box of APPROVAL_BOXES) {
-      const list = userId ? rows.filter((d) => matchesBox(d, userId, box)).sort(byRecent) : [];
+      const list = userId ? rows.filter((d) => matchesBox(d, userId, box, user?.dept)).sort(byRecent) : [];
       byBox[box] = list;
       counts[box] = list.length;
     }
     return { byBox, counts, isLoading: q.isLoading };
-  }, [q.data, q.isLoading, userId]);
+  }, [q.data, q.isLoading, userId, user?.dept]);
 }
 
 /** 단일 문서 상세(전체 캐시에서 도출 — 목록과 동일 원천으로 낙관적 갱신 즉시 반영). */

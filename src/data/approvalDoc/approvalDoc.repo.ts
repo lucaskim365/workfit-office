@@ -17,6 +17,7 @@ import {
 import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
+import { userRepo } from '@/data/user/user.repo';
 
 /**
  * 전자결재 문서 Repository — 채번(counters) + **순수 엔진**(domain/approvalDoc/engine)
@@ -89,6 +90,8 @@ export interface ApprovalDraftInput {
   fieldValues?: ApprovalDoc['fieldValues'];
   /** 첨부 파일 목록 */
   attachments?: ApprovalDoc['attachments'];
+  /** 수신(시행)처 목록 */
+  recipients?: ApprovalDoc['recipients'];
 }
 
 export const approvalDocRepo = {
@@ -112,7 +115,9 @@ export const approvalDocRepo = {
    */
   async listByBox(userId: string, box: ApprovalBox): Promise<ApprovalDoc[]> {
     const rows = await loadAll();
-    return rows.filter((d) => matchesBox(d, userId, box)).sort(byRecent);
+    const users = await userRepo.list();
+    const user = users.find((u) => u.id === userId);
+    return rows.filter((d) => matchesBox(d, userId, box, user?.dept)).sort(byRecent);
   },
 
   /** 임시저장 신규 작성 — 채번 + status='임시저장'. */
@@ -134,6 +139,7 @@ export const approvalDocRepo = {
       form: input.form ?? null,
       fieldValues: input.fieldValues ?? {},
       attachments: input.attachments ?? [],
+      recipients: input.recipients ?? [],
       currentSeq: 0,
       createdAt: now(),
       submittedAt: null,

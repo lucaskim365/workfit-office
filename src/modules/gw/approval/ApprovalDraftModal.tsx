@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@/domain/user/schema';
-import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType } from '@/domain/approvalDoc/schema';
+import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType, type ApprovalRecipient } from '@/domain/approvalDoc/schema';
 import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
@@ -50,6 +50,10 @@ export function ApprovalDraftModal({
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+  const [showRecipientPicker, setShowRecipientPicker] = useState(false);
+  const [pickerType, setPickerType] = useState<'user' | 'dept'>('dept');
+  const [pickerTargetId, setPickerTargetId] = useState('');
 
   const create = useCreateDraft();
   const save = useSaveDraft();
@@ -107,6 +111,25 @@ export function ApprovalDraftModal({
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  // 서식이 변경되거나 기안 모달이 처음 열릴 때 해당 서식의 기본 수신처가 있으면 자동으로 수신처 목록에 로딩
+  useEffect(() => {
+    if (!form || editDoc) return; // 수정 모드일 때는 기존 문서의 수신처를 따르므로 스킵
+    const defaultRecipients: ApprovalRecipient[] = [];
+    if (form.recipientDeptId) {
+      const dept = org.depts.find((d) => d.id === form.recipientDeptId);
+      if (dept) {
+        defaultRecipients.push({ id: dept.id, name: dept.name, type: 'dept' });
+      }
+    }
+    if (form.recipientUserId) {
+      const user = org.users.find((u) => u.id === form.recipientUserId);
+      if (user) {
+        defaultRecipients.push({ id: user.id, name: `${user.name} ${user.position}`, type: 'user' });
+      }
+    }
+    setRecipients(defaultRecipients);
+  }, [code, form, editDoc, org.depts, org.users]);
+
   // 실시간 결재선 규칙 엔진 연동
   const lastAutoSteps = useRef<string>('');
   useEffect(() => {
@@ -161,6 +184,7 @@ export function ApprovalDraftModal({
       form: leave,
       fieldValues: values,
       attachments,
+      recipients,
     };
   };
 
@@ -351,6 +375,107 @@ export function ApprovalDraftModal({
           <div className="mt-2">
             <div className="mb-1.5 text-[11px] font-bold text-ink2">결재선</div>
             <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
+          </div>
+
+          {/* 수신처(시행처) 지정 */}
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[11px] font-bold text-ink2">수신처 (시행처)</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRecipientPicker(!showRecipientPicker);
+                  setPickerTargetId('');
+                }}
+                className="rounded bg-teal-soft px-2 py-0.5 text-[10.5px] font-bold text-teal hover:bg-teal/10"
+              >
+                + 수신처 추가
+              </button>
+            </div>
+
+            {/* 수신처 추가 폼 */}
+            {showRecipientPicker && (
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel-alt p-2.5 border border-border">
+                <select
+                  value={pickerType}
+                  onChange={(e) => {
+                    setPickerType(e.target.value as 'user' | 'dept');
+                    setPickerTargetId('');
+                  }}
+                  className="rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                >
+                  <option value="dept">부서</option>
+                  <option value="user">사원</option>
+                </select>
+
+                <select
+                  value={pickerTargetId}
+                  onChange={(e) => setPickerTargetId(e.target.value)}
+                  className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                >
+                  <option value="">선택하세요</option>
+                  {pickerType === 'dept'
+                    ? org.depts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))
+                    : org.users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} {u.position} ({u.dept})
+                        </option>
+                      ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!pickerTargetId) return;
+                    if (pickerType === 'dept') {
+                      const dept = org.depts.find((d) => d.id === pickerTargetId);
+                      if (dept && !recipients.some((r) => r.id === dept.id)) {
+                        setRecipients((prev) => [...prev, { id: dept.id, name: dept.name, type: 'dept' }]);
+                      }
+                    } else {
+                      const user = org.users.find((u) => u.id === pickerTargetId);
+                      if (user && !recipients.some((r) => r.id === user.id)) {
+                        setRecipients((prev) => [
+                          ...prev,
+                          { id: user.id, name: `${user.name} ${user.position}`, type: 'user' },
+                        ]);
+                      }
+                    }
+                    setShowRecipientPicker(false);
+                  }}
+                  className="rounded bg-teal px-3 py-1 text-[11.5px] font-bold text-white hover:opacity-90"
+                >
+                  추가
+                </button>
+              </div>
+            )}
+
+            {/* 수신처 목록 태그 */}
+            {recipients.length === 0 ? (
+              <p className="text-[11.5px] text-ink3 pl-1">지정된 수신처가 없습니다. (승인 완료 후 추가 전송 없음)</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 pl-1">
+                {recipients.map((r) => (
+                  <span
+                    key={r.id}
+                    className="flex items-center gap-1 rounded-md bg-teal-soft/60 border border-teal/20 px-2 py-0.5 text-[11px] font-semibold text-teal"
+                  >
+                    {r.type === 'dept' ? '📁' : '👤'} {r.name}
+                    <button
+                      type="button"
+                      onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
+                      className="ml-1 font-bold text-teal/70 hover:text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 파일 첨부 영역 */}
