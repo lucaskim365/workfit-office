@@ -7,6 +7,9 @@ import ChangePasswordModal from '@/app/auth/ChangePasswordModal';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
+import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import defaultLogo from '@/assets/logo.png';
+
 interface TopbarProps {
   activeModuleId: string;
   activeUrl: string;
@@ -19,10 +22,12 @@ interface TopbarProps {
   setDockOpen: (v: string | null) => void;
 }
 
-function Brand() {
+function Brand({ logoUrl }: { logoUrl?: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid h-7 w-7 place-items-center rounded-[7px] bg-teal text-sm font-extrabold text-white">W</div>
+      <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-white overflow-hidden p-0.5 shadow-sm border border-black/5">
+        <img src={logoUrl || defaultLogo} alt="Logo" className="h-full w-full object-contain" />
+      </div>
       <div className="leading-[1.1]">
         <div style={{ color: 'var(--color-header-text)' }} className="text-sm font-extrabold tracking-tight">
           WorkFit<span className="text-teal">Intranet</span>
@@ -53,6 +58,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
+  const { data: companyInfo } = useCompanyInfo();
+  const logoUrl = companyInfo?.logoUrl;
+
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
   return (
@@ -61,7 +69,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 px-3.5"
     >
       <div className="flex shrink-0 items-center gap-7">
-        <Brand />
+        <Brand logoUrl={logoUrl} />
         <nav className="flex gap-0.5">
           {MENU_TREE.filter((m) => m.use !== false).map((m) => {
             const active = m.id === activeModuleId;

@@ -64,9 +64,20 @@ export default function ApprovalScreen() {
   const [selId, setSelId] = useState<string | null>(null);
   const [modal, setModal] = useState<{ edit?: ApprovalDoc | null } | null>(null);
   const [notis, setNotis] = useState<ApprovalNoti[]>(MOCK_NOTIS);
+  const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
 
   const list = byBox[box] ?? [];
   const selDoc = useApprovalDoc(selId);
+
+  // 완료함 기안/결재자별 필터
+  const filteredList = useMemo(() => {
+    if (box !== '완료') return list;
+    if (doneFilter === 'draft') return list.filter((d) => d.drafterId === me);
+    if (doneFilter === 'approved') {
+      return list.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+    }
+    return list;
+  }, [box, list, doneFilter, me]);
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
   useEffect(() => {
@@ -83,11 +94,11 @@ export default function ApprovalScreen() {
     setParams(params, { replace: true });
   }, [params, byBox, setParams]);
 
-  // 함 전환/목록 변화 시 선택 보정(현재 함에 없으면 첫 항목).
+  // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
   useEffect(() => {
-    if (list.length === 0) { setSelId(null); return; }
-    if (!list.some((d) => d.id === selId)) setSelId(list[0].id);
-  }, [box, list, selId]);
+    if (filteredList.length === 0) { setSelId(null); return; }
+    if (!filteredList.some((d) => d.id === selId)) setSelId(filteredList[0].id);
+  }, [box, filteredList, selId]);
 
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
@@ -127,11 +138,33 @@ export default function ApprovalScreen() {
 
         {/* 중: 목록 */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="border-b border-border px-3.5 py-2.5 text-[12px] font-bold text-ink2">{BOX_LABEL[box]} <span className="text-ink3">· {list.length}</span></div>
+          <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2">
+            <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
+          </div>
+          {box === '완료' && (
+            <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+              {(['all', 'draft', 'approved'] as const).map((f) => {
+                const label = f === 'all' ? '전체' : f === 'draft' ? '기안한 문서' : '결재한 문서';
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setDoneFilter(f)}
+                    className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${
+                      doneFilter === f
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
             {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
-            {!isLoading && list.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
-            {list.map((d) => (
+            {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
+            {filteredList.map((d) => (
               <button
                 key={d.id}
                 onClick={() => setSelId(d.id)}
