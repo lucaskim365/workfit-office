@@ -277,9 +277,8 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
                       onClose();
                     }
                   }}
-                  className={`flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left transition-colors ${
-                    n.read ? 'opacity-65 hover:bg-panel-alt' : 'bg-teal-soft/30 hover:bg-teal-soft/50'
-                  }`}
+                  className={`flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left transition-colors ${n.read ? 'opacity-65 hover:bg-panel-alt' : 'bg-teal-soft/30 hover:bg-teal-soft/50'
+                    }`}
                 >
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-panel border text-[13px]">
                     {n.type === '결재' ? '🖋️' : n.type === '메신저' ? '👤' : '📢'}
@@ -309,11 +308,10 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
                 onClick={() => { if (enabled) go(a.to); }}
                 disabled={!enabled}
                 title={enabled ? a.l : `${a.l} (준비 중)`}
-                className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow ${
-                  enabled 
-                    ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]' 
+                className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow ${enabled
+                    ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
                     : 'opacity-40 cursor-not-allowed filter grayscale'
-                }`}
+                  }`}
               >
                 <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: enabled && a.hot ? CYAN : 'transparent', color: enabled && a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
                 <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
@@ -363,7 +361,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
 function ChatbotPanel() {
   const chips = ['오늘 생산 실적 알려줘', '설비 알람 현황', '재고 부족 품목', '결재 상신 방법'];
   const msgs: { who: 'bot' | 'me'; t: string }[] = [
-    { who: 'bot', t: '안녕하세요, 김승기님 👋\nWiddy입니다. 무엇을 도와드릴까요?' },
+    { who: 'bot', t: '안녕하세요,👋\nWiddy입니다. 무엇을 도와드릴까요?' },
     { who: 'me', t: '오늘 M-Line 생산 실적 알려줘' },
     { who: 'bot', t: '오늘 M-Line 실적은 4,182 EA로 목표 대비 104.5% 달성했습니다. 종합 가동률(OEE)은 87.4%입니다. 📈' },
     { who: 'me', t: '불량률은 어때?' },
