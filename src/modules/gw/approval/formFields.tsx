@@ -420,7 +420,7 @@ export function DynamicField({
                       />
                     </th>
                   ))}
-                  <th className="p-1.5 w-[45px]"></th>
+                  <th className="w-[45px] border-none bg-transparent"></th>
                 </tr>
               </thead>
               <tbody>
@@ -439,11 +439,11 @@ export function DynamicField({
                         </td>
                       );
                     })}
-                    <td className="p-1 text-center">
+                    <td className="p-1 text-center border-none bg-transparent">
                       <button
                         type="button"
                         onClick={() => removeRow(rIdx)}
-                        className="text-[12px] text-ink3 hover:text-red-500"
+                        className="text-[12px] text-ink3 hover:text-red-500 font-bold"
                       >
                         ✕
                       </button>
