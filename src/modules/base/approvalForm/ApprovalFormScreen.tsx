@@ -23,6 +23,7 @@ const blankField = (): FormField => ({
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
   id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false, folderId,
+  recipientDeptId: null, recipientUserId: null,
   fields: [{ ...blankField(), key: 'body', label: '본문', type: '장문', required: true }],
 });
 
@@ -261,6 +262,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   form: ApprovalForm; folders: ApprovalFolder[]; onChange: (f: ApprovalForm) => void; onSave: () => void; onCancel: () => void;
   onDelete?: () => void; onDuplicate?: () => void; saving: boolean; msg: string;
 }) {
+  const { depts = [], users = [] } = useOrgTree();
   const [selTab, setSelTab] = useState('공통');
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
@@ -315,6 +317,38 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp}`} /></F>
         <div className="col-span-3"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
         <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
+        <div className="col-span-2">
+          <F label="기본 수신 부서">
+            <select
+              value={form.recipientDeptId || ''}
+              onChange={(e) => set({ recipientDeptId: e.target.value || null })}
+              className={`${inp}`}
+            >
+              <option value="">(없음)</option>
+              {depts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </F>
+        </div>
+        <div className="col-span-2">
+          <F label="기본 수신 사원">
+            <select
+              value={form.recipientUserId || ''}
+              onChange={(e) => set({ recipientUserId: e.target.value || null })}
+              className={`${inp}`}
+            >
+              <option value="">(없음)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} {u.position} ({u.dept})
+                </option>
+              ))}
+            </select>
+          </F>
+        </div>
       </div>
 
       {/* 필드 빌더 */}
@@ -519,6 +553,7 @@ function FormPreview({ form }: { form: ApprovalForm }) {
       form: leave as any,
       fieldValues: values,
       attachments: [],
+      recipients: [],
       currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);

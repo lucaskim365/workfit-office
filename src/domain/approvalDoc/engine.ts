@@ -173,7 +173,7 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
  * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */
-export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): boolean {
+export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, userDeptName?: string): boolean {
   const involves = doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId);
   if (doc.status === '삭제') {
     return box === '삭제' && doc.drafterId === userId;
@@ -182,7 +182,12 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox): 
     if (box === '완료') return involves;
     if (box === '수신') {
       const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
-      return isExecutorDrafter || doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+      const isCustomRecipient = doc.recipients?.some((r) => {
+        if (r.type === 'user') return r.id === userId;
+        if (r.type === 'dept' && userDeptName) return r.name === userDeptName || r.id === userDeptName;
+        return false;
+      }) ?? false;
+      return isExecutorDrafter || isCustomRecipient || doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     }
     return false;
   }

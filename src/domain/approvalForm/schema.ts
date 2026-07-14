@@ -84,6 +84,10 @@ export const approvalFormSchema = z.object({
   system: z.boolean().default(false),
   /** 소속 폴더 ID (null이면 최상위 루트) */
   folderId: z.string().nullable().default(null),
+  /** 기본 수신 부서 ID */
+  recipientDeptId: z.string().nullable().optional(),
+  /** 기본 수신 사용자 ID */
+  recipientUserId: z.string().nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

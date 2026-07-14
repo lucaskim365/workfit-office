@@ -71,6 +71,13 @@ export const leaveFormSchema = z.object({
 
 export type LeaveForm = z.infer<typeof leaveFormSchema>;
 
+export const approvalRecipientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['user', 'dept']),
+});
+export type ApprovalRecipient = z.infer<typeof approvalRecipientSchema>;
+
 export const approvalDocSchema = z.object({
   /** 문서 ID(PK) = docNo. */
   id: z.string().min(1),
@@ -98,6 +105,8 @@ export const approvalDocSchema = z.object({
     name: z.string(), // 원본 파일명
     url: z.string(),  // 다운로드 URL
   })).default([]),
+  /** 수신(시행)처 목록 */
+  recipients: z.array(approvalRecipientSchema).default([]),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),
