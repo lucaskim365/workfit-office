@@ -1,0 +1,23 @@
+# Synology Container Manager "프로젝트"용 — fs 백엔드로 NAS 공유폴더에 직접 저장.
+# ⚠ 아래 volumes 의 /volume1/... 경로와 JWT_SECRET 을 실제 값으로 바꿀 것.
+services:
+  gateway:
+    build: .
+    container_name: workfit-fileserver
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      STORAGE_BACKEND: fs
+      FS_ROOT: /files
+      META_FILE: /data/meta.json
+      TUS_DIR: /data/tus
+      # openssl rand -base64 48 로 생성해 교체
+      JWT_SECRET: "CHANGE_ME"
+      # 배포 앱 도메인으로 좁히는 것을 권장(예: https://<앱>.vercel.app,https://workfit.synology.me)
+      CORS_ORIGIN: "*"
+    volumes:
+      # 파일이 실제 저장될 공유폴더(File Station 경로 → 컨테이너 /files)
+      - /volume1/AX사업본부/file-storage:/files
+      # 메타 DB + tus 임시 조립(영속 필요)
+      - /volume1/docker/workfit-fileserver/data:/data
