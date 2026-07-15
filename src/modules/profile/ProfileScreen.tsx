@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useUploadSeal } from '@/features/user/useUploadSeal';
+import { useUploadAvatar } from '@/features/user/useUploadAvatar';
 import { useQueryClient } from '@tanstack/react-query';
 
 /**
@@ -34,7 +35,16 @@ export default function ProfileScreen() {
   const [sealMsg, setSealMsg] = useState('');
   const [sealErr, setSealErr] = useState('');
 
+  /* ── 프로필 사진 상태 ── */
+  const { upload: uploadAvatar, uploading: uploadingAvatar } = useUploadAvatar();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>(user?.photoUrl ?? '');
+  const [avatarMsg, setAvatarMsg] = useState('');
+  const [avatarErr, setAvatarErr] = useState('');
+
   if (!user) return null;
+
+  const initials = user.name ? user.name.slice(-2) : 'WF';
 
   /* ── 핸들러: 기본 정보 저장 ── */
   const handleSaveInfo = async () => {
@@ -108,6 +118,38 @@ export default function ProfileScreen() {
     }
   };
 
+  /* ── 핸들러: 프로필 사진 파일 선택 ── */
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setAvatarErr('파일이 너무 큽니다. 5MB 이내로 선택하세요.'); return; }
+    setAvatarErr(''); setAvatarMsg('');
+    try {
+      const url = await uploadAvatar(user.id, file);
+      setAvatarPreview(url);
+      await updateProfile({ photoUrl: url });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setAvatarMsg('프로필 사진이 저장되었습니다.');
+    } catch (e) {
+      setAvatarErr(e instanceof Error ? e.message : '업로드에 실패했습니다.');
+    }
+  };
+
+  /* ── 핸들러: 프로필 사진 삭제 ── */
+  const handleDeleteAvatar = async () => {
+    if (!window.confirm('프로필 사진을 삭제하시겠습니까?')) return;
+    setAvatarErr(''); setAvatarMsg('');
+    try {
+      await updateProfile({ photoUrl: '' });
+      setAvatarPreview('');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setAvatarMsg('프로필 사진이 삭제되었습니다.');
+    } catch (e) {
+      setAvatarErr(e instanceof Error ? e.message : '삭제에 실패했습니다.');
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-12">
       {/* 헤더 */}
@@ -126,6 +168,48 @@ export default function ProfileScreen() {
         <div className="mb-5 flex items-center gap-2">
           <span className="h-4 w-1 rounded-sm bg-teal" />
           <h2 className="text-[13px] font-extrabold text-ink">기본 정보</h2>
+        </div>
+
+        {/* 프로필 사진 설정 */}
+        <div className="mb-6 flex items-center gap-6 pb-6 border-b border-border">
+          <div className="relative h-20 w-20 shrink-0">
+            <div className="h-full w-full overflow-hidden rounded-full border border-border bg-panel-alt flex items-center justify-center text-ink3 font-bold text-lg">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="프로필 사진" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-[20px] font-black">{initials}</span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[11px] font-bold text-ink2">프로필 사진</div>
+            <div className="flex gap-2">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleAvatarFile}
+              />
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-1.5 text-[11.5px] font-semibold text-ink hover:bg-border/30 disabled:opacity-50"
+              >
+                {uploadingAvatar ? '업로드 중…' : avatarPreview ? '사진 변경' : '사진 등록'}
+              </button>
+              {avatarPreview && (
+                <button
+                  onClick={handleDeleteAvatar}
+                  className="rounded-lg border border-danger/30 px-3.5 py-1.5 text-[11.5px] font-semibold text-danger hover:bg-danger/5"
+                >
+                  사진 삭제
+                </button>
+              )}
+            </div>
+            {avatarMsg && <p className="text-[11px] font-semibold text-teal">{avatarMsg}</p>}
+            {avatarErr && <p className="text-[11px] font-semibold text-danger">{avatarErr}</p>}
+          </div>
         </div>
 
         {/* 읽기 전용 필드 */}

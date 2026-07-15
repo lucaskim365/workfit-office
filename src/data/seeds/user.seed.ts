@@ -11,7 +11,7 @@ import { type User } from '@/domain/user/schema';
  */
 const DEMO_PW = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
 
-export const USER_SEED: Omit<User, 'sealUrl'>[] = [
+export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl'>[] = [
   // 대표이사
   { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', roleGroup: 'ADMIN', email: 'ympark@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
   // 대표이사 직속 — 직책 재경이사 / 직급 이사

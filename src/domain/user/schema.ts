@@ -45,6 +45,7 @@ export const userSchema = z.object({
    * 전자결재 문서 서명란에 표시된다. 미등록 시 빈 문자열.
    */
   sealUrl: z.string().default(''),
+  photoUrl: z.string().default(''),
 });
 
 export type User = z.infer<typeof userSchema>;
@@ -65,5 +66,6 @@ export const userFormSchema = z.object({
    * 수정 시 비우면 기존 비밀번호 보존. repo.create/update 에서 처리.
    */
   password: z.string().max(50).optional(),
+  photoUrl: z.string().optional(),
 });
 export type UserFormValues = z.infer<typeof userFormSchema>;
