@@ -5,6 +5,7 @@ import { ActionBar, ActionButton } from '@/shared/ui/ActionBar';
 import { C, MHead, MKpis, FBar, FField, FSel, th, td } from '../_sales';
 import { nextStatus, nextActionLabel } from '@/domain/shipment/status';
 import { useShipments, useAdvanceShipment, useCompleteShipment } from '@/features/shipment/useShipments';
+import type { Shipment } from '@/domain/shipment/schema';
 
 const tone = (s: string): Tone => (s === '출고완료' ? 'ok' : s === '피킹중' ? 'warn' : 'info');
 const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -12,7 +13,7 @@ const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ');
 /** 출하/출고 입력 — 데이터: features/shipment. 출고완료 시 수주 납품·재고 차감 연동. */
 export default function SalesShipmentScreen() {
   const [sel, setSel] = useState<string>();
-  const { data: rows = [] } = useShipments();
+  const { data: rows = [] } = useShipments() as { data: Shipment[] | undefined };
   const advanceShip = useAdvanceShipment();
   const completeShip = useCompleteShipment();
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { Select, type Option } from '@/shared/ui/FilterBar';
-import { PERM_MENUS, PERM_COLS } from '@/domain/roleGroup/schema';
+import { PERM_MENUS, PERM_COLS, type RoleGroup } from '@/domain/roleGroup/schema';
 import { useRoleGroups, useSaveRoleGroup } from '@/features/roleGroup/useRoleGroups';
 
 const MENUS = PERM_MENUS;
@@ -36,7 +36,7 @@ export default function AuthScreen() {
   /** 그룹별 권한 매트릭스 로컬 편집 오버라이드(저장 전). */
   const [edits, setEdits] = useState<Record<string, boolean[][]>>({});
 
-  const { data: groups = [] } = useRoleGroups();
+  const { data: groups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
   const saveGroup = useSaveRoleGroup();
 
   const group = groups.find((g) => g.code === selected) ?? groups[0];

@@ -1,19 +1,3 @@
-/**
- * Firestore 시드 러너 — src/data/seeds/* 의 정적 시드를 실제 Firestore(named DB)에 1회 적재한다.
- *
- * 설계: repo의 메서드 의미(save/create/addMovement…)에 의존하지 않고,
- *   { 컬렉션, 시드배열, id함수 } 매핑 테이블로 균일하게 upsert(setDoc) 한다.
- *   문서 ID는 각 repo가 쓰는 키와 동일하게 맞춰 재실행해도 중복이 생기지 않는다(idempotent).
- *
- * 인증: Firestore 보안 룰을 우회하는 Admin SDK 사용 → 서비스 계정 키 필요.
- *   - GOOGLE_APPLICATION_CREDENTIALS=<service-account.json 경로> 또는
- *   - 프로젝트 루트의 ./serviceAccount.json (gitignore 됨)
- *   Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성.
- *
- * 실행:
- *   npm run seed -- --dry     # Firestore 접근 없이 시드 건수만 검증
- *   npm run seed              # 실제 적재
- */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert } from 'firebase-admin/app';
@@ -24,106 +8,10 @@ import { ITEM_SEED } from '@/data/seeds/item.seed';
 import { VENDOR_SEED } from '@/data/seeds/vendor.seed';
 import { COMMON_CODE_SEED } from '@/data/seeds/commonCode.seed';
 import { ROLE_GROUP_SEED } from '@/data/seeds/roleGroup.seed';
-import { SHIFT_SEED, SHIFT_ROTATION_SEED } from '@/data/seeds/shift.seed';
-import { WORK_CENTER_SEED } from '@/data/seeds/workCenter.seed';
-import { BOM_SEED } from '@/data/seeds/bom.seed';
-import { ROUTING_SEED } from '@/data/seeds/routing.seed';
-import { STOCK_MOVEMENT_SEED } from '@/data/seeds/stock.seed';
-import { WORK_ORDER_SEED } from '@/data/seeds/workOrder.seed';
 import { SALES_ORDER_SEED } from '@/data/seeds/salesOrder.seed';
 import { SHIPMENT_SEED } from '@/data/seeds/shipment.seed';
 import { RECEIPT_SEED } from '@/data/seeds/receipt.seed';
 import { ISSUE_SEED } from '@/data/seeds/issue.seed';
-import { INSPECTION_ITEM_SEED } from '@/data/seeds/inspectionItem.seed';
-import { INSPECTION_STANDARD_SEED } from '@/data/seeds/inspectionStandard.seed';
-import { DEFECT_CODE_SEED } from '@/data/seeds/defectCode.seed';
-import { QUALITY_GRADE_SEED } from '@/data/seeds/qualityGrade.seed';
-import { INSPECTION_SEED } from '@/data/seeds/inspection.seed';
-import { NONCONFORMANCE_SEED } from '@/data/seeds/nonconformance.seed';
-import { MRB_CASE_SEED } from '@/data/seeds/mrbCase.seed';
-import { REWORK_ORDER_SEED } from '@/data/seeds/reworkOrder.seed';
-import { CAPA_SEED } from '@/data/seeds/capa.seed';
-import { SPC_CHART_SEED } from '@/data/seeds/spcChart.seed';
-import { SPC_CAPABILITY_SEED } from '@/data/seeds/spcCapability.seed';
-import { SPC_ALARM_SEED } from '@/data/seeds/spcAlarm.seed';
-import { TRACE_NODE_SEED } from '@/data/seeds/traceNode.seed';
-import { VOC_SEED } from '@/data/seeds/voc.seed';
-import { D8_REPORT_SEED } from '@/data/seeds/d8Report.seed';
-import { GAGE_SEED } from '@/data/seeds/gage.seed';
-import { CALIBRATION_SEED } from '@/data/seeds/calibration.seed';
-import { GAGE_RR_SEED } from '@/data/seeds/gageRr.seed';
-import { PQC_FML_SEED } from '@/data/seeds/pqcFml.seed';
-import { PQC_SELF_SEED } from '@/data/seeds/pqcSelf.seed';
-import { PQC_PATROL_SEED } from '@/data/seeds/pqcPatrol.seed';
-import { PQC_DEVICE_SEED } from '@/data/seeds/pqcDevice.seed';
-import { COA_SEED } from '@/data/seeds/coa.seed';
-import { EQUIPMENT_SEED } from '@/data/seeds/equipment.seed';
-import { EQUIPMENT_SPEC_SEED } from '@/data/seeds/equipmentSpec.seed';
-import { EQUIP_BOM_SEED } from '@/data/seeds/equipBom.seed';
-import { EQUIP_CHECK_SEED } from '@/data/seeds/equipCheckItem.seed';
-import { ALARM_MASTER_SEED } from '@/data/seeds/alarmMaster.seed';
-import { EQUIP_VENDOR_SEED } from '@/data/seeds/equipVendor.seed';
-import { PM_PLAN_SEED } from '@/data/seeds/pmPlan.seed';
-import { DAILY_CHECK_SEED } from '@/data/seeds/dailyCheck.seed';
-import { PERIODIC_CHECK_SEED } from '@/data/seeds/periodicCheck.seed';
-import { BM_ACTION_SEED } from '@/data/seeds/bmAction.seed';
-import { PDM_EQUIPMENT_SEED } from '@/data/seeds/pdmEquipment.seed';
-import { MAINT_OUTSOURCING_SEED } from '@/data/seeds/maintOutsourcing.seed';
-import { SPARE_PART_SEED } from '@/data/seeds/sparePart.seed';
-import { SPARE_MOVEMENT_SEED } from '@/data/seeds/spareMovement.seed';
-import { SPARE_STOCK_SEED } from '@/data/seeds/spareStock.seed';
-import { SPARE_SAFETY_SEED } from '@/data/seeds/spareSafety.seed';
-import { SPARE_SCRAP_SEED } from '@/data/seeds/spareScrap.seed';
-import { ANDON_STATUS_SEED } from '@/data/seeds/andonStatus.seed';
-import { OEE_EQUIPMENT_SEED } from '@/data/seeds/oeeEquipment.seed';
-import { LIVE_ALARM_SEED } from '@/data/seeds/liveAlarm.seed';
-import { EQUIP_PARAM_SEED } from '@/data/seeds/equipParam.seed';
-import { DOWNTIME_SEED } from '@/data/seeds/downtime.seed';
-import { MOLD_SEED } from '@/data/seeds/mold.seed';
-import { MOLD_SHOT_SEED } from '@/data/seeds/moldShot.seed';
-import { MOLD_REPAIR_SEED } from '@/data/seeds/moldRepair.seed';
-import { MOLD_LOCATION_SEED } from '@/data/seeds/moldLocation.seed';
-import { EQUIP_GAGE_SEED } from '@/data/seeds/equipGage.seed';
-import { CAL_PLAN_SEED } from '@/data/seeds/calPlan.seed';
-import { CAL_RESULT_SEED } from '@/data/seeds/calResult.seed';
-import { CAL_FAIL_SEED } from '@/data/seeds/calFail.seed';
-import { PROD_PLAN_SEED } from '@/data/seeds/prodPlan.seed';
-import { SCHEDULE_ENTRY_SEED } from '@/data/seeds/scheduleEntry.seed';
-import { URGENT_ORDER_SEED } from '@/data/seeds/urgentOrder.seed';
-import { PRODUCTION_RESULT_SEED } from '@/data/seeds/productionResult.seed';
-import { JOB_LOG_SEED } from '@/data/seeds/jobLog.seed';
-import { WIP_STATUS_SEED } from '@/data/seeds/wipStatus.seed';
-import { LINE_MONITOR_SEED } from '@/data/seeds/lineMonitor.seed';
-import { MOVE_WIP_SEED } from '@/data/seeds/moveWip.seed';
-import { PROD_DEFECT_SEED } from '@/data/seeds/prodDefect.seed';
-import { MATERIAL_LOAD_SEED } from '@/data/seeds/materialLoad.seed';
-import { MATERIAL_REQUEST_SEED } from '@/data/seeds/materialRequest.seed';
-import { PROD_LOT_TRACE_SEED } from '@/data/seeds/prodLotTrace.seed';
-import { SUBCON_ORDER_SEED } from '@/data/seeds/subconOrder.seed';
-import { SUBCON_ISSUE_SEED } from '@/data/seeds/subconIssue.seed';
-import { SUBCON_RECEIPT_SEED } from '@/data/seeds/subconReceipt.seed';
-import { WAREHOUSE_ZONE_SEED } from '@/data/seeds/warehouseZone.seed';
-import { PUTAWAY_TASK_SEED } from '@/data/seeds/putawayTask.seed';
-import { TRANSFER_SEED } from '@/data/seeds/transfer.seed';
-import { COUNT_RECORD_SEED } from '@/data/seeds/countRecord.seed';
-import { ADJUSTMENT_SEED } from '@/data/seeds/adjustment.seed';
-import { AGING_STOCK_SEED } from '@/data/seeds/agingStock.seed';
-import { LABEL_TASK_SEED } from '@/data/seeds/labelTask.seed';
-import { HOLDING_STOCK_SEED } from '@/data/seeds/holdingStock.seed';
-import { MAT_RETURN_SEED } from '@/data/seeds/matReturn.seed';
-import { PICKING_LIST_SEED } from '@/data/seeds/pickingList.seed';
-import { DELIVERY_ORDER_SEED } from '@/data/seeds/deliveryOrder.seed';
-import { SAFETY_STOCK_SEED } from '@/data/seeds/safetyStock.seed';
-import { FIFO_RULE_SEED } from '@/data/seeds/fifoRule.seed';
-import { MAT_SUBCON_ISSUE_SEED } from '@/data/seeds/matSubconIssue.seed';
-import { SUBCON_STOCK_SEED } from '@/data/seeds/subconStock.seed';
-import { PALLET_SEED } from '@/data/seeds/pallet.seed';
-import { AGV_ROBOT_SEED } from '@/data/seeds/agvRobot.seed';
-import { KIT_SEED } from '@/data/seeds/kit.seed';
-import { LOT_SPLIT_SEED } from '@/data/seeds/lotSplit.seed';
-import { IQC_LINK_SEED } from '@/data/seeds/iqcLink.seed';
-import { MAT_SCRAP_SEED } from '@/data/seeds/matScrap.seed';
-import { MAT_REQUISITION_SEED } from '@/data/seeds/matRequisition.seed';
 import { QUOTE_SEED } from '@/data/seeds/quote.seed';
 import { SALES_COLLECTION_SEED } from '@/data/seeds/salesCollection.seed';
 import { ACCOUNTS_RECEIVABLE_SEED } from '@/data/seeds/accountsReceivable.seed';
@@ -160,108 +48,10 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'vendors', docs: VENDOR_SEED, id: (d) => d.code },
   { coll: 'commonCodes', docs: COMMON_CODE_SEED, id: (d) => `${d.groupCode}__${d.code}` },
   { coll: 'roleGroups', docs: ROLE_GROUP_SEED, id: (d) => d.code },
-  { coll: 'shifts', docs: SHIFT_SEED, id: (d) => d.code },
-  { coll: 'shiftRotations', docs: SHIFT_ROTATION_SEED, id: (d) => d.crew },
-  { coll: 'workCenters', docs: WORK_CENTER_SEED, id: (d) => d.code },
-  { coll: 'boms', docs: BOM_SEED, id: (d) => d.code },
-  { coll: 'routings', docs: ROUTING_SEED, id: (d) => d.code },
-  { coll: 'stockMovements', docs: STOCK_MOVEMENT_SEED, id: (d) => d.id },
-  { coll: 'workOrders', docs: WORK_ORDER_SEED, id: (d) => d.no },
   { coll: 'salesOrders', docs: SALES_ORDER_SEED, id: (d) => d.no },
   { coll: 'shipments', docs: SHIPMENT_SEED, id: (d) => d.no },
   { coll: 'receipts', docs: RECEIPT_SEED, id: (d) => d.po },
   { coll: 'issues', docs: ISSUE_SEED, id: (d) => d.no },
-  { coll: 'inspectionItems', docs: INSPECTION_ITEM_SEED, id: (d) => d.code },
-  { coll: 'inspectionStandards', docs: INSPECTION_STANDARD_SEED, id: (d) => d.code },
-  { coll: 'defectCodes', docs: DEFECT_CODE_SEED, id: (d) => d.code },
-  { coll: 'qualityGrades', docs: QUALITY_GRADE_SEED, id: (d) => d.code },
-  { coll: 'inspections', docs: INSPECTION_SEED, id: (d) => d.recv },
-  { coll: 'nonconformances', docs: NONCONFORMANCE_SEED, id: (d) => d.no },
-  { coll: 'mrbCases', docs: MRB_CASE_SEED, id: (d) => d.no },
-  { coll: 'reworkOrders', docs: REWORK_ORDER_SEED, id: (d) => d.no },
-  { coll: 'capaActions', docs: CAPA_SEED, id: (d) => d.no },
-  { coll: 'spcCharts', docs: SPC_CHART_SEED, id: (d) => d.id },
-  { coll: 'spcCapability', docs: SPC_CAPABILITY_SEED, id: (d) => d.id },
-  { coll: 'spcAlarms', docs: SPC_ALARM_SEED, id: (d) => d.id },
-  { coll: 'traceNodes', docs: TRACE_NODE_SEED, id: (d) => d.id },
-  { coll: 'voc', docs: VOC_SEED, id: (d) => d.no },
-  { coll: 'd8Reports', docs: D8_REPORT_SEED, id: (d) => d.no },
-  { coll: 'gages', docs: GAGE_SEED, id: (d) => d.id },
-  { coll: 'calibrations', docs: CALIBRATION_SEED, id: (d) => d.id },
-  { coll: 'gageRrStudies', docs: GAGE_RR_SEED, id: (d) => d.id },
-  { coll: 'pqcFmlChecks', docs: PQC_FML_SEED, id: (d) => d.wo },
-  { coll: 'pqcSelfChecks', docs: PQC_SELF_SEED, id: (d) => d.wo },
-  { coll: 'pqcPatrols', docs: PQC_PATROL_SEED, id: (d) => d.id },
-  { coll: 'pqcDevices', docs: PQC_DEVICE_SEED, id: (d) => d.id },
-  { coll: 'coaCertificates', docs: COA_SEED, id: (d) => d.no },
-  { coll: 'equipments', docs: EQUIPMENT_SEED, id: (d) => d.code },
-  { coll: 'equipmentSpecs', docs: EQUIPMENT_SPEC_SEED, id: (d) => d.type },
-  { coll: 'equipBoms', docs: EQUIP_BOM_SEED, id: (d) => d.code },
-  { coll: 'equipCheckItems', docs: EQUIP_CHECK_SEED, id: (d) => d.type },
-  { coll: 'alarmMasters', docs: ALARM_MASTER_SEED, id: (d) => d.type },
-  { coll: 'equipVendors', docs: EQUIP_VENDOR_SEED, id: (d) => d.code },
-  { coll: 'pmPlans', docs: PM_PLAN_SEED, id: (d) => d.id },
-  { coll: 'dailyChecks', docs: DAILY_CHECK_SEED, id: (d) => d.code },
-  { coll: 'periodicChecks', docs: PERIODIC_CHECK_SEED, id: (d) => d.no },
-  { coll: 'bmActions', docs: BM_ACTION_SEED, id: (d) => d.no },
-  { coll: 'pdmEquipments', docs: PDM_EQUIPMENT_SEED, id: (d) => d.code },
-  { coll: 'maintOutsourcing', docs: MAINT_OUTSOURCING_SEED, id: (d) => d.no },
-  { coll: 'spareParts', docs: SPARE_PART_SEED, id: (d) => d.code },
-  { coll: 'spareMovements', docs: SPARE_MOVEMENT_SEED, id: (d) => d.no },
-  { coll: 'spareStocks', docs: SPARE_STOCK_SEED, id: (d) => d.code },
-  { coll: 'spareSafety', docs: SPARE_SAFETY_SEED, id: (d) => d.code },
-  // 미채번(no='–') 폐기건은 code를 문서ID로(충돌 방지).
-  { coll: 'spareScraps', docs: SPARE_SCRAP_SEED, id: (d) => (d.no && d.no !== '–' ? d.no : d.code) },
-  { coll: 'andonStatus', docs: ANDON_STATUS_SEED, id: (d) => d.code },
-  { coll: 'oeeEquipments', docs: OEE_EQUIPMENT_SEED, id: (d) => d.code },
-  { coll: 'liveAlarms', docs: LIVE_ALARM_SEED, id: (d) => d.id },
-  { coll: 'equipParams', docs: EQUIP_PARAM_SEED, id: (d) => d.code },
-  { coll: 'downtimes', docs: DOWNTIME_SEED, id: (d) => d.id },
-  { coll: 'molds', docs: MOLD_SEED, id: (d) => d.code },
-  { coll: 'moldShots', docs: MOLD_SHOT_SEED, id: (d) => d.code },
-  { coll: 'moldRepairs', docs: MOLD_REPAIR_SEED, id: (d) => d.no },
-  { coll: 'moldLocations', docs: MOLD_LOCATION_SEED, id: (d) => d.code },
-  { coll: 'equipGages', docs: EQUIP_GAGE_SEED, id: (d) => d.sn },
-  { coll: 'calPlans', docs: CAL_PLAN_SEED, id: (d) => d.sn },
-  { coll: 'calResults', docs: CAL_RESULT_SEED, id: (d) => d.no },
-  { coll: 'calFails', docs: CAL_FAIL_SEED, id: (d) => d.no },
-  { coll: 'prodPlans', docs: PROD_PLAN_SEED, id: (d) => d.no },
-  { coll: 'scheduleEntries', docs: SCHEDULE_ENTRY_SEED, id: (d) => d.wo },
-  { coll: 'urgentOrders', docs: URGENT_ORDER_SEED, id: (d) => d.no },
-  { coll: 'productionResults', docs: PRODUCTION_RESULT_SEED, id: (d) => d.no },
-  { coll: 'jobLogs', docs: JOB_LOG_SEED, id: (d) => d.no },
-  { coll: 'wipStatus', docs: WIP_STATUS_SEED, id: (d) => d.id },
-  { coll: 'lineMonitors', docs: LINE_MONITOR_SEED, id: (d) => d.line },
-  { coll: 'moveWip', docs: MOVE_WIP_SEED, id: (d) => d.lot },
-  { coll: 'prodDefects', docs: PROD_DEFECT_SEED, id: (d) => d.no },
-  { coll: 'materialLoads', docs: MATERIAL_LOAD_SEED, id: (d) => d.id },
-  { coll: 'materialRequests', docs: MATERIAL_REQUEST_SEED, id: (d) => d.wo },
-  { coll: 'prodLotTraces', docs: PROD_LOT_TRACE_SEED, id: (d) => d.id },
-  { coll: 'subconOrders', docs: SUBCON_ORDER_SEED, id: (d) => d.no },
-  { coll: 'subconIssues', docs: SUBCON_ISSUE_SEED, id: (d) => d.no },
-  { coll: 'subconReceipts', docs: SUBCON_RECEIPT_SEED, id: (d) => d.no },
-  { coll: 'warehouseZones', docs: WAREHOUSE_ZONE_SEED, id: (d) => d.z },
-  { coll: 'putawayTasks', docs: PUTAWAY_TASK_SEED, id: (d) => d.lot },
-  { coll: 'transfers', docs: TRANSFER_SEED, id: (d) => d.no },
-  { coll: 'countRecords', docs: COUNT_RECORD_SEED, id: (d) => d.id },
-  { coll: 'adjustments', docs: ADJUSTMENT_SEED, id: (d) => d.no },
-  { coll: 'agingStock', docs: AGING_STOCK_SEED, id: (d) => d.lot },
-  { coll: 'labelTasks', docs: LABEL_TASK_SEED, id: (d) => d.lot },
-  { coll: 'holdingStock', docs: HOLDING_STOCK_SEED, id: (d) => d.lot },
-  { coll: 'matReturns', docs: MAT_RETURN_SEED, id: (d) => d.no },
-  { coll: 'pickingList', docs: PICKING_LIST_SEED, id: (d) => d.id },
-  { coll: 'deliveryOrders', docs: DELIVERY_ORDER_SEED, id: (d) => d.no },
-  { coll: 'safetyStock', docs: SAFETY_STOCK_SEED, id: (d) => d.code },
-  { coll: 'fifoRules', docs: FIFO_RULE_SEED, id: (d) => d.category },
-  { coll: 'matSubconIssues', docs: MAT_SUBCON_ISSUE_SEED, id: (d) => d.no },
-  { coll: 'subconStocks', docs: SUBCON_STOCK_SEED, id: (d) => d.name },
-  { coll: 'pallets', docs: PALLET_SEED, id: (d) => d.id },
-  { coll: 'agvRobots', docs: AGV_ROBOT_SEED, id: (d) => d.id },
-  { coll: 'kits', docs: KIT_SEED, id: (d) => d.no },
-  { coll: 'lotSplits', docs: LOT_SPLIT_SEED, id: (d) => d.id },
-  { coll: 'iqcLinks', docs: IQC_LINK_SEED, id: (d) => d.lot },
-  { coll: 'matScraps', docs: MAT_SCRAP_SEED, id: (d) => d.no },
-  { coll: 'matRequisitions', docs: MAT_REQUISITION_SEED, id: (d) => d.no },
   { coll: 'quotes', docs: QUOTE_SEED, id: (d) => d.no },
   { coll: 'salesCollections', docs: SALES_COLLECTION_SEED, id: (d) => d.no },
   { coll: 'accountsReceivable', docs: ACCOUNTS_RECEIVABLE_SEED, id: (d) => d.cust },
@@ -286,18 +76,6 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'approvalRouteRules', docs: APPROVAL_ROUTE_SEED, id: (d) => d.id },
   { coll: 'approvalForms', docs: APPROVAL_FORM_SEED, id: (d) => d.id },
 ];
-
-/** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
-function readEnv(key: string): string | undefined {
-  if (process.env[key]) return process.env[key];
-  const p = resolve(process.cwd(), '.env.local');
-  if (!existsSync(p)) return undefined;
-  for (const line of readFileSync(p, 'utf8').split('\n')) {
-    const m = line.match(new RegExp(`^${key}\\s*=\\s*"?([^"\\n]*)"?`));
-    if (m) return m[1].trim();
-  }
-  return undefined;
-}
 
 const DRY = process.argv.includes('--dry');
 /** --only=chatRooms,chatMessages → 지정 컬렉션만 적재(그 외 스킵). 미지정 시 전체. */
@@ -372,3 +150,15 @@ main().catch((e) => {
   console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 });
+
+/** .env.local 의 VITE_FB_* 값을 읽어 named DB를 타깃팅한다. */
+function readEnv(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  const p = resolve(process.cwd(), '.env.local');
+  if (!existsSync(p)) return undefined;
+  for (const line of readFileSync(p, 'utf8').split('\n')) {
+    const m = line.match(new RegExp(`^${key}\\s*=\\s*"?([^"\\n]*)"?`));
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}

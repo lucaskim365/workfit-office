@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Card } from '@/shared/ui/Card';
 
-/** 자재관리 화면 공통 색 토큰. */
+/** 자재관리/영업/리포트 화면 공통 색 토큰. */
 export const C = {
   ink: '#1c2536', ink2: '#56607a', ink3: '#8b95ab',
   navy: '#1f2f55', teal: '#17a89a', tealSoft: '#dcf3f0',

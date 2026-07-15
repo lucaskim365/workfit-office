@@ -31,14 +31,19 @@ import { userRepo } from '@/data/user/user.repo';
 const COLL = 'approvalDocs';
 
 function migrateDoc(data: any): any {
-  if (!data || !Array.isArray(data.steps)) return data;
+  if (!data) return data;
+  let form = data.form;
+  if (data.docType !== '휴가' || !form || !form.leaveType) {
+    form = null;
+  }
   return {
     ...data,
+    form,
     attachments: data.attachments ?? [],
-    steps: data.steps.map((s: any) => ({
+    steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
       kind: s.kind === '합의' ? '결재' : s.kind,
-    })),
+    })) : [],
   };
 }
 
