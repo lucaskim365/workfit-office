@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "seed": "tsx scripts/seed-firestore.ts"
+    "seed": "tsx scripts/seed-firestore.ts",
+    "migrate-pw": "tsx scripts/migrate-passwords.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

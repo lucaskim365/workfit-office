@@ -261,7 +261,8 @@ export default function App() {
 
   // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동
   useEffect(() => {
-    if (user && user.password === 'mes1234') {
+    const defaultHash = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
+    if (user && (user.password === 'mes1234' || user.password === defaultHash)) {
       window.alert('보안을 위해 초기 비밀번호(mes1234)를 반드시 변경해 주세요.');
       navigate('/profile');
     }

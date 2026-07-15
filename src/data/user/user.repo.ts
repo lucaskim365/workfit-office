@@ -2,6 +2,7 @@ import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
+import { hashPassword } from '@/shared/lib/crypto';
 
 /**
  * 사용자 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
@@ -54,7 +55,8 @@ export const userRepo = {
   async create(values: UserFormValues): Promise<User> {
     const all = await this.list();
     // 초기 비밀번호: 입력값 우선, 비우면 공통 기본값(mes1234) 부여 → 등록 즉시 로그인 가능.
-    const password = values.password?.trim() || DEFAULT_USER_PASSWORD;
+    const plainPassword = values.password?.trim() || DEFAULT_USER_PASSWORD;
+    const password = await hashPassword(plainPassword);
     const user = userSchema.parse({ ...values, password, id: nextId(all), lastLogin: '-' });
     await this.save(user);
     return user;
@@ -64,7 +66,10 @@ export const userRepo = {
   async update(id: string, values: UserFormValues): Promise<void> {
     const existing = (await this.list()).find((u) => u.id === id);
     // 비밀번호를 비워두면 기존 비밀번호 보존, 입력하면 해당 값으로 변경.
-    const password = values.password?.trim() || existing?.password || '';
+    let password = existing?.password || '';
+    if (values.password?.trim()) {
+      password = await hashPassword(values.password.trim());
+    }
     await this.save(userSchema.parse({ ...existing, ...values, password, id }));
   },
 

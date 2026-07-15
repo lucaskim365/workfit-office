@@ -1,5 +1,6 @@
 import { userRepo } from '@/data/user/user.repo';
 import type { User } from '@/domain/user/schema';
+import { hashPassword } from '@/shared/lib/crypto';
 
 /**
  * 인증 Repository — 자체 로그인(users 컬렉션 대조) UI 게이트.
@@ -42,7 +43,9 @@ export const authRepo = {
     if (!user) throw new AuthError('NOT_FOUND');
     if (user.status === '잠금') throw new AuthError('LOCKED');
     if (user.status === '미사용') throw new AuthError('DISABLED');
-    if (user.password !== password) throw new AuthError('WRONG_PASSWORD');
+    
+    const hashedPassword = await hashPassword(password);
+    if (user.password !== hashedPassword) throw new AuthError('WRONG_PASSWORD');
 
     return user;
   },
@@ -50,14 +53,18 @@ export const authRepo = {
   /**
    * 비밀번호 변경 — 현재 비밀번호 검증 후 새 비밀번호로 저장(DB 영구화).
    * 성공 시 갱신된 User 반환. 현재 비밀번호 불일치 시 AuthError('WRONG_PASSWORD').
-   * ⚠ 데모 한정 평문 저장. 새 비밀번호 형식 검증(길이 등)은 화면에서 수행.
+   * 새 비밀번호 형식 검증(길이 등)은 화면에서 수행.
    */
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<User> {
     const users = await userRepo.list();
     const user = users.find((u) => u.id === userId);
     if (!user) throw new AuthError('NOT_FOUND');
-    if (user.password !== currentPassword) throw new AuthError('WRONG_PASSWORD');
-    const updated = { ...user, password: newPassword };
+    
+    const hashedCurrent = await hashPassword(currentPassword);
+    if (user.password !== hashedCurrent) throw new AuthError('WRONG_PASSWORD');
+    
+    const hashedNew = await hashPassword(newPassword);
+    const updated = { ...user, password: hashedNew };
     await userRepo.save(updated);
     return updated;
   },
