@@ -23,7 +23,6 @@ import { encodeForFirestore } from '@/shared/lib/firestore-codec';
 import { ITEM_SEED } from '@/data/seeds/item.seed';
 import { VENDOR_SEED } from '@/data/seeds/vendor.seed';
 import { COMMON_CODE_SEED } from '@/data/seeds/commonCode.seed';
-import { USER_SEED } from '@/data/seeds/user.seed';
 import { ROLE_GROUP_SEED } from '@/data/seeds/roleGroup.seed';
 import { SHIFT_SEED, SHIFT_ROTATION_SEED } from '@/data/seeds/shift.seed';
 import { WORK_CENTER_SEED } from '@/data/seeds/workCenter.seed';
@@ -140,7 +139,6 @@ import { APPROVAL_RULE_SEED } from '@/data/seeds/approvalRule.seed';
 import { POSITION_SEED } from '@/data/seeds/position.seed';
 import { APPROVAL_ROUTE_SEED } from '@/data/seeds/approvalRoute.seed';
 import { APPROVAL_FORM_SEED } from '@/data/seeds/approvalForm.seed';
-import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
 import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
 import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
 import { SYS_ADMIN_SEED } from '@/data/seeds/sysAdmin.seed';
@@ -159,7 +157,6 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'items', docs: ITEM_SEED, id: (d) => d.code },
   { coll: 'vendors', docs: VENDOR_SEED, id: (d) => d.code },
   { coll: 'commonCodes', docs: COMMON_CODE_SEED, id: (d) => `${d.groupCode}__${d.code}` },
-  { coll: 'users', docs: USER_SEED, id: (d) => d.id },
   { coll: 'roleGroups', docs: ROLE_GROUP_SEED, id: (d) => d.code },
   { coll: 'shifts', docs: SHIFT_SEED, id: (d) => d.code },
   { coll: 'shiftRotations', docs: SHIFT_ROTATION_SEED, id: (d) => d.crew },
@@ -272,7 +269,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'authRoles', docs: AUTH_ROLE_SEED, id: (d) => d.code },
   { coll: 'backupPolicies', docs: BACKUP_POLICY_SEED, id: (d) => d.id },
   { coll: 'companySites', docs: COMPANY_SITE_SEED, id: (d) => d.name },
-  { coll: 'companyInfo', docs: COMPANY_INFO_SEED, id: (d) => d.id },
+
   { coll: 'interfaces', docs: SYS_INTERFACE_SEED, id: (d) => d.id },
   { coll: 'systemLogs', docs: SYSTEM_LOG_SEED, id: (d) => d.id },
   { coll: 'sysAdmins', docs: SYS_ADMIN_SEED, id: (d) => d.id },
@@ -341,38 +338,14 @@ async function main() {
   console.log(`타깃: project=${projectId} db=${databaseId ?? '(default)'}`);
 
   for (const t of tables) {
-    if (t.coll === 'users') {
-      // 사용자 컬렉션의 경우 기존 가입자의 개인 설정(비밀번호, 인감, 사진, 이메일, 로그인시각)을 보존
+    // Firestore batch 최대 500건 → 청크로 분할.
+    for (let i = 0; i < t.docs.length; i += 450) {
       const batch = db.batch();
-      for (const d of t.docs) {
-        const docId = t.id(d);
-        const docRef = db.collection(t.coll).doc(docId);
-        const existingSnap = await docRef.get();
-        let finalData = encodeForFirestore(d) as Record<string, any>;
-        if (existingSnap.exists) {
-          const exData = existingSnap.data() || {};
-          finalData = {
-            ...finalData,
-            password: exData.password ?? finalData.password ?? '',
-            sealUrl: exData.sealUrl ?? finalData.sealUrl ?? '',
-            photoUrl: exData.photoUrl ?? finalData.photoUrl ?? '',
-            lastLogin: exData.lastLogin ?? finalData.lastLogin ?? '-',
-            email: exData.email ?? finalData.email ?? '',
-          };
-        }
-        batch.set(docRef, finalData);
+      for (const d of t.docs.slice(i, i + 450)) {
+        // 중첩 배열(배열의 배열)을 맵으로 감싸 Firestore 제약 우회. 없으면 무영향.
+        batch.set(db.collection(t.coll).doc(t.id(d)), encodeForFirestore(d) as Record<string, unknown>);
       }
       await batch.commit();
-    } else {
-      // Firestore batch 최대 500건 → 청크로 분할.
-      for (let i = 0; i < t.docs.length; i += 450) {
-        const batch = db.batch();
-        for (const d of t.docs.slice(i, i + 450)) {
-          // 중첩 배열(배열의 배열)을 맵으로 감싸 Firestore 제약 우회. 없으면 무영향.
-          batch.set(db.collection(t.coll).doc(t.id(d)), encodeForFirestore(d) as Record<string, unknown>);
-        }
-        await batch.commit();
-      }
     }
     console.log(`  ✔ ${t.coll.padEnd(16)} ${t.docs.length}건`);
   }
