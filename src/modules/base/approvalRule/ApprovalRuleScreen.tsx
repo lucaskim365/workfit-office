@@ -234,8 +234,8 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
           )}
           <F label="기안자 직급(이상/상위)">
             <select
-              value={rule.positionFromRank ?? ''}
-              onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
+              value={rule.positionToRank ?? ''}
+              onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })}
               className={inp}
             >
               <option value="">(제한 없음)</option>
@@ -248,8 +248,8 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
           </F>
           <F label="기안자 직급(이하/하위)">
             <select
-              value={rule.positionToRank ?? ''}
-              onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })}
+              value={rule.positionFromRank ?? ''}
+              onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
               className={inp}
             >
               <option value="">(제한 없음)</option>

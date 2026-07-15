@@ -47,24 +47,7 @@ export const approvalFormRepo = {
         }
       }
 
-      // 자동 마이그레이션 및 동기화: Firestore에 코드 시드의 서식들을 보급
-      for (const seedForm of APPROVAL_FORM_SEED) {
-        const dbForm = list.find((f) => f.id === seedForm.id);
-        
-        // 1. DB에 서식이 아예 존재하지 않으면 무조건 생성 (최초 보급)
-        // 2. system: true 인 잠금 서식이고, 시드 파일 대비 내용 불일치 시 덮어쓰기
-        const shouldWrite = !dbForm;
 
-        if (shouldWrite) {
-          const valid = approvalFormSchema.parse(seedForm);
-          await setDoc(doc(db, COLL, valid.id), valid);
-          if (dbForm) {
-            Object.assign(dbForm, seedForm);
-          } else {
-            list.push(valid);
-          }
-        }
-      }
       return list.sort(byOrder);
     }
     memory = memory.filter((m) => !obsoleteFormIds.includes(m.id));

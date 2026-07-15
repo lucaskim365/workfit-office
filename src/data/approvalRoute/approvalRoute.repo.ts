@@ -30,21 +30,7 @@ export const approvalRouteRepo = {
         }
       }
 
-      // 2. 개별 규칙 내용 동기화 (기존 데이터와 다르면 덮어쓰기)
-      for (const seed of APPROVAL_ROUTE_SEED) {
-        const dbRule = rows.find((r) => r.id === seed.id);
-        const shouldWrite = !dbRule;
 
-        if (shouldWrite) {
-          const valid = approvalRouteRuleSchema.parse(seed);
-          await setDoc(doc(db, COLL, valid.id), valid);
-          if (dbRule) {
-            Object.assign(dbRule, seed);
-          } else {
-            rows.push(valid);
-          }
-        }
-      }
     } else {
       // 로컬/메모리 모드 갱신
       const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));

@@ -20,8 +20,14 @@ import type { ApprovalRouteRule, RouteStep, Resolver, RouteStepKind } from '@/do
  */
 
 /** 결재 단계 축약 생성기(dedupeSelf 기본 true, DRAFTER는 무조건 false). */
-const s = (resolver: Resolver, kind: RouteStepKind, arg: string | number | null = null, optional = false): RouteStep => ({
-  resolver, arg, kind, dedupeSelf: resolver !== 'DRAFTER', optional,
+const s = (
+  resolver: Resolver,
+  kind: RouteStepKind,
+  arg: string | number | null = null,
+  optional = false,
+  dedupeSelf = resolver !== 'DRAFTER',
+): RouteStep => ({
+  resolver, arg, kind, dedupeSelf, optional,
 });
 
 /** 부서범위 축약. */
@@ -30,6 +36,14 @@ const scAll = { kind: '전체', deptId: null, deptType: null } as const;
 const 만 = 10_000;
 
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
+  // --- 대표이사 자가 전결 특례 ---
+  {
+    id: 'RR-CEO-SELF', name: '대표이사 기안: 자가 전결', priority: 0, active: true,
+    docType: '전체', conditionKey: null, conditionValues: [],
+    deptScope: scAll, positionFromRank: 1, positionToRank: 1, amountFrom: null, amountTo: null,
+    steps: [s('DRAFTER', '전결')],
+  },
+
   // ==========================================
   // 1. 인사 분류 (휴가, 연장근로, 외근)
   // ==========================================
@@ -42,12 +56,12 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   },
   {
     id: 'RR-LEAVE-LEADER', name: '휴가·팀장 기안: 담당(팀장)결재➔본부장 전결 (대표 참조)', priority: 2, active: true,
-    docType: '휴가', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 4, positionToRank: 4, amountFrom: null, amountTo: null,
+    docType: '휴가', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 3, positionToRank: 4, amountFrom: null, amountTo: null,
     steps: [s('DRAFTER', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
   {
     id: 'RR-LEAVE-EXEC', name: '휴가·임원 기안: 본부장 전결 (대표 참조)', priority: 3, active: true,
-    docType: '휴가', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 3, positionToRank: 3, amountFrom: null, amountTo: null,
+    docType: '휴가', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 2, positionToRank: 2, amountFrom: null, amountTo: null,
     steps: [s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
 
@@ -59,7 +73,7 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   },
   {
     id: 'RR-OUTSIDE-LEADER', name: '외근·팀장 기안: 본부장 전결 (대표 참조)', priority: 5, active: true,
-    docType: '외근', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 4, positionToRank: 4, amountFrom: null, amountTo: null,
+    docType: '외근', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: 3, positionToRank: 4, amountFrom: null, amountTo: null,
     steps: [s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
 
@@ -112,30 +126,37 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
   {
     id: 'RR-EXPENSE-STANDARD', name: '지출결의·식대/회의비/교통비: 팀장 전결 (본부장 참조)', priority: 16, active: true,
     docType: '지출결의', conditionKey: 'expenseItem',
-    conditionValues: ['식대 (간식/야근/외근 식대)', '회의비 (10만원 이내)', '교통비 (택시/주유/대중교통)'],
+    conditionValues: ['식대', '회의비', '교통비'],
     deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
+    steps: [s('DEPT_HEAD', '전결', null, false, false), s('PARENT_DEPT_HEAD', '참조', 1)],
   },
   {
-    id: 'RR-EXPENSE-DELIVERY', name: '지출결의·운반비: 팀장 전결', priority: 17, active: true,
-    docType: '지출결의', conditionKey: 'expenseItem',
-    conditionValues: ['운반비 (택배/퀵)'],
+    id: 'RR-EXPENSE-DELIVERY-POST', name: '지출결의·운반비(우편/택배): 기안자 결재➔팀장 전결', priority: 17, active: true,
+    docType: '지출결의', conditionKey: 'sort_carr',
+    conditionValues: ['우편/택배'],
     deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '전결')],
+    steps: [s('DRAFTER', '결재'), s('DEPT_HEAD', '전결', null, false, false)],
   },
   {
-    id: 'RR-EXPENSE-HOESIK-DEPT', name: '지출결의·부서회식: 팀장➔본부장 전결', priority: 18, active: true,
-    docType: '지출결의', conditionKey: 'expenseItem',
-    conditionValues: ['회식비 (부서원 회식 - 한도내)'],
+    id: 'RR-EXPENSE-DELIVERY-QUICK', name: '지출결의·운반비(퀵서비스): 팀장 전결', priority: 18, active: true,
+    docType: '지출결의', conditionKey: 'sort_carr',
+    conditionValues: ['퀵서비스'],
     deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
+    steps: [s('DEPT_HEAD', '전결', null, false, false)],
   },
   {
-    id: 'RR-EXPENSE-HOESIK-SPECIAL', name: '지출결의·특별회식: 팀장➔본부장➔대표이사 전결', priority: 19, active: true,
-    docType: '지출결의', conditionKey: 'expenseItem',
-    conditionValues: ['회식비 (특별/전체 회식)'],
+    id: 'RR-EXPENSE-HOESIK-DEPT', name: '지출결의·부서회식: 팀장➔본부장 전결', priority: 19, active: true,
+    docType: '지출결의', conditionKey: 'sort_t_dinner',
+    conditionValues: ['부서원별(2개월한도액4만원)'],
     deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+    steps: [s('DEPT_HEAD', '결재', null, false, false), s('PARENT_DEPT_HEAD', '전결', 1)],
+  },
+  {
+    id: 'RR-EXPENSE-HOESIK-SPECIAL', name: '지출결의·특별회식: 본부장➔대표이사 전결', priority: 20, active: true,
+    docType: '지출결의', conditionKey: 'sort_t_dinner',
+    conditionValues: ['특별회식(전체회식)'],
+    deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
   },
 
   // --- 기존 개별 비용 서식 룰 비활성화 ---

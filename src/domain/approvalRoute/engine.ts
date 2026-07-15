@@ -148,10 +148,10 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       return chain.slice(0, 1); // 무조건 1차 상급자만 반환
     }
     case 'DEPT_HEAD':
-      return headsUp; // 소속 부서장 → 상위 부서장 → …
+      return headsUp.slice(0, 1); // 소속 부서장만 반환 (스킵 시 상위로 자동 승격 차단)
     case 'PARENT_DEPT_HEAD': {
       const level = asNumber(arg, 1);
-      return ancestors.slice(level).map((d) => org.headOf(d)).filter((x): x is string => !!x);
+      return ancestors.slice(level).map((d) => org.headOf(d)).filter((x): x is string => !!x).slice(0, 1);
     }
     case 'ROLE_FACTORY_HEAD': {
       const factories = ancestors.filter((d) => d.deptType === '공장');
@@ -189,7 +189,13 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
   const steps: ApprovalStep[] = [];
   const used = new Set<string>();
   let seq = 1;
+  let hasJeongyeol = false;
+  
   for (const rs of rule.steps) {
+    // 전결 이후에는 승인 라인(결재/전결)은 차단하고 오직 참조(참조)선만 허용합니다.
+    if (hasJeongyeol && rs.kind !== '참조') {
+      continue;
+    }
     const candidates = resolveCandidates(rs, drafter, org);
     
     const pick = candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
@@ -202,7 +208,9 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
     used.add(pick);
     const kind = toStepKind(rs.kind);
     steps.push({ seq: seq++, parallelGroup: null, kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
-    if (kind === '전결') break; // 전결 이후 절단
+    if (kind === '전결') {
+      hasJeongyeol = true;
+    }
   }
   return steps;
 }

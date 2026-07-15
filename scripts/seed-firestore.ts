@@ -139,6 +139,8 @@ import { APPROVAL_RULE_SEED } from '@/data/seeds/approvalRule.seed';
 import { POSITION_SEED } from '@/data/seeds/position.seed';
 import { APPROVAL_ROUTE_SEED } from '@/data/seeds/approvalRoute.seed';
 import { APPROVAL_FORM_SEED } from '@/data/seeds/approvalForm.seed';
+import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
+import { USER_SEED } from '@/data/seeds/user.seed';
 import { SYS_INTERFACE_SEED } from '@/data/seeds/sysInterface.seed';
 import { SYSTEM_LOG_SEED } from '@/data/seeds/systemLog.seed';
 import { SYS_ADMIN_SEED } from '@/data/seeds/sysAdmin.seed';
@@ -270,6 +272,8 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'backupPolicies', docs: BACKUP_POLICY_SEED, id: (d) => d.id },
   { coll: 'companySites', docs: COMPANY_SITE_SEED, id: (d) => d.name },
 
+  { coll: 'users', docs: USER_SEED, id: (d) => d.id },
+  { coll: 'companyInfo', docs: COMPANY_INFO_SEED, id: (d) => d.id },
   { coll: 'interfaces', docs: SYS_INTERFACE_SEED, id: (d) => d.id },
   { coll: 'systemLogs', docs: SYSTEM_LOG_SEED, id: (d) => d.id },
   { coll: 'sysAdmins', docs: SYS_ADMIN_SEED, id: (d) => d.id },
@@ -338,16 +342,28 @@ async function main() {
   console.log(`타깃: project=${projectId} db=${databaseId ?? '(default)'}`);
 
   for (const t of tables) {
+    // 해당 컬렉션에서 이미 존재하는 문서 ID 목록을 select()로 빠르게 로드
+    const snap = await db.collection(t.coll).select().get();
+    const existingIds = new Set(snap.docs.map((doc) => doc.id));
+
+    // 존재하지 않는 신규 데이터만 필터링
+    const docsToAdd = t.docs.filter((d) => !existingIds.has(t.id(d)));
+
+    if (docsToAdd.length === 0) {
+      console.log(`  ✔ ${t.coll.padEnd(16)} 0건 (기존 데이터와 모두 중복되어 스킵됨)`);
+      continue;
+    }
+
     // Firestore batch 최대 500건 → 청크로 분할.
-    for (let i = 0; i < t.docs.length; i += 450) {
+    for (let i = 0; i < docsToAdd.length; i += 450) {
       const batch = db.batch();
-      for (const d of t.docs.slice(i, i + 450)) {
+      for (const d of docsToAdd.slice(i, i + 450)) {
         // 중첩 배열(배열의 배열)을 맵으로 감싸 Firestore 제약 우회. 없으면 무영향.
         batch.set(db.collection(t.coll).doc(t.id(d)), encodeForFirestore(d) as Record<string, unknown>);
       }
       await batch.commit();
     }
-    console.log(`  ✔ ${t.coll.padEnd(16)} ${t.docs.length}건`);
+    console.log(`  ✔ ${t.coll.padEnd(16)} ${docsToAdd.length}건 적재 완료 (기존 ${existingIds.size}건 보존됨)`);
   }
   console.log('완료.');
 }
