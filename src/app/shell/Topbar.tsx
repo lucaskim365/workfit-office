@@ -161,7 +161,6 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
       {/* 날짜 + 계정 */}
       <div className="flex shrink-0 items-center gap-3">
-        <span style={{ color: 'var(--color-header-text)', opacity: 0.7 }} className="text-[11px] tabular-nums">2026-06-10 09:00</span>
         <div className="relative">
           <button
             onClick={() => setUserOpen(!userOpen)}
