@@ -406,12 +406,16 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
           <span className="relative inline-flex h-9 w-9 items-center justify-center select-none">
             <span className="text-[12.5px] font-bold text-[#c0392b] z-10">(인)</span>
-            {sealOf(doc.drafterId) && (
+            {sealOf(doc.drafterId) ? (
               <img
                 src={sealOf(doc.drafterId)}
                 alt="인감"
                 className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
               />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[9px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-white/10">
+                {drafterName.slice(-2)}
+              </span>
             )}
           </span>
         </div>
