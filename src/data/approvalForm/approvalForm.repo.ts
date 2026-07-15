@@ -32,7 +32,8 @@ export const approvalFormRepo = {
     const obsoleteFormIds = [
       '출장', '보험신청', '운반비청구', '공문발송', '접대비품의',
       '비용청구', '단체상해보험변경', '단체상해보험재가입', '화재보험', '자동차보험',
-      '우편택배청구', '퀵서비스청구', '일반공문', '법률문서', '접대비내', '접대비초과', '지출결의'
+      '우편택배청구', '퀵서비스청구', '일반공문', '법률문서', '접대비내', '접대비초과',
+      '식대', '회식비', '회의비', '교통비', '운반비'
     ];
     if (isFirebaseConfigured && db) {
       const snap = await getDocs(collection(db, COLL));

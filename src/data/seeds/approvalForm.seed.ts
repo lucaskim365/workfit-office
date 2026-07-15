@@ -76,44 +76,30 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
     ],
   },
   {
-    id: '식대', code: '식대', name: '식대 신청서', icon: '🍲', docTitle: '식 대 신 청 서',
-    closing: '위와 같이 식대를 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 8, system: false, folderId: 'fld-ga',
+    id: '지출결의', code: '지출결의', name: '지출결의서', icon: '💳', docTitle: '지 출 결 의 서',
+    closing: '위와 같이 지출을 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 7, system: false, folderId: 'fld-ga',
     fields: [
-      f({ key: 'expenseType', label: '식대 구분', type: '선택', required: true, width: 'half', options: ['간식대', '외근식대', '야근식대'] }),
+      f({
+        key: 'expenseItem',
+        label: '지출 항목',
+        type: '선택',
+        required: true,
+        width: 'half',
+        options: [
+          '식대 (간식/야근/외근 식대)',
+          '회의비 (10만원 이내)',
+          '교통비 (택시/주유/대중교통)',
+          '운반비 (택배/퀵)',
+          '회식비 (부서원 회식 - 한도내)',
+          '회식비 (특별/전체 회식)'
+        ]
+      }),
       f({ key: 'amount', label: '청구 금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
       f({ key: 'useDate', label: '사용 일자', type: '날짜', required: true, width: 'full' }),
-      f({ key: 'body', label: '상세 내용 및 사유', type: '장문', required: true }),
+      f({ key: 'body', label: '상세 사용 내역 및 사유', type: '장문', required: true }),
     ],
   },
-  {
-    id: '회식비', code: '회식비', name: '회식비 청구서', icon: '🍻', docTitle: '회 식 비 청 구 서',
-    closing: '위와 같이 회식비를 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 9, system: false, folderId: 'fld-ga',
-    fields: [
-      f({ key: 'expenseType', label: '회식 구분', type: '선택', required: true, width: 'half', options: ['부서원 회식', '특별회식(전체 회식)'] }),
-      f({ key: 'amount', label: '청구 금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
-      f({ key: 'useDate', label: '사용 일자', type: '날짜', required: true, width: 'full' }),
-      f({ key: 'body', label: '회식 사유 및 인원 정보', type: '장문', required: true }),
-    ],
-  },
-  {
-    id: '회의비', code: '회의비', name: '회의비 청구서', icon: '📝', docTitle: '회 의 비 청 구 서',
-    closing: '위와 같이 회의비를 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 10, system: false, folderId: 'fld-ga',
-    fields: [
-      f({ key: 'amount', label: '회의비 금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
-      f({ key: 'useDate', label: '사용 일자', type: '날짜', required: true, width: 'half' }),
-      f({ key: 'body', label: '회의 내용 및 사유', type: '장문', required: true }),
-    ],
-  },
-  {
-    id: '교통비', code: '교통비', name: '교통비 청구서', icon: '🚕', docTitle: '교 통 비 청 구 서',
-    closing: '위와 같이 교통비를 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 11, system: false, folderId: 'fld-ga',
-    fields: [
-      f({ key: 'expenseType', label: '교통비 구분', type: '선택', required: true, width: 'half', options: ['야근 후 택시비', '외근 교통비', '외근 택시비', '외근 / 야근 주유비'] }),
-      f({ key: 'amount', label: '청구 금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
-      f({ key: 'useDate', label: '날짜', type: '날짜', required: true, width: 'full' }),
-      f({ key: 'body', label: '이동 경로 및 사유', type: '장문', required: true }),
-    ],
-  },
+
   {
     id: '보험', code: '보험', name: '보험 관련 신청서', icon: '🛡️', docTitle: '보 험 관 련 신 청 서',
     closing: '위와 같이 보험 관련 신청을 하오니 재가하여 주시기 바랍니다.', active: true, order: 12, system: false, folderId: 'fld-ga',
@@ -124,15 +110,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
       f({ key: 'body', label: '세부 변동 및 신청 내용', type: '장문', required: true }),
     ],
   },
-  {
-    id: '운반비', code: '운반비', name: '운반비 청구서', icon: '📦', docTitle: '운 반 비 청 구 서',
-    closing: '위와 같이 운반비를 청구하오니 재가하여 주시기 바랍니다.', active: true, order: 13, system: false, folderId: 'fld-ga',
-    fields: [
-      f({ key: 'deliveryType', label: '배송 방식', type: '선택', required: true, width: 'half', options: ['우편 / 택배', '퀵서비스'] }),
-      f({ key: 'amount', label: '배송 비용', type: '금액', required: true, isAmountKey: true, width: 'half' }),
-      f({ key: 'body', label: '발송 물품 목록 및 목적지', type: '장문', required: true }),
-    ],
-  },
+
   {
     id: '인장날인', code: '인장날인', name: '인장 날인 요청서', icon: '印', docTitle: '인 장 날 인 요 청 서',
     closing: '위와 같이 인장 날인을 요청하오니 재가하여 주시기 바랍니다.', active: true, order: 14, system: false, folderId: 'fld-ga',

@@ -108,59 +108,69 @@ export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = [
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1), s('ROLE_CEO', '참조')],
   },
 
-  // --- 식대 신청서 ---
+  // --- 지출결의서 통합 전결 규칙 (전결 규정 별지 반영) ---
   {
-    id: 'RR-SIKDAE-ALL', name: '식대·공통: 팀장 전결 (본부장 참조)', priority: 18, active: true,
+    id: 'RR-EXPENSE-STANDARD', name: '지출결의·식대/회의비/교통비: 팀장 전결 (본부장 참조)', priority: 16, active: true,
+    docType: '지출결의', conditionKey: 'expenseItem',
+    conditionValues: ['식대 (간식/야근/외근 식대)', '회의비 (10만원 이내)', '교통비 (택시/주유/대중교통)'],
+    deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
+  },
+  {
+    id: 'RR-EXPENSE-DELIVERY', name: '지출결의·운반비: 팀장 전결', priority: 17, active: true,
+    docType: '지출결의', conditionKey: 'expenseItem',
+    conditionValues: ['운반비 (택배/퀵)'],
+    deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '전결')],
+  },
+  {
+    id: 'RR-EXPENSE-HOESIK-DEPT', name: '지출결의·부서회식: 팀장➔본부장 전결', priority: 18, active: true,
+    docType: '지출결의', conditionKey: 'expenseItem',
+    conditionValues: ['회식비 (부서원 회식 - 한도내)'],
+    deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
+  },
+  {
+    id: 'RR-EXPENSE-HOESIK-SPECIAL', name: '지출결의·특별회식: 팀장➔본부장➔대표이사 전결', priority: 19, active: true,
+    docType: '지출결의', conditionKey: 'expenseItem',
+    conditionValues: ['회식비 (특별/전체 회식)'],
+    deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
+  },
+
+  // --- 기존 개별 비용 서식 룰 비활성화 ---
+  {
+    id: 'RR-SIKDAE-ALL', name: '식대·공통: 팀장 전결 (본부장 참조) [통합 비활성]', priority: 118, active: false,
     docType: '식대', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
   },
-
-  // --- 회식비 청구서 ---
   {
-    id: 'RR-HOESIK-MEMBER', name: '회식비·부서원 회식: 팀장➔본부장 전결', priority: 19, active: true,
+    id: 'RR-HOESIK-MEMBER', name: '회식비·부서원 회식: 팀장➔본부장 전결 [통합 비활성]', priority: 119, active: false,
     docType: '회식비', conditionKey: 'expenseType', conditionValues: ['부서원 회식'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
   },
   {
-    id: 'RR-HOESIK-SPECIAL', name: '회식비·특별회식: 팀장➔본부장➔대표이사 전결', priority: 20, active: true,
+    id: 'RR-HOESIK-SPECIAL', name: '회식비·특별회식: 팀장➔본부장➔대표이사 전결 [통합 비활성]', priority: 120, active: false,
     docType: '회식비', conditionKey: 'expenseType', conditionValues: ['특별회식(전체 회식)'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
   },
-
-  // --- 회의비 청구서 ---
   {
-    id: 'RR-HOEIBI-ALL', name: '회의비·공통: 팀장 전결 (본부장 참조)', priority: 21, active: true,
+    id: 'RR-HOEIBI-ALL', name: '회의비·공통: 팀장 전결 (본부장 참조) [통합 비활성]', priority: 121, active: false,
     docType: '회의비', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
   },
-
-  // --- 교통비 청구서 ---
   {
-    id: 'RR-GYOTONGBI-ALL', name: '교통비·공통: 팀장 전결 (본부장 참조)', priority: 22, active: true,
+    id: 'RR-GYOTONGBI-ALL', name: '교통비·공통: 팀장 전결 (본부장 참조) [통합 비활성]', priority: 122, active: false,
     docType: '교통비', conditionKey: null, conditionValues: [], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결'), s('PARENT_DEPT_HEAD', '참조', 1)],
   },
-
-  // --- 보험 관련 신청서 ---
   {
-    id: 'RR-INSURANCE-NORMAL', name: '보험·가입자변경/자동차보험: 팀장➔본부장 전결', priority: 23, active: true,
-    docType: '보험', conditionKey: 'insuranceType', conditionValues: ['단체 상해 보험 가입자 변경', '자동차보험'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '전결', 1)],
-  },
-  {
-    id: 'RR-INSURANCE-SPECIAL', name: '보험·재가입/화재보험: 팀장➔본부장➔대표이사 전결', priority: 24, active: true,
-    docType: '보험', conditionKey: 'insuranceType', conditionValues: ['단체 상해 보험 만기 후 재가입', '화재보험'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
-    steps: [s('DEPT_HEAD', '결재'), s('PARENT_DEPT_HEAD', '결재', 1), s('ROLE_CEO', '전결')],
-  },
-
-  // --- 운반비 청구서 ---
-  {
-    id: 'RR-DELIVERY-POST', name: '운반비·우편/택배: 담당결재➔팀장 전결', priority: 25, active: true,
+    id: 'RR-DELIVERY-POST', name: '운반비·우편/택배: 담당결재➔팀장 전결 [통합 비활성]', priority: 125, active: false,
     docType: '운반비', conditionKey: 'deliveryType', conditionValues: ['우편 / 택배'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DRAFTER', '결재'), s('DEPT_HEAD', '전결')],
   },
   {
-    id: 'RR-DELIVERY-QUICK', name: '운반비·퀵서비스: 팀장 전결', priority: 26, active: true,
+    id: 'RR-DELIVERY-QUICK', name: '운반비·퀵서비스: 팀장 전결 [통합 비활성]', priority: 126, active: false,
     docType: '운반비', conditionKey: 'deliveryType', conditionValues: ['퀵서비스'], deptScope: scAll, positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
     steps: [s('DEPT_HEAD', '전결')],
   },
