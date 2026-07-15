@@ -36,6 +36,7 @@ const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
+const FileLabScreen = lazy(() => import('@/modules/dev/fileLab/FileLabScreen'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
@@ -289,6 +290,8 @@ export default function App() {
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />
+        {/* 개발용 파일 저장소 테스트(메뉴 트리 밖) */}
+        <Route path="/dev/file-lab" element={<FileLabScreen />} />
         <Route path="*" element={<PlaceholderScreen />} />
       </Route>
     </Routes>
