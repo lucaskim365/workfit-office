@@ -202,7 +202,16 @@ export function ApprovalDraftModal({
     if (isAmount && amountField?.required && amountNum == null) return `${amountField.label}을(를) 입력하세요.`;
     const miss = form ? missingRequired(form.fields.filter((f) => f !== amountField && f.key !== RESERVED_BODY_KEY), values) : [];
     if (miss.length) return `필수 항목을 입력하세요: ${miss.join(', ')}`;
-    if (forSubmit && !steps.some((s) => s.kind !== '참조')) return '상신하려면 결재자를 1명 이상 지정하세요.';
+    if (forSubmit) {
+      if (!steps.some((s) => s.kind !== '참조')) return '상신하려면 결재자를 1명 이상 지정하세요.';
+      const inactiveUsers = steps
+        .map((s) => org.userById(s.approverId))
+        .filter((u) => !u || u.status !== '사용');
+      if (inactiveUsers.length > 0) {
+        const names = inactiveUsers.map((u) => u ? `${u.name} ${u.position}` : '알 수 없는 사용자').join(', ');
+        return `비활성화되거나 존재하지 않는 결재자가 결재선에 포함되어 있어 재상신이 불가합니다: ${names}. 결재선을 수정해 주세요.`;
+      }
+    }
     return null;
   };
 

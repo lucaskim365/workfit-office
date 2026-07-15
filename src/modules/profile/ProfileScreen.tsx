@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useUploadSeal } from '@/features/user/useUploadSeal';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * 개인 프로필 설정 화면 — /profile 라우트.
@@ -10,6 +11,7 @@ import { useUploadSeal } from '@/features/user/useUploadSeal';
 export default function ProfileScreen() {
   const { user, changePassword, updateProfile } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { upload, uploading } = useUploadSeal();
   const sealInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,7 +42,8 @@ export default function ProfileScreen() {
     setSavingInfo(true); setInfoErr(''); setInfoMsg('');
     try {
       await updateProfile({ email: email.trim() });
-      setInfoMsg('저장되었습니다.');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setInfoMsg('기본 정보가 수정되었습니다.');
     } catch (e) {
       setInfoErr(e instanceof Error ? e.message : '저장에 실패했습니다.');
     } finally {
@@ -84,6 +87,7 @@ export default function ProfileScreen() {
       const url = await upload(user.id, file);
       setSealPreview(url);
       await updateProfile({ sealUrl: url });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
       setSealMsg('인감 이미지가 저장되었습니다.');
     } catch (e) {
       setSealErr(e instanceof Error ? e.message : '업로드에 실패했습니다.');
@@ -97,6 +101,7 @@ export default function ProfileScreen() {
     try {
       await updateProfile({ sealUrl: '' });
       setSealPreview('');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
       setSealMsg('인감 이미지가 삭제되었습니다.');
     } catch (e) {
       setSealErr(e instanceof Error ? e.message : '삭제에 실패했습니다.');

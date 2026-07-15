@@ -24,12 +24,13 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  * 모든 전이는 features 훅(엔진 위임) → 성공 시 캐시 무효화로 함·배지 자동 갱신.
  */
 const BOX_LABEL: Record<ApprovalBox, string> = {
-  대기: '받은 결재',
+  대기: '결재대기함',
   상신: '상신함',
-  완료: '완료함',
+  반려: '반려함',
+  임시: '임시저장함',
   수신: '수신함',
   참조: '참조함',
-  임시: '임시저장',
+  완료: '완료함',
   삭제: '휴지통',
 };
 
@@ -119,20 +120,34 @@ export default function ApprovalScreen() {
 
       <div className="mt-5 grid grid-cols-[160px_320px_1fr_240px] gap-4">
         {/* 좌: 함 탭 */}
-        <div className="rounded-xl border border-border bg-panel p-2">
-          {APPROVAL_BOXES.map((b) => (
-            <button
-              key={b}
-              onClick={() => setBox(b)}
-              className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[12.5px] ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
-            >
-              <span>{BOX_LABEL[b]}</span>
-              {(counts[b] ?? 0) > 0 && (
-                <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-bold ${b === '대기' ? 'bg-amber text-white' : box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'}`}>
-                  {counts[b]}
-                </span>
-              )}
-            </button>
+        <div className="rounded-xl border border-border bg-panel p-2.5 flex flex-col gap-4">
+          {[
+            { title: '결재할 문서', boxes: ['대기'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '내가 올린 문서', boxes: ['상신', '반려', '임시'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '공유 문서', boxes: ['수신', '참조'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '관리', boxes: ['완료', '삭제'] as const, titleBg: 'bg-panel-alt text-ink2' },
+          ].map((g) => (
+            <div key={g.title} className="flex flex-col gap-1.5">
+              <div className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${g.titleBg}`}>
+                {g.title}
+              </div>
+              <div className="space-y-0.5">
+                {g.boxes.map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setBox(b)}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                  >
+                    <span>{BOX_LABEL[b]}</span>
+                    {(counts[b] ?? 0) > 0 && (
+                      <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${b === '대기' ? 'bg-amber text-white' : box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'}`}>
+                        {counts[b]}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -364,6 +379,28 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {doc.status === '반려' && (() => {
+          const rejectStep = doc.steps.find((s) => s.decision === '반려');
+          const rejectUser = rejectStep ? org.userById(rejectStep.approverId) : null;
+          const rejectUserName = rejectUser ? `${rejectUser.name} ${rejectUser.position}` : rejectStep?.approverId ?? '알 수 없음';
+          return (
+            <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-3.5 text-[12px] text-ink animate-fade-in">
+              <div className="flex items-center gap-1.5 font-bold text-danger mb-1.5">
+                <span>⚠</span>
+                <span>반려 정보</span>
+              </div>
+              <div className="grid grid-cols-2 gap-y-1.5 text-ink2">
+                <div>• 반려자: <span className="font-semibold text-ink">{rejectUserName}</span></div>
+                <div>• 반려일시: <span className="font-semibold text-ink">{rejectStep?.decidedAt ? fmtDateTime(rejectStep.decidedAt) : '—'}</span></div>
+                <div className="col-span-2 mt-1 bg-white/60 dark:bg-black/10 rounded-lg p-2.5 border border-border/40">
+                  <div className="text-[11px] text-ink3 font-semibold mb-1">반려 사유</div>
+                  <div className="italic text-ink leading-relaxed">“{rejectStep?.comment || '반려 사유 없음'}”</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {view === 'document' ? (
           <ApprovalDocumentView doc={doc} />
         ) : (
