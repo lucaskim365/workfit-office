@@ -165,9 +165,13 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           <button
             onClick={() => setUserOpen(!userOpen)}
             title={user ? `${user.name} (${user.empNo})` : '계정'}
-            className={`grid h-8 w-8 place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white ${userOpen ? 'ring-2 ring-white/30' : ''}`}
+            className={`relative grid h-8 w-8 place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white overflow-hidden ${userOpen ? 'ring-2 ring-white/30' : ''}`}
           >
-            {initials}
+            {user?.photoUrl ? (
+              <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </button>
           {userOpen && (
             <UserMenu

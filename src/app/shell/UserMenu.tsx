@@ -39,10 +39,10 @@ export function UserMenu({ onClose, onThemeOpen }: UserMenuProps) {
       <div className="absolute right-[-4px] top-[calc(100%+12px)] z-[60] w-80 overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.28)]">
         {/* 프로필 헤더 */}
         <div className="flex flex-col items-center gap-2 bg-teal-soft px-[18px] pb-5 pt-[22px]">
-          {/* 인감 또는 이니셜 아바타 */}
-          {user?.sealUrl ? (
+          {/* 프로필 사진 또는 이니셜 아바타 */}
+          {user?.photoUrl ? (
             <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-teal/30 bg-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">
-              <img src={user.sealUrl} alt="인감" className="h-full w-full object-contain" />
+              <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
             </div>
           ) : (
             <div className="grid h-16 w-16 place-items-center rounded-full bg-teal text-[25px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">{initials}</div>
