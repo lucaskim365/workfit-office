@@ -174,13 +174,20 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */
 export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, userDeptName?: string): boolean {
-  const involves = doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId);
   if (doc.status === '삭제') {
     return box === '삭제' && doc.drafterId === userId;
   }
-  if (doc.status === '완료') {
-    if (box === '완료') return involves;
-    if (box === '수신') {
+  switch (box) {
+    case '대기':
+      return doc.status === '진행중' && currentApproverIds(doc).includes(userId);
+    case '상신':
+      return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
+    case '반려':
+      return doc.drafterId === userId && doc.status === '반려';
+    case '임시':
+      return doc.drafterId === userId && doc.status === '임시저장';
+    case '수신': {
+      if (doc.status !== '완료') return false;
       const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
       const isCustomRecipient = doc.recipients?.some((r) => {
         if (r.type === 'user') return r.id === userId;
@@ -188,23 +195,12 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
         if (r.type === 'drafter') return doc.drafterId === userId;
         return false;
       }) ?? false;
-      return isExecutorDrafter || isCustomRecipient || doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+      return isExecutorDrafter || isCustomRecipient;
     }
-    return false;
-  }
-  switch (box) {
-    case '대기':
-      return doc.status === '진행중' && currentApproverIds(doc).includes(userId);
-    case '상신':
-      return doc.drafterId === userId && doc.status !== '임시저장';
-    case '완료':
-      return false;
-    case '수신':
-      return false;
     case '참조':
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
-    case '임시':
-      return doc.drafterId === userId && doc.status === '임시저장';
+    case '완료':
+      return doc.status === '완료' && (doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId));
     case '삭제':
       return false;
   }
