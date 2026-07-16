@@ -50,12 +50,52 @@ export default function UserScreen() {
     { key: 'empNo', header: '사번', mono: true, sortable: true, width: 100 },
     { key: 'name', header: '이름', sortable: true, width: 90 },
     { key: 'dept', header: '부서', sortable: true },
-    { key: 'position', header: '직급', sortable: true, width: 84 },
+    {
+      key: 'position',
+      header: '직급',
+      sortable: true,
+      width: 84,
+      sortAccessor: (u) => {
+        const order: Record<string, number> = {
+          '대표이사': 1,
+          '대표': 1,
+          '사장': 2,
+          '부사장': 3,
+          '전무': 4,
+          '전무이사': 4,
+          '상무': 5,
+          '상무이사': 5,
+          '이사': 6,
+          '부장': 7,
+          '차장': 8,
+          '과장': 9,
+          '대리': 10,
+          '주임': 11,
+          '사원': 12,
+        };
+        return order[u.position] ?? 99;
+      },
+    },
     {
       key: 'jobTitle',
       header: '직책',
       sortable: true,
       width: 84,
+      sortAccessor: (u) => {
+        const order: Record<string, number> = {
+          '대표이사': 1,
+          '대표': 1,
+          '사장': 2,
+          '재경이사': 3,
+          '본부장': 4,
+          '부본부장': 5,
+          '팀장': 6,
+          '부팀장': 7,
+          '팀원': 8,
+          '사원': 8,
+        };
+        return u.jobTitle ? (order[u.jobTitle] ?? 90) : 99;
+      },
       render: (u) => (u.jobTitle ? u.jobTitle : <span className="text-ink3">—</span>),
     },
     {

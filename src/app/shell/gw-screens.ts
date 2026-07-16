@@ -24,6 +24,7 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   document: { name: '문서관리', icon: '🗂️', desc: '매뉴얼·서식·산출물 등 중요 문서를 분류·보관하는 문서고입니다.' },
   contacts: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
   task: { name: '업무관리', icon: '📗', desc: '프로젝트·업무 보고·TO-DO를 등록하고 진행을 트래킹합니다.' },
+  'permission-request': { name: '권한 건의', icon: '🔑', desc: '임직원 권한 매핑 검토 및 변경 건의 서식입니다.' },
 };
 
 /** 그룹웨어 앱 라우트 여부. */

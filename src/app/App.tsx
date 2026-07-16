@@ -36,6 +36,7 @@ const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
+const GwPermissionRequest = lazy(() => import('@/modules/gw/permissionRequest/PermissionRequestScreen'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
@@ -105,6 +106,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/report/kpi': lazy(() => import('@/modules/report/kpi/ReportKpiScreen')),
   '/report/period': lazy(() => import('@/modules/report/period/ReportPeriodScreen')),
   '/report/scorecard': lazy(() => import('@/modules/report/scorecard/ReportScorecardScreen')),
+  '/gw/permission-request': GwPermissionRequest,
 };
 
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -142,6 +144,7 @@ export default function App() {
         <Route path="/gw/orgchart" element={<GwOrgChart />} />
         <Route path="/gw/approval" element={<GwApproval />} />
         <Route path="/gw/leave" element={<GwLeave />} />
+        <Route path="/gw/permission-request" element={<GwPermissionRequest />} />
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />

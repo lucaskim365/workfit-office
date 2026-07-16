@@ -184,6 +184,17 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
       {/* 날짜 + 계정 */}
       <div className="flex shrink-0 items-center gap-3.5">
+        {/* 권한 변경 건의 콘솔 (U003 손 상무, U012 홍채원 전용) */}
+        {(user?.id === 'U003' || user?.id === 'U012') && (
+          <button
+            onClick={() => navigate('/gw/permission-request')}
+            className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/[0.08] transition-all"
+            title="권한 변경 건의 콘솔"
+          >
+            <span className="text-[17px] leading-none">🔑</span>
+          </button>
+        )}
+
         {/* GNB 통합 알림 센터 */}
         <div className="relative" ref={notiRef}>
           <button
