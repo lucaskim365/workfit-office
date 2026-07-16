@@ -46,6 +46,7 @@ export const userSchema = z.object({
    */
   sealUrl: z.string().default(''),
   photoUrl: z.string().default(''),
+  activeChatRoomId: z.string().nullable().optional(),
 });
 
 export type User = z.infer<typeof userSchema>;

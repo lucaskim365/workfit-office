@@ -83,6 +83,17 @@ export const userRepo = {
     return updated;
   },
 
+  async updateActiveChatRoom(userId: string, roomId: string | null): Promise<void> {
+    const all = await this.list();
+    const existing = all.find((u) => u.id === userId);
+    if (!existing) return;
+    const updated = {
+      ...existing,
+      activeChatRoomId: roomId,
+    };
+    await this.save(updated);
+  },
+
   /** 등록/수정(upsert). */
   async save(user: User): Promise<void> {
     const valid = userSchema.parse(user);

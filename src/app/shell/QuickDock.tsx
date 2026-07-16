@@ -441,6 +441,32 @@ function MessengerPanel() {
     }
   }, [openRoomId, me]);
 
+  // 실시간으로 현재 보고 있는 대화방 ID(activeChatRoomId)를 유저 상태에 동기화
+  useEffect(() => {
+    const syncActiveRoom = async () => {
+      try {
+        const { userRepo } = await import('@/data/user/user.repo');
+        await userRepo.updateActiveChatRoom(me, openRoomId);
+      } catch (e) {
+        console.error('Active room sync failed:', e);
+      }
+    };
+    syncActiveRoom();
+
+    // 언마운트되거나 openRoomId가 바뀔 때 activeChatRoomId 청소
+    return () => {
+      const clearActiveRoom = async () => {
+        try {
+          const { userRepo } = await import('@/data/user/user.repo');
+          await userRepo.updateActiveChatRoom(me, null);
+        } catch (e) {
+          console.error('Active room clear failed:', e);
+        }
+      };
+      clearActiveRoom();
+    };
+  }, [openRoomId, me]);
+
   if (composing) {
     return (
       <NewRoomView

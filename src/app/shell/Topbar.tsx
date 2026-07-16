@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MENU_TREE } from '../menu-tree';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
@@ -8,6 +8,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
 import defaultLogo from '@/assets/logo.png';
 
 interface TopbarProps {
@@ -67,6 +68,27 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
+  const [notiOpen, setNotiOpen] = useState(false);
+  const notifications = useNotifications(user?.id);
+  const markAll = useMarkAllNotificationsRead();
+  const markOne = useMarkNotificationRead();
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const notiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
+        setNotiOpen(false);
+      }
+    }
+    if (notiOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notiOpen]);
   return (
     <header
       style={{ backgroundColor: 'var(--color-header-bg)', color: 'var(--color-header-text)' }}
@@ -160,7 +182,82 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       <div className="flex-1" />
 
       {/* 날짜 + 계정 */}
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3.5">
+        {/* GNB 통합 알림 센터 */}
+        <div className="relative" ref={notiRef}>
+          <button
+            onClick={() => setNotiOpen(!notiOpen)}
+            className={`relative grid h-8 w-8 place-items-center rounded-lg hover:bg-white/[0.08] transition-all ${
+              notiOpen ? 'bg-white/[0.15]' : ''
+            }`}
+            title="알림 센터"
+          >
+            <span className="text-[17px] leading-none">🔔</span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[9.5px] font-extrabold text-white shadow animate-pulse">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {notiOpen && (
+            <div 
+              className="absolute right-0 top-[calc(100%+10px)] z-[60] flex w-80 flex-col rounded-xl border border-border bg-panel p-3.5 shadow-[0_16px_40px_rgba(16,24,48,0.22)] text-ink"
+            >
+              <div className="absolute -top-1.5 right-2.5 h-3 w-3 rotate-45 border-l border-t border-border bg-panel" />
+              
+              <div className="flex items-center justify-between border-b border-border pb-2 mb-2 select-none">
+                <span className="text-[12.5px] font-bold text-ink">알림 센터</span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={() => user?.id && markAll.mutate(user.id)}
+                    className="text-[10px] font-semibold text-teal hover:underline"
+                  >
+                    모두 읽음
+                  </button>
+                )}
+              </div>
+
+              <div className="content-scroll max-h-64 overflow-y-auto space-y-1.5">
+                {notifications.length === 0 ? (
+                  <div className="py-8 text-center text-[11.5px] text-ink3 select-none">수신된 알림이 없습니다.</div>
+                ) : (
+                  notifications.slice(0, 10).map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        markOne.mutate(n.id);
+                        setNotiOpen(false);
+                        if (n.type === '메신저') {
+                          setDockOpen('msg');
+                        } else if (n.linkUrl) {
+                          navigate(n.linkUrl);
+                        }
+                      }}
+                      className={`flex items-start gap-2.5 rounded-lg p-2 text-left cursor-pointer transition-colors ${
+                        n.read ? 'hover:bg-panel-alt/50 opacity-70' : 'bg-teal-soft/10 hover:bg-teal-soft/20 border-l-2 border-teal'
+                      }`}
+                    >
+                      <span className="text-[16px] shrink-0 mt-0.5 select-none">
+                        {n.type === '결재' ? '🖋️' : n.type === '메신저' ? '💬' : '📢'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-ink">{n.senderName}</span>
+                          <span className="text-[9px] text-ink3">{n.createdAt.split('T')[0]}</span>
+                        </div>
+                        <p className="text-[11.5px] font-semibold text-ink2 truncate mt-0.5">{n.title}</p>
+                        <p className="text-[10.5px] text-ink3 line-clamp-2 mt-0.5">{n.text}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 사용자 정보 */}
         <div className="relative">
           <button
             onClick={() => setUserOpen(!userOpen)}
