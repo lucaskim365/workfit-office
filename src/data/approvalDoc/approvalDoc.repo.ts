@@ -291,6 +291,7 @@ export const approvalDocRepo = {
         senderName: approverUser?.name ?? '결재자',
         linkUrl: `/gw/approval?doc=${next.id}`,
       });
+      await notificationRepo.removePendingRequests(next.id);
     } catch (e) {
       console.error('반려 알림 전송 실패:', e);
     }
@@ -315,6 +316,14 @@ export const approvalDocRepo = {
     if (cur.drafterId !== userId) throw new Error('기안자만 회수할 수 있습니다');
     const next = recallDoc(cur);
     await persist(next);
+
+    try {
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      await notificationRepo.removePendingRequests(next.id);
+    } catch (e) {
+      console.error('회수 알림 정리 실패:', e);
+    }
+
     return next;
   },
 

@@ -11,7 +11,7 @@ import { QuickDock } from './QuickDock';
 import { ToastFeed } from './ToastFeed';
 import { applyTheme } from './ThemeCustomizerModal';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useNotifications } from '@/features/notification/useNotifications';
+import { useToastNotificationsTrigger } from '@/features/notification/useNotifications';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -46,7 +46,7 @@ function ScreenLoading() {
 
 export default function AppShell() {
   const { user } = useAuth();
-  useNotifications(user?.id);
+  useToastNotificationsTrigger(user?.id);
 
   const location = useLocation();
   const navigate = useNavigate();

@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, setDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { notificationSchema, type LiveNotification } from '@/domain/liveNotification/schema';
@@ -92,6 +92,35 @@ export const notificationRepo = {
       }
     } else {
       memory = memory.map((n) => (n.userId === userId ? { ...n, read: true } : n));
+      notifyListeners();
+    }
+  },
+  async removePendingRequests(docId: string): Promise<void> {
+    if (isFirebaseConfigured && db) {
+      const snap = await getDocs(collection(db, COLL));
+      const targetDocs = snap.docs.filter((d) => {
+        const noti = d.data();
+        return (
+          !noti.read &&
+          noti.linkUrl &&
+          noti.linkUrl.includes(docId) &&
+          noti.type === '결재' &&
+          noti.title === '결재 요청'
+        );
+      });
+      for (const d of targetDocs) {
+        await deleteDoc(doc(db, COLL, d.id));
+      }
+    } else {
+      memory = memory.filter((n) => {
+        const match =
+          !n.read &&
+          n.linkUrl &&
+          n.linkUrl.includes(docId) &&
+          n.type === '결재' &&
+          n.title === '결재 요청';
+        return !match;
+      });
       notifyListeners();
     }
   },
