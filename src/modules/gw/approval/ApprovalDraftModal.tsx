@@ -319,72 +319,102 @@ export function ApprovalDraftModal({
   }
 
   const { data: folders = [] } = useApprovalFolders();
-  // 모달 내 문서 유형 선택 시 적용할 폴더 카테고리 상태 (null = 전체, 'root' = 루트 서식, 혹은 폴더 ID)
-  const [activeFolderTab, setActiveFolderTab] = useState<string | null>(null);
+  const isFixed = !!fixedType || !!editDoc;
 
-  const displayedForms = useMemo(() => {
-    if (!activeFolderTab) return forms;
-    if (activeFolderTab === 'root') return forms.filter((f) => !f.folderId);
-    return forms.filter((f) => f.folderId === activeFolderTab);
-  }, [forms, activeFolderTab]);
+  // 폴더별 열림 상태 관리 (기본값: 모두 열림)
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const toggleFolder = (folderId: string) => {
+    setOpenFolders((prev) => ({
+      ...prev,
+      [folderId]: prev[folderId] === false ? true : false,
+    }));
+  };
+
+  const sidebarFolders = useMemo(() => {
+    const list = folders.map((f) => ({
+      ...f,
+      forms: forms.filter((form) => form.folderId === f.id),
+    }));
+    const others = forms.filter((form) => !form.folderId);
+    if (others.length > 0) {
+      list.push({
+        id: 'others',
+        name: '기타',
+        order: 999,
+        forms: others,
+      });
+    }
+    return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [folders, forms]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={onClose}>
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-5 py-3.5">
+      <div 
+        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
+          isFixed ? 'max-w-2xl' : 'max-w-5xl'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
           <div className="text-[15px] font-bold text-ink">
             {isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : fixedType === '휴가' ? '휴가 신청' : '새 결재 상신'}
           </div>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt">✕</button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {/* 서식(문서유형) 폴더별 탭 선택 */}
-          {!fixedType && (
-            <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-bold text-ink2">문서 유형 분류</div>
-              {/* 폴더 카테고리 탭 */}
-              <div className="mb-2 flex flex-wrap gap-1 border-b border-border pb-1.5">
-                <button
-                  type="button"
-                  onClick={() => setActiveFolderTab(null)}
-                  className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === null ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
-                >
-                  전체 ({forms.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFolderTab('root')}
-                  className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === 'root' ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
-                >
-                  기타 ({forms.filter(f => !f.folderId).length})
-                </button>
-                {folders.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setActiveFolderTab(f.id)}
-                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${activeFolderTab === f.id ? 'bg-teal text-white' : 'bg-panel-alt text-ink2 hover:bg-border-hi'}`}
-                  >
-                    {f.name} ({forms.filter(form => form.folderId === f.id).length})
-                  </button>
-                ))}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* 좌측 서식 트리 영역 (fixedType이 아닐 때만 렌더) */}
+          {!isFixed && (
+            <div className="w-64 shrink-0 border-r border-border bg-panel-alt flex flex-col overflow-y-auto p-4 select-none">
+              <div className="mb-3 text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider">결재 서식 목록</div>
+              <div className="space-y-3">
+                {sidebarFolders.map((f) => {
+                  const isOpen = openFolders[f.id] !== false;
+                  return (
+                    <div key={f.id} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleFolder(f.id)}
+                        className="flex w-full items-center justify-between py-1.5 text-[12px] font-bold text-ink hover:text-teal transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <span>📂</span>
+                          <span>{f.name}</span>
+                        </span>
+                        <span className="text-[10px] text-ink3">{isOpen ? '▼' : '▶'}</span>
+                      </button>
+                      
+                      {isOpen && (
+                        <div className="pl-4 border-l border-border ml-2 space-y-1 mt-0.5">
+                          {f.forms.map((fm) => (
+                            <button
+                              key={fm.code}
+                              type="button"
+                              onClick={() => setCode(fm.code)}
+                              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${
+                                code === fm.code
+                                  ? 'bg-teal-soft text-teal font-semibold'
+                                  : 'text-ink2 hover:bg-border-hi/30'
+                              }`}
+                            >
+                              <span className="text-[15px]">{fm.icon}</span>
+                              <span className="truncate">{fm.name}</span>
+                            </button>
+                          ))}
+                          {f.forms.length === 0 && (
+                            <div className="py-1 pl-6 text-[11px] text-ink3">서식이 없습니다.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              {/* 서식 버튼 그리드 */}
-              {displayedForms.length === 0 ? (
-                <div className="py-4 text-center text-[11.5px] text-ink3">분류에 속한 서식이 없습니다.</div>
-              ) : (
-                <div className="grid grid-cols-4 gap-1.5">
-                  {displayedForms.map((fm) => (
-                    <button key={fm.code} type="button" onClick={() => setCode(fm.code)}
-                      className={`rounded-lg border px-2 py-2 text-[12px] font-semibold ${code === fm.code ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt text-ink2 hover:border-border-hi'}`}>
-                      {fm.icon} {fm.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
+
+          {/* 우측 폼 입력 영역 */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
           <Field label="제목">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
@@ -620,6 +650,7 @@ export function ApprovalDraftModal({
 
           {error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500">{error}</p>}
         </div>
+      </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3">
           <button onClick={onClose} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
