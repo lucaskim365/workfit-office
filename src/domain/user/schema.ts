@@ -4,7 +4,7 @@ import { z } from 'zod';
  * 사용자(User) 도메인 스키마 — 단일 진실 공급원(SSOT).
  * roleGroup 은 roleGroups.code 참조(FK). ([[데이터_모델_설계서.md]] users)
  */
-export const ROLE_GROUPS = ['ADMIN', 'OPERATOR', 'FIELD_ADMIN', 'MT_ADMIN', 'MT_USER', 'QC_USER'] as const;
+export const ROLE_GROUPS = ['ADMIN', 'OPERATOR', 'FIELD_ADMIN', 'MT_ADMIN', 'MT_USER', 'USER'] as const;
 export const USER_STATUS = ['사용', '잠금', '미사용'] as const;
 
 /**

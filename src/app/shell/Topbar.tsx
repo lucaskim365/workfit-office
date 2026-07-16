@@ -62,7 +62,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
-  const isCwhong = user?.id === 'U012';
+  const hasAccess = user?.roleGroup === 'ADMIN' || user?.roleGroup === 'OPERATOR';
   const { data: companyInfo } = useCompanyInfo();
   const logoUrl = companyInfo?.logoUrl;
   const navigate = useNavigate();
@@ -151,7 +151,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                             {g.name}
                           </div>
                           {(g.children ?? [])
-                            .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
+                            .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || hasAccess))
                             .map((s) => {
                               const cur = s.url === activeUrl;
                               return (

@@ -11,26 +11,32 @@ const matrix = (fn: (mi: number, ci: number) => boolean): boolean[][] =>
   Array.from({ length: M }, (_, mi) => Array.from({ length: C }, (_, ci) => fn(mi, ci)));
 
 export const ROLE_GROUP_SEED: RoleGroup[] = [
-  { code: 'ADMIN', name: '관리자 그룹', use: true, desc: '전사 시스템 관리 권한 그룹. 사용자/권한/코드 전 영역 접근 가능.',
+  {
+    code: 'ADMIN', name: '관리자', use: true, desc: '전사 시스템 관리 권한. 사용자/권한/코드 전 영역 접근 가능.',
     members: [
-      { name: '박영미', code: 'oilking5151' },
-      { name: '류지광', code: 'jgRyu' },
-      { name: '손승원', code: 'swson' },
+      { name: '홍채원', code: 'cwhong' },
       { name: '김승기', code: 'sgkim' }
     ],
-    permissions: matrix(() => true) },
-  { code: 'OPERATOR', name: '운영자 그룹', use: true, desc: '운영 모니터링 및 기준정보 조회 중심 권한.',
+    permissions: matrix(() => true)
+  },
+  {
+    code: 'OPERATOR', name: '임원', use: true, desc: '결재선 문서 모니터링 및 완료 문서 조회 권한.',
     members: [
+      { name: '박영미', code: 'oilking5151' },
+      { name: '손승원', code: 'swson' }
+    ],
+    permissions: matrix((mi, ci) => ci < 2 || mi < 2)
+  },
+  {
+    code: 'USER', name: '일반사원', use: true, desc: '일반 사원 권한. 기본 조회 권한만 제공.',
+    members: [
+      { name: '류지광', code: 'jgRyu' },
+      { name: '강윤석', code: 'yskang' },
+      { name: '최지혜', code: 'jihye.choi' },
       { name: '홍형표', code: 'hphong' },
       { name: '박명규', code: 'pmk' },
-      { name: '박광래', code: 'krpark' },
-      { name: '홍채원', code: 'cwhong' }
+      { name: '박광래', code: 'krpark' }
     ],
-    permissions: matrix((mi, ci) => ci < 2 || mi < 2) },
-  { code: 'QC_USER', name: '품질 담당자 그룹', use: true, desc: '품질 검사·판정 등록 권한.',
-    members: [
-      { name: '강윤석', code: 'yskang' },
-      { name: '최지혜', code: 'jihye.choi' }
-    ],
-    permissions: matrix((mi, ci) => ci < 3 && mi > 3) },
+    permissions: matrix((mi, ci) => ci < 3 && mi > 3)
+  },
 ];

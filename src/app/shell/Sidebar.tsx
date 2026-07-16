@@ -20,20 +20,20 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const { module, activeUrl, collapsed, setCollapsed, query, setQuery, railOpen, setRailOpen, favs, toggleFav, openTab } = props;
   const { user } = useAuth();
-  const isCwhong = user?.id === 'U012';
+  const hasAccess = user?.roleGroup === 'ADMIN' || user?.roleGroup === 'OPERATOR';
 
   const railW = collapsed ? 64 : 210;
   const q = query.trim().toLowerCase();
   
   const searchResults = q
     ? SCREENS.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q))
-        .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong)
+        .filter((x) => x.id !== 'S_BASE_APMON' || hasAccess)
     : [];
     
   const favScreens = favs
     .map((n) => SCREEN_BY_NAME[n])
     .filter(Boolean)
-    .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong) as FlatScreen[];
+    .filter((x) => x.id !== 'S_BASE_APMON' || hasAccess) as FlatScreen[];
 
   const FavStar = ({ name, white }: { name: string; white?: boolean }) => {
     const on = favs.includes(name);
@@ -129,7 +129,7 @@ export function Sidebar(props: SidebarProps) {
           (module.children ?? [])
             .flatMap((g) =>
               (g.children ?? [])
-                .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
+                .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || hasAccess))
                 .map((s) => ({ s, g }))
             )
             .map(({ s, g }) => {
@@ -188,7 +188,7 @@ export function Sidebar(props: SidebarProps) {
                 </button>
                 {open &&
                   (g.children ?? [])
-                    .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
+                    .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || hasAccess))
                     .map((s) => {
                       const a = s.url === activeUrl;
                       return (

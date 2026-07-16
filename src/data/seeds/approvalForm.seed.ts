@@ -26,7 +26,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
     closing: '위와 같이 휴가를 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 2, system: false, folderId: 'fld-hr',
     fields: [
       f({ key: 'period', label: '사용기간', type: '기간', required: true, width: 'half' }),
-      f({ key: 'leaveType', label: '휴가종류', type: '선택', required: true, width: 'half', options: ['연차', '반차', '병가', '경조', '공가', '대체휴무'] }),
+      f({ key: 'leaveType', label: '휴가종류', type: '선택', required: true, width: 'half', options: ['연차', '반차', '병가', '경조', '공가', '대체휴무', '기타'] }),
       f({ key: 'contactNumber', label: '긴급 연락처', type: '숫자', required: true, width: 'full' }),
       f({ key: 'body', label: '사유', type: '장문', required: true }),
     ],
