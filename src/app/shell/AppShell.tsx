@@ -8,7 +8,10 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock } from './QuickDock';
+import { ToastFeed } from './ToastFeed';
 import { applyTheme } from './ThemeCustomizerModal';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useNotifications } from '@/features/notification/useNotifications';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -42,6 +45,9 @@ function ScreenLoading() {
 }
 
 export default function AppShell() {
+  const { user } = useAuth();
+  useNotifications(user?.id);
+
   const location = useLocation();
   const navigate = useNavigate();
   const activeUrl = location.pathname;
@@ -158,7 +164,7 @@ export default function AppShell() {
       </div>
 
       <QuickDock open={dockOpen} setOpen={setDockOpen} />
-      {/* 실시간 알림 토스트 피드 중지 — 필요 시 <ToastFeed /> 복원 */}
+      <ToastFeed />
 
       {/* 하단 푸터 */}
       <footer
