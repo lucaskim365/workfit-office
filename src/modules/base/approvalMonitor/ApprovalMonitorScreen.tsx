@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
-import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { useAuth } from '@/app/auth/AuthProvider';
 
 type MonitorTab = 'ALL' | '진행중' | '완료' | '반려' | '임시저장' | '회수';
 
@@ -25,6 +25,21 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
 };
 
 export default function ApprovalMonitorScreen() {
+  const { user } = useAuth();
+  if (user?.id !== 'U012') {
+    return (
+      <div className="flex h-[calc(100vh-130px)] items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
+          <span className="text-4xl">🔒</span>
+          <h2 className="text-lg font-bold text-ink">접근 권한 제한</h2>
+          <p className="text-xs leading-relaxed text-ink2">
+            죄송합니다. 이 화면은 <b>홍채원</b> 사원 전용 모니터링 관리 화면입니다. 다른 사용자는 접근할 수 없습니다.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const { data: allDocs = [], isLoading } = useAllApprovals();
   const org = useOrgTree();
   const [tab, setTab] = useState<MonitorTab>('ALL');
@@ -171,8 +186,8 @@ export default function ApprovalMonitorScreen() {
           {selDoc ? (
             <>
               {/* 결재 진행 상황 타임라인 패널 */}
-              <div className="rounded-xl border border-border bg-panel p-4 shrink-0 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between border-b border-border pb-1.5">
+              <div className="rounded-xl border border-border bg-panel p-4 flex-1 flex flex-col gap-2.5 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
                   <span className="text-[12px] font-bold text-ink flex items-center gap-1.5">
                     <span className="h-3 w-1 rounded-sm bg-teal" />
                     결재선 진행 상태
@@ -181,7 +196,7 @@ export default function ApprovalMonitorScreen() {
                     총 {selDoc.steps.length}단계
                   </span>
                 </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto content-scroll pr-1">
+                <div className="space-y-2 flex-1 overflow-y-auto content-scroll pr-1">
                   {selDoc.steps.map((s) => {
                     const isCurrent = selDoc.status === '진행중' && currentApproverIds(selDoc).includes(s.approverId);
                     return (
@@ -225,22 +240,10 @@ export default function ApprovalMonitorScreen() {
                   })}
                 </div>
               </div>
-
-              {/* 결재 문서 양식 미리보기 패널 */}
-              <div className="flex-1 rounded-xl border border-border bg-panel overflow-hidden flex flex-col min-h-0">
-                <div className="border-b border-border bg-panel-alt px-3.5 py-2 shrink-0 flex items-center justify-between">
-                  <span className="text-[12px] font-bold text-ink2">기안 문서 원본 내용</span>
-                </div>
-                <div className="flex-1 overflow-y-auto bg-[#888]/5 p-2 content-scroll">
-                  <div className="rounded-lg shadow-[0_1px_4px_rgba(0,0,0,0.08)] bg-white overflow-hidden">
-                    <ApprovalDocumentView doc={selDoc} />
-                  </div>
-                </div>
-              </div>
             </>
           ) : (
             <div className="flex-1 grid place-items-center rounded-xl border border-dashed border-border bg-panel p-8 text-center text-ink3 text-[12px]">
-              목록에서 문서를 선택하면 결재 상세 내역과 진행 흐름을 확인할 수 있습니다.
+              목록에서 문서를 선택하면 결재선 진행 흐름을 확인할 수 있습니다.
             </div>
           )}
         </div>

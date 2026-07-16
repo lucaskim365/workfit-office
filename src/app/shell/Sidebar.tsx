@@ -1,6 +1,7 @@
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { SCREENS, SCREEN_BY_NAME } from './screens';
+import { useAuth } from '@/app/auth/AuthProvider';
 
 interface SidebarProps {
   module: MenuNode;
@@ -18,10 +19,21 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const { module, activeUrl, collapsed, setCollapsed, query, setQuery, railOpen, setRailOpen, favs, toggleFav, openTab } = props;
+  const { user } = useAuth();
+  const isCwhong = user?.id === 'U012';
+
   const railW = collapsed ? 64 : 210;
   const q = query.trim().toLowerCase();
-  const searchResults = q ? SCREENS.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q)) : [];
-  const favScreens = favs.map((n) => SCREEN_BY_NAME[n]).filter(Boolean) as FlatScreen[];
+  
+  const searchResults = q
+    ? SCREENS.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q))
+        .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong)
+    : [];
+    
+  const favScreens = favs
+    .map((n) => SCREEN_BY_NAME[n])
+    .filter(Boolean)
+    .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong) as FlatScreen[];
 
   const FavStar = ({ name, white }: { name: string; white?: boolean }) => {
     const on = favs.includes(name);
@@ -114,20 +126,26 @@ export function Sidebar(props: SidebarProps) {
 
         {/* 본문: 검색 결과 / 접힘 아이콘 / 그룹 트리 */}
         {collapsed ? (
-          (module.children ?? []).flatMap((g) => (g.children ?? []).filter((s) => s.use !== false && s.url).map((s) => ({ s, g }))).map(({ s, g }) => {
-            const a = s.url === activeUrl;
-            return (
-              <button
-                key={s.id}
-                onClick={() => openTab(screenOf(s, module, g))}
-                title={s.name}
-                className={`flex flex-col items-center gap-[3px] rounded-[9px] py-2.5 transition-colors ${a ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}
-              >
-                <MenuGlyph glyph={s.icon} size={18} color={a ? 'var(--color-teal)' : 'var(--color-ink3)'} />
-                <span className={`text-[8px] font-bold ${a ? 'text-teal' : 'text-ink3'}`}>{s.name.slice(0, 4)}</span>
-              </button>
-            );
-          })
+          (module.children ?? [])
+            .flatMap((g) =>
+              (g.children ?? [])
+                .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
+                .map((s) => ({ s, g }))
+            )
+            .map(({ s, g }) => {
+              const a = s.url === activeUrl;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => openTab(screenOf(s, module, g))}
+                  title={s.name}
+                  className={`flex flex-col items-center gap-[3px] rounded-[9px] py-2.5 transition-colors ${a ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}
+                >
+                  <MenuGlyph glyph={s.icon} size={18} color={a ? 'var(--color-teal)' : 'var(--color-ink3)'} />
+                  <span className={`text-[8px] font-bold ${a ? 'text-teal' : 'text-ink3'}`}>{s.name.slice(0, 4)}</span>
+                </button>
+              );
+            })
         ) : q ? (
           searchResults.length ? (
             searchResults.map((s) => {
@@ -170,7 +188,7 @@ export function Sidebar(props: SidebarProps) {
                 </button>
                 {open &&
                   (g.children ?? [])
-                    .filter((s) => s.use !== false && s.url)
+                    .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
                     .map((s) => {
                       const a = s.url === activeUrl;
                       return (
