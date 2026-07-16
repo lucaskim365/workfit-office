@@ -3,20 +3,20 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { byRecent } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, LeaveType } from '@/domain/approvalDoc/schema';
 
-/**
- * 휴가 데이터 훅 — 휴가는 별도 도메인이 아니라 `docType='휴가'` 결재 문서다(§5.4).
- * 잔여일수는 저장하지 않고 **도출**한다: 부여일수 − 승인완료된 휴가 days 합.
- * ([[data-layer-pattern]] 파생상태 원칙 · docs/전자결재_워크플로_개발_계획서.md §5.4·§7.4)
- */
-
-/**
- * 연차 부여일수(데모 정책 스텁). 실제로는 부서·직급·근속 정책 seed 로 확장.
- * 연차·반차만 이 부여에서 차감하고, 병가·경조·공가는 별도(부여 무관) 집계.
- */
 export const ANNUAL_GRANT = 15;
 
-/** 연차 잔여에서 차감하는 휴가 종류. */
 const DEDUCTS_ANNUAL = (t: LeaveType) => t === '연차' || t === '반차';
+
+export interface SubstituteHolidayItem {
+  id: string;
+  occurrenceDate: string;
+  expirationDate: string;
+  reason: string;
+  days: number;
+  used: number;
+  pending: number;
+  status: 'USED' | 'AVAILABLE' | 'EXPIRED';
+}
 
 export interface LeaveBalance {
   grant: number;
@@ -28,10 +28,53 @@ export interface LeaveBalance {
   remaining: number;
   /** 병가·경조·공가 등 기타 승인완료 일수 합(부여 무관, 참고 표시). */
   otherUsed: number;
+
+  /** 대체휴무 요약 및 내역 */
+  substituteHoliday: {
+    total: number;       // 총 발생 (유효한 건들의 총합 + 이미 사용 완료된 건들의 총합)
+    used: number;        // 결재 완료된 대체휴무 사용량
+    pending: number;     // 진행 중인 대체휴무 신청량
+    remaining: number;   // 사용 가능 잔여 일수 (유효기간 내)
+    expiringSoonCount: number; // 30일 이내 만료 예정 건수
+    detailList: SubstituteHolidayItem[];
+  };
+
   /** 내 휴가 문서(최근순). */
   myDocs: ApprovalDoc[];
   isLoading: boolean;
 }
+
+// 2026-07-16 기준 모의 대체휴무 발생 데이터
+const INITIAL_SUBSTITUTE_HOLIDAYS = [
+  {
+    id: 'sub-001',
+    occurrenceDate: '2026-05-10',
+    expirationDate: '2026-08-09',
+    reason: '주말 시스템 마이그레이션 작업 지원',
+    days: 1.0,
+  },
+  {
+    id: 'sub-002',
+    occurrenceDate: '2026-07-01',
+    expirationDate: '2026-10-01',
+    reason: 'ERP 구축 프로젝트 야간 장애 대응',
+    days: 2.0,
+  },
+  {
+    id: 'sub-003',
+    occurrenceDate: '2026-07-10',
+    expirationDate: '2026-10-08',
+    reason: '반기 정보보안 감사 대비 주말 연장 근무',
+    days: 1.0,
+  },
+  {
+    id: 'sub-004',
+    occurrenceDate: '2026-03-01',
+    expirationDate: '2026-05-30',
+    reason: '서버 마이그레이션 비상 대기',
+    days: 1.0,
+  }
+];
 
 export function useLeave(userId: string | undefined): LeaveBalance {
   const q = useAllApprovals();
@@ -40,19 +83,93 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     const mine = userId
       ? rows.filter((d) => d.docType === '휴가' && d.drafterId === userId).sort(byRecent)
       : [];
+
     const sumDays = (pred: (d: ApprovalDoc) => boolean) =>
       mine.filter((d) => d.form && pred(d)).reduce((s, d) => s + (d.form?.days ?? 0), 0);
 
+    // 연차/반차
     const used = sumDays((d) => d.status === '완료' && DEDUCTS_ANNUAL(d.form!.leaveType));
     const pending = sumDays((d) => d.status === '진행중' && DEDUCTS_ANNUAL(d.form!.leaveType));
-    const otherUsed = sumDays((d) => d.status === '완료' && !DEDUCTS_ANNUAL(d.form!.leaveType));
+    const otherUsed = sumDays((d) => d.status === '완료' && !DEDUCTS_ANNUAL(d.form!.leaveType) && d.form!.leaveType !== '대체휴무');
+
+    // 대체휴무 실시간 결재 문서 집계
+    const approvedSubDays = sumDays((d) => d.status === '완료' && d.form!.leaveType === '대체휴무');
+    const pendingSubDays = sumDays((d) => d.status === '진행중' && d.form!.leaveType === '대체휴무');
+
+    const todayStr = '2026-07-16';
+    const thirtyDaysLaterStr = '2026-08-15'; // 30일 이내 만료 예정 검사용 (대략 2026-08-15)
+
+    // 선입선출(FIFO) 기반 대체휴무 상태 분배 및 차감 로직
+    let remainingApprovedToAllocate = approvedSubDays;
+    let remainingPendingToAllocate = pendingSubDays;
+
+    const detailList: SubstituteHolidayItem[] = INITIAL_SUBSTITUTE_HOLIDAYS.map((item) => {
+      const isExpired = item.expirationDate < todayStr;
+      
+      let itemUsed = 0;
+      let itemPending = 0;
+
+      if (!isExpired) {
+        // 완료 건 분배
+        if (remainingApprovedToAllocate > 0) {
+          const allocate = Math.min(item.days, remainingApprovedToAllocate);
+          itemUsed = allocate;
+          remainingApprovedToAllocate -= allocate;
+        }
+        // 진행중 건 분배
+        if (remainingPendingToAllocate > 0) {
+          const availableForPending = item.days - itemUsed;
+          const allocate = Math.min(availableForPending, remainingPendingToAllocate);
+          itemPending = allocate;
+          remainingPendingToAllocate -= allocate;
+        }
+      }
+
+      let status: 'USED' | 'AVAILABLE' | 'EXPIRED' = 'AVAILABLE';
+      if (isExpired) {
+        status = 'EXPIRED';
+      } else if (itemUsed >= item.days) {
+        status = 'USED';
+      }
+
+      return {
+        ...item,
+        used: itemUsed,
+        pending: itemPending,
+        status,
+      };
+    });
+
+    // 대체휴무 요약 계산
+    const activeItems = detailList.filter(item => item.status !== 'EXPIRED');
+    const subTotal = activeItems.reduce((acc, cur) => acc + cur.days, 0);
+    const subUsed = activeItems.reduce((acc, cur) => acc + cur.used, 0);
+    const subPending = activeItems.reduce((acc, cur) => acc + cur.pending, 0);
+    const subRemaining = Math.max(0, subTotal - subUsed - subPending);
+
+    // 30일 내 만료 예정인 사용 가능한 대체휴무 계산
+    const expiringSoonCount = activeItems.filter(
+      (item) =>
+        item.status === 'AVAILABLE' &&
+        item.used + item.pending < item.days &&
+        item.expirationDate <= thirtyDaysLaterStr &&
+        item.expirationDate >= todayStr
+    ).length;
 
     return {
       grant: ANNUAL_GRANT,
       used,
       pending,
-      remaining: ANNUAL_GRANT - used,
+      remaining: Math.max(0, ANNUAL_GRANT - used),
       otherUsed,
+      substituteHoliday: {
+        total: subTotal,
+        used: subUsed,
+        pending: subPending,
+        remaining: subRemaining,
+        expiringSoonCount,
+        detailList,
+      },
       myDocs: mine,
       isLoading: q.isLoading,
     };

@@ -7,6 +7,7 @@ import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/u
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
 import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
@@ -31,9 +32,11 @@ export function ApprovalDraftModal({
 }) {
   const { data: forms } = useActiveApprovalForms();
   const org = useOrgTree();
+  const bal = useLeave(me.id);
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
+
   const [body, setBody] = useState(editDoc?.body ?? '');
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
@@ -46,6 +49,9 @@ export function ApprovalDraftModal({
     }
     return initialVals;
   });
+
+  const selectedLeaveType = String(values['leaveType'] || '연차');
+
   const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
   const [uploading, setUploading] = useState(false);
@@ -198,6 +204,17 @@ export function ApprovalDraftModal({
       const pEnd = values['period__end'];
       const pDays = Number(values['period__days']) || 0;
       if (!pStart || !pEnd || pDays <= 0) return '휴가 기간을 올바르게 입력하세요.';
+
+      const lType = String(values['leaveType'] || '연차');
+      if (lType === '연차' || lType === '반차') {
+        if (pDays > bal.remaining) {
+          return `신청 가능한 연차가 부족합니다. (신청: ${pDays}일 / 잔여: ${bal.remaining}일)`;
+        }
+      } else if (lType === '대체휴무') {
+        if (pDays > bal.substituteHoliday.remaining) {
+          return `신청 가능한 대체휴무가 부족합니다. (신청: ${pDays}일 / 잔여: ${bal.substituteHoliday.remaining}일)`;
+        }
+      }
     }
     if (isAmount && amountField?.required && amountNum == null) return `${amountField.label}을(를) 입력하세요.`;
     const miss = form ? missingRequired(form.fields.filter((f) => f !== amountField && f.key !== RESERVED_BODY_KEY), values) : [];
@@ -372,6 +389,52 @@ export function ApprovalDraftModal({
           <Field label="제목">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
           </Field>
+
+          {/* 휴가 잔여일수 실시간 표시 배너 */}
+          {code === '휴가' && (
+            <div className="mb-4 rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 shadow-sm">
+              <div className="text-[11.5px] font-bold text-teal mb-2">📊 가용 휴가 정보 (실시간 연동)</div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* 연차 카드 */}
+                <div className={`rounded-lg p-2.5 border transition-all ${
+                  selectedLeaveType === '연차' || selectedLeaveType === '반차' 
+                    ? 'border-teal bg-teal-soft/30 shadow-sm' 
+                    : 'border-border bg-panel-alt/30'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-ink2">연차 잔여</span>
+                    {(selectedLeaveType === '연차' || selectedLeaveType === '반차') && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal" />
+                    )}
+                  </div>
+                  <div className="text-[15px] font-extrabold text-teal mt-0.5">
+                    {bal.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.grant} 일</span>
+                  </div>
+                </div>
+                {/* 대체휴무 카드 */}
+                <div className={`rounded-lg p-2.5 border transition-all ${
+                  selectedLeaveType === '대체휴무' 
+                    ? 'border-blue bg-blue-soft/30 shadow-sm' 
+                    : 'border-border bg-panel-alt/30'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-ink2">대체휴무 잔여</span>
+                    {selectedLeaveType === '대체휴무' && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue" />
+                    )}
+                  </div>
+                  <div className="text-[15px] font-extrabold text-blue mt-0.5">
+                    {bal.substituteHoliday.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.substituteHoliday.total} 일</span>
+                  </div>
+                </div>
+              </div>
+              {selectedLeaveType === '대체휴무' && bal.substituteHoliday.expiringSoonCount > 0 && (
+                <div className="mt-2 text-[10px] text-amber font-semibold flex items-center gap-1 animate-pulse">
+                  ⚠️ 30일 내 만료 예정인 대체휴무가 존재합니다 ({bal.substituteHoliday.expiringSoonCount}건). 휴가일 기준으로 사용 가능 여부를 꼭 확인하세요.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 서식 동적 필드 */}
           {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-x-4">{fieldNodes}</div>}
