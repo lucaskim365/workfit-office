@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { byRecent, matchesBox } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
@@ -7,15 +7,27 @@ import { useUsers } from '@/features/user/useUsers';
 
 /**
  * 전자결재 데이터 훅 — 화면(UI)이 repository 대신 호출하는 React 바인딩.
- * 전체 문서를 한 번 로드해 결재함(5탭)·상세를 **클라이언트에서 도출**하고,
- * 상태 전이는 mutation 으로, 성공 시 캐시를 무효화한다.
- * ([[data-layer-pattern]] 정본 패턴 · docs/전자결재_워크플로_개발_계획서.md §6)
+ * 전체 문서를 실시간 구독하여 결재함(5탭)·상세를 클라이언트에서 도출하고,
+ * 상태 전이는 mutation 으로 처리한다.
  */
 const KEY = 'approvalDocs';
 
-/** 전체 결재 문서 조회(결재함·상세 도출의 원천). */
+/** 전체 결재 문서 조회(실시간 구독형으로 변경해 결재함 자동 갱신). */
 export function useAllApprovals() {
-  return useQuery({ queryKey: [KEY], queryFn: () => approvalDocRepo.list() });
+  const qc = useQueryClient();
+  const [data, setData] = useState<ApprovalDoc[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = approvalDocRepo.subscribe((list) => {
+      setData(list);
+      qc.setQueryData([KEY], list);
+      setIsLoading(false);
+    });
+    return unsub;
+  }, [qc]);
+
+  return { data, isLoading };
 }
 
 export interface ApprovalBoxes {

@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import {
   approvalDocSchema,
@@ -49,6 +49,11 @@ function migrateDoc(data: any): any {
 
 let memory: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse(migrateDoc(d)));
 
+const listeners = new Set<() => void>();
+function notifyListeners() {
+  listeners.forEach((l) => l());
+}
+
 async function loadAll(): Promise<ApprovalDoc[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
@@ -75,6 +80,7 @@ async function persist(item: ApprovalDoc): Promise<void> {
   const i = memory.findIndex((m) => m.id === valid.id);
   if (i >= 0) memory[i] = valid;
   else memory = [valid, ...memory];
+  notifyListeners();
 }
 
 async function getOrThrow(id: string): Promise<ApprovalDoc> {
@@ -384,5 +390,36 @@ export const approvalDocRepo = {
       return;
     }
     memory = memory.filter((m) => m.id !== id);
+    notifyListeners();
+  },
+
+  subscribe(callback: (docs: ApprovalDoc[]) => void): () => void {
+    if (isFirebaseConfigured && db) {
+      const q = query(collection(db, COLL));
+      return onSnapshot(q, (snapshot: QuerySnapshot) => {
+        const list: ApprovalDoc[] = [];
+        for (const d of snapshot.docs) {
+          try {
+            const parsed = approvalDocSchema.parse(migrateDoc(d.data()));
+            list.push(parsed);
+          } catch (err) {
+            console.error(`Failed to parse approval document (ID: ${d.id}):`, err);
+          }
+        }
+        callback(list);
+      }, (err: Error) => {
+        console.warn('Firestore approvalDocs subscription failed:', err);
+        callback([]);
+      });
+    } else {
+      const listener = () => {
+        callback(memory);
+      };
+      listeners.add(listener);
+      listener();
+      return () => {
+        listeners.delete(listener);
+      };
+    }
   },
 };
