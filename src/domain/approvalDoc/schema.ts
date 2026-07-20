@@ -26,7 +26,7 @@ export const STEP_KINDS = ['결재', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
 export const STEP_DECISIONS = ['대기', '승인', '반려', '보류'] as const;
 /** 휴가 종류(§5.4). */
-export const LEAVE_TYPES = ['연차', '반차', '병가', '경조', '공가', '대체휴무'] as const;
+export const LEAVE_TYPES = ['연차', '반차', '병가', '경조', '공가', '대체휴무', '기타'] as const;
 
 
 export type DocType = (typeof DOC_TYPES)[number];

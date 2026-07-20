@@ -52,7 +52,16 @@ let memory: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse
 async function loadAll(): Promise<ApprovalDoc[]> {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, COLL));
-    return snap.docs.map((d) => approvalDocSchema.parse(migrateDoc(d.data())));
+    const list: ApprovalDoc[] = [];
+    for (const d of snap.docs) {
+      try {
+        const parsed = approvalDocSchema.parse(migrateDoc(d.data()));
+        list.push(parsed);
+      } catch (err) {
+        console.error(`Failed to parse approval document (ID: ${d.id}):`, err);
+      }
+    }
+    return list;
   }
   return memory;
 }

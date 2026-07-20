@@ -56,6 +56,7 @@ export default function LoginScreen() {
     try {
       await signIn(loginId.trim(), password);
     } catch (err) {
+      console.error('Login error details:', err);
       setError(authErrorMessage(err));
     } finally {
       setBusy(false);
