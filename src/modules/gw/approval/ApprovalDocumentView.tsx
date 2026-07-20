@@ -3,7 +3,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
-import { fieldText } from '@/modules/gw/approval/formFields';
+import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
 import { won } from '@/modules/gw/_gw';
 import logoImg from '@/assets/logo.png';
 
@@ -230,16 +230,27 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
               const renderTable = (f: FormField) => {
                 const val = doc.fieldValues[f.key];
-                const defaultCols = f.options.length > 0 ? f.options : ['품목명', '수량', '가격', '비고'];
+                const defaultCols = ['구분', '항목', '내용'];
+                const defaultRows: Array<Record<string, string>> = [
+                  { '구분': '', '항목': '', '내용': '' },
+                  { '구분': '', '항목': '', '내용': '' },
+                  { '구분': '', '항목': '', '내용': '' }
+                ];
                 let cols: string[] = [...defaultCols];
-                let rows: Array<Record<string, string>> = [];
+                let rows: Array<Record<string, string>> = [...defaultRows];
                 let colWidths: Record<string, string> = {};
+                let merges: CellMerge[] = [];
+                let headerValues: Record<string, string> = {};
 
                 if (f.placeholder) {
                   try {
                     const cfg = JSON.parse(f.placeholder);
                     if (cfg && typeof cfg === 'object') {
                       if (cfg.colWidths) colWidths = cfg.colWidths;
+                      if (cfg.cols) cols = cfg.cols;
+                      if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
+                      if (Array.isArray(cfg.merges)) merges = cfg.merges;
+                      if (cfg.headerValues) headerValues = cfg.headerValues;
                     }
                   } catch (e) {}
                 }
@@ -252,9 +263,8 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                         cols = parsed.cols;
                         rows = parsed.rows;
                         colWidths = parsed.colWidths || colWidths;
-                      } else if (Array.isArray(parsed)) {
-                        rows = parsed;
-                        cols = defaultCols;
+                        if (Array.isArray(parsed.merges)) merges = parsed.merges;
+                        if (parsed.headerValues) headerValues = parsed.headerValues;
                       }
                     }
                   }
@@ -272,24 +282,44 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                             <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
                           ))}
                         </colgroup>
-                        <thead>
-                          <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                            {cols.map((col) => (
-                              <th key={col} className="p-2 border border-[#eee] font-bold text-[#555]">{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
                         <tbody>
+                          {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
+                          <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
+                            {cols.map((col, cIdx) => {
+                              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
+                              if (isMerged && !isStart) return null;
+                              return (
+                                <th
+                                  key={col}
+                                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                                  colSpan={colSpan > 1 ? colSpan : undefined}
+                                  className="p-2 border border-[#eee] font-bold text-[#555]"
+                                >
+                                  {headerValues[col] !== undefined ? headerValues[col] : col}
+                                </th>
+                              );
+                            })}
+                          </tr>
                           {rows.map((row, rIdx) => (
                             <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                              {cols.map((col) => {
+                              {cols.map((col, cIdx) => {
                                 const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
                                 const cellVal = row[col] ?? '';
                                 const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
                                   ? Number(cellVal.replace(/,/g, '')).toLocaleString()
                                   : cellVal;
+
+                                const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
+
+                                if (isMerged && !isStart) return null;
+
                                 return (
-                                  <td key={col} className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}>
+                                  <td
+                                    key={col}
+                                    rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                                    colSpan={colSpan > 1 ? colSpan : undefined}
+                                    className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}
+                                  >
                                     {displayVal || '—'}
                                   </td>
                                 );

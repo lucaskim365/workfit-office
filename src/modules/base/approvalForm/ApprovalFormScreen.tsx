@@ -523,26 +523,10 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                       {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
                     </div>
                   </div>
-                  {(f.type === '선택' || f.type === '다중선택' || f.type === '표') && (
+                  {(f.type === '선택' || f.type === '다중선택') && (
                     <div className="mt-1 w-full">
-                      <span className="text-[9.5px] text-ink3">{f.type === '표' ? '기본 열 목록 (쉼표 구분)' : '옵션 목록 (쉼표 구분)'}</span>
+                      <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
                       <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
-                    </div>
-                  )}
-                  {f.type === '표' && (
-                    <div className="mt-1.5 w-full">
-                      <span className="text-[9.5px] text-ink3">고정 행 목록 (선택사항, 쉼표 구분)</span>
-                      <FixedRowsInput
-                        placeholder={f.placeholder}
-                        onChange={(fixedRows) => {
-                          let cfg: any = {};
-                          if (f.placeholder) {
-                            try { cfg = JSON.parse(f.placeholder); } catch (e) {}
-                          }
-                          cfg.fixedRows = fixedRows;
-                          setField(i, { placeholder: JSON.stringify(cfg) });
-                        }}
-                      />
                     </div>
                   )}
                 </div>
@@ -589,8 +573,12 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
             onChangeField?.(idx, {
               options: parsed.cols,
               placeholder: JSON.stringify({
+                cols: parsed.cols,
                 colWidths: parsed.colWidths || {},
-                tableWidth: parsed.tableWidth || '100%'
+                tableWidth: parsed.tableWidth || '100%',
+                defaultRows: parsed.rows || [],
+                merges: parsed.merges || [],
+                headerValues: parsed.headerValues || {}
               })
             });
           }
@@ -723,32 +711,4 @@ function OptionsInput({ value, onChange }: { value: string[]; onChange: (val: st
   );
 }
 
-function FixedRowsInput({ placeholder, onChange }: { placeholder: string; onChange: (val: string[]) => void }) {
-  const [text, setText] = useState('');
-  
-  useEffect(() => {
-    if (placeholder) {
-      try {
-        const cfg = JSON.parse(placeholder);
-        if (cfg && Array.isArray(cfg.fixedRows)) {
-          setText(cfg.fixedRows.join(', '));
-          return;
-        }
-      } catch (e) {}
-    }
-    setText('');
-  }, [placeholder]);
 
-  return (
-    <input
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        const parsed = text.split(',').map((s) => s.trim()).filter(Boolean);
-        onChange(parsed);
-      }}
-      placeholder="행 이름(콤마 구분): SW, 인건비, NW"
-      className="mt-1 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-    />
-  );
-}

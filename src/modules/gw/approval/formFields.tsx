@@ -20,6 +20,58 @@ export function daysBetween(start: string, end: string): number {
   return Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
 }
 
+export interface CellMerge {
+  startRow: number;
+  startCol: number;
+  rowSpan: number;
+  colSpan: number;
+}
+
+export function getCellMergeInfo(rIdx: number, cIdx: number, merges: CellMerge[]) {
+  const mergeInfo = (merges || []).find((m) => {
+    const rMatch = rIdx >= m.startRow && rIdx < m.startRow + m.rowSpan;
+    const cMatch = cIdx >= m.startCol && cIdx < m.startCol + m.colSpan;
+    return rMatch && cMatch;
+  });
+
+  if (!mergeInfo) {
+    return { isMerged: false, isStart: false, rowSpan: 1, colSpan: 1 };
+  }
+
+  const isStart = mergeInfo.startRow === rIdx && mergeInfo.startCol === cIdx;
+  return {
+    isMerged: true,
+    isStart,
+    rowSpan: isStart ? mergeInfo.rowSpan : 0,
+    colSpan: isStart ? mergeInfo.colSpan : 0,
+    mergeInfo,
+  };
+}
+
+function EditableHeader({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [val, setVal] = useState(value);
+  useEffect(() => {
+    setVal(value);
+  }, [value]);
+  return (
+    <input
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => {
+        if (val !== value) {
+          onChange(val);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full rounded border border-border bg-panel-alt px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
+    />
+  );
+}
+
 const inp = 'w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal';
 
 export interface OrgLite {
@@ -319,63 +371,123 @@ export function DynamicField({
 
 
     case '표': {
-      const defaultCols = field.options.length > 0 ? field.options : ['품목명', '수량', '가격', '비고'];
-      let cols: string[] = [...defaultCols];
-      let rows: Array<Record<string, string>> = [];
-      let tableWidth = '100%';
-      let colWidths: Record<string, string> = {};
-      let fixedRows: string[] = [];
+      const defaultCols = field.options && field.options.length > 0 ? field.options : ['구분', '항목', '내용'];
+      const defaultRows: Array<Record<string, string>> = [
+        defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {}),
+        defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {}),
+        defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {})
+      ];
 
-      if (field.placeholder) {
+      // headerValues: 헤더 행의 셀 표시 텍스트 (컬럼 내부 key와 별개로 저장)
+      const { cols, rows, tableWidth, colWidths, merges, headerValues } = (() => {
         try {
-          const cfg = JSON.parse(field.placeholder);
-          if (cfg && typeof cfg === 'object') {
-            if (cfg.tableWidth) tableWidth = cfg.tableWidth;
-            if (cfg.colWidths) colWidths = cfg.colWidths;
-            if (Array.isArray(cfg.fixedRows)) fixedRows = cfg.fixedRows;
+          if (v) {
+            const parsedData = JSON.parse(v as string);
+            return {
+              cols: (parsedData.cols ?? defaultCols) as string[],
+              rows: (parsedData.rows ?? defaultRows) as Array<Record<string, string>>,
+              tableWidth: (parsedData.tableWidth ?? '100%') as string,
+              colWidths: (parsedData.colWidths ?? {}) as Record<string, string>,
+              merges: (parsedData.merges ?? []) as CellMerge[],
+              headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
+            };
+          } else if (field.placeholder) {
+            const parsedData = JSON.parse(field.placeholder);
+            return {
+              cols: (parsedData.cols ?? parsedData.options ?? defaultCols) as string[],
+              rows: (parsedData.defaultRows ?? defaultRows) as Array<Record<string, string>>,
+              tableWidth: (parsedData.tableWidth ?? '100%') as string,
+              colWidths: (parsedData.colWidths ?? {}) as Record<string, string>,
+              merges: (parsedData.merges ?? []) as CellMerge[],
+              headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
+            };
           }
         } catch (e) {}
-      }
+        return { cols: defaultCols, rows: defaultRows, tableWidth: '100%', colWidths: {} as Record<string, string>, merges: [] as CellMerge[], headerValues: {} as Record<string, string> };
+      })();
 
-      try {
-        if (typeof v === 'string' && v) {
-          const parsed = JSON.parse(v);
-          if (parsed && typeof parsed === 'object') {
-            if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-              cols = parsed.cols;
-              rows = parsed.rows;
-              tableWidth = parsed.tableWidth || tableWidth;
-              colWidths = parsed.colWidths || colWidths;
-            } else if (Array.isArray(parsed)) {
-              rows = parsed;
-              cols = defaultCols;
-            }
-          }
-        } else if (fixedRows.length > 0) {
-          rows = fixedRows.map((rName) => {
-            const row: Record<string, string> = {};
-            cols.forEach((col, cIdx) => {
-              row[col] = cIdx === 0 ? rName : '';
-            });
-            return row;
-          });
+      const getMergeInfo = (rIdx: number, cIdx: number) => getCellMergeInfo(rIdx, cIdx, merges);
+
+      const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rIdx: number; cIdx: number } | null>(null);
+      const [dragRow, setDragRow] = useState<number | null>(null);
+      const [dragCol, setDragCol] = useState<number | null>(null);
+      const [dragOverRow, setDragOverRow] = useState<number | null>(null);
+      const [dragOverCol, setDragOverCol] = useState<number | null>(null);
+
+      useEffect(() => {
+        const handleCloseMenu = () => setContextMenu(null);
+        window.addEventListener('click', handleCloseMenu);
+        return () => window.removeEventListener('click', handleCloseMenu);
+      }, []);
+
+      useEffect(() => {
+        if (!v && rows.length > 0) {
+          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths, merges, headerValues }) });
         }
-      } catch (e) {}
+      }, [v, field.key]);
 
-      const updateCell = (rowIndex: number, col: string, value: string) => {
-        const nextRows = rows.map((row, idx) => (idx === rowIndex ? { ...row, [col]: value } : row));
-        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+      const save = (nextCols: string[], nextRows: Array<Record<string, string>>, nextMerges: CellMerge[], nextColWidths = colWidths, nextHeaderValues = headerValues) =>
+        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextColWidths, merges: nextMerges, headerValues: nextHeaderValues }) });
+
+      const updateCell = (rIdx: number, col: string, val: string) => {
+        const nextRows = [...rows];
+        nextRows[rIdx] = { ...nextRows[rIdx], [col]: val };
+        save(cols, nextRows, merges);
+      };
+
+      const updateHeaderCell = (col: string, val: string) => {
+        const nextHeaderValues = { ...headerValues, [col]: val };
+        save(cols, rows, merges, colWidths, nextHeaderValues);
       };
 
       const addRow = () => {
-        const newRow = cols.reduce((acc, col) => ({ ...acc, [col]: '' }), {});
-        const nextRows = [...rows, newRow];
-        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+        const newRow = cols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {});
+        save(cols, [...rows, newRow], merges);
       };
 
       const removeRow = (rowIndex: number) => {
         const nextRows = rows.filter((_, idx) => idx !== rowIndex);
-        set({ [field.key]: JSON.stringify({ cols, rows: nextRows, tableWidth, colWidths }) });
+        const nextMerges = merges
+          .map((m: CellMerge) => {
+            if (m.startRow < 0) return m;
+            if (m.startRow > rowIndex) return { ...m, startRow: m.startRow - 1 };
+            if (m.startRow + m.rowSpan - 1 >= rowIndex) return { ...m, rowSpan: m.rowSpan - 1 };
+            return m;
+          })
+          .filter((m: CellMerge) => m.startRow < 0 || m.rowSpan > 0);
+        save(cols, nextRows, nextMerges);
+      };
+
+      const addCol = (cIdx: number) => {
+        let suffix = cols.length + 1;
+        let newColName = `열${suffix}`;
+        while (cols.includes(newColName)) { suffix++; newColName = `열${suffix}`; }
+        const nextCols = [...cols];
+        nextCols.splice(cIdx + 1, 0, newColName);
+        const nextRows = rows.map((row) => ({ ...row, [newColName]: '' }));
+        const nextMerges = merges.map((m: CellMerge) => {
+          if (m.startCol > cIdx) return { ...m, startCol: m.startCol + 1 };
+          if (m.startCol + m.colSpan - 1 >= cIdx + 1) return { ...m, colSpan: m.colSpan + 1 };
+          return m;
+        });
+        save(nextCols, nextRows, nextMerges);
+      };
+
+      const removeCol = (cIdx: number) => {
+        if (cols.length <= 1) return;
+        const colName = cols[cIdx];
+        const nextCols = cols.filter((_, idx) => idx !== cIdx);
+        const nextRows = rows.map((row) => { const r = { ...row }; delete r[colName]; return r; });
+        const nextWidths = { ...colWidths }; delete nextWidths[colName];
+        const nextHeaderValues = { ...headerValues }; delete nextHeaderValues[colName];
+        const nextMerges = merges
+          .map((m: CellMerge) => {
+            if (m.startCol > cIdx) return { ...m, startCol: m.startCol - 1 };
+            if (m.startCol + m.colSpan - 1 >= cIdx) return { ...m, colSpan: m.colSpan - 1 };
+            return m;
+          })
+          .filter((m: CellMerge) => m.colSpan > 0);
+        save(nextCols, nextRows, nextMerges, nextWidths, nextHeaderValues);
       };
 
       const handleResizeStart = (e: React.MouseEvent, colName: string) => {
@@ -383,111 +495,317 @@ export function DynamicField({
         const startX = e.clientX;
         const parentTh = e.currentTarget.parentElement;
         const startWidth = parentTh ? parentTh.getBoundingClientRect().width : 120;
-        
         let currentWidth = startWidth;
-
         const handleMouseMove = (moveEvent: MouseEvent) => {
           const dx = moveEvent.clientX - startX;
           currentWidth = Math.max(40, startWidth + dx);
           setLocalColWidths((prev) => ({ ...prev, [colName]: `${currentWidth}px` }));
         };
-
         const handleMouseUp = () => {
           window.removeEventListener('mousemove', handleMouseMove);
           window.removeEventListener('mouseup', handleMouseUp);
-          
-          const nextWidths = { ...colWidths, [colName]: `${currentWidth}px` };
-          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths: nextWidths }) });
+          save(cols, rows, merges, { ...colWidths, [colName]: `${currentWidth}px` });
         };
-
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
+      };
+
+      const mergeRight = (rIdx: number, cIdx: number) => {
+        if (cIdx >= cols.length - 1) return;
+        const { isMerged, mergeInfo } = getMergeInfo(rIdx, cIdx);
+        let nextMerges = [...merges];
+        if (isMerged && mergeInfo && mergeInfo.startRow === rIdx && mergeInfo.startCol === cIdx) {
+          nextMerges = merges.map((m: CellMerge) => m.startRow === rIdx && m.startCol === cIdx ? { ...m, colSpan: m.colSpan + 1 } : m);
+        } else if (!isMerged) {
+          nextMerges.push({ startRow: rIdx, startCol: cIdx, rowSpan: 1, colSpan: 2 });
+        }
+        save(cols, rows, nextMerges);
+      };
+
+      const mergeDown = (rIdx: number, cIdx: number) => {
+        // rIdx=-1 은 헤더 행; 헤더→첫 데이터 행(0) 병합 허용
+        if (rIdx !== -1 && rIdx >= rows.length - 1) return;
+        const { isMerged, mergeInfo } = getMergeInfo(rIdx, cIdx);
+        let nextMerges = [...merges];
+        if (isMerged && mergeInfo && mergeInfo.startRow === rIdx && mergeInfo.startCol === cIdx) {
+          nextMerges = merges.map((m: CellMerge) => m.startRow === rIdx && m.startCol === cIdx ? { ...m, rowSpan: m.rowSpan + 1 } : m);
+        } else if (!isMerged) {
+          nextMerges.push({ startRow: rIdx, startCol: cIdx, rowSpan: 2, colSpan: 1 });
+        }
+        save(cols, rows, nextMerges);
+      };
+
+      const unmerge = (rIdx: number, cIdx: number) => {
+        const { mergeInfo } = getMergeInfo(rIdx, cIdx);
+        if (!mergeInfo) return;
+        const nextMerges = merges.filter((m: CellMerge) => !(m.startRow === mergeInfo.startRow && m.startCol === mergeInfo.startCol));
+        save(cols, rows, nextMerges);
+      };
+
+      const handleCellContextMenu = (e: React.MouseEvent, rIdx: number, cIdx: number) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, rIdx, cIdx });
+      };
+
+      // ── 행 드래그 앤 드롭 ──
+      const handleRowDragStart = (e: React.DragEvent, rIdx: number) => {
+        setDragRow(rIdx);
+        e.dataTransfer.effectAllowed = 'move';
+      };
+      const handleRowDragOver = (e: React.DragEvent, rIdx: number) => {
+        e.preventDefault();
+        setDragOverRow(rIdx);
+      };
+      const handleRowDrop = (rIdx: number) => {
+        if (dragRow === null || dragRow === rIdx) { setDragRow(null); setDragOverRow(null); return; }
+
+        // ── 헤더(rIdx=-1)가 관여된 경우: 헤더 ↔ 데이터 행 내용 교환 ──
+        if (dragRow === -1 || rIdx === -1) {
+          const dataIdx = dragRow === -1 ? rIdx : dragRow;
+          // 헤더 행 내용을 데이터 행으로, 데이터 행 내용을 헤더로 전환
+          const oldHeaderAsRow = cols.reduce((acc: Record<string, string>, col: string) => ({
+            ...acc, [col]: headerValues[col] !== undefined ? headerValues[col] : col
+          }), {});
+          const nextHeaderValues = cols.reduce((acc: Record<string, string>, col: string) => ({
+            ...acc, [col]: rows[dataIdx][col] ?? ''
+          }), {});
+          const nextRows = [...rows];
+          nextRows[dataIdx] = oldHeaderAsRow;
+          // 병합 좌표: startRow=-1 ↔ startRow=dataIdx 교환
+          const nextMerges = merges.map((m: CellMerge) => {
+            if (m.startRow === -1) return { ...m, startRow: dataIdx };
+            if (m.startRow === dataIdx) return { ...m, startRow: -1 };
+            return m;
+          });
+          save(cols, nextRows, nextMerges, colWidths, nextHeaderValues);
+          setDragRow(null); setDragOverRow(null);
+          return;
+        }
+
+        // ── 일반 데이터 행 간 이동 ──
+        const nextRows = [...rows];
+        const [moved] = nextRows.splice(dragRow, 1);
+        nextRows.splice(rIdx, 0, moved);
+        const nextMerges = merges.map((m: CellMerge) => {
+          if (m.startRow < 0) return m;
+          let nr = m.startRow;
+          if (m.startRow === dragRow) nr = rIdx;
+          else if (dragRow < rIdx && m.startRow > dragRow && m.startRow <= rIdx) nr = m.startRow - 1;
+          else if (dragRow > rIdx && m.startRow >= rIdx && m.startRow < dragRow) nr = m.startRow + 1;
+          return { ...m, startRow: nr };
+        });
+        save(cols, nextRows, nextMerges);
+        setDragRow(null); setDragOverRow(null);
+      };
+
+      // ── 열 드래그 앤 드롭 ──
+      const handleColDragStart = (e: React.DragEvent, cIdx: number) => {
+        setDragCol(cIdx);
+        e.dataTransfer.effectAllowed = 'move';
+      };
+      const handleColDragOver = (e: React.DragEvent, cIdx: number) => {
+        e.preventDefault();
+        setDragOverCol(cIdx);
+      };
+      const handleColDrop = (cIdx: number) => {
+        if (dragCol === null || dragCol === cIdx) { setDragCol(null); setDragOverCol(null); return; }
+        const nextCols = [...cols];
+        const [movedCol] = nextCols.splice(dragCol, 1);
+        nextCols.splice(cIdx, 0, movedCol);
+        const nextRows = rows.map((row) => {
+          const newRow: Record<string, string> = {};
+          nextCols.forEach((c) => { newRow[c] = row[c] ?? ''; });
+          return newRow;
+        });
+        const nextHeaderValues: Record<string, string> = {};
+        nextCols.forEach((c) => { if (c in headerValues) nextHeaderValues[c] = headerValues[c]; });
+        const nextMerges = merges.map((m: CellMerge) => {
+          let nc = m.startCol;
+          if (m.startCol === dragCol) nc = cIdx;
+          else if (dragCol < cIdx && m.startCol > dragCol && m.startCol <= cIdx) nc = m.startCol - 1;
+          else if (dragCol > cIdx && m.startCol >= cIdx && m.startCol < dragCol) nc = m.startCol + 1;
+          return { ...m, startCol: nc };
+        });
+        save(nextCols, nextRows, nextMerges, colWidths, nextHeaderValues);
+        setDragCol(null); setDragOverCol(null);
       };
 
       const isHalfWidth = field.width === 'half';
 
       return (
-        <div className="mt-1 rounded-lg border border-border bg-panel p-2">
+        <div className="mt-1 rounded-lg border border-border bg-panel p-2 relative">
           <div className="mb-2 flex items-center justify-between gap-2 px-1">
-            <span className="text-[11px] font-semibold text-ink2">표 편집기</span>
+            <span className="text-[11px] font-semibold text-ink2">표 편집기 — 우클릭: 셀 병합 · 헤더/핸들 드래그: 열·행 순서 변경</span>
           </div>
           <div className="overflow-x-auto">
             <table className="table-fixed border-collapse text-left text-[11.5px] border border-border" style={{ width: '100%', minWidth: isHalfWidth ? 'auto' : '500px' }}>
               <colgroup>
-                {cols.map((col, cIdx) => (
+                <col style={{ width: '20px' }} />
+                {cols.map((col: string, cIdx: number) => (
                   <col key={cIdx} style={{ width: localColWidths[col] || 'auto' }} />
                 ))}
-                {fixedRows.length === 0 && <col style={{ width: '45px' }} />}
+                <col style={{ width: '45px' }} />
               </colgroup>
-              <thead>
-                <tr className="border-b border-border bg-panel-alt">
-                  {cols.map((col, cIdx) => (
-                    <th key={cIdx} className="p-1.5 font-bold text-ink2 relative group border-r border-border min-w-[50px]">
-                      <div className="flex items-center gap-1 pr-2">
-                        <span className="w-full text-[11.5px] font-bold text-ink2 p-0.5 select-none">
-                          {col}
-                        </span>
-                      </div>
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, col)}
-                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal bg-[#ddd]/30 group-hover:bg-[#ddd] active:bg-teal transition-colors"
-                        style={{ zIndex: 10 }}
-                        title="드래그하여 열 너비 조절"
-                      />
-                    </th>
-                  ))}
-                  {fixedRows.length === 0 && <th className="w-[45px] border-none bg-transparent"></th>}
-                </tr>
-              </thead>
               <tbody>
-                {rows.map((row, rIdx) => (
-                  <tr key={rIdx} className="border-b border-border/50 hover:bg-panel-alt/30">
-                    {cols.map((col, cIdx) => {
-                      const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
-                      const isFirstColFixed = fixedRows.length > 0 && cIdx === 0;
-                      return (
-                        <td key={col} className="p-1 border-r border-border">
-                          <input
-                            value={row[col] ?? ''}
-                            onChange={(e) => updateCell(rIdx, col, e.target.value)}
-                            placeholder={isNumLike ? '0' : ''}
-                            readOnly={isFirstColFixed}
-                            className={`w-full rounded border border-border bg-panel-alt px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal ${isFirstColFixed ? 'opacity-80 bg-panel cursor-not-allowed font-medium' : ''}`}
+                {/* ── 헤더 행 (tbody 첫 번째 tr — rowSpan이 데이터 행까지 확장 가능, 드래그로 이동 가능) ── */}
+                <tr
+                  className={`border-b border-border transition-colors ${dragOverRow === -1 && dragRow !== -1 ? 'border-t-2 border-t-teal' : ''} ${dragRow === -1 ? 'opacity-40' : ''}`}
+                  onDragOver={(e) => handleRowDragOver(e, -1)}
+                  onDrop={() => handleRowDrop(-1)}
+                >
+                  {/* 행 드래그 핸들 */}
+                  <td className="p-0 text-center border-r border-border w-[20px]">
+                    <span
+                      draggable
+                      onDragStart={(e) => handleRowDragStart(e, -1)}
+                      onDragEnd={() => { setDragRow(null); setDragOverRow(null); }}
+                      className="text-ink3 cursor-grab active:cursor-grabbing select-none text-[13px] block leading-none px-1 py-2"
+                      title="드래그하여 행 순서 변경"
+                    >
+                      ⠿
+                    </span>
+                  </td>
+                  {cols.map((col: string, cIdx: number) => {
+                    const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(-1, cIdx);
+                    if (isMerged && !isStart) return null;
+                    const isDragTarget = dragOverCol === cIdx && dragCol !== cIdx;
+                    return (
+                      <th
+                        key={cIdx}
+                        rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                        colSpan={colSpan > 1 ? colSpan : undefined}
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); handleColDragStart(e, cIdx); }}
+                        onDragOver={(e) => { e.stopPropagation(); handleColDragOver(e, cIdx); }}
+                        onDrop={(e) => { e.stopPropagation(); handleColDrop(cIdx); }}
+                        onDragEnd={() => { setDragCol(null); setDragOverCol(null); }}
+                        onContextMenu={(e) => handleCellContextMenu(e, -1, cIdx)}
+                        className={`p-1.5 relative group border-r border-border min-w-[50px] cursor-grab active:cursor-grabbing transition-colors ${isDragTarget ? 'bg-teal-soft/40 border-l-2 border-l-teal' : ''} ${dragCol === cIdx ? 'opacity-40' : ''}`}
+                      >
+                        <div className="flex items-center gap-1 pr-2">
+                          <EditableHeader
+                            value={headerValues[col] !== undefined ? headerValues[col] : col}
+                            onChange={(val) => updateHeaderCell(col, val)}
                           />
-                        </td>
-                      );
-                    })}
-                    {fixedRows.length === 0 && (
-                      <td className="p-1 text-center border-none bg-transparent">
-                        <button
-                          type="button"
-                          onClick={() => removeRow(rIdx)}
-                          className="text-[12px] text-ink3 hover:text-red-500 font-bold"
+                          {cols.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); removeCol(cIdx); }}
+                              className="text-[10px] text-ink3 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold shrink-0"
+                              title="이 열 삭제"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <div
+                          onMouseDown={(e) => { e.stopPropagation(); handleResizeStart(e, col); }}
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal bg-[#ddd]/30 group-hover:bg-[#ddd] active:bg-teal transition-colors"
+                          style={{ zIndex: 10 }}
+                          title="드래그하여 열 너비 조절"
+                        />
+                      </th>
+                    );
+                  })}
+                  <th className="w-[45px] p-1.5 border-r border-border text-center relative">
+                    <button
+                      type="button"
+                      onClick={() => addCol(cols.length - 1)}
+                      className="w-6 h-6 rounded-full border border-border bg-panel text-[13px] font-bold text-ink2 hover:border-teal hover:text-teal hover:bg-teal-soft flex items-center justify-center mx-auto transition-colors"
+                      title="오른쪽에 열 추가"
+                    >
+                      +
+                    </button>
+                  </th>
+                </tr>
+                {/* ── 데이터 행 ── */}
+                {rows.map((row: Record<string, string>, rIdx: number) => {
+                  const isDragRowTarget = dragOverRow === rIdx && dragRow !== rIdx;
+                  return (
+                    <tr
+                      key={rIdx}
+                      onDragOver={(e) => handleRowDragOver(e, rIdx)}
+                      onDrop={() => handleRowDrop(rIdx)}
+                      className={`border-b border-border/50 hover:bg-panel-alt/30 transition-colors ${isDragRowTarget ? 'border-t-2 border-t-teal' : ''} ${dragRow === rIdx ? 'opacity-40' : ''}`}
+                    >
+                      <td className="p-0 text-center border-r border-border w-[20px]">
+                        <span
+                          draggable
+                          onDragStart={(e) => handleRowDragStart(e, rIdx)}
+                          onDragEnd={() => { setDragRow(null); setDragOverRow(null); }}
+                          className="text-ink3 cursor-grab active:cursor-grabbing select-none text-[13px] block leading-none px-1 py-2"
+                          title="드래그하여 행 순서 변경"
                         >
-                          ✕
-                        </button>
+                          ⠿
+                        </span>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      {cols.map((col: string, cIdx: number) => {
+                        const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                        const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(rIdx, cIdx);
+                        if (isMerged && !isStart) return null;
+                        return (
+                          <td
+                            key={col}
+                            rowSpan={rowSpan}
+                            colSpan={colSpan}
+                            onContextMenu={(e) => handleCellContextMenu(e, rIdx, cIdx)}
+                            className="p-1 border-r border-border"
+                          >
+                            <input
+                              value={row[col] ?? ''}
+                              onChange={(e) => updateCell(rIdx, col, e.target.value)}
+                              placeholder={isNumLike ? '0' : ''}
+                              className="w-full rounded border border-border bg-panel-alt px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className="p-1 text-center border-none bg-transparent">
+                        <button type="button" onClick={() => removeRow(rIdx)} className="text-[12px] text-ink3 hover:text-red-500 font-bold">✕</button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={cols.length + (fixedRows.length === 0 ? 1 : 0)} className="py-4 text-center text-ink3 text-[11px]">
-                      표가 비어 있습니다. {fixedRows.length === 0 && '아래 버튼을 눌러 행을 추가하세요.'}
+                    <td colSpan={cols.length + 2} className="py-4 text-center text-ink3 text-[11px]">
+                      표가 비어 있습니다. 아래 버튼을 눌러 행/열을 추가하세요.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-          {fixedRows.length === 0 && (
-            <button
-              type="button"
-              onClick={addRow}
-              className="mt-2 w-full rounded border border-dashed border-border-hi py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+
+          <button
+            type="button"
+            onClick={addRow}
+            className="mt-2 w-full rounded border border-dashed border-border-hi py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+          >
+            + 행 추가
+          </button>
+
+          {contextMenu && (
+            <div
+              className="fixed z-50 min-w-[130px] rounded-lg border border-border bg-panel py-1.5 shadow-xl text-[12px]"
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+              onClick={(e) => e.stopPropagation()}
             >
-              + 행 추가
-            </button>
+              <button type="button" onClick={() => { mergeRight(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+                disabled={contextMenu.cIdx >= cols.length - 1}
+                className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent">
+                👉 오른쪽 셀과 병합
+              </button>
+              <button type="button" onClick={() => { mergeDown(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+                disabled={contextMenu.rIdx !== -1 && contextMenu.rIdx >= rows.length - 1}
+                className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent">
+                👇 아래 셀과 병합
+              </button>
+              <button type="button" onClick={() => { unmerge(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink">
+                🔓 병합 해제
+              </button>
+            </div>
           )}
         </div>
       );
