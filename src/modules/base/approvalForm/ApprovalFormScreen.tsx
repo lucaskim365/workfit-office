@@ -529,6 +529,22 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                       <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
                     </div>
                   )}
+                  {f.type === '표' && (
+                    <div className="mt-1.5 w-full">
+                      <span className="text-[9.5px] text-ink3">고정 행 목록 (선택사항, 쉼표 구분)</span>
+                      <FixedRowsInput
+                        placeholder={f.placeholder}
+                        onChange={(fixedRows) => {
+                          let cfg: any = {};
+                          if (f.placeholder) {
+                            try { cfg = JSON.parse(f.placeholder); } catch (e) {}
+                          }
+                          cfg.fixedRows = fixedRows;
+                          setField(i, { placeholder: JSON.stringify(cfg) });
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -703,6 +719,36 @@ function OptionsInput({ value, onChange }: { value: string[]; onChange: (val: st
       }}
       placeholder="옵션(콤마 구분): 영업, 교육, 회의"
       className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+    />
+  );
+}
+
+function FixedRowsInput({ placeholder, onChange }: { placeholder: string; onChange: (val: string[]) => void }) {
+  const [text, setText] = useState('');
+  
+  useEffect(() => {
+    if (placeholder) {
+      try {
+        const cfg = JSON.parse(placeholder);
+        if (cfg && Array.isArray(cfg.fixedRows)) {
+          setText(cfg.fixedRows.join(', '));
+          return;
+        }
+      } catch (e) {}
+    }
+    setText('');
+  }, [placeholder]);
+
+  return (
+    <input
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = text.split(',').map((s) => s.trim()).filter(Boolean);
+        onChange(parsed);
+      }}
+      placeholder="행 이름(콤마 구분): SW, 인건비, NW"
+      className="mt-1 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
     />
   );
 }

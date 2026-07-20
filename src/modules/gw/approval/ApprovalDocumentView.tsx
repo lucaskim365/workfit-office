@@ -123,7 +123,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
   const blocks: LayoutBlock[] = [];
   activeFields.forEach((f) => {
-    const { section: secName } = effectiveFieldProps(f);
+    const { section: secName, width: fw } = effectiveFieldProps(f);
     if (f.type === '장문') {
       blocks.push({
         type: 'longtext',
@@ -131,11 +131,23 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         fields: [f],
       });
     } else if (f.type === '표') {
-      blocks.push({
-        type: 'table-field',
-        section: secName,
-        fields: [f],
-      });
+      const lastBlock = blocks[blocks.length - 1];
+      if (
+        lastBlock &&
+        lastBlock.type === 'table-field' &&
+        lastBlock.section === secName &&
+        effectiveFieldProps(lastBlock.fields[0]).width === 'half' &&
+        fw === 'half' &&
+        lastBlock.fields.length < 2
+      ) {
+        lastBlock.fields.push(f);
+      } else {
+        blocks.push({
+          type: 'table-field',
+          section: secName,
+          fields: [f],
+        });
+      }
     } else {
       const lastBlock = blocks[blocks.length - 1];
       if (lastBlock && lastBlock.type === 'table' && lastBlock.section === secName) {
@@ -214,43 +226,89 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
             }
 
             if (block.type === 'table-field') {
-              const f = block.fields[0];
-              const val = doc.fieldValues[f.key];
-              const defaultCols = f.options.length > 0 ? f.options : ['품목명', '수량', '가격', '비고'];
-              let cols: string[] = [...defaultCols];
-              let rows: Array<Record<string, string>> = [];
-              let tableWidth = '100%';
-              let colWidths: Record<string, string> = {};
+              const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
 
-              // 서식 템플릿에 지정된 기본 너비/가로폭 속성 적용
-              if (f.placeholder) {
+              const renderTable = (f: FormField) => {
+                const val = doc.fieldValues[f.key];
+                const defaultCols = f.options.length > 0 ? f.options : ['품목명', '수량', '가격', '비고'];
+                let cols: string[] = [...defaultCols];
+                let rows: Array<Record<string, string>> = [];
+                let colWidths: Record<string, string> = {};
+
+                if (f.placeholder) {
+                  try {
+                    const cfg = JSON.parse(f.placeholder);
+                    if (cfg && typeof cfg === 'object') {
+                      if (cfg.colWidths) colWidths = cfg.colWidths;
+                    }
+                  } catch (e) {}
+                }
+
                 try {
-                  const cfg = JSON.parse(f.placeholder);
-                  if (cfg && typeof cfg === 'object') {
-                    if (cfg.tableWidth) tableWidth = cfg.tableWidth;
-                    if (cfg.colWidths) colWidths = cfg.colWidths;
-                  }
-                } catch (e) {}
-              }
-
-              try {
-                if (typeof val === 'string' && val) {
-                  const parsed = JSON.parse(val);
-                  if (parsed && typeof parsed === 'object') {
-                    if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-                      cols = parsed.cols;
-                      rows = parsed.rows;
-                      tableWidth = parsed.tableWidth || tableWidth;
-                      colWidths = parsed.colWidths || colWidths;
-                    } else if (Array.isArray(parsed)) {
-                      rows = parsed;
-                      cols = defaultCols;
+                  if (typeof val === 'string' && val) {
+                    const parsed = JSON.parse(val);
+                    if (parsed && typeof parsed === 'object') {
+                      if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
+                        cols = parsed.cols;
+                        rows = parsed.rows;
+                        colWidths = parsed.colWidths || colWidths;
+                      } else if (Array.isArray(parsed)) {
+                        rows = parsed;
+                        cols = defaultCols;
+                      }
                     }
                   }
-                }
-              } catch (e) {
-                // ignore
-              }
+                } catch (e) {}
+
+                return (
+                  <div key={f.key} className="space-y-1">
+                    <div className="text-[11px] font-semibold text-[#888] mb-0.5">
+                      {f.label}
+                    </div>
+                    <div className="overflow-x-auto border border-[#bbb] p-2 bg-white">
+                      <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
+                        <colgroup>
+                          {cols.map((col, cIdx) => (
+                            <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                          ))}
+                        </colgroup>
+                        <thead>
+                          <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
+                            {cols.map((col) => (
+                              <th key={col} className="p-2 border border-[#eee] font-bold text-[#555]">{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, rIdx) => (
+                            <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
+                              {cols.map((col) => {
+                                const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                                const cellVal = row[col] ?? '';
+                                const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                                  ? Number(cellVal.replace(/,/g, '')).toLocaleString()
+                                  : cellVal;
+                                return (
+                                  <td key={col} className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}>
+                                    {displayVal || '—'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                          {rows.length === 0 && (
+                            <tr>
+                              <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
+                                등록된 데이터가 없습니다.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              };
 
               return (
                 <div key={blockIdx} className="space-y-1">
@@ -259,50 +317,14 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       {block.section}
                     </div>
                   )}
-                  <div className="text-[11px] font-semibold text-[#888] mb-0.5">
-                    {f.label}
-                  </div>
-                  <div className="overflow-x-auto border border-[#bbb] p-2 bg-white">
-                    <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: tableWidth, minWidth: tableWidth === '100%' ? '500px' : 'auto' }}>
-                      <colgroup>
-                        {cols.map((col, cIdx) => (
-                          <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
-                        ))}
-                      </colgroup>
-                      <thead>
-                        <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                          {cols.map((col) => (
-                            <th key={col} className="p-2 border border-[#eee] font-bold text-[#555]">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((row, rIdx) => (
-                          <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                            {cols.map((col) => {
-                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
-                              const cellVal = row[col] ?? '';
-                              const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
-                                ? Number(cellVal.replace(/,/g, '')).toLocaleString()
-                                : cellVal;
-                              return (
-                                <td key={col} className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}>
-                                  {displayVal || '—'}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                        {rows.length === 0 && (
-                          <tr>
-                            <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
-                              등록된 데이터가 없습니다.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  {isHalf ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {block.fields.map((f) => renderTable(f))}
+                      {block.fields.length === 1 && <div />}
+                    </div>
+                  ) : (
+                    renderTable(block.fields[0])
+                  )}
                 </div>
               );
             }
