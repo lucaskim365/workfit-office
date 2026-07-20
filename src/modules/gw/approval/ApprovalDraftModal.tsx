@@ -60,6 +60,46 @@ export function ApprovalDraftModal({
   const [showRecipientPicker, setShowRecipientPicker] = useState(false);
   const [pickerType, setPickerType] = useState<'user' | 'dept'>('dept');
   const [pickerTargetId, setPickerTargetId] = useState('');
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
+
+  const hasManuallyEnteredValues = () => {
+    if (editDoc) {
+      const titleChanged = title.trim() !== (editDoc.title ?? '').trim();
+      const bodyChanged = body.trim() !== (editDoc.body ?? '').trim();
+      const amountChanged = amount.trim() !== (editDoc.amount != null ? String(editDoc.amount) : '');
+      const filesChanged = attachments.length !== (editDoc.attachments ?? []).length;
+      const valuesChanged = Object.keys(values).some((k) => values[k] !== editDoc.fieldValues?.[k]);
+      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged;
+    } else {
+      const hasTitle = title.trim() !== '';
+      const hasBody = body.trim() !== '';
+      const hasAmount = amount.trim() !== '';
+      const hasFiles = attachments.length > 0;
+      const hasValues = Object.keys(values).some((k) => {
+        const v = values[k];
+        return v !== undefined && v !== null && String(v).trim() !== '';
+      });
+      return hasTitle || hasBody || hasAmount || hasFiles || hasValues;
+    }
+  };
+
+  const handleAttemptClose = () => {
+    if (hasManuallyEnteredValues()) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleConfirmCloseSave = async () => {
+    try {
+      await persistDraft();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '임시저장에 실패했습니다.');
+      setShowConfirmClose(false);
+    }
+  };
 
   const create = useCreateDraft();
   const save = useSaveDraft();
@@ -348,7 +388,7 @@ export function ApprovalDraftModal({
   }, [folders, forms]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
       <div 
         className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
           isFixed ? 'max-w-2xl' : 'max-w-5xl'
@@ -359,7 +399,7 @@ export function ApprovalDraftModal({
           <div className="text-[15px] font-bold text-ink">
             {isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : fixedType === '휴가' ? '휴가 신청' : '새 결재 상신'}
           </div>
-          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt">✕</button>
+          <button onClick={handleAttemptClose} className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt">✕</button>
         </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -653,11 +693,41 @@ export function ApprovalDraftModal({
       </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <button onClick={onClose} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
+          <button onClick={handleAttemptClose} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
           {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
           <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
         </div>
       </div>
+
+      {showConfirmClose && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="w-[340px] rounded-2xl border border-border bg-panel p-5 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[14px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
+              <span>⚠️</span> 기안 작성 중단
+            </h3>
+            <p className="text-[11.5px] leading-relaxed text-ink2 mb-4">
+              기안 작성을 중단하시겠습니까?<br />작성중인 기안은 임시저장함에 저장됩니다.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfirmClose(false)}
+                className="h-8 px-3 rounded-lg text-[11.5px] font-semibold text-ink2 bg-panel-alt hover:bg-border-hi/30 transition-colors"
+              >
+                계속 작성
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCloseSave}
+                disabled={busy}
+                className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-teal hover:opacity-90 disabled:opacity-50 transition-colors"
+              >
+                임시저장 후 중단
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
