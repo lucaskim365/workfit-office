@@ -12,6 +12,7 @@ import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
 import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ZodError } from 'zod';
 
 /**
  * 상신 모달(§7.2) — 서식 선택 → 결재선 빌더 → 서식 필드/본문 → [임시저장][상신].
@@ -61,6 +62,7 @@ export function ApprovalDraftModal({
   const [pickerType, setPickerType] = useState<'user' | 'dept'>('dept');
   const [pickerTargetId, setPickerTargetId] = useState('');
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
 
   const hasManuallyEnteredValues = () => {
     if (editDoc) {
@@ -83,9 +85,38 @@ export function ApprovalDraftModal({
     }
   };
 
+  const formatErrorMessage = (err: unknown): string => {
+    if (err instanceof ZodError) {
+      return err.issues.map((e) => e.message).join(', ');
+    }
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'ZodError' && 'issues' in err && Array.isArray((err as any).issues)) {
+      return (err as any).issues.map((e: any) => e.message).join(', ');
+    }
+    if (err instanceof Error) {
+      try {
+        const parsed = JSON.parse(err.message);
+        if (Array.isArray(parsed) && parsed.length > 0 && 'message' in parsed[0]) {
+          return parsed.map((e: any) => e.message).join(', ');
+        }
+      } catch {
+        // Ignored
+      }
+      return err.message;
+    }
+    return String(err);
+  };
+
   const handleAttemptClose = () => {
     if (hasManuallyEnteredValues()) {
       setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleCancelClick = () => {
+    if (hasManuallyEnteredValues()) {
+      setShowConfirmDiscard(true);
     } else {
       onClose();
     }
@@ -96,7 +127,7 @@ export function ApprovalDraftModal({
       await persistDraft();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '임시저장에 실패했습니다.');
+      setError(formatErrorMessage(e));
       setShowConfirmClose(false);
     }
   };
@@ -286,14 +317,14 @@ export function ApprovalDraftModal({
     if (err) return setError(err);
     setError('');
     try { await persistDraft(); onClose(); }
-    catch (e) { setError(e instanceof Error ? e.message : '저장에 실패했습니다.'); }
+    catch (e) { setError(formatErrorMessage(e)); }
   };
   const onSubmit = async () => {
     const err = validate(true);
     if (err) return setError(err);
     setError('');
     try { const id = await persistDraft(); await submitM.mutateAsync({ id, userId: me.id }); onClose(); }
-    catch (e) { setError(e instanceof Error ? e.message : '상신에 실패했습니다.'); }
+    catch (e) { setError(formatErrorMessage(e)); }
   };
 
   // 필드 렌더 — 섹션 구분 + 2열 배치. body/amount 예약 필드는 전용 위젯으로.
@@ -455,6 +486,8 @@ export function ApprovalDraftModal({
 
           {/* 우측 폼 입력 영역 */}
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+          {error && <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500 animate-fade-in">{error}</div>}
 
           <Field label="제목">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
@@ -688,12 +721,11 @@ export function ApprovalDraftModal({
             )}
           </div>
 
-          {error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500">{error}</p>}
+          </div>
         </div>
-      </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <button onClick={handleAttemptClose} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
+          <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
           {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
           <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
         </div>
@@ -723,6 +755,35 @@ export function ApprovalDraftModal({
                 className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-teal hover:opacity-90 disabled:opacity-50 transition-colors"
               >
                 임시저장 후 중단
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmDiscard && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="w-[340px] rounded-2xl border border-border bg-panel p-5 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[14px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
+              <span>⚠️</span> 기안 작성 취소
+            </h3>
+            <p className="text-[11.5px] leading-relaxed text-ink2 mb-4">
+              기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDiscard(false)}
+                className="h-8 px-3 rounded-lg text-[11.5px] font-semibold text-ink2 bg-panel-alt hover:bg-border-hi/30 transition-colors"
+              >
+                돌아가기
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-danger hover:opacity-90 transition-colors"
+              >
+                변경내용 모두 취소
               </button>
             </div>
           </div>
