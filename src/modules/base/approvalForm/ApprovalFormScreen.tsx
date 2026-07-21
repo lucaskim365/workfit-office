@@ -266,9 +266,9 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   const org = useOrgTree();
   const { depts = [], users = [] } = org;
   const [selTab, setSelTab] = useState('공통');
-  const [fieldsExpanded, setFieldsExpanded] = useState(true);
-  const [recipientExpanded, setRecipientExpanded] = useState(true);
-  const [permissionExpanded, setPermissionExpanded] = useState(true);
+  const [fieldsExpanded, setFieldsExpanded] = useState(false);
+  const [recipientExpanded, setRecipientExpanded] = useState(false);
+  const [permissionExpanded, setPermissionExpanded] = useState(false);
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
   useEffect(() => {
