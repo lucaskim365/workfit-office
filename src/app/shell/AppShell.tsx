@@ -84,6 +84,13 @@ export default function AppShell() {
     if (s) setTabs((prev) => (prev.some((t) => t.url === s.url) ? prev : [...prev, s]));
   }, [activeUrl]);
 
+  // 전자결재 화면(/gw/approval) 진입 시 좌측 사이드바 메뉴 기본 닫힘 처리
+  useEffect(() => {
+    if (activeUrl === '/gw/approval') {
+      setCollapsed(true);
+    }
+  }, [activeUrl]);
+
   const activeScreen = resolveScreen(activeUrl);
   const activeModuleId = activeScreen?.moduleId ?? MENU_TREE[0].id;
   const activeModule = MENU_TREE.find((m) => m.id === activeModuleId) ?? MENU_TREE[0];

@@ -87,19 +87,17 @@ export default function ApprovalScreen() {
       <GwHead
         icon="🖋️"
         name="전자결재"
-        right={
+      />
+
+      <div className="mt-5 grid grid-cols-[160px_320px_1fr] gap-4 h-[calc(100vh-160px)] items-stretch overflow-hidden">
+        {/* 좌: 함 탭 */}
+        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-3 h-full overflow-y-auto shrink-0">
           <button
             onClick={() => setModal({})}
-            className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90"
+            className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm"
           >
             + 새 상신
           </button>
-        }
-      />
-
-      <div className="mt-5 grid grid-cols-[160px_320px_1fr] gap-4">
-        {/* 좌: 함 탭 */}
-        <div className="rounded-xl border border-border bg-panel p-2.5 flex flex-col gap-4">
           {[
             { title: '결재할 문서', boxes: ['대기'] as const, titleBg: 'bg-panel-alt text-ink2' },
             { title: '내가 올린 문서', boxes: ['상신', '반려', '임시'] as const, titleBg: 'bg-panel-alt text-ink2' },
@@ -131,7 +129,7 @@ export default function ApprovalScreen() {
         </div>
 
         {/* 중: 목록 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel">
+        <div className="overflow-hidden rounded-xl border border-border bg-panel h-full flex flex-col shrink-0">
           <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2">
             <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
           </div>
@@ -155,7 +153,7 @@ export default function ApprovalScreen() {
               })}
             </div>
           )}
-          <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
             {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
             {filteredList.map((d) => (
@@ -179,7 +177,7 @@ export default function ApprovalScreen() {
         </div>
 
         {/* 우: 상세 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel">
+        <div className="overflow-hidden rounded-xl border border-border bg-panel h-full">
           {selDoc ? (
             <DocDetail doc={selDoc} me={me} onEdit={(d) => setModal({ edit: d })} />
           ) : (
