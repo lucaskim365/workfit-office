@@ -611,8 +611,8 @@ export function ApprovalDraftModal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
       <div 
-        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
-          isFixed ? 'max-w-3xl' : 'max-w-[85vw]'
+        className={`flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
+          isFixed ? 'max-w-2xl' : 'max-w-[75vw]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
