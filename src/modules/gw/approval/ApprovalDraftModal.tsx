@@ -711,8 +711,6 @@ export function ApprovalDraftModal({
           {/* 우측 폼 입력 영역 */}
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
-          {error && <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500 animate-fade-in">{error}</div>}
-
           <Field label="제목">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
           </Field>
@@ -943,17 +941,26 @@ export function ApprovalDraftModal({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
-          <button
-            onClick={() => setShowPreview(true)}
-            disabled={busy}
-            className="rounded-lg border border-border-hi bg-panel px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
-          >
-            문서 미리보기
-          </button>
-          {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
-          <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3 bg-panel-alt/10">
+          <div className="flex-1 min-w-0 pr-4 flex items-center">
+            {error && (
+              <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11px] font-bold text-red-500 animate-fade-in truncate max-w-[320px] xl:max-w-[480px]" title={error}>
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
+            <button
+              onClick={() => setShowPreview(true)}
+              disabled={busy}
+              className="rounded-lg border border-border-hi bg-panel px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
+            >
+              문서 미리보기
+            </button>
+            {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
+            <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
+          </div>
         </div>
       </div>
 
