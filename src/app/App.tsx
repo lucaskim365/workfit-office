@@ -118,7 +118,7 @@ export default function App() {
 
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩
   useEffect(() => {
-    const savedScale = localStorage.getItem('custom_font_scale') ?? '1.125';
+    const savedScale = localStorage.getItem('custom_font_scale') ?? '1.1875';
     document.documentElement.style.setProperty('--font-scale', savedScale);
   }, []);
 

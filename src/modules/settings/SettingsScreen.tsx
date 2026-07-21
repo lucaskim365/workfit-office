@@ -16,14 +16,14 @@ export default function SettingsScreen() {
   const [notiApproval, setNotiApproval] = useState(true);
 
   // Font scale states
-  const [fontScale, setFontScale] = useState(() => localStorage.getItem('custom_font_scale') ?? '1.125');
+  const [fontScale, setFontScale] = useState(() => localStorage.getItem('custom_font_scale') ?? '1.1875');
 
   // Load theme and font scale values
   useEffect(() => {
     setHeaderBg(localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe');
     setPointColor(localStorage.getItem('custom_theme_point_color') ?? '#99bbff');
     setBtnColor(localStorage.getItem('custom_theme_btn_color') ?? '#1243b5');
-    setFontScale(localStorage.getItem('custom_font_scale') ?? '1.125');
+    setFontScale(localStorage.getItem('custom_font_scale') ?? '1.1875');
   }, []);
 
   const handleFontScaleChange = (scale: string) => {
@@ -45,8 +45,8 @@ export default function SettingsScreen() {
     setHeaderBg('#dbeafe');
     setPointColor('#99bbff');
     setBtnColor('#1243b5');
-    setFontScale('1.125');
-    document.documentElement.style.setProperty('--font-scale', '1.125');
+    setFontScale('1.1875');
+    document.documentElement.style.setProperty('--font-scale', '1.1875');
   };
 
   const headerTextColor = useMemo(() => getContrastColor(headerBg), [headerBg]);
@@ -174,10 +174,11 @@ export default function SettingsScreen() {
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-2">
                     {([
-                      { label: '작게 (100%)', scale: '1.0' },
-                      { label: '보통 (112% · 기본)', scale: '1.125' },
-                      { label: '크게 (118%)', scale: '1.1875' },
-                      { label: '아주 크게 (125%)', scale: '1.25' },
+                      { label: '매우 작게 (100%)', scale: '1.0' },
+                      { label: '작게 (112%)', scale: '1.125' },
+                      { label: '보통 (118% · 기본)', scale: '1.1875' },
+                      { label: '크게 (125%)', scale: '1.25' },
+                      { label: '매우 크게 (131%)', scale: '1.3125' },
                     ]).map((item) => (
                       <button
                         key={item.scale}
