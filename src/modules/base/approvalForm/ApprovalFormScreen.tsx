@@ -598,9 +598,9 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                       {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
                     </div>
                   </div>
-                  {(f.type === '선택' || f.type === '다중선택' || f.type === '표') && (
+                  {(f.type === '선택' || f.type === '다중선택') && (
                     <div className="mt-1 w-full">
-                      <span className="text-[9.5px] text-ink3">{f.type === '표' ? '기본 열 목록 (쉼표 구분)' : '옵션 목록 (쉼표 구분)'}</span>
+                      <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
                       <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
                     </div>
                   )}
@@ -648,8 +648,12 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
             onChangeField?.(idx, {
               options: parsed.cols,
               placeholder: JSON.stringify({
+                cols: parsed.cols,
                 colWidths: parsed.colWidths || {},
-                tableWidth: parsed.tableWidth || '100%'
+                tableWidth: parsed.tableWidth || '100%',
+                defaultRows: parsed.rows || [],
+                merges: parsed.merges || [],
+                headerValues: parsed.headerValues || {}
               })
             });
           }
@@ -781,3 +785,5 @@ function OptionsInput({ value, onChange }: { value: string[]; onChange: (val: st
     />
   );
 }
+
+
