@@ -7,6 +7,7 @@
   --color-teal-text: #1c2536;
   --color-navy-custom: #1243b5;
   --color-navy-text: #ffffff;
+  --font-scale: 1.125;
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ body {
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-ink);
+  zoom: var(--font-scale, 1.125);
 }
 
 /* 상단 공지 마퀴 */

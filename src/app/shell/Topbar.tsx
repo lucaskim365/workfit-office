@@ -295,7 +295,6 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           {userOpen && (
             <UserMenu
               onClose={() => setUserOpen(false)}
-              onThemeOpen={() => setThemeOpen(true)}
             />
           )}
         </div>

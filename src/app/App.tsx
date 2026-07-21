@@ -36,6 +36,7 @@ const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
+const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
@@ -115,6 +116,12 @@ export default function App() {
   const navigate = useNavigate();
   useNotifications(user?.id);
 
+  // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩
+  useEffect(() => {
+    const savedScale = localStorage.getItem('custom_font_scale') ?? '1.125';
+    document.documentElement.style.setProperty('--font-scale', savedScale);
+  }, []);
+
   // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동
   useEffect(() => {
     const defaultHash = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
@@ -145,6 +152,8 @@ export default function App() {
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />
+        {/* 환경설정 */}
+        <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<PlaceholderScreen />} />
       </Route>
     </Routes>

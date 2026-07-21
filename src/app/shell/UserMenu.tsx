@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 
 interface UserMenuProps {
   onClose: () => void;
-  onThemeOpen: () => void;
 }
 
 function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?: string; onClick?: () => void }) {
@@ -19,14 +18,14 @@ function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?
 }
 
 /** 계정 팝업 — 와이어프레임 app-shell.UserAccountMenu 정본. */
-export function UserMenu({ onClose, onThemeOpen }: UserMenuProps) {
+export function UserMenu({ onClose }: UserMenuProps) {
   const { signOutUser, user } = useAuth();
   const navigate = useNavigate();
   // 로그인 사용자 정보(자체 로그인). 미로그인/데모 시 기본 표기.
   const name = user?.name ?? '게스트';
   const email = user?.email ?? '-';
   const initials = name.slice(-2);
-  const roleSub = user ? `${user.dept} · ${user.position}` : '-';
+
 
   const goProfile = () => {
     onClose();
@@ -57,9 +56,15 @@ export function UserMenu({ onClose, onThemeOpen }: UserMenuProps) {
         </div>
 
         <div className="border-b border-border py-2">
-          <Item icon="👤" label="프로필 설정" sub={roleSub} onClick={goProfile} />
-          <Item icon="🎨" label="테마 설정 (Custom)" sub="메인 / 포인트 색상 변경" onClick={() => { onClose(); onThemeOpen(); }} />
-          <Item icon="🔔" label="알림 설정" sub="설비 알람 · SPC 위반 수신 중" />
+          <Item
+            icon="⚙️"
+            label="환경설정"
+            sub="환경 설정"
+            onClick={() => {
+              onClose();
+              navigate('/settings');
+            }}
+          />
           <Item icon="🌐" label="언어 / 지역" sub="한국어 (Korea)" />
         </div>
 
