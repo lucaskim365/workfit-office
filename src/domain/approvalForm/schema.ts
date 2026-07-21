@@ -37,7 +37,7 @@ export const formFieldSchema = z.object({
   /** 문서 내 필드 식별자(값 저장 키). 예약: 'body'=본문. */
   key: z.string().min(1),
   /** 표시 라벨. */
-  label: z.string().min(1, '라벨은 필수입니다'),
+  label: z.string().default(''),
   type: z.enum(FIELD_TYPES),
   required: z.boolean().default(false),
   /** 선택/다중선택 항목. */

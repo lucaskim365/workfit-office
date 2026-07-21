@@ -271,7 +271,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                 } catch (e) {}
 
                 return (
-                  <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
+                  <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
                     <colgroup>
                       {cols.map((col, cIdx) => (
                         <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
@@ -341,28 +341,40 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                     </div>
                   )}
                   {isHalf ? (
-                    <div className="border border-[#bbb] p-3 bg-white rounded-lg grid grid-cols-2 gap-6 divide-x divide-[#eee]">
-                      {block.fields.map((f, fIdx) => (
-                        <div key={f.key} className={`space-y-1 ${fIdx > 0 ? 'pl-6' : ''}`}>
-                          <div className="text-[11px] font-semibold text-[#888] mb-0.5">
-                            {f.label}
+                    <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
+                      {block.fields.map((f) => {
+                        const hasLabel = !!(f.label && f.label.trim());
+                        return (
+                          <div key={f.key} className="flex flex-col">
+                            {hasLabel && (
+                              <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
+                                {f.label}
+                              </div>
+                            )}
+                            <div className="overflow-x-auto">
+                              {renderTableOnly(f)}
+                            </div>
                           </div>
-                          <div className="overflow-x-auto">
-                            {renderTableOnly(f)}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {block.fields.length === 1 && <div />}
                     </div>
                   ) : (
-                    <div className="border border-[#bbb] p-3 bg-white rounded-lg">
-                      <div className="space-y-1">
-                        <div className="text-[11px] font-semibold text-[#888] mb-0.5">
-                          {block.fields[0].label}
-                        </div>
-                        <div className="overflow-x-auto">
-                          {renderTableOnly(block.fields[0])}
-                        </div>
+                    <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
+                      {(() => {
+                        const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
+                        return (
+                          <>
+                            {hasLabel && (
+                              <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
+                                {block.fields[0].label}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                      <div className="overflow-x-auto">
+                        {renderTableOnly(block.fields[0])}
                       </div>
                     </div>
                   )}
