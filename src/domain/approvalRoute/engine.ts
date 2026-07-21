@@ -164,6 +164,10 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       const top = chain[chain.length - 1];
       return top ? [top] : headsUp.slice(-1);
     }
+    case 'ROLE_DIVISION_HEAD': {
+      const divHead = Array.from(org.userById.values()).find((u) => u.jobTitle === '본부장');
+      return divHead ? [divHead.id] : [];
+    }
     case 'POSITION_AT_LEAST': {
       const need = asNumber(arg, 3);
       return org.managerChain(drafter.id).filter((id) => {

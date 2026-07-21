@@ -106,6 +106,12 @@ export const userRepo = {
     else memory = [valid, ...memory];
   },
 
+  async updateJobTitle(id: string, jobTitle: string): Promise<void> {
+    const existing = (await this.list()).find((u) => u.id === id);
+    if (!existing) return;
+    await this.save({ ...existing, jobTitle });
+  },
+
   async removeMany(ids: Array<string | number>): Promise<void> {
     const set = new Set(ids.map(String));
     if (isFirebaseConfigured && db) {

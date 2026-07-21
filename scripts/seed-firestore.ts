@@ -25,6 +25,7 @@ import { DEPARTMENT_SEED } from '@/data/seeds/department.seed';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { APPROVAL_RULE_SEED } from '@/data/seeds/approvalRule.seed';
 import { POSITION_SEED } from '@/data/seeds/position.seed';
+import { JOB_TITLE_SEED } from '@/data/seeds/jobTitle.seed';
 import { APPROVAL_ROUTE_SEED } from '@/data/seeds/approvalRoute.seed';
 import { APPROVAL_FORM_SEED } from '@/data/seeds/approvalForm.seed';
 import { COMPANY_INFO_SEED } from '@/data/seeds/companyInfo.seed';
@@ -71,6 +72,7 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'chatMessages', docs: CHAT_MESSAGE_SEED, id: (d) => d.id },
   { coll: 'departments', docs: DEPARTMENT_SEED, id: (d) => d.id },
   { coll: 'positions', docs: POSITION_SEED, id: (d) => d.id },
+  { coll: 'jobTitles', docs: JOB_TITLE_SEED, id: (d) => d.id },
   { coll: 'approvalDocs', docs: APPROVAL_DOC_SEED, id: (d) => d.id },
   { coll: 'approvalRules', docs: APPROVAL_RULE_SEED, id: (d) => d.id },
   { coll: 'approvalRouteRules', docs: APPROVAL_ROUTE_SEED, id: (d) => d.id },

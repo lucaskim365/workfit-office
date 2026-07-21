@@ -7,6 +7,9 @@ import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
 import { ROLE_GROUPS, USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import { usePositions } from '@/features/position/usePositions';
+import { useJobTitles } from '@/features/jobTitle/useJobTitles';
+import { useUsers } from '@/features/user/useUsers';
 
 export type { UserFormValues };
 
@@ -30,10 +33,15 @@ interface UserFormModalProps {
 }
 
 export default function UserFormModal({ open, initial, onClose, onSubmit }: UserFormModalProps) {
+  const { data: users = [] } = useUsers();
+  const { data: positions = [] } = usePositions();
+  const { data: jobTitles = [] } = useJobTitles();
+
   const {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -60,6 +68,22 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
   }, [open, initial, reset]);
 
   const submit = handleSubmit((values) => {
+    if (values.jobTitle === '본부장') {
+      const existingDivHead = users.find((u) => u.jobTitle === '본부장' && u.id !== initial?.id);
+      if (existingDivHead) {
+        setError('jobTitle', { type: 'manual', message: `본부장은 시스템에 1명만 지정할 수 있습니다. (현재: ${existingDivHead.name})` });
+        return;
+      }
+    }
+
+    if (values.jobTitle === '팀장') {
+      const existingTeamHead = users.find((u) => u.dept === values.dept && u.jobTitle === '팀장' && u.id !== initial?.id);
+      if (existingTeamHead) {
+        setError('jobTitle', { type: 'manual', message: `해당 부서에 이미 팀장이 존재합니다. (현재: ${existingTeamHead.name})` });
+        return;
+      }
+    }
+
     onSubmit(values, initial?.id);
     onClose();
   });
@@ -88,10 +112,18 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
           <TextField {...register('dept')} invalid={!!errors.dept} placeholder="생산1팀" />
         </Field>
         <Field label="직급" required error={errors.position?.message}>
-          <TextField {...register('position')} invalid={!!errors.position} placeholder="과장" />
+          <SelectField
+            {...register('position')}
+            invalid={!!errors.position}
+            options={[{ value: '', label: '직급 선택' }, ...positions.map((p) => ({ value: p.name, label: p.name }))]}
+          />
         </Field>
         <Field label="직책" error={errors.jobTitle?.message}>
-          <TextField {...register('jobTitle')} invalid={!!errors.jobTitle} placeholder="팀장 (선택)" />
+          <SelectField
+            {...register('jobTitle')}
+            invalid={!!errors.jobTitle}
+            options={[{ value: '', label: '직책 선택 (미지정)' }, ...jobTitles.map((j) => ({ value: j.name, label: j.name }))]}
+          />
         </Field>
         <Field label="권한그룹" required error={errors.roleGroup?.message}>
           <SelectField

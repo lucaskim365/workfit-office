@@ -20,6 +20,7 @@ export const RESOLVERS = [
   'PARENT_DEPT_HEAD', // 상위 level 단계 부서의 부서장(arg=level)
   'ROLE_FACTORY_HEAD', // 공장장 = 상위 부서 중 deptType='공장' 최상위의 부서장
   'ROLE_CEO', // 대표 = 조직 최상위
+  'ROLE_DIVISION_HEAD', // 본부장
   'POSITION_AT_LEAST', // rank arg 이상인 최초 상급자(arg=rank)
   'SPECIFIC_USER', // 고정 지정(arg=userId)
   'SPECIFIC_DEPT_HEAD', // 특정 부서장(arg=deptId)

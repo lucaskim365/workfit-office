@@ -49,7 +49,7 @@ service cloud.firestore {
         'authRoles', 'backupPolicies', 'companySites', 'companyInfo', 'interfaces', 'systemLogs', 'sysAdmins',
         'chatRooms', 'chatMessages',
         'departments', 'approvalDocs', 'approvalRules',
-        'positions', 'approvalRouteRules', 'approvalForms', 'approvalFolders'
+        'positions', 'jobTitles', 'approvalRouteRules', 'approvalForms', 'approvalFolders', 'notifications'
       ];
     }
 

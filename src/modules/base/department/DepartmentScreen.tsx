@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
-import { useUsers } from '@/features/user/useUsers';
+import { useUsers, useUpdateUserJobTitle } from '@/features/user/useUsers';
+import { usePositions } from '@/features/position/usePositions';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
 
 /**
@@ -15,8 +16,10 @@ const TYPE_TONE: Record<string, string> = { 본사: 'text-blue', 공장: 'text-t
 export default function DepartmentScreen() {
   const { data: rows = [], isLoading } = useDepartments();
   const { data: users = [] } = useUsers();
+  const { data: positions = [] } = usePositions();
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
+  const updateJobTitle = useUpdateUserJobTitle();
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
 
@@ -44,15 +47,70 @@ export default function DepartmentScreen() {
     return `D${String(n).padStart(3, '0')}`;
   };
 
+  const getRank = (userId: string) => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return 9;
+    const pos = positions.find((p) => p.name === user.position);
+    return pos ? pos.rank : 9;
+  };
+
   const save = async () => {
     if (!sel) return;
     if (!sel.name.trim()) return setMsg('부서명을 입력하세요.');
     if (sel.parentId === sel.id && sel.id) return setMsg('자기 자신을 상위로 지정할 수 없습니다.');
-    await upsert.mutateAsync({ ...sel, id: sel.id || nextId() });
+
+    const oldDept = rows.find((d) => d.id === sel.id);
+    const oldHeadUserId = oldDept?.headUserId;
+
+    const targetId = sel.id || nextId();
+    await upsert.mutateAsync({ ...sel, id: targetId });
+
+    if (sel.headUserId) {
+      const rank = getRank(sel.headUserId);
+      const newJob = rank >= 3 ? '팀장' : '임원';
+      await updateJobTitle.mutateAsync({ id: sel.headUserId, jobTitle: newJob });
+
+      if (newJob === '팀장') {
+        const deptUser = users.find((u) => u.id === sel.headUserId);
+        if (deptUser) {
+          const others = users.filter((u) => u.dept === deptUser.dept && u.jobTitle === '팀장' && u.id !== sel.headUserId);
+          for (const other of others) {
+            await updateJobTitle.mutateAsync({ id: other.id, jobTitle: '팀원' });
+          }
+        }
+      }
+    }
+
+    if (oldHeadUserId && oldHeadUserId !== sel.headUserId) {
+      const isStillHead = rows.some((d) => d.id !== sel.id && d.headUserId === oldHeadUserId);
+      if (!isStillHead) {
+        const rank = getRank(oldHeadUserId);
+        const newJob = rank >= 3 ? '팀원' : '임원';
+        await updateJobTitle.mutateAsync({ id: oldHeadUserId, jobTitle: newJob });
+      }
+    }
+
     setMsg('저장되었습니다.');
     setSel(null);
   };
-  const del = async (id: string) => { await remove.mutateAsync(id); if (sel?.id === id) setSel(null); };
+
+  const del = async (id: string) => {
+    const dept = rows.find((d) => d.id === id);
+    const headUserId = dept?.headUserId;
+
+    await remove.mutateAsync(id);
+
+    if (headUserId) {
+      const isStillHead = rows.some((d) => d.id !== id && d.headUserId === headUserId);
+      if (!isStillHead) {
+        const rank = getRank(headUserId);
+        const newJob = rank >= 3 ? '팀원' : '임원';
+        await updateJobTitle.mutateAsync({ id: headUserId, jobTitle: newJob });
+      }
+    }
+
+    if (sel?.id === id) setSel(null);
+  };
 
   const parentOptions = rows.filter((d) => d.id !== sel?.id);
 
