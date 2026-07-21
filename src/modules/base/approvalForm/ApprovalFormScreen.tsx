@@ -719,11 +719,22 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
 
   return (
     <div className="rounded-lg border border-teal/40 bg-teal-soft/20 p-2.5">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-[11px] font-bold text-teal">🔎 미리보기</span>
-        {(['폼', '인쇄'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-[11px] font-semibold ${tab === t ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'}`}>{t === '폼' ? '상신 폼' : '인쇄 문서'}</button>
-        ))}
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-teal">🔎 미리보기</span>
+          {(['폼', '인쇄'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-[11px] font-semibold ${tab === t ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'}`}>{t === '폼' ? '상신 폼' : '인쇄 문서'}</button>
+          ))}
+        </div>
+        {tab === '인쇄' && (
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded bg-teal-soft text-teal border border-teal/20 px-2 py-0.5 text-[10px] font-bold hover:bg-teal hover:text-white transition-colors"
+          >
+            🖨️ 실제 인쇄 미리보기
+          </button>
+        )}
       </div>
 
       {tab === '폼' ? (
@@ -778,8 +789,10 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
           </div>
         </div>
       ) : (
-        <div className="max-h-[520px] overflow-auto rounded-lg bg-white p-2">
-          <ApprovalDocumentView doc={sampleDoc} formOverride={form} />
+        <div className="max-h-[520px] overflow-auto rounded-lg bg-panel-alt/50 p-4 flex justify-center">
+          <div className="w-[800px] shrink-0 min-h-[297mm] bg-white p-8 shadow-lg border border-border/60 rounded-sm">
+            <ApprovalDocumentView doc={sampleDoc} formOverride={form} />
+          </div>
         </div>
       )}
     </div>

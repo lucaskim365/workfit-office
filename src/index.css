@@ -139,9 +139,13 @@ body {
    visibility 트릭으로 레이아웃을 보존하며 문서만 노출.
    ────────────────────────────────────────────────────────────── */
 @media print {
-  html, body {
+  /* 모든 부모 컨테이너의 높이, 스크롤바, 레이아웃 절대위치 제한을 제거하여 여러 페이지 인쇄 보장 */
+  html, body, #root, div, main, section, article {
     height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     overflow: visible !important;
+    position: static !important;
   }
 
   body * {
@@ -150,17 +154,28 @@ body {
 
   .approval-print,
   .approval-print * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
   .approval-print {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
     padding: 0 !important;
     margin: 0 !important;
     box-shadow: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* 테이블 내부 스크롤바 및 잘림 현상 제거 */
+  .overflow-x-auto, .overflow-auto, [class*="overflow-"] {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    max-height: none !important;
   }
 
   .print-avoid-break {

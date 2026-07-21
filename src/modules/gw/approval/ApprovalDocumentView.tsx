@@ -228,7 +228,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
             if (block.type === 'table-field') {
               const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
 
-              const renderTable = (f: FormField) => {
+              const renderTableOnly = (f: FormField) => {
                 const val = doc.fieldValues[f.key];
                 const defaultCols = ['구분', '항목', '내용'];
                 const defaultRows: Array<Record<string, string>> = [
@@ -271,72 +271,65 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                 } catch (e) {}
 
                 return (
-                  <div key={f.key} className="space-y-1">
-                    <div className="text-[11px] font-semibold text-[#888] mb-0.5">
-                      {f.label}
-                    </div>
-                    <div className="overflow-x-auto border border-[#bbb] p-2 bg-white">
-                      <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
-                        <colgroup>
-                          {cols.map((col, cIdx) => (
-                            <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
-                          ))}
-                        </colgroup>
-                        <tbody>
-                          {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
-                          <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                            {cols.map((col, cIdx) => {
-                              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
-                              if (isMerged && !isStart) return null;
-                              return (
-                                <th
-                                  key={col}
-                                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                  colSpan={colSpan > 1 ? colSpan : undefined}
-                                  className="p-2 border border-[#eee] font-bold text-[#555]"
-                                >
-                                  {headerValues[col] !== undefined ? headerValues[col] : col}
-                                </th>
-                              );
-                            })}
-                          </tr>
-                          {rows.map((row, rIdx) => (
-                            <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                              {cols.map((col, cIdx) => {
-                                const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
-                                const cellVal = row[col] ?? '';
-                                const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
-                                  ? Number(cellVal.replace(/,/g, '')).toLocaleString()
-                                  : cellVal;
+                  <table className="table-fixed border-collapse text-left text-[11.5px] border border-[#eee]" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
+                    <colgroup>
+                      {cols.map((col, cIdx) => (
+                        <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                      ))}
+                    </colgroup>
+                    <tbody>
+                      {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
+                      <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
+                        {cols.map((col, cIdx) => {
+                          const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
+                          if (isMerged && !isStart) return null;
+                          return (
+                            <th
+                              key={col}
+                              rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                              colSpan={colSpan > 1 ? colSpan : undefined}
+                              className="p-2 border border-[#eee] font-bold text-[#555]"
+                            >
+                              {headerValues[col] !== undefined ? headerValues[col] : col}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                      {rows.map((row, rIdx) => (
+                        <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
+                          {cols.map((col, cIdx) => {
+                            const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                            const cellVal = row[col] ?? '';
+                            const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                              ? Number(cellVal.replace(/,/g, '')).toLocaleString()
+                              : cellVal;
 
-                                const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
+                            const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
 
-                                if (isMerged && !isStart) return null;
+                            if (isMerged && !isStart) return null;
 
-                                return (
-                                  <td
-                                    key={col}
-                                    rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                    colSpan={colSpan > 1 ? colSpan : undefined}
-                                    className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}
-                                  >
-                                    {displayVal || '—'}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                          {rows.length === 0 && (
-                            <tr>
-                              <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
-                                등록된 데이터가 없습니다.
+                            return (
+                              <td
+                                key={col}
+                                rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                                colSpan={colSpan > 1 ? colSpan : undefined}
+                                className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}
+                              >
+                                {displayVal || '—'}
                               </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                      {rows.length === 0 && (
+                        <tr>
+                          <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
+                            등록된 데이터가 없습니다.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 );
               };
 
@@ -348,12 +341,30 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                     </div>
                   )}
                   {isHalf ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      {block.fields.map((f) => renderTable(f))}
+                    <div className="border border-[#bbb] p-3 bg-white rounded-lg grid grid-cols-2 gap-6 divide-x divide-[#eee]">
+                      {block.fields.map((f, fIdx) => (
+                        <div key={f.key} className={`space-y-1 ${fIdx > 0 ? 'pl-6' : ''}`}>
+                          <div className="text-[11px] font-semibold text-[#888] mb-0.5">
+                            {f.label}
+                          </div>
+                          <div className="overflow-x-auto">
+                            {renderTableOnly(f)}
+                          </div>
+                        </div>
+                      ))}
                       {block.fields.length === 1 && <div />}
                     </div>
                   ) : (
-                    renderTable(block.fields[0])
+                    <div className="border border-[#bbb] p-3 bg-white rounded-lg">
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold text-[#888] mb-0.5">
+                          {block.fields[0].label}
+                        </div>
+                        <div className="overflow-x-auto">
+                          {renderTableOnly(block.fields[0])}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
