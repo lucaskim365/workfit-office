@@ -147,7 +147,59 @@ export function ApprovalDraftModal({
 
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
 
-  const amountNum = isAmount && amount.trim() ? Number(amount.replace(/[^0-9]/g, '')) : null;
+  const tableAmountNum = useMemo(() => {
+    for (const f of form?.fields ?? []) {
+      if (f.type === '표' && f.placeholder) {
+        try {
+          const cfg = JSON.parse(f.placeholder);
+          const val = values[f.key];
+          if (val && typeof val === 'string') {
+            const parsedVal = JSON.parse(val);
+            if (parsedVal && parsedVal.rows) {
+              const sCell = parsedVal.sumCell;
+              const aCells: Array<{ rIdx: number; col: string }> = parsedVal.amountCells 
+                ? parsedVal.amountCells
+                : (parsedVal.amountCell ? [parsedVal.amountCell] : []);
+
+              // 1) 만약 합산 결과 표시 셀(sumCell)이 있다면 해당 셀 값을 대표 금액으로 삼음
+              if (sCell) {
+                const { rIdx, col } = sCell;
+                if (parsedVal.rows[rIdx]) {
+                  const cellVal = parsedVal.rows[rIdx][col];
+                  if (cellVal) {
+                    return Number(String(cellVal).replace(/[^0-9]/g, '')) || null;
+                  }
+                }
+              }
+
+              // 2) 합산 결과 셀이 없으면, '금액' 포함 열 및 수동 지정된 amountCells 금액의 총합을 구함
+              let sum = 0;
+              let hasValue = false;
+              parsedVal.rows.forEach((row: Record<string, string>, rIdx: number) => {
+                cfg.cols.forEach((col: string) => {
+                  const isAutoAmt = col.includes('금액');
+                  const isManualAmt = aCells.some((c) => c.rIdx === rIdx && c.col === col);
+                  if (isAutoAmt || isManualAmt) {
+                    const cellVal = row[col];
+                    if (cellVal) {
+                      sum += Number(String(cellVal).replace(/[^0-9]/g, '')) || 0;
+                      hasValue = true;
+                    }
+                  }
+                });
+              });
+              if (hasValue) return sum;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return null;
+  }, [form, values]);
+
+  const amountNum = isAmount && amount.trim() 
+    ? Number(amount.replace(/[^0-9]/g, '')) 
+    : tableAmountNum;
 
   // 파일 업로드 핸들러 (Firebase Storage 연동 및 로컬 Mock 지원)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

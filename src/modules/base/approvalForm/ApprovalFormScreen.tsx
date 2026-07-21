@@ -266,6 +266,9 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   const org = useOrgTree();
   const { depts = [], users = [] } = org;
   const [selTab, setSelTab] = useState('공통');
+  const [fieldsExpanded, setFieldsExpanded] = useState(true);
+  const [recipientExpanded, setRecipientExpanded] = useState(true);
+  const [permissionExpanded, setPermissionExpanded] = useState(true);
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
   useEffect(() => {
@@ -321,295 +324,316 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
       </div>
 
-      {/* 기본 수신(시행)처 설정 - 일반 입력 필드와 차별화된 독자적인 카드 레이아웃 */}
-      <div className="mt-4 rounded-xl border border-dashed border-teal/40 bg-teal-soft/10 p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-[16px]">📨</span>
-          <div>
-            <div className="text-[13px] font-bold text-teal">기본 수신(시행)처 설정</div>
-            <div className="text-[10.5px] text-ink3">본 서식으로 기안된 문서가 최종 종결(완료)되면 자동으로 문서가 도달할 기본 수신처를 지정합니다.</div>
-          </div>
-        </div>
+      {/* 기본 수신(시행)처 설정 */}
+      <div className="mt-4 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={() => setRecipientExpanded(!recipientExpanded)}
+          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+        >
+          <span>📨 기본 수신(시행)처 설정</span>
+          <span className="text-[11px] text-teal font-semibold">
+            {recipientExpanded ? '접기 ▲' : '펼치기 ▼'}
+          </span>
+        </button>
 
-        <div className="grid grid-cols-12 gap-3 items-center">
-          <div className="col-span-4 flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2">
-            <input
-              type="checkbox"
-              id="recipientDrafter"
-              checked={form.recipientDrafter || false}
-              onChange={(e) => set({ recipientDrafter: e.target.checked })}
-              className="h-4 w-4 rounded border-border-hi text-teal focus:ring-teal"
-            />
-            <label htmlFor="recipientDrafter" className="text-[12.5px] font-semibold text-ink cursor-pointer select-none">
-              👤 기안자 본인을 기본 수신처로 지정
-            </label>
-          </div>
+        {recipientExpanded && (
+          <div className="mt-3 grid grid-cols-12 gap-3 items-center border border-dashed border-teal/40 bg-teal-soft/10 p-4 rounded-xl">
+            <div className="col-span-4 flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2">
+              <input
+                type="checkbox"
+                id="recipientDrafter"
+                checked={form.recipientDrafter || false}
+                onChange={(e) => set({ recipientDrafter: e.target.checked })}
+                className="h-4 w-4 rounded border-border-hi text-teal focus:ring-teal"
+              />
+              <label htmlFor="recipientDrafter" className="text-[12.5px] font-semibold text-ink cursor-pointer select-none">
+                👤 기안자 본인을 기본 수신처로 지정
+              </label>
+            </div>
 
-          <div className="col-span-4">
-            <F label="🏢 기본 수신 부서">
-              <select
-                value={form.recipientDeptId || ''}
-                onChange={(e) => set({ recipientDeptId: e.target.value || null })}
-                className={`${inp}`}
-              >
-                <option value="">(없음)</option>
-                {depts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </F>
-          </div>
+            <div className="col-span-4">
+              <F label="🏢 기본 수신 부서">
+                <select
+                  value={form.recipientDeptId || ''}
+                  onChange={(e) => set({ recipientDeptId: e.target.value || null })}
+                  className={`${inp}`}
+                >
+                  <option value="">(없음)</option>
+                  {depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </F>
+            </div>
 
-          <div className="col-span-4">
-            <F label="👤 기본 수신 사원">
-              <select
-                value={form.recipientUserId || ''}
-                onChange={(e) => set({ recipientUserId: e.target.value || null })}
-                className={`${inp}`}
-              >
-                <option value="">(없음)</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} {u.position} ({u.dept})
-                  </option>
-                ))}
-              </select>
-            </F>
+            <div className="col-span-4">
+              <F label="👤 기본 수신 사원">
+                <select
+                  value={form.recipientUserId || ''}
+                  onChange={(e) => set({ recipientUserId: e.target.value || null })}
+                  className={`${inp}`}
+                >
+                  <option value="">(없음)</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} {u.position} ({u.dept})
+                    </option>
+                  ))}
+                </select>
+              </F>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 기안자(Drafter) 권한 제한 설정 */}
-      <div className="mt-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-[16px]">🔒</span>
-          <div>
-            <div className="text-[13px] font-bold text-amber-600">기안자 권한 제한 설정</div>
-            <div className="text-[10.5px] text-ink3">본 서식으로 문서를 기안할 수 있는 직급 범위 및 부서를 제한합니다. (미설정 시 전체 허용)</div>
-          </div>
-        </div>
+      <div className="mt-4 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={() => setPermissionExpanded(!permissionExpanded)}
+          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-amber-600 select-none"
+        >
+          <span>🔒 기안자 권한 제한 설정</span>
+          <span className="text-[11px] text-amber-600 font-semibold">
+            {permissionExpanded ? '접기 ▲' : '펼치기 ▼'}
+          </span>
+        </button>
 
-        <div className="grid grid-cols-12 gap-3 items-start">
-          <div className="col-span-4">
-            <F label="최소 기안 직책 (이하)">
-              <select
-                value={form.allowedPositionFromRank ?? ''}
-                onChange={(e) => set({ allowedPositionFromRank: e.target.value ? Number(e.target.value) : null })}
-                className={`${inp}`}
-              >
-                <option value="">(제한 없음 - 팀원까지 가능)</option>
-                <option value="9">팀원</option>
-                <option value="4">팀장</option>
-                <option value="2">본부장</option>
-                <option value="1">대표</option>
-              </select>
-            </F>
-          </div>
-
-          <div className="col-span-4">
-            <F label="최대 기안 직책 (이상)">
-              <select
-                value={form.allowedPositionToRank ?? ''}
-                onChange={(e) => set({ allowedPositionToRank: e.target.value ? Number(e.target.value) : null })}
-                className={`${inp}`}
-              >
-                <option value="">(제한 없음 - 대표까지 가능)</option>
-                <option value="9">팀원</option>
-                <option value="4">팀장</option>
-                <option value="2">본부장</option>
-                <option value="1">대표</option>
-              </select>
-            </F>
-          </div>
-
-          <div className="col-span-4">
-            <label className="block text-[10.5px] font-bold text-ink3 mb-1">🏢 기안 허용 부서 지정</label>
-            <div className="max-h-28 overflow-y-auto border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
-              {depts.map((d) => {
-                const isChecked = (form.allowedDeptIds ?? []).includes(d.id);
-                return (
-                  <label key={d.id} className="flex items-center gap-2 text-[11.5px] cursor-pointer text-ink hover:text-teal">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        const current = form.allowedDeptIds ?? [];
-                        const next = e.target.checked
-                          ? [...current, d.id]
-                          : current.filter((id) => id !== d.id);
-                        set({ allowedDeptIds: next });
-                      }}
-                      className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
-                    />
-                    <span>{d.name}</span>
-                  </label>
-                );
-              })}
-              {depts.length === 0 && <div className="text-[11px] text-ink3 py-2 text-center">등록된 부서가 없습니다.</div>}
+        {permissionExpanded && (
+          <div className="mt-3 grid grid-cols-12 gap-3 items-start border border-dashed border-amber-500/40 bg-amber-500/5 p-4 rounded-xl">
+            <div className="col-span-4">
+              <F label="최소 기안 직책 (이하)">
+                <select
+                  value={form.allowedPositionFromRank ?? ''}
+                  onChange={(e) => set({ allowedPositionFromRank: e.target.value ? Number(e.target.value) : null })}
+                  className={`${inp}`}
+                >
+                  <option value="">(제한 없음 - 팀원까지 가능)</option>
+                  <option value="9">팀원</option>
+                  <option value="4">팀장</option>
+                  <option value="2">본부장</option>
+                  <option value="1">대표</option>
+                </select>
+              </F>
             </div>
-            <div className="text-[9.5px] text-ink3 mt-1">체크가 모두 해제되어 있으면 모든 부서에서 기안이 가능합니다.</div>
+
+            <div className="col-span-4">
+              <F label="최대 기안 직책 (이상)">
+                <select
+                  value={form.allowedPositionToRank ?? ''}
+                  onChange={(e) => set({ allowedPositionToRank: e.target.value ? Number(e.target.value) : null })}
+                  className={`${inp}`}
+                >
+                  <option value="">(제한 없음 - 대표까지 가능)</option>
+                  <option value="9">팀원</option>
+                  <option value="4">팀장</option>
+                  <option value="2">본부장</option>
+                  <option value="1">대표</option>
+                </select>
+              </F>
+            </div>
+
+            <div className="col-span-4">
+              <label className="block text-[10.5px] font-bold text-ink3 mb-1">🏢 기안 허용 부서 지정</label>
+              <div className="max-h-28 overflow-y-auto border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
+                {depts.map((d) => {
+                  const isChecked = (form.allowedDeptIds ?? []).includes(d.id);
+                  return (
+                    <label key={d.id} className="flex items-center gap-2 text-[11.5px] cursor-pointer text-ink hover:text-teal">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const current = form.allowedDeptIds ?? [];
+                          const next = e.target.checked
+                            ? [...current, d.id]
+                            : current.filter((id) => id !== d.id);
+                          set({ allowedDeptIds: next });
+                        }}
+                        className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
+                      />
+                      <span>{d.name}</span>
+                    </label>
+                  );
+                })}
+                {depts.length === 0 && <div className="text-[11px] text-ink3 py-2 text-center">등록된 부서가 없습니다.</div>}
+              </div>
+              <div className="text-[9.5px] text-ink3 mt-1">체크가 모두 해제되어 있으면 모든 부서에서 기안이 가능합니다.</div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 필드 빌더 */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-[11px] font-bold text-ink2">입력 필드</div>
-        </div>
+      <div className="mt-4 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={() => setFieldsExpanded(!fieldsExpanded)}
+          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+        >
+          <span>📋 입력 필드 설정 ({form.fields.length}개)</span>
+          <span className="text-[11px] text-teal font-semibold">
+            {fieldsExpanded ? '접기 ▲' : '펼치기 ▼'}
+          </span>
+        </button>
 
-        {tabSelectorField && (
-          <div className="mb-3 flex flex-wrap gap-1 border-b border-border pb-1">
-            {['공통', ...tabSelectorField.options].map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setSelTab(tab)}
-                className={`rounded-t-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                  selTab === tab
-                    ? 'bg-teal text-white'
-                    : 'bg-panel-alt text-ink2 hover:bg-border/40'
-                }`}
-              >
-                {tab === '공통' ? '🏢 공통 양식' : `📌 ${tab}`}
-              </button>
-            ))}
+        {fieldsExpanded && (
+          <div className="mt-3 space-y-3">
+            {tabSelectorField && (
+              <div className="mb-3 flex flex-wrap gap-1 border-b border-border pb-1">
+                {['공통', ...tabSelectorField.options].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setSelTab(tab)}
+                    className={`rounded-t-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      selTab === tab
+                        ? 'bg-teal text-white'
+                        : 'bg-panel-alt text-ink2 hover:bg-border/40'
+                    }`}
+                  >
+                    {tab === '공통' ? '🏢 공통 양식' : `📌 ${tab}`}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {form.fields
+                .map((f, i) => ({ f, i }))
+                .filter(({ f }) => {
+                  if (selTab === '공통') return !f.visibleIf;
+                  // 선택지 탭: 공통 필드 + 해당 탭 전용 필드 모두 표시
+                  return !f.visibleIf || f.visibleIf === `${tabSelectorField?.key}:${selTab}`;
+                })
+                .map(({ f, i }) => {
+                  const isCommonInTab = selTab !== '공통' && !f.visibleIf;
+                  // 공통 필드를 선택지 탭에서 볼 때는 tabOverrides에서 effective 값 읽기
+                  const override: { width?: 'full' | 'half'; section?: string } =
+                    isCommonInTab ? (f.tabOverrides?.[selTab] ?? {}) : {};
+                  const effectiveWidth = (override.width ?? f.width) as 'full' | 'half';
+                  const effectiveSection = override.section ?? f.section;
+
+                  const setTabOverride = (patch: { width?: 'full' | 'half'; section?: string }) => {
+                    const newOverrides = {
+                      ...(f.tabOverrides ?? {}),
+                      [selTab]: { ...(f.tabOverrides?.[selTab] ?? {}), ...patch },
+                    };
+                    setField(i, { tabOverrides: newOverrides });
+                  };
+
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-lg border px-2 py-1.5 ${
+                        isCommonInTab
+                          ? 'border-border/50 bg-panel/60'
+                          : 'border-border bg-panel-alt'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
+                        {isCommonInTab && (
+                          <span className="rounded bg-border px-1 py-0.5 text-[9px] font-bold text-ink3">공통</span>
+                        )}
+                        <input
+                          value={f.label}
+                          onChange={(e) => setField(i, { label: e.target.value })}
+                          placeholder="라벨"
+                          disabled={isCommonInTab}
+                          className={`w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        />
+                        <input
+                          value={f.key}
+                          onChange={(e) => setField(i, { key: e.target.value })}
+                          placeholder="key"
+                          disabled={isCommonInTab}
+                          className={`w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        />
+                        <select
+                          value={f.type}
+                          onChange={(e) => setField(i, { type: e.target.value as FieldType })}
+                          disabled={isCommonInTab}
+                          className={`rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        {/* width: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
+                        <select
+                          value={effectiveWidth}
+                          onChange={(e) => {
+                            const val = e.target.value as 'half' | 'full';
+                            if (isCommonInTab) setTabOverride({ width: val });
+                            else setField(i, { width: val });
+                          }}
+                          className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                        >
+                          <option value="full">전체</option><option value="half">2열</option>
+                        </select>
+                        {/* section: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
+                        <input
+                          value={effectiveSection}
+                          onChange={(e) => {
+                            if (isCommonInTab) setTabOverride({ section: e.target.value });
+                            else setField(i, { section: e.target.value });
+                          }}
+                          placeholder="섹션"
+                          className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                        />
+                        {!isCommonInTab && (
+                          <select
+                            value={f.visibleIf ?? ''}
+                            onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
+                            className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                          >
+                            <option value="">언제나 노출</option>
+                            {form.fields
+                              .filter((other) => other.type === '선택' && other.key && other.label)
+                              .flatMap((other) =>
+                                other.options.map((opt) => (
+                                  <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
+                                    [{other.label}] "{opt}" 일 때
+                                  </option>
+                                ))
+                              )}
+                          </select>
+                        )}
+                        <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
+                        {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
+                        {f.type === '선택' && (
+                          <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={f.isTabSelector ?? false}
+                              onChange={(e) => setField(i, { isTabSelector: e.target.checked })}
+                              className="h-3 w-3"
+                            />
+                            탭분할
+                          </label>
+                        )}
+                        <div className="ml-auto flex items-center gap-1">
+                          {!isCommonInTab && <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>}
+                          {!isCommonInTab && <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>}
+                          {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
+                        </div>
+                      </div>
+                      {(f.type === '선택' || f.type === '다중선택') && (
+                        <div className="mt-1 w-full">
+                          <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
+                          <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+            <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
+            <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>
           </div>
         )}
-
-        <div className="space-y-1.5">
-          {form.fields
-            .map((f, i) => ({ f, i }))
-            .filter(({ f }) => {
-              if (selTab === '공통') return !f.visibleIf;
-              // 선택지 탭: 공통 필드 + 해당 탭 전용 필드 모두 표시
-              return !f.visibleIf || f.visibleIf === `${tabSelectorField?.key}:${selTab}`;
-            })
-            .map(({ f, i }) => {
-              const isCommonInTab = selTab !== '공통' && !f.visibleIf;
-              // 공통 필드를 선택지 탭에서 볼 때는 tabOverrides에서 effective 값 읽기
-              const override: { width?: 'full' | 'half'; section?: string } =
-                isCommonInTab ? (f.tabOverrides?.[selTab] ?? {}) : {};
-              const effectiveWidth = (override.width ?? f.width) as 'full' | 'half';
-              const effectiveSection = override.section ?? f.section;
-
-              const setTabOverride = (patch: { width?: 'full' | 'half'; section?: string }) => {
-                const newOverrides = {
-                  ...(f.tabOverrides ?? {}),
-                  [selTab]: { ...(f.tabOverrides?.[selTab] ?? {}), ...patch },
-                };
-                setField(i, { tabOverrides: newOverrides });
-              };
-
-              return (
-                <div
-                  key={i}
-                  className={`rounded-lg border px-2 py-1.5 ${
-                    isCommonInTab
-                      ? 'border-border/50 bg-panel/60'
-                      : 'border-border bg-panel-alt'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-                    {isCommonInTab && (
-                      <span className="rounded bg-border px-1 py-0.5 text-[9px] font-bold text-ink3">공통</span>
-                    )}
-                    <input
-                      value={f.label}
-                      onChange={(e) => setField(i, { label: e.target.value })}
-                      placeholder="라벨"
-                      disabled={isCommonInTab}
-                      className={`w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    />
-                    <input
-                      value={f.key}
-                      onChange={(e) => setField(i, { key: e.target.value })}
-                      placeholder="key"
-                      disabled={isCommonInTab}
-                      className={`w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    />
-                    <select
-                      value={f.type}
-                      onChange={(e) => setField(i, { type: e.target.value as FieldType })}
-                      disabled={isCommonInTab}
-                      className={`rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    {/* width: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
-                    <select
-                      value={effectiveWidth}
-                      onChange={(e) => {
-                        const val = e.target.value as 'half' | 'full';
-                        if (isCommonInTab) setTabOverride({ width: val });
-                        else setField(i, { width: val });
-                      }}
-                      className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                    >
-                      <option value="full">전체</option><option value="half">2열</option>
-                    </select>
-                    {/* section: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
-                    <input
-                      value={effectiveSection}
-                      onChange={(e) => {
-                        if (isCommonInTab) setTabOverride({ section: e.target.value });
-                        else setField(i, { section: e.target.value });
-                      }}
-                      placeholder="섹션"
-                      className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                    />
-                    {!isCommonInTab && (
-                      <select
-                        value={f.visibleIf ?? ''}
-                        onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
-                        className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                      >
-                        <option value="">언제나 노출</option>
-                        {form.fields
-                          .filter((other) => other.type === '선택' && other.key && other.label)
-                          .flatMap((other) =>
-                            other.options.map((opt) => (
-                              <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
-                                [{other.label}] "{opt}" 일 때
-                              </option>
-                            ))
-                          )}
-                      </select>
-                    )}
-                    <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
-                    {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
-                    {f.type === '선택' && (
-                      <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={f.isTabSelector ?? false}
-                          onChange={(e) => setField(i, { isTabSelector: e.target.checked })}
-                          className="h-3 w-3"
-                        />
-                        탭분할
-                      </label>
-                    )}
-                    <div className="ml-auto flex items-center gap-1">
-                      {!isCommonInTab && <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>}
-                      {!isCommonInTab && <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>}
-                      {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
-                    </div>
-                  </div>
-                  {(f.type === '선택' || f.type === '다중선택') && (
-                    <div className="mt-1 w-full">
-                      <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
-                      <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-        </div>
-        <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
-        <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>
       </div>
 
       <FormPreview form={form} onChangeField={setField} />
@@ -653,7 +677,9 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
                 tableWidth: parsed.tableWidth || '100%',
                 defaultRows: parsed.rows || [],
                 merges: parsed.merges || [],
-                headerValues: parsed.headerValues || {}
+                headerValues: parsed.headerValues || {},
+                amountCells: parsed.amountCells || [],
+                sumCell: parsed.sumCell || null
               })
             });
           }

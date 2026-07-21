@@ -379,10 +379,13 @@ export function DynamicField({
       ];
 
       // headerValues: 헤더 행의 셀 표시 텍스트 (컬럼 내부 key와 별개로 저장)
-      const { cols, rows, tableWidth, colWidths, merges, headerValues } = (() => {
+      const { cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell } = (() => {
         try {
           if (v) {
             const parsedData = JSON.parse(v as string);
+            const cells = parsedData.amountCells 
+              ? (parsedData.amountCells as Array<{ rIdx: number; col: string }>)
+              : (parsedData.amountCell ? [parsedData.amountCell as { rIdx: number; col: string }] : []);
             return {
               cols: (parsedData.cols ?? defaultCols) as string[],
               rows: (parsedData.rows ?? defaultRows) as Array<Record<string, string>>,
@@ -390,9 +393,14 @@ export function DynamicField({
               colWidths: (parsedData.colWidths ?? {}) as Record<string, string>,
               merges: (parsedData.merges ?? []) as CellMerge[],
               headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
+              amountCells: cells,
+              sumCell: parsedData.sumCell as { rIdx: number; col: string } | null,
             };
           } else if (field.placeholder) {
             const parsedData = JSON.parse(field.placeholder);
+            const cells = parsedData.amountCells 
+              ? (parsedData.amountCells as Array<{ rIdx: number; col: string }>)
+              : (parsedData.amountCell ? [parsedData.amountCell as { rIdx: number; col: string }] : []);
             return {
               cols: (parsedData.cols ?? parsedData.options ?? defaultCols) as string[],
               rows: (parsedData.defaultRows ?? defaultRows) as Array<Record<string, string>>,
@@ -400,10 +408,12 @@ export function DynamicField({
               colWidths: (parsedData.colWidths ?? {}) as Record<string, string>,
               merges: (parsedData.merges ?? []) as CellMerge[],
               headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
+              amountCells: cells,
+              sumCell: parsedData.sumCell as { rIdx: number; col: string } | null,
             };
           }
         } catch (e) {}
-        return { cols: defaultCols, rows: defaultRows, tableWidth: '100%', colWidths: {} as Record<string, string>, merges: [] as CellMerge[], headerValues: {} as Record<string, string> };
+        return { cols: defaultCols, rows: defaultRows, tableWidth: '100%', colWidths: {} as Record<string, string>, merges: [] as CellMerge[], headerValues: {} as Record<string, string>, amountCells: [] as Array<{ rIdx: number; col: string }>, sumCell: null };
       })();
 
       const getMergeInfo = (rIdx: number, cIdx: number) => getCellMergeInfo(rIdx, cIdx, merges);
@@ -422,17 +432,65 @@ export function DynamicField({
 
       useEffect(() => {
         if (!v && rows.length > 0) {
-          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths, merges, headerValues }) });
+          set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell }) });
         }
       }, [v, field.key]);
 
-      const save = (nextCols: string[], nextRows: Array<Record<string, string>>, nextMerges: CellMerge[], nextColWidths = colWidths, nextHeaderValues = headerValues) =>
-        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextColWidths, merges: nextMerges, headerValues: nextHeaderValues }) });
+      const save = (nextCols: string[], nextRows: Array<Record<string, string>>, nextMerges: CellMerge[], nextColWidths = colWidths, nextHeaderValues = headerValues, nextAmountCells = amountCells, nextSumCell = sumCell) =>
+        set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextColWidths, merges: nextMerges, headerValues: nextHeaderValues, amountCells: nextAmountCells, sumCell: nextSumCell }) });
+
+      const recalculateSum = (
+        targetRows: Array<Record<string, string>>, 
+        targetAmountCells = amountCells, 
+        targetSumCell = sumCell
+      ) => {
+        if (!targetSumCell) return targetRows;
+        const nextRows = [...targetRows];
+        let sum = 0;
+        nextRows.forEach((row, rowIdx) => {
+          cols.forEach((cName) => {
+            if (targetSumCell.rIdx === rowIdx && targetSumCell.col === cName) return;
+            const isAutoAmt = cName.includes('금액');
+            const isManualAmt = targetAmountCells.some((ac) => ac.rIdx === rowIdx && ac.col === cName);
+            if (isAutoAmt || isManualAmt) {
+              const num = Number(String(row[cName] ?? '').replace(/[^0-9]/g, '')) || 0;
+              sum += num;
+            }
+          });
+        });
+        if (nextRows[targetSumCell.rIdx]) {
+          nextRows[targetSumCell.rIdx] = {
+            ...nextRows[targetSumCell.rIdx],
+            [targetSumCell.col]: sum > 0 ? String(sum) : ''
+          };
+        }
+        return nextRows;
+      };
+
+      const toggleAmountCell = (rIdx: number, col: string) => {
+        const exists = amountCells.some((c) => c.rIdx === rIdx && c.col === col);
+        const nextCells = exists
+          ? amountCells.filter((c) => !(c.rIdx === rIdx && c.col === col))
+          : [...amountCells, { rIdx, col }];
+        const nextRows = recalculateSum(rows, nextCells, sumCell);
+        save(cols, nextRows, merges, colWidths, headerValues, nextCells, sumCell);
+      };
+
+      const toggleSumCell = (rIdx: number, col: string) => {
+        const isCurrentlySum = sumCell && sumCell.rIdx === rIdx && sumCell.col === col;
+        const nextSumCell = isCurrentlySum ? null : { rIdx, col };
+        const nextAmountCells = isCurrentlySum
+          ? amountCells
+          : amountCells.filter((c) => !(c.rIdx === rIdx && c.col === col));
+        const nextRows = recalculateSum(rows, nextAmountCells, nextSumCell);
+        save(cols, nextRows, merges, colWidths, headerValues, nextAmountCells, nextSumCell);
+      };
 
       const updateCell = (rIdx: number, col: string, val: string) => {
         const nextRows = [...rows];
         nextRows[rIdx] = { ...nextRows[rIdx], [col]: val };
-        save(cols, nextRows, merges);
+        const nextRowsWithSum = recalculateSum(nextRows, amountCells, sumCell);
+        save(cols, nextRowsWithSum, merges);
       };
 
       const updateHeaderCell = (col: string, val: string) => {
@@ -743,6 +801,10 @@ export function DynamicField({
                         const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
                         const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(rIdx, cIdx);
                         if (isMerged && !isStart) return null;
+                        const isAutoAmt = col.includes('금액');
+                        const isManualAmt = amountCells.some((c) => c.rIdx === rIdx && c.col === col);
+                        const isAmountCell = isAutoAmt || isManualAmt;
+                        const isSumCell = !!(sumCell && sumCell.rIdx === rIdx && sumCell.col === col);
                         return (
                           <td
                             key={col}
@@ -753,9 +815,15 @@ export function DynamicField({
                           >
                             <input
                               value={row[col] ?? ''}
-                              onChange={(e) => updateCell(rIdx, col, e.target.value)}
-                              placeholder={isNumLike ? '0' : ''}
-                              className="w-full rounded border border-border bg-panel-alt px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
+                              onChange={(e) => {
+                                const val = isAmountCell ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
+                                updateCell(rIdx, col, val);
+                              }}
+                              disabled={isSumCell}
+                              placeholder={isNumLike || isAmountCell || isSumCell ? '0' : ''}
+                              className={`w-full rounded border border-border px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal ${
+                                isSumCell ? 'bg-panel/40 font-semibold cursor-not-allowed text-teal' : 'bg-panel-alt'
+                              }`}
                             />
                           </td>
                         );
@@ -791,6 +859,36 @@ export function DynamicField({
               style={{ top: contextMenu.y, left: contextMenu.x }}
               onClick={(e) => e.stopPropagation()}
             >
+              {contextMenu.rIdx !== -1 && (
+                <>
+                  {/* 금액 셀 토글 */}
+                  {amountCells.some((c) => c.rIdx === contextMenu.rIdx && c.col === cols[contextMenu.cIdx]) ? (
+                    <button type="button" onClick={() => { toggleAmountCell(contextMenu.rIdx, cols[contextMenu.cIdx]); setContextMenu(null); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold">
+                      💰 금액 셀 지정 해제
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => { toggleAmountCell(contextMenu.rIdx, cols[contextMenu.cIdx]); setContextMenu(null); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold">
+                      💰 금액 셀로 지정
+                    </button>
+                  )}
+
+                  {/* 합산 결과 표시 셀 토글 */}
+                  {sumCell && sumCell.rIdx === contextMenu.rIdx && sumCell.col === cols[contextMenu.cIdx] ? (
+                    <button type="button" onClick={() => { toggleSumCell(contextMenu.rIdx, cols[contextMenu.cIdx]); setContextMenu(null); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold">
+                      📊 합산 셀 지정 해제
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => { toggleSumCell(contextMenu.rIdx, cols[contextMenu.cIdx]); setContextMenu(null); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold">
+                      📊 합산 결과 표시 지정
+                    </button>
+                  )}
+                  <hr className="border-border my-1" />
+                </>
+              )}
               <button type="button" onClick={() => { mergeRight(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
                 disabled={contextMenu.cIdx >= cols.length - 1}
                 className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent">
