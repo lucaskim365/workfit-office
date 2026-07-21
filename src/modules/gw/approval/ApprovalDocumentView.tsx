@@ -341,7 +341,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
               };
 
               return (
-                <div key={blockIdx} className="space-y-1">
+                <div key={blockIdx} className={`space-y-1 ${isHalf ? 'print-avoid-break' : ''}`}>
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
                       {block.section}
