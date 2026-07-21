@@ -90,6 +90,12 @@ export const approvalFormSchema = z.object({
   recipientUserId: z.string().nullable().optional(),
   /** 기안자 본인을 기본 수신처로 지정 여부 */
   recipientDrafter: z.boolean().optional(),
+  /** 기안 가능한 직급 서열 최소값 (null 이면 제한 없음) */
+  allowedPositionFromRank: z.number().nullable().optional(),
+  /** 기안 가능한 직급 서열 최대값 (null 이면 제한 없음) */
+  allowedPositionToRank: z.number().nullable().optional(),
+  /** 기안 가능한 부서 ID 목록 (null/빈 배열 이면 모든 부서 가능) */
+  allowedDeptIds: z.array(z.string()).nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

@@ -5,7 +5,7 @@ import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } 
 import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
-import { useRouteEngine } from '@/features/gw/useRouteEngine';
+import { useRouteEngine, useApprovalRouteRules } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
@@ -34,6 +34,7 @@ export function ApprovalDraftModal({
   const { data: forms } = useActiveApprovalForms();
   const org = useOrgTree();
   const bal = useLeave(me.id);
+  const { data: routeRules = [] } = useApprovalRouteRules();
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
@@ -291,6 +292,70 @@ export function ApprovalDraftModal({
     const miss = form ? missingRequired(form.fields.filter((f) => f !== amountField && f.key !== RESERVED_BODY_KEY), values) : [];
     if (miss.length) return `필수 항목을 입력하세요: ${miss.join(', ')}`;
     if (forSubmit) {
+      const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
+      if (form) {
+        if (form.allowedPositionFromRank != null && userRank > form.allowedPositionFromRank) {
+          let neededTitle = '상급자';
+          if (form.allowedPositionFromRank === 1) neededTitle = '대표';
+          else if (form.allowedPositionFromRank === 2) neededTitle = '본부장';
+          else if (form.allowedPositionFromRank === 3 || form.allowedPositionFromRank === 4) neededTitle = '팀장';
+          else if (form.allowedPositionFromRank >= 5) neededTitle = '팀원';
+          return `본 서식의 기안 권한이 없습니다. (${neededTitle} 이상 기안 가능)`;
+        }
+        if (form.allowedPositionToRank != null && userRank < form.allowedPositionToRank) {
+          let neededTitle = '하급자';
+          if (form.allowedPositionToRank === 1) neededTitle = '대표';
+          else if (form.allowedPositionToRank === 2) neededTitle = '본부장';
+          else if (form.allowedPositionToRank === 3 || form.allowedPositionToRank === 4) neededTitle = '팀장';
+          else if (form.allowedPositionToRank >= 5) neededTitle = '팀원';
+          return `본 서식의 기안 권한이 없습니다. (${neededTitle} 이하 기안 가능)`;
+        }
+        if (form.allowedDeptIds && form.allowedDeptIds.length > 0) {
+          const userDeptNode = org.depts.find((d) => d.name === me.dept);
+          const userDeptId = userDeptNode?.id ?? null;
+          if (!userDeptId || !form.allowedDeptIds.includes(userDeptId)) {
+            return `본 서식의 기안 권한이 없습니다. (허가된 부서만 기안 가능)`;
+          }
+        }
+      }
+
+      if (code !== '기안' && code !== '전체') {
+        const rulesForThisDoc = routeRules.filter((r) => r.active && r.docType === code);
+        if (rulesForThisDoc.length > 0) {
+          const amt = amountNum ?? 0;
+          const rulesForAmount = rulesForThisDoc.filter((r) => {
+            const matchesAmount = (r.amountFrom == null || amt >= r.amountFrom) && (r.amountTo == null || amt < r.amountTo);
+            if (!matchesAmount) return false;
+
+            if (r.conditionKey) {
+              const val = values[r.conditionKey];
+              if (val === undefined || val === null || val === '') return false;
+              if (!r.conditionValues.includes(String(val))) return false;
+            }
+            return true;
+          });
+
+          if (rulesForAmount.length > 0) {
+            const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
+            const hasQualifiedRule = rulesForAmount.some(
+              (r) =>
+                (r.positionFromRank == null || userRank >= r.positionFromRank) &&
+                (r.positionToRank == null || userRank <= r.positionToRank)
+            );
+
+            if (!hasQualifiedRule) {
+              const maxRankNeeded = Math.max(...rulesForAmount.map((r) => r.positionToRank ?? 9));
+              let neededTitle = '상급자';
+              if (maxRankNeeded === 1) neededTitle = '대표';
+              else if (maxRankNeeded === 2) neededTitle = '본부장';
+              else if (maxRankNeeded === 3 || maxRankNeeded === 4) neededTitle = '팀장';
+              else if (maxRankNeeded >= 5) neededTitle = '팀원';
+              return `이 금액대 및 선택 조건의 해당 문서 기안 권한이 없습니다. (${neededTitle} 이상 기안 가능)`;
+            }
+          }
+        }
+      }
+
       if (!steps.some((s) => s.kind !== '참조')) return '상신하려면 결재자를 1명 이상 지정하세요.';
       const inactiveUsers = steps
         .map((s) => org.userById(s.approverId))
@@ -302,6 +367,51 @@ export function ApprovalDraftModal({
     }
     return null;
   };
+
+  // 사용자의 직책 권한에 따라 비활성화할 서식(forms) 판정
+  const disabledFormCodes = useMemo(() => {
+    const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
+    const userDeptNode = org.depts.find((d) => d.name === me.dept);
+    const userDeptId = userDeptNode?.id ?? null;
+    const disabledCodes = new Set<string>();
+
+    for (const form of forms) {
+      if (form.code === '기안' || form.code === '전체') continue;
+
+      // 1) 서식 레벨의 직급 범위 제한 검사
+      if (form.allowedPositionFromRank != null && userRank > form.allowedPositionFromRank) {
+        disabledCodes.add(form.code);
+        continue;
+      }
+      if (form.allowedPositionToRank != null && userRank < form.allowedPositionToRank) {
+        disabledCodes.add(form.code);
+        continue;
+      }
+
+      // 2) 서식 레벨의 부서 제한 검사
+      if (form.allowedDeptIds && form.allowedDeptIds.length > 0) {
+        if (!userDeptId || !form.allowedDeptIds.includes(userDeptId)) {
+          disabledCodes.add(form.code);
+          continue;
+        }
+      }
+
+      // 3) 룰 레벨의 직급 범위 제한 검사
+      const rulesForThisDoc = routeRules.filter((r) => r.active && r.docType === form.code);
+      if (rulesForThisDoc.length === 0) continue; // 규칙이 지정되지 않은 경우 기본 허용
+      
+      const hasAnyQualifyingRule = rulesForThisDoc.some(
+        (r) =>
+          (r.positionFromRank == null || userRank >= r.positionFromRank) &&
+          (r.positionToRank == null || userRank <= r.positionToRank)
+      );
+
+      if (!hasAnyQualifyingRule) {
+        disabledCodes.add(form.code);
+      }
+    }
+    return disabledCodes;
+  }, [forms, routeRules, org.positions, org.depts, me.position, me.dept]);
 
   const persistDraft = async (): Promise<string> => {
     const input = buildInput();
@@ -457,21 +567,30 @@ export function ApprovalDraftModal({
                       
                       {isOpen && (
                         <div className="pl-4 border-l border-border ml-2 space-y-1 mt-0.5">
-                          {f.forms.map((fm) => (
-                            <button
-                              key={fm.code}
-                              type="button"
-                              onClick={() => setCode(fm.code)}
-                              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${
-                                code === fm.code
-                                  ? 'bg-teal-soft text-teal font-semibold'
-                                  : 'text-ink2 hover:bg-border-hi/30'
-                              }`}
-                            >
-                              <span className="text-[15px]">{fm.icon}</span>
-                              <span className="truncate">{fm.name}</span>
-                            </button>
-                          ))}
+                          {f.forms.map((fm) => {
+                            const isDisabled = disabledFormCodes.has(fm.code);
+                            return (
+                              <button
+                                key={fm.code}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => setCode(fm.code)}
+                                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${
+                                  isDisabled
+                                    ? 'opacity-40 cursor-not-allowed'
+                                    : code === fm.code
+                                      ? 'bg-teal-soft text-teal font-semibold'
+                                      : 'text-ink2 hover:bg-border-hi/30'
+                                }`}
+                              >
+                                <span className="text-[15px]">{fm.icon}</span>
+                                <span className="truncate">{fm.name}</span>
+                                {isDisabled && (
+                                  <span className="ml-auto text-[9px] font-bold bg-red-500/10 text-red-500 px-1 py-0.5 rounded">제한</span>
+                                )}
+                              </button>
+                            );
+                          })}
                           {f.forms.length === 0 && (
                             <div className="py-1 pl-6 text-[11px] text-ink3">서식이 없습니다.</div>
                           )}

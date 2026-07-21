@@ -24,6 +24,7 @@ const blankField = (): FormField => ({
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
   id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false, folderId,
   recipientDeptId: null, recipientUserId: null, recipientDrafter: false,
+  allowedPositionFromRank: null, allowedPositionToRank: null, allowedDeptIds: [],
   fields: [{ ...blankField(), key: 'body', label: '본문', type: '장문', required: true }],
 });
 
@@ -262,7 +263,8 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   form: ApprovalForm; folders: ApprovalFolder[]; onChange: (f: ApprovalForm) => void; onSave: () => void; onCancel: () => void;
   onDelete?: () => void; onDuplicate?: () => void; saving: boolean; msg: string;
 }) {
-  const { depts = [], users = [] } = useOrgTree();
+  const org = useOrgTree();
+  const { depts = [], users = [] } = org;
   const [selTab, setSelTab] = useState('공통');
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
@@ -375,6 +377,81 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                 ))}
               </select>
             </F>
+          </div>
+        </div>
+      </div>
+
+      {/* 기안자(Drafter) 권한 제한 설정 */}
+      <div className="mt-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-[16px]">🔒</span>
+          <div>
+            <div className="text-[13px] font-bold text-amber-600">기안자 권한 제한 설정</div>
+            <div className="text-[10.5px] text-ink3">본 서식으로 문서를 기안할 수 있는 직급 범위 및 부서를 제한합니다. (미설정 시 전체 허용)</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3 items-start">
+          <div className="col-span-4">
+            <F label="최소 기안 직급 (이하)">
+              <select
+                value={form.allowedPositionFromRank ?? ''}
+                onChange={(e) => set({ allowedPositionFromRank: e.target.value ? Number(e.target.value) : null })}
+                className={`${inp}`}
+              >
+                <option value="">(제한 없음 - 사원까지 가능)</option>
+                {[...org.positions].sort((a, b) => b.rank - a.rank).map((p) => (
+                  <option key={p.id} value={p.rank}>
+                    {p.name} ({p.rank}급)
+                  </option>
+                ))}
+              </select>
+            </F>
+          </div>
+
+          <div className="col-span-4">
+            <F label="최대 기안 직급 (이상)">
+              <select
+                value={form.allowedPositionToRank ?? ''}
+                onChange={(e) => set({ allowedPositionToRank: e.target.value ? Number(e.target.value) : null })}
+                className={`${inp}`}
+              >
+                <option value="">(제한 없음 - 대표이사까지 가능)</option>
+                {[...org.positions].sort((a, b) => b.rank - a.rank).map((p) => (
+                  <option key={p.id} value={p.rank}>
+                    {p.name} ({p.rank}급)
+                  </option>
+                ))}
+              </select>
+            </F>
+          </div>
+
+          <div className="col-span-4">
+            <label className="block text-[10.5px] font-bold text-ink3 mb-1">🏢 기안 허용 부서 지정</label>
+            <div className="max-h-28 overflow-y-auto border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
+              {depts.map((d) => {
+                const isChecked = (form.allowedDeptIds ?? []).includes(d.id);
+                return (
+                  <label key={d.id} className="flex items-center gap-2 text-[11.5px] cursor-pointer text-ink hover:text-teal">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        const current = form.allowedDeptIds ?? [];
+                        const next = e.target.checked
+                          ? [...current, d.id]
+                          : current.filter((id) => id !== d.id);
+                        set({ allowedDeptIds: next });
+                      }}
+                      className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
+                    />
+                    <span>{d.name}</span>
+                  </label>
+                );
+              })}
+              {depts.length === 0 && <div className="text-[11px] text-ink3 py-2 text-center">등록된 부서가 없습니다.</div>}
+            </div>
+            <div className="text-[9.5px] text-ink3 mt-1">체크가 모두 해제되어 있으면 모든 부서에서 기안이 가능합니다.</div>
           </div>
         </div>
       </div>
