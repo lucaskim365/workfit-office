@@ -74,7 +74,9 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
-  const closing = form?.closing || FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.';
+  const closing = (form?.closing !== undefined && form?.closing !== null)
+    ? form.closing
+    : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
   // 동적 필드 중 안내문과 일수 필드를 제외하고 모두 순서대로 배치
@@ -262,7 +264,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
                         cols = parsed.cols;
                         rows = parsed.rows;
-                        colWidths = parsed.colWidths || colWidths;
+                        colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
                         if (Array.isArray(parsed.merges)) merges = parsed.merges;
                         if (parsed.headerValues) headerValues = parsed.headerValues;
                       }
@@ -475,7 +477,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       )}
 
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
-        <div>{closing}</div>
+        {closing.trim() && <div>{closing}</div>}
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
         <div className="mt-1 flex items-center justify-center gap-1">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
