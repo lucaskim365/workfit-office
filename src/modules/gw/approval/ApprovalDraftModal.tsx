@@ -10,6 +10,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
+import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ZodError } from 'zod';
@@ -64,6 +65,7 @@ export function ApprovalDraftModal({
   const [pickerTargetId, setPickerTargetId] = useState('');
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const hasManuallyEnteredValues = () => {
     if (editDoc) {
@@ -142,8 +144,7 @@ export function ApprovalDraftModal({
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
   const amountField = form ? amountFieldOf(form) : undefined;
   const isAmount = !!amountField;
-  const hasBodyField = form?.fields.some((f) => f.key === RESERVED_BODY_KEY && f.type === '장문') ?? false;
-  const bodyLabel = form?.fields.find((f) => f.key === RESERVED_BODY_KEY)?.label ?? '본문';
+
 
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
 
@@ -556,6 +557,7 @@ export function ApprovalDraftModal({
 
   // 폴더별 열림 상태 관리 (기본값: 모두 열림)
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const toggleFolder = (folderId: string) => {
     setOpenFolders((prev) => ({
       ...prev,
@@ -580,11 +582,37 @@ export function ApprovalDraftModal({
     return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [folders, forms]);
 
+  const mockDoc: ApprovalDoc = useMemo(() => ({
+    id: editDoc?.id ?? 'preview-doc-id',
+    docNo: editDoc?.docNo ?? 'PREVIEW-TEMP',
+    docType: code,
+    title: title || '제목 없음',
+    body: body,
+    status: '임시저장',
+    drafterId: me.id,
+    drafterDept: me.dept || '',
+    createdAt: new Date().toISOString(),
+    submittedAt: null,
+    completedAt: null,
+    currentSeq: 0,
+    amount: amount ? Number(amount) : null,
+    fieldValues: values,
+    attachments: attachments,
+    recipients: recipients,
+    steps: steps,
+    form: code === '휴가' ? {
+      leaveType: String(values['leaveType'] || '연차') as LeaveType,
+      startDate: String(values['period'] || ''),
+      endDate: String(values['period__end'] || ''),
+      days: Number(values['period__days']) || 0,
+    } : null,
+  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
       <div 
         className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
-          isFixed ? 'max-w-2xl' : 'max-w-5xl'
+          isFixed ? 'max-w-3xl' : 'max-w-[85vw]'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -597,9 +625,19 @@ export function ApprovalDraftModal({
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* 좌측 서식 트리 영역 (fixedType이 아닐 때만 렌더) */}
-          {!isFixed && (
-            <div className="w-64 shrink-0 border-r border-border bg-panel-alt flex flex-col overflow-y-auto p-4 select-none">
-              <div className="mb-3 text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider">결재 서식 목록</div>
+          {!isFixed && sidebarOpen && (
+            <div className="w-64 shrink-0 border-r border-border bg-panel-alt flex flex-col overflow-y-auto p-4 select-none relative">
+              <div className="mb-3 flex items-center justify-between text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider">
+                <span>결재 서식 목록</span>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="rounded px-1.5 py-0.5 text-[10px] text-ink3 hover:bg-black/5 hover:text-ink transition-colors font-medium border border-border"
+                  title="목록 접기"
+                >
+                  ◀ 접기
+                </button>
+              </div>
               <div className="space-y-3">
                 {sidebarFolders.map((f) => {
                   const isOpen = openFolders[f.id] !== false;
@@ -652,6 +690,21 @@ export function ApprovalDraftModal({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {!isFixed && !sidebarOpen && (
+            <div className="w-12 shrink-0 border-r border-border bg-panel-alt flex flex-col items-center py-4 select-none gap-2">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-lg py-3 px-1 text-[11.5px] font-extrabold text-teal hover:bg-teal-soft/40 transition-colors border border-teal-soft bg-panel flex flex-col items-center gap-2 shadow-sm"
+                title="목록 펼치기"
+                style={{ writingMode: 'vertical-lr' }}
+              >
+                <span>서식 목록 펼치기</span>
+                <span className="text-[10px] font-bold text-teal">▶</span>
+              </button>
             </div>
           )}
 
@@ -713,12 +766,7 @@ export function ApprovalDraftModal({
           {/* 서식 동적 필드 */}
           {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-x-4">{fieldNodes}</div>}
 
-          {/* 본문(서식에 body 필드가 없으면 기본 본문) */}
-          {!hasBodyField && (
-            <Field label={bodyLabel}>
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="내용을 입력하세요" className={`${INP} resize-none leading-relaxed`} />
-            </Field>
-          )}
+
 
           {/* 결재선 빌더 */}
           <div className="mt-2">
@@ -897,6 +945,13 @@ export function ApprovalDraftModal({
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3">
           <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
+          <button
+            onClick={() => setShowPreview(true)}
+            disabled={busy}
+            className="rounded-lg border border-border-hi bg-panel px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
+          >
+            문서 미리보기
+          </button>
           {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
           <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
         </div>
@@ -955,6 +1010,48 @@ export function ApprovalDraftModal({
                 className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-danger hover:opacity-90 transition-colors"
               >
                 변경내용 모두 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPreview && (
+        <div 
+          className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" 
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPreview(false);
+          }}
+        >
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
+              <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
+                <span>📄</span> 문서 미리보기
+              </div>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPreview(false);
+                }} 
+                className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
+              <ApprovalDocumentView doc={mockDoc} />
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPreview(false);
+                }}
+                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
+              >
+                확인
               </button>
             </div>
           </div>
