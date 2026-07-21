@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, useEffect } from 'react';
+import { useLayoutEffect, useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MENU_TREE } from '../menu-tree';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
@@ -9,6 +9,7 @@ import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
+import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import defaultLogo from '@/assets/logo.png';
 
 interface TopbarProps {
@@ -70,10 +71,25 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
   const [notiOpen, setNotiOpen] = useState(false);
-  const notifications = useNotifications(user?.id);
+  const rawNotifications = useNotifications(user?.id);
   const markAll = useMarkAllNotificationsRead();
   const markOne = useMarkNotificationRead();
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // 메신저('메신저') 알림은 통합 알림 센터에서 노출하지 않도록 필터링 (결재 등은 보임)
+  const notifications = useMemo(() => rawNotifications.filter((n) => n.type !== '메신저'), [rawNotifications]);
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+
+  // 메신저 방별 미읽음 메시지 수 조회 및 합산 (참여 중인 방의 메시지만 집계)
+  const { data: rooms = [] } = useChatRooms(user?.id);
+  const { data: unreadMap = {} } = useUnreadCounts(user?.id);
+  const chatUnreadCount = useMemo(() => {
+    const joinedRoomIds = new Set(rooms.map((r) => r.id));
+    return Object.entries(unreadMap).reduce((sum, [roomId, count]) => {
+      if (joinedRoomIds.has(roomId)) {
+        return sum + (Number(count) || 0);
+      }
+      return sum;
+    }, 0);
+  }, [rooms, unreadMap]);
 
   const notiRef = useRef<HTMLDivElement>(null);
 
@@ -124,11 +140,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                     }
                   }}
                   style={{ color: 'var(--color-header-text)', opacity: active || isOpen ? 1 : 0.7 }}
-                  className={`flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
+                  className={`relative flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
                     }`}
                 >
                   <MenuGlyph glyph={m.icon} size={18} />
                   <span className={`whitespace-nowrap text-[11px] ${active ? 'font-bold' : 'font-semibold'}`}>{m.name}</span>
+                  {m.id === 'M_MSG' && chatUnreadCount > 0 && (
+                    <span className="absolute top-1 right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white shadow animate-pulse">
+                      {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                    </span>
+                  )}
                 </button>
 
                 {isOpen && !isSpecial && (

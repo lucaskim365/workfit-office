@@ -34,27 +34,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   삭제: '휴지통',
 };
 
-/** 전자결재 알림 아이템 타입 (추후 실시간 알림 서비스로 교체 예정). */
-interface ApprovalNoti {
-  id: string;
-  kind: '결재요청' | '승인' | '반려' | '회수' | '참조';
-  title: string;
-  docId: string;
-  at: string;
-  read: boolean;
-}
 
-/** 결재 알림 아이콘 및 색상 맵. */
-const NOTI_META: Record<ApprovalNoti['kind'], { icon: string; color: string; label: string }> = {
-  결재요청: { icon: '🖋️', color: '#f59e0b', label: '결재 요청' },
-  승인: { icon: '✅', color: '#10b981', label: '승인' },
-  반려: { icon: '❌', color: '#ef4444', label: '반려' },
-  회수: { icon: '↩️', color: '#8b5cf6', label: '회수' },
-  참조: { icon: '👁️', color: '#6b7280', label: '참조' },
-};
-
-/** 목업 알림 데이터 (추후 실시간 알림 서비스로 교체). */
-const MOCK_NOTIS: ApprovalNoti[] = [];
 
 export default function ApprovalScreen() {
   const { user } = useAuth();
@@ -64,7 +44,6 @@ export default function ApprovalScreen() {
   const [box, setBox] = useState<ApprovalBox>('대기');
   const [selId, setSelId] = useState<string | null>(null);
   const [modal, setModal] = useState<{ edit?: ApprovalDoc | null } | null>(null);
-  const [notis, setNotis] = useState<ApprovalNoti[]>(MOCK_NOTIS);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
 
   const list = byBox[box] ?? [];
@@ -118,7 +97,7 @@ export default function ApprovalScreen() {
         }
       />
 
-      <div className="mt-5 grid grid-cols-[160px_320px_1fr_240px] gap-4">
+      <div className="mt-5 grid grid-cols-[160px_320px_1fr] gap-4">
         {/* 좌: 함 탭 */}
         <div className="rounded-xl border border-border bg-panel p-2.5 flex flex-col gap-4">
           {[
@@ -206,60 +185,6 @@ export default function ApprovalScreen() {
           ) : (
             <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
           )}
-        </div>
-
-        {/* 최우: 결재 알림 패널 (상시 표시) */}
-        <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
-            <span className="flex items-center gap-1.5 text-[12px] font-extrabold text-ink">
-              🔔
-              <span>결재 알림</span>
-              {notis.some((n) => !n.read) && (
-                <span className="grid h-[16px] min-w-[16px] place-items-center rounded-full bg-danger px-[3px] text-[9px] font-extrabold text-white">
-                  {notis.filter((n) => !n.read).length}
-                </span>
-              )}
-            </span>
-            <button
-              onClick={() => setNotis((list) => list.map((n) => ({ ...n, read: true })))}
-              className="text-[10px] text-ink3 hover:text-teal transition-colors"
-            >
-              모두 읽음
-            </button>
-          </div>
-          <div className="menu-scroll flex-1 overflow-y-auto">
-            {notis.length === 0 ? (
-              <div className="py-10 text-center text-[12px] text-ink3">새 알림이 없습니다.</div>
-            ) : (
-              notis.map((n) => {
-                const meta = NOTI_META[n.kind];
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => { setNotis((list) => list.map((x) => x.id === n.id ? { ...x, read: true } : x)); setParams({ doc: n.docId }); }}
-                    className={`flex w-full items-start gap-2.5 border-b border-border px-3 py-2.5 text-left transition-colors hover:bg-panel-alt ${n.read ? 'opacity-55' : ''}`}
-                  >
-                    <span
-                      style={{ background: `${meta.color}1a`, color: meta.color }}
-                      className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[8px] text-[13px]"
-                    >
-                      {meta.icon}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <span style={{ color: meta.color, background: `${meta.color}14` }} className="rounded-[4px] px-[5px] py-px text-[9px] font-extrabold">
-                          {meta.label}
-                        </span>
-                        {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-danger" />}
-                      </div>
-                      <div className="mt-0.5 truncate text-[11.5px] font-semibold text-ink">{n.title}</div>
-                      <div className="text-[10px] text-ink3">{n.at}</div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
         </div>
       </div>
 

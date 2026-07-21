@@ -89,36 +89,6 @@ export const chatMessageRepo = {
       memory = [...memory, valid];
     }
 
-    // 알림 추가 연동
-    try {
-      const { chatRoomRepo } = await import('@/data/chatRoom/chatRoom.repo');
-      const rooms = await chatRoomRepo.list();
-      const room = rooms.find((r) => r.id === valid.roomId);
-      if (room) {
-        const others = room.members.filter((m) => m !== valid.senderId);
-        const { notificationRepo } = await import('@/data/notification/notification.repo');
-        const { userRepo } = await import('@/data/user/user.repo');
-        const users = await userRepo.list();
-
-        for (const recipientId of others) {
-          const recipient = users.find((u) => u.id === recipientId);
-          // 수신자가 현재 해당 채팅방을 열고 대화 중이면 알림 생성을 생략합니다.
-          if (recipient?.activeChatRoomId === valid.roomId) {
-            continue;
-          }
-
-          await notificationRepo.create({
-            userId: recipientId,
-            type: '메신저',
-            title: room.type === 'direct' ? '새 메시지' : `${room.name}`,
-            text: valid.text || '파일이 전송되었습니다.',
-            senderName: valid.senderName,
-          });
-        }
-      }
-    } catch (e) {
-      console.error('메시지 전송 알림 실패:', e);
-    }
   },
 
   /** 방 진입 시 읽음 처리 — 방의 모든 메시지 readBy 에 userId 추가. */
