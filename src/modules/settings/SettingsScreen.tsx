@@ -62,9 +62,9 @@ export default function SettingsScreen() {
       </div>
 
       {/* 메인 2열 레이아웃 */}
-      <div className="mt-5 flex gap-4 h-[calc(100vh-170px)] items-stretch overflow-hidden">
+      <div className="mt-5 flex gap-4 max-h-[calc(100vh-170px)] items-start overflow-hidden">
         {/* 좌측: 탭 리스트 (전자결재 함 탭 스타일) */}
-        <div className="w-44 shrink-0 rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 h-full overflow-y-auto">
+        <div className="w-44 shrink-0 rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 overflow-y-auto">
           <div className="px-2.5 py-1 rounded bg-panel-alt text-[10px] font-extrabold tracking-wider uppercase text-ink3 mb-1">
             설정 메뉴
           </div>
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* 우측: 상세 폼 */}
-        <div className="flex-1 max-w-2xl bg-panel border border-border rounded-xl flex flex-col overflow-hidden h-full">
+        <div className="flex-1 max-w-2xl bg-panel border border-border rounded-xl flex flex-col overflow-hidden">
           {activeTab === 'theme' ? (
             <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
               <div className="w-full max-w-xl">
