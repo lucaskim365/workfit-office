@@ -65,6 +65,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
   {
     id: '해외출장', code: '해외출장', name: '해외출장 신청서', icon: '✈️', docTitle: '해 외 출 장 신 청 서',
     closing: '위와 같이 해외출장을 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 6, system: false, folderId: 'fld-ga',
+    allowedPositionFromRank: 4, allowedPositionToRank: null, allowedDeptIds: [],
     fields: [
       f({ key: 'overseasType', label: '해외출장 구분', type: '선택', required: true, width: 'half', options: ['일반 해외출장', '비자 및 여권 발급'] }),
       f({ key: 'destination', label: '출장지', type: '텍스트', required: true, width: 'half', placeholder: '예: 미국 지사' }),
@@ -177,6 +178,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
   {
     id: '인장날인', code: '인장날인', name: '인장 날인 요청서', icon: '印', docTitle: '인 장 날 인 요 청 서',
     closing: '위와 같이 인장 날인을 요청하오니 재가하여 주시기 바랍니다.', active: true, order: 14, system: false, folderId: 'fld-ga',
+    allowedPositionFromRank: 4, allowedPositionToRank: null, allowedDeptIds: [],
     fields: [
       f({ key: 'sealType', label: '인장 구분', type: '선택', required: true, width: 'half', options: ['법인인감', '법인인감증명서', '사용인감 및 직인'] }),
       f({ key: 'docCount', label: '날인 부수', type: '숫자', required: true, width: 'half', placeholder: '예: 1' }),
@@ -196,6 +198,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
   {
     id: '접대비', code: '접대비', name: '접대비 품의서', icon: '🤝', docTitle: '접 대 비 품 의 서',
     closing: '위와 같이 접대비를 품의하오니 재가하여 주시기 바랍니다.', active: true, order: 16, system: false, folderId: 'fld-ga',
+    allowedPositionFromRank: 4, allowedPositionToRank: null, allowedDeptIds: [],
     fields: [
       f({ key: 'budgetStatus', label: '예산 구분', type: '선택', required: true, width: 'half', options: ['접대비 예산 한도 내', '접대비 예산 한도 초과시'] }),
       f({ key: 'amount', label: '접대 금액', type: '금액', required: true, isAmountKey: true, width: 'half' }),
@@ -225,6 +228,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
   {
     id: '외주개발용역', code: '외주개발용역', name: '외주개발/용역비 품의서', icon: '💻', docTitle: '외 주 개 발 용 역 품 의 서',
     closing: '위와 같이 외주용역 계약 체결을 품의하오니 재가하여 주시기 바랍니다.', active: true, order: 15, system: false, folderId: 'fld-req',
+    allowedPositionFromRank: 2, allowedPositionToRank: null, allowedDeptIds: [],
     fields: [
       f({ key: 'amount', label: '계약 금액(부가세 별도)', type: '금액', required: true, isAmountKey: true, width: 'half' }),
       f({ key: 'vendorName', label: '용역 수행업체', type: '텍스트', required: true, width: 'half' }),
@@ -245,6 +249,7 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
   {
     id: '경조지원', code: '경조지원', name: '경조 지원 신청서', icon: '🎉', docTitle: '경 조 지 원 신 청 서',
     closing: '위와 같이 경조 지원을 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 17, system: false, folderId: 'fld-cond',
+    allowedPositionFromRank: 4, allowedPositionToRank: null, allowedDeptIds: [],
     fields: [
       f({ key: 'supportType', label: '지원 항목', type: '선택', required: true, width: 'half', options: ['화환 및 조화 발송', '경조금(축의/부의)'] }),
       f({ key: 'amount', label: '신청 경조 금액', type: '금액', required: false, isAmountKey: true, width: 'half', placeholder: '화환 발송 시 비움' }),

@@ -393,35 +393,33 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
 
         <div className="grid grid-cols-12 gap-3 items-start">
           <div className="col-span-4">
-            <F label="최소 기안 직급 (이하)">
+            <F label="최소 기안 직책 (이하)">
               <select
                 value={form.allowedPositionFromRank ?? ''}
                 onChange={(e) => set({ allowedPositionFromRank: e.target.value ? Number(e.target.value) : null })}
                 className={`${inp}`}
               >
-                <option value="">(제한 없음 - 사원까지 가능)</option>
-                {[...org.positions].sort((a, b) => b.rank - a.rank).map((p) => (
-                  <option key={p.id} value={p.rank}>
-                    {p.name} ({p.rank}급)
-                  </option>
-                ))}
+                <option value="">(제한 없음 - 팀원까지 가능)</option>
+                <option value="9">팀원</option>
+                <option value="4">팀장</option>
+                <option value="2">본부장</option>
+                <option value="1">대표</option>
               </select>
             </F>
           </div>
 
           <div className="col-span-4">
-            <F label="최대 기안 직급 (이상)">
+            <F label="최대 기안 직책 (이상)">
               <select
                 value={form.allowedPositionToRank ?? ''}
                 onChange={(e) => set({ allowedPositionToRank: e.target.value ? Number(e.target.value) : null })}
                 className={`${inp}`}
               >
-                <option value="">(제한 없음 - 대표이사까지 가능)</option>
-                {[...org.positions].sort((a, b) => b.rank - a.rank).map((p) => (
-                  <option key={p.id} value={p.rank}>
-                    {p.name} ({p.rank}급)
-                  </option>
-                ))}
+                <option value="">(제한 없음 - 대표까지 가능)</option>
+                <option value="9">팀원</option>
+                <option value="4">팀장</option>
+                <option value="2">본부장</option>
+                <option value="1">대표</option>
               </select>
             </F>
           </div>
