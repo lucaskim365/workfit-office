@@ -106,12 +106,12 @@ async function main() {
   const databaseId = readEnv('VITE_FB_FIRESTORE_DB_ID');
   if (!projectId) throw new Error('VITE_FB_PROJECT_ID 를 찾을 수 없습니다 (.env.local).');
 
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccount.json');
+  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'service-account.json');
   if (!existsSync(keyPath)) {
     throw new Error(
       `서비스 계정 키를 찾을 수 없습니다: ${keyPath}\n` +
         'Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성 후 ' +
-        './serviceAccount.json 로 저장하거나 GOOGLE_APPLICATION_CREDENTIALS 로 경로를 지정하세요.',
+        './service-account.json 로 저장하거나 GOOGLE_APPLICATION_CREDENTIALS 로 경로를 지정하세요.',
     );
   }
   const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));

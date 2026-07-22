@@ -17,16 +17,15 @@ async function queryCloudLogging() {
   const projectId = readEnv('VITE_FB_PROJECT_ID');
   if (!projectId) throw new Error('VITE_FB_PROJECT_ID 를 찾을 수 없습니다.');
 
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccount.json');
+  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'service-account.json');
   if (!existsSync(keyPath)) throw new Error('서비스 계정 키를 찾을 수 없습니다.');
   const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
 
-  const auth = new google.auth.JWT(
-    serviceAccount.client_email,
-    undefined,
-    serviceAccount.private_key,
-    ['https://www.googleapis.com/auth/logging.read']
-  );
+  const auth = new google.auth.JWT({
+    email: serviceAccount.client_email,
+    key: serviceAccount.private_key,
+    scopes: ['https://www.googleapis.com/auth/logging.read']
+  });
 
   const logging = google.logging({ version: 'v2', auth });
 

@@ -19,7 +19,7 @@ async function main() {
   const databaseId = readEnv('VITE_FB_FIRESTORE_DB_ID');
   if (!projectId) throw new Error('VITE_FB_PROJECT_ID 를 찾을 수 없습니다 (.env.local).');
 
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'serviceAccount.json');
+  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'service-account.json');
   if (!existsSync(keyPath)) {
     throw new Error(`서비스 계정 키를 찾을 수 없습니다: ${keyPath}`);
   }

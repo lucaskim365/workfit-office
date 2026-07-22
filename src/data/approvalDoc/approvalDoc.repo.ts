@@ -237,6 +237,16 @@ export const approvalDocRepo = {
           linkUrl: `/gw/approval?doc=${next.id}`,
         });
 
+        // 전결자(최종 결재자)에게 완료 알림
+        await notificationRepo.create({
+          userId: userId,
+          type: '결재',
+          title: '결재 완료',
+          text: `[${next.title}] 문서 결재를 최종 승인(전결) 처리하였습니다.`,
+          senderName: '시스템',
+          linkUrl: `/gw/approval?doc=${next.id}`,
+        });
+
         // 수신처 알림
         for (const rec of next.recipients || []) {
           if (rec.type === 'user') {
