@@ -13,7 +13,7 @@
 | 단계 | 상태(2026-06-24 기준) |
 |---|---|
 | ① `firebase login` | ✅ 완료 (xeran75@gmail.com) |
-| ② 서비스 계정 키 받기 | ❌ **이것만 하면 됨** (`serviceAccount.json` 없음) |
+| ② 서비스 계정 키 받기 | ❌ **이것만 하면 됨** (`service-account.json` 없음) |
 | ③ `npm run seed` | ⏳ 키 받은 후 실행 |
 | firebase-admin · projectId · dbId · gitignore | ✅ 모두 준비됨 |
 
@@ -45,16 +45,16 @@ firebase login
 2. 좌측 상단 **⚙️(톱니) → 프로젝트 설정(Project settings)**
 3. 상단 탭 **서비스 계정(Service accounts)**
 4. **새 비공개 키 생성(Generate new private key)** → 팝업에서 **키 생성** → JSON 다운로드
-5. 그 파일을 **프로젝트 루트에 `serviceAccount.json` 이름으로** 저장:
+5. 그 파일을 **프로젝트 루트에 `service-account.json` 이름으로** 저장:
    ```
-   /Users/lucaskim/Developer/Work/DemoMes_v0/serviceAccount.json
+   /Users/lucaskim/Developer/Work/DemoMes_v0/service-account.json
    ```
    예:
    ```bash
-   mv ~/Downloads/gen-lang-client-*.json /Users/lucaskim/Developer/Work/DemoMes_v0/serviceAccount.json
+   mv ~/Downloads/gen-lang-client-*.json /Users/lucaskim/Developer/Work/DemoMes_v0/service-account.json
    ```
 
-> 🔒 **보안**: 이 키는 **DB 전체 권한**을 가진 비밀이다. `.gitignore`에 `serviceAccount.json`이 이미 등록돼 있어 커밋되지 않는다. 절대 공유·커밋 금지.
+> 🔒 **보안**: 이 키는 **DB 전체 권한**을 가진 비밀이다. `.gitignore`에 `service-account.json`이 이미 등록돼 있어 커밋되지 않는다. 절대 공유·커밋 금지.
 
 > 대안(파일명 안 바꾸고 싶을 때): 환경변수로 경로 지정 —
 > ```bash
@@ -104,7 +104,7 @@ npm run seed
 
 | 증상 | 원인 / 조치 |
 |---|---|
-| `서비스 계정 키를 찾을 수 없습니다` | `serviceAccount.json` 위치/이름 확인, 또는 `GOOGLE_APPLICATION_CREDENTIALS` 경로 지정 |
+| `서비스 계정 키를 찾을 수 없습니다` | `service-account.json` 위치/이름 확인, 또는 `GOOGLE_APPLICATION_CREDENTIALS` 경로 지정 |
 | `VITE_FB_PROJECT_ID 를 찾을 수 없습니다` | `.env.local`에 `VITE_FB_PROJECT_ID` 존재 확인 |
 | 권한 오류(PERMISSION_DENIED) | 서비스 계정에 Firestore 쓰기 권한 필요(기본 계정은 보유). Firestore API 활성화 확인 |
 | 데이터가 `(default)`에 쓰임 | `.env.local`의 `VITE_FB_FIRESTORE_DB_ID`가 named DB ID와 일치하는지 확인 |

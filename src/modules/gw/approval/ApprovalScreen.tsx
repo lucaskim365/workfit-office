@@ -156,23 +156,38 @@ export default function ApprovalScreen() {
           <div className="flex-1 overflow-y-auto">
             {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
             {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
-            {filteredList.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => setSelId(d.id)}
-                className={`flex w-full flex-col gap-1 border-b border-border px-3.5 py-2.5 text-left ${selId === d.id ? 'bg-teal-soft/60' : 'hover:bg-panel-alt'}`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
-                  <StatusBadge status={d.status} />
-                </div>
-                <div className="flex items-center justify-between text-[10.5px] text-ink3">
-                  <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
-                  <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
-                </div>
-              </button>
-            ))}
+            {filteredList.map((d) => {
+              const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => setSelId(d.id)}
+                  className={`relative flex w-full flex-col gap-1 border-b border-border px-3.5 py-2.5 text-left transition-all ${
+                    selId === d.id 
+                      ? 'bg-teal-soft/60' 
+                      : isRecentCompleted 
+                        ? 'bg-teal-soft/10 hover:bg-teal-soft/20' 
+                        : 'hover:bg-panel-alt'
+                  } ${isRecentCompleted ? 'border-l-4 border-l-teal' : ''}`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
+                    {isRecentCompleted && (
+                      <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+                        <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
+                        최근 완료
+                      </span>
+                    )}
+                    <StatusBadge status={d.status} />
+                  </div>
+                  <div className="flex items-center justify-between text-[10.5px] text-ink3">
+                    <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
+                    <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -206,7 +221,6 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
   const permDeleteM = usePermanentlyDelete();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
   const [err, setErr] = useState('');
-  const [view, setView] = useState<'timeline' | 'document'>('timeline');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const busy = decide.isPending || submitM.isPending || recallM.isPending || deleteM.isPending || restoreM.isPending || permDeleteM.isPending;
@@ -262,31 +276,15 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
               {doc.docNo} · {doc.docType} · 기안 {nameOf(doc.drafterId)}({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
             </div>
           </div>
-          {/* 보기 전환 + 인쇄 */}
+          {/* 인쇄 버튼 */}
           <div className="flex shrink-0 items-center gap-2">
-            <div className="flex overflow-hidden rounded-lg border border-border-hi text-[11px] font-semibold">
-              <button
-                onClick={() => setView('timeline')}
-                className={`px-2.5 py-1.5 ${view === 'timeline' ? 'bg-teal-soft text-teal' : 'bg-panel text-ink2 hover:bg-panel-alt'}`}
-              >
-                타임라인
-              </button>
-              <button
-                onClick={() => setView('document')}
-                className={`border-l border-border-hi px-2.5 py-1.5 ${view === 'document' ? 'bg-teal-soft text-teal' : 'bg-panel text-ink2 hover:bg-panel-alt'}`}
-              >
-                문서
-              </button>
-            </div>
-            {view === 'document' && (
-              <button
-                onClick={() => window.print()}
-                title="결재 문서 인쇄"
-                className="rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
-              >
-                🖨 인쇄
-              </button>
-            )}
+            <button
+              onClick={() => window.print()}
+              title="결재 문서 인쇄"
+              className="rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+            >
+              🖨 인쇄
+            </button>
           </div>
         </div>
         {(doc.amount != null || doc.form) && (
@@ -324,19 +322,10 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           );
         })()}
 
-        {view === 'document' ? (
-          <ApprovalDocumentView doc={doc} />
-        ) : (
-        <>
-        {/* 본문 */}
-        <div className="whitespace-pre-wrap rounded-xl border border-border bg-panel-alt px-4 py-3 text-[12.5px] leading-relaxed text-ink2">
-          {doc.body || <span className="text-ink3">본문 없음</span>}
-        </div>
-
-        {/* 결재선 타임라인 */}
-        <div className="mt-4">
+        {/* 상단: 결재선 타임라인 */}
+        <div className="mb-5">
           <div className="mb-2 text-[11.5px] font-bold text-ink2">결재선</div>
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {[...doc.steps].sort((a, b) => a.seq - b.seq).map((s) => {
               const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
               return (
@@ -349,7 +338,7 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
                       {s.parallelGroup && <span className="rounded bg-blue/10 px-1 text-[9px] font-bold text-blue">병렬</span>}
                       {s.delegatedFromId && <span className="text-[9.5px] text-amber">대결(원 {nameOf(s.delegatedFromId)})</span>}
                     </div>
-                    {s.comment && <div className="mt-0.5 truncate text-[10.5px] text-ink3">💬 {s.comment}</div>}
+                    {s.comment && <div className="mt-0.5 truncate text-[10.5px] text-ink3" title={s.comment}>💬 {s.comment}</div>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-0.5">
                     <DecisionBadge decision={s.decision} />
@@ -360,8 +349,14 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             })}
           </div>
         </div>
-        </>
-        )}
+
+        {/* 하단: 결재 문서 */}
+        <div className="border-t border-border pt-5">
+          <div className="mb-3 text-[11.5px] font-bold text-ink2">결재 문서</div>
+          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-hidden shadow-sm p-4">
+            <ApprovalDocumentView doc={doc} />
+          </div>
+        </div>
 
         {err && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500">{err}</p>}
 
