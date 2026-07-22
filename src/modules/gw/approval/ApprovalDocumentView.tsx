@@ -42,6 +42,25 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
+  const handleDownload = async (e: any, url: string, name: string) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed, falling back to new window:', error);
+      window.open(url, '_blank');
+    }
+  };
+
   useEffect(() => {
     const img = new Image();
     img.src = logoImg;
@@ -437,43 +456,61 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         </div>
       )}
 
-      {/* 첨부파일 다운로드 영역 */}
+      {/* 첨부파일 영역 */}
       {doc.attachments && doc.attachments.length > 0 && (
-        <div className="mt-6 border-t border-[#bbb] pt-3">
-          <div className="text-[11px] font-bold text-teal mb-2">📎 첨부 파일 목록 ({doc.attachments.length})</div>
-          <div className="space-y-1.5">
-            {doc.attachments.map((file, idx) => (
-              <a
-                key={idx}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded border border-[#ddd] bg-[#fafafa] px-3 py-2 text-[12px] text-ink hover:bg-[#eee] transition-colors max-w-md"
-              >
-                <span className="text-[14px]">📄</span>
-                <span className="font-semibold underline truncate flex-1">{file.name}</span>
-                <span className="text-[10px] text-[#666]">다운로드 ➔</span>
-              </a>
-            ))}
-          </div>
-        </div>
+        <table className="mt-4 w-full border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                첨부파일
+              </th>
+              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                <div className="space-y-1">
+                  {doc.attachments.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold hover:underline text-[#222] cursor-pointer"
+                      >
+                        {file.name}
+                      </a>
+                      <button
+                        onClick={(e) => handleDownload(e, file.url, file.name)}
+                        className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
+                      >
+                        (다운로드)
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       )}
 
-      {/* 수신(시행)처 목록 */}
+      {/* 수신처 영역 */}
       {doc.recipients && doc.recipients.length > 0 && (
-        <div className="mt-6 border-t border-[#bbb] pt-3">
-          <div className="text-[11px] font-bold text-teal mb-2">📥 수신 (시행)처 ({doc.recipients.length})</div>
-          <div className="flex flex-wrap gap-1.5">
-            {doc.recipients.map((r) => (
-              <span
-                key={r.id}
-                className="rounded border border-[#ddd] bg-[#fafafa] px-2.5 py-1 text-[11.5px] font-semibold text-[#444] inline-flex items-center gap-1"
-              >
-                {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
-              </span>
-            ))}
-          </div>
-        </div>
+        <table className="mt-2 w-full border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                수 신 처
+              </th>
+              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {doc.recipients.map((r, idx) => (
+                    <span key={r.id} className="font-semibold">
+                      {r.name}{idx < doc.recipients.length - 1 ? ',' : ''}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       )}
 
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">

@@ -89,7 +89,7 @@ export default function ApprovalScreen() {
         name="전자결재"
       />
 
-      <div className="mt-5 grid grid-cols-[160px_320px_1fr] gap-4 h-[calc(100vh-160px)] items-stretch overflow-hidden">
+      <div className="mt-5 grid grid-cols-[160px_260px_1fr] gap-4 h-[calc(100vh-160px)] items-stretch overflow-hidden">
         {/* 좌: 함 탭 */}
         <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-3 h-full overflow-y-auto shrink-0">
           <button
