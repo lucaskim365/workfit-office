@@ -158,7 +158,7 @@ export function ApprovalDraftModal({
             const parsedVal = JSON.parse(val);
             if (parsedVal && parsedVal.rows) {
               const sCell = parsedVal.sumCell;
-              const aCells: Array<{ rIdx: number; col: string }> = parsedVal.amountCells 
+              const aCells: Array<{ rIdx: number; col: string }> = parsedVal.amountCells
                 ? parsedVal.amountCells
                 : (parsedVal.amountCell ? [parsedVal.amountCell] : []);
 
@@ -192,14 +192,14 @@ export function ApprovalDraftModal({
               if (hasValue) return sum;
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     }
     return null;
   }, [form, values]);
 
-  const amountNum = isAmount && amount.trim() 
-    ? Number(amount.replace(/[^0-9]/g, '')) 
+  const amountNum = isAmount && amount.trim()
+    ? Number(amount.replace(/[^0-9]/g, ''))
     : tableAmountNum;
 
   // 파일 업로드 핸들러 (Firebase Storage 연동 및 로컬 Mock 지원)
@@ -213,7 +213,7 @@ export function ApprovalDraftModal({
       const newFiles: { name: string; url: string }[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
+
         if (isFirebaseConfigured && storage) {
           // Live Firebase Storage 업로드
           const path = `approvals/${Date.now()}_${file.name}`;
@@ -452,7 +452,7 @@ export function ApprovalDraftModal({
       // 3) 룰 레벨의 직급 범위 제한 검사
       const rulesForThisDoc = routeRules.filter((r) => r.active && r.docType === form.code);
       if (rulesForThisDoc.length === 0) continue; // 규칙이 지정되지 않은 경우 기본 허용
-      
+
       const hasAnyQualifyingRule = rulesForThisDoc.some(
         (r) =>
           (r.positionFromRank == null || userRank >= r.positionFromRank) &&
@@ -610,10 +610,9 @@ export function ApprovalDraftModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
-      <div 
-        className={`flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${
-          isFixed ? 'max-w-2xl' : 'max-w-[75vw]'
-        }`}
+      <div
+        className={`flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${isFixed ? 'max-w-2xl' : 'max-w-[75vw]'
+          }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
@@ -654,7 +653,7 @@ export function ApprovalDraftModal({
                         </span>
                         <span className="text-[10px] text-ink3">{isOpen ? '▼' : '▶'}</span>
                       </button>
-                      
+
                       {isOpen && (
                         <div className="pl-4 border-l border-border ml-2 space-y-1 mt-0.5">
                           {f.forms.map((fm) => {
@@ -668,13 +667,12 @@ export function ApprovalDraftModal({
                                   setCode(fm.code);
                                   setValues({}); // 서식 교체 시 기존 입력 상태값 초기화
                                 }}
-                                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${
-                                  isDisabled
+                                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${isDisabled
                                     ? 'opacity-40 cursor-not-allowed'
                                     : code === fm.code
                                       ? 'bg-teal-soft text-teal font-semibold'
                                       : 'text-ink2 hover:bg-border-hi/30'
-                                }`}
+                                  }`}
                               >
                                 <span className="text-[15px]">{fm.icon}</span>
                                 <span className="truncate">{fm.name}</span>
@@ -714,257 +712,246 @@ export function ApprovalDraftModal({
           {/* 우측 폼 입력 영역 */}
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
-          <Field label="제목">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
-          </Field>
+            <Field label="제목">
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
+            </Field>
 
-          {/* 휴가 잔여일수 실시간 표시 배너 */}
-          {code === '휴가' && (
-            <div className="mb-4 rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 shadow-sm">
-              <div className="text-[11.5px] font-bold text-teal mb-2">📊 가용 휴가 정보 (실시간 연동)</div>
-              <div className="grid grid-cols-2 gap-3">
-                {/* 연차 카드 */}
-                <div className={`rounded-lg p-2.5 border transition-all ${
-                  selectedLeaveType === '연차' || selectedLeaveType === '반차' 
-                    ? 'border-teal bg-teal-soft/30 shadow-sm' 
-                    : 'border-border bg-panel-alt/30'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-ink2">연차 잔여</span>
-                    {(selectedLeaveType === '연차' || selectedLeaveType === '반차') && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-teal" />
-                    )}
+            {/* 휴가 잔여일수 실시간 표시 배너 */}
+            {code === '휴가' && (
+              <div className="mb-4 rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 shadow-sm">
+                <div className="text-[11.5px] font-bold text-teal mb-2">📊 가용 휴가 정보 (실시간 연동)</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* 연차 카드 */}
+                  <div className={`rounded-lg p-2.5 border transition-all ${selectedLeaveType === '연차' || selectedLeaveType === '반차'
+                      ? 'border-teal bg-teal-soft/30 shadow-sm'
+                      : 'border-border bg-panel-alt/30'
+                    }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-ink2">연차 잔여</span>
+                      {(selectedLeaveType === '연차' || selectedLeaveType === '반차') && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-teal" />
+                      )}
+                    </div>
+                    <div className="text-[15px] font-extrabold text-teal mt-0.5">
+                      {bal.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.grant} 일</span>
+                    </div>
                   </div>
-                  <div className="text-[15px] font-extrabold text-teal mt-0.5">
-                    {bal.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.grant} 일</span>
+                  {/* 대체휴무 카드 */}
+                  <div className={`rounded-lg p-2.5 border transition-all ${selectedLeaveType === '대체휴무'
+                      ? 'border-blue bg-blue-soft/30 shadow-sm'
+                      : 'border-border bg-panel-alt/30'
+                    }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-ink2">대체휴무 잔여</span>
+                      {selectedLeaveType === '대체휴무' && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue" />
+                      )}
+                    </div>
+                    <div className="text-[15px] font-extrabold text-blue mt-0.5">
+                      {bal.substituteHoliday.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.substituteHoliday.total} 일</span>
+                    </div>
                   </div>
                 </div>
-                {/* 대체휴무 카드 */}
-                <div className={`rounded-lg p-2.5 border transition-all ${
-                  selectedLeaveType === '대체휴무' 
-                    ? 'border-blue bg-blue-soft/30 shadow-sm' 
-                    : 'border-border bg-panel-alt/30'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-ink2">대체휴무 잔여</span>
-                    {selectedLeaveType === '대체휴무' && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue" />
-                    )}
+                {selectedLeaveType === '대체휴무' && bal.substituteHoliday.expiringSoonCount > 0 && (
+                  <div className="mt-2 text-[10px] text-amber font-semibold flex items-center gap-1 animate-pulse">
+                    ⚠️ 30일 내 만료 예정인 대체휴무가 존재합니다 ({bal.substituteHoliday.expiringSoonCount}건). 휴가일 기준으로 사용 가능 여부를 꼭 확인하세요.
                   </div>
-                  <div className="text-[15px] font-extrabold text-blue mt-0.5">
-                    {bal.substituteHoliday.remaining} <span className="text-[10px] font-semibold text-ink3">/ {bal.substituteHoliday.total} 일</span>
-                  </div>
-                </div>
+                )}
               </div>
-              {selectedLeaveType === '대체휴무' && bal.substituteHoliday.expiringSoonCount > 0 && (
-                <div className="mt-2 text-[10px] text-amber font-semibold flex items-center gap-1 animate-pulse">
-                  ⚠️ 30일 내 만료 예정인 대체휴무가 존재합니다 ({bal.substituteHoliday.expiringSoonCount}건). 휴가일 기준으로 사용 가능 여부를 꼭 확인하세요.
-                </div>
-              )}
-            </div>
-          )}
+            )}
 
-          {/* 서식 동적 필드 */}
-          {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-x-4">{fieldNodes}</div>}
+            {/* 서식 동적 필드 */}
+            {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-x-4">{fieldNodes}</div>}
 
 
 
-          {/* 결재선 빌더 */}
-          <div className="mt-2">
-            <div className="mb-1.5 text-[11px] font-bold text-ink2">결재선</div>
-            <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
-          </div>
-
-          {/* 수신처(시행처) 지정 - 차별화된 별도 카드형 디자인 */}
-          <div className="mt-4 rounded-xl border border-blue/20 bg-blue-soft/10 p-3.5">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="text-[12.5px] font-bold text-blue">📨 수신처 (시행처) 설정</div>
-                <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 곳을 정합니다.</div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!recipients.some((r) => r.id === 'drafter')) {
-                      setRecipients((prev) => [...prev, { id: 'drafter', name: '기안자 본인', type: 'drafter' }]);
-                    }
-                  }}
-                  className="rounded-lg bg-blue-soft px-2 py-1 text-[10px] font-bold text-blue hover:bg-blue/20 transition-colors"
-                >
-                  👤 기안자 본인
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRecipientPicker(!showRecipientPicker);
-                    setPickerTargetId('');
-                  }}
-                  className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
-                >
-                  + 수신처 추가
-                </button>
-              </div>
+            {/* 결재선 빌더 */}
+            <div className="mt-2">
+              <div className="mb-1.5 text-[11px] font-bold text-ink2">결재선</div>
+              <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
             </div>
 
-            {/* 수신처 추가 폼 */}
-            {showRecipientPicker && (
-              <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
-                <select
-                  value={pickerType}
-                  onChange={(e) => {
-                    setPickerType(e.target.value as 'user' | 'dept');
-                    setPickerTargetId('');
-                  }}
-                  className="rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
-                >
-                  <option value="dept">부서</option>
-                  <option value="user">사원</option>
-                </select>
+            {/* 수신처(시행처) 지정 - 차별화된 별도 카드형 디자인 */}
+            <div className="mt-4 rounded-xl border border-blue/20 bg-blue-soft/10 p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-[12.5px] font-bold text-blue">📨 수신처 (시행처) 설정</div>
+                  <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 곳을 정합니다.</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!recipients.some((r) => r.id === 'drafter')) {
+                        setRecipients((prev) => [...prev, { id: 'drafter', name: '기안자 본인', type: 'drafter' }]);
+                      }
+                    }}
+                    className="rounded-lg bg-blue-soft px-2 py-1 text-[10px] font-bold text-blue hover:bg-blue/20 transition-colors"
+                  >
+                    👤 기안자 본인
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRecipientPicker(!showRecipientPicker);
+                      setPickerTargetId('');
+                    }}
+                    className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
+                  >
+                    + 수신처 추가
+                  </button>
+                </div>
+              </div>
 
-                <select
-                  value={pickerTargetId}
-                  onChange={(e) => setPickerTargetId(e.target.value)}
-                  className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
-                >
-                  <option value="">선택하세요</option>
-                  {pickerType === 'dept'
-                    ? org.depts.map((d) => (
+              {/* 수신처 추가 폼 */}
+              {showRecipientPicker && (
+                <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
+                  <select
+                    value={pickerType}
+                    onChange={(e) => {
+                      setPickerType(e.target.value as 'user' | 'dept');
+                      setPickerTargetId('');
+                    }}
+                    className="rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                  >
+                    <option value="dept">부서</option>
+                    <option value="user">사원</option>
+                  </select>
+
+                  <select
+                    value={pickerTargetId}
+                    onChange={(e) => setPickerTargetId(e.target.value)}
+                    className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                  >
+                    <option value="">선택하세요</option>
+                    {pickerType === 'dept'
+                      ? org.depts.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name}
                         </option>
                       ))
-                    : org.users.map((u) => (
+                      : org.users.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name} {u.position} ({u.dept})
                         </option>
                       ))}
-                </select>
+                  </select>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!pickerTargetId) return;
-                    if (pickerType === 'dept') {
-                      const dept = org.depts.find((d) => d.id === pickerTargetId);
-                      if (dept && !recipients.some((r) => r.id === dept.id)) {
-                        setRecipients((prev) => [...prev, { id: dept.id, name: dept.name, type: 'dept' }]);
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!pickerTargetId) return;
+                      if (pickerType === 'dept') {
+                        const dept = org.depts.find((d) => d.id === pickerTargetId);
+                        if (dept && !recipients.some((r) => r.id === dept.id)) {
+                          setRecipients((prev) => [...prev, { id: dept.id, name: dept.name, type: 'dept' }]);
+                        }
+                      } else {
+                        const user = org.users.find((u) => u.id === pickerTargetId);
+                        if (user && !recipients.some((r) => r.id === user.id)) {
+                          setRecipients((prev) => [
+                            ...prev,
+                            { id: user.id, name: `${user.name} ${user.position}`, type: 'user' },
+                          ]);
+                        }
                       }
-                    } else {
-                      const user = org.users.find((u) => u.id === pickerTargetId);
-                      if (user && !recipients.some((r) => r.id === user.id)) {
-                        setRecipients((prev) => [
-                          ...prev,
-                          { id: user.id, name: `${user.name} ${user.position}`, type: 'user' },
-                        ]);
-                      }
-                    }
-                    setShowRecipientPicker(false);
-                  }}
-                  className="rounded bg-teal px-3 py-1 text-[11.5px] font-bold text-white hover:opacity-90"
-                >
-                  추가
-                </button>
-              </div>
-            )}
-
-            {/* 수신처 목록 태그 */}
-            {recipients.length === 0 ? (
-              <p className="text-[11px] text-ink3 pl-1">지정된 수신처가 없습니다.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5 pl-1">
-                {recipients.map((r) => (
-                  <span
-                    key={r.id}
-                    className="flex items-center gap-1 rounded-md bg-panel border border-blue/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue shadow-sm"
+                      setShowRecipientPicker(false);
+                    }}
+                    className="rounded bg-teal px-3 py-1 text-[11.5px] font-bold text-white hover:opacity-90"
                   >
-                    {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
-                    <button
-                      type="button"
-                      onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
-                      className="ml-1 font-bold text-blue/60 hover:text-red-500"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+                    추가
+                  </button>
+                </div>
+              )}
 
-          {/* 파일 첨부 영역 */}
-          <div className="mt-4 border-t border-border pt-3">
-            <div className="mb-1.5 text-[11px] font-bold text-ink2">📎 첨부 파일</div>
-            
-            {/* 파일 드롭존 */}
-            <div className="relative flex flex-col items-center justify-center rounded-xl border border-dashed border-border-hi bg-panel-alt p-4 transition-colors hover:border-teal/50 hover:bg-teal-soft/10">
-              <input
-                type="file"
-                multiple
-                onChange={handleFileUpload}
-                disabled={uploading}
-                className="absolute inset-0 cursor-pointer opacity-0"
-              />
-              <div className="flex flex-col items-center text-center">
-                <span className="text-[20px] text-ink3 mb-1">📁</span>
-                <span className="text-[11.5px] font-semibold text-ink2">파일을 드래그하거나 클릭하여 추가하세요</span>
-                <span className="text-[10px] text-ink3 mt-0.5">최대 파일 제한 없음 (로컬/서버 실시간 저장)</span>
-              </div>
+              {/* 수신처 목록 태그 */}
+              {recipients.length === 0 ? (
+                <p className="text-[11px] text-ink3 pl-1">지정된 수신처가 없습니다.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 pl-1">
+                  {recipients.map((r) => (
+                    <span
+                      key={r.id}
+                      className="flex items-center gap-1 rounded-md bg-panel border border-blue/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue shadow-sm"
+                    >
+                      {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
+                      <button
+                        type="button"
+                        onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
+                        className="ml-1 font-bold text-blue/60 hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* 업로드 로딩 표시 */}
-            {uploading && (
-              <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-teal">
-                <span className="animate-spin text-[12px]">🌀</span> 업로드 중...
-              </div>
-            )}
+            {/* 파일 첨부 영역 */}
+            <div className="mt-4 border-t border-border pt-3">
+              <div className="mb-1.5 text-[11px] font-bold text-ink2">📎 첨부 파일</div>
 
-            {/* 첨부파일 리스트 */}
-            {attachments.length > 0 && (
-              <div className="mt-2.5 space-y-1">
-                {attachments.map((file, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg bg-panel-alt px-2.5 py-1.5 border border-border">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[11.5px]">📄</span>
-                      <span className="truncate text-[11.5px] font-medium text-ink2">{file.name}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(idx)}
-                      className="ml-2 text-[12px] font-bold text-ink3 hover:text-red-500 hover:bg-red-500/5 rounded-md px-1.5 py-0.5"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+              {/* 파일 드롭존 */}
+              <div className="relative flex flex-col items-center justify-center rounded-xl border border-dashed border-border-hi bg-panel-alt p-4 transition-colors hover:border-teal/50 hover:bg-teal-soft/10">
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                />
+                <div className="flex flex-col items-center text-center">
+                  <span className="text-[20px] text-ink3 mb-1">📁</span>
+                  <span className="text-[11.5px] font-semibold text-ink2">파일을 드래그하거나 클릭하여 추가하세요</span>
+                  <span className="text-[10px] text-ink3 mt-0.5">최대 파일 제한 없음 (로컬/서버 실시간 저장)</span>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* 업로드 로딩 표시 */}
+              {uploading && (
+                <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-teal">
+                  <span className="animate-spin text-[12px]">🌀</span> 업로드 중...
+                </div>
+              )}
+
+              {/* 첨부파일 리스트 */}
+              {attachments.length > 0 && (
+                <div className="mt-2.5 space-y-1">
+                  {attachments.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between rounded-lg bg-panel-alt px-2.5 py-1.5 border border-border">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11.5px]">📄</span>
+                        <span className="truncate text-[11.5px] font-medium text-ink2">{file.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(idx)}
+                        className="ml-2 text-[12px] font-bold text-ink3 hover:text-red-500 hover:bg-red-500/5 rounded-md px-1.5 py-0.5"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
           </div>
         </div>
 
-<<<<<<< HEAD
-        <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3 bg-panel-alt/10">
-          <div className="flex-1 min-w-0 pr-4 flex items-center">
-            {error && (
-              <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11px] font-bold text-red-500 animate-fade-in truncate max-w-[320px] xl:max-w-[480px]" title={error}>
-=======
+
         <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3">
           {/* 에러 알림 메시지를 하단 버튼 라인 좌측에 배치 */}
           <div className="flex-1 min-w-0">
             {error && (
               <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] font-semibold text-red-500 animate-fade-in truncate max-w-[420px]" title={error}>
->>>>>>> develop
                 ⚠️ {error}
               </div>
             )}
           </div>
-<<<<<<< HEAD
-          <div className="flex items-center gap-2">
-=======
+
           <div className="flex items-center gap-2 shrink-0">
->>>>>>> develop
             <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
             <button
               onClick={() => setShowPreview(true)}
@@ -1039,8 +1026,8 @@ export function ApprovalDraftModal({
       )}
 
       {showPreview && (
-        <div 
-          className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" 
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4"
           onClick={(e) => {
             e.stopPropagation();
             setShowPreview(false);
@@ -1051,11 +1038,11 @@ export function ApprovalDraftModal({
               <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
                 <span>📄</span> 문서 미리보기
               </div>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowPreview(false);
-                }} 
+                }}
                 className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
               >
                 ✕
