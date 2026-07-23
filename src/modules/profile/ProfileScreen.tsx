@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useUploadSeal } from '@/features/user/useUploadSeal';
 import { useUploadAvatar } from '@/features/user/useUploadAvatar';
 import { useQueryClient } from '@tanstack/react-query';
+import SignaturePad from './components/SignaturePad';
 
 /**
  * 개인 프로필 설정 화면 — /profile 라우트.
- * 모든 사용자가 자신의 이메일, 비밀번호, 인감(도장) 이미지를 관리할 수 있다.
+ * 모든 사용자가 자신의 이메일, 비밀번호, 인감(도장) 및 서명 이미지를 관리할 수 있다.
  */
 export default function ProfileScreen() {
   const { user, changePassword, updateProfile } = useAuth();
@@ -30,10 +31,12 @@ export default function ProfileScreen() {
   const [pwErr, setPwErr] = useState('');
   const [savingPw, setSavingPw] = useState(false);
 
-  /* ── 인감 이미지 상태 ── */
+  /* ── 인감 및 서명 이미지 상태 ── */
   const [sealPreview, setSealPreview] = useState<string>(user?.sealUrl ?? '');
+  const [signPreview, setSignPreview] = useState<string>(user?.signUrl ?? '');
   const [sealMsg, setSealMsg] = useState('');
   const [sealErr, setSealErr] = useState('');
+  const [savingSign, setSavingSign] = useState(false);
 
   /* ── 프로필 사진 상태 ── */
   const { upload: uploadAvatar, uploading: uploadingAvatar } = useUploadAvatar();
@@ -115,6 +118,47 @@ export default function ProfileScreen() {
       setSealMsg('인감 이미지가 삭제되었습니다.');
     } catch (e) {
       setSealErr(e instanceof Error ? e.message : '삭제에 실패했습니다.');
+    }
+  };
+
+  /* ── 핸들러: 서명 이미지 저장 ── */
+  const handleSaveSignature = async (file: File) => {
+    setSavingSign(true); setSealErr(''); setSealMsg('');
+    try {
+      const url = await upload(user.id, file);
+      setSignPreview(url);
+      await updateProfile({ signUrl: url });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setSealMsg('서명이 저장되었습니다.');
+    } catch (e) {
+      setSealErr(e instanceof Error ? e.message : '서명 저장에 실패했습니다.');
+    } finally {
+      setSavingSign(false);
+    }
+  };
+
+  /* ── 핸들러: 서명 이미지 삭제 ── */
+  const handleDeleteSignature = async () => {
+    if (!window.confirm('등록된 서명을 삭제하시겠습니까?')) return;
+    setSealErr(''); setSealMsg('');
+    try {
+      await updateProfile({ signUrl: '' });
+      setSignPreview('');
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setSealMsg('서명이 삭제되었습니다.');
+    } catch (e) {
+      setSealErr(e instanceof Error ? e.message : '서명 삭제에 실패했습니다.');
+    }
+  };
+
+  /* ── 핸들러: 결재 인증 타입 토글 ── */
+  const handleToggleSignType = async (type: 'stamp' | 'signature') => {
+    setSealErr(''); setSealMsg('');
+    try {
+      await updateProfile({ signType: type });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (e) {
+      setSealErr(e instanceof Error ? e.message : '설정 변경에 실패했습니다.');
     }
   };
 
@@ -289,61 +333,114 @@ export default function ProfileScreen() {
         </button>
       </section>
 
-      {/* ③ 인감(도장) 이미지 */}
+      {/* ③ 결재 인감 / 서명 설정 */}
       <section className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
           <span className="h-4 w-1 rounded-sm bg-teal" />
-          <h2 className="text-[13px] font-extrabold text-ink">인감(도장) 이미지</h2>
+          <h2 className="text-[13px] font-extrabold text-ink">결재 인증 설정</h2>
         </div>
         <p className="mb-5 text-[11px] text-ink3">
-          전자결재 문서 서명란에 표시될 인감 이미지입니다. PNG / JPG · 최대 5MB · 300×300px으로 자동 리사이즈됩니다.
+          전자결재 상신 시 문서 서명란에 표시될 인증 수단을 선택하고 등록합니다.
         </p>
 
-        <div className="flex items-start gap-6">
-          {/* 인감 미리보기 */}
-          <div
-            className="flex h-[100px] w-[100px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border-hi bg-panel-alt text-center overflow-hidden"
-          >
-            {sealPreview ? (
-              <img src={sealPreview} alt="인감" className="h-full w-full object-contain" />
-            ) : (
-              <div className="space-y-1">
-                <div className="grid h-[56px] w-[56px] mx-auto place-items-center rounded-full border-2 border-[#c0392b] text-[12px] font-bold text-[#c0392b]">
-                  {user.name.slice(-2)}
+        {/* 라디오 탭 스위치 */}
+        <div className="mb-6 flex gap-6 border-b border-border pb-3">
+          <label className="flex items-center gap-2 text-[12px] font-bold text-ink cursor-pointer">
+            <input
+              type="radio"
+              name="signType"
+              checked={user.signType === 'stamp' || !user.signType}
+              onChange={() => handleToggleSignType('stamp')}
+              className="accent-teal"
+            />
+            인감(도장) 이미지
+          </label>
+          <label className="flex items-center gap-2 text-[12px] font-bold text-ink cursor-pointer">
+            <input
+              type="radio"
+              name="signType"
+              checked={user.signType === 'signature'}
+              onChange={() => handleToggleSignType('signature')}
+              className="accent-teal"
+            />
+            수필 서명
+          </label>
+        </div>
+
+        {/* 조건부 렌더링 */}
+        {(user.signType === 'stamp' || !user.signType) ? (
+          <div className="flex items-start gap-6">
+            {/* 인감 미리보기 */}
+            <div
+              className="flex h-[100px] w-[100px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border-hi bg-panel-alt text-center overflow-hidden"
+            >
+              {sealPreview ? (
+                <img src={sealPreview} alt="인감" className="h-full w-full object-contain" />
+              ) : (
+                <div className="space-y-1">
+                  <div className="grid h-[56px] w-[56px] mx-auto place-items-center rounded-full border-2 border-[#c0392b] text-[12px] font-bold text-[#c0392b]">
+                    {user.name.slice(-2)}
+                  </div>
+                  <div className="text-[9px] text-ink3">미등록</div>
                 </div>
-                <div className="text-[9px] text-ink3">미등록</div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <input
+                ref={sealInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleSealFile}
+              />
+              <button
+                onClick={() => sealInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-lg border border-border-hi bg-panel-alt px-4 py-2 text-[12px] font-semibold text-ink hover:bg-border/30 disabled:opacity-50"
+              >
+                {uploading ? '업로드 중…' : sealPreview ? '이미지 변경' : '이미지 등록'}
+              </button>
+              {sealPreview && (
+                <button
+                  onClick={handleDeleteSeal}
+                  className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5"
+                >
+                  이미지 삭제
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {signPreview ? (
+              <div className="flex items-start gap-6">
+                {/* 서명 미리보기 */}
+                <div
+                  className="flex h-[100px] w-[200px] shrink-0 items-center justify-center rounded-xl border border-border-hi bg-panel-alt text-center overflow-hidden"
+                >
+                  <img src={signPreview} alt="등록된 서명" className="h-full w-full object-contain" />
+                </div>
+                <div className="pt-2">
+                  <button
+                    onClick={handleDeleteSignature}
+                    className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5"
+                  >
+                    서명 삭제
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="mb-2 text-[11px] text-ink3">아래 빈 영역에 서명을 그려 등록하세요.</div>
+                <SignaturePad onSave={handleSaveSignature} saving={savingSign} />
               </div>
             )}
           </div>
+        )}
 
-          <div className="flex flex-col gap-2 pt-1">
-            <input
-              ref={sealInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={handleSealFile}
-            />
-            <button
-              onClick={() => sealInputRef.current?.click()}
-              disabled={uploading}
-              className="rounded-lg border border-border-hi bg-panel-alt px-4 py-2 text-[12px] font-semibold text-ink hover:bg-border/30 disabled:opacity-50"
-            >
-              {uploading ? '업로드 중…' : sealPreview ? '이미지 변경' : '이미지 등록'}
-            </button>
-            {sealPreview && (
-              <button
-                onClick={handleDeleteSeal}
-                className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5"
-              >
-                이미지 삭제
-              </button>
-            )}
-          </div>
-        </div>
-
-        {sealMsg && <p className="mt-3 text-[11.5px] font-semibold text-teal">{sealMsg}</p>}
-        {sealErr && <p className="mt-3 text-[11.5px] font-semibold text-danger">{sealErr}</p>}
+        {sealMsg && <p className="mt-4 text-[11.5px] font-semibold text-teal">{sealMsg}</p>}
+        {sealErr && <p className="mt-4 text-[11.5px] font-semibold text-danger">{sealErr}</p>}
       </section>
     </div>
   );
