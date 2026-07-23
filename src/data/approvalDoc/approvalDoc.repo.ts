@@ -146,6 +146,9 @@ export const approvalDocRepo = {
     const dateKey = yymmdd(new Date());
     const seq = await counterRepo.next(`AP-${dateKey}`);
     const docNo = formatDocNo('AP', dateKey, seq);
+    const users = await userRepo.list();
+    const drafterUser = users.find((u) => u.id === input.drafterId);
+    
     const created = approvalDocSchema.parse({
       id: docNo,
       docNo,
@@ -165,6 +168,11 @@ export const approvalDocRepo = {
       createdAt: now(),
       submittedAt: null,
       completedAt: null,
+      drafterSignUrl: drafterUser?.signUrl ?? null,
+      drafterSealUrl: drafterUser?.sealUrl ?? null,
+      drafterSignType: drafterUser?.signType ?? null,
+      drafterName: drafterUser?.name ?? null,
+      drafterPos: drafterUser?.position ?? null,
     });
     await persist(created);
     return created;
@@ -185,14 +193,37 @@ export const approvalDocRepo = {
   async submit(id: string, userId: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
     if (cur.drafterId !== userId) throw new Error('기안자만 상신할 수 있습니다');
+    const users = await userRepo.list();
+    const drafterUser = users.find((u) => u.id === userId);
+    
     const next = submitDoc(cur, now());
+    next.drafterSignUrl = drafterUser?.signUrl ?? null;
+    next.drafterSealUrl = drafterUser?.sealUrl ?? null;
+    next.drafterSignType = drafterUser?.signType ?? null;
+    next.drafterName = drafterUser?.name ?? null;
+    next.drafterPos = drafterUser?.position ?? null;
+    
+    // 결재선의 기안 노드(seq === 1)에도 당시의 서명/인장 스냅샷 정보를 박제
+    next.steps = next.steps.map((s) => {
+      if (s.seq === 1 && s.approverId === userId) {
+        return {
+          ...s,
+          signUrl: drafterUser?.signUrl ?? null,
+          sealUrl: drafterUser?.sealUrl ?? null,
+          signType: drafterUser?.signType ?? null,
+          approverName: drafterUser?.name ?? null,
+          approverPos: drafterUser?.position ?? null,
+          approverDept: drafterUser?.dept ?? null,
+        };
+      }
+      return s;
+    });
+
     await persist(next);
 
     // 알림 생성 연동
     try {
       const activeApprovers = currentApproverIds(next);
-      const users = await userRepo.list();
-      const drafterUser = users.find((u) => u.id === next.drafterId);
       const { notificationRepo } = await import('@/data/notification/notification.repo');
       for (const appUserId of activeApprovers) {
         await notificationRepo.create({
@@ -217,7 +248,25 @@ export const approvalDocRepo = {
     if (!isActiveApprover(cur, userId) || !stepBelongsTo(cur, seq, userId)) {
       throw new Error('결재 권한이 없습니다(본인 차례 아님)');
     }
+    const users = await userRepo.list();
+    const approverUser = users.find((u) => u.id === userId);
+
     const next = applyDecision(cur, seq, '승인', { at: now(), comment });
+    next.steps = next.steps.map((s) => {
+      if (s.seq === seq && s.approverId === userId) {
+        return {
+          ...s,
+          signUrl: approverUser?.signUrl ?? null,
+          sealUrl: approverUser?.sealUrl ?? null,
+          signType: approverUser?.signType ?? null,
+          approverName: approverUser?.name ?? null,
+          approverPos: approverUser?.position ?? null,
+          approverDept: approverUser?.dept ?? null,
+        };
+      }
+      return s;
+    });
+
     await persist(next);
 
     // 알림 생성 연동
@@ -361,6 +410,9 @@ export const approvalDocRepo = {
     const target = cur.steps.find((s) => s.seq === seq);
     if (!target) throw new Error('결재선 노드를 찾을 수 없습니다');
     if (!isActiveApprover(cur, target.approverId)) throw new Error('현재 활성 단계가 아닙니다');
+    const users = await userRepo.list();
+    const delegateUser = users.find((u) => u.id === delegateUserId);
+
     // 원 결재자를 대결자로 교체하고(실제 결정자) 원 결재자를 위임 기록으로 남긴다.
     const delegated: ApprovalDoc = {
       ...cur,
@@ -369,6 +421,21 @@ export const approvalDocRepo = {
       ),
     };
     const next = applyDecision(delegated, seq, '승인', { at: now(), comment });
+    next.steps = next.steps.map((s) => {
+      if (s.seq === seq && s.approverId === delegateUserId) {
+        return {
+          ...s,
+          signUrl: delegateUser?.signUrl ?? null,
+          sealUrl: delegateUser?.sealUrl ?? null,
+          signType: delegateUser?.signType ?? null,
+          approverName: delegateUser?.name ?? null,
+          approverPos: delegateUser?.position ?? null,
+          approverDept: delegateUser?.dept ?? null,
+        };
+      }
+      return s;
+    });
+
     await persist(next);
     return next;
   },

@@ -24,6 +24,18 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   회수: { bg: 'bg-[#faf6f0]', text: 'text-[#e6960c]' },
 };
 
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${yy}.${mm}.${dd} ${hh}:${min}`;
+}
+
 export default function ApprovalMonitorScreen() {
   const { user } = useAuth();
   if (user?.id !== 'U012') {
@@ -162,7 +174,7 @@ export default function ApprovalMonitorScreen() {
                           <span className="text-[10px] text-ink3 ml-1">({d.drafterDept || '—'})</span>
                         </td>
                         <td className="px-4 py-3 text-ink3 tabular-nums">
-                          {(d.submittedAt ?? d.createdAt ?? '').slice(2, 16).replace('T', ' ')}
+                          {formatDateTime(d.submittedAt ?? d.createdAt)}
                         </td>
                         <td className="px-4 py-3 text-teal font-semibold">
                           {getWaitingApprovers(d)}

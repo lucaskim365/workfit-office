@@ -45,12 +45,31 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   };
   const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
 
+  // 기안자 스냅샷 우선 조회 정의
+  const drafterName = doc.drafterName || org.userById(doc.drafterId)?.name || doc.drafterId;
+  const drafterPos = doc.drafterPos || org.userById(doc.drafterId)?.position || '';
+  const drafterSeal = () => {
+    if (doc.drafterSignType) {
+      return doc.drafterSignType === 'signature'
+        ? (doc.drafterSignUrl ?? '')
+        : (doc.drafterSealUrl ?? '');
+    }
+    return sealOf(doc.drafterId);
+  };
+  const isDrafterSignature = () => {
+    if (doc.drafterSignType) {
+      return doc.drafterSignType === 'signature';
+    }
+    return isSignatureOf(doc.drafterId);
+  };
+
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
   const handleDownload = async (e: any, url: string, name: string) => {
     e.preventDefault();
     try {
-      const response = await fetch(url);
+      // CORS를 허용하여 다운로드 Blob 처리가 가능하도록 mode: 'cors' 추가
+      const response = await fetch(url, { mode: 'cors' });
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -61,8 +80,15 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      console.error('Download failed, falling back to new window:', error);
-      window.open(url, '_blank');
+      console.error('Download failed, falling back to hidden iframe:', error);
+      // window.open 대신 보이지 않는 iframe을 활용해 브라우저가 새 탭 미리보기 창을 띄우지 않고 다운로드하도록 지시
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 2000);
     }
   };
 
@@ -124,7 +150,6 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
   const isAmountInDetails = amountField ? activeFields.some((f) => f.key === amountField.key) : false;
 
-  const drafterName = nameOf(doc.drafterId);
   const steps = [...doc.steps].sort((a, b) => a.seq - b.seq);
 
   interface LayoutBlock {
@@ -211,7 +236,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
       <table className="w-full border-collapse text-[12px]">
         <tbody>
           <MetaRow cells={[['문서번호', doc.docNo], ['기안부서', doc.drafterDept || '—']]} />
-          <MetaRow cells={[['기 안 자', drafterName], ['기 안 일', korDate(doc.submittedAt ?? doc.createdAt)]]} />
+          <MetaRow cells={[['기 안 자', drafterPos ? `${drafterName} ${drafterPos}` : drafterName], ['기 안 일', korDate(doc.submittedAt ?? doc.createdAt)]]} />
           {doc.completedAt && <MetaRow cells={[['시 행 일', korDate(doc.completedAt)], ['보존연한', '3년']]} />}
         </tbody>
       </table>
@@ -526,14 +551,14 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
         <div className="mt-1 flex items-center justify-center gap-1">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-          {isSignatureOf(doc.drafterId) ? (
+          {isDrafterSignature() ? (
             // 서명 모드
-            sealOf(doc.drafterId) ? (
+            drafterSeal() ? (
               // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
               <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
                 <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
                 <img
-                  src={sealOf(doc.drafterId)}
+                  src={drafterSeal()}
                   alt="서명"
                   className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
                 />
@@ -546,12 +571,12 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
             )
           ) : (
             // 도장 모드
-            sealOf(doc.drafterId) ? (
+            drafterSeal() ? (
               // (3) 도장 이미지가 있는 경우: (인) 링 위에 도장 오버레이
               <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none">
                 <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
                 <img
-                  src={sealOf(doc.drafterId)}
+                  src={drafterSeal()}
                   alt="인감"
                   className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
                 />
@@ -578,13 +603,24 @@ function ApprovalStampBox({ steps, nameOf, posOf, sealOf, isSignatureOf }: { ste
     <div className="flex shrink-0 border border-[#333] text-center">
       <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333]">결재</div>
       <div className="flex">
-        {steps.map((s) => (
-          <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
-            <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{posOf(s.approverId) || ' '}</div>
-            <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} sealUrl={sealOf(s.approverId)} isSignature={isSignatureOf(s.approverId)} /></div>
-            <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
-          </div>
-        ))}
+        {steps.map((s) => {
+          const finalName = s.approverName || nameOf(s.approverId);
+          const finalPos = s.approverPos || posOf(s.approverId);
+          const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
+          const finalSealUrl = s.signType
+            ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
+            : sealOf(s.approverId);
+
+          return (
+            <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
+              <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
+              <div className="grid h-[52px] place-items-center px-0.5">
+                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} />
+              </div>
+              <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

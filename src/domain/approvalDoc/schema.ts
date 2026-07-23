@@ -56,6 +56,18 @@ export const approvalStepSchema = z.object({
   decidedAt: z.string().nullable().default(null),
   /** 의견 — 반려 시 필수(엔진에서 강제). */
   comment: z.string().default(''),
+  /** 승인 당시 서명 이미지 URL (스냅샷) */
+  signUrl: z.string().nullable().optional(),
+  /** 승인 당시 도장 이미지 URL (스냅샷) */
+  sealUrl: z.string().nullable().optional(),
+  /** 승인 당시 서명 유형 (스냅샷) */
+  signType: z.string().nullable().optional(),
+  /** 승인 당시 성명 (스냅샷) */
+  approverName: z.string().nullable().optional(),
+  /** 승인 당시 직급 (스냅샷) */
+  approverPos: z.string().nullable().optional(),
+  /** 승인 당시 부서명 (스냅샷) */
+  approverDept: z.string().nullable().optional(),
 });
 
 export type ApprovalStep = z.infer<typeof approvalStepSchema>;
@@ -97,6 +109,16 @@ export const approvalDocSchema = z.object({
   amount: z.number().nullable().default(null),
   /** 본문. */
   body: z.string().default(''),
+  /** 기안 당시 기안자 서명 이미지 URL (스냅샷) */
+  drafterSignUrl: z.string().nullable().optional(),
+  /** 기안 당시 기안자 도장 이미지 URL (스냅샷) */
+  drafterSealUrl: z.string().nullable().optional(),
+  /** 기안 당시 기안자 서명 유형 (스냅샷) */
+  drafterSignType: z.string().nullable().optional(),
+  /** 기안 당시 기안자 성명 (스냅샷) */
+  drafterName: z.string().nullable().optional(),
+  /** 기안 당시 기안자 직급 (스냅샷) */
+  drafterPos: z.string().nullable().optional(),
   /** 유형 확장 필드(휴가=기간·종류 등). 유형별 optional. 휴가 system 서식 전용. */
   form: leaveFormSchema.nullable().default(null),
   /** 결재서식 동적 필드값 `{ key: value }`. 커스텀 서식·확장 필드 저장(휴가 form 은 별도). */
