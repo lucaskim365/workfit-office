@@ -179,7 +179,7 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
   }
   switch (box) {
     case '대기':
-      return doc.status === '진행중' && currentApproverIds(doc).includes(userId);
+      return doc.status === '진행중' && doc.steps.some((s) => s.approverId === userId && s.kind !== '참조');
     case '상신':
       return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
     case '반려':
