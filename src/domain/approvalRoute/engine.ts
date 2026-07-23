@@ -146,7 +146,7 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       return chain.slice(0, 1); // 무조건 1차 상급자만 반환
     }
     case 'DEPT_HEAD':
-      return headsUp.slice(0, 1); // 소속 부서장만 반환 (스킵 시 상위로 자동 승격 차단)
+      return headsUp; // 기안자가 부서장일 때 셀프제외(dedupeSelf)되어 자동으로 상위 부서장으로 승격하도록 허용
     case 'PARENT_DEPT_HEAD': {
       const level = asNumber(arg, 1);
       return ancestors.slice(level).map((d) => org.headOf(d)).filter((x): x is string => !!x).slice(0, 1);

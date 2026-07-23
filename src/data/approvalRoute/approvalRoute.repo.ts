@@ -19,16 +19,7 @@ export const approvalRouteRepo = {
       const snap = await getDocs(collection(db, COLL));
       rows = snap.docs.map((d) => approvalRouteRuleSchema.parse(d.data()));
       
-      // 1. 구 버전 규칙이나 시드에서 제외된 구 룰 정리 (사용자가 새로 생성한 룰은 보존)
-      const seedIds = new Set(APPROVAL_ROUTE_SEED.map((s) => s.id));
-      for (const r of rows) {
-        const isUserRule = /RR-\d+-\d+/.test(r.id);
-        const isObsolete = !isUserRule && ((r.id.startsWith('RR-') && !seedIds.has(r.id)) || r.id.startsWith('RR-EXP-'));
-        if (isObsolete) {
-          await deleteDoc(doc(db, COLL, r.id));
-          rows = rows.filter((x) => x.id !== r.id);
-        }
-      }
+      // 1. 구 버전 규칙 정리 제거 (서버 사이드 reseed 활용)
 
 
     } else {

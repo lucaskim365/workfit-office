@@ -232,7 +232,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
               </select>
             </F>
           )}
-          <F label="기안자 직급(이상/상위)">
+          <F label="기안자 직급 이상">
             <select
               value={rule.positionToRank ?? ''}
               onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })}
@@ -246,7 +246,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
               ))}
             </select>
           </F>
-          <F label="기안자 직급(이하/하위)">
+          <F label="기안자 직급 이하">
             <select
               value={rule.positionFromRank ?? ''}
               onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
@@ -262,6 +262,9 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
           </F>
           <F label="금액 이상"><input type="number" value={rule.amountFrom ?? ''} onChange={(e) => set({ amountFrom: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
           <F label="금액 미만"><input type="number" value={rule.amountTo ?? ''} onChange={(e) => set({ amountTo: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
+
+
+
         </div>
       </div>
 
