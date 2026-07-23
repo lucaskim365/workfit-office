@@ -151,7 +151,10 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         section: secName,
         fields: [f],
       });
-    } else if (f.type === '표') {
+    } else if (f.type === '표' || (() => {
+      const val = doc.fieldValues[f.key];
+      return typeof val === 'string' && val.trim().startsWith('{') && val.includes('"cols"') && val.includes('"rows"');
+    })()) {
       const lastBlock = blocks[blocks.length - 1];
       if (
         lastBlock &&
