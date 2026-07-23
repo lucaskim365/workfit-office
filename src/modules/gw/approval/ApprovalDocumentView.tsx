@@ -527,37 +527,44 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         <div className="mt-1 flex items-center justify-center gap-1">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
           {isSignatureOf(doc.drafterId) ? (
-            // 서명 모드: (인) 빨간 동그라미 테두리 링을 씌우고, 인쇄 시 가려지지 않게 (인) 글씨의 z-index를 z-30으로 상향 배치
-            <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b]/60 select-none bg-white">
-              <span className="text-[10px] font-extrabold text-[#c0392b] z-30 select-none">(인)</span>
-              {sealOf(doc.drafterId) ? (
+            // 서명 모드
+            sealOf(doc.drafterId) ? (
+              // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
+              <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
+                <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
                 <img
                   src={sealOf(doc.drafterId)}
                   alt="서명"
-                  className="absolute inset-0 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125 translate-x-[4px]"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
                 />
-              ) : (
-                <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-white/10">
-                  {drafterName}
-                </span>
-              )}
-            </span>
+              </span>
+            ) : (
+              // (2) 서명 이미지가 없는 경우 (폴백): 붉은 원 없이 '서명미등록' 가이드 표시
+              <span className="relative inline-flex h-9 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[10px] font-bold text-danger/80 select-none">
+                서명미등록
+              </span>
+            )
           ) : (
-            // 도장 모드: 기존 1:1 도장 렌더링 (인쇄 시 가려지지 않게 z-30 상향 및 bg-transparent 설정)
-            <span className="relative inline-flex h-9 w-9 items-center justify-center select-none">
-              <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
-              {sealOf(doc.drafterId) ? (
+            // 도장 모드
+            sealOf(doc.drafterId) ? (
+              // (3) 도장 이미지가 있는 경우: (인) 링 위에 도장 오버레이
+              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none">
+                <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
                 <img
                   src={sealOf(doc.drafterId)}
                   alt="인감"
                   className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
                 />
-              ) : (
-                <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
+              </span>
+            ) : (
+              // (4) 도장 이미지가 없는 경우 (폴백): 붉은 원형 링 + 희미한 (인) 글씨 위에 이름을 비스듬히 겹쳐 출력
+              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none bg-white">
+                <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
                   {drafterName}
                 </span>
-              )}
-            </span>
+              </span>
+            )
           )}
         </div>
       </div>
