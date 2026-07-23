@@ -50,7 +50,8 @@ async function main() {
   // 정렬: 우선순위 오름차순, 문서유형순
   rules.sort((a, b) => a.priority - b.priority || a.docType.localeCompare(b.docType));
 
-  console.log(JSON.stringify(rules, null, 2));
+  console.log('총 규칙 개수:', rules.length);
+  rules.forEach(r => console.log(`- ID: ${r.id}, Name: ${r.name}`));
 }
 
 main().catch((e) => {
