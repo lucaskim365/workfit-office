@@ -664,7 +664,10 @@ export function ApprovalDraftModal({
                                 key={fm.code}
                                 type="button"
                                 disabled={isDisabled}
-                                onClick={() => setCode(fm.code)}
+                                onClick={() => {
+                                  setCode(fm.code);
+                                  setValues({}); // 서식 교체 시 기존 입력 상태값 초기화
+                                }}
                                 className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${
                                   isDisabled
                                     ? 'opacity-40 cursor-not-allowed'
