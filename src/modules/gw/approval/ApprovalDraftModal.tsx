@@ -944,15 +944,27 @@ export function ApprovalDraftModal({
           </div>
         </div>
 
+<<<<<<< HEAD
         <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3 bg-panel-alt/10">
           <div className="flex-1 min-w-0 pr-4 flex items-center">
             {error && (
               <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11px] font-bold text-red-500 animate-fade-in truncate max-w-[320px] xl:max-w-[480px]" title={error}>
+=======
+        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3">
+          {/* 에러 알림 메시지를 하단 버튼 라인 좌측에 배치 */}
+          <div className="flex-1 min-w-0">
+            {error && (
+              <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] font-semibold text-red-500 animate-fade-in truncate max-w-[420px]" title={error}>
+>>>>>>> develop
                 ⚠️ {error}
               </div>
             )}
           </div>
+<<<<<<< HEAD
           <div className="flex items-center gap-2">
+=======
+          <div className="flex items-center gap-2 shrink-0">
+>>>>>>> develop
             <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
             <button
               onClick={() => setShowPreview(true)}

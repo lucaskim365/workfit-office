@@ -45,6 +45,8 @@ export const userSchema = z.object({
    * 전자결재 문서 서명란에 표시된다. 미등록 시 빈 문자열.
    */
   sealUrl: z.string().default(''),
+  signUrl: z.string().optional().default(''),
+  signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
   activeChatRoomId: z.string().nullable().optional(),
 });

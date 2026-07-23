@@ -73,8 +73,8 @@ export const userRepo = {
     await this.save(userSchema.parse({ ...existing, ...values, password, id }));
   },
 
-  /** 프로필 자기 수정 — 사용자가 직접 변경 가능한 필드만(이메일, 인감 URL, 프로필 사진). */
-  async updateProfile(id: string, patch: { email?: string; sealUrl?: string; photoUrl?: string }): Promise<User> {
+  /** 프로필 자기 수정 — 사용자가 직접 변경 가능한 필드만(이메일, 인감 URL, 서명 URL, 선택 타입, 프로필 사진). */
+  async updateProfile(id: string, patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string }): Promise<User> {
     const all = await this.list();
     const existing = all.find((u) => u.id === id);
     if (!existing) throw new Error('사용자를 찾을 수 없습니다.');

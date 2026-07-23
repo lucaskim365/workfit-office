@@ -38,7 +38,12 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
   const { data: forms = [] } = useApprovalForms();
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const posOf = (id: string) => org.userById(id)?.position ?? '';
-  const sealOf = (id: string) => org.userById(id)?.sealUrl ?? '';
+  const sealOf = (id: string) => {
+    const user = org.userById(id);
+    if (!user) return '';
+    return user.signType === 'signature' ? (user.signUrl ?? '') : (user.sealUrl ?? '');
+  };
+  const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
 
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
@@ -200,7 +205,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        <ApprovalStampBox steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} />
+        <ApprovalStampBox steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} />
       </div>
 
       <table className="w-full border-collapse text-[12px]">
@@ -276,7 +281,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       if (Array.isArray(cfg.merges)) merges = cfg.merges;
                       if (cfg.headerValues) headerValues = cfg.headerValues;
                     }
-                  } catch (e) {}
+                  } catch (e) { }
                 }
 
                 try {
@@ -292,7 +297,7 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       }
                     }
                   }
-                } catch (e) {}
+                } catch (e) { }
 
                 return (
                   <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
@@ -521,27 +526,46 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
         <div className="mt-1 flex items-center justify-center gap-1">
           기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-          <span className="relative inline-flex h-9 w-9 items-center justify-center select-none">
-            <span className="text-[12.5px] font-bold text-[#c0392b] z-10">(인)</span>
-            {sealOf(doc.drafterId) ? (
-              <img
-                src={sealOf(doc.drafterId)}
-                alt="인감"
-                className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
-              />
-            ) : (
-              <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[9px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-white/10">
-                {drafterName.slice(-2)}
-              </span>
-            )}
-          </span>
+          {isSignatureOf(doc.drafterId) ? (
+            // 서명 모드: (인) 빨간 동그라미 테두리 링을 씌우고, 인쇄 시 가려지지 않게 (인) 글씨의 z-index를 z-30으로 상향 배치
+            <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b]/60 select-none bg-white">
+              <span className="text-[10px] font-extrabold text-[#c0392b] z-30 select-none">(인)</span>
+              {sealOf(doc.drafterId) ? (
+                <img
+                  src={sealOf(doc.drafterId)}
+                  alt="서명"
+                  className="absolute inset-0 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125 translate-x-[4px]"
+                />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-white/10">
+                  {drafterName}
+                </span>
+              )}
+            </span>
+          ) : (
+            // 도장 모드: 기존 1:1 도장 렌더링 (인쇄 시 가려지지 않게 z-30 상향 및 bg-transparent 설정)
+            <span className="relative inline-flex h-9 w-9 items-center justify-center select-none">
+              <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+              {sealOf(doc.drafterId) ? (
+                <img
+                  src={sealOf(doc.drafterId)}
+                  alt="인감"
+                  className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
+                />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center rounded-full border border-danger/60 text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
+                  {drafterName}
+                </span>
+              )}
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function ApprovalStampBox({ steps, nameOf, posOf, sealOf }: { steps: ApprovalStep[]; nameOf: (id: string) => string; posOf: (id: string) => string; sealOf: (id: string) => string }) {
+function ApprovalStampBox({ steps, nameOf, posOf, sealOf, isSignatureOf }: { steps: ApprovalStep[]; nameOf: (id: string) => string; posOf: (id: string) => string; sealOf: (id: string) => string; isSignatureOf: (id: string) => boolean }) {
   if (steps.length === 0) return null;
   return (
     <div className="flex shrink-0 border border-[#333] text-center">
@@ -550,7 +574,7 @@ function ApprovalStampBox({ steps, nameOf, posOf, sealOf }: { steps: ApprovalSte
         {steps.map((s) => (
           <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
             <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{posOf(s.approverId) || ' '}</div>
-            <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} sealUrl={sealOf(s.approverId)} /></div>
+            <div className="grid h-[52px] place-items-center px-0.5"><Stamp step={s} name={nameOf(s.approverId)} sealUrl={sealOf(s.approverId)} isSignature={isSignatureOf(s.approverId)} /></div>
             <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
           </div>
         ))}
@@ -559,11 +583,29 @@ function ApprovalStampBox({ steps, nameOf, posOf, sealOf }: { steps: ApprovalSte
   );
 }
 
-function Stamp({ step, name, sealUrl }: { step: ApprovalStep; name: string; sealUrl: string }) {
+function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name: string; sealUrl: string; isSignature: boolean }) {
   if (step.kind === '참조') return <span className="text-[10px] text-[#888]">열람<br />{name}</span>;
 
-  // 인감 이미지가 있고 결재/반려/보류가 완료된 경우 인감 이미지 우선 표시
-  if (sealUrl && (step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
+  // 인감/서명 이미지가 있고 (1) 기안자(첫 번째 노드)이거나 (2) 결재 처리가 완료된 경우 렌더링
+  if (sealUrl && (step.seq === 1 || step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
+    if (isSignature) {
+      // 서명 모드: 세로 높이가 과도하게 길어 보이지 않도록 가로로 날렵하고 납작한 비율(84px x 40px)로 정돈
+      return (
+        <div className="relative h-[52px] w-[59px] flex items-center justify-center overflow-visible select-none">
+          <img
+            src={sealUrl}
+            alt="서명"
+            className="min-w-[84px] min-h-[40px] max-w-[84px] max-h-[40px] object-contain opacity-95 pointer-events-none mix-blend-multiply"
+            style={{ opacity: step.decision === '반려' ? 0.6 : 1 }}
+          />
+          {step.decision === '반려' && (
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b] z-30" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
+          )}
+        </div>
+      );
+    }
+
+    // 도장 모드: 기존 1:1 정방형 도장 크기
     return (
       <div className="relative flex h-[44px] w-[44px] items-center justify-center">
         <img src={sealUrl} alt="인감" className="h-full w-full object-contain" style={{ opacity: step.decision === '반려' ? 0.6 : 1 }} />
@@ -579,7 +621,7 @@ function Stamp({ step, name, sealUrl }: { step: ApprovalStep; name: string; seal
   if (step.decision === '반려')
     return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
   if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
-  
+
   // 대기 상태일 때는 결재란 내 인감 영역에 연회색으로 결재단계(s.kind) 표시
   return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
 }
