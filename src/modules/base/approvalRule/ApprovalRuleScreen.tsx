@@ -18,7 +18,6 @@ import type { ApprovalForm } from '@/domain/approvalForm/schema';
  * 기안자 부서·직급·금액별 결재선을 코드 수정 없이 관리. ([[dynamic-route-engine]] §7.4)
  */
 const RESOLVER_LABEL: Record<Resolver, string> = {
-  DRAFTER: '담당 (기안자 본인)',
   MANAGER: '직속 상급자',
   DEPT_HEAD: '소속 부서장',
   PARENT_DEPT_HEAD: '상위 부서장(level)',

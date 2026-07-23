@@ -44,37 +44,8 @@ export interface LeaveBalance {
   isLoading: boolean;
 }
 
-// 2026-07-16 기준 모의 대체휴무 발생 데이터
-const INITIAL_SUBSTITUTE_HOLIDAYS = [
-  {
-    id: 'sub-001',
-    occurrenceDate: '2026-05-10',
-    expirationDate: '2026-08-09',
-    reason: '주말 시스템 마이그레이션 작업 지원',
-    days: 1.0,
-  },
-  {
-    id: 'sub-002',
-    occurrenceDate: '2026-07-01',
-    expirationDate: '2026-10-01',
-    reason: 'ERP 구축 프로젝트 야간 장애 대응',
-    days: 2.0,
-  },
-  {
-    id: 'sub-003',
-    occurrenceDate: '2026-07-10',
-    expirationDate: '2026-10-08',
-    reason: '반기 정보보안 감사 대비 주말 연장 근무',
-    days: 1.0,
-  },
-  {
-    id: 'sub-004',
-    occurrenceDate: '2026-03-01',
-    expirationDate: '2026-05-30',
-    reason: '서버 마이그레이션 비상 대기',
-    days: 1.0,
-  }
-];
+// 모의 대체휴무 발생 데이터 삭제됨
+const INITIAL_SUBSTITUTE_HOLIDAYS: Array<{ id: string; occurrenceDate: string; expirationDate: string; reason: string; days: number }> = [];
 
 export function useLeave(userId: string | undefined): LeaveBalance {
   const q = useAllApprovals();

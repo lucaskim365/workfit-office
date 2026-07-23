@@ -141,8 +141,6 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
   };
 
   switch (step.resolver) {
-    case 'DRAFTER':
-      return [drafter.id];
     case 'MANAGER': {
       const chain = org.managerChain(drafter.id);
       return chain.slice(0, 1); // 무조건 1차 상급자만 반환

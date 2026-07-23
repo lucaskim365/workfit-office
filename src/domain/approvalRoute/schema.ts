@@ -14,7 +14,6 @@ import { DEPT_TYPES } from '@/domain/department/schema';
 
 /** 결재자 해석 규칙(§5.5). */
 export const RESOLVERS = [
-  'DRAFTER', // 기안자 본인
   'MANAGER', // 직속 상급자(무조건 1차)
   'DEPT_HEAD', // 소속 부서장(막히면 상위 부서장으로 승격)
   'PARENT_DEPT_HEAD', // 상위 level 단계 부서의 부서장(arg=level)

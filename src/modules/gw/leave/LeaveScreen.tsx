@@ -25,7 +25,12 @@ export default function LeaveScreen() {
 
   // 다가오는 일정 계산
   const upcomingDoc = useMemo(() => {
-    const todayStr = '2026-07-16';
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const date = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${date}`;
+
     const activeLeaves = bal.myDocs.filter(
       (d) => (d.status === '완료' || d.status === '진행중') && d.form && d.form.startDate >= todayStr
     );
@@ -36,10 +41,12 @@ export default function LeaveScreen() {
   // 디데이 계산 텍스트 생성
   const upcomingDDayText = useMemo(() => {
     if (!upcomingDoc || !upcomingDoc.form) return '';
-    const today = new Date('2026-07-16');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const start = new Date(upcomingDoc.form.startDate);
+    start.setHours(0, 0, 0, 0);
     const diffTime = start.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     if (diffDays === 0) return '오늘';
     if (diffDays === 1) return '내일';
     return `D-${diffDays}`;
