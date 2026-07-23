@@ -24,7 +24,7 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  * 모든 전이는 features 훅(엔진 위임) → 성공 시 캐시 무효화로 함·배지 자동 갱신.
  */
 const BOX_LABEL: Record<ApprovalBox, string> = {
-  대기: '결재대기함',
+  대기: '결재함',
   상신: '상신함',
   반려: '반려함',
   임시: '임시저장함',
@@ -42,22 +42,40 @@ export default function ApprovalScreen() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const [params, setParams] = useSearchParams();
   const [box, setBox] = useState<ApprovalBox>('대기');
+
+  const myActivePendingCount = useMemo(() => {
+    const list = byBox['대기'] ?? [];
+    return list.filter((d) => currentApproverIds(d).includes(me)).length;
+  }, [byBox, me]);
+
   const [selId, setSelId] = useState<string | null>(null);
   const [modal, setModal] = useState<{ edit?: ApprovalDoc | null } | null>(null);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
+  const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
 
   const list = byBox[box] ?? [];
   const selDoc = useApprovalDoc(selId);
 
-  // 완료함 기안/결재자별 필터
+  // 완료함 및 결재함 필터링 적용
   const filteredList = useMemo(() => {
-    if (box !== '완료') return list;
-    if (doneFilter === 'draft') return list.filter((d) => d.drafterId === me);
-    if (doneFilter === 'approved') {
-      return list.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+    if (box === '완료') {
+      if (doneFilter === 'draft') return list.filter((d) => d.drafterId === me);
+      if (doneFilter === 'approved') {
+        return list.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+      }
+      return list;
+    }
+    if (box === '대기') {
+      if (todoFilter === 'pending') {
+        return list.filter((d) => currentApproverIds(d).includes(me));
+      }
+      if (todoFilter === 'progress') {
+        return list.filter((d) => !currentApproverIds(d).includes(me));
+      }
+      return list;
     }
     return list;
-  }, [box, list, doneFilter, me]);
+  }, [box, list, doneFilter, todoFilter, me]);
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
   useEffect(() => {
@@ -109,20 +127,36 @@ export default function ApprovalScreen() {
                 {g.title}
               </div>
               <div className="space-y-0.5">
-                {g.boxes.map((b) => (
-                  <button
-                    key={b}
-                    onClick={() => setBox(b)}
-                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
-                  >
-                    <span>{BOX_LABEL[b]}</span>
-                    {(counts[b] ?? 0) > 0 && (
-                      <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${b === '대기' ? 'bg-amber text-white' : box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'}`}>
-                        {counts[b]}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {g.boxes.map((b) => {
+                  const hasBadge = b === '대기' 
+                    ? (byBox['대기'] ?? []).length > 0
+                    : (counts[b] ?? 0) > 0;
+                  
+                  const badgeCount = b === '대기'
+                    ? (myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length)
+                    : counts[b];
+
+                  const badgeClass = b === '대기'
+                    ? (myActivePendingCount > 0 
+                        ? 'bg-red-500 text-white animate-pulse' 
+                        : 'bg-ink3/15 text-ink2')
+                    : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+
+                  return (
+                    <button
+                      key={b}
+                      onClick={() => setBox(b)}
+                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                    >
+                      <span>{BOX_LABEL[b]}</span>
+                      {hasBadge && (
+                        <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
+                          {badgeCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -133,6 +167,26 @@ export default function ApprovalScreen() {
           <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2">
             <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
           </div>
+          {box === '대기' && (
+            <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+              {(['all', 'pending', 'progress'] as const).map((f) => {
+                const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setTodoFilter(f)}
+                    className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${
+                      todoFilter === f
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {box === '완료' && (
             <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
               {(['all', 'draft', 'approved'] as const).map((f) => {
@@ -158,6 +212,7 @@ export default function ApprovalScreen() {
             {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
             {filteredList.map((d) => {
               const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
+              const isMyTurn = d.status === '진행중' && currentApproverIds(d).includes(me);
               return (
                 <button
                   key={d.id}
@@ -179,7 +234,11 @@ export default function ApprovalScreen() {
                         최근 완료
                       </span>
                     )}
-                    <StatusBadge status={d.status} />
+                    {isMyTurn ? (
+                      <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />
+                    ) : (
+                      <StatusBadge status={d.status} />
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-[10.5px] text-ink3">
                     <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
@@ -270,7 +329,11 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             <div className="flex items-center gap-2">
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
               <h2 className="truncate text-[15.5px] font-bold text-ink">{doc.title}</h2>
-              <StatusBadge status={doc.status} />
+              {doc.status === '진행중' && currentApproverIds(doc).includes(me) ? (
+                <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />
+              ) : (
+                <StatusBadge status={doc.status} />
+              )}
             </div>
             <div className="mt-1 text-[11px] text-ink3">
               {doc.docNo} · {doc.docType} · 기안 {nameOf(doc.drafterId)}({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}

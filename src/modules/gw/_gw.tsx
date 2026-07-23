@@ -32,10 +32,10 @@ const STATUS_TONE: Record<DocStatus, string> = {
   삭제: 'bg-red-500/12 text-red-500',
 };
 
-export function StatusBadge({ status }: { status: DocStatus }) {
+export function StatusBadge({ status, label, className }: { status: DocStatus; label?: string; className?: string }) {
   return (
-    <span className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${STATUS_TONE[status]}`}>
-      {status}
+    <span className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${className || STATUS_TONE[status]}`}>
+      {label || status}
     </span>
   );
 }

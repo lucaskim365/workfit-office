@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { currentApproverIds } from '@/domain/approvalDoc/engine';
 
 /**
  * 도크 그룹웨어 요약 — 로그인 사용자의 **결재 대기** 집계(도출값).
@@ -15,10 +17,16 @@ export interface GwSummary {
 }
 
 export function useGwSummary(userId: string | undefined): GwSummary {
-  const { byBox, counts, isLoading } = useApprovalBoxes(userId);
+  const { byBox, isLoading } = useApprovalBoxes(userId);
+
+  const activePendingDocs = useMemo(() => {
+    const list = byBox['대기'] ?? [];
+    return userId ? list.filter((d) => currentApproverIds(d).includes(userId)) : [];
+  }, [byBox, userId]);
+
   return {
-    pendingCount: counts['대기'] ?? 0,
-    pendingDocs: byBox['대기'] ?? [],
+    pendingCount: activePendingDocs.length,
+    pendingDocs: activePendingDocs,
     isLoading,
   };
 }
