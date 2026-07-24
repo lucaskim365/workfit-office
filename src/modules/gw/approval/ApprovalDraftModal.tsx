@@ -79,9 +79,7 @@ export function ApprovalDraftModal({
     }
     return null;
   });
-  const [showExecutionPicker, setShowExecutionPicker] = useState(false);
   const [execPickerType, setExecPickerType] = useState<'USER' | 'DEPT'>('DEPT');
-  const [execPickerTargetId, setExecPickerTargetId] = useState('');
 
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
@@ -958,106 +956,83 @@ export function ApprovalDraftModal({
                   </div>
                 </div>
 
-                {/* 시행자 지정 - 별도 카드형 디자인 */}
+                {/* 시행자 지정 - 별도 카드형 디자인 (직관적인 인라인 바인딩) */}
                 <div className="rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 flex flex-col justify-between min-h-[130px]">
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <div>
                         <div className="text-[12px] font-bold text-teal">📦 시행자 설정</div>
-                        <div className="text-[9.5px] text-ink3">완료 후 후속 실무를 처리할 시행자</div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowExecutionPicker(!showExecutionPicker);
-                            setExecPickerTargetId('');
-                          }}
-                          className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
-                        >
-                          + 지정
-                        </button>
+                        <div className="text-[9.5px] text-ink3">완료 후 후속 실무를 처리할 시행자 지정</div>
                       </div>
                     </div>
 
-                    {/* 시행자 지정 추가 폼 */}
-                    {showExecutionPicker && (
-                      <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
-                        <select
-                          value={execPickerType}
-                          onChange={(e) => {
-                            setExecPickerType(e.target.value as 'USER' | 'DEPT');
-                            setExecPickerTargetId('');
-                          }}
-                          className="rounded border border-border-hi bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                        >
-                          <option value="DEPT">부서</option>
-                          <option value="USER">사원</option>
-                        </select>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <select
+                        value={execPickerType}
+                        onChange={(e) => {
+                          const newType = e.target.value as 'USER' | 'DEPT';
+                          setExecPickerType(newType);
+                          setExecutionTarget(null);
+                        }}
+                        className="rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink outline-none"
+                      >
+                        <option value="DEPT">부서</option>
+                        <option value="USER">사원</option>
+                      </select>
 
-                        <select
-                          value={execPickerTargetId}
-                          onChange={(e) => setExecPickerTargetId(e.target.value)}
-                          className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                        >
-                          <option value="">선택하세요</option>
-                          {execPickerType === 'DEPT'
-                            ? org.depts.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))
-                            : org.users.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name} {u.position} ({u.dept})
-                              </option>
-                            ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!execPickerTargetId) return;
-                            if (execPickerType === 'DEPT') {
-                              const dept = org.depts.find((d) => d.id === execPickerTargetId);
-                              if (dept) {
-                                setExecutionTarget({ type: 'DEPT', id: dept.id, name: dept.name });
-                              }
-                            } else {
-                              const user = org.users.find((u) => u.id === execPickerTargetId);
-                              if (user) {
-                                setExecutionTarget({ type: 'USER', id: user.id, name: `${user.name} ${user.position}` });
-                              }
+                      <select
+                        value={executionTarget?.id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setExecutionTarget(null);
+                            return;
+                          }
+                          if (execPickerType === 'DEPT') {
+                            const dept = org.depts.find((d) => d.id === val);
+                            if (dept) {
+                              setExecutionTarget({ type: 'DEPT', id: dept.id, name: dept.name });
                             }
-                            setShowExecutionPicker(false);
-                          }}
-                          className="rounded bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90"
-                        >
-                          지정
-                        </button>
-                      </div>
-                    )}
+                          } else {
+                            const user = org.users.find((u) => u.id === val);
+                            if (user) {
+                              setExecutionTarget({ type: 'USER', id: user.id, name: `${user.name} ${user.position}` });
+                            }
+                          }
+                        }}
+                        className="flex-1 min-w-0 rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink outline-none"
+                      >
+                        <option value="">시행자 지정 안함</option>
+                        {execPickerType === 'DEPT'
+                          ? org.depts.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))
+                          : org.users.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} {u.position} ({u.dept})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* 지정된 시행자 태그 */}
-                  <div className="mt-2 flex-1">
-                    {!executionTarget ? (
-                      <p className="text-[10.5px] text-ink3 pl-1">지정된 시행자가 없습니다.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 pl-1">
-                        <span
-                          className="flex items-center gap-1 rounded-md bg-panel border border-teal/20 px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-sm"
+                  {/* 지정된 시행자 정보 가이드 */}
+                  <div className="mt-2.5">
+                    {executionTarget ? (
+                      <div className="text-[10.5px] font-semibold text-teal flex items-center justify-between bg-panel border border-teal/20 px-2.5 py-0.5 rounded shadow-sm">
+                        <span className="truncate">🎯 지정됨: {executionTarget.type === 'DEPT' ? '📁' : '👤'} {executionTarget.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setExecutionTarget(null)}
+                          className="ml-1 font-bold text-teal/60 hover:text-red-500 shrink-0"
                         >
-                          {executionTarget.type === 'DEPT' ? '📁' : '👤'} {executionTarget.name}
-                          <button
-                            type="button"
-                            onClick={() => setExecutionTarget(null)}
-                            className="ml-1 font-bold text-teal/60 hover:text-red-500"
-                          >
-                            ✕
-                          </button>
-                        </span>
+                          ✕
+                        </button>
                       </div>
+                    ) : (
+                      <p className="text-[10.5px] text-ink3 pl-1">지정된 시행자가 없습니다.</p>
                     )}
                   </div>
                 </div>

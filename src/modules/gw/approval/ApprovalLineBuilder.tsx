@@ -184,11 +184,12 @@ export function ApprovalLineBuilder({
       {/* 결재자 피커 팝오버 */}
       {picker && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
-          <div className="max-h-[70vh] w-full max-w-sm overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(ev) => ev.stopPropagation()}>
-            <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between">
+          <div className="max-h-[75vh] w-full max-w-md overflow-hidden rounded-2xl bg-panel shadow-2xl flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+            <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between shrink-0">
               <span>{picker.mode === 'add' ? '결재자 추가' : '결재자 변경'}</span>
+              <button type="button" onClick={() => setPicker(null)} className="text-[16px] text-ink3 hover:text-ink">✕</button>
             </div>
-            <UserPickList users={users.filter((u) => u.status === '사용')} onPick={pick} />
+            <UserPickList users={users.filter((u) => u.status === '사용')} org={org} onPick={pick} />
           </div>
         </div>
       )}
@@ -196,37 +197,135 @@ export function ApprovalLineBuilder({
   );
 }
 
-/** 검색 가능한 사용자 선택 리스트(MemberPicker 톤 재사용). */
-function UserPickList({ users, onPick }: { users: User[]; onPick: (id: string) => void }) {
+/** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트. */
+function UserPickList({ users, org, onPick }: { users: User[]; org: ReturnType<typeof useOrgTree>; onPick: (id: string) => void }) {
+  const [tab, setTab] = useState<'org' | 'list'>('org');
   const [q, setQ] = useState('');
   const kw = q.trim().toLowerCase();
   const list = users.filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
+
   return (
-    <div className="flex max-h-[62vh] flex-col">
-      <div className="border-b border-border p-3">
+    <div className="flex max-h-[66vh] flex-col min-h-0 flex-1">
+      {/* 탭 & 검색창 */}
+      <div className="border-b border-border p-3 space-y-2 shrink-0">
+        <div className="flex gap-1 rounded-lg bg-panel-alt p-1">
+          <button
+            type="button"
+            onClick={() => setTab('org')}
+            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${
+              tab === 'org' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
+            }`}
+          >
+            🌳 조직도
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('list')}
+            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${
+              tab === 'list' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
+            }`}
+          >
+            📋 전체 사용자 목록
+          </button>
+        </div>
+
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="이름·부서 검색"
-          className="w-full rounded-full border border-border-hi bg-panel-alt px-3.5 py-2 text-[12px] text-ink outline-none focus:border-teal"
+          placeholder="이름·부서 검색..."
+          className="w-full rounded-full border border-border-hi bg-panel-alt px-3.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {list.map((u) => (
-          <button
-            key={u.id}
-            onClick={() => onPick(u.id)}
-            className="flex w-full items-center gap-3 border-b border-border px-4 py-2.5 text-left hover:bg-panel-alt"
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">{u.name[0]}</span>
-            <div className="min-w-0">
-              <div className="truncate text-[12.5px] font-semibold text-ink">{u.name}</div>
-              <div className="truncate text-[10.5px] text-ink3">{u.dept} · {u.position}</div>
-            </div>
-          </button>
-        ))}
-        {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">대상이 없습니다</div>}
+
+      {/* 본문 뷰 */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        {kw ? (
+          /* 검색어 입력 시 검색 결과 리스트 */
+          <div className="space-y-0.5">
+            {list.map((u) => (
+              <UserPickItem key={u.id} user={u} onPick={onPick} />
+            ))}
+            {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">검색 결과가 없습니다.</div>}
+          </div>
+        ) : tab === 'org' ? (
+          /* 조직도 트리 뷰 */
+          <div className="space-y-1">
+            {org.roots.map((root) => (
+              <OrgTreeNodeItem key={root.dept.id} node={root} onPick={onPick} />
+            ))}
+            {org.roots.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">조직도 정보가 없습니다.</div>}
+          </div>
+        ) : (
+          /* 전체 사용자 리스트 뷰 */
+          <div className="space-y-0.5">
+            {list.map((u) => (
+              <UserPickItem key={u.id} user={u} onPick={onPick} />
+            ))}
+            {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">사용자가 없습니다.</div>}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+/** 조직도 트리의 각 부서 노드 컴포넌트 */
+function OrgTreeNodeItem({ node, onPick }: { node: import('@/features/gw/useOrgTree').OrgNode; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(true);
+  const hasContent = node.children.length > 0 || node.members.length > 0;
+
+  return (
+    <div className="space-y-0.5 select-none">
+      {/* 부서 헤더 */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[12px] font-bold text-ink hover:bg-panel-alt transition-colors"
+      >
+        <span className="flex items-center gap-1.5 truncate">
+          <span className="text-[13px]">🏢</span>
+          <span className="truncate">{node.dept.name}</span>
+          <span className="text-[10px] text-ink3 font-normal">({node.members.length})</span>
+        </span>
+        {hasContent && <span className="text-[9px] text-ink3">{open ? '▼' : '▶'}</span>}
+      </button>
+
+      {/* 부서원 및 하위 부서 (펼침 상태) */}
+      {open && hasContent && (
+        <div className="ml-3.5 pl-2 border-l border-border/60 space-y-0.5">
+          {/* 부서 소속원들 */}
+          {node.members.map((u) => (
+            <UserPickItem key={u.id} user={u} onPick={onPick} />
+          ))}
+
+          {/* 하위 부서들 */}
+          {node.children.map((child) => (
+            <OrgTreeNodeItem key={child.dept.id} node={child} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 개별 사용자 아이템 컴포넌트 */
+function UserPickItem({ user, onPick }: { user: User; onPick: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(user.id)}
+      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-teal-soft/30 hover:text-teal transition-all group"
+    >
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal group-hover:bg-teal group-hover:text-white transition-colors">
+        {user.name[0]}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-1">
+          <span className="truncate text-[12px] font-semibold text-ink group-hover:text-teal">{user.name}</span>
+          <span className="text-[10px] text-teal font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">선택 ➔</span>
+        </div>
+        <div className="truncate text-[10.5px] text-ink3">{user.dept} · {user.position}</div>
+      </div>
+    </button>
   );
 }

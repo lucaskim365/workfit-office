@@ -344,47 +344,140 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
 
   return (
     <div className="flex h-full flex-col">
-      {/* 상세 헤더 */}
-      <div className="border-b border-border px-5 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+      {/* 상세 헤더 & 미니 결재선 */}
+      <div className="border-b border-border px-5 py-3.5">
+        <div className="flex items-center justify-between gap-4">
+          {/* 좌측: 문서 기본 정보 */}
+          <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
-              <h2 className="truncate text-[15.5px] font-bold text-ink">{doc.title}</h2>
+              <h2 className="truncate text-[16px] font-bold text-ink">{doc.title}</h2>
               {doc.status === '진행중' && currentApproverIds(doc).includes(me) ? (
                 <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />
               ) : (
                 <StatusBadge status={doc.status} />
               )}
             </div>
-            <div className="mt-1 text-[11px] text-ink3">
-              {doc.docNo} · {doc.docType} · 기안 {nameOf(doc.drafterId)}({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
+            <div className="text-[11.5px] text-ink3">
+              {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
             </div>
-          </div>
-          {/* 인쇄 버튼 */}
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={() => window.print()}
-              title="결재 문서 인쇄"
-              className="rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal"
-            >
-              🖨 인쇄
-            </button>
-          </div>
-        </div>
-        {(doc.amount != null || doc.form) && (
-          <div className="mt-2 flex flex-wrap gap-2 text-[11.5px]">
-            {doc.amount != null && <span className="rounded-md bg-panel-alt px-2 py-1 font-semibold text-ink2">금액 {won(doc.amount)}</span>}
-            {doc.form && (
-              <span className="rounded-md bg-panel-alt px-2 py-1 font-semibold text-ink2">
-                {doc.form.leaveType} · {doc.form.startDate}~{doc.form.endDate} · {doc.form.days}일
-              </span>
+            {(doc.amount != null || doc.form) && (
+              <div className="pt-0.5 flex flex-wrap gap-1.5 text-[11px]">
+                {doc.amount != null && <span className="rounded-md bg-panel-alt px-2 py-0.5 font-semibold text-ink2">금액 {won(doc.amount)}</span>}
+                {doc.form && (
+                  <span className="rounded-md bg-panel-alt px-2 py-0.5 font-semibold text-ink2">
+                    {doc.form.leaveType} · {doc.form.startDate}~{doc.form.endDate} · {doc.form.days}일
+                  </span>
+                )}
+              </div>
             )}
           </div>
-        )}
+
+          {/* 우측: 확대된 컴팩트 결재선 플로우차트 */}
+          <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto max-w-[55%] py-0.5">
+            {/* 기안자 카드 */}
+            <div className="w-[92px] h-[80px] shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 p-2 text-center shadow-xs">
+              <div className="text-[9.5px] font-bold text-teal">기안</div>
+              <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                <span className="text-[11.5px] font-semibold text-ink truncate w-full">
+                  {doc.drafterName || nameOf(doc.drafterId)}
+                </span>
+                <span className="text-[9px] text-ink3 truncate w-full mt-0.5">
+                  {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
+                </span>
+              </div>
+              <div className="rounded bg-teal/15 py-0.5 text-[9px] font-bold text-teal">상신</div>
+            </div>
+
+            {/* 결재권자 카드들 */}
+            {[...doc.steps]
+              .filter((s) => s.kind !== '참조')
+              .sort((a, b) => a.seq - b.seq)
+              .map((s) => {
+                const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
+
+                let statusText: string = s.decision;
+                let statusBg = 'bg-ink3/10 text-ink3';
+                if (s.decision === '승인') {
+                  statusText = '승인';
+                  statusBg = 'bg-teal-soft text-teal';
+                } else if (s.decision === '반려') {
+                  statusText = '반려';
+                  statusBg = 'bg-red-500/10 text-red-500';
+                } else if (s.decision === '보류') {
+                  statusText = '보류';
+                  statusBg = 'bg-amber/10 text-amber';
+                } else if (isActive) {
+                  statusText = '결재대기';
+                  statusBg = 'bg-amber text-white animate-pulse';
+                }
+
+                return (
+                  <Fragment key={s.seq}>
+                    <span className="text-ink3 text-[11px] font-bold">➔</span>
+                    <div className={`w-[92px] h-[80px] shrink-0 flex flex-col justify-between rounded-xl border p-2 text-center shadow-xs transition-all ${isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel'}`}>
+                      <div className="flex items-center justify-between text-[9px] font-bold">
+                        <span className="text-ink3">Seq {s.seq}</span>
+                        <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                        <span className="text-[11.5px] font-semibold text-ink truncate w-full">
+                          {s.approverName || nameOf(s.approverId)}
+                        </span>
+                        <span className="text-[9px] text-ink3 truncate w-full mt-0.5">
+                          {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                        </span>
+                        {s.delegatedFromId && <span className="text-[8px] text-amber truncate w-full">대결</span>}
+                      </div>
+                      <div className={`rounded py-0.5 text-[9px] font-bold ${statusBg}`}>
+                        {statusText}
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })}
+          </div>
+        </div>
       </div>
 
+      {/* 헤더 아래 본문 영역 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {/* 수신/참조자 목록 (슬림 인라인 배치 & 수신/참조 태그 명시) */}
+        {((doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조')) && (
+          <div className="mb-2.5 flex items-center gap-2 text-[11px] leading-none">
+            <span className="text-ink3 font-semibold shrink-0 select-none">└─ 📨 공유처:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {doc.recipients?.map((r) => {
+                let detailInfo = '';
+                if (r.type === 'user') {
+                  const u = org.userById(r.id);
+                  if (u) detailInfo = ` (${u.dept} ${u.position})`;
+                } else if (r.type === 'dept') {
+                  detailInfo = ' (부서)';
+                }
+                const label = r.type === 'drafter' ? '[기안자]' : '[수신]';
+                return (
+                  <span key={r.id} className="inline-flex items-center gap-1 text-teal font-medium">
+                    <span className="text-[9.5px] opacity-75 font-bold">{label}</span>
+                    <span>{r.type === 'dept' ? '📁' : '👤'}</span>
+                    <span>{r.name}{detailInfo}</span>
+                  </span>
+                );
+              })}
+              {doc.steps.filter((s) => s.kind === '참조').map((s) => {
+                const u = org.userById(s.approverId);
+                const posDept = s.approverPos || u?.position ? ` (${s.approverDept || u?.dept || ''} ${s.approverPos || u?.position || ''})` : '';
+                return (
+                  <span key={s.approverId} className="inline-flex items-center gap-1 text-teal font-medium">
+                    <span className="text-[9.5px] opacity-75 font-bold">[참조]</span>
+                    <span>👤</span>
+                    <span>{s.approverName || nameOf(s.approverId)}{posDept}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {doc.status === '반려' && (() => {
           const rejectStep = doc.steps.find((s) => s.decision === '반려');
           const rejectUser = rejectStep ? org.userById(rejectStep.approverId) : null;
@@ -407,116 +500,24 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           );
         })()}
 
-        {/* 상단: 결재선 타임라인 (플로우차트) */}
-        <div className="mb-5 overflow-x-auto pb-2">
-          <div className="mb-2.5 text-[11.5px] font-bold text-ink2">결재선 진행 현황</div>
-          <div className="flex items-center gap-2 md:gap-3.5 min-w-max py-1">
-            {/* 기안자 카드 */}
-            <div className="w-28 h-28 shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 p-2.5 text-center shadow-sm">
-              <div className="text-[10px] font-bold text-teal">기안</div>
-              <div className="flex flex-col items-center justify-center flex-1">
-                <span className="text-[12.5px] font-semibold text-ink truncate max-w-full">
-                  {doc.drafterName || nameOf(doc.drafterId)}
-                  {doc.drafterPos || org.userById(doc.drafterId)?.position ? ` ${doc.drafterPos || org.userById(doc.drafterId)?.position}` : ''}
-                </span>
-                <span className="text-[9.5px] text-ink3 truncate max-w-full mt-0.5">{doc.drafterDept}</span>
-              </div>
-              <div className="rounded bg-teal/15 py-0.5 text-[9.5px] font-bold text-teal">상신</div>
-            </div>
-
-            {/* 화살표 & 결재권자 카드들 */}
-            {[...doc.steps]
-              .filter((s) => s.kind !== '참조')
-              .sort((a, b) => a.seq - b.seq)
-              .map((s) => {
-                const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
-                
-                // Status Styling
-                let statusText: string = s.decision;
-                let statusBg = 'bg-ink3/10 text-ink3';
-                if (s.decision === '승인') {
-                  statusText = '승인';
-                  statusBg = 'bg-teal-soft text-teal';
-                } else if (s.decision === '반려') {
-                  statusText = '반려';
-                  statusBg = 'bg-red-500/10 text-red-500';
-                } else if (s.decision === '보류') {
-                  statusText = '보류';
-                  statusBg = 'bg-amber/10 text-amber';
-                } else if (isActive) {
-                  statusText = '결재대기';
-                  statusBg = 'bg-amber text-white animate-pulse';
-                }
-
-                return (
-                  <Fragment key={s.seq}>
-                    {/* 연결 화살표 */}
-                    <span className="text-ink3 text-[14px] font-bold self-center">➔</span>
-                    
-                    {/* 결재자 카드 */}
-                    <div className={`w-28 h-28 shrink-0 flex flex-col justify-between rounded-xl border p-2.5 text-center shadow-sm transition-all ${isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-105' : 'border-border bg-panel'}`}>
-                      <div className="flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-ink3">Seq {s.seq}</span>
-                        <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
-                      </div>
-                      <div className="flex flex-col items-center justify-center flex-1">
-                        <span className="text-[12.5px] font-semibold text-ink truncate max-w-full">
-                          {s.approverName || nameOf(s.approverId)}
-                          {s.approverPos || org.userById(s.approverId)?.position ? ` ${s.approverPos || org.userById(s.approverId)?.position}` : ''}
-                        </span>
-                        <span className="text-[9.5px] text-ink3 truncate max-w-full mt-0.5">
-                          {s.approverDept || org.userById(s.approverId)?.dept || '—'}
-                        </span>
-                        {s.delegatedFromId && <span className="text-[8.5px] text-amber truncate max-w-full mt-0.5">대결</span>}
-                      </div>
-                      <div className={`rounded py-0.5 text-[9.5px] font-bold ${statusBg}`}>
-                        {statusText}
-                      </div>
-                    </div>
-                  </Fragment>
-                );
-              })}
-          </div>
-          
-          {/* 수신처 / 참조자 분기 (대안 A) */}
-          {((doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조')) && (
-            <div className="mt-4 border-t border-dashed border-border pt-3.5 pl-2">
-              <div className="flex items-start gap-4">
-                {/* 꺾이는 점선 연결 기호 */}
-                <div className="flex flex-col items-center select-none text-ink3 text-[12px] font-bold self-start mt-1">
-                  <span>└─📨 수신/참조자</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {doc.recipients.map((r) => (
-                    <span
-                      key={r.id}
-                      className="flex items-center gap-1 rounded-lg border border-dashed border-teal/40 bg-teal-soft/10 px-2.5 py-1 text-[11px] font-semibold text-teal"
-                    >
-                      {r.type === 'dept' ? '📁' : '👤'} {r.name}
-                    </span>
-                  ))}
-                  {doc.steps.filter((s) => s.kind === '참조').map((s) => (
-                    <span
-                      key={s.approverId}
-                      className="flex items-center gap-1 rounded-lg border border-dashed border-teal/40 bg-teal-soft/10 px-2.5 py-1 text-[11px] font-semibold text-teal"
-                    >
-                      👤 {nameOf(s.approverId)} (참조)
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* 시행 정보 및 제어 영역 */}
         {doc.execution && (
           <ApprovalExecutionPanel doc={doc} userId={me} />
         )}
 
         {/* 하단: 결재 문서 */}
-        <div className="border-t border-border pt-5">
-          <div className="mb-3 text-[11.5px] font-bold text-ink2">결재 문서</div>
+        <div className="border-t border-border pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[11.5px] font-bold text-ink2">결재 문서</div>
+            {/* 인쇄 버튼을 결재 문서 섹션으로 이동 */}
+            <button
+              onClick={() => window.print()}
+              title="결재 문서 인쇄"
+              className="rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-all print:hidden"
+            >
+              🖨 인쇄
+            </button>
+          </div>
           <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-hidden shadow-sm p-4">
             <ApprovalDocumentView doc={doc} />
           </div>
