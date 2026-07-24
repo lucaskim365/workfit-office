@@ -548,6 +548,25 @@ export const approvalDocRepo = {
       },
     };
     await persist(next);
+
+    // 부서장이 담당자 지정 시 알림 전송 (부서장 본인 제외)
+    if (executorId !== assignerId) {
+      try {
+        const { notificationRepo } = await import('@/data/notification/notification.repo');
+        const assignerUser = users.find((u) => u.id === assignerId);
+        await notificationRepo.create({
+          userId: executorId,
+          type: '결재',
+          title: '시행 담당자 지정 알림',
+          text: `[${next.title}] 문서의 시행 담당자로 지정되었습니다.`,
+          senderName: assignerUser?.name ?? '부서장',
+          linkUrl: `/gw/approval?doc=${next.id}`,
+        });
+      } catch (e) {
+        console.error('시행 담당자 지정 알림 전송 실패:', e);
+      }
+    }
+
     return next;
   },
 
@@ -611,6 +630,38 @@ export const approvalDocRepo = {
       },
     };
     await persist(next);
+
+    // 시행 완료 알림 전송 (결재선에 참여한 모든 사람: 기안자 + 결재선 단계의 결재자들)
+    try {
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      const users = await userRepo.list();
+      const executorUser = users.find((u) => u.id === userId);
+
+      // 결재선에 참여한 모든 사용자 ID 수집 (기안자 + 결재선 결재자)
+      const participantIds = new Set<string>();
+      if (next.drafterId) {
+        participantIds.add(next.drafterId);
+      }
+      for (const step of next.steps) {
+        if (step.approverId) {
+          participantIds.add(step.approverId);
+        }
+      }
+
+      for (const targetUserId of participantIds) {
+        await notificationRepo.create({
+          userId: targetUserId,
+          type: '결재',
+          title: '시행 완료 알림',
+          text: `[${next.title}] 문서의 시행 처리가 완료되었습니다.`,
+          senderName: executorUser?.name ?? '시행 담당자',
+          linkUrl: `/gw/approval?doc=${next.id}`,
+        });
+      }
+    } catch (e) {
+      console.error('시행 완료 알림 전송 실패:', e);
+    }
+
     return next;
   },
 
