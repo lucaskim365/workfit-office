@@ -812,25 +812,14 @@ export function ApprovalDraftModal({
               <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
             </div>
 
-            {/* 수신처 지정 - 차별화된 별도 카드형 디자인 */}
-            <div className="mt-4 rounded-xl border border-blue/20 bg-blue-soft/10 p-3.5">
+            {/* 수신처 지정 - 통일된 카드형 디자인 */}
+            <div className="mt-4 rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <div className="text-[12.5px] font-bold text-blue">📨 수신처 설정</div>
+                  <div className="text-[12.5px] font-bold text-teal">📨 수신처 설정</div>
                   <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 수신처를 지정합니다.</div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!recipients.some((r) => r.id === 'drafter')) {
-                        setRecipients((prev) => [...prev, { id: 'drafter', name: '기안자 본인', type: 'drafter' }]);
-                      }
-                    }}
-                    className="rounded-lg bg-blue-soft px-2 py-1 text-[10px] font-bold text-blue hover:bg-blue/20 transition-colors"
-                  >
-                    👤 기안자 본인
-                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -913,13 +902,13 @@ export function ApprovalDraftModal({
                   {recipients.map((r) => (
                     <span
                       key={r.id}
-                      className="flex items-center gap-1 rounded-md bg-panel border border-blue/20 px-2.5 py-0.5 text-[11px] font-semibold text-blue shadow-sm"
+                      className="flex items-center gap-1 rounded-md bg-panel border border-teal/20 px-2.5 py-0.5 text-[11px] font-semibold text-teal shadow-sm"
                     >
                       {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
                       <button
                         type="button"
                         onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
-                        className="ml-1 font-bold text-blue/60 hover:text-red-500"
+                        className="ml-1 font-bold text-teal/60 hover:text-red-500"
                       >
                         ✕
                       </button>
