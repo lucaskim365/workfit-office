@@ -237,7 +237,17 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         <tbody>
           <MetaRow cells={[['문서번호', doc.docNo], ['기안부서', doc.drafterDept || '—']]} />
           <MetaRow cells={[['기 안 자', drafterPos ? `${drafterName} ${drafterPos}` : drafterName], ['기 안 일', korDate(doc.submittedAt ?? doc.createdAt)]]} />
-          {doc.completedAt && <MetaRow cells={[['시 행 일', korDate(doc.completedAt)], ['보존연한', '3년']]} />}
+          {doc.completedAt && (
+            <MetaRow
+              cells={[
+                [
+                  doc.execution ? '시 행 일' : '결재 완료일',
+                  doc.execution ? (doc.execution.startedAt ? korDate(doc.execution.startedAt) : '—') : korDate(doc.completedAt)
+                ],
+                ['보존연한', doc.preservationPeriod || form?.preservationPeriod || '3년']
+              ]}
+            />
+          )}
         </tbody>
       </table>
 

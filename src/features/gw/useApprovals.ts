@@ -4,6 +4,7 @@ import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/app
 import { byRecent, matchesBox } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { useUsers } from '@/features/user/useUsers';
+import { departmentRepo } from '@/data/department/department.repo';
 
 /**
  * 전자결재 데이터 훅 — 화면(UI)이 repository 대신 호출하는 React 바인딩.
@@ -41,17 +42,29 @@ export function useApprovalBoxes(userId: string | undefined): ApprovalBoxes {
   const q = useAllApprovals();
   const { data: users = [] } = useUsers();
   const user = useMemo(() => users.find((u) => u.id === userId), [users, userId]);
+  
+  const [depts, setDepts] = useState<any[]>([]);
+  useEffect(() => {
+    departmentRepo.list().then(setDepts);
+  }, []);
+
+  const userDeptObj = useMemo(() => depts.find((d) => d.name === user?.dept), [depts, user?.dept]);
+  const userDeptNameOrId = useMemo(() => {
+    if (!user) return '';
+    return userDeptObj ? `${user.dept}||${userDeptObj.id}` : user.dept;
+  }, [user, userDeptObj]);
+
   return useMemo(() => {
     const rows = q.data ?? [];
     const byBox = {} as Record<ApprovalBox, ApprovalDoc[]>;
     const counts = {} as Record<ApprovalBox, number>;
     for (const box of APPROVAL_BOXES) {
-      const list = userId ? rows.filter((d) => matchesBox(d, userId, box, user?.dept)).sort(byRecent) : [];
+      const list = userId ? rows.filter((d) => matchesBox(d, userId, box, userDeptNameOrId)).sort(byRecent) : [];
       byBox[box] = list;
       counts[box] = list.length;
     }
     return { byBox, counts, isLoading: q.isLoading };
-  }, [q.data, q.isLoading, userId, user?.dept]);
+  }, [q.data, q.isLoading, userId, userDeptNameOrId]);
 }
 
 /** 단일 문서 상세(전체 캐시에서 도출 — 목록과 동일 원천으로 낙관적 갱신 즉시 반영). */
@@ -155,6 +168,36 @@ export function usePermanentlyDelete() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => approvalDocRepo.permanentlyDelete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 시행 담당자 강제 지정/변경 (부서장용) */
+export function useAssignExecutor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, executorId, assignerId }: { docId: string; executorId: string; assignerId: string }) =>
+      approvalDocRepo.assignExecutor(docId, executorId, assignerId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 시행 담당자 자가 지정 (내가 담당하기) */
+export function useSelfAssignExecutor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, userId }: { docId: string; userId: string }) =>
+      approvalDocRepo.selfAssignExecutor(docId, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 시행 완료 처리 */
+export function useCompleteExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, userId, completedAt, comment }: { docId: string; userId: string; completedAt: string; comment?: string }) =>
+      approvalDocRepo.completeExecution(docId, userId, completedAt, comment),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }

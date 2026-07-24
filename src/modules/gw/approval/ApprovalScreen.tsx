@@ -17,6 +17,7 @@ import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/app
 import { DecisionBadge, DOC_TYPE_ICON, fmtDateTime, GwHead, KIND_TONE, StatusBadge, won } from '@/modules/gw/_gw';
 import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
 
 /**
  * 전자결재 결재함(§7.2) — 좌 함 탭(대기·상신·완료·참조·임시) + 중 목록 + 우 상세.
@@ -30,6 +31,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   임시: '임시저장함',
   수신: '수신함',
   참조: '참조함',
+  시행: '시행함',
   완료: '완료함',
   삭제: '휴지통',
 };
@@ -116,10 +118,22 @@ export default function ApprovalScreen() {
           >
             + 새 상신
           </button>
+          <button
+            onClick={() => setBox('임시')}
+            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === '임시' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+          >
+            <span>{BOX_LABEL['임시']}</span>
+            {(counts['임시'] ?? 0) > 0 && (
+              <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${box === '임시' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'}`}>
+                {counts['임시']}
+              </span>
+            )}
+          </button>
+          <div className="h-px bg-border my-1" />
           {[
             { title: '결재할 문서', boxes: ['대기'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '내가 올린 문서', boxes: ['상신', '반려', '임시'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '공유 문서', boxes: ['수신', '참조'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '내가 올린 문서', boxes: ['상신', '반려'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '공유 문서', boxes: ['수신', '참조', '시행'] as const, titleBg: 'bg-panel-alt text-ink2' },
             { title: '관리', boxes: ['완료', '삭제'] as const, titleBg: 'bg-panel-alt text-ink2' },
           ].map((g) => (
             <div key={g.title} className="flex flex-col gap-1.5">
@@ -128,12 +142,20 @@ export default function ApprovalScreen() {
               </div>
               <div className="space-y-0.5">
                 {g.boxes.map((b) => {
+                  const executionCount = (byBox['시행'] ?? []).filter(
+                    (d) => d.execution?.status === '대기중' || d.execution?.status === '처리중'
+                  ).length;
+
                   const hasBadge = b === '대기' 
                     ? (byBox['대기'] ?? []).length > 0
+                    : b === '시행'
+                    ? executionCount > 0
                     : (counts[b] ?? 0) > 0;
                   
                   const badgeCount = b === '대기'
                     ? (myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length)
+                    : b === '시행'
+                    ? executionCount
                     : counts[b];
 
                   const badgeClass = b === '대기'
@@ -412,6 +434,11 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             })}
           </div>
         </div>
+
+        {/* 시행 정보 및 제어 영역 */}
+        {doc.execution && (
+          <ApprovalExecutionPanel doc={doc} userId={me} />
+        )}
 
         {/* 하단: 결재 문서 */}
         <div className="border-t border-border pt-5">

@@ -63,6 +63,26 @@ export function ApprovalDraftModal({
   const [showRecipientPicker, setShowRecipientPicker] = useState(false);
   const [pickerType, setPickerType] = useState<'user' | 'dept'>('dept');
   const [pickerTargetId, setPickerTargetId] = useState('');
+  
+  const [executionTarget, setExecutionTarget] = useState<{ type: 'USER' | 'DEPT'; id: string; name: string } | null>(() => {
+    if (editDoc?.execution) {
+      const t = editDoc.execution;
+      let name = t.targetId;
+      if (t.targetType === 'USER') {
+        const u = org.userById(t.targetId);
+        if (u) name = `${u.name} ${u.position}`;
+      } else {
+        const d = org.depts.find((dept) => dept.id === t.targetId);
+        if (d) name = d.name;
+      }
+      return { type: t.targetType, id: t.targetId, name };
+    }
+    return null;
+  });
+  const [showExecutionPicker, setShowExecutionPicker] = useState(false);
+  const [execPickerType, setExecPickerType] = useState<'USER' | 'DEPT'>('DEPT');
+  const [execPickerTargetId, setExecPickerTargetId] = useState('');
+
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -307,6 +327,16 @@ export function ApprovalDraftModal({
         days: pDays,
       };
     }
+    const execution = executionTarget
+      ? {
+          docId: editDoc?.id ?? '',
+          targetType: executionTarget.type,
+          targetId: executionTarget.id,
+          status: '대기중' as const,
+          comment: '',
+        }
+      : null;
+
     return {
       docType: code,
       title: title.trim(),
@@ -319,6 +349,7 @@ export function ApprovalDraftModal({
       fieldValues: values,
       attachments,
       recipients,
+      execution,
     };
   };
 
@@ -606,7 +637,17 @@ export function ApprovalDraftModal({
       endDate: String(values['period__end'] || ''),
       days: Number(values['period__days']) || 0,
     } : null,
-  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps]);
+    execution: executionTarget
+      ? {
+          docId: editDoc?.id ?? 'preview-doc-id',
+          targetType: executionTarget.type,
+          targetId: executionTarget.id,
+          status: '대기중' as const,
+          comment: '',
+        }
+      : null,
+    preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
+  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
@@ -771,12 +812,12 @@ export function ApprovalDraftModal({
               <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
             </div>
 
-            {/* 수신처(시행처) 지정 - 차별화된 별도 카드형 디자인 */}
+            {/* 수신처 지정 - 차별화된 별도 카드형 디자인 */}
             <div className="mt-4 rounded-xl border border-blue/20 bg-blue-soft/10 p-3.5">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <div className="text-[12.5px] font-bold text-blue">📨 수신처 (시행처) 설정</div>
-                  <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 곳을 정합니다.</div>
+                  <div className="text-[12.5px] font-bold text-blue">📨 수신처 설정</div>
+                  <div className="text-[10px] text-ink3">문서 완료 시 자동 전송받을 수신처를 지정합니다.</div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -884,6 +925,106 @@ export function ApprovalDraftModal({
                       </button>
                     </span>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* 시행자 지정 - 별도 카드형 디자인 */}
+            <div className="mt-4 rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-[12.5px] font-bold text-teal">📦 시행자 설정</div>
+                  <div className="text-[10px] text-ink3">최종 결재 완료 후 후속 실무를 처리할 시행 대상(부서/사원)을 지정합니다.</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExecutionPicker(!showExecutionPicker);
+                      setExecPickerTargetId('');
+                    }}
+                    className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
+                  >
+                    + 시행자 지정
+                  </button>
+                </div>
+              </div>
+
+              {/* 시행자 지정 추가 폼 */}
+              {showExecutionPicker && (
+                <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
+                  <select
+                    value={execPickerType}
+                    onChange={(e) => {
+                      setExecPickerType(e.target.value as 'USER' | 'DEPT');
+                      setExecPickerTargetId('');
+                    }}
+                    className="rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                  >
+                    <option value="DEPT">부서</option>
+                    <option value="USER">사원</option>
+                  </select>
+
+                  <select
+                    value={execPickerTargetId}
+                    onChange={(e) => setExecPickerTargetId(e.target.value)}
+                    className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none"
+                  >
+                    <option value="">선택하세요</option>
+                    {execPickerType === 'DEPT'
+                      ? org.depts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))
+                      : org.users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} {u.position} ({u.dept})
+                        </option>
+                      ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!execPickerTargetId) return;
+                      if (execPickerType === 'DEPT') {
+                        const dept = org.depts.find((d) => d.id === execPickerTargetId);
+                        if (dept) {
+                          setExecutionTarget({ type: 'DEPT', id: dept.id, name: dept.name });
+                        }
+                      } else {
+                        const user = org.users.find((u) => u.id === execPickerTargetId);
+                        if (user) {
+                          setExecutionTarget({ type: 'USER', id: user.id, name: `${user.name} ${user.position}` });
+                        }
+                      }
+                      setShowExecutionPicker(false);
+                    }}
+                    className="rounded bg-teal px-3 py-1 text-[11.5px] font-bold text-white hover:opacity-90"
+                  >
+                    지정
+                  </button>
+                </div>
+              )}
+
+              {/* 지정된 시행자 태그 */}
+              {!executionTarget ? (
+                <p className="text-[11px] text-ink3 pl-1">지정된 시행자가 없습니다. (결재 완료 후 후속 시행 이관 없음)</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 pl-1">
+                  <span
+                    className="flex items-center gap-1 rounded-md bg-panel border border-teal/20 px-2.5 py-0.5 text-[11px] font-semibold text-teal shadow-sm"
+                  >
+                    {executionTarget.type === 'DEPT' ? '📁' : '👤'} {executionTarget.name}
+                    <button
+                      type="button"
+                      onClick={() => setExecutionTarget(null)}
+                      className="ml-1 font-bold text-teal/60 hover:text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </span>
                 </div>
               )}
             </div>

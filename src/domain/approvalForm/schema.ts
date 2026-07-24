@@ -96,6 +96,8 @@ export const approvalFormSchema = z.object({
   allowedPositionToRank: z.number().nullable().optional(),
   /** 기안 가능한 부서 ID 목록 (null/빈 배열 이면 모든 부서 가능) */
   allowedDeptIds: z.array(z.string()).nullable().optional(),
+  /** 보존연한 */
+  preservationPeriod: z.string().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

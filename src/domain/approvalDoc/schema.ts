@@ -91,6 +91,26 @@ export const approvalRecipientSchema = z.object({
 });
 export type ApprovalRecipient = z.infer<typeof approvalRecipientSchema>;
 
+export const approvalExecutionSchema = z.object({
+  /** 대상 결재문서 ID */
+  docId: z.string(),
+  /** 기안 시 지정된 시행 대상 유형 ('USER' | 'DEPT') */
+  targetType: z.enum(['USER', 'DEPT']),
+  /** 시행 대상 ID (사용자 ID 또는 부서 ID) */
+  targetId: z.string(),
+  /** 시행 처리 상태 */
+  status: z.enum(['대기중', '처리중', '시행완료']),
+  /** 실제 처리를 담당한 사용자 ID */
+  executorId: z.string().nullable().optional(),
+  /** 처리 시작 일시 (ISO String) */
+  startedAt: z.string().nullable().optional(),
+  /** 시행 완료 일자 (YYYY-MM-DD) */
+  completedAt: z.string().nullable().optional(),
+  /** 시행 처리 의견 */
+  comment: z.string().optional().default(''),
+});
+export type ApprovalExecution = z.infer<typeof approvalExecutionSchema>;
+
 export const approvalDocSchema = z.object({
   /** 문서 ID(PK) = docNo. */
   id: z.string().min(1),
@@ -130,6 +150,10 @@ export const approvalDocSchema = z.object({
   })).default([]),
   /** 수신(시행)처 목록 */
   recipients: z.array(approvalRecipientSchema).default([]),
+  /** 시행 정보 데이터 (시행자가 지정되었을 때만 존재) */
+  execution: approvalExecutionSchema.nullable().optional(),
+  /** 보존연한 설정 */
+  preservationPeriod: z.string().nullable().optional(),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),
@@ -139,6 +163,6 @@ export const approvalDocSchema = z.object({
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;
 
-/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·임시저장. */
-export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '완료', '삭제'] as const;
+/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·시행함·임시저장. */
+export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '시행', '완료', '삭제'] as const;
 export type ApprovalBox = (typeof APPROVAL_BOXES)[number];

@@ -136,15 +136,29 @@ export function applyDecision(
   // 승인
   // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
   if (step.kind === '전결') {
-    return { ...next, status: '완료', completedAt: opts.at, currentSeq: seq };
+    next = { ...next, status: '완료', completedAt: opts.at, currentSeq: seq };
+  } else {
+    // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
+    const stillActive = activeGroup(next);
+    if (!stillActive) {
+      // 마지막 그룹 통과 → 완료.
+      next = { ...next, status: '완료', completedAt: opts.at };
+    }
   }
 
-  // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
-  const stillActive = activeGroup(next);
-  if (!stillActive) {
-    // 마지막 그룹 통과 → 완료.
-    next = { ...next, status: '완료', completedAt: opts.at };
+  // 최종 결재 완료 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
+  if (next.status === '완료' && next.execution && next.execution.targetId) {
+    next.execution = {
+      ...next.execution,
+      docId: next.id,
+      status: '대기중',
+      executorId: null,
+      startedAt: null,
+      completedAt: null,
+      comment: '',
+    };
   }
+
   return { ...next, currentSeq: recomputeCurrentSeq(next) };
 }
 
@@ -191,7 +205,10 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
       const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
       const isCustomRecipient = doc.recipients?.some((r) => {
         if (r.type === 'user') return r.id === userId;
-        if (r.type === 'dept' && userDeptName) return r.name === userDeptName || r.id === userDeptName;
+        if (r.type === 'dept' && userDeptName) {
+          const parts = userDeptName.split('||');
+          return parts.includes(r.name) || parts.includes(r.id);
+        }
         if (r.type === 'drafter') return doc.drafterId === userId;
         return false;
       }) ?? false;
@@ -199,6 +216,20 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
     }
     case '참조':
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+    case '시행': {
+      if (doc.status !== '완료') return false;
+      if (!doc.execution) return false;
+      const targetId = doc.execution.targetId;
+      const targetType = doc.execution.targetType;
+      if (targetType === 'USER') {
+        return targetId === userId;
+      } else if (targetType === 'DEPT') {
+        if (!userDeptName) return false;
+        const parts = userDeptName.split('||');
+        return parts.includes(targetId);
+      }
+      return false;
+    }
     case '완료':
       return doc.status === '완료' && (doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId));
     case '삭제':
