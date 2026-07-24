@@ -36,6 +36,31 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   삭제: '휴지통',
 };
 
+/** 문서 배지 렌더링 헬퍼 — 시행 문서이고 결재가 '완료'된 경우 시행 상태(대기중/처리중/시행완료)를 표기 */
+function renderStatusBadge(d: ApprovalDoc, me: string) {
+  if (d.status === '진행중' && currentApproverIds(d).includes(me)) {
+    return <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />;
+  }
+
+  // 결재가 완료된 시행 문서의 경우 '완료' 대신 시행 상태(대기중, 처리중, 시행완료)로 표시
+  if (d.status === '완료' && d.execution) {
+    const execStatus = d.execution.status;
+    let badgeClass = 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300';
+    if (execStatus === '처리중') {
+      badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+    } else if (execStatus === '시행완료') {
+      badgeClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+    }
+    return (
+      <span className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${badgeClass}`}>
+        {execStatus}
+      </span>
+    );
+  }
+
+  return <StatusBadge status={d.status} />;
+}
+
 
 
 export default function ApprovalScreen() {
@@ -234,7 +259,6 @@ export default function ApprovalScreen() {
             {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
             {filteredList.map((d) => {
               const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
-              const isMyTurn = d.status === '진행중' && currentApproverIds(d).includes(me);
               return (
                 <button
                   key={d.id}
@@ -256,11 +280,7 @@ export default function ApprovalScreen() {
                         최근 완료
                       </span>
                     )}
-                    {isMyTurn ? (
-                      <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />
-                    ) : (
-                      <StatusBadge status={d.status} />
-                    )}
+                    {renderStatusBadge(d, me)}
                   </div>
                   <div className="flex items-center justify-between text-[10.5px] text-ink3">
                     <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
@@ -352,11 +372,7 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             <div className="flex items-center gap-2">
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
               <h2 className="truncate text-[16px] font-bold text-ink">{doc.title}</h2>
-              {doc.status === '진행중' && currentApproverIds(doc).includes(me) ? (
-                <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />
-              ) : (
-                <StatusBadge status={doc.status} />
-              )}
+              {renderStatusBadge(doc, me)}
             </div>
             <div className="text-[11.5px] text-ink3">
               {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
@@ -373,70 +389,105 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
             )}
           </div>
 
-          {/* 우측: 확대된 컴팩트 결재선 플로우차트 */}
-          <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto max-w-[55%] py-0.5">
-            {/* 기안자 카드 */}
-            <div className="w-[92px] h-[80px] shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 p-2 text-center shadow-xs">
-              <div className="text-[9.5px] font-bold text-teal">기안</div>
-              <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                <span className="text-[11.5px] font-semibold text-ink truncate w-full">
-                  {doc.drafterName || nameOf(doc.drafterId)}
-                </span>
-                <span className="text-[9px] text-ink3 truncate w-full mt-0.5">
-                  {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
-                </span>
+          {/* 우측: 결재 단계 수에 따른 동적 크기 결재선 플로우차트 (스크롤바 없이 한눈에 맞춤) */}
+          {(() => {
+            const approvalSteps = doc.steps.filter((s) => s.kind !== '참조').sort((a, b) => a.seq - b.seq);
+            const totalCount = 1 + approvalSteps.length; // 기안자 + 결재자 수
+
+            // 단계 수에 따른 동적 스타일 도출
+            let cardWidthClass = 'w-[92px] h-[80px]';
+            let nameFontClass = 'text-[11.5px]';
+            let subFontClass = 'text-[9px]';
+            let arrowFontClass = 'text-[11px]';
+            let gapClass = 'gap-1.5';
+            let paddingClass = 'p-2';
+
+            if (totalCount >= 6) {
+              cardWidthClass = 'w-[64px] h-[64px]';
+              nameFontClass = 'text-[9.5px]';
+              subFontClass = 'text-[7.5px]';
+              arrowFontClass = 'text-[8.5px]';
+              gapClass = 'gap-0.5';
+              paddingClass = 'p-1';
+            } else if (totalCount >= 5) {
+              cardWidthClass = 'w-[74px] h-[70px]';
+              nameFontClass = 'text-[10px]';
+              subFontClass = 'text-[8px]';
+              arrowFontClass = 'text-[9px]';
+              gapClass = 'gap-1';
+              paddingClass = 'p-1.5';
+            } else if (totalCount >= 4) {
+              cardWidthClass = 'w-[84px] h-[74px]';
+              nameFontClass = 'text-[10.5px]';
+              subFontClass = 'text-[8.5px]';
+              arrowFontClass = 'text-[10px]';
+              gapClass = 'gap-1';
+              paddingClass = 'p-1.5';
+            }
+
+            return (
+              <div className={`flex shrink-0 items-center ${gapClass} max-w-[65%] py-0.5 select-none`}>
+                {/* 기안자 카드 */}
+                <div className={`${cardWidthClass} ${paddingClass} shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 text-center shadow-xs`}>
+                  <div className={`${subFontClass} font-bold text-teal`}>기안</div>
+                  <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                    <span className={`${nameFontClass} font-semibold text-ink truncate w-full`}>
+                      {doc.drafterName || nameOf(doc.drafterId)}
+                    </span>
+                    <span className={`${subFontClass} text-ink3 truncate w-full mt-0.5`}>
+                      {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
+                    </span>
+                  </div>
+                  <div className={`rounded bg-teal/15 py-0.2 ${subFontClass} font-bold text-teal`}>상신</div>
+                </div>
+
+                {/* 결재권자 카드들 */}
+                {approvalSteps.map((s) => {
+                  const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
+
+                  let statusText: string = s.decision;
+                  let statusBg = 'bg-ink3/10 text-ink3';
+                  if (s.decision === '승인') {
+                    statusText = '승인';
+                    statusBg = 'bg-teal-soft text-teal';
+                  } else if (s.decision === '반려') {
+                    statusText = '반려';
+                    statusBg = 'bg-red-500/10 text-red-500';
+                  } else if (s.decision === '보류') {
+                    statusText = '보류';
+                    statusBg = 'bg-amber/10 text-amber';
+                  } else if (isActive) {
+                    statusText = '결재대기';
+                    statusBg = 'bg-amber text-white animate-pulse';
+                  }
+
+                  return (
+                    <Fragment key={s.seq}>
+                      <span className={`text-ink3 ${arrowFontClass} font-bold shrink-0`}>➔</span>
+                      <div className={`${cardWidthClass} ${paddingClass} shrink-0 flex flex-col justify-between rounded-xl border text-center shadow-xs transition-all ${isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel'}`}>
+                        <div className={`flex items-center justify-between ${subFontClass} font-bold`}>
+                          <span className="text-ink3">Seq{s.seq}</span>
+                          <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
+                        </div>
+                        <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                          <span className={`${nameFontClass} font-semibold text-ink truncate w-full`}>
+                            {s.approverName || nameOf(s.approverId)}
+                          </span>
+                          <span className={`${subFontClass} text-ink3 truncate w-full mt-0.5`}>
+                            {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                          </span>
+                          {s.delegatedFromId && <span className="text-[7.5px] text-amber truncate w-full">대결</span>}
+                        </div>
+                        <div className={`rounded py-0.2 ${subFontClass} font-bold ${statusBg}`}>
+                          {statusText}
+                        </div>
+                      </div>
+                    </Fragment>
+                  );
+                })}
               </div>
-              <div className="rounded bg-teal/15 py-0.5 text-[9px] font-bold text-teal">상신</div>
-            </div>
-
-            {/* 결재권자 카드들 */}
-            {[...doc.steps]
-              .filter((s) => s.kind !== '참조')
-              .sort((a, b) => a.seq - b.seq)
-              .map((s) => {
-                const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
-
-                let statusText: string = s.decision;
-                let statusBg = 'bg-ink3/10 text-ink3';
-                if (s.decision === '승인') {
-                  statusText = '승인';
-                  statusBg = 'bg-teal-soft text-teal';
-                } else if (s.decision === '반려') {
-                  statusText = '반려';
-                  statusBg = 'bg-red-500/10 text-red-500';
-                } else if (s.decision === '보류') {
-                  statusText = '보류';
-                  statusBg = 'bg-amber/10 text-amber';
-                } else if (isActive) {
-                  statusText = '결재대기';
-                  statusBg = 'bg-amber text-white animate-pulse';
-                }
-
-                return (
-                  <Fragment key={s.seq}>
-                    <span className="text-ink3 text-[11px] font-bold">➔</span>
-                    <div className={`w-[92px] h-[80px] shrink-0 flex flex-col justify-between rounded-xl border p-2 text-center shadow-xs transition-all ${isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel'}`}>
-                      <div className="flex items-center justify-between text-[9px] font-bold">
-                        <span className="text-ink3">Seq {s.seq}</span>
-                        <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
-                      </div>
-                      <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                        <span className="text-[11.5px] font-semibold text-ink truncate w-full">
-                          {s.approverName || nameOf(s.approverId)}
-                        </span>
-                        <span className="text-[9px] text-ink3 truncate w-full mt-0.5">
-                          {s.approverPos || org.userById(s.approverId)?.position || '—'}
-                        </span>
-                        {s.delegatedFromId && <span className="text-[8px] text-amber truncate w-full">대결</span>}
-                      </div>
-                      <div className={`rounded py-0.5 text-[9px] font-bold ${statusBg}`}>
-                        {statusText}
-                      </div>
-                    </div>
-                  </Fragment>
-                );
-              })}
-          </div>
+            );
+          })()}
         </div>
       </div>
 

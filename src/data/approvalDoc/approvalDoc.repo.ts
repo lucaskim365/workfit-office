@@ -553,6 +553,7 @@ export const approvalDocRepo = {
 
   async selfAssignExecutor(docId: string, userId: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(docId);
+    if (cur.status !== '완료') throw new Error('결재가 완료된 문서만 시행을 처리할 수 있습니다');
     if (!cur.execution) throw new Error('시행 대상 문서가 아닙니다');
     if (cur.execution.executorId) throw new Error('이미 담당자가 지정되어 있습니다');
 
@@ -589,6 +590,7 @@ export const approvalDocRepo = {
 
   async completeExecution(docId: string, userId: string, completedAt: string, comment = ''): Promise<ApprovalDoc> {
     const cur = await getOrThrow(docId);
+    if (cur.status !== '완료') throw new Error('결재가 완료된 문서만 시행을 처리할 수 있습니다');
     if (!cur.execution) throw new Error('시행 대상 문서가 아닙니다');
     
     const depts = await departmentRepo.list();

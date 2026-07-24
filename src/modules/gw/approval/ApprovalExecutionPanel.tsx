@@ -33,7 +33,8 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
   }, []);
 
   const execution = doc.execution;
-  if (!execution) return null;
+  // 문서 결재 상태가 최종 '완료'가 아니거나 execution 정보가 없으면 시행 관리 패널 표시 금지
+  if (!execution || doc.status !== '완료') return null;
 
   // 부서 시행인 경우 해당 부서 정보 조회
   const targetDept = useMemo(() => {
