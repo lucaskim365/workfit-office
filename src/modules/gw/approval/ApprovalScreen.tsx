@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -14,7 +14,7 @@ import {
 } from '@/features/gw/useApprovals';
 import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { DecisionBadge, DOC_TYPE_ICON, fmtDateTime, GwHead, KIND_TONE, StatusBadge, won } from '@/modules/gw/_gw';
+import { DOC_TYPE_ICON, fmtDateTime, GwHead, KIND_TONE, StatusBadge, won } from '@/modules/gw/_gw';
 import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
@@ -407,32 +407,106 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           );
         })()}
 
-        {/* 상단: 결재선 타임라인 */}
-        <div className="mb-5">
-          <div className="mb-2 text-[11.5px] font-bold text-ink2">결재선</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {[...doc.steps].sort((a, b) => a.seq - b.seq).map((s) => {
-              const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
-              return (
-                <div key={s.seq} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${isActive ? 'border-teal bg-teal-soft/50' : 'border-border bg-panel'}`}>
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-panel-alt text-[10px] font-bold text-ink2">{s.seq}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[12px] font-semibold text-ink">{nameOf(s.approverId)}</span>
-                      <span className={`text-[10px] font-bold ${KIND_TONE[s.kind]}`}>{s.kind}</span>
-                      {s.parallelGroup && <span className="rounded bg-blue/10 px-1 text-[9px] font-bold text-blue">병렬</span>}
-                      {s.delegatedFromId && <span className="text-[9.5px] text-amber">대결(원 {nameOf(s.delegatedFromId)})</span>}
+        {/* 상단: 결재선 타임라인 (플로우차트) */}
+        <div className="mb-5 overflow-x-auto pb-2">
+          <div className="mb-2.5 text-[11.5px] font-bold text-ink2">결재선 진행 현황</div>
+          <div className="flex items-center gap-2 md:gap-3.5 min-w-max py-1">
+            {/* 기안자 카드 */}
+            <div className="w-28 h-28 shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 p-2.5 text-center shadow-sm">
+              <div className="text-[10px] font-bold text-teal">기안</div>
+              <div className="flex flex-col items-center justify-center flex-1">
+                <span className="text-[12.5px] font-semibold text-ink truncate max-w-full">
+                  {doc.drafterName || nameOf(doc.drafterId)}
+                  {doc.drafterPos || org.userById(doc.drafterId)?.position ? ` ${doc.drafterPos || org.userById(doc.drafterId)?.position}` : ''}
+                </span>
+                <span className="text-[9.5px] text-ink3 truncate max-w-full mt-0.5">{doc.drafterDept}</span>
+              </div>
+              <div className="rounded bg-teal/15 py-0.5 text-[9.5px] font-bold text-teal">상신</div>
+            </div>
+
+            {/* 화살표 & 결재권자 카드들 */}
+            {[...doc.steps]
+              .filter((s) => s.kind !== '참조')
+              .sort((a, b) => a.seq - b.seq)
+              .map((s) => {
+                const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
+                
+                // Status Styling
+                let statusText: string = s.decision;
+                let statusBg = 'bg-ink3/10 text-ink3';
+                if (s.decision === '승인') {
+                  statusText = '승인';
+                  statusBg = 'bg-teal-soft text-teal';
+                } else if (s.decision === '반려') {
+                  statusText = '반려';
+                  statusBg = 'bg-red-500/10 text-red-500';
+                } else if (s.decision === '보류') {
+                  statusText = '보류';
+                  statusBg = 'bg-amber/10 text-amber';
+                } else if (isActive) {
+                  statusText = '결재대기';
+                  statusBg = 'bg-amber text-white animate-pulse';
+                }
+
+                return (
+                  <Fragment key={s.seq}>
+                    {/* 연결 화살표 */}
+                    <span className="text-ink3 text-[14px] font-bold self-center">➔</span>
+                    
+                    {/* 결재자 카드 */}
+                    <div className={`w-28 h-28 shrink-0 flex flex-col justify-between rounded-xl border p-2.5 text-center shadow-sm transition-all ${isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-105' : 'border-border bg-panel'}`}>
+                      <div className="flex items-center justify-between text-[10px] font-bold">
+                        <span className="text-ink3">Seq {s.seq}</span>
+                        <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center flex-1">
+                        <span className="text-[12.5px] font-semibold text-ink truncate max-w-full">
+                          {s.approverName || nameOf(s.approverId)}
+                          {s.approverPos || org.userById(s.approverId)?.position ? ` ${s.approverPos || org.userById(s.approverId)?.position}` : ''}
+                        </span>
+                        <span className="text-[9.5px] text-ink3 truncate max-w-full mt-0.5">
+                          {s.approverDept || org.userById(s.approverId)?.dept || '—'}
+                        </span>
+                        {s.delegatedFromId && <span className="text-[8.5px] text-amber truncate max-w-full mt-0.5">대결</span>}
+                      </div>
+                      <div className={`rounded py-0.5 text-[9.5px] font-bold ${statusBg}`}>
+                        {statusText}
+                      </div>
                     </div>
-                    {s.comment && <div className="mt-0.5 truncate text-[10.5px] text-ink3" title={s.comment}>💬 {s.comment}</div>}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-0.5">
-                    <DecisionBadge decision={s.decision} />
-                    {s.decidedAt && <span className="text-[9px] text-ink3">{fmtDateTime(s.decidedAt)}</span>}
-                  </div>
-                </div>
-              );
-            })}
+                  </Fragment>
+                );
+              })}
           </div>
+          
+          {/* 수신처 / 참조자 분기 (대안 A) */}
+          {((doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조')) && (
+            <div className="mt-4 border-t border-dashed border-border pt-3.5 pl-2">
+              <div className="flex items-start gap-4">
+                {/* 꺾이는 점선 연결 기호 */}
+                <div className="flex flex-col items-center select-none text-ink3 text-[12px] font-bold self-start mt-1">
+                  <span>└─📨 수신/참조자</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {doc.recipients.map((r) => (
+                    <span
+                      key={r.id}
+                      className="flex items-center gap-1 rounded-lg border border-dashed border-teal/40 bg-teal-soft/10 px-2.5 py-1 text-[11px] font-semibold text-teal"
+                    >
+                      {r.type === 'dept' ? '📁' : '👤'} {r.name}
+                    </span>
+                  ))}
+                  {doc.steps.filter((s) => s.kind === '참조').map((s) => (
+                    <span
+                      key={s.approverId}
+                      className="flex items-center gap-1 rounded-lg border border-dashed border-teal/40 bg-teal-soft/10 px-2.5 py-1 text-[11px] font-semibold text-teal"
+                    >
+                      👤 {nameOf(s.approverId)} (참조)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 시행 정보 및 제어 영역 */}
