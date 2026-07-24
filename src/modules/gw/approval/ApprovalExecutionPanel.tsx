@@ -33,12 +33,10 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
   }, []);
 
   const execution = doc.execution;
-  // 문서 결재 상태가 최종 '완료'가 아니거나 execution 정보가 없으면 시행 관리 패널 표시 금지
-  if (!execution || doc.status !== '완료') return null;
 
   // 부서 시행인 경우 해당 부서 정보 조회
   const targetDept = useMemo(() => {
-    if (execution.targetType === 'DEPT') {
+    if (execution?.targetType === 'DEPT') {
       return depts.find((d) => d.id === execution.targetId || d.name === execution.targetId);
     }
     return null;
@@ -63,6 +61,7 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
 
   // 내가 시행 권한이 있는 사용자(또는 부서원)인가
   const hasExecutionAuthority = useMemo(() => {
+    if (!execution) return false;
     if (execution.targetType === 'USER') {
       return execution.targetId === userId;
     } else if (execution.targetType === 'DEPT') {
@@ -81,15 +80,16 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
 
   // 담당자 명칭 매핑
   const executorName = useMemo(() => {
-    if (execution.executorId) {
+    if (execution?.executorId) {
       const u = users.find((x) => x.id === execution.executorId);
       return u ? `${u.name} ${u.position}` : execution.executorId;
     }
     return null;
-  }, [execution.executorId, users]);
+  }, [execution?.executorId, users]);
 
   // 시행 대상 명칭
   const targetName = useMemo(() => {
+    if (!execution) return '';
     if (execution.targetType === 'USER') {
       const u = users.find((x) => x.id === execution.targetId);
       return u ? `${u.name} ${u.position}` : execution.targetId;
@@ -100,12 +100,16 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
 
   // [시행 완료] 가능 여부 (담당자 본인이거나 부서장인 경우)
   const canComplete = useMemo(() => {
+    if (!execution) return false;
     if (execution.status === '시행완료') return false;
     if (execution.executorId) {
       return execution.executorId === userId || isDeptHead;
     }
     return hasExecutionAuthority || isDeptHead;
   }, [execution, userId, isDeptHead, hasExecutionAuthority]);
+
+  // 문서 결재 상태가 최종 '완료'가 아니거나 execution 정보가 없으면 시행 관리 패널 표시 금지
+  if (!execution || doc.status !== '완료') return null;
 
 
 

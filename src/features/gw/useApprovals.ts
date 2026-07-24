@@ -39,14 +39,14 @@ export interface ApprovalBoxes {
 
 /** userId 관점의 결재함 5탭 도출(대기·상신·완료·참조·임시) + 카운트. */
 export function useApprovalBoxes(userId: string | undefined): ApprovalBoxes {
-  const q = useAllApprovals();
-  const { data: users = [] } = useUsers();
-  const user = useMemo(() => users.find((u) => u.id === userId), [users, userId]);
-  
   const [depts, setDepts] = useState<any[]>([]);
   useEffect(() => {
     departmentRepo.list().then(setDepts);
   }, []);
+
+  const q = useAllApprovals();
+  const { data: users = [] } = useUsers();
+  const user = useMemo(() => users.find((u) => u.id === userId), [users, userId]);
 
   const userDeptObj = useMemo(() => depts.find((d) => d.name === user?.dept), [depts, user?.dept]);
   const userDeptNameOrId = useMemo(() => {
