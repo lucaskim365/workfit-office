@@ -87,6 +87,10 @@ export function ApprovalDraftModal({
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
+  const sidebarWidth = 240;
+
   const hasManuallyEnteredValues = () => {
     if (editDoc) {
       const titleChanged = title.trim() !== (editDoc.title ?? '').trim();
@@ -597,11 +601,22 @@ export function ApprovalDraftModal({
   };
 
   const sidebarFolders = useMemo(() => {
+    const filteredForms = forms.filter((form) => {
+      if (sidebarSearch.trim() && !form.name.toLowerCase().includes(sidebarSearch.toLowerCase())) {
+        return false;
+      }
+      if (onlyAllowedForms && disabledFormCodes.has(form.code)) {
+        return false;
+      }
+      return true;
+    });
+
     const list = folders.map((f) => ({
       ...f,
-      forms: forms.filter((form) => form.folderId === f.id),
-    }));
-    const others = forms.filter((form) => !form.folderId);
+      forms: filteredForms.filter((form) => form.folderId === f.id),
+    })).filter((f) => f.forms.length > 0);
+
+    const others = filteredForms.filter((form) => !form.folderId);
     if (others.length > 0) {
       list.push({
         id: 'others',
@@ -611,7 +626,7 @@ export function ApprovalDraftModal({
       });
     }
     return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  }, [folders, forms]);
+  }, [folders, forms, sidebarSearch, onlyAllowedForms, disabledFormCodes]);
 
   const mockDoc: ApprovalDoc = useMemo(() => ({
     id: editDoc?.id ?? 'preview-doc-id',
@@ -665,87 +680,104 @@ export function ApprovalDraftModal({
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* 좌측 서식 트리 영역 (fixedType이 아닐 때만 렌더) */}
-          {!isFixed && sidebarOpen && (
-            <div className="w-64 shrink-0 border-r border-border bg-panel-alt flex flex-col overflow-y-auto p-4 select-none relative">
-              <div className="mb-3 flex items-center justify-between text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider">
-                <span>결재 서식 목록</span>
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(false)}
-                  className="rounded px-1.5 py-0.5 text-[10px] text-ink3 hover:bg-black/5 hover:text-ink transition-colors font-medium border border-border"
-                  title="목록 접기"
-                >
-                  ◀ 접기
-                </button>
-              </div>
-              <div className="space-y-3">
-                {sidebarFolders.map((f) => {
-                  const isOpen = openFolders[f.id] !== false;
-                  return (
-                    <div key={f.id} className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleFolder(f.id)}
-                        className="flex w-full items-center justify-between py-1.5 text-[12px] font-bold text-ink hover:text-teal transition-colors"
-                      >
-                        <span className="flex items-center gap-2">
-                          <span>📂</span>
-                          <span>{f.name}</span>
-                        </span>
-                        <span className="text-[10px] text-ink3">{isOpen ? '▼' : '▶'}</span>
-                      </button>
+          {!isFixed && (
+            <div
+              style={{ width: sidebarOpen ? sidebarWidth : 0 }}
+              className="relative shrink-0 border-r border-border bg-panel-alt flex flex-col select-none transition-all duration-200"
+            >
+              {/* 사이드바 본문 (접혔을 때 숨김) */}
+              <div className={`flex flex-col h-full p-3.5 overflow-y-auto ${!sidebarOpen ? 'invisible opacity-0' : 'visible opacity-100 transition-opacity duration-150'}`} style={{ width: sidebarWidth }}>
+                <div className="mb-2">
+                  <div className="text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider mb-2">
+                    결재 서식 목록
+                  </div>
+                  
+                  {/* 검색창 및 작성가능 필터 체크박스 */}
+                  <div className="space-y-1.5 mb-2">
+                    <input
+                      type="text"
+                      value={sidebarSearch}
+                      onChange={(e) => setSidebarSearch(e.target.value)}
+                      placeholder="서식 제목 검색..."
+                      className="w-full rounded-md border border-border-hi bg-panel px-2.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
+                    />
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={onlyAllowedForms}
+                        onChange={(e) => setOnlyAllowedForms(e.target.checked)}
+                        className="rounded border-border accent-teal cursor-pointer h-3.5 w-3.5"
+                      />
+                      <span className="text-[10px] font-bold text-ink2">작성 가능한 문서만 보기</span>
+                    </label>
+                  </div>
+                </div>
 
-                      {isOpen && (
-                        <div className="pl-4 border-l border-border ml-2 space-y-1 mt-0.5">
-                          {f.forms.map((fm) => {
-                            const isDisabled = disabledFormCodes.has(fm.code);
-                            return (
-                              <button
-                                key={fm.code}
-                                type="button"
-                                disabled={isDisabled}
-                                onClick={() => {
-                                  setCode(fm.code);
-                                  setValues({}); // 서식 교체 시 기존 입력 상태값 초기화
-                                }}
-                                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition-colors ${isDisabled
-                                    ? 'opacity-40 cursor-not-allowed'
-                                    : code === fm.code
-                                      ? 'bg-teal-soft text-teal font-semibold'
-                                      : 'text-ink2 hover:bg-border-hi/30'
-                                  }`}
-                              >
-                                <span className="text-[15px]">{fm.icon}</span>
-                                <span className="truncate">{fm.name}</span>
-                                {isDisabled && (
-                                  <span className="ml-auto text-[9px] font-bold bg-red-500/10 text-red-500 px-1 py-0.5 rounded">제한</span>
-                                )}
-                              </button>
-                            );
-                          })}
-                          {f.forms.length === 0 && (
-                            <div className="py-1 pl-6 text-[11px] text-ink3">서식이 없습니다.</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                {/* 서식 목록 트리 */}
+                <div className="space-y-2 flex-1">
+                  {sidebarFolders.map((f) => {
+                    const isOpen = openFolders[f.id] !== false;
+                    return (
+                      <div key={f.id} className="space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleFolder(f.id)}
+                          className="flex w-full items-center justify-between py-1 text-[11.5px] font-bold text-ink hover:text-teal transition-colors"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span>📂</span>
+                            <span>{f.name}</span>
+                          </span>
+                          <span className="text-[9px] text-ink3">{isOpen ? '▼' : '▶'}</span>
+                        </button>
 
-          {!isFixed && !sidebarOpen && (
-            <div className="w-12 shrink-0 border-r border-border bg-panel-alt flex flex-col items-center py-4 select-none gap-2">
+                        {isOpen && (
+                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5 mt-0.5">
+                            {f.forms.map((fm) => {
+                              const isDisabled = disabledFormCodes.has(fm.code);
+                              return (
+                                <button
+                                  key={fm.code}
+                                  type="button"
+                                  disabled={isDisabled}
+                                  onClick={() => {
+                                    setCode(fm.code);
+                                    setValues({}); // 서식 교체 시 기존 입력 상태값 초기화
+                                  }}
+                                  className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11.5px] font-medium transition-colors ${isDisabled
+                                      ? 'opacity-40 cursor-not-allowed'
+                                      : code === fm.code
+                                        ? 'bg-teal-soft text-teal font-semibold'
+                                        : 'text-ink2 hover:bg-border-hi/30'
+                                    }`}
+                                >
+                                  <span className="text-[13px]">{fm.icon}</span>
+                                  <span className="truncate">{fm.name}</span>
+                                  {isDisabled && (
+                                    <span className="ml-auto text-[8.5px] font-bold bg-red-500/10 text-red-500 px-1 py-0.5 rounded">제한</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            {f.forms.length === 0 && (
+                              <div className="py-0.5 pl-5 text-[10.5px] text-ink3">서식이 없습니다.</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+
+              
               <button
                 type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="rounded-lg py-3 px-1 text-[11.5px] font-extrabold text-teal hover:bg-teal-soft/40 transition-colors border border-teal-soft bg-panel flex flex-col items-center gap-2 shadow-sm"
-                title="목록 펼치기"
-                style={{ writingMode: 'vertical-lr' }}
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="absolute top-1/2 -right-2.5 -translate-y-1/2 z-[30] flex h-5 w-5 items-center justify-center rounded-full border border-border bg-panel shadow hover:border-teal hover:text-teal transition-all text-[9px] font-bold text-ink2 cursor-pointer"
               >
-                <span>서식 목록 펼치기</span>
-                <span className="text-[10px] font-bold text-teal">▶</span>
+                {sidebarOpen ? '◀' : '▶'}
               </button>
             </div>
           )}
