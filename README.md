@@ -29,6 +29,7 @@ MVP 프로토타입(React 19 + TypeScript + Vite + Firebase)의 기술 기반 �
 - **스타일**: Tailwind CSS 4
 - **상태/데이터**: TanStack Query, React Hook Form + Zod
 - **백엔드**: Firebase (Firestore / Auth / Storage)
+- **서버리스**: Firebase Cloud Functions (`functions/` — 메신저 새 메시지 FCM 자동 푸시)
 - **배포**: Vercel (GitHub 연동, PR Preview / main Production)
 
 ## 시작하기
@@ -72,7 +73,19 @@ src/
 ├── data/         # Firestore 데이터 계층 (코덱·리포지토리)
 ├── shared/       # 공용 타입·UI·유틸
 └── assets/       # 정적 자산
+
+functions/        # Firebase Cloud Functions (chatMessages 생성 시 FCM 푸시)
 ```
+
+## 관련 프로젝트
+
+- [`intraworkfitmobile`](https://github.com/lucaskim365/intraworkfitmobile) — **워크핏 모바일 앱**(Flutter). 동일한 Firebase 백엔드(`workfit-office-app`)를 공유하는 사내 메신저·전자결재 iOS/Android 앱. 웹 ↔ 모바일 실시간 동기화.
+
+## 주요 기능 노트
+
+- **사내 메신저** — 실시간 채팅·이미지/파일 첨부. 새 메시지 발생 시 Cloud Function이 방 멤버에게 FCM 푸시(모바일).
+- **전자결재** — 결재선 상태머신 엔진(순차·병렬·전결·대결), 결재함 분류. 모바일 앱에서도 결재함·승인/반려 지원.
+- **퇴사자 처리(Phase 1)** — 사용자관리에서 계정 비활성화 + 상급자 체인 재연결 + 진행중 결재 정체 사전 경고.
 
 ## 문서
 
