@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
-import type { ChatMessage } from '@/domain/chatMessage/schema';
+import type { ChatMessage, ReplyPreview } from '@/domain/chatMessage/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
 
@@ -25,6 +25,8 @@ interface SendVars {
   text: string;
   senderId: string;
   senderName: string;
+  /** 답글(인용) 원문 요약. 없으면 일반 메시지. */
+  replyTo?: ReplyPreview | null;
 }
 
 /** 메시지 전송(낙관적) — 캐시에 즉시 추가 → 실패 시 롤백. 성공 시 방 목록 lastMessage 갱신. */
@@ -33,7 +35,7 @@ export function useSendMessage(roomId: string) {
   const key = [CHAT_THREAD_KEY, roomId];
 
   return useMutation({
-    mutationFn: async ({ text, senderId, senderName }: SendVars) => {
+    mutationFn: async ({ text, senderId, senderName, replyTo }: SendVars) => {
       const at = nowLocalIso();
       const message: ChatMessage = {
         id: `${roomId}-${Date.now()}`,
@@ -43,6 +45,7 @@ export function useSendMessage(roomId: string) {
         text,
         type: 'text',
         attachment: null,
+        replyTo: replyTo ?? null,
         at,
         readBy: [senderId],
       };
@@ -50,7 +53,7 @@ export function useSendMessage(roomId: string) {
       await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
       return message;
     },
-    onMutate: async ({ text, senderId, senderName }) => {
+    onMutate: async ({ text, senderId, senderName, replyTo }) => {
       await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData<ChatMessage[]>(key);
       const optimistic: ChatMessage = {
@@ -61,6 +64,7 @@ export function useSendMessage(roomId: string) {
         text,
         type: 'text',
         attachment: null,
+        replyTo: replyTo ?? null,
         at: nowLocalIso(),
         readBy: [senderId],
       };
@@ -94,6 +98,7 @@ export function useSendAttachment(roomId: string) {
         text: '',
         type: isImage ? 'image' : 'file',
         attachment,
+        replyTo: null,
         at,
         readBy: [senderId],
       };

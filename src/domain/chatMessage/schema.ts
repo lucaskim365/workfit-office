@@ -28,6 +28,14 @@ export const attachmentSchema = z.object({
 });
 export type Attachment = z.infer<typeof attachmentSchema>;
 
+/** 답글(인용) 미리보기 — 원문 메시지 요약. 모바일 앱과 동일 shape. */
+export const replyPreviewSchema = z.object({
+  id: z.string(),
+  senderName: z.string(),
+  text: z.string(),
+});
+export type ReplyPreview = z.infer<typeof replyPreviewSchema>;
+
 export const chatMessageSchema = z.object({
   id: z.string().min(1),
   roomId: z.string().min(1),
@@ -38,6 +46,8 @@ export const chatMessageSchema = z.object({
   type: z.enum(CHAT_MESSAGE_TYPES).default('text'),
   /** image/file 메시지의 첨부 메타. text/system 은 null. */
   attachment: attachmentSchema.nullable().default(null),
+  /** 답글(인용) 원문 요약. 일반 메시지는 null. (모바일 앱과 공유) */
+  replyTo: replyPreviewSchema.nullable().default(null),
   /** 전송 시각(ISO). 방 안 정렬 키. */
   at: z.string(),
   readBy: z.array(z.string()).default([]),

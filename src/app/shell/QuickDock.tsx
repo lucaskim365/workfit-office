@@ -627,6 +627,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewer, setViewer] = useState<Attachment | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const readonly = room.type === 'notice';
@@ -706,8 +707,16 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const submit = () => {
     const t = text.trim();
     if (!t) return;
-    send.mutate({ text: t, senderId: me, senderName: meName });
+    send.mutate({
+      text: t,
+      senderId: me,
+      senderName: meName,
+      replyTo: replyTo
+        ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) }
+        : null,
+    });
     setText('');
+    setReplyTo(null);
   };
 
   if (inviting) {
@@ -788,7 +797,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
       {/* 메시지 */}
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {filteredMessages.map((m) => (
-          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} />
+          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} onReply={setReplyTo} />
         ))}
         {filteredMessages.length === 0 && searchQuery && (
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
@@ -802,6 +811,15 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
         <div className="shrink-0 border-t border-border bg-panel-alt px-4 py-3 text-center text-[11px] text-ink3">공지 전용 방입니다</div>
       ) : (
         <div className="shrink-0 border-t border-border bg-panel p-3">
+          {replyTo && (
+            <div className="mb-1.5 flex items-center gap-2 rounded-lg border-l-[3px] border-amber bg-panel-alt px-2.5 py-1.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10.5px] font-bold text-amber">{(replyTo.senderName || '메시지')}에게 답장</div>
+                <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo)}</div>
+              </div>
+              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 hover:bg-black/5">✕</button>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 rounded-full border border-border-hi bg-panel py-1.5 pl-2 pr-1.5">
             <input ref={fileRef} type="file" className="hidden" onChange={onPickFile} />
             <button
@@ -828,6 +846,13 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   );
 }
 
+/** 메시지 미리보기(답글 인용·목록용). 모바일 preview 와 동일 규칙. */
+function msgPreview(m: ChatMessage): string {
+  if (m.type === 'image') return '📷 사진';
+  if (m.type === 'file') return `📎 ${m.attachment?.name ?? '파일'}`;
+  return m.text;
+}
+
 /** 바이트 → 사람이 읽는 크기(KB/MB). */
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -835,7 +860,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MessageBubble({ m, me, group, roomMembers, onOpenImage }: { m: ChatMessage; me: string; group: boolean; roomMembers: string[]; onOpenImage: (att: Attachment) => void }) {
+function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m: ChatMessage; me: string; group: boolean; roomMembers: string[]; onOpenImage: (att: Attachment) => void; onReply: (m: ChatMessage) => void }) {
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
@@ -909,9 +934,24 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage }: { m: ChatMess
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
-        <div className="min-w-0">
+        <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
-          {body}
+          {m.replyTo && (
+            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}>
+              <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
+              <div className="truncate text-[10.5px] text-ink3">{m.replyTo.text}</div>
+            </div>
+          )}
+          <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+            {body}
+            <button
+              onClick={() => onReply(m)}
+              title="답글"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] text-ink3 opacity-0 transition-opacity hover:bg-panel-alt group-hover:opacity-100"
+            >
+              ↩
+            </button>
+          </div>
           {bubbleMeta}
         </div>
       </div>
