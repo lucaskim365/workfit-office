@@ -22,7 +22,8 @@ const ROLE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...ROLE_GROUPS.m
 
 /** 사용자관리 — 필터 + KPI 요약 + 목록(직급·직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
 export default function UserScreen() {
-  const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '', q: '' });
+  // 사용여부 필터 기본값 '사용' — 기본 화면에서 미사용(퇴사 등) 계정 제외.
+  const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '사용', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
