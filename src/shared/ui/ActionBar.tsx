@@ -8,7 +8,8 @@ export type IconName =
   | 'refresh'
   | 'compare'
   | 'search'
-  | 'trash';
+  | 'trash'
+  | 'logout';
 
 const PATHS: Record<IconName, string[]> = {
   plus: ['M12 5.5v13', 'M5.5 12h13'],
@@ -19,6 +20,7 @@ const PATHS: Record<IconName, string[]> = {
   compare: ['M7.5 4.5v15', 'M4 8l3.5-3.5L11 8', 'M16.5 19.5v-15', 'M20 16l-3.5 3.5L13 16'],
   search: ['M11 4.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Z', 'M20 20l-4.2-4.2'],
   trash: ['M5.5 7h13', 'M9.5 7V5.2a.7.7 0 0 1 .7-.7h3.6a.7.7 0 0 1 .7.7V7', 'M7 7l.8 11.3a.8.8 0 0 0 .8.7h6.8a.8.8 0 0 0 .8-.7L18 7', 'M10.5 10.5v6', 'M13.5 10.5v6'],
+  logout: ['M14 5H6.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H14', 'M11 12h9', 'M16.5 8.5 20 12l-3.5 3.5'],
 };
 
 export function ActIcon({ name, size = 13 }: { name: IconName; size?: number }) {

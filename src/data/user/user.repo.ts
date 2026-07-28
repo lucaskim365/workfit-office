@@ -3,6 +3,7 @@ import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
 import { hashPassword } from '@/shared/lib/crypto';
+import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
  * 사용자 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
@@ -104,6 +105,31 @@ export const userRepo = {
     const i = memory.findIndex((m) => m.id === valid.id);
     if (i >= 0) memory[i] = valid;
     else memory = [valid, ...memory];
+  },
+
+  /**
+   * 퇴사 처리(Phase 1) — 계정 비활성화 + 상급자 체인 재연결.
+   * 1) 대상 계정: status='미사용', resignedAt 기록, fcmToken 제거(푸시 무효화).
+   * 2) 상급자 재연결: 대상을 managerId 로 둔 직원들을 대상의 상급자(차상위)로 재지정
+   *    → 상신선 자동생성이 끊기지 않도록 함.
+   * ⚠ 진행중 결재선 정체는 여기서 자동 해소하지 않는다(Phase 2). 화면에서 사전 경고.
+   * @returns 재연결된 부하직원 수.
+   */
+  async resign(userId: string): Promise<{ reconnectedReports: number }> {
+    const all = await this.list();
+    const target = all.find((u) => u.id === userId);
+    if (!target) throw new Error('사용자를 찾을 수 없습니다.');
+
+    // 1) 계정 비활성화 + 퇴사 기록 + 푸시 토큰 무효화.
+    await this.save({ ...target, status: '미사용', resignedAt: nowLocalIso(), fcmToken: '' });
+
+    // 2) 상급자 체인 재연결(대상을 상급자로 둔 직원 → 대상의 상급자).
+    const reports = all.filter((u) => u.managerId === userId && u.id !== userId);
+    await Promise.all(
+      reports.map((r) => this.save({ ...r, managerId: target.managerId ?? null })),
+    );
+
+    return { reconnectedReports: reports.length };
   },
 
   async updateJobTitle(id: string, jobTitle: string): Promise<void> {

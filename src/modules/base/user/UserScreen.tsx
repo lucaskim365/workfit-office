@@ -8,6 +8,7 @@ import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared
 import { ROLE_GROUPS, type User } from '@/domain/user/schema';
 import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
+import ResignModal from './ResignModal';
 
 const STATUS_TONE: Record<User['status'], Tone> = { 사용: 'ok', 잠금: 'warn', 미사용: 'mute' };
 
@@ -25,6 +26,8 @@ export default function UserScreen() {
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
+  const [resigning, setResigning] = useState<User | null>(null);
+  const [notice, setNotice] = useState<string>('');
 
   const { data: all = [] } = useUsers();
   const { data: rows = [] } = useUsers(applied);
@@ -93,6 +96,14 @@ export default function UserScreen() {
     setSelected([]);
   };
 
+  // 퇴사 처리 — 정확히 1명 선택 + 아직 미사용이 아닌 경우만.
+  const singleSelected =
+    selected.length === 1 ? all.find((u) => String(u.id) === String(selected[0])) ?? null : null;
+  const canResign = !!singleSelected && singleSelected.status !== '미사용';
+  const handleResign = () => {
+    if (singleSelected) setResigning(singleSelected);
+  };
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
@@ -102,6 +113,16 @@ export default function UserScreen() {
         </div>
         <ActionBar actions={['refresh', 'upload', 'download']} />
       </div>
+
+      {/* 퇴사 처리 결과 알림 */}
+      {notice && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-teal-300 bg-teal-soft px-3.5 py-2.5 text-[12px] text-navy">
+          <span>✅ {notice}</span>
+          <button className="font-semibold underline-offset-2 hover:underline" onClick={() => setNotice('')}>
+            닫기
+          </button>
+        </div>
+      )}
 
       {/* 필터 */}
       <FilterBar onSearch={() => setApplied(draft)}>
@@ -133,6 +154,7 @@ export default function UserScreen() {
         action={
           <ActionBar
             actions={[
+              { icon: 'logout', label: '퇴사 처리', onClick: handleResign, disabled: !canResign },
               { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 },
               { preset: 'add', label: '사용자 추가', variant: 'primary', onClick: () => setEditing(null) },
             ]}
@@ -165,6 +187,16 @@ export default function UserScreen() {
         initial={editing}
         onClose={() => setEditing(undefined)}
         onSubmit={handleSubmit}
+      />
+
+      <ResignModal
+        open={resigning !== null}
+        user={resigning}
+        onClose={() => setResigning(null)}
+        onDone={(msg) => {
+          setNotice(msg);
+          setSelected([]);
+        }}
       />
     </div>
   );

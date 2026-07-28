@@ -49,6 +49,16 @@ export const userSchema = z.object({
   signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
   activeChatRoomId: z.string().nullable().optional(),
+  /**
+   * 퇴사 처리 일시(ISO). 빈 문자열 = 재직/해당없음. Phase1 퇴사 처리에서 기록.
+   * 로그인 차단은 기존 status='미사용'과 연동(퇴사 처리 시 자동 세팅).
+   */
+  resignedAt: z.string().default(''),
+  /**
+   * 모바일 FCM 푸시 토큰(모바일 앱이 기록). 퇴사 처리 시 비운다.
+   * 스키마에 명시해 웹 저장 시에도 보존되도록 함(과거엔 파싱에서 탈락).
+   */
+  fcmToken: z.string().default(''),
 });
 
 export type User = z.infer<typeof userSchema>;

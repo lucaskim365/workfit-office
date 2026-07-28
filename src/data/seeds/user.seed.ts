@@ -11,7 +11,7 @@ import { type User } from '@/domain/user/schema';
  */
 const DEMO_PW = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
 
-export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signType'>[] = [
+export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signType' | 'resignedAt' | 'fcmToken'>[] = [
   // 대표이사
   { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', roleGroup: 'ADMIN', email: 'ympark@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
   // 대표이사 직속 — 직책 재경이사 / 직급 이사
@@ -29,4 +29,8 @@ export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signTyp
   // S/W 개발팀 — 팀장 김승기(부장)
   { id: 'U011', empNo: '600001', name: '김승기', dept: 'S/W 개발팀', position: '부장', jobTitle: '팀장', roleGroup: 'ADMIN', email: 'sgkim@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:41', managerId: 'U003', password: DEMO_PW },
   { id: 'U012', empNo: '600002', name: '홍채원', dept: 'S/W 개발팀', position: '사원', jobTitle: '팀원', roleGroup: 'OPERATOR', email: 'cwhong@workfit.kr', status: '사용', lastLogin: '2026-07-07 06:48', managerId: 'U011', password: DEMO_PW },
+  // 테스트 전용 계정 (홍테스터, 김테스터)
+  { id: 'A001', empNo: 'A001', name: '홍테스터', dept: '테스트', position: '선임연구원', jobTitle: '테스터', roleGroup: 'OPERATOR', email: 'tester1@workfit.kr', status: '사용', lastLogin: '2026-07-28 09:00', managerId: 'U011', password: DEMO_PW },
+  { id: 'A002', empNo: 'A002', name: '김테스터', dept: '테스트', position: '선임연구원', jobTitle: '테스터', roleGroup: 'OPERATOR', email: 'tester2@workfit.kr', status: '사용', lastLogin: '2026-07-28 09:00', managerId: 'U011', password: DEMO_PW },
 ];
+
