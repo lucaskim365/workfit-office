@@ -1,0 +1,181 @@
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  type FirebaseStorage,
+} from 'firebase/storage';
+import { storage as firebaseStorage, isFirebaseConfigured } from '@/shared/lib/firebase';
+
+/**
+ * 파일 스토리지 추상화 계층 (Storage Adapter).
+ *
+ * [[DB_이관_대비_설계원칙.md]] 원칙 1을 파일 저장소에 적용한 것:
+ * 앱 전체에서 `firebase/storage` 를 import 하는 유일한 곳은 이 파일이다.
+ * repo·features·UI 는 `fileStorage.put()/remove()` 만 호출하고,
+ * 실제 백엔드(Firebase / Garage(S3) / data URL 폴백)는 이 파일에서만 안다.
+ *
+ * 백엔드 교체 = 이 파일의 어댑터 구현 하나만 바꾸는 작업.
+ * 선택은 환경변수 VITE_STORAGE_DRIVER = "s3" | "firebase" | "dataurl" 로.
+ * (미지정 시: Firebase 설정돼 있으면 firebase, 아니면 dataurl 폴백 — 기존 동작 보존)
+ */
+
+export interface PutOptions {
+  /** 저장/전송 Content-Type (미지정 시 Blob.type) */
+  contentType?: string;
+  /** 다운로드 시 보존할 원본 파일명 (Content-Disposition; 한글 등 비ASCII 대응) */
+  filename?: string;
+}
+
+export interface StorageAdapter {
+  /** 파일을 주어진 경로(path)에 저장하고 접근 가능한 URL을 반환. */
+  put(path: string, data: Blob, opts?: PutOptions): Promise<string>;
+  /** 경로의 파일을 삭제(best-effort). 미지원/미존재는 조용히 무시. */
+  remove(path: string): Promise<void>;
+}
+
+/** Content-Disposition 헤더값 생성(원본 파일명 보존). */
+function contentDisposition(filename?: string): string | undefined {
+  if (!filename) return undefined;
+  return `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+/** Blob → data URL (폴백/미리보기용). */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// 1) Firebase Storage 어댑터 (현행 기본)
+// ─────────────────────────────────────────────────────────────
+class FirebaseStorageAdapter implements StorageAdapter {
+  constructor(private readonly storage: FirebaseStorage) {}
+
+  async put(path: string, data: Blob, opts?: PutOptions): Promise<string> {
+    const r = ref(this.storage, path);
+    await uploadBytes(r, data, {
+      contentType: opts?.contentType || data.type || 'application/octet-stream',
+      ...(contentDisposition(opts?.filename)
+        ? { contentDisposition: contentDisposition(opts?.filename) }
+        : {}),
+    });
+    return getDownloadURL(r);
+  }
+
+  async remove(path: string): Promise<void> {
+    try {
+      await deleteObject(ref(this.storage, path));
+    } catch {
+      /* 이전 파일 없음 등 무시 */
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 2) Garage(S3 호환) 어댑터 — presigned URL 방식
+//    브라우저는 자격증명을 갖지 않는다. DMZ의 서명 API가 presigned URL을 발급하고,
+//    브라우저는 그 URL로 직접 업로드/다운로드한다. (파일서버_이관_제안서 §4.2)
+//    서명 API 엔드포인트: VITE_STORAGE_SIGN_URL
+//
+//    [인증] (임시) 서명 API의 Bearer 토큰 게이트에 VITE_STORAGE_SIGN_TOKEN 을 전달.
+//      ⚠️ VITE_ 값은 번들에 노출되므로 강한 보안은 아니다(현행 Firebase 공개 write와 동급).
+//      TODO(실 인증): 앱이 Firebase Auth(VITE_AUTH_ENABLED)를 켜는 시점에,
+//        여기서 Firebase ID토큰을 Authorization 으로 보내고 서명 API는 Admin SDK로 검증하도록 교체.
+// ─────────────────────────────────────────────────────────────
+class S3StorageAdapter implements StorageAdapter {
+  constructor(private readonly signUrl: string, private readonly token?: string) {}
+
+  /** 서명 API 호출용 헤더(선택적 Bearer 토큰 포함). */
+  private signHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+    };
+  }
+
+  async put(path: string, data: Blob, opts?: PutOptions): Promise<string> {
+    const contentType = opts?.contentType || data.type || 'application/octet-stream';
+    // 1) 서명 API에 presigned PUT URL 요청 (앱 세션 검증은 서명 API 측에서)
+    const signRes = await fetch(this.signUrl, {
+      method: 'POST',
+      headers: this.signHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ op: 'put', path, contentType, filename: opts?.filename }),
+    });
+    if (!signRes.ok) throw new Error(`서명 URL 발급 실패 (${signRes.status})`);
+    // headers: 서명에 포함된 헤더(Content-Type, 필요시 Content-Disposition)를 그대로 보내야 함.
+    const { putUrl, headers, getUrl } = (await signRes.json()) as {
+      putUrl: string;
+      headers?: Record<string, string>;
+      getUrl: string;
+    };
+
+    // 2) presigned URL로 직접 업로드 (서명 API가 지정한 헤더 그대로 전송)
+    const putRes = await fetch(putUrl, {
+      method: 'PUT',
+      headers: headers ?? { 'Content-Type': contentType },
+      body: data,
+    });
+    if (!putRes.ok) throw new Error(`업로드 실패 (${putRes.status})`);
+    return getUrl;
+  }
+
+  async remove(path: string): Promise<void> {
+    try {
+      await fetch(this.signUrl, {
+        method: 'POST',
+        headers: this.signHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ op: 'delete', path }),
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3) data URL 폴백 어댑터 — 백엔드 미설정(데모/오프라인)
+//    저장하지 않고 base64 data URL을 반환(세션 한정 미리보기).
+// ─────────────────────────────────────────────────────────────
+class DataUrlAdapter implements StorageAdapter {
+  async put(_path: string, data: Blob): Promise<string> {
+    return blobToDataUrl(data);
+  }
+  async remove(): Promise<void> {
+    /* 저장하지 않으므로 no-op */
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 활성 어댑터 선택
+// ─────────────────────────────────────────────────────────────
+type Driver = 's3' | 'firebase' | 'dataurl';
+
+function selectAdapter(): StorageAdapter {
+  const driver = (import.meta.env.VITE_STORAGE_DRIVER as Driver | undefined)
+    ?? (isFirebaseConfigured ? 'firebase' : 'dataurl');
+
+  switch (driver) {
+    case 's3': {
+      const signUrl = import.meta.env.VITE_STORAGE_SIGN_URL as string | undefined;
+      const signToken = import.meta.env.VITE_STORAGE_SIGN_TOKEN as string | undefined;
+      if (signUrl) return new S3StorageAdapter(signUrl, signToken);
+      console.warn('[storage] VITE_STORAGE_DRIVER=s3 이지만 VITE_STORAGE_SIGN_URL 미설정 → data URL 폴백');
+      return new DataUrlAdapter();
+    }
+    case 'firebase':
+      if (isFirebaseConfigured && firebaseStorage) return new FirebaseStorageAdapter(firebaseStorage);
+      return new DataUrlAdapter();
+    default:
+      return new DataUrlAdapter();
+  }
+}
+
+/** 앱 전역 파일 스토리지. repo/훅은 이 객체의 put/remove 만 사용한다. */
+export const fileStorage: StorageAdapter = selectAdapter();

@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { fileStorage } from '@/shared/lib/storage';
 
 /**
  * 프로필 사진 업로드 훅.
- * Firebase Storage가 설정된 경우 Storage에 업로드하고 download URL을 반환.
- * 미설정 시 브라우저에서 200×200px 이내로 리사이즈 후 base64 data URL로 폴백.
+ * 브라우저에서 200×200px 이내로 리사이즈(PNG) 후 파일 스토리지에 업로드하고 URL을 반환.
+ * 저장 백엔드(Firebase / Garage(S3) / data URL 폴백)는 fileStorage 어댑터가 결정한다.
  */
 export function useUploadAvatar() {
   const [uploading, setUploading] = useState(false);
@@ -17,18 +16,10 @@ export function useUploadAvatar() {
     try {
       // 이미지 리사이즈 (200×200 max, PNG 변환)
       const resized = await resizeImage(file, 200, 200);
-
-      if (isFirebaseConfigured && storage) {
-        // Firebase Storage 업로드
-        const storageRef = ref(storage, `avatars/${userId}/avatar.png`);
-        const blob = await dataUrlToBlob(resized);
-        await uploadBytes(storageRef, blob, { contentType: 'image/png' });
-        const url = await getDownloadURL(storageRef);
-        return url;
-      } else {
-        // 폴백: base64 data URL 그대로 반환
-        return resized;
-      }
+      const blob = await dataUrlToBlob(resized);
+      return await fileStorage.put(`avatars/${userId}/avatar.png`, blob, {
+        contentType: 'image/png',
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '업로드에 실패했습니다.';
       setError(msg);

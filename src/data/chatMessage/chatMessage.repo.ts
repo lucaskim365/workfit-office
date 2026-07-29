@@ -1,6 +1,6 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { fileStorage } from '@/shared/lib/storage';
 import {
   chatMessageSchema,
   MAX_ATTACHMENT_BYTES,
@@ -65,25 +65,10 @@ export const chatMessageRepo = {
       throw new Error(`파일이 너무 큽니다(최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB).`);
     }
     const meta = { name: file.name, size: file.size, mime: file.type || 'application/octet-stream' };
-    if (isFirebaseConfigured && storage) {
-      const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
-      const path = `chat/${roomId}/${Date.now()}-${safe}`;
-      const r = ref(storage, path);
-      // 다운로드 시 원본 파일명 보존: Content-Disposition 에 RFC 5987(UTF-8) 인코딩된 파일명 지정.
-      // (한글 등 비ASCII 대비 filename* 사용)
-      await uploadBytes(r, file, {
-        contentType: meta.mime,
-        contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-      });
-      const url = await getDownloadURL(r);
-      return { url, ...meta };
-    }
-    const url = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+    // 다운로드 시 원본 파일명 보존을 위해 filename 을 넘긴다(어댑터가 Content-Disposition 처리).
+    const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
+    const path = `chat/${roomId}/${Date.now()}-${safe}`;
+    const url = await fileStorage.put(path, file, { contentType: meta.mime, filename: file.name });
     return { url, ...meta };
   },
 

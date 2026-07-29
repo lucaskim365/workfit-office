@@ -11,8 +11,7 @@ import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
-import { storage, isFirebaseConfigured } from '@/shared/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { fileStorage } from '@/shared/lib/storage';
 import { ZodError } from 'zod';
 
 /**
@@ -236,21 +235,14 @@ export function ApprovalDraftModal({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        if (isFirebaseConfigured && storage) {
-          // Live Firebase Storage 업로드
-          const path = `approvals/${Date.now()}_${file.name}`;
-          const fileRef = ref(storage, path);
-          await uploadBytes(fileRef, file);
-          const downloadUrl = await getDownloadURL(fileRef);
-          newFiles.push({ name: file.name, url: downloadUrl });
-        } else {
-          // 로컬 데모 모드 (Graceful Fallback - mock URL)
-          await new Promise((resolve) => setTimeout(resolve, 800)); // 시뮬레이팅 로딩
-          newFiles.push({
-            name: file.name,
-            url: `https://example.com/mock-attachments/${Date.now()}_${file.name}`,
-          });
-        }
+        // 파일 스토리지 업로드(백엔드는 fileStorage 어댑터가 결정).
+        // 미설정 시 어댑터가 data URL 미리보기로 graceful fallback.
+        const path = `approvals/${Date.now()}_${file.name}`;
+        const url = await fileStorage.put(path, file, {
+          contentType: file.type || undefined,
+          filename: file.name,
+        });
+        newFiles.push({ name: file.name, url });
       }
       setAttachments((prev) => [...prev, ...newFiles]);
     } catch (err) {
