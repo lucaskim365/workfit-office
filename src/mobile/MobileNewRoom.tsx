@@ -59,7 +59,7 @@ export default function MobileNewRoom() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <MobileMemberPicker exclude={[me]} selected={selected} onToggle={toggle} />
       </div>
     </div>

@@ -109,7 +109,7 @@ export default function MobileChatList() {
         <button onClick={() => nav('/m/new')} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[20px] leading-none text-white" style={{ background: '#e6960c' }}>＋</button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {sortedRooms.length === 0 && (
           <div className="py-16 text-center text-[12px] text-ink3">{kw ? '검색 결과가 없습니다.' : '대화방이 없습니다.'}</div>
         )}
