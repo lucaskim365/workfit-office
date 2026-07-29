@@ -23,7 +23,15 @@ async function loadAll(): Promise<ChatMessage[]> {
   if (isFirebaseConfigured && db) {
     const fdb = db;
     const snap = await getDocs(collection(fdb, COLL));
-    return snap.docs.map((d) => chatMessageSchema.parse(d.data()));
+    // 문서별 안전 파싱 — 불량 문서(모바일이 쓴 미지원 type 등) 하나 때문에
+    // 전체 조회가 예외로 실패하지 않도록 실패 문서만 건너뛴다.
+    const out: ChatMessage[] = [];
+    for (const d of snap.docs) {
+      const parsed = chatMessageSchema.safeParse(d.data());
+      if (parsed.success) out.push(parsed.data);
+      else console.warn('[chatMessage] 파싱 실패로 건너뜀:', d.id, parsed.error.issues);
+    }
+    return out;
   }
   return memory;
 }
