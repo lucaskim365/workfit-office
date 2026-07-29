@@ -132,6 +132,14 @@ export const userRepo = {
     return { reconnectedReports: reports.length };
   },
 
+  /** FCM 푸시 토큰 저장(웹 PWA·모바일 공용 users.fcmToken). 서버 트리거가 이 토큰으로 발송. */
+  async updateFcmToken(userId: string, token: string): Promise<void> {
+    const existing = (await this.list()).find((u) => u.id === userId);
+    if (!existing) return;
+    if (existing.fcmToken === token) return; // 동일 토큰이면 저장 생략
+    await this.save({ ...existing, fcmToken: token });
+  },
+
   async updateJobTitle(id: string, jobTitle: string): Promise<void> {
     const existing = (await this.list()).find((u) => u.id === id);
     if (!existing) return;

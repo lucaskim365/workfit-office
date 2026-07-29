@@ -1,0 +1,17 @@
+{
+  "name": "워크핏 메신저",
+  "short_name": "워크핏",
+  "description": "Workfit 사내 메신저 & 전자결재",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101830",
+  "theme_color": "#101830",
+  "lang": "ko",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

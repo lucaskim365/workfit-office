@@ -1,6 +1,7 @@
 import { lazy as reactLazy, useEffect, type ComponentType } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from './shell/AppShell';
+import MobileApp from '@/mobile/MobileApp';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
 
@@ -114,7 +115,9 @@ import { useNotifications } from '@/features/notification/useNotifications';
 export default function App() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   useNotifications(user?.id);
+  const isMobilePwa = location.pathname.startsWith('/m');
 
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩
   useEffect(() => {
@@ -122,17 +125,21 @@ export default function App() {
     document.documentElement.style.setProperty('--font-scale', savedScale);
   }, []);
 
-  // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동
+  // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동.
+  // 단, 모바일 PWA(/m)는 자체 흐름을 쓰므로 이 데스크톱 리다이렉트를 건너뛴다.
   useEffect(() => {
+    if (isMobilePwa) return;
     const defaultHash = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
     if (user && (user.password === 'mes1234' || user.password === defaultHash)) {
       window.alert('보안을 위해 초기 비밀번호(mes1234)를 반드시 변경해 주세요.');
       navigate('/profile');
     }
-  }, [user, navigate]);
+  }, [user, navigate, isMobilePwa]);
 
   return (
     <Routes>
+      {/* 모바일 메신저 PWA — 데스크톱 셸 밖의 전체화면 라우트 */}
+      <Route path="/m/*" element={<MobileApp />} />
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={HOME} replace />} />
         {SCREENS.map((screen) => {
