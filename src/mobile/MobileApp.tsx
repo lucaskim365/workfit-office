@@ -30,7 +30,10 @@ export default function MobileApp() {
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
-      <div className="flex h-full w-full max-w-[480px] flex-col overflow-hidden bg-panel shadow-xl">
+      <div
+        className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
+        style={{ background: '#101830', paddingTop: 'env(safe-area-inset-top)' }}
+      >
         {loading ? (
           <div className="grid flex-1 place-items-center text-[13px] text-ink3">불러오는 중…</div>
         ) : !user ? (
