@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ClipboardCheck, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -91,16 +92,16 @@ export default function MobileChatList() {
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
         <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => nav('/m/approval')} title="전자결재" className="relative grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">
-            📋
+          <button onClick={() => nav('/m/approval')} title="전자결재" className="relative grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10">
+            <ClipboardCheck size={18} strokeWidth={2} />
             {pendingApprovals > 0 && (
               <span className="absolute -right-0.5 -top-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9px] font-extrabold text-white" style={{ background: '#e0483b' }}>
                 {pendingApprovals}
               </span>
             )}
           </button>
-          <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">🔔</button>
-          <button onClick={() => void signOutUser()} title="로그아웃" className="grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">⎋</button>
+          <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><Bell size={18} strokeWidth={2} /></button>
+          <button onClick={() => void signOutUser()} title="로그아웃" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><LogOut size={18} strokeWidth={2} /></button>
         </div>
       </header>
 
