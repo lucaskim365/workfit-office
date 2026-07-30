@@ -9,7 +9,7 @@ import { z } from 'zod';
  * type: text(일반) / system(입장·초대 안내 등 가운데 캡슐).
  * readBy: 읽은 users.id 배열 → 미읽음은 저장하지 않고 여기서 도출.
  */
-export const CHAT_MESSAGE_TYPES = ['text', 'system', 'image', 'file'] as const;
+export const CHAT_MESSAGE_TYPES = ['text', 'system', 'image', 'file', 'approval_bot'] as const;
 export type ChatMessageType = (typeof CHAT_MESSAGE_TYPES)[number];
 
 /** 첨부 허용 최대 용량(데모: 10MB). storage.rules·업로드 repo·입력 UI 3곳에서 강제. */
@@ -36,6 +36,21 @@ export const replyPreviewSchema = z.object({
 });
 export type ReplyPreview = z.infer<typeof replyPreviewSchema>;
 
+/**
+ * 전자결재 알림 봇 카드 페이로드 — type='approval_bot' 메시지에 담긴다.
+ * Flutter 앱(ApprovalBotPayload)·PWA·웹이 공유하는 shape. 탭 시 해당 결재문서 상세로 이동.
+ */
+export const approvalBotPayloadSchema = z.object({
+  docId: z.string().default(''),
+  docNo: z.string().default(''),
+  title: z.string().default(''),
+  drafterName: z.string().default(''),
+  drafterDept: z.string().default(''),
+  status: z.string().default('진행중'),
+  currentSeq: z.number().default(1),
+});
+export type ApprovalBotPayload = z.infer<typeof approvalBotPayloadSchema>;
+
 export const chatMessageSchema = z.object({
   id: z.string().min(1),
   roomId: z.string().min(1),
@@ -48,6 +63,8 @@ export const chatMessageSchema = z.object({
   attachment: attachmentSchema.nullable().default(null),
   /** 답글(인용) 원문 요약. 일반 메시지는 null. (모바일 앱과 공유) */
   replyTo: replyPreviewSchema.nullable().default(null),
+  /** 전자결재 알림 봇 카드 페이로드. type='approval_bot' 일 때만 존재. (Flutter 앱과 공유) */
+  approvalPayload: approvalBotPayloadSchema.nullable().default(null),
   /** 전송 시각(ISO). 방 안 정렬 키. */
   at: z.string(),
   readBy: z.array(z.string()).default([]),

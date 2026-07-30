@@ -46,6 +46,7 @@ export function useSendMessage(roomId: string) {
         type: 'text',
         attachment: null,
         replyTo: replyTo ?? null,
+        approvalPayload: null,
         at,
         readBy: [senderId],
       };
@@ -65,6 +66,7 @@ export function useSendMessage(roomId: string) {
         type: 'text',
         attachment: null,
         replyTo: replyTo ?? null,
+        approvalPayload: null,
         at: nowLocalIso(),
         readBy: [senderId],
       };
@@ -99,6 +101,7 @@ export function useSendAttachment(roomId: string) {
         type: isImage ? 'image' : 'file',
         attachment,
         replyTo: null,
+        approvalPayload: null,
         at,
         readBy: [senderId],
       };

@@ -6,11 +6,12 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
-import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
+import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
+import { statusColor } from './MobileApprovalList';
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
@@ -242,6 +243,43 @@ export default function MobileChatThread() {
   );
 }
 
+/** 전자결재 알림 봇 카드 — 탭 시 결재 상세(/m/approval/:id)로 이동. Flutter approval_notification_card 와 동일 역할. */
+function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text: string }) {
+  const nav = useNavigate();
+  const canOpen = !!payload.docId;
+  return (
+    <div className="w-[240px] overflow-hidden rounded-2xl border border-black/10 bg-white">
+      <div className="flex items-center gap-1.5 px-3 py-2 text-white" style={{ background: '#101830' }}>
+        <span className="text-[13px]">🖋️</span>
+        <span className="text-[11.5px] font-bold">전자결재 알림</span>
+        <span
+          className="ml-auto rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+          style={{ background: `${statusColor(payload.status)}33`, color: '#fff' }}
+        >
+          {payload.status}
+        </span>
+      </div>
+      <div className="px-3 py-2.5">
+        <div className="text-[11px] text-ink3">{text || '전자결재 문서를 확인해 주세요.'}</div>
+        <div className="mt-1.5 line-clamp-2 text-[13px] font-bold text-ink">{payload.title || '(제목 없음)'}</div>
+        <div className="mt-1 text-[11px] text-ink3">
+          {payload.drafterName}
+          {payload.drafterDept ? ` · ${payload.drafterDept}` : ''}
+          {payload.docNo ? ` · ${payload.docNo}` : ''}
+        </div>
+        <button
+          onClick={() => canOpen && nav(`/m/approval/${payload.docId}`)}
+          disabled={!canOpen}
+          className="mt-2.5 w-full rounded-lg py-2 text-[12px] font-bold text-white disabled:opacity-40"
+          style={{ background: '#e6960c' }}
+        >
+          결재 문서 상세 보기 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
   m: ChatMessage;
   me: string;
@@ -263,7 +301,9 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body;
-  if (m.type === 'image' && att) {
+  if (m.type === 'approval_bot' && m.approvalPayload) {
+    body = <ApprovalBotCard payload={m.approvalPayload} text={m.text} />;
+  } else if (m.type === 'image' && att) {
     body = (
       <button onClick={() => onOpenImage(att)} className="block overflow-hidden rounded-2xl border border-black/10">
         <img src={att.url} alt={att.name} className="max-h-52 max-w-full object-cover" />

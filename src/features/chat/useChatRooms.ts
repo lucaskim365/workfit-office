@@ -73,6 +73,7 @@ export function useInviteMembers() {
         type: 'system',
         attachment: null,
         replyTo: null,
+        approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
       });
@@ -98,6 +99,7 @@ export function useLeaveRoom() {
         type: 'system',
         attachment: null,
         replyTo: null,
+        approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
       });
@@ -127,6 +129,7 @@ export function useDeleteRoom() {
         type: 'system',
         attachment: null,
         replyTo: null,
+        approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
       });
