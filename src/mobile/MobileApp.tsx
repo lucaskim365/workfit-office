@@ -6,6 +6,8 @@ import MobileLogin from './MobileLogin';
 import MobileChatList from './MobileChatList';
 import MobileChatThread from './MobileChatThread';
 import MobileNewRoom from './MobileNewRoom';
+import MobileApprovalList from './MobileApprovalList';
+import MobileApprovalDetail from './MobileApprovalDetail';
 
 /**
  * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
@@ -43,6 +45,8 @@ export default function MobileApp() {
             <Route index element={<MobileChatList />} />
             <Route path="new" element={<MobileNewRoom />} />
             <Route path="room/:roomId" element={<MobileChatThread />} />
+            <Route path="approval" element={<MobileApprovalList />} />
+            <Route path="approval/:id" element={<MobileApprovalDetail />} />
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
         )}

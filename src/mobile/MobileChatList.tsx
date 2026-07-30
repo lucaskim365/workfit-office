@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
+import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser } from '@/shared/lib/messaging';
 import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
@@ -28,6 +29,8 @@ export default function MobileChatList() {
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
+  const { counts: approvalCounts } = useApprovalBoxes(me);
+  const pendingApprovals = approvalCounts['대기'] ?? 0;
   const [notice, setNotice] = useState('');
   const [q, setQ] = useState('');
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
@@ -88,6 +91,14 @@ export default function MobileChatList() {
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
         <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => nav('/m/approval')} title="전자결재" className="relative grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">
+            📋
+            {pendingApprovals > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9px] font-extrabold text-white" style={{ background: '#e0483b' }}>
+                {pendingApprovals}
+              </span>
+            )}
+          </button>
           <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">🔔</button>
           <button onClick={() => void signOutUser()} title="로그아웃" className="grid h-8 w-8 place-items-center rounded-lg text-[15px] hover:bg-white/10">⎋</button>
         </div>
