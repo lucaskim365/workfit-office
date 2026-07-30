@@ -341,7 +341,11 @@ function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void })
 
   return createPortal(
     <div onClick={onClose} className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/90 p-4">
-      <div className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white"
+        style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{att.name}</span>
         <button onClick={() => downloadAttachment(att)} title="다운로드" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[15px] active:bg-white/25">⤓</button>
         <button onClick={onClose} title="닫기" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[16px] active:bg-white/25">✕</button>
@@ -383,7 +387,7 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
           초대 ({selected.length})
         </button>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <MobileMemberPicker exclude={room.members} selected={selected} onToggle={toggle} />
       </div>
     </div>
