@@ -11,6 +11,9 @@ import {
   useDeleteToTrash,
   useRestoreFromTrash,
   usePermanentlyDelete,
+  useBatchDecideStep,
+  useBatchRestoreFromTrash,
+  useBatchPermanentlyDelete,
 } from '@/features/gw/useApprovals';
 import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
@@ -61,8 +64,6 @@ function renderStatusBadge(d: ApprovalDoc, me: string) {
   return <StatusBadge status={d.status} />;
 }
 
-
-
 export default function ApprovalScreen() {
   const { user } = useAuth();
   const me = user?.id ?? '';
@@ -81,8 +82,22 @@ export default function ApprovalScreen() {
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
+  // 다중 선택 상태 & 일괄 처리 훅
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
+  const [batchComment, setBatchComment] = useState('');
+
+  const batchDecide = useBatchDecideStep();
+  const batchRestore = useBatchRestoreFromTrash();
+  const batchPermanentDelete = useBatchPermanentlyDelete();
+
   const list = byBox[box] ?? [];
   const selDoc = useApprovalDoc(selId);
+
+  // 함이나 필터가 바뀌면 다중 선택 초기화
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [box, doneFilter, todoFilter, execFilter]);
 
   // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
@@ -135,6 +150,64 @@ export default function ApprovalScreen() {
     if (!filteredList.some((d) => d.id === selId)) setSelId(filteredList[0].id);
   }, [box, filteredList, selId]);
 
+  // 다중 선택 처리 헬퍼
+  const isAllSelected = filteredList.length > 0 && selectedIds.length === filteredList.length;
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredList.map((d) => d.id));
+    }
+  };
+
+  const toggleSelectOne = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  // 일괄 승인 실행
+  const handleBatchApprove = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await batchDecide.mutateAsync({
+        docIds: selectedIds,
+        userId: me,
+        comment: batchComment.trim() || '일괄 승인 처리되었습니다.',
+      });
+      setShowBatchApproveConfirm(false);
+      setBatchComment('');
+      setSelectedIds([]);
+    } catch (err: any) {
+      alert(`일괄 승인 중 오류가 발생했습니다: ${err.message || String(err)}`);
+    }
+  };
+
+  // 일괄 복원 실행
+  const handleBatchRestore = async () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`선택한 ${selectedIds.length}건의 문서를 휴지통에서 복원하시겠습니까?`)) {
+      try {
+        await batchRestore.mutateAsync(selectedIds);
+        setSelectedIds([]);
+      } catch (err: any) {
+        alert(`일괄 복원 중 오류가 발생했습니다: ${err.message || String(err)}`);
+      }
+    }
+  };
+
+  // 일괄 영구 삭제 실행
+  const handleBatchPermanentDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`⚠️ 경고: 선택한 ${selectedIds.length}건의 문서를 영구 삭제하시겠습니까?\n이 작업은 복구할 수 없습니다.`)) {
+      try {
+        await batchPermanentDelete.mutateAsync(selectedIds);
+        setSelectedIds([]);
+      } catch (err: any) {
+        alert(`일괄 삭제 중 오류가 발생했습니다: ${err.message || String(err)}`);
+      }
+    }
+  };
+
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
@@ -144,9 +217,9 @@ export default function ApprovalScreen() {
         name="전자결재"
       />
 
-      <div className="mt-5 grid grid-cols-[160px_260px_1fr] gap-4 h-[calc(100vh-160px)] items-stretch overflow-hidden">
-        {/* 좌: 함 탭 */}
-        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-3 h-full overflow-y-auto shrink-0">
+      <div className="mt-5 grid grid-cols-[160px_280px_1fr] gap-4 items-start">
+        {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거) */}
+        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-3 self-start shadow-sm shrink-0">
           <button
             onClick={() => setModal({})}
             className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm"
@@ -223,11 +296,24 @@ export default function ApprovalScreen() {
           ))}
         </div>
 
-        {/* 중: 목록 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel h-full flex flex-col shrink-0">
-          <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2">
-            <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
+        {/* 중: 목록 (목록 높이에 딱 맞게 콤팩트 렌더링 + 일괄 버튼 하단 풋터 배치) */}
+        <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 max-h-[calc(100vh-160px)] shadow-sm self-start">
+          {/* 목록 헤더 */}
+          <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
+            <div className="flex items-center gap-2">
+              {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 animate-fadeIn"
+                  title="전체 선택/해제"
+                />
+              )}
+              <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
+            </div>
           </div>
+
           {box === '대기' && (
             <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
               {(['all', 'pending', 'progress'] as const).map((f) => {
@@ -288,16 +374,19 @@ export default function ApprovalScreen() {
               })}
             </div>
           )}
-          <div className="flex-1 overflow-y-auto">
+
+          {/* 목록 데이터 스크롤 영역 */}
+          <div className="max-h-[500px] overflow-y-auto">
             {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
             {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
             {filteredList.map((d) => {
               const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
+              const isChecked = selectedIds.includes(d.id);
               return (
                 <button
                   key={d.id}
                   onClick={() => setSelId(d.id)}
-                  className={`relative flex w-full flex-col gap-1 border-b border-border px-3.5 py-2.5 text-left transition-all ${
+                  className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-2.5 text-left transition-all ${
                     selId === d.id 
                       ? 'bg-teal-soft/60' 
                       : isRecentCompleted 
@@ -305,25 +394,80 @@ export default function ApprovalScreen() {
                         : 'hover:bg-panel-alt'
                   } ${isRecentCompleted ? 'border-l-4 border-l-teal' : ''}`}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
-                    {isRecentCompleted && (
-                      <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                        <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
-                        최근 완료
-                      </span>
-                    )}
-                    {renderStatusBadge(d, me)}
-                  </div>
-                  <div className="flex items-center justify-between text-[10.5px] text-ink3">
-                    <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
-                    <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
+                  {(box === '대기' || box === '삭제') && (
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      onClick={(e) => toggleSelectOne(d.id, e)}
+                      className="mt-1 rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 shrink-0"
+                    />
+                  )}
+                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
+                      {isRecentCompleted && (
+                        <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+                          <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
+                          최근 완료
+                        </span>
+                      )}
+                      {renderStatusBadge(d, me)}
+                    </div>
+                    <div className="flex items-center justify-between text-[10.5px] text-ink3">
+                      <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
+                      <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
+                    </div>
                   </div>
                 </button>
               );
             })}
           </div>
+
+          {/* 목록 하단 풋터 액션 바 (선택 항목 존재 시 목록 바로 아래에 조밀하게 표시) */}
+          {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
+            <div className="border-t border-border bg-panel-alt/60 p-2.5 flex items-center justify-between animate-fadeIn">
+              <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
+                {selectedIds.length}개 선택됨
+              </span>
+
+              {box === '대기' && (
+                <button
+                  onClick={() => setShowBatchApproveConfirm(true)}
+                  className="group relative inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal to-emerald-600 text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-teal/20 hover:shadow-md hover:shadow-teal/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                >
+                  <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>일괄 승인</span>
+                </button>
+              )}
+
+              {box === '삭제' && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleBatchRestore}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                  >
+                    <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>일괄 복원</span>
+                  </button>
+                  <button
+                    onClick={handleBatchPermanentDelete}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/20 hover:border-rose-500 rounded-lg text-[11.5px] font-bold shadow-xs hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                  >
+                    <svg className="w-3.5 h-3.5 stroke-[2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>영구 삭제</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 우: 상세 */}
@@ -335,6 +479,68 @@ export default function ApprovalScreen() {
           )}
         </div>
       </div>
+
+      {/* 일괄 승인 경고 및 의견 입력 모달 */}
+      {showBatchApproveConfirm && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/45 p-4"
+          onClick={() => setShowBatchApproveConfirm(false)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">
+              <div className="flex items-center gap-2 text-[14px] font-extrabold text-ink">
+                <span className="text-amber-500">⚠️</span>
+                <span>일괄 결재 승인 확인</span>
+              </div>
+              <button
+                onClick={() => setShowBatchApproveConfirm(false)}
+                className="grid h-7 w-7 place-items-center rounded-lg text-[14px] text-ink3 hover:bg-panel-alt"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-[12.5px]">
+              <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-amber-700 dark:text-amber-300 font-semibold space-y-1">
+                <p>선택하신 <span className="font-extrabold underline">{selectedIds.length}건</span>의 결재 문서를 일괄 승인하시겠습니까?</p>
+                <p className="text-[11.5px] font-normal text-amber-600 dark:text-amber-400">
+                  ※ 일괄 승인 처리 후에는 결재를 취소하거나 이전 상태로 되돌릴 수 없습니다.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-ink2 block text-[11.5px]">일괄 승인 의견 (선택)</label>
+                <textarea
+                  value={batchComment}
+                  onChange={(e) => setBatchComment(e.target.value)}
+                  placeholder="예: 일괄 승인 처리되었습니다."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border bg-panel-alt/20 px-5 py-3">
+              <button
+                onClick={() => setShowBatchApproveConfirm(false)}
+                className="rounded-lg px-4 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleBatchApprove}
+                disabled={batchDecide.isPending}
+                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
+              >
+                {batchDecide.isPending ? '승인 처리중...' : '✓ 일괄 승인 확정'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && <ApprovalDraftModal me={user} editDoc={modal.edit ?? null} onClose={() => setModal(null)} />}
     </div>

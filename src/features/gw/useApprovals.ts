@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
-import { byRecent, matchesBox } from '@/domain/approvalDoc/engine';
-import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { activeSteps, byRecent, matchesBox } from '@/domain/approvalDoc/engine';
+import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc, type ApprovalStep } from '@/domain/approvalDoc/schema';
 import { useUsers } from '@/features/user/useUsers';
 import { departmentRepo } from '@/data/department/department.repo';
 
@@ -139,13 +139,22 @@ export function useRecallApproval() {
 export function useDelegateStep() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, seq, delegateUserId, comment = '' }: { id: string; seq: number; delegateUserId: string; comment?: string }) =>
-      approvalDocRepo.delegate(id, seq, delegateUserId, comment),
+    mutationFn: ({
+      id,
+      seq,
+      delegateUserId,
+      comment = '',
+    }: {
+      id: string;
+      seq: number;
+      delegateUserId: string;
+      comment?: string;
+    }) => approvalDocRepo.delegate(id, seq, delegateUserId, comment),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
 
-/** 휴지통으로 보내기 (임시저장만 가능). */
+/** 휴지통으로 이동. */
 export function useDeleteToTrash() {
   const qc = useQueryClient();
   return useMutation({
@@ -154,7 +163,7 @@ export function useDeleteToTrash() {
   });
 }
 
-/** 휴지통에서 복구. */
+/** 휴지통에서 복원. */
 export function useRestoreFromTrash() {
   const qc = useQueryClient();
   return useMutation({
@@ -168,6 +177,52 @@ export function usePermanentlyDelete() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => approvalDocRepo.permanentlyDelete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 일괄 결재 승인 mutation */
+export function useBatchDecideStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ docIds, userId, comment }: { docIds: string[]; userId: string; comment?: string }) => {
+      const list = await approvalDocRepo.list();
+      for (const id of docIds) {
+        const doc = list.find((d: ApprovalDoc) => d.id === id);
+        if (doc && doc.status === '진행중') {
+          const active = activeSteps(doc).find((s: ApprovalStep) => s.approverId === userId);
+          if (active) {
+            await approvalDocRepo.approve(id, active.seq, userId, comment);
+          }
+        }
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 일괄 휴지통 복원 mutation */
+export function useBatchRestoreFromTrash() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (docIds: string[]) => {
+      for (const id of docIds) {
+        await approvalDocRepo.restoreFromTrash(id);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
+/** 일괄 영구 삭제 mutation */
+export function useBatchPermanentlyDelete() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (docIds: string[]) => {
+      for (const id of docIds) {
+        await approvalDocRepo.permanentlyDelete(id);
+      }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
