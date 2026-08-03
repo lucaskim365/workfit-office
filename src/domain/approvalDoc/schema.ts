@@ -27,6 +27,8 @@ export const STEP_KINDS = ['결재', '참조', '전결', '대결'] as const;
 export const STEP_DECISIONS = ['대기', '승인', '반려', '보류'] as const;
 /** 휴가 종류(§5.4). */
 export const LEAVE_TYPES = ['연차', '반차', '병가', '경조', '공가', '대체휴무', '기타'] as const;
+/** 문서 보안 등급 */
+export const DOC_SECURITY_LEVELS = ['일반', '대외비', '극비'] as const;
 
 
 export type DocType = (typeof DOC_TYPES)[number];
@@ -34,6 +36,7 @@ export type DocStatus = (typeof DOC_STATUS)[number];
 export type StepKind = (typeof STEP_KINDS)[number];
 export type StepDecision = (typeof STEP_DECISIONS)[number];
 export type LeaveType = (typeof LEAVE_TYPES)[number];
+export type SecurityLevel = (typeof DOC_SECURITY_LEVELS)[number];
 
 /**
  * 결재선 노드(ApprovalStep) — 임베드 라인.
@@ -172,6 +175,8 @@ export const approvalDocSchema = z.object({
   execution: approvalExecutionSchema.nullable().optional(),
   /** 보존연한 설정 */
   preservationPeriod: z.string().nullable().optional(),
+  /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
+  securityLevel: z.enum(DOC_SECURITY_LEVELS).default('일반'),
   /** 연결된 관련 기결재 문서 리스트 */
   relatedDocs: z.array(relatedDocSchema).default([]),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */

@@ -123,6 +123,8 @@ export interface ApprovalDraftInput {
   execution?: ApprovalDoc['execution'];
   /** 관련 문서 목록 */
   relatedDocs?: ApprovalDoc['relatedDocs'];
+  /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
+  securityLevel?: '일반' | '대외비' | '극비';
 }
 
 export const approvalDocRepo = {
@@ -195,6 +197,7 @@ export const approvalDocRepo = {
       preservationPeriod: input.preservationPeriod ?? null,
       execution: input.execution ?? null,
       relatedDocs: input.relatedDocs ?? [],
+      securityLevel: input.securityLevel ?? '일반',
     });
     await persist(created);
     return created;

@@ -45,15 +45,52 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
   };
   const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
 
-  // 보안 필드 열람 권한 검증: (1) 기안자 (2) 결재선 승인자/참여자 (3) 관리자/인사/재무 부서
-  const canViewSecret = (() => {
-    if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
-    if (doc.drafterId === currentUser.id) return true;
-    if (doc.steps.some((s) => s.approverId === currentUser.id)) return true;
-    const u = org.userById(currentUser.id);
-    if (u?.roleGroup === 'ADMIN' || u?.dept === '인사팀' || u?.dept === '재무팀' || currentUser.dept === '인사팀' || currentUser.dept === '재무팀') return true;
+  // 사용자 정보 조회
+  const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
+  const userPos = userObj?.position ?? '';
+  const isExecutive = currentUser?.id === 'U001' || userPos === '대표이사' || userPos === '상무' || userPos === '상무이사' || userObj?.dept === '대표이사';
+
+  // 1단계: 문서 자체의 보안 등급(securityLevel)에 따른 물리적 접근 차단 판별
+  const canAccessDocument = (() => {
+    if (!currentUser?.id) return true; // 미리보기 등 유저 미지정 시 허용
+    if (isExecutive) return true; // 대표이사/상무이사 100% 허용
+    if (doc.drafterId === currentUser.id) return true; // 기안자 허용
+
+    const secLevel = doc.securityLevel ?? '일반';
+    if (secLevel === '일반') return true;
+
+    const isApprover = doc.steps.some((s) => s.approverId === currentUser.id);
+    const isRecipient = doc.recipients?.some((r) => r.id === currentUser.id || r.id === userObj?.dept);
+
+    if (secLevel === '대외비') {
+      return isApprover || !!isRecipient;
+    }
+    if (secLevel === '극비') {
+      return isApprover; // 극비 문서는 수신처/참조자 제외
+    }
     return false;
   })();
+
+  // 2단계: 필드 단위 보안 마스킹 권한 판별 (canViewSecret)
+  const canViewSecret = (() => {
+    if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
+    if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
+    if (doc.drafterId === currentUser.id) return true; // 기안자 본인
+    if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
+    return false;
+  })();
+
+  if (!canAccessDocument) {
+    return (
+      <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
+        <div className="text-[28px]">🛡️</div>
+        <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
+        <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
+          본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
+        </div>
+      </div>
+    );
+  }
 
   const maskValue = (rawVal: string, isSecret?: boolean) => {
     if (!isSecret || canViewSecret) return rawVal;

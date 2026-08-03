@@ -23,7 +23,7 @@ const blankField = (): FormField => ({
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
   id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false, folderId,
-  recipientDeptId: null, recipientUserId: null, recipientDrafter: false,
+  recipientDeptId: null, recipientUserId: null, recipientDrafter: false, preservationPeriod: '5년',
   allowedPositionFromRank: null, allowedPositionToRank: null, allowedDeptIds: [],
   fields: [{ ...blankField(), key: 'body', label: '본문', type: '장문', required: true }],
 });
@@ -320,7 +320,20 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
           </select>
         </F>
         <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp}`} /></F>
-        <div className="col-span-3"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
+        <F label="보존연한">
+          <select
+            value={form.preservationPeriod || '5년'}
+            onChange={(e) => set({ preservationPeriod: e.target.value })}
+            className={`${inp}`}
+          >
+            <option value="1년">1년</option>
+            <option value="3년">3년</option>
+            <option value="5년">5년</option>
+            <option value="10년">10년</option>
+            <option value="영구">영구</option>
+          </select>
+        </F>
+        <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
         <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
       </div>
 
@@ -730,6 +743,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
       attachments: [],
       recipients: [],
       relatedDocs: [],
+      securityLevel: '일반',
       currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);
