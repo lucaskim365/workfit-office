@@ -403,7 +403,7 @@ export function missingRequired(fields: FormField[], values: Record<string, Fiel
     .map((f) => f.label);
 }
 
-function TableFieldEditor({
+export function TableFieldEditor({
   field,
   v,
   set,

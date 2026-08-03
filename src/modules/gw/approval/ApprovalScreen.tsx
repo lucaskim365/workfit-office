@@ -79,30 +79,40 @@ export default function ApprovalScreen() {
   const [modal, setModal] = useState<{ edit?: ApprovalDoc | null } | null>(null);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
+  const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
   const list = byBox[box] ?? [];
   const selDoc = useApprovalDoc(selId);
 
-  // 완료함 및 결재함 필터링 적용
+  // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
+    if (box === '시행') {
+      if (execFilter === 'pending') {
+        return list.filter((d) => d.execution?.status === '대기중' || d.execution?.status === '처리중');
+      }
+      if (execFilter === 'completed') {
+        return list.filter((d) => d.execution?.status === '시행완료');
+      }
+      return list;
+    }
     if (box === '완료') {
       if (doneFilter === 'draft') return list.filter((d) => d.drafterId === me);
       if (doneFilter === 'approved') {
-        return list.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+        return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
       }
       return list;
     }
     if (box === '대기') {
       if (todoFilter === 'pending') {
-        return list.filter((d) => currentApproverIds(d).includes(me));
+        return list.filter((d: ApprovalDoc) => currentApproverIds(d).includes(me));
       }
       if (todoFilter === 'progress') {
-        return list.filter((d) => !currentApproverIds(d).includes(me));
+        return list.filter((d: ApprovalDoc) => !currentApproverIds(d).includes(me));
       }
       return list;
     }
     return list;
-  }, [box, list, doneFilter, todoFilter, me]);
+  }, [box, list, doneFilter, todoFilter, execFilter, me]);
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
   useEffect(() => {
@@ -187,6 +197,10 @@ export default function ApprovalScreen() {
                     ? (myActivePendingCount > 0 
                         ? 'bg-red-500 text-white animate-pulse' 
                         : 'bg-ink3/15 text-ink2')
+                    : b === '시행'
+                    ? (executionCount > 0
+                        ? 'bg-amber-500 text-white animate-pulse'
+                        : 'bg-ink3/15 text-ink2')
                     : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   return (
@@ -225,6 +239,26 @@ export default function ApprovalScreen() {
                     className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${
                       todoFilter === f
                         ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {box === '시행' && (
+            <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+              {(['all', 'pending', 'completed'] as const).map((f) => {
+                const label = f === 'all' ? '전체' : f === 'pending' ? '미처리·진행중' : '시행완료';
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setExecFilter(f)}
+                    className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${
+                      execFilter === f
+                        ? 'bg-amber-500 text-white shadow-sm'
                         : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                     }`}
                   >
