@@ -43,6 +43,7 @@ function migrateDoc(data: any): any {
     attachments: data.attachments ?? [],
     execution: data.execution ?? null,
     preservationPeriod: data.preservationPeriod ?? null,
+    relatedDocs: data.relatedDocs ?? [],
     steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
       kind: s.kind === '합의' ? '결재' : s.kind,
@@ -120,6 +121,8 @@ export interface ApprovalDraftInput {
   preservationPeriod?: string | null;
   /** 시행 정보 */
   execution?: ApprovalDoc['execution'];
+  /** 관련 문서 목록 */
+  relatedDocs?: ApprovalDoc['relatedDocs'];
 }
 
 export const approvalDocRepo = {
@@ -131,6 +134,10 @@ export const approvalDocRepo = {
   async get(id: string): Promise<ApprovalDoc | null> {
     const rows = await loadAll();
     return rows.find((d) => d.id === id) ?? null;
+  },
+
+  async getById(id: string): Promise<ApprovalDoc | null> {
+    return this.get(id);
   },
 
   /**
@@ -187,6 +194,7 @@ export const approvalDocRepo = {
       drafterPos: drafterUser?.position ?? null,
       preservationPeriod: input.preservationPeriod ?? null,
       execution: input.execution ?? null,
+      relatedDocs: input.relatedDocs ?? [],
     });
     await persist(created);
     return created;
@@ -612,6 +620,62 @@ export const approvalDocRepo = {
     };
     await persist(next);
     return next;
+  },
+
+  async searchCompletedDocs(params: {
+    userId: string;
+    userDept?: string;
+    userDeptId?: string;
+    keyword?: string;
+  }): Promise<ApprovalDoc[]> {
+    const docs = await loadAll();
+    const { userId, userDept, userDeptId, keyword } = params;
+
+    // 1. 완료 상태 문서만 필터링
+    let completedList = docs.filter((d) => d.status === '완료');
+
+    // 2. 열람 권한 검증: 기안자, 결재선 참여자, 수신/참조처, 시행자/시행부서
+    completedList = completedList.filter((doc) => {
+      // 기안자
+      if (doc.drafterId === userId) return true;
+      // 결재선
+      if (doc.steps.some((s) => s.approverId === userId)) return true;
+      // 수신/참조처(recipients)
+      if (
+        doc.recipients?.some((r) => {
+          if (r.type === 'user') return r.id === userId;
+          if (r.type === 'dept') return r.id === userDeptId || r.name === userDept || r.id === userDept;
+          if (r.type === 'drafter') return doc.drafterId === userId;
+          return false;
+        })
+      ) {
+        return true;
+      }
+      // 시행자/시행부서(execution)
+      if (doc.execution) {
+        if (doc.execution.targetType === 'USER' && doc.execution.targetId === userId) return true;
+        if (
+          doc.execution.targetType === 'DEPT' &&
+          (doc.execution.targetId === userDeptId || doc.execution.targetId === userDept)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    // 3. 키워드 검색 (문서제목, 문서번호, 기안자명)
+    if (keyword && keyword.trim()) {
+      const kw = keyword.trim().toLowerCase();
+      completedList = completedList.filter(
+        (d) =>
+          d.title.toLowerCase().includes(kw) ||
+          d.docNo.toLowerCase().includes(kw) ||
+          (d.drafterName && d.drafterName.toLowerCase().includes(kw))
+      );
+    }
+
+    return completedList.sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
   },
 
   subscribe(callback: (docs: ApprovalDoc[]) => void): () => void {

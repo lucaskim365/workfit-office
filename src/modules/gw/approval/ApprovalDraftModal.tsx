@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@/domain/user/schema';
-import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType, type ApprovalRecipient } from '@/domain/approvalDoc/schema';
+import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType, type ApprovalRecipient, type RelatedDoc } from '@/domain/approvalDoc/schema';
 import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
-import type { ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
+import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import { useRouteEngine, useApprovalRouteRules } from '@/features/gw/useRouteEngine';
@@ -11,6 +11,7 @@ import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { RelatedDocSearchModal } from '@/modules/gw/approval/RelatedDocSearchModal';
 import { fileStorage } from '@/shared/lib/storage';
 import { ZodError } from 'zod';
 
@@ -56,6 +57,9 @@ export function ApprovalDraftModal({
 
   const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
+  const [relatedDocs, setRelatedDocs] = useState<RelatedDoc[]>(editDoc?.relatedDocs ?? []);
+  const [showRelatedModal, setShowRelatedModal] = useState(false);
+  const [previewRelatedDoc, setPreviewRelatedDoc] = useState<ApprovalDoc | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
@@ -344,6 +348,7 @@ export function ApprovalDraftModal({
       attachments,
       recipients,
       execution,
+      relatedDocs,
     };
   };
 
@@ -635,6 +640,7 @@ export function ApprovalDraftModal({
     fieldValues: values,
     attachments: attachments,
     recipients: recipients,
+    relatedDocs: relatedDocs,
     steps: steps,
     form: code === '휴가' ? {
       leaveType: String(values['leaveType'] || '연차') as LeaveType,
@@ -1031,6 +1037,71 @@ export function ApprovalDraftModal({
               </div>
             </div>
 
+            {/* 관련 문서 연결 (relatedDocs) 영역 */}
+            <div className="mt-4 border-t border-border pt-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[11px] font-bold text-ink2 flex items-center gap-1">
+                  <span>🔗 관련 문서 연결</span>
+                  <span className="text-[10px] font-normal text-ink3">(기결재 완료 문서)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRelatedModal(true)}
+                  className="rounded-lg bg-teal-soft px-2 py-1 text-[10.5px] font-bold text-teal hover:bg-teal/20 transition-colors"
+                >
+                  + 관련 문서 선택
+                </button>
+              </div>
+
+              {/* 연동된 관련 문서 목록 태그 */}
+              {relatedDocs.length === 0 ? (
+                <p className="text-[10.5px] text-ink3 pl-0.5">연동된 관련 문서가 없습니다.</p>
+              ) : (
+                <div className="space-y-1.5 mt-2">
+                  {relatedDocs.map((rd) => (
+                    <div
+                      key={rd.docId}
+                      className="flex items-center justify-between rounded-xl bg-panel-alt border border-teal/20 p-2.5 shadow-sm text-[11px]"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[10.5px] text-teal font-semibold shrink-0">
+                          [{rd.docNo}]
+                        </span>
+                        <span className="font-semibold text-ink truncate">{rd.title}</span>
+                        <span className="text-[10px] text-ink3 shrink-0">
+                          ({rd.docType} | {rd.drafterName})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const found = await approvalDocRepo.getById(rd.docId);
+                            if (found) {
+                              setPreviewRelatedDoc(found);
+                            } else {
+                              setError('삭제되었거나 접근할 수 없는 문서입니다.');
+                            }
+                          }}
+                          className="rounded bg-panel px-2 py-0.5 text-[10px] font-bold text-teal border border-teal/30 hover:bg-teal-soft/30 transition-colors"
+                        >
+                          미리보기
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRelatedDocs((prev) => prev.filter((x) => x.docId !== rd.docId))}
+                          className="text-[11px] font-bold text-ink3 hover:text-red-500 px-1"
+                          title="연결 해제"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* 파일 첨부 영역 */}
             <div className="mt-4 border-t border-border pt-3">
               <div className="mb-1.5 text-[11px] font-bold text-ink2">📎 첨부 파일</div>
@@ -1204,6 +1275,63 @@ export function ApprovalDraftModal({
                 className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
               >
                 확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showRelatedModal && (
+        <RelatedDocSearchModal
+          userId={me.id}
+          userDept={me.dept}
+          selectedDocIds={relatedDocs.map((x) => x.docId)}
+          onSelect={(selectedList) => {
+            setRelatedDocs((prev) => {
+              const existingIds = new Set(prev.map((x) => x.docId));
+              const newItems = selectedList.filter((x) => !existingIds.has(x.docId));
+              return [...prev, ...newItems];
+            });
+          }}
+          onClose={() => setShowRelatedModal(false)}
+        />
+      )}
+
+      {previewRelatedDoc && (
+        <div
+          className="fixed inset-0 z-[110] grid place-items-center bg-black/45 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewRelatedDoc(null);
+          }}
+        >
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
+              <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
+                <span>🔗</span> 관련 문서 미리보기 [{previewRelatedDoc.docNo}]
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewRelatedDoc(null);
+                }}
+                className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
+              <ApprovalDocumentView doc={previewRelatedDoc} />
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewRelatedDoc(null);
+                }}
+                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
+              >
+                닫기
               </button>
             </div>
           </div>

@@ -713,6 +713,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
       fieldValues: values,
       attachments: [],
       recipients: [],
+      relatedDocs: [],
       currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);

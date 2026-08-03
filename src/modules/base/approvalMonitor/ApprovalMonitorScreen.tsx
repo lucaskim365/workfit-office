@@ -59,6 +59,7 @@ export default function ApprovalMonitorScreen() {
   const [selId, setSelId] = useState<string | null>(null);
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
+  const deptNameOf = (id: string) => org.depts.find((d) => d.id === id || d.name === id)?.name ?? id;
 
   // 1. 검색 및 필터링
   const filtered = useMemo(() => {
@@ -198,59 +199,132 @@ export default function ApprovalMonitorScreen() {
           {selDoc ? (
             <>
               {/* 결재 진행 상황 타임라인 패널 */}
-              <div className="rounded-xl border border-border bg-panel p-4 flex-1 flex flex-col gap-2.5 overflow-hidden">
-                <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
-                  <span className="text-[12px] font-bold text-ink flex items-center gap-1.5">
-                    <span className="h-3 w-1 rounded-sm bg-teal" />
-                    결재선 진행 상태
-                  </span>
-                  <span className="text-[10.5px] font-extrabold text-ink3">
-                    총 {selDoc.steps.length}단계
-                  </span>
-                </div>
-                <div className="space-y-2 flex-1 overflow-y-auto content-scroll pr-1">
-                  {selDoc.steps.map((s) => {
-                    const isCurrent = selDoc.status === '진행중' && currentApproverIds(selDoc).includes(s.approverId);
-                    return (
-                      <div
-                        key={s.seq}
-                        className={`flex items-center justify-between p-2 rounded-lg border text-[11px] ${
-                          isCurrent
-                            ? 'border-teal/30 bg-teal-soft/30 font-bold'
-                            : s.decision === '승인'
-                            ? 'border-border/60 bg-panel-alt/40'
-                            : 'border-border bg-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`grid h-4.5 w-4.5 place-items-center rounded-full text-[9px] font-bold ${
-                            s.decision === '승인' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
-                          }`}>
-                            {s.seq}
-                          </span>
-                          <span className="text-ink">{nameOf(s.approverId)}</span>
-                          <span className="text-[9.5px] text-ink3">({s.kind})</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {isCurrent && (
-                            <span className="animate-pulse rounded bg-amber/20 px-1 py-0.5 text-[9.5px] font-extrabold text-amber">
-                              ⏳ 대기 중
-                            </span>
-                          )}
-                          <span className={`text-[9.5px] font-extrabold ${
-                            s.decision === '승인'
-                              ? 'text-teal'
-                              : s.decision === '반려'
-                              ? 'text-danger'
-                              : 'text-ink3'
-                          }`}>
-                            {s.decision}
-                          </span>
-                        </div>
+              <div className="rounded-xl border border-border bg-panel p-4 flex flex-col gap-2.5 shadow-sm">
+                {(() => {
+                  const blockingSteps = selDoc.steps.filter((s) => s.kind !== '참조');
+                  const hasShared = (selDoc.recipients && selDoc.recipients.length > 0) || selDoc.steps.some((s) => s.kind === '참조');
+                  return (
+                    <>
+                      <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
+                        <span className="text-[12px] font-bold text-ink flex items-center gap-1.5">
+                          <span className="h-3 w-1 rounded-sm bg-teal" />
+                          결재선 진행 상태
+                        </span>
+                        <span className="text-[10.5px] font-extrabold text-ink3">
+                          총 {blockingSteps.length}단계
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto content-scroll pr-1">
+                        {blockingSteps.map((s, idx) => {
+                          const displaySeq = idx + 1;
+                          const isCurrent = selDoc.status === '진행중' && currentApproverIds(selDoc).includes(s.approverId);
+                          return (
+                            <div
+                              key={s.seq}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-[11px] ${
+                                isCurrent
+                                  ? 'border-teal/30 bg-teal-soft/30 font-bold'
+                                  : s.decision === '승인'
+                                  ? 'border-border/60 bg-panel-alt/40'
+                                  : 'border-border bg-transparent'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`grid h-4.5 w-4.5 place-items-center rounded-full text-[9px] font-bold ${
+                                  s.decision === '승인' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
+                                }`}>
+                                  {displaySeq}
+                                </span>
+                                <span className="text-ink">{nameOf(s.approverId)}</span>
+                                <span className="text-[9.5px] text-ink3">({s.kind})</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {isCurrent && (
+                                  <span className="animate-pulse rounded bg-amber/20 px-1 py-0.5 text-[9.5px] font-extrabold text-amber">
+                                    ⏳ 대기 중
+                                  </span>
+                                )}
+                                <span className={`text-[9.5px] font-extrabold ${
+                                  s.decision === '승인'
+                                    ? 'text-teal'
+                                    : s.decision === '반려'
+                                    ? 'text-danger'
+                                    : 'text-ink3'
+                                }`}>
+                                  {s.decision}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* 공유처 (수신 / 참조) - 마지막 결재단계 바로 아래 표시 */}
+                      {hasShared && (
+                        <div className="mt-1 border-t border-border/60 pt-2.5">
+                          <div className="mb-1.5 text-[11px] font-bold text-ink flex items-center gap-1.5">
+                            <span className="text-indigo-500">└ 📨 공유처</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pl-2">
+                            {/* 결재선 내 참조 노드 */}
+                            {selDoc.steps.filter((s) => s.kind === '참조').map((s) => (
+                              <span key={`ref-${s.seq}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-teal/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
+                                <span className="font-bold text-teal">[참조]</span> {nameOf(s.approverId)}
+                              </span>
+                            ))}
+                            {/* 수신/참조처(recipients) 노드 */}
+                            {selDoc.recipients?.map((r) => (
+                              <span key={`rec-${r.id}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-indigo-500/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
+                                <span className="font-bold text-indigo-600">[{r.type === 'dept' ? '수신부서' : r.type === 'drafter' ? '기안자' : '수신'}]</span>
+                                {r.type === 'dept' ? `📁 ${r.name}` : `👤 ${r.name}`}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 시행 정보 - 공유처 아래 표시 */}
+                      {selDoc.execution && (
+                        <div className="mt-1 border-t border-border/60 pt-2.5">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[11px] font-bold text-teal flex items-center gap-1.5">
+                              <span>└ 📦 시행 정보</span>
+                            </span>
+                            <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full ${
+                              selDoc.execution.status === '시행완료'
+                                ? 'bg-teal text-white'
+                                : selDoc.execution.status === '처리중'
+                                ? 'bg-amber text-white'
+                                : 'bg-ink3/10 text-ink3'
+                            }`}>
+                              {selDoc.execution.status}
+                            </span>
+                          </div>
+                          <div className="text-[10.5px] text-ink2 space-y-1 pl-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-ink3">시행 대상</span>
+                              <span className="font-bold text-ink">
+                                {selDoc.execution.targetType === 'DEPT' ? `📁 ${deptNameOf(selDoc.execution.targetId)}` : `👤 ${nameOf(selDoc.execution.targetId)}`}
+                              </span>
+                            </div>
+                            {selDoc.execution.executorId && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-ink3">실무 담당자</span>
+                                <span className="font-bold text-teal">{nameOf(selDoc.execution.executorId)}</span>
+                              </div>
+                            )}
+                            {selDoc.execution.completedAt && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-ink3">시행 완료일</span>
+                                <span className="font-semibold text-ink">{selDoc.execution.completedAt}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </>
           ) : (

@@ -27,9 +27,16 @@ async function loadAll(): Promise<ChatMessage[]> {
     // 전체 조회가 예외로 실패하지 않도록 실패 문서만 건너뛴다.
     const out: ChatMessage[] = [];
     for (const d of snap.docs) {
-      const parsed = chatMessageSchema.safeParse(d.data());
-      if (parsed.success) out.push(parsed.data);
-      else console.warn('[chatMessage] 파싱 실패로 건너뜀:', d.id, parsed.error.issues);
+      const raw = d.data();
+      const parsed = chatMessageSchema.safeParse({
+        ...raw,
+        text: raw.text ?? '',
+        type: raw.type ?? 'text',
+        readBy: Array.isArray(raw.readBy) ? raw.readBy : [],
+      });
+      if (parsed.success) {
+        out.push(parsed.data);
+      }
     }
     return out;
   }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { useUsers } from '@/features/user/useUsers';
 import { departmentRepo } from '@/data/department/department.repo';
 import {
@@ -8,6 +9,7 @@ import {
   useCompleteExecution,
 } from '@/features/gw/useApprovals';
 import { fmtDateTime } from '@/modules/gw/_gw';
+import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
 interface ApprovalExecutionPanelProps {
   doc: ApprovalDoc;
@@ -27,6 +29,7 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
   const [errorMsg, setErrorMsg] = useState('');
   const [showChangeExecutor, setShowChangeExecutor] = useState(false);
   const [changeExecutorId, setChangeExecutorId] = useState('');
+  const [previewDoc, setPreviewDoc] = useState<ApprovalDoc | null>(null);
 
   useEffect(() => {
     departmentRepo.list().then(setDepts);
@@ -300,11 +303,44 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
           </div>
         )}
 
-        {/* 처리 의견 */}
-        {execution.status === '시행완료' && execution.comment && (
-          <div className="mt-2 rounded-lg border border-border bg-panel-alt/50 p-3">
-            <div className="text-[10.5px] font-bold text-ink3 mb-1">처리 의견</div>
-            <div className="text-[11.5px] text-ink leading-relaxed whitespace-pre-wrap">"{execution.comment}"</div>
+        {/* 관련 문서 (relatedDocs) 표출 영역 */}
+        {doc.relatedDocs && doc.relatedDocs.length > 0 && (
+          <div className="mt-3 rounded-lg border border-border bg-panel-alt/40 p-3">
+            <div className="text-[11.5px] font-bold text-ink flex items-center gap-1 mb-2">
+              <span>🔗 관련 문서 ({doc.relatedDocs.length}건)</span>
+            </div>
+            <div className="space-y-1.5">
+              {doc.relatedDocs.map((rd) => (
+                <div
+                  key={rd.docId}
+                  className="flex items-center justify-between rounded-md bg-panel border border-teal/20 px-2.5 py-1.5 text-[11px] shadow-sm"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10.5px] text-teal font-semibold shrink-0">
+                      [{rd.docNo}]
+                    </span>
+                    <span className="font-semibold text-ink truncate">{rd.title}</span>
+                    <span className="text-[10px] text-ink3 shrink-0">
+                      ({rd.docType} | {rd.drafterName})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const found = await approvalDocRepo.getById(rd.docId);
+                      if (found) {
+                        setPreviewDoc(found);
+                      } else {
+                        setErrorMsg('삭제되었거나 접근할 수 없는 문서입니다.');
+                      }
+                    }}
+                    className="ml-2 rounded bg-teal-soft/40 px-2 py-0.5 text-[10px] font-bold text-teal border border-teal/30 hover:bg-teal hover:text-white transition-colors shrink-0"
+                  >
+                    열람
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -407,6 +443,48 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* 관련 문서 열람 팝업 모달 */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[110] grid place-items-center bg-black/45 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewDoc(null);
+          }}
+        >
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
+              <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
+                <span>🔗</span> 관련 문서 열람 [{previewDoc.docNo}]
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewDoc(null);
+                }}
+                className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
+              <ApprovalDocumentView doc={previewDoc} />
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewDoc(null);
+                }}
+                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

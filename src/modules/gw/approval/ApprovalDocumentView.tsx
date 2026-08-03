@@ -556,6 +556,30 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
         </table>
       )}
 
+      {/* 관련 문서 연동 영역 */}
+      {doc.relatedDocs && doc.relatedDocs.length > 0 && (
+        <table className="mt-2 w-full border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                관련 문서
+              </th>
+              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                <div className="space-y-1">
+                  {doc.relatedDocs.map((rd) => (
+                    <div key={rd.docId} className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
+                      <span className="font-semibold text-[#222]">{rd.title}</span>
+                      <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
         {closing.trim() && <div>{closing}</div>}
         <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>

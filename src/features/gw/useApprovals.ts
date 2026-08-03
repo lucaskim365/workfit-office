@@ -201,3 +201,59 @@ export function useCompleteExecution() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+/** 관련 문서 연동용 기결재 완료 문서 목록 검색 훅 */
+export function useCompletedDocsForSelection(params: {
+  userId?: string;
+  userDept?: string;
+  userDeptId?: string;
+  keyword?: string;
+}) {
+  const { data: allDocs = [], isLoading } = useAllApprovals();
+
+  const filteredDocs = useMemo(() => {
+    if (!params.userId) return [];
+    const { userId, userDept, userDeptId, keyword } = params;
+
+    let list = allDocs.filter((d) => d.status === '완료');
+
+    list = list.filter((doc) => {
+      if (doc.drafterId === userId) return true;
+      if (doc.steps.some((s) => s.approverId === userId)) return true;
+      if (
+        doc.recipients?.some((r) => {
+          if (r.type === 'user') return r.id === userId;
+          if (r.type === 'dept') return r.id === userDeptId || r.name === userDept || r.id === userDept;
+          if (r.type === 'drafter') return doc.drafterId === userId;
+          return false;
+        })
+      ) {
+        return true;
+      }
+      if (doc.execution) {
+        if (doc.execution.targetType === 'USER' && doc.execution.targetId === userId) return true;
+        if (
+          doc.execution.targetType === 'DEPT' &&
+          (doc.execution.targetId === userDeptId || doc.execution.targetId === userDept)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (keyword && keyword.trim()) {
+      const kw = keyword.trim().toLowerCase();
+      list = list.filter(
+        (d) =>
+          d.title.toLowerCase().includes(kw) ||
+          d.docNo.toLowerCase().includes(kw) ||
+          (d.drafterName && d.drafterName.toLowerCase().includes(kw))
+      );
+    }
+
+    return list.sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
+  }, [allDocs, params.userId, params.userDept, params.userDeptId, params.keyword]);
+
+  return { data: filteredDocs, isLoading };
+}

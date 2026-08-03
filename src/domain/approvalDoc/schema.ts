@@ -111,6 +111,24 @@ export const approvalExecutionSchema = z.object({
 });
 export type ApprovalExecution = z.infer<typeof approvalExecutionSchema>;
 
+export const relatedDocSchema = z.object({
+  /** 대상 기결재 문서 ID (PK) */
+  docId: z.string().min(1),
+  /** 문서 번호 (AP-YYMMDD-NNN) */
+  docNo: z.string().min(1),
+  /** 문서 제목 */
+  title: z.string(),
+  /** 문서 서식/유형 */
+  docType: z.string(),
+  /** 기안자 성명 (+직급) */
+  drafterName: z.string(),
+  /** 기안 부서 */
+  drafterDept: z.string(),
+  /** 결재 완료 일자 (ISO 또는 YYYY-MM-DD) */
+  completedAt: z.string().nullable().optional(),
+});
+export type RelatedDoc = z.infer<typeof relatedDocSchema>;
+
 export const approvalDocSchema = z.object({
   /** 문서 ID(PK) = docNo. */
   id: z.string().min(1),
@@ -154,6 +172,8 @@ export const approvalDocSchema = z.object({
   execution: approvalExecutionSchema.nullable().optional(),
   /** 보존연한 설정 */
   preservationPeriod: z.string().nullable().optional(),
+  /** 연결된 관련 기결재 문서 리스트 */
+  relatedDocs: z.array(relatedDocSchema).default([]),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),
