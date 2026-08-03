@@ -33,7 +33,7 @@ function shortDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; formOverride?: ApprovalForm }) {
+export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: ApprovalDoc; formOverride?: ApprovalForm; currentUser?: { id: string; dept?: string } }) {
   const org = useOrgTree();
   const { data: forms = [] } = useApprovalForms();
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -44,6 +44,30 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
     return user.signType === 'signature' ? (user.signUrl ?? '') : (user.sealUrl ?? '');
   };
   const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
+
+  // 보안 필드 열람 권한 검증: (1) 기안자 (2) 결재선 승인자/참여자 (3) 관리자/인사/재무 부서
+  const canViewSecret = (() => {
+    if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
+    if (doc.drafterId === currentUser.id) return true;
+    if (doc.steps.some((s) => s.approverId === currentUser.id)) return true;
+    const u = org.userById(currentUser.id);
+    if (u?.roleGroup === 'ADMIN' || u?.dept === '인사팀' || u?.dept === '재무팀' || currentUser.dept === '인사팀' || currentUser.dept === '재무팀') return true;
+    return false;
+  })();
+
+  const maskValue = (rawVal: string, isSecret?: boolean) => {
+    if (!isSecret || canViewSecret) return rawVal;
+    if (!rawVal || rawVal === '—') return '—';
+    // 주민번호 패턴
+    if (/^\d{6}[-s]?\d{7}$/.test(rawVal)) {
+      return rawVal.replace(/^(\d{6})[-s]?\d{7}$/, '$1-*******');
+    }
+    // 금액/숫자 패턴
+    if (!isNaN(Number(rawVal.replace(/[^0-9]/g, ''))) && rawVal.length > 2) {
+      return '₩ ***,***,*** 원';
+    }
+    return '[보안 처리된 정보입니다]';
+  };
 
   // 기안자 스냅샷 우선 조회 정의
   const drafterName = doc.drafterName || org.userById(doc.drafterId)?.name || doc.drafterId;
@@ -305,6 +329,9 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                 let colWidths: Record<string, string> = {};
                 let merges: CellMerge[] = [];
                 let headerValues: Record<string, string> = {};
+                let secretCols: string[] = [];
+                let secretCells: string[] = [];
+                let secretRows: number[] = [];
 
                 if (f.placeholder) {
                   try {
@@ -315,6 +342,9 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
                       if (Array.isArray(cfg.merges)) merges = cfg.merges;
                       if (cfg.headerValues) headerValues = cfg.headerValues;
+                      if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
+                      if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
+                      if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
                     }
                   } catch (e) { }
                 }
@@ -329,6 +359,9 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                         colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
                         if (Array.isArray(parsed.merges)) merges = parsed.merges;
                         if (parsed.headerValues) headerValues = parsed.headerValues;
+                        if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
+                        if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
+                        if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
                       }
                     }
                   }
@@ -362,11 +395,21 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                       {rows.map((row, rIdx) => (
                         <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
                           {cols.map((col, cIdx) => {
+                            const isCellSecret =
+                              f.isSecret ||
+                              secretCols.includes(col) ||
+                              secretRows.includes(rIdx) ||
+                              secretCells.includes(`${rIdx}:${cIdx}`);
+
                             const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
                             const cellVal = row[col] ?? '';
-                            const displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                            let displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
                               ? Number(cellVal.replace(/,/g, '')).toLocaleString()
                               : cellVal;
+
+                            if (isCellSecret && !canViewSecret) {
+                              displayVal = maskValue(displayVal, true);
+                            }
 
                             const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
 
@@ -377,7 +420,9 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
                                 key={col}
                                 rowSpan={rowSpan > 1 ? rowSpan : undefined}
                                 colSpan={colSpan > 1 ? colSpan : undefined}
-                                className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'}`}
+                                className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'} ${
+                                  isCellSecret && !canViewSecret ? 'blur-sm select-none opacity-70' : ''
+                                }`}
                               >
                                 {displayVal || '—'}
                               </td>
@@ -452,26 +497,41 @@ export function ApprovalDocumentView({ doc, formOverride }: { doc: ApprovalDoc; 
 
             for (let i = 0; i < fields.length; i++) {
               const f = fields[i];
-              const val = fieldText(f, doc.fieldValues, org);
+              const rawVal = fieldText(f, doc.fieldValues, org);
+              const val = maskValue(rawVal, f.isSecret);
               const { width: fw } = effectiveFieldProps(f);
 
               if (fw === 'half') {
                 const next = fields[i + 1];
                 const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
                 if (next && nw === 'half') {
-                  const nextVal = fieldText(next, doc.fieldValues, org);
+                  const rawNextVal = fieldText(next, doc.fieldValues, org);
+                  const nextVal = maskValue(rawNextVal, next.isSecret);
                   tableRows.push(
-                    <MetaRow key={f.key} cells={[[f.label, val], [next.label, nextVal]]} />
+                    <MetaRow
+                      key={f.key}
+                      cells={[
+                        [f.label, val, f.isSecret && !canViewSecret],
+                        [next.label, nextVal, next.isSecret && !canViewSecret]
+                      ]}
+                    />
                   );
                   i++;
                 } else {
                   tableRows.push(
-                    <MetaRow key={f.key} cells={[[f.label, val], ['', '']]} />
+                    <MetaRow
+                      key={f.key}
+                      cells={[[f.label, val, f.isSecret && !canViewSecret], ['', '']]}
+                    />
                   );
                 }
               } else {
                 tableRows.push(
-                  <MetaRow key={f.key} cells={[[f.label, val]]} full />
+                  <MetaRow
+                    key={f.key}
+                    cells={[[f.label, val, f.isSecret && !canViewSecret]]}
+                    full
+                  />
                 );
               }
             }
@@ -703,13 +763,13 @@ function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name:
   return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
 }
 
-function MetaRow({ cells, full }: { cells: [string, string][]; full?: boolean }) {
+function MetaRow({ cells, full }: { cells: Array<[string, React.ReactNode, boolean?]>; full?: boolean }) {
   return (
     <tr>
-      {cells.map(([k, v], i) => (
+      {cells.map(([k, v, isSecret], i) => (
         <Fragment key={i}>
           <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">{k}</th>
-          <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]" colSpan={full ? 3 : 1}>{v}</td>
+          <td className={`border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] ${isSecret ? 'blur-sm select-none opacity-70' : ''}`} colSpan={full ? 3 : 1}>{v}</td>
         </Fragment>
       ))}
     </tr>

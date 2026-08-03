@@ -18,7 +18,7 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
  */
 
 const blankField = (): FormField => ({
-  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, tabOverrides: {},
+  key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, isSecret: false, tabOverrides: {},
 });
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
@@ -602,7 +602,15 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                           </select>
                         )}
                         <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
-                        {f.type === '금액' && <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.isAmountKey} onChange={(e) => setField(i, { isAmountKey: e.target.checked })} className="h-3 w-3" />금액키</label>}
+                        <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer" title="열람 권한에 따라 텍스트 마스킹 및 블러 처리됩니다.">
+                          <input
+                            type="checkbox"
+                            checked={f.isSecret ?? false}
+                            onChange={(e) => setField(i, { isSecret: e.target.checked })}
+                            className="h-3 w-3"
+                          />
+                          보안필드
+                        </label>
                         {f.type === '선택' && (
                           <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
                             <input
@@ -679,7 +687,10 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
                 merges: parsed.merges || [],
                 headerValues: parsed.headerValues || {},
                 amountCells: parsed.amountCells || [],
-                sumCell: parsed.sumCell || null
+                sumCell: parsed.sumCell || null,
+                secretCols: parsed.secretCols || [],
+                secretCells: parsed.secretCells || [],
+                secretRows: parsed.secretRows || []
               })
             });
           }
@@ -692,7 +703,12 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
 
   const sampleDoc = useMemo<ApprovalDoc>(() => {
     const u = org.users;
-    const drafter = u[u.length - 1] ?? u[0];
+    const dummyDrafter = {
+      id: 'dummy_hong',
+      name: '홍길동',
+      dept: '기획팀',
+      position: '대리'
+    };
 
     let leave = null;
     if (form.code === '휴가') {
@@ -706,7 +722,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
 
     return {
       id: 'PREVIEW', docNo: 'AP-000000-000', docType: form.code || '서식', title: `${form.name || '서식'} 미리보기`,
-      drafterId: drafter?.id ?? '', drafterDept: drafter?.dept ?? '', status: '진행중',
+      drafterId: dummyDrafter.id, drafterName: dummyDrafter.name, drafterDept: dummyDrafter.dept, drafterPos: dummyDrafter.position, status: '진행중',
       steps: u.slice(0, 3).map((x, i) => ({ seq: i + 1, parallelGroup: null, kind: i === 2 ? '전결' : '결재', approverId: x.id, delegatedFromId: null, decision: i === 0 ? '승인' : '대기', decidedAt: null, comment: '' })),
       amount: amountField ? 3_000_000 : null, body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '(본문 미리보기)',
       form: leave as any,

@@ -440,26 +440,29 @@ function TableFieldEditor({
   ];
 
   // headerValues: 헤더 행의 셀 표시 텍스트 (컬럼 내부 key와 별개로 저장)
-  const { cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell } = (() => {
+  const { cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell, secretCols, secretCells, secretRows } = (() => {
     try {
-      if (v) {
-        const parsedData = JSON.parse(v as string);
-        const cells = parsedData.amountCells 
-          ? (parsedData.amountCells as Array<{ rIdx: number; col: string }>)
-          : (parsedData.amountCell ? [parsedData.amountCell as { rIdx: number; col: string }] : []);
+      if (v && typeof v === 'string') {
+        const parsedData = JSON.parse(v);
+        const cells: Array<{ rIdx: number; col: string }> = parsedData.amountCells
+          ? parsedData.amountCells
+          : (parsedData.amountCell ? [parsedData.amountCell] : []);
         return {
-          cols: (parsedData.cols ?? defaultCols) as string[],
-          rows: (parsedData.rows ?? defaultRows) as Array<Record<string, string>>,
-          tableWidth: (parsedData.tableWidth ?? '100%') as string,
-          colWidths: (parsedData.colWidths ?? {}) as Record<string, string>,
+          cols: Array.isArray(parsedData.cols) && parsedData.cols.length > 0 ? parsedData.cols : defaultCols,
+          rows: Array.isArray(parsedData.rows) ? parsedData.rows : defaultRows,
+          tableWidth: (parsedData.tableWidth || '100%') as string,
+          colWidths: (parsedData.colWidths || {}) as Record<string, string>,
           merges: (parsedData.merges ?? []) as CellMerge[],
           headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
           amountCells: cells,
           sumCell: parsedData.sumCell as { rIdx: number; col: string } | null,
+          secretCols: Array.isArray(parsedData.secretCols) ? (parsedData.secretCols as string[]) : [],
+          secretCells: Array.isArray(parsedData.secretCells) ? (parsedData.secretCells as string[]) : [],
+          secretRows: Array.isArray(parsedData.secretRows) ? (parsedData.secretRows as number[]) : [],
         };
       } else if (field.placeholder) {
         const parsedData = JSON.parse(field.placeholder);
-        const cells = parsedData.amountCells 
+        const cells = parsedData.amountCells
           ? (parsedData.amountCells as Array<{ rIdx: number; col: string }>)
           : (parsedData.amountCell ? [parsedData.amountCell as { rIdx: number; col: string }] : []);
         return {
@@ -471,10 +474,13 @@ function TableFieldEditor({
           headerValues: (parsedData.headerValues ?? {}) as Record<string, string>,
           amountCells: cells,
           sumCell: parsedData.sumCell as { rIdx: number; col: string } | null,
+          secretCols: Array.isArray(parsedData.secretCols) ? (parsedData.secretCols as string[]) : [],
+          secretCells: Array.isArray(parsedData.secretCells) ? (parsedData.secretCells as string[]) : [],
+          secretRows: Array.isArray(parsedData.secretRows) ? (parsedData.secretRows as number[]) : [],
         };
       }
     } catch (e) {}
-    return { cols: defaultCols, rows: defaultRows, tableWidth: '100%', colWidths: {} as Record<string, string>, merges: [] as CellMerge[], headerValues: {} as Record<string, string>, amountCells: [] as Array<{ rIdx: number; col: string }>, sumCell: null };
+    return { cols: defaultCols, rows: defaultRows, tableWidth: '100%', colWidths: {} as Record<string, string>, merges: [] as CellMerge[], headerValues: {} as Record<string, string>, amountCells: [] as Array<{ rIdx: number; col: string }>, sumCell: null, secretCols: [] as string[], secretCells: [] as string[], secretRows: [] as number[] };
   })();
 
   const getMergeInfo = (rIdx: number, cIdx: number) => getCellMergeInfo(rIdx, cIdx, merges);
@@ -493,12 +499,50 @@ function TableFieldEditor({
 
   useEffect(() => {
     if (!v && rows.length > 0) {
-      set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell }) });
+      set({ [field.key]: JSON.stringify({ cols, rows, tableWidth, colWidths, merges, headerValues, amountCells, sumCell, secretCols, secretCells, secretRows }) });
     }
   }, [v, field.key]);
 
-  const save = (nextCols: string[], nextRows: Array<Record<string, string>>, nextMerges: CellMerge[], nextColWidths = colWidths, nextHeaderValues = headerValues, nextAmountCells = amountCells, nextSumCell = sumCell) =>
-    set({ [field.key]: JSON.stringify({ cols: nextCols, rows: nextRows, tableWidth, colWidths: nextColWidths, merges: nextMerges, headerValues: nextHeaderValues, amountCells: nextAmountCells, sumCell: nextSumCell }) });
+  const save = (
+    nextCols: string[],
+    nextRows: Array<Record<string, string>>,
+    nextMerges: CellMerge[],
+    nextColWidths = colWidths,
+    nextHeaderValues = headerValues,
+    nextAmountCells = amountCells,
+    nextSumCell = sumCell,
+    nextSecretCols = secretCols,
+    nextSecretCells = secretCells,
+    nextSecretRows = secretRows
+  ) =>
+    set({
+      [field.key]: JSON.stringify({
+        cols: nextCols,
+        rows: nextRows,
+        tableWidth,
+        colWidths: nextColWidths,
+        merges: nextMerges,
+        headerValues: nextHeaderValues,
+        amountCells: nextAmountCells,
+        sumCell: nextSumCell,
+        secretCols: nextSecretCols,
+        secretCells: nextSecretCells,
+        secretRows: nextSecretRows,
+      }),
+    });
+
+  const toggleSecretColumn = (col: string) => {
+    const exists = secretCols.includes(col);
+    const nextSecretCols = exists ? secretCols.filter((c) => c !== col) : [...secretCols, col];
+    save(cols, rows, merges, colWidths, headerValues, amountCells, sumCell, nextSecretCols, secretCells, secretRows);
+  };
+
+  const toggleSecretCell = (rIdx: number, cIdx: number) => {
+    const cellKey = `${rIdx}:${cIdx}`;
+    const exists = secretCells.includes(cellKey);
+    const nextSecretCells = exists ? secretCells.filter((c) => c !== cellKey) : [...secretCells, cellKey];
+    save(cols, rows, merges, colWidths, headerValues, amountCells, sumCell, secretCols, nextSecretCells, secretRows);
+  };
 
   const recalculateSum = (
     targetRows: Array<Record<string, string>>, 
@@ -508,8 +552,8 @@ function TableFieldEditor({
     if (!targetSumCell) return targetRows;
     const nextRows = [...targetRows];
     let sum = 0;
-    nextRows.forEach((row, rowIdx) => {
-      cols.forEach((cName) => {
+    nextRows.forEach((row, rowIdx: number) => {
+      cols.forEach((cName: string) => {
         if (targetSumCell.rIdx === rowIdx && targetSumCell.col === cName) return;
         const isAutoAmt = cName.includes('금액');
         const isManualAmt = targetAmountCells.some((ac) => ac.rIdx === rowIdx && ac.col === cName);
@@ -538,16 +582,16 @@ function TableFieldEditor({
   };
 
   const toggleAmountColumn = (col: string) => {
-    const allDesignated = rows.every((_, rowIdx) => amountCells.some((c) => c.rIdx === rowIdx && c.col === col));
+    const allDesignated = rows.every((_r: Record<string, string>, rowIdx: number) => amountCells.some((c) => c.rIdx === rowIdx && c.col === col));
     let nextCells = amountCells;
     if (allDesignated) {
       nextCells = amountCells.filter((c) => c.col !== col);
     } else {
       const existing = new Set(amountCells.filter((c) => c.col === col).map((c) => c.rIdx));
       const toAdd = rows
-        .map((_, rIdx) => rIdx)
-        .filter((rIdx) => !existing.has(rIdx))
-        .map((rIdx) => ({ rIdx, col }));
+        .map((_r: Record<string, string>, rIdx: number) => rIdx)
+        .filter((rIdx: number) => !existing.has(rIdx))
+        .map((rIdx: number) => ({ rIdx, col }));
       nextCells = [...amountCells, ...toAdd];
     }
     const nextRows = recalculateSum(rows, nextCells, sumCell);
@@ -582,7 +626,7 @@ function TableFieldEditor({
   };
 
   const removeRow = (rowIndex: number) => {
-    const nextRows = rows.filter((_, idx) => idx !== rowIndex);
+    const nextRows = rows.filter((_r: Record<string, string>, idx: number) => idx !== rowIndex);
     const nextMerges = merges
       .map((m: CellMerge) => {
         if (m.startRow < 0) return m;
@@ -600,7 +644,7 @@ function TableFieldEditor({
     while (cols.includes(newColName)) { suffix++; newColName = `열${suffix}`; }
     const nextCols = [...cols];
     nextCols.splice(cIdx + 1, 0, newColName);
-    const nextRows = rows.map((row) => ({ ...row, [newColName]: '' }));
+    const nextRows = rows.map((row: Record<string, string>) => ({ ...row, [newColName]: '' }));
     const nextMerges = merges.map((m: CellMerge) => {
       if (m.startCol > cIdx) return { ...m, startCol: m.startCol + 1 };
       if (m.startCol + m.colSpan - 1 >= cIdx + 1) return { ...m, colSpan: m.colSpan + 1 };
@@ -612,8 +656,8 @@ function TableFieldEditor({
   const removeCol = (cIdx: number) => {
     if (cols.length <= 1) return;
     const colName = cols[cIdx];
-    const nextCols = cols.filter((_, idx) => idx !== cIdx);
-    const nextRows = rows.map((row) => { const r = { ...row }; delete r[colName]; return r; });
+    const nextCols = cols.filter((_c: string, idx: number) => idx !== cIdx);
+    const nextRows = rows.map((row: Record<string, string>) => { const r = { ...row }; delete r[colName]; return r; });
     const nextWidths = { ...colWidths }; delete nextWidths[colName];
     const nextHeaderValues = { ...headerValues }; delete nextHeaderValues[colName];
     const nextMerges = merges
@@ -758,7 +802,7 @@ function TableFieldEditor({
     const nextCols = [...cols];
     const [movedCol] = nextCols.splice(dragCol, 1);
     nextCols.splice(cIdx, 0, movedCol);
-    const nextRows = rows.map((row) => {
+    const nextRows = rows.map((row: Record<string, string>) => {
       const newRow: Record<string, string> = {};
       nextCols.forEach((c) => { newRow[c] = row[c] ?? ''; });
       return newRow;
@@ -893,13 +937,18 @@ function TableFieldEditor({
                     const isManualAmt = amountCells.some((c) => c.rIdx === rIdx && c.col === col);
                     const isAmountCell = isAutoAmt || isManualAmt;
                     const isSumCell = !!(sumCell && sumCell.rIdx === rIdx && sumCell.col === col);
+                    const isSecretCell = secretCols.includes(col) || secretCells.includes(`${rIdx}:${cIdx}`);
+
                     return (
                       <td
                         key={col}
                         rowSpan={rowSpan}
                         colSpan={colSpan}
                         onContextMenu={(e) => handleCellContextMenu(e, rIdx, cIdx)}
-                        className="p-1 border-r border-border"
+                        className={`p-1 border-r border-border transition-colors ${
+                          isSecretCell ? 'bg-amber-500/10 dark:bg-amber-500/20' : ''
+                        }`}
+                        title={isSecretCell ? '보안/마스킹 지정된 셀입니다 (우클릭으로 변경)' : ''}
                       >
                         <input
                           value={row[col] ?? ''}
@@ -910,7 +959,7 @@ function TableFieldEditor({
                           disabled={isSumCell}
                           placeholder={isNumLike || isAmountCell || isSumCell ? '0' : ''}
                           className={`w-full rounded border border-border px-1.5 py-1 text-[11px] text-ink outline-none focus:border-teal ${
-                            isSumCell ? 'bg-panel/40 font-semibold cursor-not-allowed text-teal' : 'bg-panel-alt'
+                            isSumCell ? 'bg-panel/40 font-semibold cursor-not-allowed text-teal' : isSecretCell ? 'bg-amber-500/5 font-semibold text-amber-700 dark:text-amber-300' : 'bg-panel-alt'
                           }`}
                         />
                       </td>
@@ -949,7 +998,18 @@ function TableFieldEditor({
         >
           {contextMenu.rIdx === -1 && (
             <>
-              {rows.every((_, rowIdx) => amountCells.some((c) => c.rIdx === rowIdx && c.col === cols[contextMenu.cIdx])) ? (
+              {secretCols.includes(cols[contextMenu.cIdx]) ? (
+                <button type="button" onClick={() => { toggleSecretColumn(cols[contextMenu.cIdx]); setContextMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold">
+                  보안 열 지정 해제
+                </button>
+              ) : (
+                <button type="button" onClick={() => { toggleSecretColumn(cols[contextMenu.cIdx]); setContextMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold">
+                  보안 열로 지정
+                </button>
+              )}
+              {rows.every((_r: Record<string, string>, rowIdx: number) => amountCells.some((c) => c.rIdx === rowIdx && c.col === cols[contextMenu.cIdx])) ? (
                 <button type="button" onClick={() => { toggleAmountColumn(cols[contextMenu.cIdx]); setContextMenu(null); }}
                   className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold">
                   💰 금액 열 지정 해제
@@ -965,6 +1025,19 @@ function TableFieldEditor({
           )}
           {contextMenu.rIdx !== -1 && (
             <>
+              {/* 보안 셀 토글 */}
+              {secretCells.includes(`${contextMenu.rIdx}:${contextMenu.cIdx}`) ? (
+                <button type="button" onClick={() => { toggleSecretCell(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold">
+                  보안 셀 지정 해제
+                </button>
+              ) : (
+                <button type="button" onClick={() => { toggleSecretCell(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold">
+                  보안 셀로 지정
+                </button>
+              )}
+
               {/* 금액 셀 토글 */}
               {amountCells.some((c) => c.rIdx === contextMenu.rIdx && c.col === cols[contextMenu.cIdx]) ? (
                 <button type="button" onClick={() => { toggleAmountCell(contextMenu.rIdx, cols[contextMenu.cIdx]); setContextMenu(null); }}
@@ -1003,10 +1076,12 @@ function TableFieldEditor({
             className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent">
             👇 아래 셀과 병합
           </button>
-          <button type="button" onClick={() => { unmerge(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
-            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink">
-            🔓 병합 해제
-          </button>
+          {getMergeInfo(contextMenu.rIdx, contextMenu.cIdx).isMerged && (
+            <button type="button" onClick={() => { unmerge(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
+              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink">
+              🔓 병합 해제
+            </button>
+          )}
         </div>
       )}
     </div>

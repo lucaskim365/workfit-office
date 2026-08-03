@@ -53,6 +53,8 @@ export const formFieldSchema = z.object({
   visibleIf: z.string().nullable().default(null),
   /** 이 선택 필드가 상단 탭 분리 기준으로 작동하는지 여부 */
   isTabSelector: z.boolean().optional().default(false),
+  /** 이 필드가 보안/마스킹 대상 필드인지 여부 */
+  isSecret: z.boolean().default(false),
   /**
    * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
    * width/section 을 독립적으로 다르게 설정하기 위한 맵.
