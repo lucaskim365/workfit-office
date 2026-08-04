@@ -986,10 +986,12 @@ export function ApprovalDraftModal({
       {showConfirmClose && (
         <DraftConfirmDialog
           title="기안 작성 중단"
-          description={<>기안 작성을 중단하시겠습니까?<br />작성중인 기안은 임시저장함에 저장됩니다.</>}
+          description={<>기안 작성을 중단하시겠습니까?<br />임시저장하거나 작성중인 내용을 취소할 수 있습니다.</>}
           confirmLabel="임시저장 후 중단"
           confirmColor="bg-teal"
           onConfirm={handleConfirmCloseSave}
+          onDiscard={onClose}
+          discardLabel="변경내용 모두 취소"
           onCancel={() => setShowConfirmClose(false)}
           disabled={busy}
         />
