@@ -1,0 +1,87 @@
+import type { ApprovalStep } from '@/domain/approvalDoc/schema';
+
+function shortDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name: string; sealUrl: string; isSignature: boolean }) {
+  if (step.kind === '참조') return <span className="text-[10px] text-[#888]">열람<br />{name}</span>;
+
+  if (sealUrl && (step.seq === 1 || step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
+    if (isSignature) {
+      return (
+        <div className="relative h-[52px] w-[59px] flex items-center justify-center overflow-visible select-none">
+          <img
+            src={sealUrl}
+            alt="서명"
+            className="min-w-[84px] min-h-[40px] max-w-[84px] max-h-[40px] object-contain opacity-95 pointer-events-none mix-blend-multiply"
+            style={{ opacity: step.decision === '반려' ? 0.6 : 1 }}
+          />
+          {step.decision === '반려' && (
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b] z-30" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative flex h-[44px] w-[44px] items-center justify-center">
+        <img src={sealUrl} alt="인감" className="h-full w-full object-contain" style={{ opacity: step.decision === '반려' ? 0.6 : 1 }} />
+        {step.decision === '반려' && (
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b]" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
+        )}
+      </div>
+    );
+  }
+
+  if (step.decision === '승인')
+    return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold leading-tight text-[#c0392b]">{name}</span>;
+  if (step.decision === '반려')
+    return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
+  if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
+
+  return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
+}
+
+export function ApprovalStampTable({
+  steps,
+  nameOf,
+  posOf,
+  sealOf,
+  isSignatureOf,
+}: {
+  steps: ApprovalStep[];
+  nameOf: (id: string) => string;
+  posOf: (id: string) => string;
+  sealOf: (id: string) => string;
+  isSignatureOf: (id: string) => boolean;
+}) {
+  if (steps.length === 0) return null;
+  return (
+    <div className="flex shrink-0 border border-[#333] text-center">
+      <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333]">결재</div>
+      <div className="flex">
+        {steps.map((s) => {
+          const finalName = s.approverName || nameOf(s.approverId);
+          const finalPos = s.approverPos || posOf(s.approverId);
+          const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
+          const finalSealUrl = s.signType
+            ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
+            : sealOf(s.approverId);
+
+          return (
+            <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
+              <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
+              <div className="grid h-[52px] place-items-center px-0.5">
+                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} />
+              </div>
+              <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

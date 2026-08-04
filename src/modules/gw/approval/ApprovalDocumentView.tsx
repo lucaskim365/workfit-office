@@ -1,11 +1,14 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
-import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
+import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
-import { won } from './utils/approvalUtils';
+import { ApprovalStampTable } from './components/ApprovalStampTable';
+import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
+
+let cachedLogoDataUrl: string | null = null;
 
 /**
  * 결재 문서 보기 — 전통 기안문서 양식(우상단 결재란 도장 grid + A4 레이아웃).
@@ -27,11 +30,7 @@ function korDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
-function shortDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-}
+
 
 export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: ApprovalDoc; formOverride?: ApprovalForm; currentUser?: { id: string; dept?: string } }) {
   const org = useOrgTree();
@@ -154,6 +153,10 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
   };
 
   useEffect(() => {
+    if (cachedLogoDataUrl) {
+      setProcessedLogo(cachedLogoDataUrl);
+      return;
+    }
     const img = new Image();
     img.src = logoImg;
     img.crossOrigin = 'anonymous';
@@ -171,7 +174,6 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
         const g = data[i + 1];
         const b = data[i + 2];
         const a = data[i + 3];
-        // 흰색/밝은 회색 계열(R/G/B 모두 200 이상)만 블랙으로 변환
         if (r > 200 && g > 200 && b > 200 && a > 10) {
           data[i] = 0;
           data[i + 1] = 0;
@@ -179,7 +181,9 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
         }
       }
       ctx.putImageData(imgData, 0, 0);
-      setProcessedLogo(canvas.toDataURL());
+      const dataUrl = canvas.toDataURL();
+      cachedLogoDataUrl = dataUrl;
+      setProcessedLogo(dataUrl);
     };
   }, []);
 
@@ -190,28 +194,7 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
-  // 동적 필드 중 안내문과 일수 필드를 제외하고 모두 순서대로 배치
-  const activeFields = (form?.fields ?? []).filter((f) => {
-    if (f.type === '안내문' || f.key.endsWith('__days')) return false;
-    if (f.visibleIf) {
-      const parts = f.visibleIf.split(':');
-      if (parts.length === 2) {
-        const [condKey, condVal] = parts;
-        if (String(doc.fieldValues[condKey] ?? '') !== condVal) {
-          return false;
-        }
-      }
-    }
-    return true;
-  });
-
-  const longTextFields = activeFields.filter(
-    (f) => f.type === '장문'
-  );
-
-  const isAmountInDetails = amountField ? activeFields.some((f) => f.key === amountField.key) : false;
-
-  const steps = [...doc.steps].sort((a, b) => a.seq - b.seq);
+  const steps = useMemo(() => [...doc.steps].sort((a, b) => a.seq - b.seq), [doc.steps]);
 
   interface LayoutBlock {
     type: 'table' | 'longtext' | 'table-field';
@@ -219,63 +202,91 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
     fields: FormField[];
   }
 
-  // tabOverrides 적용을 위해 탭 분할 선택 필드와 현재 탭 값을 미리 추출
-  const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
-  const currentTabValue = tabSelectorField ? String(doc.fieldValues[tabSelectorField.key] ?? '') : '';
-  /** 공통 필드에 tabOverrides를 적용한 effective width/section 반환 */
-  const effectiveFieldProps = (f: FormField) => {
-    const isCommon = !f.visibleIf;
-    const override: { width?: 'full' | 'half'; section?: string } =
-      (isCommon && currentTabValue && f.tabOverrides?.[currentTabValue]) || {};
-    return {
-      width: (override.width ?? f.width) as 'full' | 'half',
-      section: override.section ?? f.section,
-    };
-  };
+  const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
+    const act = (form?.fields ?? []).filter((f) => {
+      if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      if (f.visibleIf) {
+        const parts = f.visibleIf.split(':');
+        if (parts.length === 2) {
+          const [condKey, condVal] = parts;
+          if (String(doc.fieldValues[condKey] ?? '') !== condVal) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
 
-  const blocks: LayoutBlock[] = [];
-  activeFields.forEach((f) => {
-    const { section: secName, width: fw } = effectiveFieldProps(f);
-    if (f.type === '장문') {
-      blocks.push({
-        type: 'longtext',
-        section: secName,
-        fields: [f],
-      });
-    } else if (f.type === '표' || (() => {
-      const val = doc.fieldValues[f.key];
-      return typeof val === 'string' && val.trim().startsWith('{') && val.includes('"cols"') && val.includes('"rows"');
-    })()) {
-      const lastBlock = blocks[blocks.length - 1];
-      if (
-        lastBlock &&
-        lastBlock.type === 'table-field' &&
-        lastBlock.section === secName &&
-        effectiveFieldProps(lastBlock.fields[0]).width === 'half' &&
-        fw === 'half' &&
-        lastBlock.fields.length < 2
+    const isAmtIn = amountField ? act.some((f) => f.key === amountField.key) : false;
+    const longTexts = act.filter((f) => f.type === '장문');
+
+    const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
+    const currentTabValue = tabSelectorField ? String(doc.fieldValues[tabSelectorField.key] ?? '') : '';
+    const getEffectiveProps = (f: FormField) => {
+      const isCommon = !f.visibleIf;
+      const override: { width?: 'full' | 'half'; section?: string } =
+        (isCommon && currentTabValue && f.tabOverrides?.[currentTabValue]) || {};
+      return {
+        width: (override.width ?? f.width) as 'full' | 'half',
+        section: override.section ?? f.section,
+      };
+    };
+
+    const blks: LayoutBlock[] = [];
+    act.forEach((f) => {
+      const { section: secName, width: fw } = getEffectiveProps(f);
+      if (f.type === '장문') {
+        blks.push({
+          type: 'longtext',
+          section: secName,
+          fields: [f],
+        });
+      } else if (
+        f.type === '표' ||
+        (() => {
+          const val = doc.fieldValues[f.key];
+          return typeof val === 'string' && val.trim().startsWith('{') && val.includes('"cols"') && val.includes('"rows"');
+        })()
       ) {
-        lastBlock.fields.push(f);
+        const lastBlock = blks[blks.length - 1];
+        if (
+          lastBlock &&
+          lastBlock.type === 'table-field' &&
+          lastBlock.section === secName &&
+          getEffectiveProps(lastBlock.fields[0]).width === 'half' &&
+          fw === 'half' &&
+          lastBlock.fields.length < 2
+        ) {
+          lastBlock.fields.push(f);
+        } else {
+          blks.push({
+            type: 'table-field',
+            section: secName,
+            fields: [f],
+          });
+        }
       } else {
-        blocks.push({
-          type: 'table-field',
-          section: secName,
-          fields: [f],
-        });
+        const lastBlock = blks[blks.length - 1];
+        if (lastBlock && lastBlock.type === 'table' && lastBlock.section === secName) {
+          lastBlock.fields.push(f);
+        } else {
+          blks.push({
+            type: 'table',
+            section: secName,
+            fields: [f],
+          });
+        }
       }
-    } else {
-      const lastBlock = blocks[blocks.length - 1];
-      if (lastBlock && lastBlock.type === 'table' && lastBlock.section === secName) {
-        lastBlock.fields.push(f);
-      } else {
-        blocks.push({
-          type: 'table',
-          section: secName,
-          fields: [f],
-        });
-      }
-    }
-  });
+    });
+
+    return {
+      activeFields: act,
+      blocks: blks,
+      isAmountInDetails: isAmtIn,
+      effectiveFieldProps: getEffectiveProps,
+      longTextFields: longTexts,
+    };
+  }, [form, doc.fieldValues, amountField]);
 
   let lastRenderedSection = '';
 
@@ -291,35 +302,17 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        <ApprovalStampBox steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} />
+        <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} />
       </div>
 
-      <table className="w-full border-collapse text-[12px]">
-        <tbody>
-          <MetaRow cells={[['문서번호', doc.docNo], ['기안부서', doc.drafterDept || '—']]} />
-          <MetaRow cells={[['기 안 자', drafterPos ? `${drafterName} ${drafterPos}` : drafterName], ['기 안 일', korDate(doc.submittedAt ?? doc.createdAt)]]} />
-          {doc.completedAt && (
-            <MetaRow
-              cells={[
-                [
-                  doc.execution ? '시 행 일' : '결재 완료일',
-                  doc.execution ? (doc.execution.startedAt ? korDate(doc.execution.startedAt) : '—') : korDate(doc.completedAt)
-                ],
-                ['보존연한', doc.preservationPeriod || form?.preservationPeriod || '3년']
-              ]}
-            />
-          )}
-        </tbody>
-      </table>
-
-      <table className="mt-2 w-full border-collapse text-[12px]">
-        <tbody>
-          <MetaRow cells={[['제 목', doc.title]]} full />
-          {doc.amount != null && !isAmountInDetails && (
-            <MetaRow cells={[[amountLabel, `${won(doc.amount)} (부가세 포함)`]]} full />
-          )}
-        </tbody>
-      </table>
+      <ApprovalDocMetaTable
+        doc={doc}
+        form={form}
+        drafterName={drafterName}
+        drafterPos={drafterPos}
+        isAmountInDetails={isAmountInDetails}
+        amountLabel={amountLabel}
+      />
 
       {/* 서식 동적 상세 블록 렌더링 (순서 보존 및 섹션별 테이블/독립 장문박스 배치) */}
       {blocks.length > 0 && (
@@ -728,87 +721,4 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
   );
 }
 
-function ApprovalStampBox({ steps, nameOf, posOf, sealOf, isSignatureOf }: { steps: ApprovalStep[]; nameOf: (id: string) => string; posOf: (id: string) => string; sealOf: (id: string) => string; isSignatureOf: (id: string) => boolean }) {
-  if (steps.length === 0) return null;
-  return (
-    <div className="flex shrink-0 border border-[#333] text-center">
-      <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333]">결재</div>
-      <div className="flex">
-        {steps.map((s) => {
-          const finalName = s.approverName || nameOf(s.approverId);
-          const finalPos = s.approverPos || posOf(s.approverId);
-          const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
-          const finalSealUrl = s.signType
-            ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
-            : sealOf(s.approverId);
 
-          return (
-            <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
-              <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
-              <div className="grid h-[52px] place-items-center px-0.5">
-                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} />
-              </div>
-              <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name: string; sealUrl: string; isSignature: boolean }) {
-  if (step.kind === '참조') return <span className="text-[10px] text-[#888]">열람<br />{name}</span>;
-
-  // 인감/서명 이미지가 있고 (1) 기안자(첫 번째 노드)이거나 (2) 결재 처리가 완료된 경우 렌더링
-  if (sealUrl && (step.seq === 1 || step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
-    if (isSignature) {
-      // 서명 모드: 세로 높이가 과도하게 길어 보이지 않도록 가로로 날렵하고 납작한 비율(84px x 40px)로 정돈
-      return (
-        <div className="relative h-[52px] w-[59px] flex items-center justify-center overflow-visible select-none">
-          <img
-            src={sealUrl}
-            alt="서명"
-            className="min-w-[84px] min-h-[40px] max-w-[84px] max-h-[40px] object-contain opacity-95 pointer-events-none mix-blend-multiply"
-            style={{ opacity: step.decision === '반려' ? 0.6 : 1 }}
-          />
-          {step.decision === '반려' && (
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b] z-30" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
-          )}
-        </div>
-      );
-    }
-
-    // 도장 모드: 기존 1:1 정방형 도장 크기
-    return (
-      <div className="relative flex h-[44px] w-[44px] items-center justify-center">
-        <img src={sealUrl} alt="인감" className="h-full w-full object-contain" style={{ opacity: step.decision === '반려' ? 0.6 : 1 }} />
-        {step.decision === '반려' && (
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b]" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
-        )}
-      </div>
-    );
-  }
-
-  if (step.decision === '승인')
-    return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold leading-tight text-[#c0392b]">{name}</span>;
-  if (step.decision === '반려')
-    return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
-  if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
-
-  // 대기 상태일 때는 결재란 내 인감 영역에 연회색으로 결재단계(s.kind) 표시
-  return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
-}
-
-function MetaRow({ cells, full }: { cells: Array<[string, React.ReactNode, boolean?]>; full?: boolean }) {
-  return (
-    <tr>
-      {cells.map(([k, v, isSecret], i) => (
-        <Fragment key={i}>
-          <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">{k}</th>
-          <td className={`border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] ${isSecret ? 'blur-sm select-none opacity-70' : ''}`} colSpan={full ? 3 : 1}>{v}</td>
-        </Fragment>
-      ))}
-    </tr>
-  );
-}

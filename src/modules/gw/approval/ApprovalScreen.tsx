@@ -127,8 +127,9 @@ export default function ApprovalScreen() {
 
   // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
   useEffect(() => {
-    if (filteredList.length === 0) { setSelId(null); return; }
-    if (!filteredList.some((d) => d.id === selId)) setSelId(filteredList[0].id);
+    if (filteredList.length === 0) { setSelId(null); }
+    else if (!filteredList.some((d) => d.id === selId)) { setSelId(filteredList[0].id); }
+    setSelectedIds((prev) => prev.filter((id) => filteredList.some((d) => d.id === id)));
   }, [box, filteredList, selId]);
 
   // 다중 선택 처리 헬퍼
