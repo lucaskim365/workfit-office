@@ -142,6 +142,30 @@ export function ApprovalDraftModal({
     }
   };
 
+  const [scale, setScale] = useState(1);
+  const rightContentRef = useRef<HTMLDivElement>(null);
+  const DESIGN_WIDTH = 960;
+
+  useEffect(() => {
+    const el = rightContentRef.current;
+    if (!el) return;
+
+    const updateScale = () => {
+      const currentWidth = el.clientWidth;
+      if (currentWidth && currentWidth < DESIGN_WIDTH) {
+        const computedScale = Math.min(1, Math.max(0.65, currentWidth / DESIGN_WIDTH));
+        setScale(computedScale);
+      } else {
+        setScale(1);
+      }
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const handleCancelClick = () => {
     if (hasManuallyEnteredValues()) {
       setShowConfirmDiscard(true);
@@ -701,49 +725,54 @@ export function ApprovalDraftModal({
           )}
 
           {/* 우측 폼 입력 영역 */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
-
-            <div className="grid grid-cols-4 gap-3">
-              <div className="col-span-2">
-                <Field label="제목">
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
-                </Field>
+          <div ref={rightContentRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-5">
+            <div
+              style={{
+                zoom: scale,
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-4 gap-3">
+                <div className="col-span-2">
+                  <Field label="제목">
+                    <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목" className={INP} />
+                  </Field>
+                </div>
+                <div className="col-span-1">
+                  <Field label="보존연한">
+                    <select
+                      value={preservationPeriod}
+                      onChange={(e) => setPreservationPeriod(e.target.value)}
+                      className={`${INP} font-semibold text-ink`}
+                    >
+                      <option value="1년">1년</option>
+                      <option value="3년">3년</option>
+                      <option value="5년">5년</option>
+                      <option value="10년">10년</option>
+                      <option value="영구">영구</option>
+                    </select>
+                  </Field>
+                </div>
+                <div className="col-span-1">
+                  <Field label="보안 등급">
+                    <select
+                      value={securityLevel}
+                      onChange={(e) => setSecurityLevel(e.target.value as '일반' | '대외비' | '극비')}
+                      className={`${INP} font-semibold ${
+                        securityLevel === '극비'
+                          ? 'text-red-600 bg-red-500/5'
+                          : securityLevel === '대외비'
+                          ? 'text-amber-600 bg-amber-500/5'
+                          : 'text-ink'
+                      }`}
+                    >
+                      <option value="일반">일반 문서</option>
+                      <option value="대외비">🔒 대외비</option>
+                      <option value="극비">⛔ 극비</option>
+                    </select>
+                  </Field>
+                </div>
               </div>
-              <div className="col-span-1">
-                <Field label="보존연한">
-                  <select
-                    value={preservationPeriod}
-                    onChange={(e) => setPreservationPeriod(e.target.value)}
-                    className={`${INP} font-semibold text-ink`}
-                  >
-                    <option value="1년">1년</option>
-                    <option value="3년">3년</option>
-                    <option value="5년">5년</option>
-                    <option value="10년">10년</option>
-                    <option value="영구">영구</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="col-span-1">
-                <Field label="보안 등급">
-                  <select
-                    value={securityLevel}
-                    onChange={(e) => setSecurityLevel(e.target.value as '일반' | '대외비' | '극비')}
-                    className={`${INP} font-semibold ${
-                      securityLevel === '극비'
-                        ? 'text-red-600 bg-red-500/5'
-                        : securityLevel === '대외비'
-                        ? 'text-amber-600 bg-amber-500/5'
-                        : 'text-ink'
-                    }`}
-                  >
-                    <option value="일반">일반 문서</option>
-                    <option value="대외비">🔒 대외비</option>
-                    <option value="극비">⛔ 극비</option>
-                  </select>
-                </Field>
-              </div>
-            </div>
 
             {/* 휴가 잔여일수 실시간 표시 배너 */}
             {code === '휴가' && (
@@ -789,8 +818,8 @@ export function ApprovalDraftModal({
               </div>
             )}
 
-            {/* 서식 동적 필드 */}
-            {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-x-4">{fieldNodes}</div>}
+            {/* 서식 동적 필드 (언제나 2열 가로 비중 유지) */}
+            {fieldNodes.length > 0 && <div className="grid grid-cols-2 gap-3">{fieldNodes}</div>}
 
 
 
@@ -924,9 +953,9 @@ export function ApprovalDraftModal({
                 </div>
               )}
             </div>
-
           </div>
         </div>
+      </div>
 
 
         <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3">

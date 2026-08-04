@@ -820,7 +820,7 @@ export function TableFieldEditor({
     setDragCol(null); setDragOverCol(null);
   };
 
-  const isHalfWidth = field.width === 'half';
+
 
   return (
     <div ref={containerRef} className="mt-1 rounded-lg border border-border bg-panel p-2 relative">
@@ -828,7 +828,7 @@ export function TableFieldEditor({
         <span className="text-[11px] font-semibold text-ink2">표 편집기 — 우클릭: 셀 병합 · 헤더/핸들 드래그: 열·행 순서 변경</span>
       </div>
       <div className="overflow-x-auto">
-        <table className="table-fixed border-collapse text-left text-[11.5px] border border-border" style={{ width: '100%', minWidth: isHalfWidth ? 'auto' : '500px' }}>
+        <table className="table-fixed border-collapse text-left text-[11.5px] border border-border w-full">
           <colgroup>
             <col style={{ width: '20px' }} />
             {cols.map((col: string, cIdx: number) => (
@@ -897,7 +897,7 @@ export function TableFieldEditor({
                   </th>
                 );
               })}
-              <th className="w-[45px] p-1.5 border-r border-border text-center relative">
+              <th className="w-[32px] p-1 border-r border-border text-center relative">
                 <button
                   type="button"
                   onClick={() => addCol(cols.length - 1)}
