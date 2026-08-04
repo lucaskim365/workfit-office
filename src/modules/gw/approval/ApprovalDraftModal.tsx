@@ -92,6 +92,23 @@ export function ApprovalDraftModal({
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
 
+  const initialValuesSnapshot = useRef<Record<string, FieldValue>>({});
+  const isInitializedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    isInitializedRef.current = null;
+  }, [code]);
+
+  useEffect(() => {
+    if (isInitializedRef.current !== code) {
+      const timer = setTimeout(() => {
+        initialValuesSnapshot.current = { ...values };
+        isInitializedRef.current = code;
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [code, values]);
+
   const hasManuallyEnteredValues = () => {
     if (editDoc) {
       const titleChanged = title.trim() !== (editDoc.title ?? '').trim();
@@ -105,11 +122,14 @@ export function ApprovalDraftModal({
       const hasBody = body.trim() !== '';
       const hasAmount = amount.trim() !== '';
       const hasFiles = attachments.length > 0;
-      const hasValues = Object.keys(values).some((k) => {
+      const valuesChanged = Object.keys(values).some((k) => {
         const v = values[k];
-        return v !== undefined && v !== null && String(v).trim() !== '';
+        if (v === undefined || v === null || String(v).trim() === '') return false;
+        const initV = initialValuesSnapshot.current[k];
+        if (initV !== undefined && JSON.stringify(v) === JSON.stringify(initV)) return false;
+        return true;
       });
-      return hasTitle || hasBody || hasAmount || hasFiles || hasValues;
+      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged;
     }
   };
 
