@@ -194,10 +194,21 @@ export default function ApprovalScreen() {
 
   return (
     <div className="w-full px-6">
-      <GwHead
-        icon="🖋️"
-        name="전자결재"
-      />
+      <div className="flex items-center justify-between">
+        <GwHead
+          icon="🖋️"
+          name="전자결재"
+        />
+        <button
+          type="button"
+          onClick={() => setIsListCollapsed(!isListCollapsed)}
+          className="mt-2 self-end rounded-xl border-2 border-teal/40 bg-white dark:bg-panel px-4 py-2 text-[12.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/30 transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer shrink-0 hover:scale-[1.02] active:scale-[0.98]"
+          title={isListCollapsed ? '문서 목록 펼치기' : '문서 목록 접고 상세 넓게 보기'}
+        >
+          <span className="text-[13px]">{isListCollapsed ? '▶' : '◀'}</span>
+          <span>{isListCollapsed ? '문서 목록 펼치기' : '문서 목록 접기'}</span>
+        </button>
+      </div>
 
       <div className={`mt-5 grid transition-all duration-300 gap-4 items-start ${isListCollapsed ? 'grid-cols-[160px_1fr]' : 'grid-cols-[160px_280px_1fr]'}`}>
         {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거) */}
@@ -461,8 +472,6 @@ export default function ApprovalScreen() {
               doc={selDoc}
               me={me}
               onEdit={(d) => setModal({ edit: d })}
-              isListCollapsed={isListCollapsed}
-              onToggleListCollapse={() => setIsListCollapsed(!isListCollapsed)}
             />
           ) : (
             <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
@@ -507,14 +516,10 @@ function DocDetail({
   doc,
   me,
   onEdit,
-  isListCollapsed,
-  onToggleListCollapse,
 }: {
   doc: ApprovalDoc;
   me: string;
   onEdit: (d: ApprovalDoc) => void;
-  isListCollapsed?: boolean;
-  onToggleListCollapse?: () => void;
 }) {
   const org = useOrgTree();
   const decide = useDecideStep();
@@ -590,19 +595,9 @@ function DocDetail({
           {/* 좌측: 문서 기본 정보 */}
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              {onToggleListCollapse && (
-                <button
-                  type="button"
-                  onClick={onToggleListCollapse}
-                  className="rounded-lg border border-teal/30 bg-teal-soft/40 px-2 py-1 text-[11px] font-extrabold text-teal hover:bg-teal hover:text-white transition-all shadow-2xs flex items-center gap-1 shrink-0"
-                  title={isListCollapsed ? '목록 펼치기' : '목록 접고 넓게 보기'}
-                >
-                  <span>{isListCollapsed ? '▶ 목록 펼치기' : '◀ 목록 접기'}</span>
-                </button>
-              )}
+              <DocStatusBadge doc={doc} me={me} />
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
               <h2 className="truncate text-[16px] font-bold text-ink">{doc.title}</h2>
-              <DocStatusBadge doc={doc} me={me} />
             </div>
             <div className="text-[11.5px] text-ink3">
               {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
