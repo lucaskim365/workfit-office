@@ -561,6 +561,8 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
   const restoreM = useRestoreFromTrash();
   const permDeleteM = usePermanentlyDelete();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approveComment, setApproveComment] = useState('');
   const [err, setErr] = useState('');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -591,7 +593,22 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
     }
   };
 
-  const approve = () => mySeq != null && run(() => decide.mutateAsync({ id: doc.id, seq: mySeq, userId: me, decision: '승인' }));
+  const handleConfirmApprove = () => {
+    if (mySeq == null) return;
+    run(() =>
+      decide.mutateAsync({
+        id: doc.id,
+        seq: mySeq,
+        userId: me,
+        decision: '승인',
+        comment: approveComment.trim() || undefined,
+      })
+    ).then(() => {
+      setShowApproveModal(false);
+      setApproveComment('');
+    });
+  };
+
   const hold = () => mySeq != null && run(() => decide.mutateAsync({ id: doc.id, seq: mySeq, userId: me, decision: '보류' }));
   const doReject = () => {
     if (!reject) return;
@@ -842,7 +859,7 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           <>
             <button onClick={() => setReject({ seq: mySeq, comment: '' })} disabled={busy} className="rounded-lg border border-red-500/50 px-3.5 py-2 text-[12.5px] font-bold text-red-500 hover:bg-red-500/5 disabled:opacity-50">반려</button>
             <button onClick={hold} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-ink3 disabled:opacity-50">보류</button>
-            <button onClick={approve} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">승인</button>
+            <button onClick={() => setShowApproveModal(true)} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">승인</button>
           </>
         )}
         {canRecall && <button onClick={() => run(() => recallM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-amber hover:text-amber disabled:opacity-50">회수</button>}
@@ -871,6 +888,69 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           </span>
         )}
       </div>
+
+      {/* 단일 결재 승인 의견 입력 모달 */}
+      {showApproveModal && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/45 p-4 animate-fadeIn"
+          onClick={() => setShowApproveModal(false)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">
+              <div className="flex items-center gap-2 text-[14px] font-extrabold text-ink">
+                <span className="text-teal">✓</span>
+                <span>결재 승인 확인</span>
+              </div>
+              <button
+                onClick={() => setShowApproveModal(false)}
+                className="grid h-7 w-7 place-items-center rounded-lg text-[14px] text-ink3 hover:bg-panel-alt"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-[12.5px]">
+              <div className="rounded-xl bg-teal/10 border border-teal/30 p-3.5 text-teal-800 dark:text-teal-200 font-semibold space-y-1">
+                <p className="font-extrabold text-[13px] text-ink">{doc.title}</p>
+                <p className="text-[11.5px] font-normal text-ink2">
+                  위 결재 문서를 승인하시겠습니까?
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-ink2 block text-[11.5px]">승인 의견 (선택)</label>
+                <textarea
+                  value={approveComment}
+                  onChange={(e) => setApproveComment(e.target.value)}
+                  placeholder="승인 의견을 입력하세요 (선택 사항)"
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border bg-panel-alt/20 px-5 py-3">
+              <button
+                onClick={() => setShowApproveModal(false)}
+                className="rounded-lg px-4 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleConfirmApprove}
+                disabled={busy}
+                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
+              >
+                {decide.isPending ? '승인 처리중...' : '✓ 승인 확정'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
