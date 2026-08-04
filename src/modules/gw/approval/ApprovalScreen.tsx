@@ -17,7 +17,10 @@ import {
 } from '@/features/gw/useApprovals';
 import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { DOC_TYPE_ICON, fmtDateTime, GwHead, KIND_TONE, StatusBadge, won } from '@/modules/gw/_gw';
+import { GwHead } from '@/modules/gw/_gw';
+import { DOC_TYPE_ICON, fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
+import { DocStatusBadge } from './components/ApprovalBadges';
+import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
@@ -39,30 +42,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   삭제: '휴지통',
 };
 
-/** 문서 배지 렌더링 헬퍼 — 시행 문서이고 결재가 '완료'된 경우 시행 상태(대기중/처리중/시행완료)를 표기 */
-function renderStatusBadge(d: ApprovalDoc, me: string) {
-  if (d.status === '진행중' && currentApproverIds(d).includes(me)) {
-    return <StatusBadge status="진행중" label="결재대기중" className="bg-amber/15 text-amber" />;
-  }
 
-  // 결재가 완료된 시행 문서의 경우 '완료' 대신 시행 상태(대기중, 처리중, 시행완료)로 표시
-  if (d.status === '완료' && d.execution) {
-    const execStatus = d.execution.status;
-    let badgeClass = 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300';
-    if (execStatus === '처리중') {
-      badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
-    } else if (execStatus === '시행완료') {
-      badgeClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-    }
-    return (
-      <span className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${badgeClass}`}>
-        {execStatus}
-      </span>
-    );
-  }
-
-  return <StatusBadge status={d.status} />;
-}
 
 export default function ApprovalScreen() {
   const { user } = useAuth();
@@ -86,6 +66,7 @@ export default function ApprovalScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
   const [batchComment, setBatchComment] = useState('');
+  const [isListCollapsed, setIsListCollapsed] = useState(false);
 
   const batchDecide = useBatchDecideStep();
   const batchRestore = useBatchRestoreFromTrash();
@@ -217,7 +198,7 @@ export default function ApprovalScreen() {
         name="전자결재"
       />
 
-      <div className="mt-5 grid grid-cols-[160px_280px_1fr] gap-4 items-start">
+      <div className={`mt-5 grid transition-all duration-300 gap-4 items-start ${isListCollapsed ? 'grid-cols-[160px_1fr]' : 'grid-cols-[160px_280px_1fr]'}`}>
         {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거) */}
         <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-3 self-start shadow-sm shrink-0">
           <button
@@ -296,8 +277,9 @@ export default function ApprovalScreen() {
           ))}
         </div>
 
-        {/* 중: 목록 (목록 높이에 딱 맞게 콤팩트 렌더링 + 일괄 버튼 하단 풋터 배치) */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 max-h-[calc(100vh-160px)] shadow-sm self-start">
+        {/* 중: 목록 (목록 접기 시 hidden 처리) */}
+        {!isListCollapsed && (
+          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 max-h-[calc(100vh-160px)] shadow-sm self-start animate-fadeIn">
           {/* 목록 헤더 */}
           <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
             <div className="flex items-center gap-2">
@@ -413,7 +395,7 @@ export default function ApprovalScreen() {
                           최근 완료
                         </span>
                       )}
-                      {renderStatusBadge(d, me)}
+                      <DocStatusBadge doc={d} me={me} />
                     </div>
                     <div className="flex items-center justify-between text-[10.5px] text-ink3">
                       <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
@@ -469,11 +451,18 @@ export default function ApprovalScreen() {
             </div>
           )}
         </div>
+      )}
 
         {/* 우: 상세 */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel h-full">
           {selDoc ? (
-            <DocDetail doc={selDoc} me={me} onEdit={(d) => setModal({ edit: d })} />
+            <DocDetail
+              doc={selDoc}
+              me={me}
+              onEdit={(d) => setModal({ edit: d })}
+              isListCollapsed={isListCollapsed}
+              onToggleListCollapse={() => setIsListCollapsed(!isListCollapsed)}
+            />
           ) : (
             <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
           )}
@@ -482,64 +471,25 @@ export default function ApprovalScreen() {
 
       {/* 일괄 승인 경고 및 의견 입력 모달 */}
       {showBatchApproveConfirm && (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center bg-black/45 p-4"
-          onClick={() => setShowBatchApproveConfirm(false)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">
-              <div className="flex items-center gap-2 text-[14px] font-extrabold text-ink">
-                <span className="text-amber-500">⚠️</span>
-                <span>일괄 결재 승인 확인</span>
-              </div>
-              <button
-                onClick={() => setShowBatchApproveConfirm(false)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-[14px] text-ink3 hover:bg-panel-alt"
-              >
-                ✕
-              </button>
+        <ApprovalOpinionModal
+          title="일괄 결재 승인 확인"
+          description={
+            <div className="space-y-1 text-amber-700 dark:text-amber-300 font-semibold">
+              <p>선택하신 <span className="font-extrabold underline">{selectedIds.length}건</span>의 결재 문서를 일괄 승인하시겠습니까?</p>
+              <p className="text-[11.5px] font-normal text-amber-600 dark:text-amber-400">
+                ※ 일괄 승인 처리 후에는 결재를 취소하거나 이전 상태로 되돌릴 수 없습니다.
+              </p>
             </div>
-
-            <div className="p-5 space-y-3.5 text-[12.5px]">
-              <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-amber-700 dark:text-amber-300 font-semibold space-y-1">
-                <p>선택하신 <span className="font-extrabold underline">{selectedIds.length}건</span>의 결재 문서를 일괄 승인하시겠습니까?</p>
-                <p className="text-[11.5px] font-normal text-amber-600 dark:text-amber-400">
-                  ※ 일괄 승인 처리 후에는 결재를 취소하거나 이전 상태로 되돌릴 수 없습니다.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-ink2 block text-[11.5px]">일괄 승인 의견 (선택)</label>
-                <textarea
-                  value={batchComment}
-                  onChange={(e) => setBatchComment(e.target.value)}
-                  placeholder="예: 일괄 승인 처리되었습니다."
-                  rows={3}
-                  className="w-full resize-none rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-border bg-panel-alt/20 px-5 py-3">
-              <button
-                onClick={() => setShowBatchApproveConfirm(false)}
-                className="rounded-lg px-4 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleBatchApprove}
-                disabled={batchDecide.isPending}
-                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
-              >
-                {batchDecide.isPending ? '승인 처리중...' : '✓ 일괄 승인 확정'}
-              </button>
-            </div>
-          </div>
-        </div>
+          }
+          confirmText="일괄 승인 확정"
+          confirmTone="bg-teal"
+          busy={batchDecide.isPending}
+          onConfirm={(comment) => {
+            setBatchComment(comment);
+            handleBatchApprove();
+          }}
+          onClose={() => setShowBatchApproveConfirm(false)}
+        />
       )}
 
       {modal && <ApprovalDraftModal me={user} editDoc={modal.edit ?? null} onClose={() => setModal(null)} />}
@@ -552,7 +502,19 @@ function org_nameFallback(d: ApprovalDoc): string {
   return d.drafterDept || '기안';
 }
 
-function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: (d: ApprovalDoc) => void }) {
+function DocDetail({
+  doc,
+  me,
+  onEdit,
+  isListCollapsed,
+  onToggleListCollapse,
+}: {
+  doc: ApprovalDoc;
+  me: string;
+  onEdit: (d: ApprovalDoc) => void;
+  isListCollapsed?: boolean;
+  onToggleListCollapse?: () => void;
+}) {
   const org = useOrgTree();
   const decide = useDecideStep();
   const submitM = useSubmitApproval();
@@ -627,9 +589,19 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
           {/* 좌측: 문서 기본 정보 */}
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
+              {onToggleListCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleListCollapse}
+                  className="rounded-lg border border-teal/30 bg-teal-soft/40 px-2 py-1 text-[11px] font-extrabold text-teal hover:bg-teal hover:text-white transition-all shadow-2xs flex items-center gap-1 shrink-0"
+                  title={isListCollapsed ? '목록 펼치기' : '목록 접고 넓게 보기'}
+                >
+                  <span>{isListCollapsed ? '▶ 목록 펼치기' : '◀ 목록 접기'}</span>
+                </button>
+              )}
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
               <h2 className="truncate text-[16px] font-bold text-ink">{doc.title}</h2>
-              {renderStatusBadge(doc, me)}
+              <DocStatusBadge doc={doc} me={me} />
             </div>
             <div className="text-[11.5px] text-ink3">
               {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
@@ -891,65 +863,23 @@ function DocDetail({ doc, me, onEdit }: { doc: ApprovalDoc; me: string; onEdit: 
 
       {/* 단일 결재 승인 의견 입력 모달 */}
       {showApproveModal && (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center bg-black/45 p-4 animate-fadeIn"
-          onClick={() => setShowApproveModal(false)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">
-              <div className="flex items-center gap-2 text-[14px] font-extrabold text-ink">
-                <span className="text-teal">✓</span>
-                <span>결재 승인 확인</span>
-              </div>
-              <button
-                onClick={() => setShowApproveModal(false)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-[14px] text-ink3 hover:bg-panel-alt"
-              >
-                ✕
-              </button>
+        <ApprovalOpinionModal
+          title="결재 승인 확인"
+          description={
+            <div className="space-y-1 text-teal-800 dark:text-teal-200 font-semibold">
+              <p className="font-extrabold text-[13px] text-ink">{doc.title}</p>
+              <p className="text-[11.5px] font-normal text-ink2">위 결재 문서를 승인하시겠습니까?</p>
             </div>
-
-            <div className="p-5 space-y-3.5 text-[12.5px]">
-              <div className="rounded-xl bg-teal/10 border border-teal/30 p-3.5 text-teal-800 dark:text-teal-200 font-semibold space-y-1">
-                <p className="font-extrabold text-[13px] text-ink">{doc.title}</p>
-                <p className="text-[11.5px] font-normal text-ink2">
-                  위 결재 문서를 승인하시겠습니까?
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-ink2 block text-[11.5px]">승인 의견 (선택)</label>
-                <textarea
-                  value={approveComment}
-                  onChange={(e) => setApproveComment(e.target.value)}
-                  placeholder="승인 의견을 입력하세요 (선택 사항)"
-                  rows={3}
-                  autoFocus
-                  className="w-full resize-none rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-border bg-panel-alt/20 px-5 py-3">
-              <button
-                onClick={() => setShowApproveModal(false)}
-                className="rounded-lg px-4 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleConfirmApprove}
-                disabled={busy}
-                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
-              >
-                {decide.isPending ? '승인 처리중...' : '✓ 승인 확정'}
-              </button>
-            </div>
-          </div>
-        </div>
+          }
+          confirmText="승인 확정"
+          confirmTone="bg-teal"
+          busy={decide.isPending}
+          onConfirm={(comment) => {
+            setApproveComment(comment);
+            handleConfirmApprove();
+          }}
+          onClose={() => setShowApproveModal(false)}
+        />
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
-import { won } from '@/modules/gw/_gw';
+import { won } from './utils/approvalUtils';
 import logoImg from '@/assets/logo.png';
 
 /**

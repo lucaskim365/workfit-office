@@ -10,8 +10,11 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { DynamicField, missingRequired } from '@/modules/gw/approval/formFields';
-import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { RelatedDocSearchModal } from '@/modules/gw/approval/RelatedDocSearchModal';
+import { DraftConfirmDialog } from './components/DraftConfirmDialog';
+import { DocumentPreviewModal } from './components/DocumentPreviewModal';
+import { DraftFormSidebar } from './components/DraftFormSidebar';
+import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { fileStorage } from '@/shared/lib/storage';
 import { ZodError } from 'zod';
 
@@ -65,9 +68,6 @@ export function ApprovalDraftModal({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
-  const [showRecipientPicker, setShowRecipientPicker] = useState(false);
-  const [pickerType, setPickerType] = useState<'user' | 'dept'>('dept');
-  const [pickerTargetId, setPickerTargetId] = useState('');
   
   const [executionTarget, setExecutionTarget] = useState<{ type: 'USER' | 'DEPT'; id: string; name: string } | null>(() => {
     if (editDoc?.execution) {
@@ -84,7 +84,6 @@ export function ApprovalDraftModal({
     }
     return null;
   });
-  const [execPickerType, setExecPickerType] = useState<'USER' | 'DEPT'>('DEPT');
 
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
@@ -92,7 +91,6 @@ export function ApprovalDraftModal({
 
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
-  const sidebarWidth = 240;
 
   const hasManuallyEnteredValues = () => {
     if (editDoc) {
@@ -685,105 +683,21 @@ export function ApprovalDraftModal({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* 좌측 서식 트리 영역 (fixedType이 아닐 때만 렌더) */}
           {!isFixed && (
-            <div
-              style={{ width: sidebarOpen ? sidebarWidth : 0 }}
-              className="relative shrink-0 border-r border-border bg-panel-alt flex flex-col select-none transition-all duration-200"
-            >
-              {/* 사이드바 본문 (접혔을 때 숨김) */}
-              <div className={`flex flex-col h-full p-3.5 overflow-y-auto ${!sidebarOpen ? 'invisible opacity-0' : 'visible opacity-100 transition-opacity duration-150'}`} style={{ width: sidebarWidth }}>
-                <div className="mb-2">
-                  <div className="text-[11.5px] font-extrabold text-ink3 uppercase tracking-wider mb-2">
-                    결재 서식 목록
-                  </div>
-                  
-                  {/* 검색창 및 작성가능 필터 체크박스 */}
-                  <div className="space-y-1.5 mb-2">
-                    <input
-                      type="text"
-                      value={sidebarSearch}
-                      onChange={(e) => setSidebarSearch(e.target.value)}
-                      placeholder="서식 제목 검색..."
-                      className="w-full rounded-md border border-border-hi bg-panel px-2.5 py-1 text-[11px] text-ink outline-none focus:border-teal"
-                    />
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={onlyAllowedForms}
-                        onChange={(e) => setOnlyAllowedForms(e.target.checked)}
-                        className="rounded border-border accent-teal cursor-pointer h-3.5 w-3.5"
-                      />
-                      <span className="text-[10px] font-bold text-ink2">작성 가능한 문서만 보기</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* 서식 목록 트리 */}
-                <div className="space-y-2 flex-1">
-                  {sidebarFolders.map((f) => {
-                    const isOpen = openFolders[f.id] !== false;
-                    return (
-                      <div key={f.id} className="space-y-0.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleFolder(f.id)}
-                          className="flex w-full items-center justify-between py-1 text-[11.5px] font-bold text-ink hover:text-teal transition-colors"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span>📂</span>
-                            <span>{f.name}</span>
-                          </span>
-                          <span className="text-[9px] text-ink3">{isOpen ? '▼' : '▶'}</span>
-                        </button>
-
-                        {isOpen && (
-                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5 mt-0.5">
-                            {f.forms.map((fm) => {
-                              const isDisabled = disabledFormCodes.has(fm.code);
-                              return (
-                                <button
-                                  key={fm.code}
-                                  type="button"
-                                  disabled={isDisabled}
-                                  onClick={() => {
-                                    setCode(fm.code);
-                                    setValues({}); // 서식 교체 시 기존 입력 상태값 초기화
-                                  }}
-                                  className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11.5px] font-medium transition-colors ${isDisabled
-                                      ? 'opacity-40 cursor-not-allowed'
-                                      : code === fm.code
-                                        ? 'bg-teal-soft text-teal font-semibold'
-                                        : 'text-ink2 hover:bg-border-hi/30'
-                                    }`}
-                                >
-                                  <span className="text-[13px]">{fm.icon}</span>
-                                  <span className="truncate">{fm.name}</span>
-                                  {isDisabled && (
-                                    <span className="ml-auto text-[8.5px] font-bold bg-red-500/10 text-red-500 px-1 py-0.5 rounded">제한</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                            {f.forms.length === 0 && (
-                              <div className="py-0.5 pl-5 text-[10.5px] text-ink3">서식이 없습니다.</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-
-              
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="absolute top-1/2 -right-2.5 -translate-y-1/2 z-[30] flex h-5 w-5 items-center justify-center rounded-full border border-border bg-panel shadow hover:border-teal hover:text-teal transition-all text-[9px] font-bold text-ink2 cursor-pointer"
-              >
-                {sidebarOpen ? '◀' : '▶'}
-              </button>
-            </div>
+            <DraftFormSidebar
+              sidebarOpen={sidebarOpen}
+              setSidebarOpen={setSidebarOpen}
+              sidebarSearch={sidebarSearch}
+              setSidebarSearch={setSidebarSearch}
+              onlyAllowedForms={onlyAllowedForms}
+              setOnlyAllowedForms={setOnlyAllowedForms}
+              sidebarFolders={sidebarFolders}
+              openFolders={openFolders}
+              toggleFolder={toggleFolder}
+              disabledFormCodes={disabledFormCodes}
+              code={code}
+              setCode={setCode}
+              setValues={setValues}
+            />
           )}
 
           {/* 우측 폼 입력 영역 */}
@@ -888,199 +802,13 @@ export function ApprovalDraftModal({
                 <ApprovalLineBuilder steps={steps} onChange={setSteps} drafterId={me.id} docType={code} amount={amountNum} docData={values} />
               </div>
 
-              {/* 수신처 & 시행자 설정 (2열 배치로 세로 스크롤 최소화) */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* 수신처 지정 - 통일된 카드형 디자인 */}
-                <div className="rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 flex flex-col justify-between min-h-[130px]">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="text-[12px] font-bold text-teal">📨 수신처 설정</div>
-                        <div className="text-[9.5px] text-ink3">문서 완료 시 자동 전송받을 수신처</div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowRecipientPicker(!showRecipientPicker);
-                            setPickerTargetId('');
-                          }}
-                          className="rounded-lg bg-teal-soft px-2 py-1 text-[10px] font-bold text-teal hover:bg-teal/20 transition-colors"
-                        >
-                          + 추가
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 수신처 추가 폼 */}
-                    {showRecipientPicker && (
-                      <div className="mb-3 flex items-center gap-2 rounded-lg bg-panel p-2 border border-border">
-                        <select
-                          value={pickerType}
-                          onChange={(e) => {
-                            setPickerType(e.target.value as 'user' | 'dept');
-                            setPickerTargetId('');
-                          }}
-                          className="rounded border border-border-hi bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                        >
-                          <option value="dept">부서</option>
-                          <option value="user">사원</option>
-                        </select>
-
-                        <select
-                          value={pickerTargetId}
-                          onChange={(e) => setPickerTargetId(e.target.value)}
-                          className="flex-1 rounded border border-border-hi bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                        >
-                          <option value="">선택하세요</option>
-                          {pickerType === 'dept'
-                            ? org.depts.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))
-                            : org.users.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name} {u.position} ({u.dept})
-                              </option>
-                            ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!pickerTargetId) return;
-                            if (pickerType === 'dept') {
-                              const dept = org.depts.find((d) => d.id === pickerTargetId);
-                              if (dept && !recipients.some((r) => r.id === dept.id)) {
-                                setRecipients((prev) => [...prev, { id: dept.id, name: dept.name, type: 'dept' }]);
-                              }
-                            } else {
-                              const user = org.users.find((u) => u.id === pickerTargetId);
-                              if (user && !recipients.some((r) => r.id === user.id)) {
-                                setRecipients((prev) => [
-                                  ...prev,
-                                  { id: user.id, name: `${user.name} ${user.position}`, type: 'user' },
-                                ]);
-                              }
-                            }
-                            setShowRecipientPicker(false);
-                          }}
-                          className="rounded bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90"
-                        >
-                          추가
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 수신처 목록 태그 */}
-                  <div className="mt-2 flex-1">
-                    {recipients.length === 0 ? (
-                      <p className="text-[10.5px] text-ink3 pl-1">지정된 수신처가 없습니다.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 pl-1 max-h-[100px] overflow-y-auto">
-                        {recipients.map((r) => (
-                          <span
-                            key={r.id}
-                            className="flex items-center gap-1 rounded-md bg-panel border border-teal/20 px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-sm"
-                          >
-                            {r.type === 'dept' ? '📁' : r.type === 'drafter' ? '👤 기안자:' : '👤'} {r.name}
-                            <button
-                              type="button"
-                              onClick={() => setRecipients((prev) => prev.filter((x) => x.id !== r.id))}
-                              className="ml-1 font-bold text-teal/60 hover:text-red-500"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 시행자 지정 - 별도 카드형 디자인 (직관적인 인라인 바인딩) */}
-                <div className="rounded-xl border border-teal/20 bg-teal-soft/10 p-3.5 flex flex-col justify-between min-h-[130px]">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="text-[12px] font-bold text-teal">📦 시행자 설정</div>
-                        <div className="text-[9.5px] text-ink3">완료 후 후속 실무를 처리할 시행자 지정</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <select
-                        value={execPickerType}
-                        onChange={(e) => {
-                          const newType = e.target.value as 'USER' | 'DEPT';
-                          setExecPickerType(newType);
-                          setExecutionTarget(null);
-                        }}
-                        className="rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                      >
-                        <option value="DEPT">부서</option>
-                        <option value="USER">사원</option>
-                      </select>
-
-                      <select
-                        value={executionTarget?.id ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (!val) {
-                            setExecutionTarget(null);
-                            return;
-                          }
-                          if (execPickerType === 'DEPT') {
-                            const dept = org.depts.find((d) => d.id === val);
-                            if (dept) {
-                              setExecutionTarget({ type: 'DEPT', id: dept.id, name: dept.name });
-                            }
-                          } else {
-                            const user = org.users.find((u) => u.id === val);
-                            if (user) {
-                              setExecutionTarget({ type: 'USER', id: user.id, name: `${user.name} ${user.position}` });
-                            }
-                          }
-                        }}
-                        className="flex-1 min-w-0 rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink outline-none"
-                      >
-                        <option value="">시행자 지정 안함</option>
-                        {execPickerType === 'DEPT'
-                          ? org.depts.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))
-                          : org.users.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} {u.position} ({u.dept})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* 지정된 시행자 정보 가이드 */}
-                  <div className="mt-2.5">
-                    {executionTarget ? (
-                      <div className="text-[10.5px] font-semibold text-teal flex items-center justify-between bg-panel border border-teal/20 px-2.5 py-0.5 rounded shadow-sm">
-                        <span className="truncate">🎯 지정됨: {executionTarget.type === 'DEPT' ? '📁' : '👤'} {executionTarget.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setExecutionTarget(null)}
-                          className="ml-1 font-bold text-teal/60 hover:text-red-500 shrink-0"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[10.5px] text-ink3 pl-1">지정된 시행자가 없습니다.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <DraftRecipientSection
+                recipients={recipients}
+                setRecipients={setRecipients}
+                executionTarget={executionTarget}
+                setExecutionTarget={setExecutionTarget}
+                org={org}
+              />
             </div>
 
             {/* 관련 문서 연결 (relatedDocs) 영역 */}
@@ -1227,105 +955,37 @@ export function ApprovalDraftModal({
       </div>
 
       {showConfirmClose && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
-          <div className="w-[340px] rounded-2xl border border-border bg-panel p-5 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
-              <span>⚠️</span> 기안 작성 중단
-            </h3>
-            <p className="text-[11.5px] leading-relaxed text-ink2 mb-4">
-              기안 작성을 중단하시겠습니까?<br />작성중인 기안은 임시저장함에 저장됩니다.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowConfirmClose(false)}
-                className="h-8 px-3 rounded-lg text-[11.5px] font-semibold text-ink2 bg-panel-alt hover:bg-border-hi/30 transition-colors"
-              >
-                계속 작성
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCloseSave}
-                disabled={busy}
-                className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-teal hover:opacity-90 disabled:opacity-50 transition-colors"
-              >
-                임시저장 후 중단
-              </button>
-            </div>
-          </div>
-        </div>
+        <DraftConfirmDialog
+          title="기안 작성 중단"
+          description={<>기안 작성을 중단하시겠습니까?<br />작성중인 기안은 임시저장함에 저장됩니다.</>}
+          confirmLabel="임시저장 후 중단"
+          confirmColor="bg-teal"
+          onConfirm={handleConfirmCloseSave}
+          onCancel={() => setShowConfirmClose(false)}
+          disabled={busy}
+        />
       )}
 
       {showConfirmDiscard && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
-          <div className="w-[340px] rounded-2xl border border-border bg-panel p-5 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
-              <span>⚠️</span> 기안 작성 취소
-            </h3>
-            <p className="text-[11.5px] leading-relaxed text-ink2 mb-4">
-              기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowConfirmDiscard(false)}
-                className="h-8 px-3 rounded-lg text-[11.5px] font-semibold text-ink2 bg-panel-alt hover:bg-border-hi/30 transition-colors"
-              >
-                돌아가기
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-8 px-3.5 rounded-lg text-[11.5px] font-bold text-white bg-danger hover:opacity-90 transition-colors"
-              >
-                변경내용 모두 취소
-              </button>
-            </div>
-          </div>
-        </div>
+        <DraftConfirmDialog
+          title="기안 작성 취소"
+          description={<>기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.</>}
+          confirmLabel="변경내용 모두 취소"
+          confirmColor="bg-danger"
+          onConfirm={onClose}
+          onCancel={() => setShowConfirmDiscard(false)}
+        />
       )}
 
       {showPreview && (
-        <div
-          className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowPreview(false);
-          }}
-        >
-          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
-              <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
-                <span>📄</span> 문서 미리보기
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowPreview(false);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
-              <ApprovalDocumentView doc={mockDoc} />
-            </div>
-            <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowPreview(false);
-                }}
-                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
+        <DocumentPreviewModal
+          title="문서 미리보기"
+          doc={mockDoc}
+          currentUser={me}
+          onClose={() => setShowPreview(false)}
+        />
       )}
+
       {showRelatedModal && (
         <RelatedDocSearchModal
           userId={me.id}
@@ -1343,45 +1003,12 @@ export function ApprovalDraftModal({
       )}
 
       {previewRelatedDoc && (
-        <div
-          className="fixed inset-0 z-[110] grid place-items-center bg-black/45 p-4"
-          onClick={(e) => {
-            e.stopPropagation();
-            setPreviewRelatedDoc(null);
-          }}
-        >
-          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
-              <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
-                <span>🔗</span> 관련 문서 미리보기 [{previewRelatedDoc.docNo}]
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPreviewRelatedDoc(null);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
-              <ApprovalDocumentView doc={previewRelatedDoc} currentUser={me} />
-            </div>
-            <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPreviewRelatedDoc(null);
-                }}
-                className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white hover:opacity-90 shadow-sm"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
+        <DocumentPreviewModal
+          title={`관련 문서 미리보기 [${previewRelatedDoc.docNo}]`}
+          doc={previewRelatedDoc}
+          currentUser={me}
+          onClose={() => setPreviewRelatedDoc(null)}
+        />
       )}
     </div>
   );
