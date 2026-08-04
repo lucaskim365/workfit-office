@@ -1,11 +1,10 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { chatRoomSchema, type ChatRoom, type ChatRoomType, type LastMessage } from '@/domain/chatRoom/schema';
 import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
-import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 
 /**
  * 채팅방 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
@@ -110,34 +109,6 @@ export const chatRoomRepo = {
       }
     } catch (e) {
       console.error('Failed to sync department rooms:', e);
-    }
-
-    // 삭제 조치된 특정 대화방 메시지("헤헤 됐다", "뭐야당신!" 등)를 포함한 대화방 타겟 멸실 처리 (테스트 부서 및 단체방 100% 안전 보존)
-    try {
-      if (isFirebaseConfigured && db) {
-        const msgSnap = await getDocs(collection(db, 'chatMessages'));
-        const targetRoomIds = new Set<string>();
-        for (const mDoc of msgSnap.docs) {
-          const text = String(mDoc.data()?.text ?? '');
-          if (text === '헤헤 됐다' || text === '뭐야당신!' || text === '안녕하세요' && mDoc.data()?.senderId !== memberId) {
-            const rId = mDoc.data()?.roomId;
-            if (rId) targetRoomIds.add(rId);
-            try { await deleteDoc(doc(db, 'chatMessages', mDoc.id)); } catch {}
-          }
-        }
-        for (const rId of targetRoomIds) {
-          // 단체방은 절대로 삭제되지 않도록 2중 세이프가드
-          const targetRoom = rows.find((r) => r.id === rId);
-          if (targetRoom && targetRoom.type === 'direct') {
-            try { await deleteDoc(doc(db, COLL, rId)); } catch {}
-            try { await chatMessageRepo.deleteByRoom(rId); } catch {}
-            rows = rows.filter((r) => r.id !== rId);
-            memory = memory.filter((r) => r.id !== rId);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed targeted cleanup:', e);
     }
 
     if (!opts?.includeDeleted) rows = rows.filter((r) => !r.deletedAt);

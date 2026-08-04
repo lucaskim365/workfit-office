@@ -22,7 +22,7 @@ export default function OrgChartScreen() {
       const firstTeam = org.roots[0]?.children[0]?.dept.id ?? org.roots[0]?.dept.id ?? null;
       setSelId(firstTeam);
     }
-  }, [org.depts, org.roots]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [org.depts, org.roots, selId]);
 
   const expandAll = () => setOpenIds(new Set(org.depts.map((d) => d.id)));
   const collapseAll = () => setOpenIds(new Set());
