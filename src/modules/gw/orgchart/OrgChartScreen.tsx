@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { User } from '@/domain/user/schema';
 
@@ -13,14 +13,19 @@ export default function OrgChartScreen() {
   const [selId, setSelId] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
-  // 최초 로드 시 최상위 부서 펼침 + 첫 팀 선택.
-  const initReady = org.roots.length > 0;
-  useMemo(() => {
-    if (!initReady || selId) return;
-    setOpenIds(new Set(org.roots.map((r) => r.dept.id)));
-    const firstTeam = org.roots[0]?.children[0]?.dept.id ?? org.roots[0]?.dept.id ?? null;
-    setSelId(firstTeam);
-  }, [initReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 최초 로드 시 모든 부서 전체 펼침 + 첫 팀 선택.
+  useEffect(() => {
+    if (org.depts.length > 0) {
+      setOpenIds(new Set(org.depts.map((d) => d.id)));
+    }
+    if (org.roots.length > 0 && !selId) {
+      const firstTeam = org.roots[0]?.children[0]?.dept.id ?? org.roots[0]?.dept.id ?? null;
+      setSelId(firstTeam);
+    }
+  }, [org.depts, org.roots]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const expandAll = () => setOpenIds(new Set(org.depts.map((d) => d.id)));
+  const collapseAll = () => setOpenIds(new Set());
 
   const selNode = useMemo(() => {
     if (!selId) return null;
@@ -62,6 +67,14 @@ export default function OrgChartScreen() {
       <div className="mt-5 grid grid-cols-[300px_1fr] gap-4">
         {/* 좌: 부서 트리 */}
         <div className="rounded-xl border border-border bg-panel p-2">
+          <div className="mb-2 flex items-center justify-between border-b border-border pb-1.5 px-1 pt-0.5">
+            <span className="text-[11px] font-bold text-ink2">부서 목록</span>
+            <div className="flex items-center gap-1.5 text-[10.5px]">
+              <button type="button" onClick={expandAll} className="px-1.5 py-0.5 rounded hover:bg-teal-soft text-teal font-semibold transition-colors">전체 펼치기</button>
+              <span className="text-ink3">·</span>
+              <button type="button" onClick={collapseAll} className="px-1.5 py-0.5 rounded hover:bg-panel-alt text-ink3 hover:text-ink transition-colors">전체 접기</button>
+            </div>
+          </div>
           {org.roots.map((n) => (
             <DeptRow key={n.dept.id} node={n} depth={0} openIds={openIds} selId={selId} onToggle={toggle} onSelect={setSelId} />
           ))}

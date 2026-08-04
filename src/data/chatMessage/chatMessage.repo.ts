@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { fileStorage } from '@/shared/lib/storage';
 import {
@@ -104,5 +104,18 @@ export const chatMessageRepo = {
         if (i >= 0) memory[i] = updated;
       }
     }
+  },
+
+  /** 특정 방의 메시지 전건 삭제 */
+  async deleteByRoom(roomId: string): Promise<void> {
+    if (isFirebaseConfigured && db) {
+      const snap = await getDocs(collection(db, COLL));
+      for (const d of snap.docs) {
+        if (d.data().roomId === roomId) {
+          await deleteDoc(doc(db, COLL, d.id));
+        }
+      }
+    }
+    memory = memory.filter((m) => m.roomId !== roomId);
   },
 };

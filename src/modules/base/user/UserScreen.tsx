@@ -22,8 +22,8 @@ const ROLE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...ROLE_GROUPS.m
 
 /** 사용자관리 — 필터 + KPI 요약 + 목록(직급·직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
 export default function UserScreen() {
-  // 사용여부 필터 기본값 '사용' — 기본 화면에서 미사용(퇴사 등) 계정 제외.
-  const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '사용', q: '' });
+  // 사용여부 필터 기본값 '' (전체) — 미사용(퇴사 등) 계정도 기본 화면에서 함께 확인 가능.
+  const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
@@ -141,12 +141,60 @@ export default function UserScreen() {
         </FilterField>
       </FilterBar>
 
-      {/* KPI 요약 */}
+      {/* KPI 요약 (클릭 시 해당 상태로 빠른 필터링) */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <Card><Kpi label="전체 사용자" value={String(summary.total)} unit="명" /></Card>
-        <Card><Kpi label="사용중" value={String(summary.active)} unit="명" tone="teal" /></Card>
-        <Card><Kpi label="잠금" value={String(summary.locked)} unit="명" /></Card>
-        <Card><Kpi label="미사용" value={String(summary.inactive)} unit="명" /></Card>
+        <div
+          className="cursor-pointer transition-transform active:scale-[0.98]"
+          onClick={() => {
+            const next = { ...draft, status: '' };
+            setDraft(next);
+            setApplied(next);
+          }}
+          title="클릭하여 전체 사용자 보기"
+        >
+          <Card className={`transition-colors ${applied.status === '' ? 'border-teal ring-1 ring-teal/30' : 'hover:border-border-hi'}`}>
+            <Kpi label="전체 사용자" value={String(summary.total)} unit="명" />
+          </Card>
+        </div>
+        <div
+          className="cursor-pointer transition-transform active:scale-[0.98]"
+          onClick={() => {
+            const next = { ...draft, status: '사용' };
+            setDraft(next);
+            setApplied(next);
+          }}
+          title="클릭하여 사용중인 사용자만 보기"
+        >
+          <Card className={`transition-colors ${applied.status === '사용' ? 'border-teal ring-1 ring-teal/30' : 'hover:border-border-hi'}`}>
+            <Kpi label="사용중" value={String(summary.active)} unit="명" tone="teal" />
+          </Card>
+        </div>
+        <div
+          className="cursor-pointer transition-transform active:scale-[0.98]"
+          onClick={() => {
+            const next = { ...draft, status: '잠금' };
+            setDraft(next);
+            setApplied(next);
+          }}
+          title="클릭하여 잠금 상태 사용자만 보기"
+        >
+          <Card className={`transition-colors ${applied.status === '잠금' ? 'border-teal ring-1 ring-teal/30' : 'hover:border-border-hi'}`}>
+            <Kpi label="잠금" value={String(summary.locked)} unit="명" />
+          </Card>
+        </div>
+        <div
+          className="cursor-pointer transition-transform active:scale-[0.98]"
+          onClick={() => {
+            const next = { ...draft, status: '미사용' };
+            setDraft(next);
+            setApplied(next);
+          }}
+          title="클릭하여 미사용 계정만 보기"
+        >
+          <Card className={`transition-colors ${applied.status === '미사용' ? 'border-amber-500 ring-1 ring-amber-500/30' : 'hover:border-border-hi'}`}>
+            <Kpi label="미사용" value={String(summary.inactive)} unit="명" />
+          </Card>
+        </div>
       </div>
 
       {/* 목록 */}

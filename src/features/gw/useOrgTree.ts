@@ -51,7 +51,8 @@ export function useOrgTree() {
 
   const data = useMemo<OrgTree>(() => {
     const masters = deptsQ.data ?? [];
-    const users = usersQ.data ?? [];
+    const rawUsers = usersQ.data ?? [];
+    const users = rawUsers.filter((u) => u.status !== '미사용');
     const positions = positionsQ.data ?? [];
 
     // 직급 서열 — 마스터 우선, 없으면 폴백 상수.
