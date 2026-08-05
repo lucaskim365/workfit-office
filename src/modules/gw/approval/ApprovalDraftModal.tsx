@@ -197,20 +197,13 @@ export function ApprovalDraftModal({
 
   const [scale, setScale] = useState(1);
   const rightContentRef = useRef<HTMLDivElement>(null);
-  const DESIGN_WIDTH = 960;
 
   useEffect(() => {
     const el = rightContentRef.current;
     if (!el) return;
 
     const updateScale = () => {
-      const currentWidth = el.clientWidth;
-      if (currentWidth && currentWidth < DESIGN_WIDTH) {
-        const computedScale = Math.min(1, Math.max(0.65, currentWidth / DESIGN_WIDTH));
-        setScale(computedScale);
-      } else {
-        setScale(1);
-      }
+      setScale(1);
     };
 
     updateScale();
@@ -793,10 +786,9 @@ export function ApprovalDraftModal({
   }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40" onClick={handleAttemptClose}>
       <div
-        className={`flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${isFixed ? 'max-w-2xl' : 'max-w-[75vw]'
-          }`}
+        className={`flex h-[82vh] max-h-[82vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${isFixed ? 'max-w-3xl' : 'w-[90vw] max-w-[1200px]'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
@@ -1198,10 +1190,9 @@ export function ApprovalDraftModal({
             </div>
           </div>
         </div>
-      </div>
 
-
-        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3">
+        {/* 고정 하단 메뉴 바 (모달 카드 내부 하단 고정) */}
+        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3 bg-panel">
           {/* 에러 알림 메시지를 하단 버튼 라인 좌측에 배치 */}
           <div className="flex-1 min-w-0">
             {error && (
@@ -1212,16 +1203,38 @@ export function ApprovalDraftModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
             <button
+              type="button"
+              onClick={handleCancelClick}
+              disabled={busy}
+              className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
               onClick={() => setShowPreview(true)}
               disabled={busy}
               className="rounded-lg border border-border-hi bg-panel px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
             >
-              문서 미리보기
+              미리보기
             </button>
-            {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
-            <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
+            <button
+              type="button"
+              onClick={onSaveDraft}
+              disabled={busy}
+              className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
+            >
+              {isResubmit ? '저장' : '임시저장'}
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={busy}
+              className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}
+            </button>
           </div>
         </div>
       </div>
@@ -1285,6 +1298,7 @@ export function ApprovalDraftModal({
         />
       )}
     </div>
+  </div>
   );
 }
 
