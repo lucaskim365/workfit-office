@@ -27,6 +27,7 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'S_BASE_DEPT', name: '부서/조직관리', url: '/base/department', icon: '▤', order: 10, use: true },
       { id: 'S_BASE_POSITION', name: '직급관리', url: '/base/position', icon: '◫', order: 20, use: true },
       { id: 'S_BASE_APRULE', name: '결재선 규칙관리', url: '/base/approval-rule', icon: '⚖', order: 30, use: true },
+      { id: 'S_BASE_APPROC', name: '결재 프로세스 설정', url: '/base/approval-process', icon: '⚙', order: 35, use: true },
       { id: 'S_BASE_APFORM', name: '결재서식 관리', url: '/base/approval-form', icon: '📄', order: 40, use: true },
       { id: 'S_BASE_APMON', name: '결재문서 모니터링', url: '/base/approval-monitor', icon: '🔍', order: 50, use: true },
     ] },

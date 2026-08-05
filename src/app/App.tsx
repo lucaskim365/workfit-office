@@ -51,6 +51,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/department': lazy(() => import('@/modules/base/department/DepartmentScreen')),
   '/base/position': lazy(() => import('@/modules/base/position/PositionScreen')),
   '/base/approval-rule': lazy(() => import('@/modules/base/approvalRule/ApprovalRuleScreen')),
+  '/base/approval-process': lazy(() => import('@/modules/base/approvalProcess/ApprovalProcessScreen')),
   '/base/approval-form': lazy(() => import('@/modules/base/approvalForm/ApprovalFormScreen')),
   '/base/approval-monitor': lazy(() => import('@/modules/base/approvalMonitor/ApprovalMonitorScreen')),
   '/base/vendor': lazy(() => import('@/modules/base/vendor/VendorScreen')),
