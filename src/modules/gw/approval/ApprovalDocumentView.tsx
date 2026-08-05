@@ -333,11 +333,51 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
             </div>
           </div>
 
-          <div className="flex flex-col gap-1 border-t border-rose-500/15 pt-2">
-            <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 선조치 배경:</span>
-            <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-              {doc.postApprovalReason ?? '—'}
-            </div>
+          <div className="flex flex-col gap-2 border-t border-rose-500/15 pt-2 text.11.5px]">
+            {doc.postApprovalActionTaken && (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold text-rose-800 text-[11px]">1. 선조치(긴급 조치) 내용 및 결과:</span>
+                <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  {doc.postApprovalActionTaken}
+                </div>
+              </div>
+            )}
+            {doc.postApprovalNecessity && (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold text-rose-800 text-[11px]">2. 긴급성 및 불가피성 소명 (Why?):</span>
+                <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  {doc.postApprovalNecessity}
+                </div>
+              </div>
+            )}
+            {(doc.postApprovalCostDetails || doc.postApprovalFollowup) && (
+              <div className="grid grid-cols-2 gap-2">
+                {doc.postApprovalCostDetails && (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-bold text-[#555] text-[11px]">3. 소요 비용 및 집행 내역:</span>
+                    <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                      {doc.postApprovalCostDetails}
+                    </div>
+                  </div>
+                )}
+                {doc.postApprovalFollowup && (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-bold text-[#555] text-[11px]">4. 후속 조치 및 재발 방지 대책:</span>
+                    <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                      {doc.postApprovalFollowup}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!doc.postApprovalActionTaken && !doc.postApprovalNecessity && doc.postApprovalReason && (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 소명 내역:</span>
+                <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  {doc.postApprovalReason}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

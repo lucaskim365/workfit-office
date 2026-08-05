@@ -47,6 +47,15 @@ function migrateDoc(data: any): any {
     execution: data.execution ?? null,
     preservationPeriod: data.preservationPeriod ?? null,
     relatedDocs: data.relatedDocs ?? [],
+    isPostApproval: data.isPostApproval ?? false,
+    postApprovalReason: data.postApprovalReason ?? null,
+    postApprovalActionTaken: data.postApprovalActionTaken ?? null,
+    postApprovalNecessity: data.postApprovalNecessity ?? null,
+    postApprovalCostDetails: data.postApprovalCostDetails ?? null,
+    postApprovalFollowup: data.postApprovalFollowup ?? null,
+    postApprovedAt: data.postApprovedAt ?? null,
+    postApprovedById: data.postApprovedById ?? null,
+    postApprovedByName: data.postApprovedByName ?? null,
     steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
       kind: s.kind === '합의' ? '결재' : s.kind,
@@ -164,8 +173,16 @@ export interface ApprovalDraftInput {
   securityLevel?: '일반' | '대외비' | '극비';
   /** 긴급 선조치 사후 승인(후결) 여부 */
   isPostApproval?: boolean;
-  /** 후결 긴급 사유 */
+  /** 후결 긴급 사유 (종합) */
   postApprovalReason?: string | null;
+  /** 후결 1. 선조치(긴급 조치) 내용 및 결과 */
+  postApprovalActionTaken?: string | null;
+  /** 후결 2. 긴급성 및 불가피성 소명 (Why?) */
+  postApprovalNecessity?: string | null;
+  /** 후결 3. 소요 비용 및 내역 */
+  postApprovalCostDetails?: string | null;
+  /** 후결 4. 후속 조치 및 재발 방지 대책 */
+  postApprovalFollowup?: string | null;
   /** 후결 선조치 일시 */
   postApprovedAt?: string | null;
   /** 후결 선조치 승인자 ID */
@@ -275,6 +292,15 @@ export const approvalDocRepo = {
       execution: input.execution ?? null,
       relatedDocs: input.relatedDocs ?? [],
       securityLevel: input.securityLevel ?? '일반',
+      isPostApproval: input.isPostApproval ?? false,
+      postApprovalReason: input.postApprovalReason ?? null,
+      postApprovalActionTaken: input.postApprovalActionTaken ?? null,
+      postApprovalNecessity: input.postApprovalNecessity ?? null,
+      postApprovalCostDetails: input.postApprovalCostDetails ?? null,
+      postApprovalFollowup: input.postApprovalFollowup ?? null,
+      postApprovedAt: input.postApprovedAt ?? null,
+      postApprovedById: input.postApprovedById ?? null,
+      postApprovedByName: input.postApprovedByName ?? null,
     });
     await persist(created);
     return created;

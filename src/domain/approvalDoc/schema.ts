@@ -183,8 +183,16 @@ export const approvalDocSchema = z.object({
   relatedDocs: z.array(relatedDocSchema).default([]),
   /** 긴급 선조치 사후 승인(후결) 여부 */
   isPostApproval: z.boolean().default(false),
-  /** 후결 - 긴급 사유 */
+  /** 후결 - 긴급 사유 (종합) */
   postApprovalReason: z.string().nullable().optional(),
+  /** 후결 1. 선조치(긴급 조치) 내용 및 결과 */
+  postApprovalActionTaken: z.string().nullable().optional(),
+  /** 후결 2. 긴급성 및 불가피성 소명 (Why?) */
+  postApprovalNecessity: z.string().nullable().optional(),
+  /** 후결 3. 소요 비용 및 내역 */
+  postApprovalCostDetails: z.string().nullable().optional(),
+  /** 후결 4. 후속 조치 및 재발 방지 대책 */
+  postApprovalFollowup: z.string().nullable().optional(),
   /** 후결 - 선조치 일시 (ISO String) */
   postApprovedAt: z.string().nullable().optional(),
   /** 후결 - 선조치 구두/임시 승인자 ID */

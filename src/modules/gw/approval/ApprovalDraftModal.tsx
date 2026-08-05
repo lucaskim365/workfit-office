@@ -97,6 +97,10 @@ export function ApprovalDraftModal({
   const [isPostApprovalSystemEnabled, setIsPostApprovalSystemEnabled] = useState(false);
   const [isPostApproval, setIsPostApproval] = useState<boolean>(editDoc?.isPostApproval ?? false);
   const [postApprovalReason, setPostApprovalReason] = useState<string>(editDoc?.postApprovalReason ?? '');
+  const [postApprovalActionTaken, setPostApprovalActionTaken] = useState<string>(editDoc?.postApprovalActionTaken ?? '');
+  const [postApprovalNecessity, setPostApprovalNecessity] = useState<string>(editDoc?.postApprovalNecessity ?? '');
+  const [postApprovalCostDetails, setPostApprovalCostDetails] = useState<string>(editDoc?.postApprovalCostDetails ?? '');
+  const [postApprovalFollowup, setPostApprovalFollowup] = useState<string>(editDoc?.postApprovalFollowup ?? '');
   const [postApprovedAt, setPostApprovedAt] = useState<string>(editDoc?.postApprovedAt ?? '');
   const [postApprovedById, setPostApprovedById] = useState<string>(editDoc?.postApprovedById ?? '');
 
@@ -105,6 +109,19 @@ export function ApprovalDraftModal({
       setIsPostApprovalSystemEnabled(enabled);
     });
   }, []);
+
+  useEffect(() => {
+    if (editDoc) {
+      setIsPostApproval(editDoc.isPostApproval ?? false);
+      setPostApprovalReason(editDoc.postApprovalReason ?? '');
+      setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
+      setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
+      setPostApprovalCostDetails(editDoc.postApprovalCostDetails ?? '');
+      setPostApprovalFollowup(editDoc.postApprovalFollowup ?? '');
+      setPostApprovedAt(editDoc.postApprovedAt ?? '');
+      setPostApprovedById(editDoc.postApprovedById ?? '');
+    }
+  }, [editDoc]);
 
   const initialValuesSnapshot = useRef<Record<string, FieldValue>>({});
   const isInitializedRef = useRef<string | null>(null);
@@ -130,12 +147,14 @@ export function ApprovalDraftModal({
       const amountChanged = amount.trim() !== (editDoc.amount != null ? String(editDoc.amount) : '');
       const filesChanged = attachments.length !== (editDoc.attachments ?? []).length;
       const valuesChanged = Object.keys(values).some((k) => values[k] !== editDoc.fieldValues?.[k]);
-      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged;
+      const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
+      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
     } else {
       const hasTitle = title.trim() !== '';
       const hasBody = body.trim() !== '';
       const hasAmount = amount.trim() !== '';
       const hasFiles = attachments.length > 0;
+      const hasPostApproval = isPostApproval || postApprovalReason.trim() !== '';
       const valuesChanged = Object.keys(values).some((k) => {
         const v = values[k];
         if (v === undefined || v === null || String(v).trim() === '') return false;
@@ -143,7 +162,7 @@ export function ApprovalDraftModal({
         if (initV !== undefined && JSON.stringify(v) === JSON.stringify(initV)) return false;
         return true;
       });
-      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged;
+      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged || hasPostApproval;
     }
   };
 
@@ -397,6 +416,12 @@ export function ApprovalDraftModal({
       : null;
 
     const postApprovedUser = org.userById(postApprovedById);
+    const combinedReason = [
+      postApprovalActionTaken ? `[선조치 내용 및 결과]\n${postApprovalActionTaken.trim()}` : '',
+      postApprovalNecessity ? `[긴급성 및 불가피성 소명]\n${postApprovalNecessity.trim()}` : '',
+      postApprovalCostDetails ? `[소요 비용 및 내역]\n${postApprovalCostDetails.trim()}` : '',
+      postApprovalFollowup ? `[후속 조치 및 재발 방지 대책]\n${postApprovalFollowup.trim()}` : '',
+    ].filter(Boolean).join('\n\n') || postApprovalReason.trim();
 
     return {
       docType: code,
@@ -415,7 +440,11 @@ export function ApprovalDraftModal({
       securityLevel,
       preservationPeriod,
       isPostApproval: isPostApprovalSystemEnabled ? isPostApproval : false,
-      postApprovalReason: isPostApprovalSystemEnabled && isPostApproval ? postApprovalReason.trim() : null,
+      postApprovalReason: isPostApprovalSystemEnabled && isPostApproval ? combinedReason : null,
+      postApprovalActionTaken: isPostApprovalSystemEnabled && isPostApproval ? postApprovalActionTaken.trim() : null,
+      postApprovalNecessity: isPostApprovalSystemEnabled && isPostApproval ? postApprovalNecessity.trim() : null,
+      postApprovalCostDetails: isPostApprovalSystemEnabled && isPostApproval ? postApprovalCostDetails.trim() : null,
+      postApprovalFollowup: isPostApprovalSystemEnabled && isPostApproval ? postApprovalFollowup.trim() : null,
       postApprovedAt: isPostApprovalSystemEnabled && isPostApproval ? postApprovedAt : null,
       postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
       postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
@@ -427,8 +456,15 @@ export function ApprovalDraftModal({
 
     // 후결(사후 승인) 검증
     if (isPostApprovalSystemEnabled && isPostApproval) {
-      if (!postApprovalReason.trim() || postApprovalReason.trim().length < 50) {
-        return '후결 사후 승인 요청 시 긴급 사유 및 선조치 배경을 최소 50자 이상 입력해야 합니다.';
+      if (!postApprovalActionTaken.trim() && !postApprovalReason.trim()) {
+        return '후결 사후 승인 요청 시 [1. 선조치(긴급 조치) 내용 및 결과] 항목을 입력해 주세요.';
+      }
+      if (!postApprovalNecessity.trim() && !postApprovalReason.trim()) {
+        return '후결 사후 승인 요청 시 [2. 긴급성 및 불가피성 소명 (Why?)] 항목을 입력해 주세요.';
+      }
+      const totalLen = (postApprovalActionTaken + postApprovalNecessity + postApprovalCostDetails + postApprovalFollowup + postApprovalReason).trim().length;
+      if (totalLen < 50) {
+        return '후결 사후 승인 소명 및 선조치 내역은 최소 50자 이상 상세히 작성해 주세요.';
       }
       if (!postApprovedAt) {
         return '선조치 일시를 입력해 주세요.';
@@ -747,10 +783,14 @@ export function ApprovalDraftModal({
     preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
     isPostApproval: isPostApproval,
     postApprovalReason: postApprovalReason,
+    postApprovalActionTaken: postApprovalActionTaken,
+    postApprovalNecessity: postApprovalNecessity,
+    postApprovalCostDetails: postApprovalCostDetails,
+    postApprovalFollowup: postApprovalFollowup,
     postApprovedAt: postApprovedAt,
     postApprovedById: postApprovedById,
     postApprovedByName: org.userById(postApprovedById)?.name ?? null,
-  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovedAt, postApprovedById, org]);
+  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
@@ -794,33 +834,30 @@ export function ApprovalDraftModal({
               }}
               className="space-y-4"
             >
-              {/* 후결(사후 승인) 옵션 토글 스위치 — 시스템 설정 ON 시에만 표시 */}
+              {/* 후결(사후 승인) 옵션 토글 스위치 — 우측 상단 콤팩트 배치 */}
               {isPostApprovalSystemEnabled && (
-                <div className="flex items-center justify-between p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/5 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-[12.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                <div className="flex justify-end">
+                  <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/5 shadow-xs transition-all">
+                    <span className="text-[11.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1">
                       <span>🚨</span>
                       <span>긴급 선조치 사후 승인 (후결) 요청</span>
                     </span>
-                    <span className="text-[10.5px] text-ink3 mt-0.5">
-                      장애 복구, 공장 수리 등 긴급 현장 선조치 후 사후 결재를 올리는 경우 스위치를 켜세요.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isPostApproval}
-                    onClick={() => setIsPostApproval(!isPostApproval)}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        isPostApproval ? 'translate-x-5' : 'translate-x-0'
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isPostApproval}
+                      onClick={() => setIsPostApproval(!isPostApproval)}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                        isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          isPostApproval ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -837,27 +874,70 @@ export function ApprovalDraftModal({
                     </span>
                   </div>
 
-                  {/* 1. 긴급 사유 (텍스트, 전체, 최소 50자 이상) */}
+                  {/* 1. 선조치(긴급 조치) 내용 및 결과 (텍스트, 전체) */}
                   <div className="flex flex-col gap-1">
                     <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
-                      <span>긴급 사유 및 선조치 배경</span>
+                      <span>1. 선조치(긴급 조치) 내용 및 결과</span>
                       <span className="text-rose-500">*</span>
-                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(최소 50자 이상 상세 기재)</span>
+                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(언제, 어떤 상황에서, 어떤 조치를 취했는지 상세 팩트)</span>
                     </label>
                     <textarea
-                      value={postApprovalReason}
-                      onChange={(e) => setPostApprovalReason(e.target.value)}
-                      placeholder="정식 사전 결재를 거치지 않고 선조치를 진행하게 된 긴급한 배경(서버 다운, 공장 고장 수리 등)을 상세히 입력하세요."
-                      rows={3}
+                      value={postApprovalActionTaken}
+                      onChange={(e) => setPostApprovalActionTaken(e.target.value)}
+                      placeholder="예: 8월 5일 오후 2시 공장 메인 서버 다운으로 긴급 외주 업체를 불러 서버 모듈 교체 및 복구 완료."
+                      rows={2}
                       className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-rose-500"
                     />
-                    <div className="flex justify-end text-[10px] text-ink3 font-mono">
-                      {postApprovalReason.trim().length} / 50자 이상
+                  </div>
+
+                  {/* 2. 긴급성 및 불가피성 소명 (Why?) (텍스트, 전체) */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                      <span>2. 긴급성 및 불가피성 소명 (Why?)</span>
+                      <span className="text-rose-500">*</span>
+                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(사전 결재 미진행 이유 및 미선조치 시 예상 치명적 손해)</span>
+                    </label>
+                    <textarea
+                      value={postApprovalNecessity}
+                      onChange={(e) => setPostApprovalNecessity(e.target.value)}
+                      placeholder="왜 사전에 결재를 올릴 시간이 없었는지, 만약 선조치하지 않고 결재를 기다렸다면 회사에 발생했을 손해(생산 중단, 보안 사고 등)를 설명하세요."
+                      rows={2}
+                      className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  {/* 3. 소요 비용 및 후속 조치 (2열) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>3. 소요 비용 및 집행 내역</span>
+                        <span className="text-[10.5px] font-normal text-ink3">(영수증/견적서 하단 첨부 필수)</span>
+                      </label>
+                      <textarea
+                        value={postApprovalCostDetails}
+                        onChange={(e) => setPostApprovalCostDetails(e.target.value)}
+                        placeholder="선조치 과정에서 발생한 정확한 금액과 수리비/계약 내역"
+                        rows={2}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>4. 후속 조치 및 재발 방지 대책</span>
+                        <span className="text-[10.5px] font-normal text-ink3">(예방 대책 및 잔여 업무)</span>
+                      </label>
+                      <textarea
+                        value={postApprovalFollowup}
+                        onChange={(e) => setPostApprovalFollowup(e.target.value)}
+                        placeholder="향후 유사 비상 상황 예방 대책 및 미마무리 잔여 업무 계획"
+                        rows={2}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* 2. 선조치 일시 (날짜, 2열, 현재 시간 이전이어야 함) */}
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-rose-500/15">
+                    {/* 선조치 일시 (날짜, 2열, 현재 시간 이전이어야 함) */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
                         <span>선조치 일시</span>
@@ -872,7 +952,7 @@ export function ApprovalDraftModal({
                       />
                     </div>
 
-                    {/* 3. 선조치 승인자 (사용자, 2열) */}
+                    {/* 선조치 승인자 (사용자, 2열) */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
                         <span>선조치 구두/임시 승인자</span>
