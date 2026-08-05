@@ -330,8 +330,8 @@ export default function ApprovalScreen() {
                       key={f}
                       onClick={() => setTodoFilter(f)}
                       className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${todoFilter === f
-                          ? 'bg-teal text-white shadow-sm'
-                          : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                         }`}
                     >
                       {label}
@@ -349,8 +349,8 @@ export default function ApprovalScreen() {
                       key={f}
                       onClick={() => setExecFilter(f)}
                       className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${execFilter === f
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                         }`}
                     >
                       {label}
@@ -368,8 +368,8 @@ export default function ApprovalScreen() {
                       key={f}
                       onClick={() => setDoneFilter(f)}
                       className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${doneFilter === f
-                          ? 'bg-teal text-white shadow-sm'
-                          : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                         }`}
                     >
                       {label}
@@ -391,10 +391,10 @@ export default function ApprovalScreen() {
                     key={d.id}
                     onClick={() => setSelId(d.id)}
                     className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-2.5 text-left transition-all ${selId === d.id
-                        ? 'bg-teal-soft/60'
-                        : isRecentCompleted
-                          ? 'bg-teal-soft/10 hover:bg-teal-soft/20'
-                          : 'hover:bg-panel-alt'
+                      ? 'bg-teal-soft/60'
+                      : isRecentCompleted
+                        ? 'bg-teal-soft/10 hover:bg-teal-soft/20'
+                        : 'hover:bg-panel-alt'
                       } ${isRecentCompleted ? 'border-l-4 border-l-teal' : ''}`}
                   >
                     {(box === '대기' || box === '삭제') && (
@@ -797,7 +797,6 @@ function DocDetail({
                 return (
                   <span key={s.approverId} className="inline-flex items-center gap-1 text-teal font-medium">
                     <span className="text-[9.5px] opacity-75 font-bold">[참조]</span>
-                    <span>👤</span>
                     <span>{s.approverName || nameOf(s.approverId)}{posDept}</span>
                   </span>
                 );
