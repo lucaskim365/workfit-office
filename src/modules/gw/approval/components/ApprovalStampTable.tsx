@@ -6,7 +6,7 @@ function shortDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name: string; sealUrl: string; isSignature: boolean }) {
+function Stamp({ step, name, sealUrl, isSignature, isPostApproval }: { step: ApprovalStep; name: string; sealUrl: string; isSignature: boolean; isPostApproval?: boolean }) {
   if (step.kind === '참조') return <span className="text-[10px] text-[#888]">열람<br />{name}</span>;
 
   if (sealUrl && (step.seq === 1 || step.decision === '승인' || step.decision === '반려' || step.decision === '보류')) {
@@ -19,6 +19,9 @@ function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name:
             className="min-w-[84px] min-h-[40px] max-w-[84px] max-h-[40px] object-contain opacity-95 pointer-events-none mix-blend-multiply"
             style={{ opacity: step.decision === '반려' ? 0.6 : 1 }}
           />
+          {isPostApproval && step.decision === '승인' && (
+            <span className="absolute bottom-0 text-[8px] font-extrabold text-rose-600 bg-white/90 border border-rose-400 px-0.5 rounded z-20">사후승인</span>
+          )}
           {step.decision === '반려' && (
             <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b] z-30" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
           )}
@@ -29,6 +32,9 @@ function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name:
     return (
       <div className="relative flex h-[44px] w-[44px] items-center justify-center">
         <img src={sealUrl} alt="인감" className="h-full w-full object-contain" style={{ opacity: step.decision === '반려' ? 0.6 : 1 }} />
+        {isPostApproval && step.decision === '승인' && (
+          <span className="absolute bottom-0 text-[8px] font-extrabold text-rose-600 bg-white/90 border border-rose-400 px-0.5 rounded z-20">사후승인</span>
+        )}
         {step.decision === '반려' && (
           <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-[#c0392b]" style={{ textShadow: '0 0 2px #fff' }}>반려</span>
         )}
@@ -37,7 +43,14 @@ function Stamp({ step, name, sealUrl, isSignature }: { step: ApprovalStep; name:
   }
 
   if (step.decision === '승인')
-    return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold leading-tight text-[#c0392b]">{name}</span>;
+    return (
+      <div className="relative flex items-center justify-center">
+        <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold leading-tight text-[#c0392b]">{name}</span>
+        {isPostApproval && (
+          <span className="absolute bottom-[-4px] text-[7.5px] font-extrabold text-rose-600 bg-white border border-rose-400 px-0.5 rounded z-10">사후</span>
+        )}
+      </div>
+    );
   if (step.decision === '반려')
     return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
   if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
@@ -51,12 +64,14 @@ export function ApprovalStampTable({
   posOf,
   sealOf,
   isSignatureOf,
+  isPostApproval,
 }: {
   steps: ApprovalStep[];
   nameOf: (id: string) => string;
   posOf: (id: string) => string;
   sealOf: (id: string) => string;
   isSignatureOf: (id: string) => boolean;
+  isPostApproval?: boolean;
 }) {
   if (steps.length === 0) return null;
   return (
@@ -75,7 +90,7 @@ export function ApprovalStampTable({
             <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
               <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
               <div className="grid h-[52px] place-items-center px-0.5">
-                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} />
+                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} isPostApproval={isPostApproval} />
               </div>
               <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
             </div>

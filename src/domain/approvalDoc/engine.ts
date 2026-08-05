@@ -124,9 +124,10 @@ export function applyDecision(
   });
   let next: ApprovalDoc = { ...doc, steps: patched };
 
-  // 반려 → 종결(반려). 기안자에게 회송.
+  // 반려 → 종결(반려). 기안자에게 회송. (후결 문서 시 '긴급 조치 사후 검토 반려' 특수 상태 지정)
   if (decision === '반려') {
-    return { ...next, status: '반려', currentSeq: seq };
+    const nextStatus = doc.isPostApproval ? '긴급 조치 사후 검토 반려' : '반려';
+    return { ...next, status: nextStatus, currentSeq: seq };
   }
   // 보류 → 진행 일시정지(그룹 미통과 유지). 상태는 진행중.
   if (decision === '보류') {
@@ -167,7 +168,7 @@ export function applyDecision(
  * 재상신 시 이전 라운드의 결정을 초기화(대기)해 새 결재 라운드를 시작한다.
  */
 export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
-  if (!['임시저장', '반려', '회수'].includes(doc.status)) {
+  if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수'].includes(doc.status)) {
     throw new ApprovalError('임시저장·반려·회수 상태에서만 상신할 수 있습니다');
   }
   if (!doc.steps.some(isBlocking)) throw new ApprovalError('결재자를 1명 이상 지정하세요');
@@ -214,7 +215,7 @@ export function matchesBox(
     case '상신':
       return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
     case '반려':
-      return doc.drafterId === userId && doc.status === '반려';
+      return doc.drafterId === userId && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려');
     case '임시':
       return doc.drafterId === userId && doc.status === '임시저장';
     case '수신': {

@@ -47,6 +47,15 @@ function migrateDoc(data: any): any {
     execution: data.execution ?? null,
     preservationPeriod: data.preservationPeriod ?? null,
     relatedDocs: data.relatedDocs ?? [],
+    isPostApproval: data.isPostApproval ?? false,
+    postApprovalReason: data.postApprovalReason ?? null,
+    postApprovalActionTaken: data.postApprovalActionTaken ?? null,
+    postApprovalNecessity: data.postApprovalNecessity ?? null,
+    postApprovalCostDetails: data.postApprovalCostDetails ?? null,
+    postApprovalFollowup: data.postApprovalFollowup ?? null,
+    postApprovedAt: data.postApprovedAt ?? null,
+    postApprovedById: data.postApprovedById ?? null,
+    postApprovedByName: data.postApprovedByName ?? null,
     steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
       kind: s.kind === '합의' ? '결재' : s.kind,
@@ -162,6 +171,24 @@ export interface ApprovalDraftInput {
   relatedDocs?: ApprovalDoc['relatedDocs'];
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
   securityLevel?: '일반' | '대외비' | '극비';
+  /** 긴급 선조치 사후 승인(후결) 여부 */
+  isPostApproval?: boolean;
+  /** 후결 긴급 사유 (종합) */
+  postApprovalReason?: string | null;
+  /** 후결 1. 선조치(긴급 조치) 내용 및 결과 */
+  postApprovalActionTaken?: string | null;
+  /** 후결 2. 긴급성 및 불가피성 소명 (Why?) */
+  postApprovalNecessity?: string | null;
+  /** 후결 3. 소요 비용 및 내역 */
+  postApprovalCostDetails?: string | null;
+  /** 후결 4. 후속 조치 및 재발 방지 대책 */
+  postApprovalFollowup?: string | null;
+  /** 후결 선조치 일시 */
+  postApprovedAt?: string | null;
+  /** 후결 선조치 승인자 ID */
+  postApprovedById?: string | null;
+  /** 후결 선조치 승인자 성명 */
+  postApprovedByName?: string | null;
 }
 
 export const approvalDocRepo = {
@@ -265,6 +292,15 @@ export const approvalDocRepo = {
       execution: input.execution ?? null,
       relatedDocs: input.relatedDocs ?? [],
       securityLevel: input.securityLevel ?? '일반',
+      isPostApproval: input.isPostApproval ?? false,
+      postApprovalReason: input.postApprovalReason ?? null,
+      postApprovalActionTaken: input.postApprovalActionTaken ?? null,
+      postApprovalNecessity: input.postApprovalNecessity ?? null,
+      postApprovalCostDetails: input.postApprovalCostDetails ?? null,
+      postApprovalFollowup: input.postApprovalFollowup ?? null,
+      postApprovedAt: input.postApprovedAt ?? null,
+      postApprovedById: input.postApprovedById ?? null,
+      postApprovedByName: input.postApprovedByName ?? null,
     });
     await persist(created);
     return created;
@@ -273,7 +309,7 @@ export const approvalDocRepo = {
   /** 문서 편집 — 임시저장(상신 전) 또는 반려·회수(재상신 전 수정). 진행중·완료는 불가. */
   async saveDraft(id: string, patch: Partial<ApprovalDraftInput>): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (!['임시저장', '반려', '회수'].includes(cur.status)) {
+    if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수'].includes(cur.status)) {
       throw new Error('임시저장·반려·회수 상태에서만 수정할 수 있습니다');
     }
     const merged = approvalDocSchema.parse({ ...cur, ...patch });

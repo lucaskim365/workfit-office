@@ -309,8 +309,8 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
                 disabled={!enabled}
                 title={enabled ? a.l : `${a.l} (준비 중)`}
                 className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow ${enabled
-                    ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
-                    : 'opacity-40 cursor-not-allowed filter grayscale'
+                  ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
+                  : 'opacity-40 cursor-not-allowed filter grayscale'
                   }`}
               >
                 <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: enabled && a.hot ? CYAN : 'transparent', color: enabled && a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>

@@ -29,8 +29,16 @@ export function DocStatusBadge({ doc, me }: { doc: ApprovalDoc; me?: string }) {
   }
 
   return (
-    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10.5px] border ${badge.toneClass}`}>
-      {badge.label}
-    </span>
+    <div className="inline-flex items-center gap-1">
+      {doc.isPostApproval && (
+        <span className="inline-flex items-center gap-0.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400">
+          <span>🚨</span>
+          <span>후결</span>
+        </span>
+      )}
+      <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10.5px] border ${badge.toneClass}`}>
+        {badge.label}
+      </span>
+    </div>
   );
 }

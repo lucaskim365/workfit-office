@@ -3,6 +3,7 @@ import type { User } from '@/domain/user/schema';
 import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType, type ApprovalRecipient, type RelatedDoc } from '@/domain/approvalDoc/schema';
 import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
+import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import { useRouteEngine, useApprovalRouteRules } from '@/features/gw/useRouteEngine';
@@ -92,6 +93,36 @@ export function ApprovalDraftModal({
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
 
+  // Post-Approval (후결) states
+  const [isPostApprovalSystemEnabled, setIsPostApprovalSystemEnabled] = useState(false);
+  const [isPostApproval, setIsPostApproval] = useState<boolean>(editDoc?.isPostApproval ?? false);
+  const [postApprovalReason, setPostApprovalReason] = useState<string>(editDoc?.postApprovalReason ?? '');
+  const [postApprovalActionTaken, setPostApprovalActionTaken] = useState<string>(editDoc?.postApprovalActionTaken ?? '');
+  const [postApprovalNecessity, setPostApprovalNecessity] = useState<string>(editDoc?.postApprovalNecessity ?? '');
+  const [postApprovalCostDetails, setPostApprovalCostDetails] = useState<string>(editDoc?.postApprovalCostDetails ?? '');
+  const [postApprovalFollowup, setPostApprovalFollowup] = useState<string>(editDoc?.postApprovalFollowup ?? '');
+  const [postApprovedAt, setPostApprovedAt] = useState<string>(editDoc?.postApprovedAt ?? '');
+  const [postApprovedById, setPostApprovedById] = useState<string>(editDoc?.postApprovedById ?? '');
+
+  useEffect(() => {
+    approvalProcessRepo.isOptionEnabled('post_approval').then((enabled) => {
+      setIsPostApprovalSystemEnabled(enabled);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (editDoc) {
+      setIsPostApproval(editDoc.isPostApproval ?? false);
+      setPostApprovalReason(editDoc.postApprovalReason ?? '');
+      setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
+      setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
+      setPostApprovalCostDetails(editDoc.postApprovalCostDetails ?? '');
+      setPostApprovalFollowup(editDoc.postApprovalFollowup ?? '');
+      setPostApprovedAt(editDoc.postApprovedAt ?? '');
+      setPostApprovedById(editDoc.postApprovedById ?? '');
+    }
+  }, [editDoc]);
+
   const initialValuesSnapshot = useRef<Record<string, FieldValue>>({});
   const isInitializedRef = useRef<string | null>(null);
 
@@ -116,12 +147,14 @@ export function ApprovalDraftModal({
       const amountChanged = amount.trim() !== (editDoc.amount != null ? String(editDoc.amount) : '');
       const filesChanged = attachments.length !== (editDoc.attachments ?? []).length;
       const valuesChanged = Object.keys(values).some((k) => values[k] !== editDoc.fieldValues?.[k]);
-      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged;
+      const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
+      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
     } else {
       const hasTitle = title.trim() !== '';
       const hasBody = body.trim() !== '';
       const hasAmount = amount.trim() !== '';
       const hasFiles = attachments.length > 0;
+      const hasPostApproval = isPostApproval || postApprovalReason.trim() !== '';
       const valuesChanged = Object.keys(values).some((k) => {
         const v = values[k];
         if (v === undefined || v === null || String(v).trim() === '') return false;
@@ -129,7 +162,7 @@ export function ApprovalDraftModal({
         if (initV !== undefined && JSON.stringify(v) === JSON.stringify(initV)) return false;
         return true;
       });
-      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged;
+      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged || hasPostApproval;
     }
   };
 
@@ -164,20 +197,13 @@ export function ApprovalDraftModal({
 
   const [scale, setScale] = useState(1);
   const rightContentRef = useRef<HTMLDivElement>(null);
-  const DESIGN_WIDTH = 960;
 
   useEffect(() => {
     const el = rightContentRef.current;
     if (!el) return;
 
     const updateScale = () => {
-      const currentWidth = el.clientWidth;
-      if (currentWidth && currentWidth < DESIGN_WIDTH) {
-        const computedScale = Math.min(1, Math.max(0.65, currentWidth / DESIGN_WIDTH));
-        setScale(computedScale);
-      } else {
-        setScale(1);
-      }
+      setScale(1);
     };
 
     updateScale();
@@ -382,6 +408,14 @@ export function ApprovalDraftModal({
         }
       : null;
 
+    const postApprovedUser = org.userById(postApprovedById);
+    const combinedReason = [
+      postApprovalActionTaken ? `[선조치 내용 및 결과]\n${postApprovalActionTaken.trim()}` : '',
+      postApprovalNecessity ? `[긴급성 및 불가피성 소명]\n${postApprovalNecessity.trim()}` : '',
+      postApprovalCostDetails ? `[소요 비용 및 내역]\n${postApprovalCostDetails.trim()}` : '',
+      postApprovalFollowup ? `[후속 조치 및 재발 방지 대책]\n${postApprovalFollowup.trim()}` : '',
+    ].filter(Boolean).join('\n\n') || postApprovalReason.trim();
+
     return {
       docType: code,
       title: title.trim(),
@@ -398,11 +432,43 @@ export function ApprovalDraftModal({
       relatedDocs,
       securityLevel,
       preservationPeriod,
+      isPostApproval: isPostApprovalSystemEnabled ? isPostApproval : false,
+      postApprovalReason: isPostApprovalSystemEnabled && isPostApproval ? combinedReason : null,
+      postApprovalActionTaken: isPostApprovalSystemEnabled && isPostApproval ? postApprovalActionTaken.trim() : null,
+      postApprovalNecessity: isPostApprovalSystemEnabled && isPostApproval ? postApprovalNecessity.trim() : null,
+      postApprovalCostDetails: isPostApprovalSystemEnabled && isPostApproval ? postApprovalCostDetails.trim() : null,
+      postApprovalFollowup: isPostApprovalSystemEnabled && isPostApproval ? postApprovalFollowup.trim() : null,
+      postApprovedAt: isPostApprovalSystemEnabled && isPostApproval ? postApprovedAt : null,
+      postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
+      postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
     };
   };
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+
+    // 후결(사후 승인) 검증
+    if (isPostApprovalSystemEnabled && isPostApproval) {
+      if (!postApprovalActionTaken.trim() && !postApprovalReason.trim()) {
+        return '후결 사후 승인 요청 시 [1. 선조치(긴급 조치) 내용 및 결과] 항목을 입력해 주세요.';
+      }
+      if (!postApprovalNecessity.trim() && !postApprovalReason.trim()) {
+        return '후결 사후 승인 요청 시 [2. 긴급성 및 불가피성 소명 (Why?)] 항목을 입력해 주세요.';
+      }
+      const totalLen = (postApprovalActionTaken + postApprovalNecessity + postApprovalCostDetails + postApprovalFollowup + postApprovalReason).trim().length;
+      if (totalLen < 50) {
+        return '후결 사후 승인 소명 및 선조치 내역은 최소 50자 이상 상세히 작성해 주세요.';
+      }
+      if (!postApprovedAt) {
+        return '선조치 일시를 입력해 주세요.';
+      }
+      if (new Date(postApprovedAt).getTime() > Date.now()) {
+        return '선조치 일시는 현재 시간보다 이전으로 설정해야 합니다.';
+      }
+      if (!postApprovedById) {
+        return '선조치 구두/임시 승인자를 선택해 주세요.';
+      }
+    }
     if (code === '휴가') {
       const pStart = values['period'];
       const pEnd = values['period__end'];
@@ -708,13 +774,21 @@ export function ApprovalDraftModal({
         }
       : null,
     preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
-  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form]);
+    isPostApproval: isPostApproval,
+    postApprovalReason: postApprovalReason,
+    postApprovalActionTaken: postApprovalActionTaken,
+    postApprovalNecessity: postApprovalNecessity,
+    postApprovalCostDetails: postApprovalCostDetails,
+    postApprovalFollowup: postApprovalFollowup,
+    postApprovedAt: postApprovedAt,
+    postApprovedById: postApprovedById,
+    postApprovedByName: org.userById(postApprovedById)?.name ?? null,
+  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40" onClick={handleAttemptClose}>
       <div
-        className={`flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${isFixed ? 'max-w-2xl' : 'max-w-[75vw]'
-          }`}
+        className={`flex h-[82vh] max-h-[82vh] w-full flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl transition-all duration-300 ${isFixed ? 'max-w-3xl' : 'w-[90vw] max-w-[1200px]'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
@@ -752,6 +826,147 @@ export function ApprovalDraftModal({
               }}
               className="space-y-4"
             >
+              {/* 후결(사후 승인) 옵션 토글 스위치 — 우측 상단 콤팩트 배치 */}
+              {isPostApprovalSystemEnabled && (
+                <div className="flex justify-end">
+                  <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/5 shadow-xs transition-all">
+                    <span className="text-[11.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1">
+                      <span>🚨</span>
+                      <span>긴급 선조치 사후 승인 (후결) 요청</span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isPostApproval}
+                      onClick={() => setIsPostApproval(!isPostApproval)}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                        isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          isPostApproval ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 선조치 내용 공통 섹션 (후결 스위치 ON일 때 동적 노출) */}
+              {isPostApprovalSystemEnabled && isPostApproval && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-500/5 p-4 flex flex-col gap-3.5 shadow-xs animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-rose-500/20 pb-2">
+                    <span className="text-[12.5px] font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                      <span>📋</span>
+                      <span>선조치 내용 (후결 사후 승인 필수 증빙 항목)</span>
+                    </span>
+                    <span className="rounded bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400">
+                      사후 감사 증빙 필수
+                    </span>
+                  </div>
+
+                  {/* 1. 선조치(긴급 조치) 내용 및 결과 (텍스트, 전체) */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                      <span>1. 선조치(긴급 조치) 내용 및 결과</span>
+                      <span className="text-rose-500">*</span>
+                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(언제, 어떤 상황에서, 어떤 조치를 취했는지 상세 팩트)</span>
+                    </label>
+                    <textarea
+                      value={postApprovalActionTaken}
+                      onChange={(e) => setPostApprovalActionTaken(e.target.value)}
+                      placeholder="예: 8월 5일 오후 2시 공장 메인 서버 다운으로 긴급 외주 업체를 불러 서버 모듈 교체 및 복구 완료."
+                      rows={2}
+                      className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  {/* 2. 긴급성 및 불가피성 소명 (Why?) (텍스트, 전체) */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                      <span>2. 긴급성 및 불가피성 소명 (Why?)</span>
+                      <span className="text-rose-500">*</span>
+                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(사전 결재 미진행 이유 및 미선조치 시 예상 치명적 손해)</span>
+                    </label>
+                    <textarea
+                      value={postApprovalNecessity}
+                      onChange={(e) => setPostApprovalNecessity(e.target.value)}
+                      placeholder="왜 사전에 결재를 올릴 시간이 없었는지, 만약 선조치하지 않고 결재를 기다렸다면 회사에 발생했을 손해(생산 중단, 보안 사고 등)를 설명하세요."
+                      rows={2}
+                      className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  {/* 3. 소요 비용 및 후속 조치 (2열) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>3. 소요 비용 및 집행 내역</span>
+                        <span className="text-[10.5px] font-normal text-ink3">(영수증/견적서 하단 첨부 필수)</span>
+                      </label>
+                      <textarea
+                        value={postApprovalCostDetails}
+                        onChange={(e) => setPostApprovalCostDetails(e.target.value)}
+                        placeholder="선조치 과정에서 발생한 정확한 금액과 수리비/계약 내역"
+                        rows={2}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>4. 후속 조치 및 재발 방지 대책</span>
+                        <span className="text-[10.5px] font-normal text-ink3">(예방 대책 및 잔여 업무)</span>
+                      </label>
+                      <textarea
+                        value={postApprovalFollowup}
+                        onChange={(e) => setPostApprovalFollowup(e.target.value)}
+                        placeholder="향후 유사 비상 상황 예방 대책 및 미마무리 잔여 업무 계획"
+                        rows={2}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-rose-500/15">
+                    {/* 선조치 일시 (날짜, 2열, 현재 시간 이전이어야 함) */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>선조치 일시</span>
+                        <span className="text-rose-500">*</span>
+                        <span className="text-[10px] font-normal text-rose-500">(현재 시간 이전 필수)</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={postApprovedAt}
+                        onChange={(e) => setPostApprovedAt(e.target.value)}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    {/* 선조치 승인자 (사용자, 2열) */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>선조치 구두/임시 승인자</span>
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={postApprovedById}
+                        onChange={(e) => setPostApprovedById(e.target.value)}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-medium text-ink outline-none focus:border-rose-500"
+                      >
+                        <option value="">-- 선조치 승인자 선택 --</option>
+                        {org.users.filter((u) => u.status === '사용').map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.dept} / {u.position})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-4 gap-3">
                 <div className="col-span-2">
                   <Field label="제목">
@@ -977,28 +1192,50 @@ export function ApprovalDraftModal({
         </div>
       </div>
 
-
-        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3">
-          {/* 에러 알림 메시지를 하단 버튼 라인 좌측에 배치 */}
+        {/* 고정 하단 메뉴 바 (모달 카드 내부 하단 고정) */}
+        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3 bg-panel">
+          {/* 에러 알림 메시지 (에러가 있을 때만 공간을 차지하도록 수정) */}
           <div className="flex-1 min-w-0">
-            {error && (
+            {error ? (
               <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] font-semibold text-red-500 animate-fade-in truncate max-w-[420px]" title={error}>
                 ⚠️ {error}
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={handleCancelClick} disabled={busy} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50">취소</button>
             <button
+              type="button"
+              onClick={handleCancelClick}
+              disabled={busy}
+              className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
               onClick={() => setShowPreview(true)}
               disabled={busy}
               className="rounded-lg border border-border-hi bg-panel px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
             >
-              문서 미리보기
+              미리보기
             </button>
-            {!isResubmit && <button onClick={onSaveDraft} disabled={busy} className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50">임시저장</button>}
-            <button onClick={onSubmit} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">{busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}</button>
+            <button
+              type="button"
+              onClick={onSaveDraft}
+              disabled={busy}
+              className="rounded-lg border border-border-hi bg-panel-alt px-3.5 py-2 text-[12.5px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
+            >
+              {isResubmit ? '저장' : '임시저장'}
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={busy}
+              className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? '처리 중…' : isResubmit ? '재상신' : '상신'}
+            </button>
           </div>
         </div>
       </div>

@@ -30,8 +30,8 @@ export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
     category: '결재 프로세스',
     name: '사후 결재 (후결)',
     description: '긴급건 또는 선조치가 필요한 업무 서식에 대해 선집행 후 사후 결재(후결) 절차를 진행할 수 있도록 허용합니다.',
-    enabled: false,
-    isImplemented: false,
+    enabled: true,
+    isImplemented: true,
   },
   {
     id: 'pre_approval',
