@@ -1190,16 +1190,17 @@ export function ApprovalDraftModal({
             </div>
           </div>
         </div>
+      </div>
 
         {/* 고정 하단 메뉴 바 (모달 카드 내부 하단 고정) */}
         <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-3 bg-panel">
-          {/* 에러 알림 메시지를 하단 버튼 라인 좌측에 배치 */}
+          {/* 에러 알림 메시지 (에러가 있을 때만 공간을 차지하도록 수정) */}
           <div className="flex-1 min-w-0">
-            {error && (
+            {error ? (
               <div className="rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] font-semibold text-red-500 animate-fade-in truncate max-w-[420px]" title={error}>
                 ⚠️ {error}
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -1298,7 +1299,6 @@ export function ApprovalDraftModal({
         />
       )}
     </div>
-  </div>
   );
 }
 
