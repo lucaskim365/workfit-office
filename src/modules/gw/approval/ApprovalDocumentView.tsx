@@ -302,8 +302,45 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} />
+        <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
       </div>
+
+      {/* 긴급 선조치 사후 승인 (후결) 정보 카드 */}
+      {doc.isPostApproval && (
+        <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-[12px] print-avoid-break">
+          <div className="flex items-center justify-between border-b border-rose-500/20 pb-2 mb-2.5">
+            <span className="font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5 text-[12.5px]">
+              <span>🚨</span>
+              <span>긴급 선조치 내용 (후결 사후 승인 문서)</span>
+            </span>
+            <span className={`px-2 py-0.5 rounded text-[10.5px] font-extrabold ${
+              doc.status === '긴급 조치 사후 검토 반려'
+                ? 'bg-rose-600 text-white'
+                : 'bg-rose-500/15 text-rose-700'
+            }`}>
+              {doc.status === '긴급 조치 사후 검토 반려' ? '🚨 사후 검토 반려됨 (감사 영구 보존)' : '사후 감사 대상'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 text-[11.5px] mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-[#555] shrink-0">선조치 일시:</span>
+              <span className="font-semibold text-rose-700">{doc.postApprovedAt ? korDate(doc.postApprovedAt) + ' ' + new Date(doc.postApprovedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-[#555] shrink-0">구두/임시 승인자:</span>
+              <span className="font-semibold text-ink">{doc.postApprovedByName ?? '—'}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-rose-500/15 pt-2">
+            <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 선조치 배경:</span>
+            <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+              {doc.postApprovalReason ?? '—'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <ApprovalDocMetaTable
         doc={doc}

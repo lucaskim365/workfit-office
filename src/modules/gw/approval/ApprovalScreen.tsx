@@ -214,9 +214,9 @@ export default function ApprovalScreen() {
         </button>
       </div>
 
-      <div className={`mt-5 grid transition-all duration-300 gap-4 items-start ${isListCollapsed ? 'grid-cols-[160px_1fr]' : 'grid-cols-[160px_280px_1fr]'}`}>
-        {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거) */}
-        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0">
+      <div className={`mt-5 grid transition-all duration-300 gap-4 items-start ${isListCollapsed ? 'grid-cols-[160px_1fr]' : 'grid-cols-[160px_320px_1fr]'}`}>
+        {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거 & 스크롤 시 상단 고정) */}
+        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-4">
           <button
             onClick={() => setModal({})}
             className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm mb-0.5"
@@ -304,7 +304,7 @@ export default function ApprovalScreen() {
 
         {/* 중: 목록 (목록 접기 시 hidden 처리) */}
         {!isListCollapsed && (
-          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 w-80 shadow-sm self-start animate-fadeIn sticky top-4">
+          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col w-full min-w-0 shadow-sm self-start animate-fadeIn sticky top-4">
             {/* 목록 헤더 */}
             <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
               <div className="flex items-center gap-2">

@@ -28,6 +28,7 @@ const STATUS_TONE: Record<DocStatus, string> = {
   진행중: 'bg-blue/12 text-blue',
   완료: 'bg-teal/15 text-teal',
   반려: 'bg-red-500/12 text-red-500',
+  '긴급 조치 사후 검토 반려': 'bg-rose-600 text-white font-extrabold',
   회수: 'bg-amber/15 text-amber',
   삭제: 'bg-red-500/12 text-red-500',
 };

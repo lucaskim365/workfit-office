@@ -20,7 +20,7 @@ import { z } from 'zod';
  */
 export const DOC_TYPES = ['기안', '품의', '지출결의', '휴가'] as const;
 /** 문서 상태(§4.4 상태머신). */
-export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제'] as const;
+export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제', '긴급 조치 사후 검토 반려'] as const;
 /** 결재 구분 — 각 결재선 노드의 역할(§4.2). */
 export const STEP_KINDS = ['결재', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
@@ -181,6 +181,16 @@ export const approvalDocSchema = z.object({
   securityLevel: z.enum(DOC_SECURITY_LEVELS).default('일반'),
   /** 연결된 관련 기결재 문서 리스트 */
   relatedDocs: z.array(relatedDocSchema).default([]),
+  /** 긴급 선조치 사후 승인(후결) 여부 */
+  isPostApproval: z.boolean().default(false),
+  /** 후결 - 긴급 사유 */
+  postApprovalReason: z.string().nullable().optional(),
+  /** 후결 - 선조치 일시 (ISO String) */
+  postApprovedAt: z.string().nullable().optional(),
+  /** 후결 - 선조치 구두/임시 승인자 ID */
+  postApprovedById: z.string().nullable().optional(),
+  /** 후결 - 선조치 구두/임시 승인자 성명 (스냅샷) */
+  postApprovedByName: z.string().nullable().optional(),
   /** 현재 활성 단계 seq(도출 캐시, 목록 성능용). 종결이면 마지막 seq. */
   currentSeq: z.number().default(0),
   createdAt: z.string().nullable().default(null),

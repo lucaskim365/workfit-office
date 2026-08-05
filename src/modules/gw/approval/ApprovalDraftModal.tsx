@@ -3,6 +3,7 @@ import type { User } from '@/domain/user/schema';
 import { type ApprovalDoc, type ApprovalStep, type LeaveForm, type LeaveType, type ApprovalRecipient, type RelatedDoc } from '@/domain/approvalDoc/schema';
 import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
+import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import { useRouteEngine, useApprovalRouteRules } from '@/features/gw/useRouteEngine';
@@ -91,6 +92,19 @@ export function ApprovalDraftModal({
 
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
+
+  // Post-Approval (후결) states
+  const [isPostApprovalSystemEnabled, setIsPostApprovalSystemEnabled] = useState(false);
+  const [isPostApproval, setIsPostApproval] = useState<boolean>(editDoc?.isPostApproval ?? false);
+  const [postApprovalReason, setPostApprovalReason] = useState<string>(editDoc?.postApprovalReason ?? '');
+  const [postApprovedAt, setPostApprovedAt] = useState<string>(editDoc?.postApprovedAt ?? '');
+  const [postApprovedById, setPostApprovedById] = useState<string>(editDoc?.postApprovedById ?? '');
+
+  useEffect(() => {
+    approvalProcessRepo.isOptionEnabled('post_approval').then((enabled) => {
+      setIsPostApprovalSystemEnabled(enabled);
+    });
+  }, []);
 
   const initialValuesSnapshot = useRef<Record<string, FieldValue>>({});
   const isInitializedRef = useRef<string | null>(null);
@@ -382,6 +396,8 @@ export function ApprovalDraftModal({
         }
       : null;
 
+    const postApprovedUser = org.userById(postApprovedById);
+
     return {
       docType: code,
       title: title.trim(),
@@ -398,11 +414,32 @@ export function ApprovalDraftModal({
       relatedDocs,
       securityLevel,
       preservationPeriod,
+      isPostApproval: isPostApprovalSystemEnabled ? isPostApproval : false,
+      postApprovalReason: isPostApprovalSystemEnabled && isPostApproval ? postApprovalReason.trim() : null,
+      postApprovedAt: isPostApprovalSystemEnabled && isPostApproval ? postApprovedAt : null,
+      postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
+      postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
     };
   };
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+
+    // 후결(사후 승인) 검증
+    if (isPostApprovalSystemEnabled && isPostApproval) {
+      if (!postApprovalReason.trim() || postApprovalReason.trim().length < 50) {
+        return '후결 사후 승인 요청 시 긴급 사유 및 선조치 배경을 최소 50자 이상 입력해야 합니다.';
+      }
+      if (!postApprovedAt) {
+        return '선조치 일시를 입력해 주세요.';
+      }
+      if (new Date(postApprovedAt).getTime() > Date.now()) {
+        return '선조치 일시는 현재 시간보다 이전으로 설정해야 합니다.';
+      }
+      if (!postApprovedById) {
+        return '선조치 구두/임시 승인자를 선택해 주세요.';
+      }
+    }
     if (code === '휴가') {
       const pStart = values['period'];
       const pEnd = values['period__end'];
@@ -708,7 +745,12 @@ export function ApprovalDraftModal({
         }
       : null,
     preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
-  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form]);
+    isPostApproval: isPostApproval,
+    postApprovalReason: postApprovalReason,
+    postApprovedAt: postApprovedAt,
+    postApprovedById: postApprovedById,
+    postApprovedByName: org.userById(postApprovedById)?.name ?? null,
+  }), [editDoc, code, title, body, me, amount, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovedAt, postApprovedById, org]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onClick={handleAttemptClose}>
@@ -752,6 +794,107 @@ export function ApprovalDraftModal({
               }}
               className="space-y-4"
             >
+              {/* 후결(사후 승인) 옵션 토글 스위치 — 시스템 설정 ON 시에만 표시 */}
+              {isPostApprovalSystemEnabled && (
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/5 transition-all">
+                  <div className="flex flex-col">
+                    <span className="text-[12.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                      <span>🚨</span>
+                      <span>긴급 선조치 사후 승인 (후결) 요청</span>
+                    </span>
+                    <span className="text-[10.5px] text-ink3 mt-0.5">
+                      장애 복구, 공장 수리 등 긴급 현장 선조치 후 사후 결재를 올리는 경우 스위치를 켜세요.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isPostApproval}
+                    onClick={() => setIsPostApproval(!isPostApproval)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        isPostApproval ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+
+              {/* 선조치 내용 공통 섹션 (후결 스위치 ON일 때 동적 노출) */}
+              {isPostApprovalSystemEnabled && isPostApproval && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-500/5 p-4 flex flex-col gap-3.5 shadow-xs animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-rose-500/20 pb-2">
+                    <span className="text-[12.5px] font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                      <span>📋</span>
+                      <span>선조치 내용 (후결 사후 승인 필수 증빙 항목)</span>
+                    </span>
+                    <span className="rounded bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400">
+                      사후 감사 증빙 필수
+                    </span>
+                  </div>
+
+                  {/* 1. 긴급 사유 (텍스트, 전체, 최소 50자 이상) */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                      <span>긴급 사유 및 선조치 배경</span>
+                      <span className="text-rose-500">*</span>
+                      <span className="text-[10.5px] font-normal text-ink3 ml-1">(최소 50자 이상 상세 기재)</span>
+                    </label>
+                    <textarea
+                      value={postApprovalReason}
+                      onChange={(e) => setPostApprovalReason(e.target.value)}
+                      placeholder="정식 사전 결재를 거치지 않고 선조치를 진행하게 된 긴급한 배경(서버 다운, 공장 고장 수리 등)을 상세히 입력하세요."
+                      rows={3}
+                      className="w-full rounded-lg border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-rose-500"
+                    />
+                    <div className="flex justify-end text-[10px] text-ink3 font-mono">
+                      {postApprovalReason.trim().length} / 50자 이상
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* 2. 선조치 일시 (날짜, 2열, 현재 시간 이전이어야 함) */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>선조치 일시</span>
+                        <span className="text-rose-500">*</span>
+                        <span className="text-[10px] font-normal text-rose-500">(현재 시간 이전 필수)</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={postApprovedAt}
+                        onChange={(e) => setPostApprovedAt(e.target.value)}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    {/* 3. 선조치 승인자 (사용자, 2열) */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11.5px] font-bold text-ink flex items-center gap-1">
+                        <span>선조치 구두/임시 승인자</span>
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={postApprovedById}
+                        onChange={(e) => setPostApprovedById(e.target.value)}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-medium text-ink outline-none focus:border-rose-500"
+                      >
+                        <option value="">-- 선조치 승인자 선택 --</option>
+                        {org.users.filter((u) => u.status === '사용').map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.dept} / {u.position})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-4 gap-3">
                 <div className="col-span-2">
                   <Field label="제목">

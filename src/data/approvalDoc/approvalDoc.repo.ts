@@ -162,6 +162,16 @@ export interface ApprovalDraftInput {
   relatedDocs?: ApprovalDoc['relatedDocs'];
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
   securityLevel?: '일반' | '대외비' | '극비';
+  /** 긴급 선조치 사후 승인(후결) 여부 */
+  isPostApproval?: boolean;
+  /** 후결 긴급 사유 */
+  postApprovalReason?: string | null;
+  /** 후결 선조치 일시 */
+  postApprovedAt?: string | null;
+  /** 후결 선조치 승인자 ID */
+  postApprovedById?: string | null;
+  /** 후결 선조치 승인자 성명 */
+  postApprovedByName?: string | null;
 }
 
 export const approvalDocRepo = {
