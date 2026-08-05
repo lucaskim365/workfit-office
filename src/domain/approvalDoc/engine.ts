@@ -187,13 +187,30 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
  * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */
-export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, userDeptName?: string): boolean {
+export function matchesBox(
+  doc: ApprovalDoc,
+  userId: string,
+  box: ApprovalBox,
+  userDeptName?: string,
+  absentApproverIds?: string[]
+): boolean {
   if (doc.status === '삭제') {
     return box === '삭제' && doc.drafterId === userId;
   }
   switch (box) {
-    case '대기':
-      return doc.status === '진행중' && doc.steps.some((s) => s.approverId === userId && s.kind !== '참조');
+    case '대기': {
+      if (doc.status !== '진행중') return false;
+      const acts = activeSteps(doc);
+      // 1) 직접 현재 활성 결재자인 경우
+      const isDirectActive = acts.some((s) => s.approverId === userId && s.kind !== '참조');
+      if (isDirectActive) return true;
+      // 2) 대결권자로 위임받은 원결재자가 현재 활성 결재자인 경우 (Dual-Routing)
+      if (absentApproverIds && absentApproverIds.length > 0) {
+        const isDelegateActive = acts.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
+        if (isDelegateActive) return true;
+      }
+      return false;
+    }
     case '상신':
       return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
     case '반려':
@@ -230,11 +247,14 @@ export function matchesBox(doc: ApprovalDoc, userId: string, box: ApprovalBox, u
       }
       return false;
     }
+    case '후열':
+      return doc.status === '완료' && doc.steps.some((s) => s.delegatedFromId === userId);
     case '완료':
       return doc.status === '완료' && (doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId));
     case '삭제':
       return false;
   }
+  return false;
 }
 
 

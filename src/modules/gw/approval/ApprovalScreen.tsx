@@ -11,6 +11,7 @@ import {
   useDeleteToTrash,
   useRestoreFromTrash,
   usePermanentlyDelete,
+  useConfirmPostRead,
   useBatchDecideStep,
   useBatchRestoreFromTrash,
   useBatchPermanentlyDelete,
@@ -23,6 +24,8 @@ import { DocStatusBadge } from './components/ApprovalBadges';
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { absenceRepo } from '@/data/absence/absence.repo';
+import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
 
 /**
@@ -38,6 +41,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   수신: '수신함',
   참조: '참조함',
   시행: '시행함',
+  후열: '후열함',
   완료: '완료함',
   삭제: '휴지통',
 };
@@ -234,7 +238,7 @@ export default function ApprovalScreen() {
           {[
             { title: '결재할 문서', boxes: ['대기'] as const, titleBg: 'bg-panel-alt text-ink2' },
             { title: '내가 올린 문서', boxes: ['상신', '반려'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '공유 문서', boxes: ['수신', '참조', '시행'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            { title: '공유 문서', boxes: ['수신', '참조', '시행', '후열'] as const, titleBg: 'bg-panel-alt text-ink2' },
             { title: '관리', boxes: ['완료', '삭제'] as const, titleBg: 'bg-panel-alt text-ink2' },
           ].map((g) => (
             <div key={g.title} className="flex flex-col gap-1.5">
@@ -246,12 +250,17 @@ export default function ApprovalScreen() {
                   const executionCount = (byBox['시행'] ?? []).filter(
                     (d) => d.execution?.status === '대기중' || d.execution?.status === '처리중'
                   ).length;
+                  const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
+                    (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)
+                  ).length;
 
                   const hasBadge = b === '대기'
                     ? (byBox['대기'] ?? []).length > 0
                     : b === '시행'
                       ? executionCount > 0
-                      : (counts[b] ?? 0) > 0;
+                      : b === '후열'
+                        ? (counts['후열'] ?? 0) > 0
+                        : (counts[b] ?? 0) > 0;
 
                   const badgeCount = b === '대기'
                     ? (myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length)
@@ -267,7 +276,11 @@ export default function ApprovalScreen() {
                       ? (executionCount > 0
                         ? 'bg-amber-500 text-white animate-pulse'
                         : 'bg-ink3/15 text-ink2')
-                      : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+                      : b === '후열'
+                        ? (unconfirmedPostReadCount > 0
+                          ? 'bg-amber-500 text-white animate-pulse'
+                          : 'bg-ink3/15 text-ink2')
+                        : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   return (
                     <button
@@ -291,7 +304,7 @@ export default function ApprovalScreen() {
 
         {/* 중: 목록 (목록 접기 시 hidden 처리) */}
         {!isListCollapsed && (
-          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 max-h-[calc(100vh-160px)] shadow-sm self-start animate-fadeIn">
+          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col shrink-0 w-80 shadow-sm self-start animate-fadeIn sticky top-4">
             {/* 목록 헤더 */}
             <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
               <div className="flex items-center gap-2">
@@ -366,8 +379,8 @@ export default function ApprovalScreen() {
               </div>
             )}
 
-            {/* 목록 데이터 스크롤 영역 */}
-            <div className="max-h-[500px] overflow-y-auto">
+            {/* 목록 데이터 영역 */}
+            <div>
               {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
               {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
               {filteredList.map((d) => {
@@ -462,7 +475,7 @@ export default function ApprovalScreen() {
         )}
 
         {/* 우: 상세 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel h-full">
+        <div className="overflow-hidden rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
           {selDoc ? (
             <DocDetail
               doc={selDoc}
@@ -524,16 +537,58 @@ function DocDetail({
   const deleteM = useDeleteToTrash();
   const restoreM = useRestoreFromTrash();
   const permDeleteM = usePermanentlyDelete();
+  const confirmPostReadM = useConfirmPostRead();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approveComment, setApproveComment] = useState('');
   const [err, setErr] = useState('');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
-  const busy = decide.isPending || submitM.isPending || recallM.isPending || deleteM.isPending || restoreM.isPending || permDeleteM.isPending;
+  const busy = decide.isPending || submitM.isPending || recallM.isPending || deleteM.isPending || restoreM.isPending || permDeleteM.isPending || confirmPostReadM.isPending;
 
-  // 내 차례(활성 결재자)의 seq.
-  const mySeq = useMemo(() => activeSteps(doc).find((s) => s.approverId === me)?.seq ?? null, [doc, me]);
+  const postReadStep = useMemo(() => doc.steps.find((s) => s.delegatedFromId === me), [doc.steps, me]);
+
+  // 내 차례(직접 활성 결재자 또는 대결자)의 seq.
+  const [mySeq, setMySeq] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function resolveMySeq() {
+      if (!doc || !me) {
+        if (isMounted) setMySeq(null);
+        return;
+      }
+      const acts = activeSteps(doc);
+      // 1) 본인이 직접 결재자인 경우
+      const direct = acts.find((s) => s.approverId === me && s.kind !== '참조');
+      if (direct) {
+        if (isMounted) setMySeq(direct.seq);
+        return;
+      }
+      // 2) 본인이 대결자로 지정된 부재자의 결재 단계인 경우 (옵션 ON 상태일 때만)
+      const isProxyEnabled = await approvalProcessRepo.isOptionEnabled('proxy_approval');
+      if (isProxyEnabled) {
+        for (const actStep of acts) {
+          if (actStep.kind === '참조') continue;
+          const abs = await absenceRepo.get(actStep.approverId);
+          if (abs.isAbsent && abs.delegateUserId === me) {
+            const now = new Date();
+            const startValid = !abs.startDate || now >= new Date(abs.startDate);
+            const endValid = !abs.endDate || now <= new Date(abs.endDate);
+            if (startValid && endValid) {
+              if (isMounted) setMySeq(actStep.seq);
+              return;
+            }
+          }
+        }
+      }
+      if (isMounted) setMySeq(null);
+    }
+    resolveMySeq();
+    return () => {
+      isMounted = false;
+    };
+  }, [doc, me]);
   const iAmDrafter = doc.drafterId === me;
   const canRecall = iAmDrafter && doc.status === '진행중' && !doc.steps.some((s) => s.kind !== '참조' && s.decision === '승인');
   const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '회수');
@@ -713,7 +768,7 @@ function DocDetail({
       </div>
 
       {/* 헤더 아래 본문 영역 */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="px-5 py-4">
         {/* 수신/참조자 목록 (슬림 인라인 배치 & 수신/참조 태그 명시) */}
         {((doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조')) && (
           <div className="mb-2.5 flex items-center gap-2 text-[11px] leading-none">
@@ -846,7 +901,24 @@ function DocDetail({
             <button onClick={() => run(() => submitM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">재상신</button>
           </>
         )}
-        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && (
+        {postReadStep && (
+          postReadStep.postReadAt ? (
+            <span className="rounded-lg bg-teal/15 px-3 py-1.5 text-[12px] font-bold text-teal border border-teal/30 flex items-center gap-1.5">
+              <span>✓</span>
+              <span>후열 확인 완료 ({fmtDateTime(postReadStep.postReadAt)})</span>
+            </span>
+          ) : (
+            <button
+              onClick={() => run(() => confirmPostReadM.mutateAsync({ id: doc.id, seq: postReadStep.seq, userId: me }))}
+              disabled={busy}
+              className="rounded-lg bg-amber-500 text-white px-4 py-2 text-[12.5px] font-bold shadow-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>👁️</span>
+              <span>후열 확인</span>
+            </button>
+          )
+        )}
+        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && !postReadStep && (
           <span className="text-[11px] text-ink3">
             {doc.status === '완료' ? '결재가 완료된 문서입니다.' : doc.status === '진행중' ? '다른 결재자의 차례입니다.' : ''}
           </span>

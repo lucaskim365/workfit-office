@@ -154,6 +154,16 @@ export function useDelegateStep() {
   });
 }
 
+/** 후열 확인(원결재자 사후 확인). */
+export function useConfirmPostRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, seq, userId }: { id: string; seq: number; userId: string }) =>
+      approvalDocRepo.confirmPostRead(id, seq, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
+
 /** 휴지통으로 이동. */
 export function useDeleteToTrash() {
   const qc = useQueryClient();

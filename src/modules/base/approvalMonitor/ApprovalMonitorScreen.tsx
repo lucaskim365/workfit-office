@@ -135,7 +135,7 @@ export default function ApprovalMonitorScreen() {
           </div>
 
           {/* 테이블 리스트 */}
-          <div className="flex-1 overflow-y-auto content-scroll">
+          <div className="flex-1">
             {isLoading ? (
               <div className="py-12 text-center text-[12px] text-ink3">로딩 중…</div>
             ) : filtered.length === 0 ? (
@@ -214,7 +214,7 @@ export default function ApprovalMonitorScreen() {
                           총 {blockingSteps.length}단계
                         </span>
                       </div>
-                      <div className="space-y-2 max-h-[300px] overflow-y-auto content-scroll pr-1">
+                      <div className="space-y-2">
                         {blockingSteps.map((s, idx) => {
                           const displaySeq = idx + 1;
                           const isCurrent = selDoc.status === '진행중' && currentApproverIds(selDoc).includes(s.approverId);

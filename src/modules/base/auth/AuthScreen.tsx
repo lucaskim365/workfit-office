@@ -83,7 +83,7 @@ export default function AuthScreen() {
               className="h-8 flex-1 rounded-md border border-border-hi bg-panel px-3 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal"
             />
           </div>
-          <div className="max-h-[300px] overflow-y-auto">
+          <div>
             {filteredGroups.map((g) => {
               const on = g.code === selected;
               return (

@@ -10,6 +10,7 @@ import {
   applyDecision,
   byRecent,
   isActiveApprover,
+  activeSteps,
   matchesBox,
   recall as recallDoc,
   submit as submitDoc,
@@ -20,6 +21,8 @@ import { counterRepo } from '@/data/counter/counter.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
+import { absenceRepo } from '@/data/absence/absence.repo';
+import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 
 /**
  * 전자결재 문서 Repository — 채번(counters) + **순수 엔진**(domain/approvalDoc/engine)
@@ -96,9 +99,43 @@ async function getOrThrow(id: string): Promise<ApprovalDoc> {
 
 const now = () => new Date().toISOString();
 
-/** 결재선 노드 seq 의 결재자가 userId 인지(권한 검증용). */
-function stepBelongsTo(d: ApprovalDoc, seq: number, userId: string): boolean {
-  return d.steps.some((s) => s.seq === seq && s.approverId === userId);
+
+/** 동시성 락 및 결재자/대결자 권한 검증. */
+async function verifyApproverOrDelegate(
+  doc: ApprovalDoc,
+  seq: number,
+  userId: string
+): Promise<{ isDirect: boolean; isDelegate: boolean; originalApproverId: string }> {
+  const target = doc.steps.find((s) => s.seq === seq);
+  if (!target) {
+    throw new Error('결재선 노드를 찾을 수 없습니다.');
+  }
+  // Concurrency Lock: 이미 승인/반려/처리 완료된 경우
+  if (target.decision !== '대기' && target.decision !== '보류') {
+    throw new Error('이미 승인되거나 처리된 결재 단계입니다.');
+  }
+  const isCurrentActive = activeSteps(doc).some((s) => s.seq === seq);
+  if (!isCurrentActive) {
+    throw new Error('현재 활성 상태인 결재 단계가 아닙니다.');
+  }
+
+  // 1. 직접 본인이 결재자인 경우
+  if (target.approverId === userId) {
+    return { isDirect: true, isDelegate: false, originalApproverId: userId };
+  }
+
+  // 2. 본인이 부재 중인 원 결재자의 활성 대결자로 지정되어 있는 경우 (Proxy - 서식 범위 및 금액 제한 검증 포함)
+  const isProxyEnabled = await approvalProcessRepo.isOptionEnabled('proxy_approval');
+  if (isProxyEnabled) {
+    const absenceCheck = await absenceRepo.isCurrentlyAbsent(target.approverId, doc.docType, doc.amount);
+    if (absenceCheck.isAbsent && absenceCheck.delegateUserId === userId) {
+      return { isDirect: false, isDelegate: true, originalApproverId: target.approverId };
+    } else if (absenceCheck.blockReason) {
+      throw new Error(`대결 결재 불가: ${absenceCheck.blockReason}`);
+    }
+  }
+
+  throw new Error('결재 권한이 없습니다 (본인 차례이거나 지정 대결자가 아닙니다).');
 }
 
 /** 임시저장 신규 문서 초안(시스템 필드 제외). */
@@ -158,6 +195,36 @@ export const approvalDocRepo = {
     const depts = await departmentRepo.list();
     const userDeptObj = depts.find((d) => d.name === user?.dept);
     const userDeptNameOrId = userDeptObj ? `${user?.dept}||${userDeptObj.id}` : user?.dept;
+
+    // 대기함 조회 시: 본인을 대결자로 지정해둔 활성 부재자 ID 목록 도출 (Dual-Routing - 서식 범위 검증 포함)
+    const isProxyEnabled = await approvalProcessRepo.isOptionEnabled('proxy_approval');
+    if (box === '대기' && isProxyEnabled) {
+      const allAbsences = await Promise.all(users.map((u) => absenceRepo.get(u.id)));
+      const now = new Date();
+
+      return rows
+        .filter((d) => {
+          const docAbsentApproverIds = allAbsences
+            .filter((cfg) => {
+              if (!cfg.isAbsent || cfg.delegateUserId !== userId) return false;
+              if (cfg.startDate && now < new Date(cfg.startDate)) return false;
+              if (cfg.endDate && now > new Date(cfg.endDate)) return false;
+              // 서식 범위 검증
+              if (cfg.scope === 'SPECIFIC_FORMS' && (!cfg.allowedDocTypes || !cfg.allowedDocTypes.includes(d.docType))) {
+                return false;
+              }
+              // 최고 금액 제한 검증
+              if (d.amount != null && cfg.maxDelegateAmount != null && cfg.maxDelegateAmount > 0) {
+                if (d.amount > cfg.maxDelegateAmount) return false;
+              }
+              return true;
+            })
+            .map((cfg) => cfg.userId);
+
+          return matchesBox(d, userId, box, userDeptNameOrId, docAbsentApproverIds);
+        })
+        .sort(byRecent);
+    }
 
     return rows.filter((d) => matchesBox(d, userId, box, userDeptNameOrId)).sort(byRecent);
   },
@@ -267,26 +334,36 @@ export const approvalDocRepo = {
     return next;
   },
 
-  /** 승인 — 활성 단계 결재자만(엔진 위임). */
+  /** 승인 — 활성 단계 결재자 또는 대결자 (동시성 락 & 대결 처리). */
   async approve(id: string, seq: number, userId: string, comment = ''): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (!isActiveApprover(cur, userId) || !stepBelongsTo(cur, seq, userId)) {
-      throw new Error('결재 권한이 없습니다(본인 차례 아님)');
-    }
-    const users = await userRepo.list();
-    const approverUser = users.find((u) => u.id === userId);
+    const auth = await verifyApproverOrDelegate(cur, seq, userId);
 
-    const next = applyDecision(cur, seq, '승인', { at: now(), comment });
+    const users = await userRepo.list();
+    const actingUser = users.find((u) => u.id === userId);
+
+    let docToProcess = cur;
+    // 대결자인 경우: approverId를 대결자로 교체하고 delegatedFromId에 원결재자 기록
+    if (auth.isDelegate) {
+      docToProcess = {
+        ...cur,
+        steps: cur.steps.map((s) =>
+          s.seq === seq ? { ...s, approverId: userId, delegatedFromId: auth.originalApproverId } : s
+        ),
+      };
+    }
+
+    const next = applyDecision(docToProcess, seq, '승인', { at: now(), comment });
     next.steps = next.steps.map((s) => {
       if (s.seq === seq && s.approverId === userId) {
         return {
           ...s,
-          signUrl: approverUser?.signUrl ?? null,
-          sealUrl: approverUser?.sealUrl ?? null,
-          signType: approverUser?.signType ?? null,
-          approverName: approverUser?.name ?? null,
-          approverPos: approverUser?.position ?? null,
-          approverDept: approverUser?.dept ?? null,
+          signUrl: actingUser?.signUrl ?? null,
+          sealUrl: actingUser?.sealUrl ?? null,
+          signType: actingUser?.signType ?? null,
+          approverName: actingUser?.name ?? null,
+          approverPos: actingUser?.position ?? null,
+          approverDept: actingUser?.dept ?? null,
         };
       }
       return s;
@@ -367,13 +444,22 @@ export const approvalDocRepo = {
     return next;
   },
 
-  /** 반려 — 활성 단계 결재자만, 사유 필수(엔진 위임). */
+  /** 반려 — 활성 단계 결재자 또는 대결자 (사유 필수). */
   async reject(id: string, seq: number, userId: string, comment: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (!isActiveApprover(cur, userId) || !stepBelongsTo(cur, seq, userId)) {
-      throw new Error('결재 권한이 없습니다(본인 차례 아님)');
+    const auth = await verifyApproverOrDelegate(cur, seq, userId);
+
+    let docToProcess = cur;
+    if (auth.isDelegate) {
+      docToProcess = {
+        ...cur,
+        steps: cur.steps.map((s) =>
+          s.seq === seq ? { ...s, approverId: userId, delegatedFromId: auth.originalApproverId } : s
+        ),
+      };
     }
-    const next = applyDecision(cur, seq, '반려', { at: now(), comment });
+
+    const next = applyDecision(docToProcess, seq, '반려', { at: now(), comment });
     await persist(next);
 
     // 알림 생성 연동
@@ -398,13 +484,30 @@ export const approvalDocRepo = {
     return next;
   },
 
-  /** 보류 — 활성 단계 결재자만, 진행 일시정지(엔진 위임). */
+  /** 보류 — 활성 단계 결재자 또는 대결자. */
   async hold(id: string, seq: number, userId: string, comment = ''): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (!isActiveApprover(cur, userId) || !stepBelongsTo(cur, seq, userId)) {
-      throw new Error('결재 권한이 없습니다(본인 차례 아님)');
-    }
+    await verifyApproverOrDelegate(cur, seq, userId);
     const next = applyDecision(cur, seq, '보류', { at: now(), comment });
+    await persist(next);
+    return next;
+  },
+
+  /** 후열 확인 — 원결재자가 대결 처리된 문서에 대해 사후 후열 확인 시각(postReadAt)을 기록. */
+  async confirmPostRead(id: string, seq: number, userId: string): Promise<ApprovalDoc> {
+    const cur = await getOrThrow(id);
+    const target = cur.steps.find((s) => s.seq === seq);
+    if (!target) throw new Error('결재선 노드를 찾을 수 없습니다.');
+    if (target.delegatedFromId !== userId) {
+      throw new Error('원결재자만 후열 확인을 완료할 수 있습니다.');
+    }
+
+    const next: ApprovalDoc = {
+      ...cur,
+      steps: cur.steps.map((s) =>
+        s.seq === seq ? { ...s, postReadAt: now() } : s
+      ),
+    };
     await persist(next);
     return next;
   },

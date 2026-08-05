@@ -59,6 +59,8 @@ export const approvalStepSchema = z.object({
   decidedAt: z.string().nullable().default(null),
   /** 의견 — 반려 시 필수(엔진에서 강제). */
   comment: z.string().default(''),
+  /** 원결재자 후열 확인 시각(ISO) — 대결 승인건에 대해 사후 확인한 시각. */
+  postReadAt: z.string().nullable().optional(),
   /** 승인 당시 서명 이미지 URL (스냅샷) */
   signUrl: z.string().nullable().optional(),
   /** 승인 당시 도장 이미지 URL (스냅샷) */
@@ -188,6 +190,6 @@ export const approvalDocSchema = z.object({
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;
 
-/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·시행함·임시저장. */
-export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '시행', '완료', '삭제'] as const;
+/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·시행함·임시저장·후열함. */
+export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '시행', '후열', '완료', '삭제'] as const;
 export type ApprovalBox = (typeof APPROVAL_BOXES)[number];

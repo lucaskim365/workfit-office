@@ -116,7 +116,7 @@ export default function AppShell() {
     setFavs((f) => (f.includes(name) ? f.filter((x) => x !== name) : [...f, name]));
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-bg">
+    <div className="relative flex min-h-screen flex-col bg-bg">
       <Topbar
         activeModuleId={activeModuleId}
         activeUrl={activeUrl}
@@ -156,7 +156,7 @@ export default function AppShell() {
             menuOpen={tabMenuOpen}
             setMenuOpen={setTabMenuOpen}
           />
-          <main className="content-scroll min-h-0 flex-1 overflow-auto bg-bg pr-3">
+          <main className="flex-1 bg-bg pr-3">
             {tabs.length === 0 ? (
               <NoTab />
             ) : (

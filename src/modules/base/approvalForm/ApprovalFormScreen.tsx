@@ -451,7 +451,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
 
             <div className="col-span-4">
               <label className="block text-[10.5px] font-bold text-ink3 mb-1">🏢 기안 허용 부서 지정</label>
-              <div className="max-h-28 overflow-y-auto border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
+              <div className="border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
                 {depts.map((d) => {
                   const isChecked = (form.allowedDeptIds ?? []).includes(d.id);
                   return (
