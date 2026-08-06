@@ -132,22 +132,25 @@ export default function AppShell() {
       {/* 모듈 드롭다운 딤 */}
       {openModule && <div onClick={() => setOpenModule(null)} className="absolute inset-x-0 bottom-0 top-[58px] z-40 bg-navy-deep/30" />}
 
-      <div className="flex min-h-0 flex-1">
-        <Sidebar
-          module={activeModule}
-          activeUrl={activeUrl}
-          collapsed={collapsed}
-          setCollapsed={setCollapsed}
-          query={query}
-          setQuery={setQuery}
-          railOpen={railOpen}
-          setRailOpen={setRailOpen}
-          favs={favs}
-          toggleFav={toggleFav}
-          openTab={openTab}
-        />
+      <div className={activeUrl.startsWith('/gw') ? 'flex flex-1' : 'flex min-h-0 flex-1'}>
+        {/* /gw 하위 라우트(:조직도, 전자결재 등)에서는 좌측 사이드바 숨김 */}
+        {!activeUrl.startsWith('/gw') && (
+          <Sidebar
+            module={activeModule}
+            activeUrl={activeUrl}
+            collapsed={collapsed}
+            setCollapsed={setCollapsed}
+            query={query}
+            setQuery={setQuery}
+            railOpen={railOpen}
+            setRailOpen={setRailOpen}
+            favs={favs}
+            toggleFav={toggleFav}
+            openTab={openTab}
+          />
+        )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 flex-col' : 'flex min-w-0 flex-1 flex-col'}>
           <TabBar
             tabs={tabs}
             activeUrl={activeUrl}
@@ -156,11 +159,11 @@ export default function AppShell() {
             menuOpen={tabMenuOpen}
             setMenuOpen={setTabMenuOpen}
           />
-          <main className="flex-1 bg-bg pr-3">
+          <main className={activeUrl.startsWith('/gw') ? 'flex-1 bg-bg' : 'flex-1 bg-bg min-h-0 overflow-y-auto'}>
             {tabs.length === 0 ? (
               <NoTab />
             ) : (
-              <div className="p-[18px]">
+              <div className={activeUrl.startsWith('/gw/') ? 'p-0' : 'p-[18px]'}>
                 <Suspense fallback={<ScreenLoading />}>
                   <Outlet />
                 </Suspense>

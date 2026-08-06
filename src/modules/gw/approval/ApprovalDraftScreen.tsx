@@ -560,9 +560,10 @@ function ApprovalDraftInner({
   );
 
   return (
-    <div className="flex h-full w-full flex-col bg-panel overflow-hidden">
-      {/* 상단 통합 헤더 툴바 */}
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-panel px-6 py-3 shadow-2xs">
+    <div className="flex w-full flex-col bg-panel">
+      {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
+           (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
+      <header className="sticky top-0 z-[200] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 py-3 shadow-xs">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -623,6 +624,9 @@ function ApprovalDraftInner({
         </div>
       </header>
 
+      {/* fixed 헤더 높이(53px)만큼 콘텐츠 밀림 방지용 spacer */}
+      <div className="h-[53px] shrink-0" />
+
       {/* 에러 메시지 팝업 바 */}
       {error && (
         <div className="flex items-center justify-between bg-rose-500/10 border-b border-rose-500/30 px-6 py-2 text-[12px] font-bold text-rose-600">
@@ -632,10 +636,10 @@ function ApprovalDraftInner({
       )}
 
       {/* 3단 워크스페이스 본문 메인 레이아웃 */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* [1단] 좌측 서식 탐색 사이드바 (Wide/Desktop 전용, 서식 변경 가능 시만 노출) */}
         {!isFixed && (
-          <div className={`transition-all duration-300 border-r border-border bg-panel-alt/50 shrink-0 ${sidebarOpen ? 'w-[230px]' : 'w-[50px]'}`}>
+          <div className={`transition-all duration-300 border-r border-border bg-panel-alt/50 shrink-0 sticky self-start overflow-y-auto ${sidebarOpen ? 'w-[230px]' : 'w-[50px]'}`} style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
             <DraftFormSidebar
               sidebarOpen={sidebarOpen}
               setSidebarOpen={setSidebarOpen}
@@ -654,8 +658,8 @@ function ApprovalDraftInner({
           </div>
         )}
 
-        {/* [2단] 중앙 기안 작성 영역 (독립 스크롤) */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-5 bg-panel">
+        {/* [2단] 중앙 기안 작성 영역 */}
+        <div className="flex-1 min-w-0 px-6 py-6 space-y-5 bg-panel">
           {/* 후결(사후 승인) 옵션 토글 스위치 */}
           {isPostApprovalSystemEnabled && (
             <div className="flex justify-end">
@@ -908,7 +912,7 @@ function ApprovalDraftInner({
         </div>
 
         {/* [3단] 우측 결재선 전용 고정 패널 (Wide/Desktop 화면 370px 고정) */}
-        <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 overflow-y-auto p-4 space-y-4">
+        <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 overflow-y-auto p-4 space-y-4 sticky self-start" style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
           <div className="flex items-center justify-between border-b border-border pb-2.5">
             <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
               <span>🔗 결재선 설정</span>
