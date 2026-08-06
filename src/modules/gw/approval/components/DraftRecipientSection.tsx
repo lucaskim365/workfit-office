@@ -78,15 +78,15 @@ export function DraftRecipientSection({
                 <option value="">선택하세요</option>
                 {pickerType === 'dept'
                   ? org.depts.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))
                   : org.users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} {u.position} ({u.dept})
-                      </option>
-                    ))}
+                    <option key={u.id} value={u.id}>
+                      {u.name} {u.position} ({u.dept})
+                    </option>
+                  ))}
               </select>
 
               <button
@@ -192,15 +192,15 @@ export function DraftRecipientSection({
               <option value="">시행자 지정 안함</option>
               {execPickerType === 'DEPT'
                 ? org.depts.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))
                 : org.users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} {u.position} ({u.dept})
-                    </option>
-                  ))}
+                  <option key={u.id} value={u.id}>
+                    {u.name} {u.position} ({u.dept})
+                  </option>
+                ))}
             </select>
           </div>
         </div>
