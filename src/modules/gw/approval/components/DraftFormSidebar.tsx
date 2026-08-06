@@ -35,18 +35,15 @@ export function DraftFormSidebar({
   setCode: (code: string) => void;
   setValues: (values: Record<string, any>) => void;
 }) {
-  const sidebarWidth = 240;
 
   return (
-    <div
-      style={{ width: sidebarOpen ? sidebarWidth : 0 }}
-      className="relative shrink-0 border-r border-border bg-panel-alt/30 transition-all duration-200"
-    >
+    <div className="relative w-full h-full bg-panel-alt/30 transition-all duration-200">
       {sidebarOpen && (
-        <div className="flex h-full flex-col p-3 min-w-[240px]">
+        <div className="flex h-full flex-col p-3 w-full overflow-x-hidden">
           <div className="border-b border-border pb-2 mb-2">
-            <div className="text-[12px] font-bold text-ink mb-1 flex items-center justify-between">
-              <span>📂 서식 선택</span>
+            <div className="text-[12px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">1</span>
+              <span>서식 선택</span>
             </div>
 
             <div className="space-y-1.5 mb-2">

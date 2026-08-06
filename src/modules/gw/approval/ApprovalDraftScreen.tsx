@@ -536,11 +536,11 @@ function ApprovalDraftInner({
       form:
         code === '휴가'
           ? {
-              leaveType: String(values['leaveType'] || '연차') as LeaveType,
-              startDate: String(values['period'] || ''),
-              endDate: String(values['period__end'] || ''),
-              days: Number(values['period__days']) || 0,
-            }
+            leaveType: String(values['leaveType'] || '연차') as LeaveType,
+            startDate: String(values['period'] || ''),
+            endDate: String(values['period__end'] || ''),
+            days: Number(values['period__days']) || 0,
+          }
           : null,
       execution: executionTarget
         ? { docId: editDoc?.id ?? 'preview-doc-id', targetType: executionTarget.type, targetId: executionTarget.id, status: '대기중' as const, comment: '' }
@@ -624,9 +624,6 @@ function ApprovalDraftInner({
         </div>
       </header>
 
-      {/* fixed 헤더 높이(53px)만큼 콘텐츠 밀림 방지용 spacer */}
-      <div className="h-[53px] shrink-0" />
-
       {/* 에러 메시지 팝업 바 */}
       {error && (
         <div className="flex items-center justify-between bg-rose-500/10 border-b border-rose-500/30 px-6 py-2 text-[12px] font-bold text-rose-600">
@@ -639,7 +636,7 @@ function ApprovalDraftInner({
       <div className="flex flex-1">
         {/* [1단] 좌측 서식 탐색 사이드바 (Wide/Desktop 전용, 서식 변경 가능 시만 노출) */}
         {!isFixed && (
-          <div className={`transition-all duration-300 border-r border-border bg-panel-alt/50 shrink-0 sticky self-start overflow-y-auto ${sidebarOpen ? 'w-[230px]' : 'w-[50px]'}`} style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
+          <div className={`transition-all duration-300 border-r border-border bg-panel-alt/50 shrink-0 sticky self-start overflow-y-auto overflow-x-hidden ${sidebarOpen ? 'w-[210px]' : 'w-[46px]'}`} style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
             <DraftFormSidebar
               sidebarOpen={sidebarOpen}
               setSidebarOpen={setSidebarOpen}
@@ -658,34 +655,20 @@ function ApprovalDraftInner({
           </div>
         )}
 
-        {/* [2단] 중앙 기안 작성 영역 */}
+        {/* 2단: 기안 작성 영역 */}
         <div className="flex-1 min-w-0 px-6 py-6 space-y-5 bg-panel">
-          {/* 후결(사후 승인) 옵션 토글 스위치 */}
-          {isPostApprovalSystemEnabled && (
-            <div className="flex justify-end">
-              <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/5 shadow-xs transition-all">
-                <span className="text-[11.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1">
-                  <span>🚨</span>
-                  <span>긴급 선조치 사후 승인 (후결) 요청</span>
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isPostApproval}
-                  onClick={() => setIsPostApproval(!isPostApproval)}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                    isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      isPostApproval ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+
+          {/* 작성 흐름 안내 헤더 */}
+          <div className="flex items-center gap-2 pb-1">
+            <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-teal">
+              <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">2</span>
+                <span>기안 작성</span>
+              </span>
+
             </div>
-          )}
+          </div>
+
 
           {/* 후결 필수 소명 입력 서식 카드 */}
           {isPostApprovalSystemEnabled && isPostApproval && (
@@ -756,7 +739,7 @@ function ApprovalDraftInner({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3 items-end">
               <Field label="보안등급">
                 <select
                   value={securityLevel}
@@ -782,6 +765,37 @@ function ApprovalDraftInner({
                   <option value="영구">영구</option>
                 </select>
               </Field>
+
+              {/* 후결(사후 승인) 옵션 토글 스위치 — 보안등급/보존연한과 같은 행에 배치 */}
+              {isPostApprovalSystemEnabled ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-ink2">긴급 후결 요청</span>
+                  <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-[7px] transition-all ${isPostApproval
+                    ? 'border-rose-500/40 bg-rose-500/8'
+                    : 'border-border bg-panel'
+                    }`}>
+                    <span className="text-[11px] font-semibold text-rose-700 flex items-center gap-1 flex-1">
+                      <span>🚨</span>
+                      <span>{isPostApproval ? '후결 요청 중' : '해당 없음'}</span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isPostApproval}
+                      onClick={() => setIsPostApproval(!isPostApproval)}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
+                        }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPostApproval ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div />
+              )}
             </div>
           </div>
 
@@ -823,15 +837,6 @@ function ApprovalDraftInner({
               </Field>
             )}
           </div>
-
-          {/* 수신처 / 시행자 지정 컴포넌트 */}
-          <DraftRecipientSection
-            recipients={recipients}
-            setRecipients={setRecipients}
-            executionTarget={executionTarget}
-            setExecutionTarget={setExecutionTarget}
-            org={org}
-          />
 
           {/* 첨부파일 / 관련 문서 영역 */}
           <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-2xs">
@@ -915,7 +920,8 @@ function ApprovalDraftInner({
         <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 overflow-y-auto p-4 space-y-4 sticky self-start" style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
           <div className="flex items-center justify-between border-b border-border pb-2.5">
             <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
-              <span>🔗 결재선 설정</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
+              <span>결재선 설정</span>
             </span>
             <span className="text-[11px] text-ink3 font-semibold">
               {steps.length}명 지정됨
@@ -930,7 +936,16 @@ function ApprovalDraftInner({
             amount={amountNum}
             docData={values}
           />
+          {/* 수신처 / 시행자 지정 컴포넌트 */}
+          <DraftRecipientSection
+            recipients={recipients}
+            setRecipients={setRecipients}
+            executionTarget={executionTarget}
+            setExecutionTarget={setExecutionTarget}
+            org={org}
+          />
         </div>
+
       </div>
 
       {/* 해상도 작을 때 우측 결재선 Drawer */}
@@ -952,6 +967,7 @@ function ApprovalDraftInner({
           </div>
         </div>
       )}
+
 
       {/* 다이얼로그 모달 모음 */}
       {showConfirmClose && (
