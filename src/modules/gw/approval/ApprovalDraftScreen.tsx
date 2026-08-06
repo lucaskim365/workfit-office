@@ -655,8 +655,8 @@ function ApprovalDraftInner({
           </div>
         )}
 
-        {/* 2단: 기안 작성 영역 */}
-        <div className="flex-1 min-w-0 px-6 py-6 space-y-5 bg-panel">
+        {/* 2단: 기안 작성 영역 (3단 우측 패널보다 레이어 우선순위를 낮게 z-0 설정) */}
+        <div className="flex-1 min-w-0 px-6 py-6 space-y-5 bg-panel relative z-0">
 
           {/* 작성 흐름 안내 헤더 */}
           <div className="flex items-center gap-2 pb-1">
@@ -916,8 +916,8 @@ function ApprovalDraftInner({
           </div>
         </div>
 
-        {/* [3단] 우측 결재선 전용 고정 패널 (Wide/Desktop 화면 370px 고정) */}
-        <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 overflow-y-auto p-4 space-y-4 sticky self-start" style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
+        {/* [3단] 우측 결재선 전용 고정 패널 (Wide/Desktop 화면 370px 고정) — z-30 및 overflow-visible로 2단 영역보다 상위에 위치 */}
+        <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 p-4 space-y-4 sticky self-start relative z-30 overflow-visible" style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}>
           <div className="flex items-center justify-between border-b border-border pb-2.5">
             <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
