@@ -34,6 +34,7 @@ const HOME = '/exec';
 // 그룹웨어(도크 전용, menu-tree 밖) — 명시적 라우트로 등록.
 const GwOrgChart = lazy(() => import('@/modules/gw/orgchart/OrgChartScreen'));
 const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
+const GwApprovalDraft = lazy(() => import('@/modules/gw/approval/ApprovalDraftScreen'));
 const GwExcelTestLab = lazy(() => import('@/modules/gw/approval/ExcelTestLabScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
@@ -160,8 +161,10 @@ export default function App() {
             />
           );
         })}
-        {/* 그룹웨어(도크 전용) — 조직도 실화면 + 나머지 준비중 랜딩 */}
+        {/* 그룹웨어(도크 전용) — 조직도 실화면 + 전자결재 독립 라우트 */}
         <Route path="/gw/orgchart" element={<GwOrgChart />} />
+        <Route path="/gw/approval/new" element={<GwApprovalDraft />} />
+        <Route path="/gw/approval/edit/:id" element={<GwApprovalDraft />} />
         <Route path="/gw/approval" element={<GwApproval />} />
         <Route path="/gw/excel-test" element={<GwExcelTestLab />} />
         <Route path="/gw/leave" element={<GwLeave />} />

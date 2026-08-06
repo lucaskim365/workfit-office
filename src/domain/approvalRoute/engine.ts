@@ -209,7 +209,7 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
     
     used.add(pick);
     const kind = toStepKind(rs.kind);
-    steps.push({ seq: seq++, parallelGroup: null, kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
+    steps.push({ seq: seq++, parallelGroup: null, executionType: 'sequential', kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
     if (kind === '전결') {
       hasJeongyeol = true;
     }
@@ -224,7 +224,7 @@ function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
   const head = heads.find((id) => id !== drafter.id);
   const pick = head ?? org.managerChain(drafter.id)[0];
   if (!pick) return [];
-  return [{ seq: 1, parallelGroup: null, kind: '전결', approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' }];
+  return [{ seq: 1, parallelGroup: null, executionType: 'sequential', kind: '전결', approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' }];
 }
 
 /**

@@ -5,17 +5,11 @@ import { useLeave } from '@/features/gw/useLeave';
 import { activeSteps } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { fmtDateTime, GwHead, StatusBadge } from '@/modules/gw/_gw';
-import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 
-/**
- * 휴가관리(§7.4) — 상단 잔여 요약(연차/대체휴무/일정) + 상세 내역 탭(연차/대체휴무/이력) +
- * 휴가 신청 연동.
- */
 export default function LeaveScreen() {
   const { user } = useAuth();
   const nav = useNavigate();
   const bal = useLeave(user?.id);
-  const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'annual' | 'substitute' | 'requests'>('annual');
   const [statusFilter, setStatusFilter] = useState<'전체' | '진행중' | '완료' | '반려'>('전체');
 
@@ -78,7 +72,11 @@ export default function LeaveScreen() {
         icon="🏖️"
         name="휴가관리"
         right={
-          <button onClick={() => setOpen(true)} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white transition-opacity hover:opacity-90">
+          <button
+            type="button"
+            onClick={() => nav('/gw/approval/new?type=휴가')}
+            className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all shadow-sm shrink-0"
+          >
             + 휴가 신청
           </button>
         }
@@ -367,8 +365,6 @@ export default function LeaveScreen() {
           </div>
         )}
       </div>
-
-      {open && <ApprovalDraftModal me={user} fixedType="휴가" onClose={() => setOpen(false)} />}
     </div>
   );
 }

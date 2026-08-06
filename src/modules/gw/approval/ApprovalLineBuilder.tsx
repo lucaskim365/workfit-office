@@ -12,11 +12,12 @@ import { KIND_TONE } from '@/modules/gw/_gw';
  * 완전 제어형: 내부 상태 없이 props(steps)에서 편집표현을 도출해 병렬 태그 드리프트를 방지.
  */
 
-/** 편집표현 — 병렬은 "이전과 묶기(linkedPrev)"로 표현해 seq/태그 드리프트를 없앤다. */
+/** 편집표현 — 병렬그룹/단독 노드 편집 표현 */
 interface EditStep {
   approverId: string;
   kind: StepKind;
   linkedPrev: boolean;
+  groupId?: string | null; // 독립 병렬 그룹 ID (예: 'G1', 'G2')
 }
 
 function toEdit(steps: ApprovalStep[]): EditStep[] {
@@ -25,19 +26,24 @@ function toEdit(steps: ApprovalStep[]): EditStep[] {
     approverId: s.approverId,
     kind: s.kind,
     linkedPrev: i > 0 && !!s.parallelGroup && s.parallelGroup === sorted[i - 1].parallelGroup,
+    groupId: s.parallelGroup ?? null,
   }));
 }
 
-/** 편집표현 → steps[]: seq=순번, 연속 linked 런은 같은 parallelGroup 태그 부여. */
+/** 편집표현 → steps[]: seq=순번, 명시적 groupId가 있거나 linkedPrev일 때만 병렬그룹 부여 */
 function toSteps(edits: EditStep[]): ApprovalStep[] {
   return edits.map((e, i) => {
-    // linked 런의 시작 인덱스를 태그로 사용(안정적·결정적).
     let runStart = i;
     while (runStart > 0 && edits[runStart].linkedPrev) runStart--;
-    const runHasParallel = (edits[i].linkedPrev || (i + 1 < edits.length && edits[i + 1].linkedPrev));
+
+    // 명시적으로 groupId가 지정되어 있거나, 앞/뒤와 linkedPrev로 묶인 경우에만 병렬 그룹 처리
+    const isLinkedParallel = edits[i].linkedPrev || (i + 1 < edits.length && edits[i + 1].linkedPrev);
+    const finalGroupId = e.groupId ? e.groupId : isLinkedParallel ? `G${runStart + 1}` : null;
+    
     return {
       seq: i + 1,
-      parallelGroup: runHasParallel ? `G${runStart + 1}` : null,
+      parallelGroup: finalGroupId,
+      executionType: finalGroupId ? ('parallel' as const) : ('sequential' as const),
       kind: e.kind,
       approverId: e.approverId,
       delegatedFromId: null,
@@ -66,7 +72,17 @@ export function ApprovalLineBuilder({
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
   const route = useRouteEngine();
-  const [picker, setPicker] = useState<{ mode: 'add' } | { mode: 'replace'; index: number } | null>(null);
+
+  // 빈 병렬 그룹 ID 목록 (사용자가 생성한 빈 병렬 그룹 박스 유지용)
+  const [emptyGroupIds, setEmptyGroupIds] = useState<string[]>([]);
+
+  // 피커 상태
+  const [picker, setPicker] = useState<
+    | { mode: 'add' }
+    | { mode: 'replace'; index: number }
+    | { mode: 'add-to-group'; groupIndex: number; targetGroupId?: string }
+    | null
+  >(null);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -78,7 +94,25 @@ export function ApprovalLineBuilder({
   const emit = (next: EditStep[]) => onChange(toSteps(next));
 
   const setKind = (i: number, kind: StepKind) => emit(edits.map((e, idx) => (idx === i ? { ...e, kind } : e)));
-  const remove = (i: number) => emit(edits.filter((_, idx) => idx !== i).map((e, idx) => (idx === 0 ? { ...e, linkedPrev: false } : e)));
+  
+  /** 특정 결재자 삭제 처리 (그룹 구조 붕괴 방지) */
+  const remove = (i: number) => {
+    const target = edits[i];
+    const next = edits.filter((_, idx) => idx !== i);
+    
+    // 만약 삭제 대상이 그룹의 첫 멤버(linkedPrev: false이고 groupId가 있음)였고, 뒤에 연달아 같은 groupId를 가진 멤버가 있다면
+    if (!target.linkedPrev && target.groupId && next.length > i && next[i].groupId === target.groupId) {
+      // 뒤 멤버가 그룹의 리더 역할을 이어받음
+      next[i] = { ...next[i], linkedPrev: false };
+    }
+    
+    if (next.length > 0) {
+      next[0] = { ...next[0], linkedPrev: false };
+    }
+    emit(next);
+  };
+  
+  /** 단독 노드 단위 이동 */
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
     if (j < 0 || j >= edits.length) return;
@@ -87,18 +121,99 @@ export function ApprovalLineBuilder({
     next[0] = { ...next[0], linkedPrev: false };
     emit(next);
   };
-  const pick = (userId: string) => {
+
+  /** 병렬 그룹 전체 위치 이동 (위/아래, 빈 그룹 포함) */
+  const moveGroup = (renderGroupsList: any[], groupIdx: number, dir: -1 | 1) => {
+    const targetGroupIdx = groupIdx + dir;
+    if (targetGroupIdx < 0 || targetGroupIdx >= renderGroupsList.length) return;
+
+    const newRenderGroups = [...renderGroupsList];
+    [newRenderGroups[groupIdx], newRenderGroups[targetGroupIdx]] = [newRenderGroups[targetGroupIdx], newRenderGroups[groupIdx]];
+
+    // 1) emptyGroupIds 배열의 순서도 새로운 renderGroups 순서대로 재정렬
+    const newEmptyGroupIds: string[] = [];
+    const nextEdits: EditStep[] = [];
+
+    newRenderGroups.forEach((g) => {
+      if (g.items.length === 0) {
+        newEmptyGroupIds.push(g.id);
+      } else {
+        g.items.forEach((item: any, idx: number) => {
+          nextEdits.push({
+            ...item.edit,
+            linkedPrev: idx > 0,
+            groupId: g.isParallel ? (g.id.startsWith('empty-') ? `G${Date.now()}` : g.id) : null,
+          });
+        });
+      }
+    });
+
+    if (nextEdits.length > 0) {
+      nextEdits[0].linkedPrev = false;
+    }
+    setEmptyGroupIds(newEmptyGroupIds);
+    emit(nextEdits);
+  };
+
+  /** 결재 피커에서 인원 단일 또는 다중 선택 시 처리 */
+  const pick = (userIds: string | string[]) => {
     if (!picker) return;
+    const selectedIds = Array.isArray(userIds) ? userIds : [userIds];
+    if (selectedIds.length === 0) return;
+
     if (picker.mode === 'add') {
-      emit([...edits, { approverId: userId, kind: '결재', linkedPrev: false }]);
-    } else {
-      emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: userId } : e)));
+      // 일반 결재자(순차) 추가
+      const newItems = selectedIds.map((id) => ({ approverId: id, kind: '결재' as StepKind, linkedPrev: false, groupId: null }));
+      emit([...edits, ...newItems]);
+    } else if (picker.mode === 'replace') {
+      // 특정 노드 교체
+      emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: selectedIds[0] } : e)));
+    } else if (picker.mode === 'add-to-group') {
+      const targetIdx = picker.groupIndex;
+      if (targetIdx === -1 && picker.targetGroupId) {
+        // 빈 병렬 그룹에 멤버 추가
+        const generatedPgId = `G_${Date.now()}`;
+        const newItems = selectedIds.map((id, idx) => ({
+          approverId: id,
+          kind: '결재' as StepKind,
+          linkedPrev: idx > 0,
+          groupId: generatedPgId, // 독립 병렬그룹 ID 부여 (1명이어도 보존)
+        }));
+        emit([...edits, ...newItems]);
+        setEmptyGroupIds((prev) => prev.filter((id) => id !== picker.targetGroupId));
+      } else {
+        // 기존 병렬 그룹에 멤버 추가
+        let lastGroupIdx = targetIdx;
+        const targetGroupId = edits[targetIdx]?.groupId || `G_${Date.now()}`;
+        while (lastGroupIdx + 1 < edits.length && edits[lastGroupIdx + 1].linkedPrev) {
+          lastGroupIdx++;
+        }
+        const newItems = selectedIds.map((id) => ({
+          approverId: id,
+          kind: '결재' as StepKind,
+          linkedPrev: true,
+          groupId: targetGroupId,
+        }));
+        const next = [...edits];
+        next.splice(lastGroupIdx + 1, 0, ...newItems);
+        emit(next);
+      }
     }
     setPicker(null);
   };
 
+  /** 빈 병렬 그룹 생성 */
+  const createEmptyParallelGroup = () => {
+    const newGroupId = `empty-pg-${Date.now()}`;
+    setEmptyGroupIds((prev) => [...prev, newGroupId]);
+  };
+
+  /** 빈 병렬 그룹 삭제 */
+  const removeEmptyGroup = (groupId: string) => {
+    setEmptyGroupIds((prev) => prev.filter((id) => id !== groupId));
+  };
+
   const fillAuto = () => {
-    // 동적 결재선 룰 엔진 — 기안자 부서·직급·금액에 맞는 결재선을 생성.
     const built = route.build({ drafterId, docType, amount, docData });
     onChange(built.length ? built : steps);
   };
@@ -107,6 +222,47 @@ export function ApprovalLineBuilder({
     const ids = edits.map((e) => e.approverId);
     return ids.includes(drafterId) || new Set(ids).size !== ids.length;
   }, [edits, drafterId]);
+
+  // edits를 그룹 단위로 묶어서 UI 렌더링용 구조 생성 (독립 groupId 및 linkedPrev 기재 방식)
+  const renderGroups = useMemo(() => {
+    const groups: { id: string; isParallel: boolean; items: { edit: EditStep; originalIndex: number }[] }[] = [];
+    edits.forEach((edit, index) => {
+      // 명시적인 groupId가 존재하는 병렬 노드이거나 이전과 연결된 경우
+      if (edit.groupId) {
+        const existingGroup = groups.find((g) => g.id === edit.groupId);
+        if (existingGroup) {
+          existingGroup.items.push({ edit, originalIndex: index });
+        } else {
+          groups.push({
+            id: edit.groupId,
+            isParallel: true,
+            items: [{ edit, originalIndex: index }],
+          });
+        }
+      } else if (edit.linkedPrev && groups.length > 0) {
+        const currentGroup = groups[groups.length - 1];
+        currentGroup.isParallel = true;
+        currentGroup.items.push({ edit, originalIndex: index });
+      } else {
+        groups.push({
+          id: `seq-${index}`,
+          isParallel: false,
+          items: [{ edit, originalIndex: index }],
+        });
+      }
+    });
+
+    // 빈 병렬 그룹 추가
+    emptyGroupIds.forEach((egId) => {
+      groups.push({
+        id: egId,
+        isParallel: true,
+        items: [],
+      });
+    });
+
+    return groups;
+  }, [edits, emptyGroupIds]);
 
   return (
     <div>
@@ -123,59 +279,274 @@ export function ApprovalLineBuilder({
         </button>
         <button
           type="button"
-          onClick={() => onChange([])}
+          onClick={() => {
+            onChange([]);
+            setEmptyGroupIds([]);
+          }}
           className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500"
         >
           비우기
         </button>
-        <span className="ml-auto text-[10.5px] text-ink3">{edits.length}단계</span>
+        <span className="ml-auto text-[10.5px] text-ink3">{edits.length}명 ({renderGroups.length}단계)</span>
       </div>
 
-      {/* 결재선 노드 리스트 */}
-      <div className="space-y-1.5">
-        {edits.map((e, i) => (
-          <div key={i} className="rounded-lg border border-border bg-panel-alt px-2.5 py-2">
-            <div className="flex items-center gap-2">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-              <button
-                type="button"
-                onClick={() => setPicker({ mode: 'replace', index: i })}
-                className="min-w-0 flex-1 text-left"
+      {/* 결재선 노드 리스트 (그룹 단위 렌더링) */}
+      <div className="space-y-2.5">
+        {renderGroups.map((group, groupIdx) => {
+          const firstItemIdx = group.items.length > 0 ? group.items[0].originalIndex : -1;
+
+          // 병렬 그룹 박스 UI (2명 이상이거나, 처음부터 병렬그룹으로 지정된 경우, 또는 빈 병렬그룹인 경우)
+          if (group.items.length > 1 || group.isParallel || group.items.length === 0) {
+            const memberCount = group.items.length;
+
+            return (
+              <div
+                key={`group-${group.id}`}
+                className="rounded-lg border border-border bg-panel-alt p-2 hover:border-teal/50 transition-colors shadow-2xs"
               >
-                <span className="truncate text-[12px] font-semibold text-ink">{nameOf(e.approverId)}</span>
-                <span className="ml-1 text-[10px] text-ink3">{deptPosOf(e.approverId)}</span>
-              </button>
-              <select
-                value={e.kind}
-                onChange={(ev) => setKind(i, ev.target.value as StepKind)}
-                className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[e.kind]}`}
-              >
-                {STEP_KINDS.map((k) => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
-              <div className="flex shrink-0 flex-col">
-                <button type="button" onClick={() => move(i, -1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
-                <button type="button" onClick={() => move(i, 1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
+                {/* [ (병렬순서동그라미) - 병렬 카드들 - +버튼 - 위치변경 - x삭제 ] 형태 수평 통합 레이아웃 */}
+                <div className="flex items-center gap-2">
+                  {/* 병렬 순서 동그라미 (상단 '병렬' 뱃지 레이블 포함) */}
+                  <div className="flex shrink-0 flex-col items-center justify-center gap-0.5">
+                    <span className="rounded bg-teal-soft/80 px-1 py-0.2 text-[8px] font-extrabold text-teal">
+                      병렬
+                    </span>
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">
+                      {groupIdx + 1}
+                    </span>
+                  </div>
+
+                  {/* 병렬 결재자 카드 묶음 (가로 100% 동적 분할) */}
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    {memberCount === 0 ? (
+                      <div className="flex flex-1 items-center justify-center py-2 text-center text-[11px] font-semibold text-ink3">
+                        빈 병렬 그룹입니다. 오른쪽 '+' 버튼을 눌러 결재자를 추가하세요.
+                      </div>
+                    ) : (
+                      <div className="grid flex-1 gap-1.5" style={{ gridTemplateColumns: `repeat(${memberCount}, minmax(0, 1fr))` }}>
+                        {group.items.map(({ edit, originalIndex }) => (
+                          <div
+                            key={originalIndex}
+                            className="group relative rounded-md border border-border-hi bg-panel p-1.5 shadow-2xs hover:border-teal transition-all min-w-0"
+                          >
+                            {/* 마우스 호버 시 우상단 X 삭제 버튼 */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                remove(originalIndex);
+                              }}
+                              title="결재자 삭제"
+                              className="absolute right-1 top-1 hidden h-3.5 w-3.5 place-items-center rounded-full bg-border-hi text-[9px] font-bold text-ink2 hover:bg-rose-500 hover:text-white group-hover:grid transition-colors z-10"
+                            >
+                              ✕
+                            </button>
+
+                            {/* 인원수별 조건부 수평/수직 내포 카드 구조 */}
+                            {memberCount === 1 ? (
+                              <div className="flex h-7 items-center justify-between gap-1 px-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
+                                  className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                                >
+                                  <span className="truncate text-[11.5px] font-bold text-ink hover:text-teal transition-colors">
+                                    {nameOf(edit.approverId)}
+                                  </span>
+                                  <span className="truncate text-[9.5px] text-ink3">
+                                    ({deptPosOf(edit.approverId)})
+                                  </span>
+                                </button>
+                                <select
+                                  value={edit.kind === '전결' ? '결재' : edit.kind}
+                                  onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
+                                  className={`shrink-0 rounded border border-border-hi bg-panel px-1 py-0.5 text-[9px] font-bold outline-none ${KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}`}
+                                >
+                                  {STEP_KINDS.filter((k) => k !== '전결').map((k) => (
+                                    <option key={k} value={k}>{k}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : memberCount === 2 ? (
+                              <div className="flex h-11 items-center justify-between gap-1 px-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
+                                  className="flex flex-1 flex-col justify-center text-left min-w-0"
+                                >
+                                  <span className="truncate w-full text-[11.5px] font-bold text-ink hover:text-teal transition-colors">
+                                    {nameOf(edit.approverId)}
+                                  </span>
+                                  <span className="truncate w-full text-[9px] text-ink3">
+                                    {deptPosOf(edit.approverId)}
+                                  </span>
+                                </button>
+                                <select
+                                  value={edit.kind === '전결' ? '결재' : edit.kind}
+                                  onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
+                                  className={`shrink-0 rounded border border-border-hi bg-panel px-1 py-0.5 text-[8.5px] font-bold outline-none ${KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}`}
+                                >
+                                  {STEP_KINDS.filter((k) => k !== '전결').map((k) => (
+                                    <option key={k} value={k}>{k}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <div className="flex h-12 flex-col justify-between p-0.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
+                                  className="flex flex-1 flex-col items-center justify-center text-center w-full min-w-0"
+                                >
+                                  <span className="truncate w-full text-[11px] font-bold text-ink hover:text-teal transition-colors">
+                                    {nameOf(edit.approverId)}
+                                  </span>
+                                  <span className="truncate w-full text-[8.5px] text-ink3">
+                                    {deptPosOf(edit.approverId)}
+                                  </span>
+                                </button>
+                                <div className="flex justify-center">
+                                  <select
+                                    value={edit.kind === '전결' ? '결재' : edit.kind}
+                                    onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
+                                    className={`rounded border border-border-hi bg-panel px-0.5 py-0.2 text-[8px] font-bold outline-none ${KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}`}
+                                  >
+                                    {STEP_KINDS.filter((k) => k !== '전결').map((k) => (
+                                      <option key={k} value={k}>{k}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 병렬 그룹 내 + 추가 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setPicker({ mode: 'add-to-group', groupIndex: firstItemIdx, targetGroupId: group.id })}
+                      title="병렬 그룹에 결재자 추가"
+                      className={`flex ${memberCount <= 1 ? 'h-7' : 'h-11'} w-7 shrink-0 items-center justify-center rounded border border-dashed border-teal/60 bg-panel text-teal hover:bg-teal-soft transition-all`}
+                    >
+                      <span className="text-base font-bold">+</span>
+                    </button>
+                  </div>
+
+                  {/* 병렬 그룹 위치 변경 버튼 (▲/▼) */}
+                  <div className="flex shrink-0 flex-col">
+                    <button
+                      type="button"
+                      onClick={() => moveGroup(renderGroups, groupIdx, -1)}
+                      title="병렬 그룹 위로 이동"
+                      className="text-[9px] leading-none text-ink3 hover:text-ink"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveGroup(renderGroups, groupIdx, 1)}
+                      title="병렬 그룹 아래로 이동"
+                      className="text-[9px] leading-none text-ink3 hover:text-ink"
+                    >
+                      ▼
+                    </button>
+                  </div>
+
+                  {/* 병렬 그룹 전체 삭제 (x) 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (group.items.length === 0) {
+                        removeEmptyGroup(group.id);
+                      } else {
+                        // 그룹 내 모든 멤버 일괄 삭제
+                        const indicesToRemove = group.items.map((it) => it.originalIndex);
+                        const nextEdits = edits.filter((_, idx) => !indicesToRemove.includes(idx));
+                        if (nextEdits.length > 0) nextEdits[0].linkedPrev = false;
+                        emit(nextEdits);
+                      }
+                    }}
+                    title="병렬 그룹 삭제"
+                    className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <button type="button" onClick={() => remove(i)} className="shrink-0 text-[13px] text-ink3 hover:text-red-500">✕</button>
+            );
+          }
+
+          // 순차 결재자 단독 바 레이아웃 (원래 WorkFit 기존 디자인 톤 및 삭제/이동 버튼 원복)
+          const { edit, originalIndex } = group.items[0];
+          return (
+            <div
+              key={originalIndex}
+              className="rounded-lg border border-border bg-panel-alt px-2.5 py-2 hover:border-teal/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">
+                  {groupIdx + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="truncate text-[12px] font-semibold text-ink">{nameOf(edit.approverId)}</span>
+                  <span className="ml-1 text-[10px] text-ink3">{deptPosOf(edit.approverId)}</span>
+                </button>
+                <select
+                  value={edit.kind}
+                  onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
+                  className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
+                >
+                  {STEP_KINDS.map((k) => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+                <div className="flex shrink-0 flex-col">
+                  <button type="button" onClick={() => move(originalIndex, -1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
+                  <button type="button" onClick={() => move(originalIndex, 1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(originalIndex)}
+                  title="결재자 삭제"
+                  className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
         {edits.length === 0 && (
           <div className="rounded-lg border border-dashed border-border py-6 text-center text-[11px] text-ink3">
-            결재선이 비어 있습니다. 자동 상신선 또는 결재자 추가로 구성하세요.
+            결재선이 비어 있습니다. 결재자 추가 또는 병렬 그룹 추가로 구성하세요.
           </div>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setPicker({ mode: 'add' })}
-        className="mt-2 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal"
-      >
-        + 결재자 추가
-      </button>
+      {/* 하단 버튼 2개: 일반 결재자 추가 / 병렬 그룹 추가 */}
+      <div className="mt-2.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPicker({ mode: 'add' })}
+          className="flex-1 rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-colors"
+        >
+          + 결재자 추가 (순차)
+        </button>
+        <button
+          type="button"
+          onClick={() => createEmptyParallelGroup()}
+          className="flex-1 rounded-lg border border-dashed border-sky-300 bg-sky-50/50 py-1.5 text-[11.5px] font-bold text-sky-700 hover:bg-sky-100 transition-colors"
+        >
+          + 병렬 그룹 추가
+        </button>
+      </div>
 
       {dupWarn && (
         <p className="mt-1.5 text-[10.5px] text-amber">⚠ 기안자 본인 또는 중복 결재자가 포함돼 있습니다.</p>
@@ -186,10 +557,24 @@ export function ApprovalLineBuilder({
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
           <div className="max-h-[75vh] w-full max-w-md overflow-hidden rounded-2xl bg-panel shadow-2xl flex flex-col" onClick={(ev) => ev.stopPropagation()}>
             <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between shrink-0">
-              <span>{picker.mode === 'add' ? '결재자 추가' : '결재자 변경'}</span>
+              <span>
+                {picker.mode === 'add'
+                  ? '결재자 추가'
+                  : picker.mode === 'replace'
+                  ? '결재자 변경'
+                  : picker.groupIndex === -1
+                  ? '병렬 그룹 결재자 추가 (최소 2명 이상 선택)'
+                  : '병렬 그룹에 결재자 추가'}
+              </span>
               <button type="button" onClick={() => setPicker(null)} className="text-[16px] text-ink3 hover:text-ink">✕</button>
             </div>
-            <UserPickList users={users.filter((u) => u.status === '사용')} org={org} onPick={pick} />
+            <UserPickList
+              users={users.filter((u) => u.status === '사용')}
+              org={org}
+              onPick={pick}
+              isMultiSelect={picker.mode === 'add-to-group' && picker.groupIndex === -1}
+              minSelectCount={picker.mode === 'add-to-group' && picker.groupIndex === -1 ? 2 : 1}
+            />
           </div>
         </div>
       )}
@@ -197,12 +582,41 @@ export function ApprovalLineBuilder({
   );
 }
 
-/** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트. */
-function UserPickList({ users, org, onPick }: { users: User[]; org: ReturnType<typeof useOrgTree>; onPick: (id: string) => void }) {
+/** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트 (단일/다중 선택 지원). */
+function UserPickList({
+  users,
+  org,
+  onPick,
+  isMultiSelect = false,
+  minSelectCount = 1,
+}: {
+  users: User[];
+  org: ReturnType<typeof useOrgTree>;
+  onPick: (ids: string | string[]) => void;
+  isMultiSelect?: boolean;
+  minSelectCount?: number;
+}) {
   const [tab, setTab] = useState<'org' | 'list'>('org');
   const [q, setQ] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const kw = q.trim().toLowerCase();
   const list = users.filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
+
+  const toggleSelect = (id: string) => {
+    if (!isMultiSelect) {
+      onPick(id);
+      return;
+    }
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleConfirm = () => {
+    if (selectedIds.length < minSelectCount) {
+      alert(`최소 ${minSelectCount}명 이상의 결재자를 선택하셔야 병렬 그룹이 형성됩니다.`);
+      return;
+    }
+    onPick(selectedIds);
+  };
 
   return (
     <div className="flex max-h-[66vh] flex-col min-h-0 flex-1">
@@ -243,7 +657,7 @@ function UserPickList({ users, org, onPick }: { users: User[]; org: ReturnType<t
           /* 검색어 입력 시 검색 결과 리스트 */
           <div className="space-y-0.5">
             {list.map((u) => (
-              <UserPickItem key={u.id} user={u} onPick={onPick} />
+              <UserPickItem key={u.id} user={u} onPick={toggleSelect} isSelected={selectedIds.includes(u.id)} isMulti={isMultiSelect} />
             ))}
             {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">검색 결과가 없습니다.</div>}
           </div>
@@ -251,7 +665,7 @@ function UserPickList({ users, org, onPick }: { users: User[]; org: ReturnType<t
           /* 조직도 트리 뷰 */
           <div className="space-y-1">
             {org.roots.map((root) => (
-              <OrgTreeNodeItem key={root.dept.id} node={root} onPick={onPick} />
+              <OrgTreeNodeItem key={root.dept.id} node={root} onPick={toggleSelect} selectedIds={selectedIds} isMulti={isMultiSelect} />
             ))}
             {org.roots.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">조직도 정보가 없습니다.</div>}
           </div>
@@ -259,18 +673,44 @@ function UserPickList({ users, org, onPick }: { users: User[]; org: ReturnType<t
           /* 전체 사용자 리스트 뷰 */
           <div className="space-y-0.5">
             {list.map((u) => (
-              <UserPickItem key={u.id} user={u} onPick={onPick} />
+              <UserPickItem key={u.id} user={u} onPick={toggleSelect} isSelected={selectedIds.includes(u.id)} isMulti={isMultiSelect} />
             ))}
             {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">사용자가 없습니다.</div>}
           </div>
         )}
       </div>
+
+      {/* 다중 선택 시 하단 확정 버튼 */}
+      {isMultiSelect && (
+        <div className="border-t border-border bg-panel-alt p-3 flex items-center justify-between shrink-0">
+          <span className="text-[11.5px] font-bold text-ink">
+            선택된 결재자: <strong className="text-teal font-extrabold">{selectedIds.length}명</strong>
+          </span>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="rounded-lg bg-teal px-4 py-1.5 text-[12px] font-bold text-white hover:bg-teal-dark transition-colors shadow-xs"
+          >
+            선택 완료 ({selectedIds.length}명)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 /** 조직도 트리의 각 부서 노드 컴포넌트 */
-function OrgTreeNodeItem({ node, onPick }: { node: import('@/features/gw/useOrgTree').OrgNode; onPick: (id: string) => void }) {
+function OrgTreeNodeItem({
+  node,
+  onPick,
+  selectedIds = [],
+  isMulti = false,
+}: {
+  node: import('@/features/gw/useOrgTree').OrgNode;
+  onPick: (id: string) => void;
+  selectedIds?: string[];
+  isMulti?: boolean;
+}) {
   const [open, setOpen] = useState(true);
   const hasContent = node.children.length > 0 || node.members.length > 0;
 
@@ -295,12 +735,12 @@ function OrgTreeNodeItem({ node, onPick }: { node: import('@/features/gw/useOrgT
         <div className="ml-3.5 pl-2 border-l border-border/60 space-y-0.5">
           {/* 부서 소속원들 */}
           {node.members.map((u) => (
-            <UserPickItem key={u.id} user={u} onPick={onPick} />
+            <UserPickItem key={u.id} user={u} onPick={onPick} isSelected={selectedIds.includes(u.id)} isMulti={isMulti} />
           ))}
 
           {/* 하위 부서들 */}
           {node.children.map((child) => (
-            <OrgTreeNodeItem key={child.dept.id} node={child} onPick={onPick} />
+            <OrgTreeNodeItem key={child.dept.id} node={child} onPick={onPick} selectedIds={selectedIds} isMulti={isMulti} />
           ))}
         </div>
       )}
@@ -309,20 +749,40 @@ function OrgTreeNodeItem({ node, onPick }: { node: import('@/features/gw/useOrgT
 }
 
 /** 개별 사용자 아이템 컴포넌트 */
-function UserPickItem({ user, onPick }: { user: User; onPick: (id: string) => void }) {
+function UserPickItem({
+  user,
+  onPick,
+  isSelected = false,
+  isMulti = false,
+}: {
+  user: User;
+  onPick: (id: string) => void;
+  isSelected?: boolean;
+  isMulti?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={() => onPick(user.id)}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-teal-soft/30 hover:text-teal transition-all group"
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-all group ${
+        isSelected
+          ? 'bg-teal-soft/80 text-teal border border-teal/40 font-bold'
+          : 'hover:bg-teal-soft/30 hover:text-teal'
+      }`}
     >
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal group-hover:bg-teal group-hover:text-white transition-colors">
-        {user.name[0]}
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold transition-colors ${
+        isSelected ? 'bg-teal text-white' : 'bg-teal-soft text-teal group-hover:bg-teal group-hover:text-white'
+      }`}>
+        {isSelected ? '✓' : user.name[0]}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1">
-          <span className="truncate text-[12px] font-semibold text-ink group-hover:text-teal">{user.name}</span>
-          <span className="text-[10px] text-teal font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">선택 ➔</span>
+          <span className={`truncate text-[12px] ${isSelected ? 'font-bold text-teal' : 'font-semibold text-ink group-hover:text-teal'}`}>
+            {user.name}
+          </span>
+          <span className="text-[10px] text-teal font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {isMulti ? (isSelected ? '해제' : '선택') : '선택 ➔'}
+          </span>
         </div>
         <div className="truncate text-[10.5px] text-ink3">{user.dept} · {user.position}</div>
       </div>
