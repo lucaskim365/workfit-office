@@ -948,9 +948,9 @@ function ApprovalDraftInner({
 
       </div>
 
-      {/* 해상도 작을 때 우측 결재선 Drawer */}
+      {/* 해상도 작을 때 우측 결재선 Drawer (header z-[200]보다 높은 z-[300] 지정) */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 xl:hidden" onClick={() => setDrawerOpen(false)}>
+        <div className="fixed inset-0 z-[300] flex justify-end bg-black/40 xl:hidden" onClick={() => setDrawerOpen(false)}>
           <div className="h-full w-full max-w-md bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
               <span className="text-[15px] font-bold text-ink">🔗 결재선 설정</span>
