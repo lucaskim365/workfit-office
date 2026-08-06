@@ -184,11 +184,11 @@ function ApprovalDraftInner({
       const formMaster = forms.find((f) => f.code === code);
       const dbDocTitle = (formMaster?.docTitle || formMaster?.name || '').trim();
 
-      // 2) 문서 제목 비교: 제목을 안 입력했거나 DB 서식 기본 문서명(예: '계약품의서', '휴가신청서')과 동일하면 미입력
+      // 2) 문서 제목 비교: 빈 값이거나, 서식의 기본 제목과 완전히 일치하면 변경되지 않은 것으로 판단
       const curTitle = title.trim();
       const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
 
-      // 3) 본문 내용 비교: 서식 본문 필드 placeholder 가이드글과 동일하거나 비어있으면 미입력
+      // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
       const curBody = (values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body).trim();
       const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
       const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
@@ -200,7 +200,7 @@ function ApprovalDraftInner({
       const relatedDocsHasEntered = relatedDocs.length > 0;
       const postApprovalHasEntered = isPostApproval || postApprovalReason.trim() !== '';
 
-      // 5) 동적 서식 필드 검증: 사용자가 서식 기본 가이드글(placeholder) 외에 직접 입력했는가?
+      // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
       const valuesHasChanged = Object.keys(values).some((k) => {
         if (k === RESERVED_BODY_KEY) return false;
         const valStr = String(values[k] ?? '').trim();
@@ -209,11 +209,19 @@ function ApprovalDraftInner({
         const fieldMaster = formMaster?.fields?.find((f) => f.key === k);
         const dbPlaceholder = String(fieldMaster?.placeholder || '').trim();
 
-        // 서식 기본 placeholder 거나 기본 선택값인 경우 미입력으로 처리
+        // 서식 기본 placeholder와 값이 같으면 변경되지 않은 것으로 처리
         if (dbPlaceholder && valStr === dbPlaceholder) return false;
 
-        // 휴가 신청 기본값(연차, 일수 등) 자동 세팅값인 경우 미입력 처리
-        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) return false;
+        // [추가] 필드 마스터에 설정된 기본값(defaultValue 등)이 있다면 이와 비교하는 로직 추가 가능
+        if (fieldMaster && 'defaultValue' in fieldMaster && valStr === String(fieldMaster.defaultValue ?? '')) {
+          return false;
+        }
+
+        // 휴가 신청 기본값 자동 세팅값인 경우 미입력 처리 (필요에 따라 유지 또는 보완)
+        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) {
+          // 휴가의 경우 초기 자동 계산된 값이 들어가므로, 사용자가 직접 손대지 않았으면 false 처리할 수 있도록 기본값과 비교
+          return false;
+        }
 
         return true;
       });
