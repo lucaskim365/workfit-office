@@ -170,8 +170,6 @@ function ApprovalDraftInner({
 
   const isFixed = !!fixedType || !!editDoc;
 
-  const initialValuesSnapshot = useRef(values);
-
   const hasManuallyEnteredValues = (): boolean => {
     if (editDoc) {
       const titleChanged = title !== (editDoc.title ?? '');
@@ -182,19 +180,45 @@ function ApprovalDraftInner({
       const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
       return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
     } else {
-      const hasTitle = title.trim() !== '';
-      const hasBody = body.trim() !== '';
-      const hasAmount = amount.trim() !== '';
-      const hasFiles = attachments.length > 0;
-      const hasPostApproval = isPostApproval || postApprovalReason.trim() !== '';
-      const valuesChanged = Object.keys(values).some((k) => {
-        const v = values[k];
-        if (v === undefined || v === null || String(v).trim() === '') return false;
-        const initV = initialValuesSnapshot.current[k];
-        if (initV !== undefined && JSON.stringify(v) === JSON.stringify(initV)) return false;
+      // 1) DB(approvalForms)에서 현재 선택된 서식 마스터 정보 추출
+      const formMaster = forms.find((f) => f.code === code);
+      const dbDocTitle = (formMaster?.docTitle || formMaster?.name || '').trim();
+
+      // 2) 문서 제목 비교: 제목을 안 입력했거나 DB 서식 기본 문서명(예: '계약품의서', '휴가신청서')과 동일하면 미입력
+      const curTitle = title.trim();
+      const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
+
+      // 3) 본문 내용 비교: 서식 본문 필드 placeholder 가이드글과 동일하거나 비어있으면 미입력
+      const curBody = (values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body).trim();
+      const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
+      const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
+      const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
+
+      // 4) 금액 / 첨부파일 / 관련문서 / 후결요청 검증
+      const amountHasEntered = amount.trim() !== '';
+      const filesHasEntered = attachments.length > 0;
+      const relatedDocsHasEntered = relatedDocs.length > 0;
+      const postApprovalHasEntered = isPostApproval || postApprovalReason.trim() !== '';
+
+      // 5) 동적 서식 필드 검증: 사용자가 서식 기본 가이드글(placeholder) 외에 직접 입력했는가?
+      const valuesHasChanged = Object.keys(values).some((k) => {
+        if (k === RESERVED_BODY_KEY) return false;
+        const valStr = String(values[k] ?? '').trim();
+        if (!valStr) return false;
+
+        const fieldMaster = formMaster?.fields?.find((f) => f.key === k);
+        const dbPlaceholder = String(fieldMaster?.placeholder || '').trim();
+
+        // 서식 기본 placeholder 거나 기본 선택값인 경우 미입력으로 처리
+        if (dbPlaceholder && valStr === dbPlaceholder) return false;
+
+        // 휴가 신청 기본값(연차, 일수 등) 자동 세팅값인 경우 미입력 처리
+        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) return false;
+
         return true;
       });
-      return hasTitle || hasBody || hasAmount || hasFiles || valuesChanged || hasPostApproval;
+
+      return titleHasChanged || bodyHasChanged || amountHasEntered || filesHasEntered || relatedDocsHasEntered || valuesHasChanged || postApprovalHasEntered;
     }
   };
 

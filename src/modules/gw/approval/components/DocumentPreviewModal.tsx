@@ -15,7 +15,7 @@ export function DocumentPreviewModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[110] grid place-items-center bg-black/45 p-4 animate-fadeIn"
+      className="fixed inset-0 z-[400] grid place-items-center bg-black/45 p-4 animate-fadeIn"
       onClick={(e) => {
         e.stopPropagation();
         onClose();
