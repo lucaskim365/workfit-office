@@ -395,6 +395,16 @@ export function missingRequired(fields: FormField[], values: Record<string, Fiel
   return fields
     .filter((f) => f.required && f.type !== '안내문')
     .filter((f) => {
+      // visibleIf 조건 필터링: 조건이 지정되어 있고 현재 입력값들과 맞지 않아 보이지 않는 상태면 검증 생략
+      if (f.visibleIf) {
+        const parts = f.visibleIf.split(':');
+        if (parts.length === 2) {
+          const [condKey, condVal] = parts;
+          if (String(values[condKey] ?? '') !== condVal) {
+            return false;
+          }
+        }
+      }
       const v = values[f.key];
       if (f.type === '기간') return !(v && values[f.key + END_SUFFIX]);
       if (f.type === '체크') return v !== true;

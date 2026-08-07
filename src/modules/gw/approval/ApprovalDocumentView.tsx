@@ -32,7 +32,17 @@ function korDate(iso: string | null | undefined): string {
 }
 
 
-export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: ApprovalDoc; formOverride?: ApprovalForm; currentUser?: { id: string; dept?: string } }) {
+export function ApprovalDocumentView({
+  doc,
+  formOverride,
+  currentUser,
+  isPreview = false,
+}: {
+  doc: ApprovalDoc;
+  formOverride?: ApprovalForm;
+  currentUser?: { id: string; dept?: string };
+  isPreview?: boolean;
+}) {
   const org = useOrgTree();
   const { data: forms = [] } = useApprovalForms();
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -51,6 +61,7 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
 
   // 1단계: 문서 자체의 보안 등급(securityLevel)에 따른 물리적 접근 차단 판별
   const canAccessDocument = (() => {
+    if (isPreview) return true; // 미리보기 시에는 통과
     if (!currentUser?.id) return true; // 미리보기 등 유저 미지정 시 허용
     if (isExecutive) return true; // 대표이사/상무이사 100% 허용
     if (doc.drafterId === currentUser.id) return true; // 기안자 허용
@@ -72,12 +83,14 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
 
   // 2단계: 필드 단위 보안 마스킹 권한 판별 (canViewSecret)
   const canViewSecret = (() => {
+    if (isPreview) return false; // 미리보기 모드에서는 기안자도 블러/마스킹된 모습 확인 가능하도록 false 반환
     if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
     if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
-    if (doc.drafterId === currentUser.id) return true; // 기안자 본인
+    if (doc.status === '완료' && doc.drafterId === currentUser.id) return true; // 기안자 본인은 완료함 등 완결 상태일 때만 해제
     if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
     return false;
   })();
+
 
   if (!canAccessDocument) {
     return (
@@ -402,7 +415,9 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
 
             if (block.type === 'longtext') {
               const f = block.fields[0];
-              const val = fieldText(f, doc.fieldValues, org);
+              const rawVal = fieldText(f, doc.fieldValues, org);
+              const val = maskValue(rawVal, f.isSecret);
+              const isBlurred = f.isSecret && !canViewSecret;
               return (
                 <div key={blockIdx} className="space-y-1">
                   {showSectionHeader && (
@@ -410,10 +425,11 @@ export function ApprovalDocumentView({ doc, formOverride, currentUser }: { doc: 
                       {block.section}
                     </div>
                   )}
-                  <div className="text-[11px] font-semibold text-ink2 mb-0.5">
+                  <div className="text-[11px] font-semibold text-ink2 mb-0.5 flex items-center gap-1">
                     {f.label}
+                    {isBlurred && <span className="text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">🔒 보안</span>}
                   </div>
-                  <div className="min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+                  <div className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70' : ''}`.trim()}>
                     {val || ' '}
                   </div>
                 </div>

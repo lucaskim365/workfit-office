@@ -846,7 +846,7 @@ function DocDetail({
             </button>
           </div>
           <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-hidden shadow-sm p-4">
-            <ApprovalDocumentView doc={doc} />
+            <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>
 

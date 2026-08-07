@@ -823,7 +823,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
       ) : (
         <div className="max-h-[520px] overflow-auto rounded-lg bg-panel-alt/50 p-4 flex justify-center">
           <div className="w-[800px] shrink-0 min-h-[297mm] bg-white p-8 shadow-lg border border-border/60 rounded-sm">
-            <ApprovalDocumentView doc={sampleDoc} formOverride={form} />
+            <ApprovalDocumentView doc={sampleDoc} formOverride={form} isPreview={true} />
           </div>
         </div>
       )}

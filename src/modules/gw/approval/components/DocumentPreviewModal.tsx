@@ -41,7 +41,7 @@ export function DocumentPreviewModal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">
-          <ApprovalDocumentView doc={doc} currentUser={currentUser} />
+          <ApprovalDocumentView doc={doc} currentUser={currentUser} isPreview={true} />
         </div>
         <div className="flex shrink-0 justify-end border-t border-border px-5 py-3 bg-panel-alt/20">
           <button
