@@ -268,7 +268,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   const [selTab, setSelTab] = useState('공통');
   const [fieldsExpanded, setFieldsExpanded] = useState(false);
   const [recipientExpanded, setRecipientExpanded] = useState(false);
-  const [permissionExpanded, setPermissionExpanded] = useState(false);
+
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
   useEffect(() => {
@@ -402,83 +402,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         )}
       </div>
 
-      {/* 기안자(Drafter) 권한 제한 설정 */}
-      <div className="mt-4 border-t border-border pt-4">
-        <button
-          type="button"
-          onClick={() => setPermissionExpanded(!permissionExpanded)}
-          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-amber-600 select-none"
-        >
-          <span>🔒 기안자 권한 제한 설정</span>
-          <span className="text-[11px] text-amber-600 font-semibold">
-            {permissionExpanded ? '접기 ▲' : '펼치기 ▼'}
-          </span>
-        </button>
 
-        {permissionExpanded && (
-          <div className="mt-3 grid grid-cols-12 gap-3 items-start border border-dashed border-amber-500/40 bg-amber-500/5 p-4 rounded-xl">
-            <div className="col-span-4">
-              <F label="최소 기안 직책 (이하)">
-                <select
-                  value={form.allowedPositionFromRank ?? ''}
-                  onChange={(e) => set({ allowedPositionFromRank: e.target.value ? Number(e.target.value) : null })}
-                  className={`${inp}`}
-                >
-                  <option value="">(제한 없음 - 팀원까지 가능)</option>
-                  <option value="9">팀원</option>
-                  <option value="4">팀장</option>
-                  <option value="2">본부장</option>
-                  <option value="1">대표</option>
-                </select>
-              </F>
-            </div>
-
-            <div className="col-span-4">
-              <F label="최대 기안 직책 (이상)">
-                <select
-                  value={form.allowedPositionToRank ?? ''}
-                  onChange={(e) => set({ allowedPositionToRank: e.target.value ? Number(e.target.value) : null })}
-                  className={`${inp}`}
-                >
-                  <option value="">(제한 없음 - 대표까지 가능)</option>
-                  <option value="9">팀원</option>
-                  <option value="4">팀장</option>
-                  <option value="2">본부장</option>
-                  <option value="1">대표</option>
-                </select>
-              </F>
-            </div>
-
-            <div className="col-span-4">
-              <label className="block text-[10.5px] font-bold text-ink3 mb-1">🏢 기안 허용 부서 지정</label>
-              <div className="border border-border rounded-lg bg-panel p-2 space-y-1 select-none">
-                {depts.map((d) => {
-                  const isChecked = (form.allowedDeptIds ?? []).includes(d.id);
-                  return (
-                    <label key={d.id} className="flex items-center gap-2 text-[11.5px] cursor-pointer text-ink hover:text-teal">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          const current = form.allowedDeptIds ?? [];
-                          const next = e.target.checked
-                            ? [...current, d.id]
-                            : current.filter((id) => id !== d.id);
-                          set({ allowedDeptIds: next });
-                        }}
-                        className="h-3.5 w-3.5 rounded border-border-hi text-teal focus:ring-teal"
-                      />
-                      <span>{d.name}</span>
-                    </label>
-                  );
-                })}
-                {depts.length === 0 && <div className="text-[11px] text-ink3 py-2 text-center">등록된 부서가 없습니다.</div>}
-              </div>
-              <div className="text-[9.5px] text-ink3 mt-1">체크가 모두 해제되어 있으면 모든 부서에서 기안이 가능합니다.</div>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* 필드 빌더 */}
       <div className="mt-4 border-t border-border pt-4">

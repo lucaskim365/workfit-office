@@ -490,32 +490,6 @@ export function ApprovalDraftModal({
     const miss = form ? missingRequired(form.fields.filter((f) => f !== amountField && f.key !== RESERVED_BODY_KEY), values) : [];
     if (miss.length) return `필수 항목을 입력하세요: ${miss.join(', ')}`;
     if (forSubmit) {
-      const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
-      if (form) {
-        if (form.allowedPositionFromRank != null && userRank > form.allowedPositionFromRank) {
-          let neededTitle = '상급자';
-          if (form.allowedPositionFromRank === 1) neededTitle = '대표';
-          else if (form.allowedPositionFromRank === 2) neededTitle = '본부장';
-          else if (form.allowedPositionFromRank === 3 || form.allowedPositionFromRank === 4) neededTitle = '팀장';
-          else if (form.allowedPositionFromRank >= 5) neededTitle = '팀원';
-          return `본 서식의 기안 권한이 없습니다. (${neededTitle} 이상 기안 가능)`;
-        }
-        if (form.allowedPositionToRank != null && userRank < form.allowedPositionToRank) {
-          let neededTitle = '하급자';
-          if (form.allowedPositionToRank === 1) neededTitle = '대표';
-          else if (form.allowedPositionToRank === 2) neededTitle = '본부장';
-          else if (form.allowedPositionToRank === 3 || form.allowedPositionToRank === 4) neededTitle = '팀장';
-          else if (form.allowedPositionToRank >= 5) neededTitle = '팀원';
-          return `본 서식의 기안 권한이 없습니다. (${neededTitle} 이하 기안 가능)`;
-        }
-        if (form.allowedDeptIds && form.allowedDeptIds.length > 0) {
-          const userDeptNode = org.depts.find((d) => d.name === me.dept);
-          const userDeptId = userDeptNode?.id ?? null;
-          if (!userDeptId || !form.allowedDeptIds.includes(userDeptId)) {
-            return `본 서식의 기안 권한이 없습니다. (허가된 부서만 기안 가능)`;
-          }
-        }
-      }
 
       if (code !== '기안' && code !== '전체') {
         const rulesForThisDoc = routeRules.filter((r) => r.active && r.docType === code);
@@ -569,32 +543,12 @@ export function ApprovalDraftModal({
   // 사용자의 직책 권한에 따라 비활성화할 서식(forms) 판정
   const disabledFormCodes = useMemo(() => {
     const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
-    const userDeptNode = org.depts.find((d) => d.name === me.dept);
-    const userDeptId = userDeptNode?.id ?? null;
     const disabledCodes = new Set<string>();
 
     for (const form of forms) {
       if (form.code === '기안' || form.code === '전체') continue;
 
-      // 1) 서식 레벨의 직급 범위 제한 검사
-      if (form.allowedPositionFromRank != null && userRank > form.allowedPositionFromRank) {
-        disabledCodes.add(form.code);
-        continue;
-      }
-      if (form.allowedPositionToRank != null && userRank < form.allowedPositionToRank) {
-        disabledCodes.add(form.code);
-        continue;
-      }
-
-      // 2) 서식 레벨의 부서 제한 검사
-      if (form.allowedDeptIds && form.allowedDeptIds.length > 0) {
-        if (!userDeptId || !form.allowedDeptIds.includes(userDeptId)) {
-          disabledCodes.add(form.code);
-          continue;
-        }
-      }
-
-      // 3) 룰 레벨의 직급 범위 제한 검사
+      // 룰 레벨의 직급 범위 제한 검사
       const rulesForThisDoc = routeRules.filter((r) => r.active && r.docType === form.code);
       if (rulesForThisDoc.length === 0) continue; // 규칙이 지정되지 않은 경우 기본 허용
 
@@ -609,7 +563,8 @@ export function ApprovalDraftModal({
       }
     }
     return disabledCodes;
-  }, [forms, routeRules, org.positions, org.depts, me.position, me.dept]);
+  }, [forms, routeRules, org.positions, me.position]);
+
 
   const persistDraft = async (): Promise<string> => {
     const input = buildInput();
