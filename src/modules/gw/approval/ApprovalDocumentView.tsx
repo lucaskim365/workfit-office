@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
@@ -45,125 +46,7 @@ export function ApprovalDocumentView({
 }) {
   const org = useOrgTree();
   const { data: forms = [] } = useApprovalForms();
-  const nameOf = (id: string) => org.userById(id)?.name ?? id;
-  const posOf = (id: string) => org.userById(id)?.position ?? '';
-  const sealOf = (id: string) => {
-    const user = org.userById(id);
-    if (!user) return '';
-    return user.signType === 'signature' ? (user.signUrl ?? '') : (user.sealUrl ?? '');
-  };
-  const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
-
-  // 사용자 정보 조회
-  const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
-  const userPos = userObj?.position ?? '';
-  const isExecutive = currentUser?.id === 'U001' || userPos === '대표이사' || userPos === '상무' || userPos === '상무이사' || userObj?.dept === '대표이사';
-
-  // 1단계: 문서 자체의 보안 등급(securityLevel)에 따른 물리적 접근 차단 판별
-  const canAccessDocument = (() => {
-    if (isPreview) return true; // 미리보기 시에는 통과
-    if (!currentUser?.id) return true; // 미리보기 등 유저 미지정 시 허용
-    if (isExecutive) return true; // 대표이사/상무이사 100% 허용
-    if (doc.drafterId === currentUser.id) return true; // 기안자 허용
-
-    const secLevel = doc.securityLevel ?? '일반';
-    if (secLevel === '일반') return true;
-
-    const isApprover = doc.steps.some((s) => s.approverId === currentUser.id);
-    const isRecipient = doc.recipients?.some((r) => r.id === currentUser.id || r.id === userObj?.dept);
-
-    if (secLevel === '대외비') {
-      return isApprover || !!isRecipient;
-    }
-    if (secLevel === '극비') {
-      return isApprover; // 극비 문서는 수신처/참조자 제외
-    }
-    return false;
-  })();
-
-  // 2단계: 필드 단위 보안 마스킹 권한 판별 (canViewSecret)
-  const canViewSecret = (() => {
-    if (isPreview) return false; // 미리보기 모드에서는 기안자도 블러/마스킹된 모습 확인 가능하도록 false 반환
-    if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
-    if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
-    if (doc.status === '완료' && doc.drafterId === currentUser.id) return true; // 기안자 본인은 완료함 등 완결 상태일 때만 해제
-    if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
-    return false;
-  })();
-
-
-  if (!canAccessDocument) {
-    return (
-      <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
-        <div className="text-[28px]">🛡️</div>
-        <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
-        <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
-          본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
-        </div>
-      </div>
-    );
-  }
-
-  const maskValue = (rawVal: string, isSecret?: boolean) => {
-    if (!isSecret || canViewSecret) return rawVal;
-    if (!rawVal || rawVal === '—') return '—';
-    // 주민번호 패턴
-    if (/^\d{6}[-s]?\d{7}$/.test(rawVal)) {
-      return rawVal.replace(/^(\d{6})[-s]?\d{7}$/, '$1-*******');
-    }
-    // 금액/숫자 패턴
-    if (!isNaN(Number(rawVal.replace(/[^0-9]/g, ''))) && rawVal.length > 2) {
-      return '₩ ***,***,*** 원';
-    }
-    return '[보안 처리된 정보입니다]';
-  };
-
-  // 기안자 스냅샷 우선 조회 정의
-  const drafterName = doc.drafterName || org.userById(doc.drafterId)?.name || doc.drafterId;
-  const drafterPos = doc.drafterPos || org.userById(doc.drafterId)?.position || '';
-  const drafterSeal = () => {
-    if (doc.drafterSignType) {
-      return doc.drafterSignType === 'signature'
-        ? (doc.drafterSignUrl ?? '')
-        : (doc.drafterSealUrl ?? '');
-    }
-    return sealOf(doc.drafterId);
-  };
-  const isDrafterSignature = () => {
-    if (doc.drafterSignType) {
-      return doc.drafterSignType === 'signature';
-    }
-    return isSignatureOf(doc.drafterId);
-  };
-
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
-
-  const handleDownload = async (e: any, url: string, name: string) => {
-    e.preventDefault();
-    try {
-      // CORS를 허용하여 다운로드 Blob 처리가 가능하도록 mode: 'cors' 추가
-      const response = await fetch(url, { mode: 'cors' });
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error('Download failed, falling back to hidden iframe:', error);
-      // window.open 대신 보이지 않는 iframe을 활용해 브라우저가 새 탭 미리보기 창을 띄우지 않고 다운로드하도록 지시
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = url;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 2000);
-    }
-  };
 
   useEffect(() => {
     if (cachedLogoDataUrl) {
@@ -199,6 +82,156 @@ export function ApprovalDocumentView({
       setProcessedLogo(dataUrl);
     };
   }, []);
+
+  const nameOf = (id: string) => org.userById(id)?.name ?? id;
+  const posOf = (id: string) => org.userById(id)?.position ?? '';
+  const sealOf = (id: string) => {
+    const user = org.userById(id);
+    if (!user) return '';
+    return user.signType === 'signature' ? (user.signUrl ?? '') : (user.sealUrl ?? '');
+  };
+  const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
+
+
+  // 사용자 정보 조회
+  const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
+  const userPos = userObj?.position ?? '';
+  const isExecutive = currentUser?.id === 'U001' || userPos === '대표이사' || userPos === '상무' || userPos === '상무이사' || userObj?.dept === '대표이사';
+
+  // 1단계: 문서 자체의 보안 등급(securityLevel) 및 공개 범위(visibility)에 따른 물리적 접근 차단 판별
+  const canAccessDocument = (() => {
+    if (isPreview) return true; // 미리보기 시에는 통과
+    if (!currentUser?.id) return true; // 미리보기 등 유저 미지정 시 허용
+
+    // 1. 문서 공식 관계자 여부 판별 (최우선순위)
+    const isDrafter = doc.drafterId === currentUser.id;
+    const isApprover = doc.steps.some((s) => s.approverId === currentUser.id);
+    
+    // 수신 부서 ID 혹은 부서명 교차 비교 지원
+    const isRecipient = doc.recipients?.some((r) => {
+      if (r.id === currentUser.id) return true;
+      if (r.id === userObj?.dept) return true;
+      const userDeptObj = org.depts.find(d => d.name === userObj?.dept);
+      if (userDeptObj && r.id === userDeptObj.id) return true;
+      return false;
+    });
+
+    // 후임자 승계 대상자 판별
+    const preds = getPredecessorsOf(currentUser.id);
+    const isPredecessorRelated = preds.includes(doc.drafterId) || doc.steps.some(s => preds.includes(s.approverId));
+
+    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated;
+
+    // 공식 관계자 및 후임자 승계자인 경우 등급/공개범위 무관 무조건 열람 가능 (제1순위)
+    if (isOfficialRelated) return true;
+
+    // 대표이사/상무이사 등 마스터 권한 소지 임원 (제2순위)
+    if (isExecutive) return true;
+
+    // 공개 범위 판별
+    const vis = doc.visibility ?? '부서';
+    // 비공개 문서인 경우 관계자/임원이 아니면 열람 불가 (제3순위)
+    if (vis === '비공개') return false;
+
+    // 부서공개 문서인 경우 소속 부서가 다르면 열람 불가 (제4순위)
+    if (vis === '부서' && doc.drafterDept !== userObj?.dept) return false;
+
+    // 물리적 보안등급 체크 (제5순위)
+    const secLevel = doc.securityLevel ?? '일반';
+    if (secLevel === '일반') return true; // 일반 등급은 타 부서원도 전사 공개 탭 등에서 확인 가능
+    
+    return false; // 그 외 대외비/극비 문서는 관계자/임원이 아니므로 열람 불가
+  })();
+
+
+
+  // 2단계: 필드 단위 보안 마스킹 권한 판별 (canViewSecret)
+  const [forceMaskMode, setForceMaskMode] = useState<boolean>(false);
+  const canViewSecret = (() => {
+    if (isPreview) return false; // 미리보기 모드에서는 기안자도 블러/마스킹된 모습 확인 가능하도록 false 반환
+    if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
+    if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
+    if (doc.status === '완료' && doc.drafterId === currentUser.id) return true; // 기안자 본인은 완료함 등 완결 상태일 때만 해제
+    if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
+    return false;
+  })();
+
+  const isMaskingActive = !canViewSecret || forceMaskMode;
+
+  if (!canAccessDocument) {
+    return (
+      <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
+        <div className="text-[28px]">🛡️</div>
+        <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
+        <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
+          본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
+        </div>
+      </div>
+    );
+  }
+
+  const maskValue = (rawVal: string, isSecret?: boolean) => {
+    if (!isSecret || !isMaskingActive) return rawVal;
+
+    if (!rawVal || rawVal === '—') return '—';
+    // 주민번호 패턴
+    if (/^\d{6}[-s]?\d{7}$/.test(rawVal)) {
+      return rawVal.replace(/^(\d{6})[-s]?\d{7}$/, '$1-*******');
+    }
+    // 금액/숫자 패턴
+    if (!isNaN(Number(rawVal.replace(/[^0-9]/g, ''))) && rawVal.length > 2) {
+      return '₩ ***,***,*** 원';
+    }
+    return '[보안 처리된 정보입니다]';
+  };
+
+  // 기안자 스냅샷 우선 조회 정의
+  const drafterName = doc.drafterName || org.userById(doc.drafterId)?.name || doc.drafterId;
+  const drafterPos = doc.drafterPos || org.userById(doc.drafterId)?.position || '';
+  const drafterSeal = () => {
+    if (doc.drafterSignType) {
+      return doc.drafterSignType === 'signature'
+        ? (doc.drafterSignUrl ?? '')
+        : (doc.drafterSealUrl ?? '');
+    }
+    return sealOf(doc.drafterId);
+  };
+  const isDrafterSignature = () => {
+    if (doc.drafterSignType) {
+      return doc.drafterSignType === 'signature';
+    }
+    return isSignatureOf(doc.drafterId);
+  };
+
+
+  const handleDownload = async (e: any, url: string, name: string) => {
+    e.preventDefault();
+    try {
+      // CORS를 허용하여 다운로드 Blob 처리가 가능하도록 mode: 'cors' 추가
+      const response = await fetch(url, { mode: 'cors' });
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed, falling back to hidden iframe:', error);
+      // window.open 대신 보이지 않는 iframe을 활용해 브라우저가 새 탭 미리보기 창을 띄우지 않고 다운로드하도록 지시
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 2000);
+    }
+  };
+
+
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
@@ -303,8 +336,47 @@ export function ApprovalDocumentView({
 
   let lastRenderedSection = '';
 
+  const hasSecretFields = form?.fields.some(f => f.isSecret);
+
   return (
-    <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a]" style={{ maxWidth: 800 }}>
+    <>
+      {/* 🔒 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
+      {hasSecretFields && (
+        <div className="mx-auto mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl max-w-[800px] flex items-center justify-between text-[11.5px] font-bold text-amber-800 print:hidden shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span>🔒</span>
+            <span>
+              {canViewSecret 
+                ? '귀하는 본 보안 문서의 공식 권한자(기안자/결재자)입니다.' 
+                : '본 문서에는 보안 규정에 의해 블러 처리된 항목이 포함되어 있습니다.'}
+            </span>
+          </div>
+          {canViewSecret ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-amber-700">타인에게 보이는 화면 비교:</span>
+              <button
+                type="button"
+                onClick={() => setForceMaskMode(!forceMaskMode)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  forceMaskMode ? 'bg-amber-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    forceMaskMode ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-[10px] text-amber-800">{forceMaskMode ? '마스킹 켜짐' : '마스킹 꺼짐'}</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-amber-600 bg-white px-2 py-0.5 rounded border border-amber-500/20">열람 권한 없음</span>
+          )}
+        </div>
+      )}
+
+      <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a]" style={{ maxWidth: 800 }}>
+
       <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
         <div className="flex items-center gap-2 h-full">
           <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
@@ -417,7 +489,7 @@ export function ApprovalDocumentView({
               const f = block.fields[0];
               const rawVal = fieldText(f, doc.fieldValues, org);
               const val = maskValue(rawVal, f.isSecret);
-              const isBlurred = f.isSecret && !canViewSecret;
+              const isBlurred = f.isSecret && isMaskingActive;
               return (
                 <div key={blockIdx} className="space-y-1">
                   {showSectionHeader && (
@@ -429,10 +501,14 @@ export function ApprovalDocumentView({
                     {f.label}
                     {isBlurred && <span className="text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">🔒 보안</span>}
                   </div>
-                  <div className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70' : ''}`.trim()}>
+                  <div 
+                    title={isBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
+                    className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
+                  >
                     {val || ' '}
                   </div>
                 </div>
+
               );
             }
 
@@ -530,7 +606,7 @@ export function ApprovalDocumentView({
                               ? Number(cellVal.replace(/,/g, '')).toLocaleString()
                               : cellVal;
 
-                            if (isCellSecret && !canViewSecret) {
+                            if (isCellSecret && isMaskingActive) {
                               displayVal = maskValue(displayVal, true);
                             }
 
@@ -538,15 +614,19 @@ export function ApprovalDocumentView({
 
                             if (isMerged && !isStart) return null;
 
+                            const isCellBlurred = isCellSecret && isMaskingActive;
+
                             return (
                               <td
                                 key={col}
                                 rowSpan={rowSpan > 1 ? rowSpan : undefined}
                                 colSpan={colSpan > 1 ? colSpan : undefined}
+                                title={isCellBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
                                 className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'} ${
-                                  isCellSecret && !canViewSecret ? 'blur-sm select-none opacity-70' : ''
+                                  isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
                                 }`}
                               >
+
                                 {displayVal || '—'}
                               </td>
                             );
@@ -634,8 +714,8 @@ export function ApprovalDocumentView({
                     <MetaRow
                       key={f.key}
                       cells={[
-                        [f.label, val, f.isSecret && !canViewSecret],
-                        [next.label, nextVal, next.isSecret && !canViewSecret]
+                        [f.label, val, f.isSecret && isMaskingActive],
+                        [next.label, nextVal, next.isSecret && isMaskingActive]
                       ]}
                     />
                   );
@@ -644,7 +724,7 @@ export function ApprovalDocumentView({
                   tableRows.push(
                     <MetaRow
                       key={f.key}
-                      cells={[[f.label, val, f.isSecret && !canViewSecret], ['', '']]}
+                      cells={[[f.label, val, f.isSecret && isMaskingActive], ['', '']]}
                     />
                   );
                 }
@@ -652,11 +732,12 @@ export function ApprovalDocumentView({
                 tableRows.push(
                   <MetaRow
                     key={f.key}
-                    cells={[[f.label, val, f.isSecret && !canViewSecret]]}
+                    cells={[[f.label, val, f.isSecret && isMaskingActive]]}
                     full
                   />
                 );
               }
+
             }
 
             return (
@@ -811,7 +892,9 @@ export function ApprovalDocumentView({
         </div>
       </div>
     </div>
+    </>
   );
 }
+
 
 

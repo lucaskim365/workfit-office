@@ -273,3 +273,27 @@ export function recall(doc: ApprovalDoc): ApprovalDoc {
   if (anyApproved) throw new ApprovalError('이미 승인이 진행돼 회수할 수 없습니다');
   return { ...doc, status: '회수', currentSeq: 0 };
 }
+
+// ── 후임자 업무/권한 승계 판별 헬퍼 ──
+// (인사이동 대응: U002 류지광 이사 ➔ U_MORAN 모란 대리 등)
+const SUCCESSION_MAP: Record<string, string> = {
+  U002: 'U_MORAN', // 류지광 이사 -> 모란 대리
+};
+
+/** 특정 후임자 ID가 인계받은 전임자(들)의 ID 리스트를 리턴합니다. */
+export function getPredecessorsOf(successorId: string): string[] {
+  if (!successorId) return [];
+  const preds: string[] = [];
+  for (const [predId, succId] of Object.entries(SUCCESSION_MAP)) {
+    if (succId === successorId) {
+      preds.push(predId);
+    }
+  }
+  return preds;
+}
+
+/** 특정 전임자 ID의 다음 후임자 ID를 리턴합니다. */
+export function getSuccessorOf(predecessorId: string): string | null {
+  return SUCCESSION_MAP[predecessorId] ?? null;
+}
+

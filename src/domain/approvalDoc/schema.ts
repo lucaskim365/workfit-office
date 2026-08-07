@@ -181,6 +181,8 @@ export const approvalDocSchema = z.object({
   preservationPeriod: z.string().nullable().optional(),
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
   securityLevel: z.enum(DOC_SECURITY_LEVELS).default('일반'),
+  /** 문서 공개 범위 ('전사' | '부서' | '비공개') */
+  visibility: z.enum(['전사', '부서', '비공개']).optional().default('부서'),
   /** 연결된 관련 기결재 문서 리스트 */
   relatedDocs: z.array(relatedDocSchema).default([]),
   /** 긴급 선조치 사후 승인(후결) 여부 */

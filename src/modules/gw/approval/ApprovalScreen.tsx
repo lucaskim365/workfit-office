@@ -15,18 +15,19 @@ import {
   useBatchDecideStep,
   useBatchRestoreFromTrash,
   useBatchPermanentlyDelete,
+  useAllApprovals,
 } from '@/features/gw/useApprovals';
-import { activeSteps, currentApproverIds } from '@/domain/approvalDoc/engine';
+import { activeSteps, currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { GwHead } from '@/modules/gw/_gw';
 import { DOC_TYPE_ICON, fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
 import { DocStatusBadge } from './components/ApprovalBadges';
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
-import { ApprovalDraftModal } from '@/modules/gw/approval/ApprovalDraftModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
+
 
 /**
  * 전자결재 결재함(§7.2) — 좌 함 탭(대기·상신·완료·참조·임시) + 중 목록 + 우 상세.
@@ -52,9 +53,13 @@ export default function ApprovalScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const me = user?.id ?? '';
+  const org = useOrgTree();
+  const userObj = org.userById(me);
+
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
+  const { data: allDocs = [] } = useAllApprovals();
   const [params, setParams] = useSearchParams();
-  const [box, setBox] = useState<ApprovalBox>('대기');
+  const [box, setBox] = useState<ApprovalBox | '부서문서' | '전사문서'>('대기');
 
   const myActivePendingCount = useMemo(() => {
     const list = byBox['대기'] ?? [];
@@ -62,10 +67,10 @@ export default function ApprovalScreen() {
   }, [byBox, me]);
 
   const [selId, setSelId] = useState<string | null>(null);
-  const [modal, setModal] = useState<{ edit?: ApprovalDoc | null } | null>(null);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
 
   // 다중 선택 상태 & 일괄 처리 훅
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -77,7 +82,7 @@ export default function ApprovalScreen() {
   const batchRestore = useBatchRestoreFromTrash();
   const batchPermanentDelete = useBatchPermanentlyDelete();
 
-  const list = byBox[box] ?? [];
+  const list = (box === '부서문서' || box === '전사문서') ? [] : (byBox[box as ApprovalBox] ?? []);
   const selDoc = useApprovalDoc(selId);
 
   // 함이나 필터가 바뀌면 다중 선택 초기화
@@ -87,33 +92,51 @@ export default function ApprovalScreen() {
 
   // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
+    if (box === '부서문서') {
+      const myDept = userObj?.dept ?? '';
+      return allDocs.filter((d) => {
+        const vis = d.visibility ?? '부서';
+        if (vis === '비공개') return false; // 비공개는 제외
+        return d.drafterDept === myDept;
+      });
+    }
+    if (box === '전사문서') {
+      return allDocs.filter((d) => d.visibility === '전사');
+    }
     if (box === '시행') {
       if (execFilter === 'pending') {
-        return list.filter((d) => d.execution?.status === '대기중' || d.execution?.status === '처리중');
+        return list.filter((d: ApprovalDoc) => d.execution?.status === '대기중' || d.execution?.status === '처리중');
       }
       if (execFilter === 'completed') {
-        return list.filter((d) => d.execution?.status === '시행완료');
+        return list.filter((d: ApprovalDoc) => d.execution?.status === '시행완료');
       }
       return list;
     }
     if (box === '완료') {
-      if (doneFilter === 'draft') return list.filter((d) => d.drafterId === me);
+      if (doneFilter === 'draft') return list.filter((d: ApprovalDoc) => d.drafterId === me);
       if (doneFilter === 'approved') {
         return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
       }
       return list;
     }
     if (box === '대기') {
+      const preds = getPredecessorsOf(me);
       if (todoFilter === 'pending') {
-        return list.filter((d: ApprovalDoc) => currentApproverIds(d).includes(me));
+        return list.filter((d: ApprovalDoc) => {
+          const approvers = currentApproverIds(d);
+          return approvers.includes(me) || approvers.some(id => preds.includes(id));
+        });
       }
       if (todoFilter === 'progress') {
-        return list.filter((d: ApprovalDoc) => !currentApproverIds(d).includes(me));
+        return list.filter((d: ApprovalDoc) => {
+          const approvers = currentApproverIds(d);
+          return !approvers.includes(me) && !approvers.some(id => preds.includes(id));
+        });
       }
       return list;
     }
     return list;
-  }, [box, list, doneFilter, todoFilter, execFilter, me]);
+  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, me, userObj?.dept]);
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
   useEffect(() => {
@@ -132,10 +155,23 @@ export default function ApprovalScreen() {
 
   // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
   useEffect(() => {
-    if (filteredList.length === 0) { setSelId(null); }
-    else if (!filteredList.some((d) => d.id === selId)) { setSelId(filteredList[0].id); }
-    setSelectedIds((prev) => prev.filter((id) => filteredList.some((d) => d.id === id)));
-  }, [box, filteredList, selId]);
+    if (filteredList.length === 0) {
+      if (selId !== null) setSelId(null);
+    } else {
+      const exists = filteredList.some((d: ApprovalDoc) => d.id === selId);
+      if (!exists) {
+        const firstId = filteredList[0].id;
+        if (selId !== firstId) setSelId(firstId);
+      }
+    }
+
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => filteredList.some((d: ApprovalDoc) => d.id === id));
+      if (JSON.stringify(prev) === JSON.stringify(next)) return prev; // 참조 비교 우회 방어
+      return next;
+    });
+  }, [filteredList, selId]);
+
 
   // 다중 선택 처리 헬퍼
   const isAllSelected = filteredList.length > 0 && selectedIds.length === filteredList.length;
@@ -143,9 +179,10 @@ export default function ApprovalScreen() {
     if (isAllSelected) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredList.map((d) => d.id));
+      setSelectedIds(filteredList.map((d: ApprovalDoc) => d.id));
     }
   };
+
 
   const toggleSelectOne = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -238,17 +275,55 @@ export default function ApprovalScreen() {
           </button>
           <div className="h-px bg-border -mt-0.5 mb-1" />
           {[
-            { title: '결재할 문서', boxes: ['대기'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '내가 올린 문서', boxes: ['상신', '반려'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '공유 문서', boxes: ['수신', '참조', '시행', '후열'] as const, titleBg: 'bg-panel-alt text-ink2' },
-            { title: '관리', boxes: ['완료', '삭제'] as const, titleBg: 'bg-panel-alt text-ink2' },
+            {
+              title: '문서함',
+              boxes: [
+                { key: '부서문서', label: '부서 문서함' },
+                { key: '전사문서', label: '전사 문서함' },
+              ] as const,
+              titleBg: 'bg-teal/10 text-teal dark:text-teal-soft',
+            },
+            {
+              title: '결재할 문서',
+              boxes: [{ key: '대기', label: BOX_LABEL['대기'] }] as const,
+              titleBg: 'bg-panel-alt text-ink2',
+            },
+            {
+              title: '내가 올린 문서',
+              boxes: [
+                { key: '상신', label: BOX_LABEL['상신'] },
+                { key: '반려', label: BOX_LABEL['반려'] },
+              ] as const,
+              titleBg: 'bg-panel-alt text-ink2',
+            },
+            {
+              title: '공유 문서',
+              boxes: [
+                { key: '수신', label: BOX_LABEL['수신'] },
+                { key: '참조', label: BOX_LABEL['참조'] },
+                { key: '시행', label: BOX_LABEL['시행'] },
+                { key: '후열', label: BOX_LABEL['후열'] },
+              ] as const,
+              titleBg: 'bg-panel-alt text-ink2',
+            },
+            {
+              title: '관리',
+              boxes: [
+                { key: '완료', label: BOX_LABEL['완료'] },
+                { key: '삭제', label: BOX_LABEL['삭제'] },
+              ] as const,
+              titleBg: 'bg-panel-alt text-ink2',
+            },
           ].map((g) => (
             <div key={g.title} className="flex flex-col gap-1.5">
               <div className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider uppercase ${g.titleBg}`}>
                 {g.title}
               </div>
               <div className="space-y-0.5">
-                {g.boxes.map((b) => {
+                {g.boxes.map((bInfo) => {
+                  const b = bInfo.key;
+                  const label = bInfo.label;
+
                   const executionCount = (byBox['시행'] ?? []).filter(
                     (d) => d.execution?.status === '대기중' || d.execution?.status === '처리중'
                   ).length;
@@ -256,19 +331,28 @@ export default function ApprovalScreen() {
                     (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)
                   ).length;
 
-                  const hasBadge = b === '대기'
-                    ? (byBox['대기'] ?? []).length > 0
-                    : b === '시행'
-                      ? executionCount > 0
-                      : b === '후열'
-                        ? (counts['후열'] ?? 0) > 0
-                        : (counts[b] ?? 0) > 0;
+                  // 배지 개수 산출
+                  let badgeCount = 0;
+                  if (b === '부서문서') {
+                    const myDept = userObj?.dept ?? '';
+                    badgeCount = allDocs.filter((d) => {
+                      const vis = d.visibility ?? '부서';
+                      if (vis === '비공개') return false;
+                      return d.drafterDept === myDept;
+                    }).length;
+                  } else if (b === '전사문서') {
+                    badgeCount = allDocs.filter((d) => d.visibility === '전사').length;
+                  } else if (b === '대기') {
+                    badgeCount = myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length;
+                  } else if (b === '시행') {
+                    badgeCount = executionCount;
+                  } else if (b === '후열') {
+                    badgeCount = counts['후열'] ?? 0;
+                  } else {
+                    badgeCount = counts[b] ?? 0;
+                  }
 
-                  const badgeCount = b === '대기'
-                    ? (myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length)
-                    : b === '시행'
-                      ? executionCount
-                      : counts[b];
+                  const hasBadge = badgeCount > 0;
 
                   const badgeClass = b === '대기'
                     ? (myActivePendingCount > 0
@@ -290,7 +374,9 @@ export default function ApprovalScreen() {
                       onClick={() => setBox(b)}
                       className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
-                      <span>{BOX_LABEL[b]}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span>{label}</span>
+                      </span>
                       {hasBadge && (
                         <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
                           {badgeCount}
@@ -319,7 +405,10 @@ export default function ApprovalScreen() {
                     title="전체 선택/해제"
                   />
                 )}
-                <span>{BOX_LABEL[box]} <span className="text-ink3">· {filteredList.length}</span></span>
+                <span>
+                  {box === '부서문서' ? '부서 문서함' : box === '전사문서' ? '전사 문서함' : BOX_LABEL[box as ApprovalBox]} 
+                  <span className="text-ink3">· {filteredList.length}</span>
+                </span>
               </div>
             </div>
 
@@ -385,9 +474,10 @@ export default function ApprovalScreen() {
             <div>
               {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
               {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
-              {filteredList.map((d) => {
+              {filteredList.map((d: ApprovalDoc) => {
                 const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
                 const isChecked = selectedIds.includes(d.id);
+
                 return (
                   <button
                     key={d.id}
@@ -512,11 +602,10 @@ export default function ApprovalScreen() {
           onClose={() => setShowBatchApproveConfirm(false)}
         />
       )}
-
-      {modal && <ApprovalDraftModal me={user} editDoc={modal.edit ?? null} onClose={() => setModal(null)} />}
     </div>
   );
 }
+
 
 /** 목록 보조 표기(기안자명은 상세에서 org 로 해석 — 목록은 부서 비정규화 사용). */
 function org_nameFallback(d: ApprovalDoc): string {

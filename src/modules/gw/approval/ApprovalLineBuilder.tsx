@@ -1,7 +1,9 @@
 import { Fragment, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
+
 import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
@@ -572,9 +574,9 @@ export function ApprovalLineBuilder({
       {/* 결재자 추가 버튼 바로 하단: 수신/시행 등 외부 slot */}
       {bottomSlot && <div className="mt-3">{bottomSlot}</div>}
 
-      {/* 결재자 피커 팝오버 */}
-      {picker && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
+      {/* 결재자 피커 팝오버 (Portal 적용하여 부모 쌓임 맥락 탈출) */}
+      {picker && createPortal(
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
           <div className="max-h-[75vh] w-full max-w-md overflow-hidden rounded-2xl bg-panel shadow-2xl flex flex-col" onClick={(ev) => ev.stopPropagation()}>
             <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between shrink-0">
               <span>
@@ -596,11 +598,13 @@ export function ApprovalLineBuilder({
               minSelectCount={picker.mode === 'add-to-group' && picker.groupIndex === -1 ? 2 : 1}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
+
 
 /** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트 (단일/다중 선택 지원). */
 function UserPickList({

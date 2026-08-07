@@ -100,8 +100,14 @@ export const approvalFormSchema = z.object({
   allowedDeptIds: z.array(z.string()).nullable().optional(),
   /** 보존연한 */
   preservationPeriod: z.string().optional(),
+  /** 기본 보안 등급 */
+  securityLevel: z.enum(['일반', '대외비', '극비']).optional(),
+  /** 기본 공개 범위 */
+  visibility: z.enum(['전사', '부서', '비공개']).optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
+
+
 
 /** 폴더(Folder) 도메인 스키마 추가 */
 export const approvalFolderSchema = z.object({

@@ -402,6 +402,52 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         )}
       </div>
 
+      {/* 🔒 서식 기본 보안 정책 설정 */}
+      <div className="mt-4 border-t border-border pt-4">
+        <div className="mb-2 text-[12px] font-bold text-ink select-none flex items-center gap-1">
+          <span>🔒 서식 기본 보안 정책 설정</span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-12 gap-3 items-start border border-dashed border-red-500/40 bg-red-500/5 p-4 rounded-xl">
+          <div className="col-span-6">
+            <F label="기본 보안 등급">
+              <select
+                value={form.securityLevel || '일반'}
+                onChange={(e) => set({ securityLevel: e.target.value as any })}
+                className={`${inp} font-semibold ${
+                  form.securityLevel === '극비'
+                    ? 'text-red-600 bg-red-500/5'
+                    : form.securityLevel === '대외비'
+                    ? 'text-amber-600 bg-amber-500/5'
+                    : 'text-ink'
+                }`}
+              >
+                <option value="일반">일반 문서</option>
+                <option value="대외비">🔒 대외비</option>
+                <option value="극비">⛔ 극비</option>
+              </select>
+            </F>
+            <div className="text-[9.5px] text-ink3 mt-1">서식을 기안할 때 적용될 문서의 기본 물리적 보안 등급입니다.</div>
+          </div>
+
+          <div className="col-span-6">
+            <F label="기본 공개 범위">
+              <select
+                value={form.visibility || '부서'}
+                onChange={(e) => set({ visibility: e.target.value as any })}
+                className={`${inp} font-semibold text-ink`}
+              >
+                <option value="전사">전사 공개</option>
+                <option value="부서">부서 공개</option>
+                <option value="비공개">비공개</option>
+              </select>
+            </F>
+            <div className="text-[9.5px] text-ink3 mt-1">부서 문서함/전사 문서함 노출 여부 및 목록 탐색 범위를 한정합니다.</div>
+          </div>
+        </div>
+      </div>
+
+
 
 
       {/* 필드 빌더 */}
@@ -668,6 +714,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
       recipients: [],
       relatedDocs: [],
       securityLevel: '일반',
+      visibility: '부서',
       isPostApproval: false,
       currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };

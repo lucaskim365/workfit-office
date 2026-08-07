@@ -65,6 +65,7 @@ function ApprovalDraftInner({
   const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
   const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? '일반');
+  const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? '부서');
   const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? '5년');
 
   const [body, setBody] = useState(editDoc?.body ?? '');
@@ -141,13 +142,30 @@ function ApprovalDraftInner({
   }, []);
 
   useEffect(() => {
+    // 서식별 보안 설정 자동 매핑
+    if (code === '채용' || code === '인사') {
+      setSecurityLevel('극비');
+      setVisibility('비공개');
+    } else if (code === '지출결의') {
+      setSecurityLevel('대외비');
+      setVisibility('부서');
+    } else {
+      setSecurityLevel('일반');
+      setVisibility('전사');
+    }
+  }, [code]);
+
+
+  useEffect(() => {
     if (editDoc) {
       setCode(editDoc.docType);
       setTitle(editDoc.title ?? '');
       setSecurityLevel(editDoc.securityLevel ?? '일반');
+      setVisibility(editDoc.visibility ?? '부서');
       setPreservationPeriod(editDoc.preservationPeriod ?? '5년');
       setBody(editDoc.body ?? '');
       setAmount(editDoc.amount != null ? String(editDoc.amount) : '');
+
       const initialVals = { ...(editDoc.fieldValues ?? {}) };
       if (editDoc.docType === '휴가' && editDoc.form) {
         if (!initialVals['leaveType']) initialVals['leaveType'] = editDoc.form.leaveType;
@@ -310,6 +328,7 @@ function ApprovalDraftInner({
       execution,
       relatedDocs,
       securityLevel,
+      visibility,
       preservationPeriod,
       isPostApproval: isPostApprovalSystemEnabled ? isPostApproval : false,
       postApprovalReason: isPostApprovalSystemEnabled && isPostApproval ? combinedReason : null,
@@ -556,6 +575,7 @@ function ApprovalDraftInner({
       status: '진행중',
       amount: amountNum,
       securityLevel,
+      visibility: visibility,
       createdAt: new Date().toISOString(),
       submittedAt: null,
       completedAt: null,
@@ -772,15 +792,16 @@ function ApprovalDraftInner({
             </Field>
 
             <div className="grid grid-cols-3 gap-3 items-end">
-              <Field label="보안등급">
+              <Field label="공개 범위">
                 <select
-                  value={securityLevel}
-                  onChange={(e) => setSecurityLevel(e.target.value as any)}
+                  value={visibility}
+                  onChange={(e) => setVisibility(e.target.value as any)}
                   className={INP}
+                  disabled={code === '채용' || code === '인사'}
                 >
-                  <option value="일반">일반</option>
-                  <option value="대외비">대외비</option>
-                  <option value="극비">극비</option>
+                  <option value="전사">전사 공개</option>
+                  <option value="부서">부서 공개</option>
+                  <option value="비공개">비공개</option>
                 </select>
               </Field>
 
@@ -797,6 +818,7 @@ function ApprovalDraftInner({
                   <option value="영구">영구</option>
                 </select>
               </Field>
+
 
               {/* 후결(사후 승인) 옵션 토글 스위치 — 보안등급/보존연한과 같은 행에 배치 */}
               {isPostApprovalSystemEnabled ? (
@@ -829,7 +851,26 @@ function ApprovalDraftInner({
                 <div />
               )}
             </div>
+
+
+
+            {/* 보안 매핑에 따른 피드백 안내 문구 */}
+            {(code === '채용' || code === '인사' || code === '지출결의') && (
+              <div className={`rounded-lg px-3 py-2 text-[11px] font-semibold flex items-center gap-2 ${
+                code === '지출결의' 
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20' 
+                  : 'bg-red-500/10 text-red-700 border border-red-500/20'
+              }`}>
+                <span>{code === '지출결의' ? '⚠️' : '🔒'}</span>
+                <span>
+                  {code === '지출결의' 
+                    ? '지출결의서는 보안 규정에 의해 [대외비 / 부서 공개] 로 기본 제한됩니다.' 
+                    : `본 서식(${code}품의)은 극비 기안 양식으로써 기안 시점에 [극비 / 비공개]로 강제 자동 설정됩니다.`}
+                </span>
+              </div>
+            )}
           </div>
+
 
           {/* 서식 본문 및 동적 필드 영역 */}
           <div className="rounded-xl border border-border bg-panel p-4 space-y-4 shadow-2xs">
