@@ -157,12 +157,21 @@ export function DraftRecipientSection({
   const excludeRecipientIds = new Set(recipients.map((r) => r.id));
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {/* ─── 수신처 설정 카드 (z-20으로 지정하여 우측 시행자 카드 및 부모 레이어보다 위로 올림) ─── */}
-      <div className="relative z-20 rounded-xl border border-teal/20 bg-teal-soft/10 p-3 flex flex-col gap-2">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-[12px] font-bold text-teal">📨 수신처 설정</div>
+    <div className="rounded-xl border border-border bg-panel-alt/30 overflow-hidden">
+      {/* 섹션 헤더 */}
+      <div className="px-3 pt-2.5 pb-2 border-b border-border/60 flex items-center justify-between">
+        <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1.5">
+          <span>📬</span>
+          <span>수신 및 시행</span>
+        </span>
+        <span className="text-[10px] text-ink3">결재 완료 후 자동 전달</span>
+      </div>
+
+      {/* ─── 수신처 설정 ─── */}
+      <div className="relative p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-bold text-teal flex items-center gap-1">
+            <span>📨</span><span>수신처</span>
           </div>
           <InfoTooltip text="문서가 최종 완료되면 지정한 수신처(부서 또는 사원)에 자동으로 전송됩니다." />
         </div>
@@ -181,16 +190,19 @@ export function DraftRecipientSection({
         )}
 
         <button type="button" onClick={() => setRecipientDialog(true)}
-          className="mt-auto w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
+          className="w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
           + 수신처 추가
         </button>
       </div>
 
-      {/* ─── 시행자 설정 카드 ─── */}
-      <div className="relative z-10 rounded-xl border border-teal/20 bg-teal-soft/10 p-3 flex flex-col gap-2">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-[12px] font-bold text-teal">📦 시행자 설정</div>
+      {/* ─── 구분선 ─── */}
+      <div className="mx-3 border-t border-border/60" />
+
+      {/* ─── 시행자 설정 ─── */}
+      <div className="relative p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-bold text-teal flex items-center gap-1">
+            <span>📦</span><span>시행자</span>
           </div>
           <InfoTooltip text="문서 완료 후 실무 집행을 담당할 시행자(부서 또는 사원)를 1명 지정합니다." />
         </div>
@@ -205,7 +217,7 @@ export function DraftRecipientSection({
         )}
 
         <button type="button" onClick={() => setExecDialog(true)}
-          className="mt-auto w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
+          className="w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
           {executionTarget ? '+ 시행자 변경' : '+ 시행자 지정'}
         </button>
       </div>

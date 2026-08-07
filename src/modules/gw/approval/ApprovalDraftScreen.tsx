@@ -595,7 +595,7 @@ function ApprovalDraftInner({
     <div className="flex w-full flex-col bg-panel">
       {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
            (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
-      <header className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 py-3 shadow-xs">
+      <header className="sticky top-0 z-40 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -948,9 +948,13 @@ function ApprovalDraftInner({
           </div>
         </div>
 
-        {/* [3단] 우측 결재선 전용 고정 패널 (Wide/Desktop 화면 370px 고정) — z-30 및 overflow-visible로 2단 영역보다 상위에 위치 */}
-        <div className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 p-4 space-y-4 sticky self-start relative z-30 overflow-visible" style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}>
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
+        {/* [3단] 우측 결재선 전용 고정 패널 — sticky self-start top-53px, 내부 스크롤 + 패널 내부 헤더 sticky 고정 */}
+        <div
+          className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
+          style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
+        >
+          {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
             <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
               <span>결재선 설정</span>
@@ -960,22 +964,26 @@ function ApprovalDraftInner({
             </span>
           </div>
 
-          <ApprovalLineBuilder
-            steps={steps}
-            onChange={setSteps}
-            drafterId={me.id}
-            docType={code}
-            amount={amountNum}
-            docData={values}
-          />
-          {/* 수신처 / 시행자 지정 컴포넌트 */}
-          <DraftRecipientSection
-            recipients={recipients}
-            setRecipients={setRecipients}
-            executionTarget={executionTarget}
-            setExecutionTarget={setExecutionTarget}
-            org={org}
-          />
+          {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
+          <div className="px-4 py-4">
+            <ApprovalLineBuilder
+              steps={steps}
+              onChange={setSteps}
+              drafterId={me.id}
+              docType={code}
+              amount={amountNum}
+              docData={values}
+              bottomSlot={
+                <DraftRecipientSection
+                  recipients={recipients}
+                  setRecipients={setRecipients}
+                  executionTarget={executionTarget}
+                  setExecutionTarget={setExecutionTarget}
+                  org={org}
+                />
+              }
+            />
+          </div>
         </div>
 
       </div>

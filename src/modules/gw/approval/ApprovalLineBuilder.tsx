@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
@@ -61,6 +61,7 @@ export function ApprovalLineBuilder({
   docType,
   amount,
   docData,
+  bottomSlot,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
@@ -68,6 +69,7 @@ export function ApprovalLineBuilder({
   docType: string;
   amount: number | null;
   docData?: Record<string, any> | null;
+  bottomSlot?: React.ReactNode;
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
@@ -267,13 +269,13 @@ export function ApprovalLineBuilder({
   return (
     <div>
       {/* 상단 3방식 툴바 */}
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={fillAuto}
           disabled={route.isLoading}
           title="기안자 부서·직급·금액에 맞는 결재선을 룰 엔진으로 자동 생성"
-          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50"
+          className="rounded-lg border border-teal/30 bg-teal-soft/40 px-2.5 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft transition-colors disabled:opacity-50"
         >
           ⚡ 자동 결재선(룰)
         </button>
@@ -283,25 +285,26 @@ export function ApprovalLineBuilder({
             onChange([]);
             setEmptyGroupIds([]);
           }}
-          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500"
+          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500 hover:border-red-300 transition-colors"
         >
           비우기
         </button>
         <span className="ml-auto text-[10.5px] text-ink3">{edits.length}명 ({renderGroups.length}단계)</span>
       </div>
 
-      {/* 결재선 노드 리스트 (그룹 단위 렌더링) */}
-      <div className="space-y-2.5">
+      {/* 결재선 노드 리스트 (그룹 단위 렌더링) — Timeline Stepper 구조 */}
+      <div>
         {renderGroups.map((group, groupIdx) => {
           const firstItemIdx = group.items.length > 0 ? group.items[0].originalIndex : -1;
+          const isLast = groupIdx === renderGroups.length - 1;
 
           // 병렬 그룹 박스 UI (2명 이상이거나, 처음부터 병렬그룹으로 지정된 경우, 또는 빈 병렬그룹인 경우)
           if (group.items.length > 1 || group.isParallel || group.items.length === 0) {
             const memberCount = group.items.length;
 
             return (
+              <Fragment key={`group-${group.id}`}>
               <div
-                key={`group-${group.id}`}
                 className="rounded-lg border border-border bg-panel-alt p-2 hover:border-teal/50 transition-colors shadow-2xs"
               >
                 {/* [ (병렬순서동그라미) - 병렬 카드들 - +버튼 - 위치변경 - x삭제 ] 형태 수평 통합 레이아웃 */}
@@ -475,14 +478,21 @@ export function ApprovalLineBuilder({
                   </button>
                 </div>
               </div>
+              {/* Timeline 커넥터: 노드 사이 세로 실선 */}
+              {!isLast && (
+                <div className="flex" style={{ paddingLeft: '11px' }}>
+                  <div className="w-0.5 h-2.5 bg-border-hi" />
+                </div>
+              )}
+              </Fragment>
             );
           }
 
           // 순차 결재자 단독 바 레이아웃 (원래 WorkFit 기존 디자인 톤 및 삭제/이동 버튼 원복)
           const { edit, originalIndex } = group.items[0];
           return (
+            <Fragment key={originalIndex}>
             <div
-              key={originalIndex}
               className="rounded-lg border border-border bg-panel-alt px-2.5 py-2 hover:border-teal/50 transition-colors"
             >
               <div className="flex items-center gap-2">
@@ -520,6 +530,13 @@ export function ApprovalLineBuilder({
                 </button>
               </div>
             </div>
+              {/* Timeline 커넥터: 노드 사이 세로 실선 */}
+              {!isLast && (
+                <div className="flex" style={{ paddingLeft: '11px' }}>
+                  <div className="w-0.5 h-2.5 bg-border-hi" />
+                </div>
+              )}
+            </Fragment>
           );
         })}
 
@@ -551,6 +568,9 @@ export function ApprovalLineBuilder({
       {dupWarn && (
         <p className="mt-1.5 text-[10.5px] text-amber">⚠ 기안자 본인 또는 중복 결재자가 포함돼 있습니다.</p>
       )}
+
+      {/* 결재자 추가 버튼 바로 하단: 수신/시행 등 외부 slot */}
+      {bottomSlot && <div className="mt-3">{bottomSlot}</div>}
 
       {/* 결재자 피커 팝오버 */}
       {picker && (
