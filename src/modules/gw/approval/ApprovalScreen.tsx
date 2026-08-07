@@ -59,7 +59,8 @@ export default function ApprovalScreen() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
   const [params, setParams] = useSearchParams();
-  const [box, setBox] = useState<ApprovalBox | '부서문서' | '전사문서'>('대기');
+  const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
+  const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
 
   const myActivePendingCount = useMemo(() => {
     const list = byBox['대기'] ?? [];
@@ -72,6 +73,7 @@ export default function ApprovalScreen() {
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
 
+
   // 다중 선택 상태 & 일괄 처리 훅
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
@@ -82,27 +84,39 @@ export default function ApprovalScreen() {
   const batchRestore = useBatchRestoreFromTrash();
   const batchPermanentDelete = useBatchPermanentlyDelete();
 
-  const list = (box === '부서문서' || box === '전사문서') ? [] : (byBox[box as ApprovalBox] ?? []);
+  const list = box === '문서함' ? [] : (byBox[box as ApprovalBox] ?? []);
   const selDoc = useApprovalDoc(selId);
 
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, execFilter]);
+  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter]);
 
   // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
-    if (box === '부서문서') {
-      const myDept = userObj?.dept ?? '';
-      return allDocs.filter((d) => {
-        const vis = d.visibility ?? '부서';
-        if (vis === '비공개') return false; // 비공개는 제외
-        return d.drafterDept === myDept;
-      });
+    if (box === '문서함') {
+      if (docBoxFilter === 'dept') {
+        const myDept = userObj?.dept ?? '';
+        return allDocs.filter((d) => {
+          const vis = d.visibility ?? '부서';
+          if (vis === '비공개') return false; // 비공개는 제외
+          return d.drafterDept === myDept;
+        }).sort((a, b) => {
+          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tB - tA;
+        });
+      } else {
+        return allDocs.filter((d) => d.visibility === '전사')
+          .sort((a, b) => {
+            const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tB - tA;
+          });
+      }
     }
-    if (box === '전사문서') {
-      return allDocs.filter((d) => d.visibility === '전사');
-    }
+
+
     if (box === '시행') {
       if (execFilter === 'pending') {
         return list.filter((d: ApprovalDoc) => d.execution?.status === '대기중' || d.execution?.status === '처리중');
@@ -136,7 +150,8 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, me, userObj?.dept]);
+  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, me, userObj?.dept, docBoxFilter]);
+
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
   useEffect(() => {
@@ -278,8 +293,7 @@ export default function ApprovalScreen() {
             {
               title: '문서함',
               boxes: [
-                { key: '부서문서', label: '부서 문서함' },
-                { key: '전사문서', label: '전사 문서함' },
+                { key: '문서함', label: '문서함' },
               ] as const,
               titleBg: 'bg-teal/10 text-teal dark:text-teal-soft',
             },
@@ -333,15 +347,15 @@ export default function ApprovalScreen() {
 
                   // 배지 개수 산출
                   let badgeCount = 0;
-                  if (b === '부서문서') {
+                  if (b === '문서함') {
                     const myDept = userObj?.dept ?? '';
-                    badgeCount = allDocs.filter((d) => {
+                    const deptDocsCount = allDocs.filter((d) => {
                       const vis = d.visibility ?? '부서';
                       if (vis === '비공개') return false;
                       return d.drafterDept === myDept;
                     }).length;
-                  } else if (b === '전사문서') {
-                    badgeCount = allDocs.filter((d) => d.visibility === '전사').length;
+                    const companyDocsCount = allDocs.filter((d) => d.visibility === '전사').length;
+                    badgeCount = deptDocsCount + companyDocsCount;
                   } else if (b === '대기') {
                     badgeCount = myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length;
                   } else if (b === '시행') {
@@ -349,7 +363,7 @@ export default function ApprovalScreen() {
                   } else if (b === '후열') {
                     badgeCount = counts['후열'] ?? 0;
                   } else {
-                    badgeCount = counts[b] ?? 0;
+                    badgeCount = counts[b as ApprovalBox] ?? 0;
                   }
 
                   const hasBadge = badgeCount > 0;
@@ -374,6 +388,7 @@ export default function ApprovalScreen() {
                       onClick={() => setBox(b)}
                       className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
+
                       <span className="flex items-center gap-1.5">
                         <span>{label}</span>
                       </span>
@@ -406,9 +421,10 @@ export default function ApprovalScreen() {
                   />
                 )}
                 <span>
-                  {box === '부서문서' ? '부서 문서함' : box === '전사문서' ? '전사 문서함' : BOX_LABEL[box as ApprovalBox]} 
+                  {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]} 
                   <span className="text-ink3">· {filteredList.length}</span>
                 </span>
+
               </div>
             </div>
 
@@ -469,6 +485,27 @@ export default function ApprovalScreen() {
                 })}
               </div>
             )}
+
+            {box === '문서함' && (
+              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                {(['dept', 'all'] as const).map((f) => {
+                  const label = f === 'dept' ? '부서 문서' : '전사 문서';
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setDocBoxFilter(f)}
+                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${docBoxFilter === f
+                        ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
 
             {/* 목록 데이터 영역 */}
             <div>

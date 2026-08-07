@@ -10,6 +10,8 @@ import { ROLE_GROUPS, USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type U
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
+import { useDepartments } from '@/features/department/useDepartments';
+
 
 export type { UserFormValues };
 
@@ -36,6 +38,8 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
   const { data: users = [] } = useUsers();
   const { data: positions = [] } = usePositions();
   const { data: jobTitles = [] } = useJobTitles();
+  const { data: departments = [] } = useDepartments();
+
 
   const {
     register,
@@ -109,8 +113,16 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
           <TextField {...register('name')} invalid={!!errors.name} placeholder="홍길동" />
         </Field>
         <Field label="부서" required error={errors.dept?.message}>
-          <TextField {...register('dept')} invalid={!!errors.dept} placeholder="생산1팀" />
+          <SelectField
+            {...register('dept')}
+            invalid={!!errors.dept}
+            options={[
+              { value: '', label: '부서 선택' },
+              ...departments.map((d) => ({ value: d.name, label: d.name }))
+            ]}
+          />
         </Field>
+
         <Field label="직급" required error={errors.position?.message}>
           <SelectField
             {...register('position')}
