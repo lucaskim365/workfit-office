@@ -8,6 +8,8 @@ import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approv
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
+import { useUsers } from '@/features/user/useUsers';
+
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -45,7 +47,9 @@ export function ApprovalDocumentView({
   isPreview?: boolean;
 }) {
   const org = useOrgTree();
+  const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
+
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
   useEffect(() => {
@@ -83,14 +87,25 @@ export function ApprovalDocumentView({
     };
   }, []);
 
-  const nameOf = (id: string) => org.userById(id)?.name ?? id;
-  const posOf = (id: string) => org.userById(id)?.position ?? '';
-  const sealOf = (id: string) => {
-    const user = org.userById(id);
-    if (!user) return '';
-    return user.signType === 'signature' ? (user.signUrl ?? '') : (user.sealUrl ?? '');
+  const nameOf = (id: string) => {
+    const u = org.userById(id) || users.find((x) => x.id === id);
+    if (!u) return id;
+    return u.status === '미사용' ? `${u.name}(퇴사)` : u.name;
   };
-  const isSignatureOf = (id: string) => org.userById(id)?.signType === 'signature';
+  const posOf = (id: string) => {
+    const u = org.userById(id) || users.find((x) => x.id === id);
+    return u?.position ?? '';
+  };
+  const sealOf = (id: string) => {
+    const u = org.userById(id) || users.find((x) => x.id === id);
+    if (!u) return '';
+    return u.signType === 'signature' ? (u.signUrl ?? '') : (u.sealUrl ?? '');
+  };
+  const isSignatureOf = (id: string) => {
+    const u = org.userById(id) || users.find((x) => x.id === id);
+    return u?.signType === 'signature';
+  };
+
 
 
   // 사용자 정보 조회

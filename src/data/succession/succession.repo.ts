@@ -18,20 +18,50 @@ export const successionRepo = {
     return SUCCESSION_SEED;
   },
 
-  /** 특정 후임자(successorId)의 전임자 ID 목록 조회 */
+  /** 특정 후임자(successorId)의 모든 대를 거친 전임자 ID 목록 재귀 조회 (영구적 권한 이관 보장) */
   getPredecessorsOf(userId: string): string[] {
     const list = this.getAll();
-    return list
-      .filter((s) => s.successorId === userId)
-      .map((s) => s.predecessorId);
+    const predecessors: string[] = [];
+    const visited = new Set<string>();
+
+    const traverse = (currentId: string) => {
+      if (visited.has(currentId)) return;
+      visited.add(currentId);
+
+      const directPreds = list.filter((s) => s.successorId === currentId).map((s) => s.predecessorId);
+      directPreds.forEach((predId) => {
+        predecessors.push(predId);
+        traverse(predId);
+      });
+    };
+
+    traverse(userId);
+    return Array.from(new Set(predecessors));
   },
 
-  /** 특정 전임자(predecessorId)의 후임자 ID 조회 */
+  /** 특정 전임자(predecessorId)의 최종 후임자 ID를 재귀적으로 추적 */
   getSuccessorOf(userId: string): string | null {
     const list = this.getAll();
-    const item = list.find((s) => s.predecessorId === userId);
-    return item ? item.successorId : null;
-  },
+    const visited = new Set<string>();
+    
+    let currentId = userId;
+    let finalSuccessor: string | null = null;
+    
+    while (currentId) {
+      if (visited.has(currentId)) break;
+      visited.add(currentId);
+      
+      const item = list.find((s) => s.predecessorId === currentId);
+      if (item) {
+        finalSuccessor = item.successorId;
+        currentId = item.successorId;
+      } else {
+        break;
+      }
+    }
+    return finalSuccessor;
+  }
+,
 
   /** 신규 인수인계(승계) 매핑 추가 */
   add(predecessorId: string, successorId: string): ApprovalSuccession {

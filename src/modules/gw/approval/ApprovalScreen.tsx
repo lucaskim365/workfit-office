@@ -17,11 +17,17 @@ import {
   useBatchPermanentlyDelete,
   useAllApprovals,
 } from '@/features/gw/useApprovals';
-import { activeSteps, currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { GwHead } from '@/modules/gw/_gw';
+import type { User } from '@/domain/user/schema';
+
+
+
+
 import { DOC_TYPE_ICON, fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
 import { DocStatusBadge } from './components/ApprovalBadges';
+import { useUsers } from '@/features/user/useUsers';
+
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { absenceRepo } from '@/data/absence/absence.repo';
@@ -55,9 +61,11 @@ export default function ApprovalScreen() {
   const me = user?.id ?? '';
   const org = useOrgTree();
   const userObj = org.userById(me);
+  const { data: users = [] } = useUsers();
 
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
+
   const [params, setParams] = useSearchParams();
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
@@ -84,8 +92,37 @@ export default function ApprovalScreen() {
   const batchRestore = useBatchRestoreFromTrash();
   const batchPermanentDelete = useBatchPermanentlyDelete();
 
-  const list = box === '문서함' ? [] : (byBox[box as ApprovalBox] ?? []);
+  const preds = useMemo(() => getPredecessorsOf(me), [me]);
+
+  // 본인 및 전임자(들)의 approval boxes 데이터를 병합하여 단일 결재함 리스트 구성 (권한 승계 완벽 반영)
+  const list = useMemo(() => {
+    if (box === '문서함') return [];
+    
+    // 1. 본인의 기본 문서 목록
+    const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
+    const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
+    let combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId));
+
+    // 2. 전임자들의 문서 목록을 가져와 병합
+    preds.forEach((predId) => {
+      const predUser = org.userById(predId) || users.find((u) => u.id === predId);
+      if (!predUser) return;
+      const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
+      const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
+      
+      const predDocs = allDocs.filter((d) => matchesBox(d, predId, box as ApprovalBox, predDeptNameOrId));
+      combined = [...combined, ...predDocs];
+    });
+
+    // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
+    const uniqueMap = new Map<string, ApprovalDoc>();
+    combined.forEach((d) => uniqueMap.set(d.id, d));
+    return Array.from(uniqueMap.values()).sort(byRecent);
+  }, [box, allDocs, me, preds, org, userObj, users]);
+
+
   const selDoc = useApprovalDoc(selId);
+
 
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
@@ -250,33 +287,18 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className="w-full px-6">
-      <div className="flex items-center justify-between">
-        <GwHead
-          icon="🖋️"
-          name="전자결재"
-        />
-        <button
-          type="button"
-          onClick={() => setIsListCollapsed(!isListCollapsed)}
-          className="mt-2 self-end rounded-xl border-2 border-teal/40 bg-white dark:bg-panel px-4 py-2 text-[12.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/30 transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer shrink-0 hover:scale-[1.02] active:scale-[0.98]"
-          title={isListCollapsed ? '문서 목록 펼치기' : '문서 목록 접고 상세 넓게 보기'}
-        >
-          <span className="text-[13px]">{isListCollapsed ? '▶' : '◀'}</span>
-          <span>{isListCollapsed ? '문서 목록 펼치기' : '문서 목록 접기'}</span>
-        </button>
-      </div>
+    <div className="w-full px-6 pt-2">
+      <div className="flex gap-4 items-start w-full">
+        {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
+        <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
 
-
-      <div className={`mt-5 grid transition-all duration-300 gap-4 items-start ${isListCollapsed ? 'grid-cols-[160px_1fr]' : 'grid-cols-[160px_320px_1fr]'}`}>
-        {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거 & 스크롤 시 상단 고정) */}
-        <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-4">
           <button
             onClick={() => navigate('/gw/approval/new')}
             className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm mb-0.5"
           >
             + 새 상신
           </button>
+
           <button
             onClick={() => setBox('임시')}
             className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === '임시' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
@@ -356,15 +378,24 @@ export default function ApprovalScreen() {
                     }).length;
                     const companyDocsCount = allDocs.filter((d) => d.visibility === '전사').length;
                     badgeCount = deptDocsCount + companyDocsCount;
-                  } else if (b === '대기') {
-                    badgeCount = myActivePendingCount > 0 ? myActivePendingCount : (byBox['대기'] ?? []).length;
-                  } else if (b === '시행') {
-                    badgeCount = executionCount;
-                  } else if (b === '후열') {
-                    badgeCount = counts['후열'] ?? 0;
                   } else {
-                    badgeCount = counts[b as ApprovalBox] ?? 0;
+                    const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
+                    const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
+                    let combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId));
+
+                    preds.forEach((predId) => {
+                      const predUser = org.userById(predId) || users.find((u) => u.id === predId);
+                      if (!predUser) return;
+                      const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
+                      const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
+                      const predDocs = allDocs.filter((d) => matchesBox(d, predId, b as ApprovalBox, predDeptNameOrId));
+                      combined = [...combined, ...predDocs];
+                    });
+
+                    const uniqueIds = new Set(combined.map((d) => d.id));
+                    badgeCount = uniqueIds.size;
                   }
+
 
                   const hasBadge = badgeCount > 0;
 
@@ -405,25 +436,47 @@ export default function ApprovalScreen() {
           ))}
         </div>
 
-        {/* 중: 목록 (목록 접기 시 hidden 처리) */}
-        {!isListCollapsed && (
-          <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col w-full min-w-0 shadow-sm self-start animate-fadeIn sticky top-4">
-            {/* 목록 헤더 */}
-            <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
-              <div className="flex items-center gap-2">
-                {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={toggleSelectAll}
-                    className="rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 animate-fadeIn"
-                    title="전체 선택/해제"
-                  />
-                )}
-                <span>
-                  {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]} 
-                  <span className="text-ink3">· {filteredList.length}</span>
-                </span>
+        {/* 우측 영역: 타이틀 바 + (목록 & 상세) */}
+        <div className="flex-1 flex flex-col gap-3">
+          {/* 🖥️ 상단 고정 통합 타이틀 바 ( GwHead 잘림 제거 대안 ) */}
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[20px]">🖋️</span>
+              <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setIsListCollapsed(!isListCollapsed)}
+              className="rounded-lg border border-teal/30 bg-white dark:bg-panel px-3 py-1.5 text-[11.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/20 transition-all shadow-2xs hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>{isListCollapsed ? '▶' : '◀'}</span>
+              <span>{isListCollapsed ? '목록 펼치기' : '목록 접기'}</span>
+            </button>
+          </div>
+
+          <div className="flex items-start gap-4">
+            {/* 중: 목록 (목록 접기 시 hidden 처리) */}
+            {!isListCollapsed && (
+              <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col w-[320px] shrink-0 min-w-0 shadow-sm self-start animate-fadeIn sticky top-[8px]">
+                {/* 목록 헤더 */}
+
+                <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
+                  <div className="flex items-center gap-2">
+                    {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 animate-fadeIn"
+                        title="전체 선택/해제"
+                      />
+                    )}
+                    <span>
+                      {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]} 
+                      <span className="text-ink3">· {filteredList.length}</span>
+                    </span>
+
 
               </div>
             </div>
@@ -609,13 +662,21 @@ export default function ApprovalScreen() {
             <DocDetail
               doc={selDoc}
               me={me}
+              users={users}
               onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
             />
+
           ) : (
             <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
           )}
         </div>
       </div>
+    </div>
+  </div>
+
+
+
+
 
       {/* 일괄 승인 경고 및 의견 입력 모달 */}
       {showBatchApproveConfirm && (
@@ -652,12 +713,15 @@ function org_nameFallback(d: ApprovalDoc): string {
 function DocDetail({
   doc,
   me,
+  users,
   onEdit,
 }: {
   doc: ApprovalDoc;
   me: string;
+  users: User[];
   onEdit: (d: ApprovalDoc) => void;
 }) {
+
   const org = useOrgTree();
   const decide = useDecideStep();
   const submitM = useSubmitApproval();
@@ -671,7 +735,12 @@ function DocDetail({
   const [approveComment, setApproveComment] = useState('');
   const [err, setErr] = useState('');
 
-  const nameOf = (id: string) => org.userById(id)?.name ?? id;
+  const nameOf = (id: string) => {
+    const u = org.userById(id) || users.find((x) => x.id === id);
+    if (!u) return id;
+    return u.status === '미사용' ? `${u.name}(퇴사)` : u.name;
+  };
+
   const busy = decide.isPending || submitM.isPending || recallM.isPending || deleteM.isPending || restoreM.isPending || permDeleteM.isPending || confirmPostReadM.isPending;
 
   const postReadStep = useMemo(() => doc.steps.find((s) => s.delegatedFromId === me), [doc.steps, me]);
@@ -904,31 +973,42 @@ function DocDetail({
             <div className="flex flex-wrap items-center gap-1.5">
               {doc.recipients?.map((r) => {
                 let detailInfo = '';
+                let isRetired = false;
                 if (r.type === 'user') {
-                  const u = org.userById(r.id);
-                  if (u) detailInfo = ` (${u.dept} ${u.position})`;
+                  const u = org.userById(r.id) || users.find((x) => x.id === r.id);
+                  if (u) {
+                    detailInfo = ` (${u.dept} ${u.position})`;
+                    isRetired = u.status === '미사용';
+                  }
                 } else if (r.type === 'dept') {
                   detailInfo = ' (부서)';
                 }
                 const label = r.type === 'drafter' ? '[기안자]' : '[수신]';
+                const displayName = isRetired ? `${r.name.replace('(퇴사)', '')}(퇴사)` : r.name;
                 return (
                   <span key={r.id} className="inline-flex items-center gap-1 text-teal font-medium">
                     <span className="text-[9.5px] opacity-75 font-bold">{label}</span>
                     <span>{r.type === 'dept' ? '📁' : '👤'}</span>
-                    <span>{r.name}{detailInfo}</span>
+                    <span>{displayName}{detailInfo}</span>
                   </span>
                 );
               })}
               {doc.steps.filter((s) => s.kind === '참조').map((s) => {
-                const u = org.userById(s.approverId);
-                const posDept = s.approverPos || u?.position ? ` (${s.approverDept || u?.dept || ''} ${s.approverPos || u?.position || ''})` : '';
+                const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
+                const isRetired = u?.status === '미사용';
+                const displayName = isRetired ? `${u?.name || s.approverName || s.approverId}(퇴사)` : (s.approverName || nameOf(s.approverId));
+                
+                const pos = s.approverPos || u?.position || '';
+                const dept = s.approverDept || u?.dept || '';
+                const posDept = dept || pos ? ` (${dept} ${pos})` : '';
                 return (
                   <span key={s.approverId} className="inline-flex items-center gap-1 text-teal font-medium">
                     <span className="text-[9.5px] opacity-75 font-bold">[참조]</span>
-                    <span>{s.approverName || nameOf(s.approverId)}{posDept}</span>
+                    <span>{displayName}{posDept}</span>
                   </span>
                 );
               })}
+
             </div>
           </div>
         )}
