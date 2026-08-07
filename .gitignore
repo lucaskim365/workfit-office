@@ -33,4 +33,6 @@ _migrate*.mjs
 # 앱 확인용 스크린샷(run-app 스킬)
 .screenshots/
 
+#UI개편 아이디어 프로젝트
+implement/UI개편아이디어/프로젝트/
 

@@ -61,6 +61,9 @@ export default function ApprovalMonitorScreen() {
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const deptNameOf = (id: string) => org.depts.find((d) => d.id === id || d.name === id)?.name ?? id;
 
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+
   // 1. 검색 및 필터링
   const filtered = useMemo(() => {
     let list = [...allDocs];
@@ -81,8 +84,15 @@ export default function ApprovalMonitorScreen() {
     return list.sort((a, b) => (b.submittedAt ?? b.createdAt ?? '').localeCompare(a.submittedAt ?? a.createdAt ?? ''));
   }, [allDocs, tab, q, org.users]);
 
+  // 페이지계산
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const pagedList = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
   // 2. 현재 선택 문서
-  const selDoc = useMemo(() => filtered.find((d) => d.id === selId) ?? filtered[0] ?? null, [filtered, selId]);
+  const selDoc = useMemo(() => filtered.find((d) => d.id === selId) ?? pagedList[0] ?? null, [filtered, pagedList, selId]);
 
   // 3. 현재 결재 대기자 구하기
   const getWaitingApprovers = (d: ApprovalDoc) => {
@@ -93,22 +103,22 @@ export default function ApprovalMonitorScreen() {
   };
 
   return (
-    <div className="flex flex-col gap-3.5 h-[calc(100vh-130px)]">
+    <div className="flex flex-col gap-3.5 pb-10">
       {/* 헤더 */}
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">결재문서 모니터링</h1>
         <p className="mt-0.5 text-xs text-ink3">기준 정보 / 조직·결재 기준정보 / 전사 결재 문서 진행 상황 실시간 모니터링</p>
       </div>
 
-      <div className="grid grid-cols-[1fr_420px] gap-4 min-h-0 flex-1">
+      <div className="grid grid-cols-[1fr_420px] gap-4 items-start">
         {/* 좌: 문서 그리드 목록 및 검색/필터 */}
-        <div className="flex flex-col rounded-xl border border-border bg-panel overflow-hidden min-w-0">
+        <div className="flex flex-col rounded-xl border border-border bg-panel overflow-hidden min-w-0 shadow-2xs">
           {/* 필터 탭 */}
           <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1 shrink-0 overflow-x-auto">
             {(Object.keys(TAB_LABELS) as MonitorTab[]).map((t) => (
               <button
                 key={t}
-                onClick={() => { setTab(t); setSelId(null); }}
+                onClick={() => { setTab(t); setSelId(null); setPage(1); }}
                 className={`rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${
                   tab === t ? 'bg-teal text-white shadow-sm' : 'text-ink2 hover:bg-panel-alt'
                 }`}
@@ -124,25 +134,25 @@ export default function ApprovalMonitorScreen() {
               <span className="text-[12px] text-ink3">🔍</span>
               <input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => { setQ(e.target.value); setPage(1); }}
                 placeholder="기안자, 문서제목, 문서유형, 문서번호 검색..."
                 className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
               />
               {q && (
-                <button onClick={() => setQ('')} className="text-[11px] text-ink3 hover:text-ink">✕</button>
+                <button onClick={() => { setQ(''); setPage(1); }} className="text-[11px] text-ink3 hover:text-ink">✕</button>
               )}
             </div>
           </div>
 
-          {/* 테이블 리스트 */}
-          <div className="flex-1">
+          {/* 테이블 리스트 (높이 고정 제거로 15개 행이 한 번에 표시됨) */}
+          <div className="w-full">
             {isLoading ? (
               <div className="py-12 text-center text-[12px] text-ink3">로딩 중…</div>
             ) : filtered.length === 0 ? (
               <div className="py-12 text-center text-[12px] text-ink3">조건에 일치하는 결재 문서가 없습니다.</div>
             ) : (
               <table className="w-full border-collapse text-left text-[11.5px]">
-                <thead className="sticky top-0 bg-panel-alt/80 backdrop-blur-sm border-b border-border font-bold text-ink2 z-10">
+                <thead className="bg-panel-alt/90 border-b border-border font-bold text-ink2">
                   <tr>
                     <th className="px-4 py-2.5">문서번호</th>
                     <th className="px-4 py-2.5">문서유형</th>
@@ -154,7 +164,7 @@ export default function ApprovalMonitorScreen() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {filtered.map((d) => {
+                  {pagedList.map((d) => {
                     const isSelected = selDoc?.id === d.id;
                     const st = STATUS_STYLE[d.status] || { bg: 'bg-panel-alt', text: 'text-ink3' };
                     return (
@@ -192,10 +202,52 @@ export default function ApprovalMonitorScreen() {
               </table>
             )}
           </div>
+
+          {/* 하단 페이지네이션 바 */}
+          <div className="flex items-center justify-between border-t border-border bg-panel-alt/40 px-4 py-2.5 shrink-0">
+            <span className="text-[11px] font-medium text-ink3">
+              전체 <strong className="text-ink font-bold">{filtered.length}</strong>건 (페이지 {page}/{totalPages})
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:bg-panel-alt disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ◀ 이전
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
+                <button
+                  key={pNum}
+                  type="button"
+                  onClick={() => setPage(pNum)}
+                  className={`h-7 w-7 rounded-lg text-[11.5px] font-bold transition-all ${
+                    page === pNum
+                      ? 'bg-teal text-white shadow-2xs'
+                      : 'border border-border/80 bg-panel text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  {pNum}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:bg-panel-alt disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                다음 ▶
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 우: 결재 상세 뷰 및 결재 흐름 상세 */}
-        <div className="flex flex-col gap-4 overflow-hidden">
+        {/* 우: 결재 상세 뷰 및 결재 흐름 상세 (페이지 스크롤 시 sticky 상단 고정) */}
+        <div className="flex flex-col gap-4 sticky top-4">
           {selDoc ? (
             <>
               {/* 결재 진행 상황 타임라인 패널 */}

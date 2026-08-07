@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import {
@@ -50,6 +50,7 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
 
 export default function ApprovalScreen() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const me = user?.id ?? '';
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const [params, setParams] = useSearchParams();
@@ -219,7 +220,7 @@ export default function ApprovalScreen() {
         {/* 좌: 함 탭 (목록 콘텐츠 길이에 딱 맞게 하단 흰색 여백 제거 & 스크롤 시 상단 고정) */}
         <div className="rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-4">
           <button
-            onClick={() => setModal({})}
+            onClick={() => navigate('/gw/approval/new')}
             className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm mb-0.5"
           >
             + 새 상신
@@ -481,7 +482,7 @@ export default function ApprovalScreen() {
             <DocDetail
               doc={selDoc}
               me={me}
-              onEdit={(d) => setModal({ edit: d })}
+              onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
             />
           ) : (
             <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>

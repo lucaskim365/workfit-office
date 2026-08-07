@@ -47,6 +47,8 @@ export const approvalStepSchema = z.object({
   seq: z.number().int().min(1),
   /** 병렬 그룹 태그 — 같으면 동시 활성(합의용). null 이면 단독 순차. */
   parallelGroup: z.string().nullable().default(null),
+  /** 승인 방식 — 'sequential' (순차) | 'parallel' (병렬) */
+  executionType: z.enum(['sequential', 'parallel']).optional().default('sequential'),
   /** 결재 구분(§4.2). 참조=열람만(진행 막지 않음), 전결=승인 시 상위 생략 완료. */
   kind: z.enum(STEP_KINDS),
   /** 결재자 users.id(FK). */

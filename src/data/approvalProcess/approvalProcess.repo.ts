@@ -34,6 +34,14 @@ export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
     isImplemented: true,
   },
   {
+    id: 'parallel_approval_toggle',
+    category: '결재 프로세스',
+    name: '병렬 결재 기능',
+    description: '동일 결재 단계에 복수의 결재자를 지정하여 동시에 결재를 진행할 수 있는 병렬 결재 프로세스를 허용합니다.',
+    enabled: true,
+    isImplemented: true,
+  },
+  {
     id: 'pre_approval',
     category: '결재 프로세스',
     name: '선결 (선승인)',
