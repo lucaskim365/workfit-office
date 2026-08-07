@@ -568,16 +568,19 @@ export default function ApprovalScreen() {
                 const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
                 const isChecked = selectedIds.includes(d.id);
 
+                const isActive = selId === d.id;
                 return (
                   <button
                     key={d.id}
                     onClick={() => setSelId(d.id)}
-                    className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-2.5 text-left transition-all ${selId === d.id
-                      ? 'bg-teal-soft/60'
-                      : isRecentCompleted
-                        ? 'bg-teal-soft/10 hover:bg-teal-soft/20'
-                        : 'hover:bg-panel-alt'
-                      } ${isRecentCompleted ? 'border-l-4 border-l-teal' : ''}`}
+                    className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-3 text-left transition-all ${
+                      isActive
+                        ? 'bg-teal-soft/50 border-l-4 border-l-teal shadow-2xs font-semibold'
+                        : isRecentCompleted
+                          ? 'bg-teal-soft/10 border-l-4 border-l-teal/30 hover:bg-teal-soft/20'
+                          : 'hover:bg-panel-alt border-l-4 border-l-transparent'
+                    }`}
+
                   >
                     {(box === '대기' || box === '삭제') && (
                       <input

@@ -261,7 +261,7 @@ export default function UserScreen() {
           columns={columns}
           rows={rows}
           rowKey={(u) => u.id}
-          pageSize={10}
+          pageSize={20}
           selectable
           selectedKeys={selected}
           onSelectionChange={setSelected}
