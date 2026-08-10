@@ -132,9 +132,12 @@ function ApprovalDraftInner({
     return () => clearTimeout(timer);
   }, [code, title, body, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
 
+  const hasCheckedAutosave = useRef(false);
+
   // 마운트 시 자동저장본 복구 제안
   useEffect(() => {
-    if (editDoc) return;
+    if (editDoc || hasCheckedAutosave.current) return;
+    if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
     const saved = localStorage.getItem('draft_autosave_' + me.id);
     if (saved) {
@@ -154,16 +157,16 @@ function ApprovalDraftInner({
             if (data.securityLevel) setSecurityLevel(data.securityLevel);
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
-            // 무한 팝업 방지: 불러온 즉시 스토리지에서 삭제 (수정 시 디바운스 훅에 의해 새로 저장됨)
-            localStorage.removeItem('draft_autosave_' + me.id);
-          } else {
-            localStorage.removeItem('draft_autosave_' + me.id);
           }
+          // 수락/거절 관계없이 첫 진입 시 검사 완료 후 세션 데이터 초기화
+          localStorage.removeItem('draft_autosave_' + me.id);
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
       }
     }
+    // 최초 마운트 검사 완료 플래그 적용
+    hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
   const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
