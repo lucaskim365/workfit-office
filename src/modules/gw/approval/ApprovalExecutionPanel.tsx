@@ -17,9 +17,10 @@ import { fmtDateTime } from '@/modules/gw/_gw';
 interface ApprovalExecutionPanelProps {
   doc: ApprovalDoc;
   userId: string;
+  forceFullView?: boolean;
 }
 
-export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelProps) {
+export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: ApprovalExecutionPanelProps) {
   const { data: users = [] } = useUsers();
   
   // 신규 복수 시행 훅 및 뮤테이션 연동
@@ -96,8 +97,28 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
     return [];
   }, [docExecutions, doc, users]);
 
+  // 기안자/기안부서 중심 열람 허용 + 시행 부서(수신 부서) 관점 권한 제한 필터링
+  const visibleExecutions = useMemo(() => {
+    if (forceFullView) return finalExecutions;
+
+    const isDrafterOrDrafterDept = doc.drafterId === userId || (meUser?.dept && doc.drafterDept === meUser.dept);
+    const isPublic = doc.visibility === '전사';
+    const isAdmin = meUser?.roleGroup === 'ADMIN';
+
+    if (isDrafterOrDrafterDept || isPublic || isAdmin) {
+      return finalExecutions;
+    }
+
+    // 본인 부서 시행 건만 열람 허용
+    const myDeptObj = depts.find((d) => d.name === meUser?.dept);
+    const myDeptId = myDeptObj?.id;
+    return finalExecutions.filter((exec) => {
+      return (myDeptId && exec.targetDeptId === myDeptId) || exec.targetDeptNameSnapshot === meUser?.dept;
+    });
+  }, [finalExecutions, doc, meUser, userId, depts, forceFullView]);
+
   // 문서 결재 상태가 최종 '완료'가 아니거나 표시할 시행 임무가 없으면 패널 숨김
-  if (doc.status !== '완료' || finalExecutions.length === 0) return null;
+  if (doc.status !== '완료' || visibleExecutions.length === 0) return null;
 
   const handleClaim = async (execId: string) => {
     setErrorMsg('');
@@ -204,12 +225,12 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
   };
 
   const statusColors: Record<string, string> = {
-    WAITING: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
-    UNASSIGNED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    IN_PROGRESS: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    RETURNED: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
-    CANCELLED: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+    WAITING: 'bg-zinc-50 border border-zinc-200 text-zinc-600 dark:bg-zinc-800/40 dark:border-zinc-700 dark:text-zinc-300',
+    UNASSIGNED: 'bg-blue-50 border border-blue-200 text-blue-600 dark:bg-blue-950/20 dark:border-blue-900/30 dark:text-blue-400',
+    IN_PROGRESS: 'bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400',
+    COMPLETED: 'bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400',
+    RETURNED: 'bg-rose-50 border border-rose-200 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-400',
+    CANCELLED: 'bg-gray-50 border border-gray-200 text-gray-500 dark:bg-gray-800/40 dark:border-gray-700 dark:text-gray-400',
   };
 
   const statusLabels: Record<string, string> = {
@@ -230,7 +251,7 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
           <span className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
             <span>시행 업무 진행 현황</span>
             <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[10px] font-extrabold text-teal">
-              {finalExecutions.length}개 시행부서
+              {visibleExecutions.length}개 시행부서
             </span>
           </span>
         </div>
@@ -244,7 +265,7 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
 
       {/* 시행 리스트 */}
       <div className="space-y-4">
-        {finalExecutions.map((exec) => {
+        {visibleExecutions.map((exec) => {
           const targetDept = depts.find((d) => d.id === exec.targetDeptId || d.name === exec.targetDeptId);
           const isDeptHead = targetDept?.headUserId === userId;
           const isMyDept = meUser?.dept === targetDept?.name;
@@ -259,7 +280,13 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
                   <span>📁</span>
                   <span>{exec.targetDeptNameSnapshot}</span>
                 </span>
-                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusColors[exec.status] || ''}`}>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusColors[exec.status] || ''}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    exec.status === 'COMPLETED' ? 'bg-emerald-500' :
+                    exec.status === 'RETURNED' ? 'bg-rose-500' :
+                    exec.status === 'IN_PROGRESS' ? 'bg-amber-500' :
+                    exec.status === 'UNASSIGNED' ? 'bg-blue-500' : 'bg-zinc-400'
+                  }`} />
                   {statusLabels[exec.status]}
                 </span>
               </div>
@@ -269,7 +296,14 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
                 <div className="flex items-center gap-1.5">
                   <span className="text-ink3 shrink-0">담당 실무자:</span>
                   <span className="font-semibold text-ink">
-                    {exec.assigneeNameSnapshot ? `✅ ${exec.assigneeNameSnapshot}` : '❌ 미지정'}
+                    {exec.assigneeNameSnapshot ? (
+                      <span className="text-teal font-bold">👤 {exec.assigneeNameSnapshot}</span>
+                    ) : (
+                      <span className="text-ink3 font-medium flex items-center gap-1">
+                        <span className="text-[12px] opacity-60">👤</span>
+                        <span>미지정</span>
+                      </span>
+                    )}
                   </span>
                 </div>
                 {exec.dispatchedAt && (
@@ -304,90 +338,86 @@ export function ApprovalExecutionPanel({ doc, userId }: ApprovalExecutionPanelPr
 
               {/* 부서원 및 부서장 컨트롤 액션 패널 */}
               {exec.status !== 'COMPLETED' && exec.status !== 'CANCELLED' && (
-                <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-1.5">
-                    {/* 접수대기 상태 && 본인 부서 업무 */}
-                    {exec.status === 'UNASSIGNED' && hasExecutionAuthority && (
+                <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-end flex-wrap gap-2">
+                  {/* 부서장 전용: 시행 강제 취소 (부차적인 액션이므로 왼쪽에 배치) */}
+                  {isDeptHead && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancel(exec.id)}
+                      className="mr-auto rounded-md border border-danger/35 px-2.5 py-1 text-[11px] font-semibold text-danger hover:bg-danger/5 transition-all"
+                    >
+                      시행 취소
+                    </button>
+                  )}
+
+                  {/* 접수대기 상태 && 본인 부서 업무 */}
+                  {exec.status === 'UNASSIGNED' && hasExecutionAuthority && (
+                    <button
+                      type="button"
+                      onClick={() => handleClaim(exec.id)}
+                      className="rounded-md bg-teal px-3 py-1.5 text-[11px] font-bold text-white hover:bg-teal-dark transition-all shadow-3xs"
+                    >
+                      내가 담당하기
+                    </button>
+                  )}
+
+                  {/* 부서장 전용: 담당 지정 */}
+                  {isDeptHead && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveExecId(exec.id);
+                        setShowAssignModal(true);
+                      }}
+                      className="rounded-md border border-teal/40 px-3 py-1.5 text-[11px] font-semibold text-teal hover:bg-teal-soft transition-all"
+                    >
+                      {exec.assigneeId ? '담당자 지정/변경' : '담당자 지정'}
+                    </button>
+                  )}
+
+                  {/* 담당자 본인: 처리 가능 액션들 */}
+                  {exec.status === 'IN_PROGRESS' && exec.assigneeId === userId && (
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleClaim(exec.id)}
-                        className="rounded-md bg-teal-soft px-3 py-1 text-[11px] font-bold text-teal hover:bg-teal hover:text-white transition-all shadow-3xs"
+                        onClick={() => handleRelease(exec.id)}
+                        className="rounded-md border border-border-hi px-3 py-1.5 text-[11px] font-semibold text-ink2 hover:bg-panel-alt transition-all"
                       >
-                        내가 담당하기
+                        담당 반납
                       </button>
-                    )}
-
-                    {/* 부서장 전용: 담당 지정 */}
-                    {isDeptHead && (
                       <button
                         type="button"
                         onClick={() => {
                           setActiveExecId(exec.id);
-                          setShowAssignModal(true);
+                          setShowReturnModal(true);
                         }}
-                        className="rounded-md border border-teal/40 px-3 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft transition-all"
+                        className="rounded-md border border-rose-500/40 px-3.5 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50"
                       >
-                        {exec.assigneeId ? '담당자 지정/변경' : '담당자 지정'}
+                        🚨 시행 반송
                       </button>
-                    )}
-
-                    {/* 담당자 본인: 처리 가능 액션들 */}
-                    {exec.status === 'IN_PROGRESS' && exec.assigneeId === userId && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveExecId(exec.id);
-                            setShowCompleteModal(true);
-                          }}
-                          className="rounded-md bg-emerald-600 px-3.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition-all shadow-3xs"
-                        >
-                          ✅ 시행 완료 보고
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveExecId(exec.id);
-                            setShowReturnModal(true);
-                          }}
-                          className="rounded-md bg-rose-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-rose-500 transition-all shadow-3xs"
-                        >
-                          🚨 시행 반송
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRelease(exec.id)}
-                          className="rounded-md border border-border-hi px-3 py-1 text-[11px] font-semibold text-ink2 hover:bg-panel-alt transition-all"
-                        >
-                          담당 반납
-                        </button>
-                      </div>
-                    )}
-
-                    {/* 기안자 전용: 반송된 건에 대해 보완 상신 */}
-                    {exec.status === 'RETURNED' && doc.drafterId === userId && (
                       <button
                         type="button"
-                        onClick={() => handleResubmit(exec.id)}
-                        className="rounded-md bg-teal px-3 py-1 text-[11px] font-bold text-white hover:bg-teal-dark transition-all shadow-3xs"
+                        onClick={() => {
+                          setActiveExecId(exec.id);
+                          setShowCompleteModal(true);
+                        }}
+                        className="rounded-md bg-emerald-600 px-4 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500 transition-all shadow-3xs"
                       >
-                        🔄 보완 완료 후 재시행 상신
+                        ✅ 시행 완료 보고
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  <div className="flex items-center gap-1.5">
-                    {/* 기안자 혹은 부서장 전용: 시행 강제 취소 */}
-                    {(doc.drafterId === userId || isDeptHead) && (
-                      <button
-                        type="button"
-                        onClick={() => handleCancel(exec.id)}
-                        className="rounded-md border border-rose-500/30 px-2 py-0.8 text-[10px] text-rose-500 hover:bg-rose-500 hover:text-white transition-all"
-                      >
-                        시행 취소
-                      </button>
-                    )}
-                  </div>
+                  {/* 기안자 전용: 반송된 건에 대해 보완 상신 */}
+                  {exec.status === 'RETURNED' && doc.drafterId === userId && (
+                    <button
+                      type="button"
+                      onClick={() => handleResubmit(exec.id)}
+                      className="rounded-md bg-teal px-3.5 py-1.5 text-[11px] font-bold text-white hover:bg-teal-dark transition-all shadow-3xs"
+                    >
+                      🔄 보완 완료 후 재시행 상신
+                    </button>
+                  )}
                 </div>
               )}
             </div>
