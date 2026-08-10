@@ -86,3 +86,82 @@ exports.onNewChatMessage = onDocumentCreated(
     );
   }
 );
+
+/**
+ * 인앱 알림(결재 등) → 기기 푸시.
+ *
+ * notifications 컬렉션에 새 문서가 생기면 트리거되어, 대상자(userId)의
+ * FCM 토큰(users/{id}.fcmToken)으로 푸시를 발송한다. 결재 요청/완료/반려/
+ * 수신 등 모든 결재 알림이 이 컬렉션을 거치므로 여기 하나로 커버된다.
+ * (메신저 푸시는 onNewChatMessage 가 chatMessages 에서 별도 처리하므로
+ *  중복 발송되지 않는다.)
+ */
+exports.onNewNotification = onDocumentCreated(
+  "notifications/{notiId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const noti = snap.data();
+    if (!noti) return;
+
+    const userId = noti.userId;
+    if (!userId) return;
+
+    const db = getFirestore();
+
+    // 대상자의 FCM 토큰.
+    const u = await db.collection("users").doc(userId).get();
+    const token = u.exists ? (u.data() || {}).fcmToken : "";
+    if (!token) {
+      console.log(`no token for user ${userId} (noti ${event.params.notiId})`);
+      return;
+    }
+
+    const type = noti.type || "시스템";
+    const title = noti.title || "새 알림";
+    const body = noti.text || "";
+
+    // linkUrl 예: "/gw/approval?doc=DOC123" → 앱 딥링크용 docId 추출.
+    const linkUrl = noti.linkUrl || "";
+    const docMatch = /[?&]doc=([^&]+)/.exec(linkUrl);
+    const docId = docMatch ? decodeURIComponent(docMatch[1]) : "";
+
+    // 타입별 안드로이드 채널(앱에서 생성한 채널 id 와 일치해야 함).
+    const channelId = type === "결재" ? "workfit_approvals" : "workfit_messages";
+
+    const message = {
+      token,
+      notification: { title, body },
+      // 앱이 알림 탭 시 결재 문서로 딥링크하기 위한 데이터.
+      data: {
+        type: String(type),
+        docId: String(docId),
+        linkUrl: String(linkUrl),
+        title: String(title),
+        body: String(body),
+      },
+      android: {
+        priority: "high",
+        notification: { channelId },
+      },
+      apns: { payload: { aps: { sound: "default" } } },
+    };
+
+    try {
+      await getMessaging().send(message);
+      console.log(`noti push sent to ${userId} (${type}) [${event.params.notiId}]`);
+    } catch (e) {
+      // 만료/무효 토큰이면 정리.
+      const code = e && e.errorInfo && e.errorInfo.code;
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+      ) {
+        await db.collection("users").doc(userId).update({ fcmToken: "" });
+        console.log(`cleared stale token for ${userId}`);
+      } else {
+        console.error(`noti push failed for ${userId}:`, e);
+      }
+    }
+  }
+);
