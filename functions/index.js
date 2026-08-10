@@ -6,6 +6,7 @@
  * (users/{id}.fcmToken)으로 푸시를 발송한다.
  *
  * 데이터 위치가 asia-northeast3(서울)이므로 함수도 동일 리전에 배포.
+ * 런타임: Node.js 22 (firebase.json runtime, package.json engines).
  */
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
