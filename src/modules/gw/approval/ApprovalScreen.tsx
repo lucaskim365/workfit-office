@@ -16,6 +16,7 @@ import {
   useBatchRestoreFromTrash,
   useBatchPermanentlyDelete,
   useAllApprovals,
+  useAllExecutions,
 } from '@/features/gw/useApprovals';
 import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
@@ -65,6 +66,7 @@ export default function ApprovalScreen() {
 
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
+  const { data: deptExecutions = [] } = useAllExecutions();
 
   const [params, setParams] = useSearchParams();
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
@@ -135,6 +137,7 @@ export default function ApprovalScreen() {
       if (docBoxFilter === 'dept') {
         const myDept = userObj?.dept ?? '';
         return allDocs.filter((d) => {
+          if (d.status !== '완료') return false; // 결재 완료된 문서만 노출
           const vis = d.visibility ?? '부서';
           if (vis === '비공개') return false; // 비공개는 제외
           return d.drafterDept === myDept;
@@ -144,7 +147,7 @@ export default function ApprovalScreen() {
           return tB - tA;
         });
       } else {
-        return allDocs.filter((d) => d.visibility === '전사')
+        return allDocs.filter((d) => d.status === '완료' && d.visibility === '전사') // 결재 완료된 문서만 노출
           .sort((a, b) => {
             const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -155,13 +158,27 @@ export default function ApprovalScreen() {
 
 
     if (box === '시행') {
-      if (execFilter === 'pending') {
-        return list.filter((d: ApprovalDoc) => d.execution?.status === '대기중' || d.execution?.status === '처리중');
-      }
-      if (execFilter === 'completed') {
-        return list.filter((d: ApprovalDoc) => d.execution?.status === '시행완료');
-      }
-      return list;
+      const myDeptId = userObj?.dept ? (org.depts.find(d => d.name === userObj.dept)?.id ?? '') : '';
+      return list.filter((d: ApprovalDoc) => {
+        const execs = deptExecutions.filter(e => e.documentId === d.id && e.targetDeptId === myDeptId);
+        const hasLegacyMatch = d.execution && (
+          d.execution.targetId === myDeptId || d.execution.targetId === userObj?.dept
+        );
+
+        if (execFilter === 'pending') {
+          if (execs.length > 0) {
+            return execs.some(e => e.status === 'UNASSIGNED' || e.status === 'IN_PROGRESS' || e.status === 'RETURNED');
+          }
+          return hasLegacyMatch && (d.execution!.status === '대기중' || d.execution!.status === '처리중');
+        }
+        if (execFilter === 'completed') {
+          if (execs.length > 0) {
+            return execs.every(e => e.status === 'COMPLETED');
+          }
+          return hasLegacyMatch && d.execution!.status === '시행완료';
+        }
+        return execs.length > 0 || hasLegacyMatch;
+      });
     }
     if (box === '완료') {
       if (doneFilter === 'draft') return list.filter((d: ApprovalDoc) => d.drafterId === me);
@@ -360,8 +377,9 @@ export default function ApprovalScreen() {
                   const b = bInfo.key;
                   const label = bInfo.label;
 
-                  const executionCount = (byBox['시행'] ?? []).filter(
-                    (d) => d.execution?.status === '대기중' || d.execution?.status === '처리중'
+                  const myDeptId = userObj?.dept ? (org.depts.find(d => d.name === userObj.dept)?.id ?? '') : '';
+                  const executionCount = deptExecutions.filter(
+                    (e) => e.targetDeptId === myDeptId && (e.status === 'UNASSIGNED' || e.status === 'IN_PROGRESS' || e.status === 'RETURNED')
                   ).length;
                   const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
                     (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)
@@ -1038,7 +1056,7 @@ function DocDetail({
         })()}
 
         {/* 시행 정보 및 제어 영역 */}
-        {doc.execution && (
+        {(doc.execution || (doc.executionDepts && doc.executionDepts.length > 0) || (doc.executionsSnapshot && doc.executionsSnapshot.length > 0)) && (
           <ApprovalExecutionPanel doc={doc} userId={me} />
         )}
 

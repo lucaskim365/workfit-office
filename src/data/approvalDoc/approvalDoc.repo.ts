@@ -45,6 +45,8 @@ function migrateDoc(data: any): any {
     form,
     attachments: data.attachments ?? [],
     execution: data.execution ?? null,
+    executionsSnapshot: data.executionsSnapshot ?? [],
+    executionDepts: data.executionDepts ?? [],
     preservationPeriod: data.preservationPeriod ?? null,
     relatedDocs: data.relatedDocs ?? [],
     visibility: data.visibility ?? '부서',
@@ -168,6 +170,8 @@ export interface ApprovalDraftInput {
   preservationPeriod?: string | null;
   /** 시행 정보 */
   execution?: ApprovalDoc['execution'];
+  /** 시행 부서 목록 */
+  executionDepts?: ApprovalDoc['executionDepts'];
   /** 관련 문서 목록 */
   relatedDocs?: ApprovalDoc['relatedDocs'];
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
@@ -293,6 +297,7 @@ export const approvalDocRepo = {
       drafterPos: drafterUser?.position ?? null,
       preservationPeriod: input.preservationPeriod ?? null,
       execution: input.execution ?? null,
+      executionDepts: input.executionDepts ?? [],
       relatedDocs: input.relatedDocs ?? [],
       securityLevel: input.securityLevel ?? '일반',
       visibility: input.visibility ?? '부서',
@@ -419,6 +424,21 @@ export const approvalDocRepo = {
       const approverUser = users.find((u) => u.id === userId);
 
       if (next.status === '완료') {
+        // 복수 시행처용 documentExecutions 레코드 생성 및 Snapshot 매핑
+        try {
+          const { documentExecutionRepo } = await import('@/data/documentExecution/documentExecution.repo');
+          await documentExecutionRepo.dispatchExecutions(next);
+          const execs = await documentExecutionRepo.getByDocumentId(next.id);
+          next.executionsSnapshot = execs.map(e => ({
+            executionId: e.id,
+            deptId: e.targetDeptId,
+            deptName: e.targetDeptNameSnapshot
+          }));
+          await persist(next);
+        } catch (e) {
+          console.error('시행처 이관 처리 실패:', e);
+        }
+
         // 기안자에게 완료 알림
         await notificationRepo.create({
           userId: next.drafterId,
@@ -446,7 +466,7 @@ export const approvalDocRepo = {
               userId: rec.id,
               type: '결재',
               title: '수신 문서 알림',
-              text: `[${next.title}] 수신/시행 문서가 배달되었습니다.`,
+              text: `[${next.title}] 수신 문서가 배달되었습니다.`,
               senderName: '시스템',
               linkUrl: `/gw/approval?doc=${next.id}`,
             });
@@ -457,11 +477,26 @@ export const approvalDocRepo = {
                 userId: du.id,
                 type: '결재',
                 title: '수신 문서 알림',
-                text: `[${next.title}] 부서 수신/시행 문서가 배달되었습니다.`,
+                text: `[${next.title}] 부서 수신 문서가 배달되었습니다.`,
                 senderName: '시스템',
                 linkUrl: `/gw/approval?doc=${next.id}`,
               });
             }
+          }
+        }
+
+        // 시행처 알림
+        for (const execDept of next.executionDepts || []) {
+          const deptUsers = users.filter((u) => u.dept === execDept.name);
+          for (const du of deptUsers) {
+            await notificationRepo.create({
+              userId: du.id,
+              type: '결재',
+              title: '시행 업무 알림',
+              text: `[${next.title}] 부서 시행 업무(실무 집행)가 이관되었습니다.`,
+              senderName: '시스템',
+              linkUrl: `/gw/approval?doc=${next.id}`,
+            });
           }
         }
       } else if (next.status === '진행중') {
@@ -604,6 +639,21 @@ export const approvalDocRepo = {
       }
       return s;
     });
+
+    if (next.status === '완료') {
+      try {
+        const { documentExecutionRepo } = await import('@/data/documentExecution/documentExecution.repo');
+        await documentExecutionRepo.dispatchExecutions(next);
+        const execs = await documentExecutionRepo.getByDocumentId(next.id);
+        next.executionsSnapshot = execs.map(e => ({
+          executionId: e.id,
+          deptId: e.targetDeptId,
+          deptName: e.targetDeptNameSnapshot
+        }));
+      } catch (e) {
+        console.error('대결 결재 완료 후 시행처 이관 실패:', e);
+      }
+    }
 
     await persist(next);
     return next;

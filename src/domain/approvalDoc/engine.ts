@@ -236,6 +236,17 @@ export function matchesBox(
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '시행': {
       if (doc.status !== '완료') return false;
+      
+      // 1. 복수 시행처 스냅샷 매칭
+      if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {
+        if (!userDeptName) return false;
+        const parts = userDeptName.split('||');
+        return doc.executionsSnapshot.some((snapshot) => 
+          parts.includes(snapshot.deptId) || parts.includes(snapshot.deptName)
+        );
+      }
+
+      // 2. 하위 호환성 (Legacy doc.execution)
       if (!doc.execution) return false;
       const targetId = doc.execution.targetId;
       const targetType = doc.execution.targetType;

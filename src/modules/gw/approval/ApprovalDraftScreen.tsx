@@ -90,8 +90,9 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
 
-  const [executionTarget, setExecutionTarget] = useState<{ type: 'USER' | 'DEPT'; id: string; name: string } | null>(() => {
+  const executionTarget = useMemo(() => {
     if (editDoc?.execution) {
       const t = editDoc.execution;
       let name = t.targetId;
@@ -105,7 +106,7 @@ function ApprovalDraftInner({
       return { type: t.targetType, id: t.targetId, name };
     }
     return null;
-  });
+  }, [editDoc, org]);
 
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
@@ -325,6 +326,7 @@ function ApprovalDraftInner({
       fieldValues: values,
       attachments,
       recipients,
+      executionDepts,
       execution,
       relatedDocs,
       securityLevel,
@@ -583,6 +585,7 @@ function ApprovalDraftInner({
       fieldValues: values,
       attachments,
       recipients,
+      executionDepts,
       relatedDocs,
       steps,
       form:
@@ -597,6 +600,7 @@ function ApprovalDraftInner({
       execution: executionTarget
         ? { docId: editDoc?.id ?? 'preview-doc-id', targetType: executionTarget.type, targetId: executionTarget.id, status: '대기중' as const, comment: '' }
         : null,
+      executionsSnapshot: editDoc?.executionsSnapshot ?? [],
       preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
       isPostApproval,
       postApprovalReason,
@@ -1018,8 +1022,8 @@ function ApprovalDraftInner({
                 <DraftRecipientSection
                   recipients={recipients}
                   setRecipients={setRecipients}
-                  executionTarget={executionTarget}
-                  setExecutionTarget={setExecutionTarget}
+                  executionDepts={executionDepts}
+                  setExecutionDepts={setExecutionDepts}
                   org={org}
                 />
               }

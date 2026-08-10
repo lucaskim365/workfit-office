@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ApprovalRecipient } from '@/domain/approvalDoc/schema';
 
 interface OrgUser {
@@ -40,12 +41,13 @@ function InfoTooltip({ text }: { text: string }) {
 }
 
 function SelectorDialog({
-  title, org, excludeIds, singleSelect, onConfirm, onClose,
+  title, org, excludeIds, singleSelect, deptOnly, onConfirm, onClose,
 }: {
   title: string;
   org: { users: OrgUser[]; depts: OrgDept[] };
   excludeIds?: Set<string>;
   singleSelect?: boolean;
+  deptOnly?: boolean;
   onConfirm: (items: { id: string; name: string; type: 'user' | 'dept' }[]) => void;
   onClose: () => void;
 }) {
@@ -67,7 +69,9 @@ function SelectorDialog({
 
   const isSelected = (id: string) => selected.some((s) => s.id === id);
 
-  return (
+  const activeTab = deptOnly ? 'dept' : tab;
+
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl bg-panel shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -75,35 +79,37 @@ function SelectorDialog({
           <button type="button" onClick={onClose} className="text-[15px] text-ink3 hover:text-ink">✕</button>
         </div>
 
-        <div className="flex gap-0 border-b border-border px-4 pt-2">
-          {(['dept', 'user'] as const).map((t) => (
-            <button
-              key={t} type="button"
-              onClick={() => { setTab(t); setSearch(''); }}
-              className={`pb-1.5 px-3 text-[11.5px] font-bold border-b-2 transition-colors ${tab === t ? 'border-teal text-teal' : 'border-transparent text-ink3 hover:text-ink'}`}
-            >
-              {t === 'dept' ? '📁 부서' : '👤 사원'}
-            </button>
-          ))}
-        </div>
+        {!deptOnly && (
+          <div className="flex gap-0 border-b border-border px-4 pt-2">
+            {(['dept', 'user'] as const).map((t) => (
+              <button
+                key={t} type="button"
+                onClick={() => { setTab(t); setSearch(''); }}
+                className={`pb-1.5 px-3 text-[11.5px] font-bold border-b-2 transition-colors ${tab === t ? 'border-teal text-teal' : 'border-transparent text-ink3 hover:text-ink'}`}
+              >
+                {t === 'dept' ? '📁 부서' : '👤 사원'}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="px-4 pt-3 pb-2">
           <input
             autoFocus type="text" value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tab === 'dept' ? '부서명 검색...' : '이름·부서·직책 검색...'}
+            placeholder={activeTab === 'dept' ? '부서명 검색...' : '이름·부서·직책 검색...'}
             className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal"
           />
         </div>
 
-        <div className="max-h-[220px] overflow-y-auto px-4 pb-2 space-y-0.5">
-          {tab === 'dept'
+        <div className="content-scroll flex-1 overflow-y-auto px-4 py-2 min-h-[220px] max-h-[320px] space-y-0.5">
+          {activeTab === 'dept'
             ? depts.length === 0
               ? <p className="text-center text-[11px] text-ink3 py-4">검색 결과 없음</p>
               : depts.map((d) => (
                 <button key={d.id} type="button" onClick={() => toggle({ id: d.id, name: d.name, type: 'dept' })}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[11.5px] font-medium transition-colors ${isSelected(d.id) ? 'bg-teal-soft text-teal font-bold' : 'hover:bg-panel-alt text-ink'}`}>
-                  <span>📁</span><span className="flex-1">{d.name}</span>
+                  <span>📁</span><span className="flex-1 truncate">{d.name}</span>
                   {isSelected(d.id) && <span className="text-teal text-[10px]">✓</span>}
                 </button>
               ))
@@ -139,22 +145,25 @@ function SelectorDialog({
             className="flex-1 rounded-lg bg-teal py-1.5 text-[12px] font-bold text-white hover:bg-teal-dark transition-colors disabled:opacity-40">확인</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
 export function DraftRecipientSection({
-  recipients, setRecipients, executionTarget, setExecutionTarget, org,
+  recipients = [], setRecipients, executionDepts = [], setExecutionDepts, org,
 }: {
   recipients: ApprovalRecipient[];
   setRecipients: React.Dispatch<React.SetStateAction<ApprovalRecipient[]>>;
-  executionTarget: { type: 'USER' | 'DEPT'; id: string; name: string } | null;
-  setExecutionTarget: (target: { type: 'USER' | 'DEPT'; id: string; name: string } | null) => void;
+  executionDepts: { id: string; name: string }[];
+  setExecutionDepts: React.Dispatch<React.SetStateAction<{ id: string; name: string }[]>>;
   org: { users: OrgUser[]; depts: OrgDept[] };
 }) {
   const [recipientDialog, setRecipientDialog] = useState(false);
   const [execDialog, setExecDialog] = useState(false);
-  const excludeRecipientIds = new Set(recipients.map((r) => r.id));
+
+  const excludeRecipientIds = new Set((recipients || []).map((r) => r.id));
+  const excludeExecDeptIds = new Set((executionDepts || []).map((d) => d.id));
 
   return (
     <div className="rounded-xl border border-border bg-panel-alt/30 overflow-hidden">
@@ -162,18 +171,18 @@ export function DraftRecipientSection({
       <div className="px-3 pt-2.5 pb-2 border-b border-border/60 flex items-center justify-between">
         <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1.5">
           <span>📬</span>
-          <span>수신 및 시행</span>
+          <span>수신처 및 시행부서 설정</span>
         </span>
-        <span className="text-[10px] text-ink3">결재 완료 후 자동 전달</span>
+        <span className="text-[10px] text-ink3">결재 완료 후 자동 공유/전달</span>
       </div>
 
       {/* ─── 수신처 설정 ─── */}
       <div className="relative p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold text-teal flex items-center gap-1">
-            <span>📨</span><span>수신처</span>
+            <span>📨</span><span>수신처 (참조/수신 전용)</span>
           </div>
-          <InfoTooltip text="문서가 최종 완료되면 지정한 수신처(부서 또는 사원)에 자동으로 전송됩니다." />
+          <InfoTooltip text="문서가 최종 완료되면 지정한 수신처(부서 또는 사원)에 읽기 권한이 자동으로 부여(수신함)됩니다." />
         </div>
 
         {recipients.length > 0 ? (
@@ -198,27 +207,31 @@ export function DraftRecipientSection({
       {/* ─── 구분선 ─── */}
       <div className="mx-3 border-t border-border/60" />
 
-      {/* ─── 시행자 설정 ─── */}
+      {/* ─── 시행처 설정 ─── */}
       <div className="relative p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold text-teal flex items-center gap-1">
-            <span>📦</span><span>시행자</span>
+            <span>📦</span><span>시행처 (집행 의무 부서)</span>
           </div>
-          <InfoTooltip text="문서 완료 후 실무 집행을 담당할 시행자(부서 또는 사원)를 1명 지정합니다." />
+          <InfoTooltip text="문서 완료 후 실무 집행 및 처리를 전담하여 수행할 시행 부서들을 지정합니다. 지정된 각 부서 단위로 독립적인 시행 임무(시행 관리)가 자동 이관됩니다." />
         </div>
 
-        {executionTarget ? (
-          <span className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs w-fit">
-            {executionTarget.type === 'DEPT' ? '📁' : '👤'} {executionTarget.name}
-            <button type="button" onClick={() => setExecutionTarget(null)} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
-          </span>
+        {executionDepts.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {executionDepts.map((d) => (
+              <span key={d.id} className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs">
+                📁 {d.name}
+                <button type="button" onClick={() => setExecutionDepts((p) => p.filter((x) => x.id !== d.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
+              </span>
+            ))}
+          </div>
         ) : (
-          <p className="text-[10.5px] text-ink3">지정된 시행자가 없습니다.</p>
+          <p className="text-[10.5px] text-ink3">지정된 시행처가 없습니다.</p>
         )}
 
         <button type="button" onClick={() => setExecDialog(true)}
           className="w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
-          {executionTarget ? '+ 시행자 변경' : '+ 시행자 지정'}
+          + 시행 부서 추가
         </button>
       </div>
 
@@ -236,11 +249,13 @@ export function DraftRecipientSection({
       )}
 
       {execDialog && (
-        <SelectorDialog title="시행자 지정" org={org} singleSelect={true}
+        <SelectorDialog title="시행 부서 추가" org={org} excludeIds={excludeExecDeptIds} singleSelect={false} deptOnly={true}
           onConfirm={(items) => {
-            const item = items[0];
-            if (!item) return;
-            setExecutionTarget({ type: item.type === 'dept' ? 'DEPT' : 'USER', id: item.id, name: item.name });
+            setExecutionDepts((prev) => [
+              ...prev,
+              ...items.filter((item) => !prev.some((d) => d.id === item.id))
+                .map((item) => ({ id: item.id, name: item.name })),
+            ]);
           }}
           onClose={() => setExecDialog(false)}
         />

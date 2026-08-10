@@ -98,6 +98,13 @@ export const approvalRecipientSchema = z.object({
 });
 export type ApprovalRecipient = z.infer<typeof approvalRecipientSchema>;
 
+export const documentExecutionSnapshotSchema = z.object({
+  executionId: z.string(),
+  deptId: z.string(),
+  deptName: z.string(),
+});
+export type DocumentExecutionSnapshot = z.infer<typeof documentExecutionSnapshotSchema>;
+
 export const approvalExecutionSchema = z.object({
   /** 대상 결재문서 ID */
   docId: z.string(),
@@ -177,6 +184,13 @@ export const approvalDocSchema = z.object({
   recipients: z.array(approvalRecipientSchema).default([]),
   /** 시행 정보 데이터 (시행자가 지정되었을 때만 존재) */
   execution: approvalExecutionSchema.nullable().optional(),
+  /** 복수 시행처 목록 Snapshot */
+  executionsSnapshot: z.array(documentExecutionSnapshotSchema).optional().default([]),
+  /** 실제 집행할 시행 부서 목록 (수신처와 분리) */
+  executionDepts: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+  })).optional().default([]),
   /** 보존연한 설정 */
   preservationPeriod: z.string().nullable().optional(),
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */

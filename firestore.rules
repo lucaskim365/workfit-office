@@ -56,5 +56,12 @@ service cloud.firestore {
     match /{coll}/{docId} {
       allow read, write: if appCollection(coll);
     }
+
+    match /documentExecutions/{executionId} {
+      allow read, write: if true;
+      match /{allChildren=**} {
+        allow read, write: if true;
+      }
+    }
   }
 }

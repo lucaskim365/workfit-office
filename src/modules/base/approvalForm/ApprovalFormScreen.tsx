@@ -716,6 +716,8 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
       securityLevel: '일반',
       visibility: '부서',
       isPostApproval: false,
+      executionsSnapshot: [],
+      executionDepts: [],
       currentSeq: 1, createdAt: null, submittedAt: '2026-07-07T00:00:00.000Z', completedAt: null,
     };
   }, [form, org.users, values, amountField]);
