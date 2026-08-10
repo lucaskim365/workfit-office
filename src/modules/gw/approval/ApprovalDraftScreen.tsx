@@ -154,6 +154,8 @@ function ApprovalDraftInner({
             if (data.securityLevel) setSecurityLevel(data.securityLevel);
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+            // 무한 팝업 방지: 불러온 즉시 스토리지에서 삭제 (수정 시 디바운스 훅에 의해 새로 저장됨)
+            localStorage.removeItem('draft_autosave_' + me.id);
           } else {
             localStorage.removeItem('draft_autosave_' + me.id);
           }
