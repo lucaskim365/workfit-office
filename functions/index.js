@@ -77,7 +77,8 @@ exports.onNewChatMessage = onDocumentCreated(
         title: String(title),
         body: String(body),
       },
-      android: { priority: "high" },
+      // 앱의 "메시지 알림" 채널로 표시(미지정 시 백그라운드에서 FCM 폴백 채널로 뜸).
+      android: { priority: "high", notification: { channelId: "workfit_messages" } },
       apns: { payload: { aps: { sound: "default" } } },
     };
 
