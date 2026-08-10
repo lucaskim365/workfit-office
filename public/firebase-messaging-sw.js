@@ -19,29 +19,38 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const n = payload.notification || {};
   const data = payload.data || {};
-  self.registration.showNotification(n.title || data.title || '새 메시지', {
+  self.registration.showNotification(n.title || data.title || '새 알림', {
     body: n.body || data.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     data,
-    tag: data.roomId || undefined,
+    tag: data.roomId || data.docId || undefined,
   });
 });
 
-// 알림 탭 → 해당 대화방으로 이동(딥링크).
+// 알림 탭 → 타입별 딥링크(결재 문서 / 대화방)로 이동.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const roomId = event.notification.data && event.notification.data.roomId;
-  const target = roomId ? `/m/room/${roomId}` : '/m';
+  const data = event.notification.data || {};
+  const isApproval = data.type === '결재';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const client of list) {
-        if (client.url.includes('/m') && 'focus' in client) {
-          client.navigate(target);
-          return client.focus();
+        if (!('focus' in client)) continue;
+        // 이미 열린 창이 있으면 그 창 종류(PWA /m vs 데스크톱)에 맞춰 이동.
+        const inPwa = client.url.includes('/m');
+        let target;
+        if (isApproval) {
+          target = inPwa ? `/m/approval/${data.docId || ''}` : (data.linkUrl || '/gw/approval');
+        } else {
+          target = data.roomId ? `/m/room/${data.roomId}` : '/m';
         }
+        client.navigate(target);
+        return client.focus();
       }
-      return self.clients.openWindow(target);
+      // 열린 창이 없으면 새 창. 결재는 데스크톱 결재 화면, 메신저는 PWA.
+      const fallback = isApproval ? (data.linkUrl || '/gw/approval') : '/m';
+      return self.clients.openWindow(fallback);
     }),
   );
 });

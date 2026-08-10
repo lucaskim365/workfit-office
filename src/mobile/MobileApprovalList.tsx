@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ClipboardCheck, Bell } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
+import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
 /**
@@ -45,14 +47,33 @@ export default function MobileApprovalList() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const [box, setBox] = useState<ApprovalBox>('대기');
 
+  // 결재 푸시 opt-in — 권한이 아직 'default'일 때만 노출(최초 허용은 사용자 제스처 필요).
+  const [pushPerm, setPushPerm] = useState<NotificationPermission | 'unsupported'>(() => notificationPermission());
+  const [notice, setNotice] = useState('');
+  const showPushOptIn = isPushConfigured() && pushPerm === 'default';
+  const enablePush = async () => {
+    setNotice('알림 설정 중…');
+    const res = await enablePushForUser(me);
+    setPushPerm(notificationPermission());
+    setNotice(res.ok ? '✅ 결재 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
+    setTimeout(() => setNotice(''), 8000);
+  };
+
   const docs = byBox[box] ?? [];
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
       <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
-        <span className="text-[15px] font-bold">📋 전자결재</span>
+        <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
+        {showPushOptIn && (
+          <button onClick={enablePush} title="결재 알림 켜기" className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10">
+            <Bell size={18} strokeWidth={2} />
+          </button>
+        )}
       </header>
+
+      {notice && <div className="px-4 py-2 text-[11.5px] text-navy" style={{ background: '#c7ecc5' }}>{notice}</div>}
 
       {/* 결재함 탭 */}
       <div className="flex shrink-0 border-b border-black/10 bg-white">
