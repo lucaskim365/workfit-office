@@ -19,7 +19,6 @@ export function DraftFormSidebar({
   disabledFormCodes,
   code,
   setCode,
-  setValues,
 }: {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -33,7 +32,6 @@ export function DraftFormSidebar({
   disabledFormCodes: Set<string>;
   code: string;
   setCode: (code: string) => void;
-  setValues: (values: Record<string, any>) => void;
 }) {
 
   return (
@@ -94,7 +92,6 @@ export function DraftFormSidebar({
                             disabled={isDisabled}
                             onClick={() => {
                               setCode(fm.code);
-                              setValues({});
                             }}
                             className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11.5px] font-medium transition-colors ${
                               isDisabled

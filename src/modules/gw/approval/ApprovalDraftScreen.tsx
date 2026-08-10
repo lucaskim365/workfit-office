@@ -90,6 +90,80 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+  // 양식 변경 시 작성내용 유실 경고 핸들러
+  const handleFormChange = (newCode: string) => {
+    const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
+    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+
+    if (hasContent && newCode !== code) {
+      const ok = window.confirm(
+        '새 양식으로 변경하면 현재 작성 중인 내용이 지워지고 초기화됩니다. 계속하시겠습니까?'
+      );
+      if (!ok) return;
+    }
+    setCode(newCode);
+    setValues({});
+    setTitle('');
+    setBody('');
+    setAmount('');
+  };
+
+  // 실시간 자동저장 (1.5초 디바운스)
+  useEffect(() => {
+    const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
+    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+
+    if (!hasContent) return;
+
+    const timer = setTimeout(() => {
+      localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
+        code,
+        title,
+        body,
+        values,
+        amount,
+        securityLevel,
+        visibility,
+        preservationPeriod,
+        timestamp: Date.now()
+      }));
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [code, title, body, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
+
+  // 마운트 시 자동저장본 복구 제안
+  useEffect(() => {
+    if (editDoc) return;
+
+    const saved = localStorage.getItem('draft_autosave_' + me.id);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
+          const formName = forms.find(f => f.code === data.code)?.name || data.code;
+          const ok = window.confirm(
+            `이전에 작성 중이던 임시 저장 문서가 존재합니다. (${formName})\n작성 중이던 내용을 불러오시겠습니까?`
+          );
+          if (ok) {
+            setCode(data.code);
+            setTitle(data.title || '');
+            setBody(data.body || '');
+            setValues(data.values || {});
+            setAmount(data.amount || '');
+            if (data.securityLevel) setSecurityLevel(data.securityLevel);
+            if (data.visibility) setVisibility(data.visibility);
+            if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+          } else {
+            localStorage.removeItem('draft_autosave_' + me.id);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse autosave data', e);
+      }
+    }
+  }, [me.id, forms, editDoc]);
+
   const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
 
   const executionTarget = useMemo(() => {
@@ -705,8 +779,7 @@ function ApprovalDraftInner({
               toggleFolder={toggleFolder}
               disabledFormCodes={disabledFormCodes}
               code={code}
-              setCode={setCode}
-              setValues={setValues}
+              setCode={handleFormChange}
             />
           </div>
         )}
