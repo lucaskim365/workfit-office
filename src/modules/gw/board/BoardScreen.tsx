@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface Board {
   id: string;
@@ -151,6 +152,7 @@ const INITIAL_POSTS: Post[] = [
 ];
 
 export default function BoardScreen() {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [activeBoard, setActiveBoard] = useState<string>('notice');
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
@@ -392,6 +394,20 @@ export default function BoardScreen() {
               <div className="whitespace-pre-wrap leading-relaxed text-[13px] py-2 border-b border-border/60 pb-5 text-ink">
                 {selectedPost.content}
               </div>
+
+              {/* 연계 문서 바로가기 링크 */}
+              {selectedPost.id === 1 && (
+                <div className="rounded-lg border border-teal/20 bg-teal-soft/10 p-3.5 flex items-center justify-between">
+                  <span className="text-[11.5px] font-semibold text-ink2">💡 개정된 최신 규정집 본문은 문서관리에서 즉시 확인 가능합니다.</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/gw/document?docId=1')}
+                    className="text-[11px] font-bold text-white bg-teal px-3.5 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    [취업규칙 확인]
+                  </button>
+                </div>
+              )}
 
               {/* 첨부파일 영역 */}
               {selectedPost.hasAttachment && (
