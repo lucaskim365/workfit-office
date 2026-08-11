@@ -19,8 +19,8 @@ export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signTyp
   // AX사업본부 — 직책 본부장 / 직급 상무이사
   { id: 'U003', empNo: '200001', name: '손승원', dept: 'AX사업본부', position: '상무이사', jobTitle: '본부장', roleGroup: 'ADMIN', email: 'smartfactory@workfit.kr', status: '사용', lastLogin: '2026-07-07 09:02', managerId: 'U001', password: DEMO_PW },
   // 품질관리팀 — 팀장 강윤석(직급 이사)
-  { id: 'U006', empNo: '300001', name: '강윤석', dept: '품질관리팀', position: '이사', jobTitle: '팀장', roleGroup: 'QC_USER', email: 'yskang@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:12', managerId: 'U003', password: DEMO_PW },
-  { id: 'U007', empNo: '300002', name: '최지혜', dept: '품질관리팀', position: '사원', jobTitle: '팀원', roleGroup: 'QC_USER', email: 'jhchoi@workfit.kr', status: '사용', lastLogin: '2026-07-06 17:55', managerId: 'U006', password: DEMO_PW },
+  { id: 'U006', empNo: '300001', name: '강윤석', dept: '품질관리팀', position: '이사', jobTitle: '팀장', roleGroup: 'USER', email: 'yskang@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:12', managerId: 'U003', password: DEMO_PW },
+  { id: 'U007', empNo: '300002', name: '최지혜', dept: '품질관리팀', position: '사원', jobTitle: '팀원', roleGroup: 'USER', email: 'jhchoi@workfit.kr', status: '사용', lastLogin: '2026-07-06 17:55', managerId: 'U006', password: DEMO_PW },
   // 영업팀 — 팀장 홍형표(직급 부장)
   { id: 'U008', empNo: '400001', name: '홍형표', dept: '영업팀', position: '부장', jobTitle: '팀장', roleGroup: 'OPERATOR', email: 'hphong@workfit.kr', status: '사용', lastLogin: '2026-07-07 07:48', managerId: 'U003', password: DEMO_PW },
   // 사업관리팀 — 팀장 박명규(부장) / 부팀장 박광래(차장)

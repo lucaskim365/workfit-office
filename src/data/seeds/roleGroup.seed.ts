@@ -27,10 +27,10 @@ export const ROLE_GROUP_SEED: RoleGroup[] = [
       { name: '홍채원', code: 'cwhong' }
     ],
     permissions: matrix((mi, ci) => ci < 2 || mi < 2) },
-  { code: 'QC_USER', name: '품질 담당자 그룹', use: true, desc: '품질 검사·판정 등록 권한.',
+  { code: 'USER', name: '일반 사용자 그룹', use: true, desc: '일반 사원 권한 그룹. 기본 조회 권한 중심.',
     members: [
       { name: '강윤석', code: 'yskang' },
       { name: '최지혜', code: 'jihye.choi' }
     ],
-    permissions: matrix((mi, ci) => ci < 3 && mi > 3) },
+    permissions: matrix((_, ci) => ci < 2) },
 ];
