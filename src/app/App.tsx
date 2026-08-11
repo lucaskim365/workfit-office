@@ -18,7 +18,7 @@ function lazy<T extends ComponentType<any>>(factory: () => Promise<{ default: T 
       console.error('Failed to load component chunk, reloading page...', error);
       window.location.reload();
       // Return a pending promise to prevent rendering broken components during reload
-      return new Promise<{ default: T }>(() => {});
+      return new Promise<{ default: T }>(() => { });
     }
   });
 }
@@ -39,6 +39,7 @@ const GwExcelTestLab = lazy(() => import('@/modules/gw/approval/ExcelTestLabScre
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
 const GwDocument = lazy(() => import('@/modules/gw/document/DocumentScreen'));
+const GwCommunity = lazy(() => import('@/modules/gw/community/CommunityScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
@@ -179,13 +180,14 @@ export default function App() {
         <Route path="/gw/leave" element={<GwLeave />} />
         <Route path="/gw/board" element={<GwBoard />} />
         <Route path="/gw/document" element={<GwDocument />} />
+        <Route path="/gw/community" element={<GwCommunity />} />
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />
         {/* 환경설정 */}
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<PlaceholderScreen />} />
-      </Route>
-    </Routes>
+      </Route >
+    </Routes >
   );
 }
