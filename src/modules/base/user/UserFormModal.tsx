@@ -137,7 +137,7 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             options={[{ value: '', label: '직책 선택 (미지정)' }, ...jobTitles.map((j) => ({ value: j.name, label: j.name }))]}
           />
         </Field>
-        <Field label="권한그룹" required error={errors.roleGroup?.message}>
+        <Field label="권한그룹" required error={errors.roleGroup?.message ? String(errors.roleGroup.message) : undefined}>
           <SelectField
             {...register('roleGroup')}
             invalid={!!errors.roleGroup}

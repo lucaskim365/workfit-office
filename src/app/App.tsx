@@ -37,6 +37,7 @@ const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwApprovalDraft = lazy(() => import('@/modules/gw/approval/ApprovalDraftScreen'));
 const GwExcelTestLab = lazy(() => import('@/modules/gw/approval/ExcelTestLabScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
+const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
@@ -168,6 +169,7 @@ export default function App() {
         <Route path="/gw/approval" element={<GwApproval />} />
         <Route path="/gw/excel-test" element={<GwExcelTestLab />} />
         <Route path="/gw/leave" element={<GwLeave />} />
+        <Route path="/gw/board" element={<GwBoard />} />
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />

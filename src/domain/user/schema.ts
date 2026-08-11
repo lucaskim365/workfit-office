@@ -25,7 +25,12 @@ export const userSchema = z.object({
    * 선택 항목(미지정 허용).
    */
   jobTitle: z.string().max(20).default(''),
-  roleGroup: z.enum(ROLE_GROUPS),
+  roleGroup: z.preprocess((val) => {
+    const s = String(val);
+    if (s === 'QC_USER' || s === 'MT_USER') return 'USER';
+    if (s === 'FIELD_ADMIN' || s === 'MT_ADMIN') return 'OPERATOR';
+    return s;
+  }, z.enum(ROLE_GROUPS)) as any,
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS).default('사용'),
   lastLogin: z.string().default('-'),
@@ -71,7 +76,12 @@ export const userFormSchema = z.object({
   position: z.string().min(1, '직급을 입력하세요').max(20),
   /** 직책 — 선택(미지정 허용, 빈 문자열 가능). 직급(position)과 별개. */
   jobTitle: z.string().max(20),
-  roleGroup: z.enum(ROLE_GROUPS),
+  roleGroup: z.preprocess((val) => {
+    const s = String(val);
+    if (s === 'QC_USER' || s === 'MT_USER') return 'USER';
+    if (s === 'FIELD_ADMIN' || s === 'MT_ADMIN') return 'OPERATOR';
+    return s;
+  }, z.enum(ROLE_GROUPS)) as any,
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),
   /**
