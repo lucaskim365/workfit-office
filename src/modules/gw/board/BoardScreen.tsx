@@ -157,8 +157,7 @@ export default function BoardScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   
-  // 신규 댓글 입력 임시 상태
-  const [commentInput, setCommentInput] = useState<string>('');
+
 
   // 폼 상태 (글쓰기용)
   const [newPost, setNewPost] = useState({
@@ -229,29 +228,7 @@ export default function BoardScreen() {
     });
   };
 
-  const handleAddComment = () => {
-    if (!commentInput.trim() || !selectedPostId) return;
 
-    const newComment: Comment = {
-      id: (selectedPost?.comments?.length || 0) + 1,
-      author: '홍채원 사원', // 내 로그인 가상 계정
-      content: commentInput.trim(),
-      date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-    };
-
-    setPosts((prevPosts) =>
-      prevPosts.map((p) => {
-        if (p.id === selectedPostId) {
-          return {
-            ...p,
-            comments: [...(p.comments || []), newComment],
-          };
-        }
-        return p;
-      })
-    );
-    setCommentInput('');
-  };
 
   return (
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink">
@@ -358,11 +335,7 @@ export default function BoardScreen() {
                           {p.isPinned && <span className="text-teal font-extrabold text-[10px] bg-teal-soft/40 border border-teal/20 rounded px-1 shrink-0">중요</span>}
                           <span className="truncate hover:text-teal transition-colors">{p.title}</span>
                           {p.hasAttachment && <span className="text-[10px] opacity-75 shrink-0" title="첨부파일 있음">📎</span>}
-                          {p.comments && p.comments.length > 0 && (
-                            <span className="text-[10px] font-bold text-teal bg-teal-soft px-1.5 py-0.5 rounded shrink-0">
-                              {p.comments.length}
-                            </span>
-                          )}
+
                         </td>
                         <td className="p-3 text-ink2 truncate">{p.author}</td>
                         <td className="p-3 text-ink3">{p.date}</td>
@@ -431,48 +404,7 @@ export default function BoardScreen() {
                 </div>
               )}
 
-              {/* 댓글 목록 */}
-              <div className="space-y-3 pt-3">
-                <h3 className="font-bold text-ink flex items-center gap-1.5">
-                  💬 댓글 <span className="text-teal font-extrabold">{selectedPost.comments?.length || 0}</span>
-                </h3>
-                
-                <div className="space-y-2">
-                  {selectedPost.comments && selectedPost.comments.length > 0 ? (
-                    selectedPost.comments.map((c) => (
-                      <div key={c.id} className="rounded-lg border border-border bg-panel-alt/10 p-3.5 flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-[10.5px]">
-                          <span className="font-extrabold text-ink2">{c.author}</span>
-                          <span className="text-ink3 font-mono">{c.date}</span>
-                        </div>
-                        <p className="text-[11.5px] leading-relaxed text-ink">{c.content}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-ink3 text-[11px] py-2">아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>
-                  )}
-                </div>
 
-                {/* 댓글 작성 폼 */}
-                <div className="flex gap-2 pt-2">
-                  <input
-                    type="text"
-                    value={commentInput}
-                    onChange={(e) => setCommentInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddComment();
-                    }}
-                    placeholder="의견을 입력하세요"
-                    className="flex-1 h-9.5 rounded-lg border border-border-hi bg-panel px-3.5 text-[12px] outline-none focus:border-teal"
-                  />
-                  <button
-                    onClick={handleAddComment}
-                    className="rounded-lg bg-teal px-5 text-[12px] font-bold text-white hover:opacity-90"
-                  >
-                    등록
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         )}
