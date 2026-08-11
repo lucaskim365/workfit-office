@@ -68,7 +68,6 @@ function ApprovalDraftInner({
   const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? '부서');
   const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? '5년');
 
-  const [body, setBody] = useState(editDoc?.body ?? '');
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
     const initialVals = { ...(editDoc?.fieldValues ?? {}) };
@@ -93,7 +92,7 @@ function ApprovalDraftInner({
   // 양식 변경 시 작성내용 유실 경고 핸들러
   const handleFormChange = (newCode: string) => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
-    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+    const hasContent = title.trim().length > 0 || hasValue;
 
     if (hasContent && newCode !== code) {
       const ok = window.confirm(
@@ -104,14 +103,13 @@ function ApprovalDraftInner({
     setCode(newCode);
     setValues({});
     setTitle('');
-    setBody('');
     setAmount('');
   };
 
   // 실시간 자동저장 (1.5초 디바운스)
   useEffect(() => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
-    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+    const hasContent = title.trim().length > 0 || hasValue;
 
     if (!hasContent) return;
 
@@ -119,7 +117,6 @@ function ApprovalDraftInner({
       localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
         code,
         title,
-        body,
         values,
         amount,
         securityLevel,
@@ -130,7 +127,7 @@ function ApprovalDraftInner({
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [code, title, body, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
 
   const hasCheckedAutosave = useRef(false);
 
@@ -151,7 +148,6 @@ function ApprovalDraftInner({
           if (ok) {
             setCode(data.code);
             setTitle(data.title || '');
-            setBody(data.body || '');
             setValues(data.values || {});
             setAmount(data.amount || '');
             if (data.securityLevel) setSecurityLevel(data.securityLevel);
@@ -243,7 +239,6 @@ function ApprovalDraftInner({
       setSecurityLevel(editDoc.securityLevel ?? '일반');
       setVisibility(editDoc.visibility ?? '부서');
       setPreservationPeriod(editDoc.preservationPeriod ?? '5년');
-      setBody(editDoc.body ?? '');
       setAmount(editDoc.amount != null ? String(editDoc.amount) : '');
 
       const initialVals = { ...(editDoc.fieldValues ?? {}) };
@@ -271,7 +266,7 @@ function ApprovalDraftInner({
   const hasManuallyEnteredValues = (): boolean => {
     if (editDoc) {
       const titleChanged = title !== (editDoc.title ?? '');
-      const bodyChanged = body !== (editDoc.body ?? '');
+      const bodyChanged = String(values[RESERVED_BODY_KEY] ?? '') !== (editDoc.body ?? '');
       const amountChanged = amount !== (editDoc.amount != null ? String(editDoc.amount) : '');
       const filesChanged = JSON.stringify(attachments) !== JSON.stringify(editDoc.attachments ?? []);
       const valuesChanged = Object.keys(values).some((k) => JSON.stringify(values[k]) !== JSON.stringify((editDoc.fieldValues ?? {})[k]));
@@ -287,7 +282,7 @@ function ApprovalDraftInner({
       const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
 
       // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
-      const curBody = (values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body).trim();
+      const curBody = String(values[RESERVED_BODY_KEY] ?? '').trim();
       const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
       const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
       const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
@@ -300,7 +295,6 @@ function ApprovalDraftInner({
 
       // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
       const valuesHasChanged = Object.keys(values).some((k) => {
-        if (k === RESERVED_BODY_KEY) return false;
         const valStr = String(values[k] ?? '').trim();
         if (!valStr) return false;
 
@@ -400,7 +394,7 @@ function ApprovalDraftInner({
       drafterDept: me.dept,
       steps,
       amount: amountNum,
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : body.trim(),
+      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : '',
       form: leave,
       fieldValues: values,
       attachments,
@@ -581,23 +575,6 @@ function ApprovalDraftInner({
           </Field>
         </div>,
       );
-    } else if (field.key === RESERVED_BODY_KEY && field.type === '장문') {
-      fieldNodes.push(
-        <div key={field.key} className="col-span-2">
-          <Field label={field.label}>
-            <textarea
-              value={values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body}
-              onChange={(e) => {
-                setVals({ [RESERVED_BODY_KEY]: e.target.value });
-                setBody(e.target.value);
-              }}
-              rows={8}
-              placeholder={field.placeholder || '내용을 입력하세요'}
-              className={`${INP} resize-y leading-relaxed`}
-            />
-          </Field>
-        </div>,
-      );
     } else {
       fieldNodes.push(
         <div key={field.key} className={span}>
@@ -650,7 +627,7 @@ function ApprovalDraftInner({
       docNo: editDoc?.docNo ?? 'DRAFT-PREVIEW',
       docType: code,
       title: title || '(제목 없음)',
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body,
+      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '',
       drafterId: me.id,
       drafterDept: me.dept,
       status: '진행중',
@@ -691,7 +668,7 @@ function ApprovalDraftInner({
       postApprovedById,
       postApprovedByName: org.userById(postApprovedById)?.name ?? null,
     }),
-    [editDoc, code, title, body, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
+    [editDoc, code, title, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
   );
 
   return (
@@ -978,19 +955,6 @@ function ApprovalDraftInner({
             <div className="grid grid-cols-2 gap-3.5">
               {fieldNodes}
             </div>
-
-            {/* 기본 본문(장문) 텍스트 입력창 (서식에 body 필드가 포함되어 있지 않을 경우만 추가 보출) */}
-            {!form?.fields.some((f) => f.key === RESERVED_BODY_KEY) && (
-              <Field label="기안 내용">
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={8}
-                  placeholder="내용을 입력하세요"
-                  className={`${INP} resize-y leading-relaxed`}
-                />
-              </Field>
-            )}
           </div>
 
           {/* 첨부파일 / 관련 문서 영역 */}

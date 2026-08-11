@@ -649,6 +649,10 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
   const org = useOrgTree();
   const [tab, setTab] = useState<'폼' | '인쇄'>('폼');
   const [values, setValues] = useState<Record<string, FieldValue>>({});
+
+  useEffect(() => {
+    setValues({});
+  }, [form.id, form.code]);
   
   const setVals = (patch: Record<string, FieldValue>) => {
     setValues((prev) => ({ ...prev, ...patch }));
@@ -778,16 +782,6 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
                   </div>
                 );
               });
-
-              const hasBodyField = form.fields.some((f) => f.key === 'body');
-              if (!hasBodyField) {
-                nodes.push(
-                  <div key="default-body-preview" className="col-span-2 mt-3">
-                    <div className="mb-1 text-[11px] font-bold text-ink2">본문</div>
-                    <textarea disabled placeholder="내용을 입력하세요" rows={4} className={`${inp} resize-none leading-relaxed opacity-70`} />
-                  </div>
-                );
-              }
 
               return nodes;
             })()}
