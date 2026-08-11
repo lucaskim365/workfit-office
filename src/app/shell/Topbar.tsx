@@ -9,6 +9,7 @@ import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
+import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import defaultLogo from '@/assets/logo.png';
 
@@ -90,6 +91,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       return sum;
     }, 0);
   }, [rooms, unreadMap]);
+
+  // 결재·알림 푸시 opt-in(최초 권한 허용은 사용자 제스처 필요 — 이 버튼으로).
+  const [pushPerm, setPushPerm] = useState<NotificationPermission | 'unsupported'>(() => notificationPermission());
+  const showPushOptIn = isPushConfigured() && pushPerm === 'default';
+  const enablePush = async () => {
+    if (!user?.id) return;
+    const res = await enablePushForUser(user.id);
+    setPushPerm(notificationPermission());
+    if (!res.ok) console.warn('[push] 활성화 실패', res.error);
+  };
 
   const notiRef = useRef<HTMLDivElement>(null);
 
@@ -239,6 +250,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                   </button>
                 )}
               </div>
+
+              {showPushOptIn && (
+                <button
+                  onClick={enablePush}
+                  className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-teal/10 py-2 text-[11px] font-bold text-teal hover:bg-teal/20 transition-colors"
+                  title="이 기기에서 결재·알림 푸시를 받습니다"
+                >
+                  🔔 결재·알림 푸시 켜기
+                </button>
+              )}
 
               <div className="content-scroll max-h-64 overflow-y-auto space-y-1.5">
                 {notifications.length === 0 ? (

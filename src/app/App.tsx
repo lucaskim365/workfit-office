@@ -116,6 +116,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
 
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNotifications } from '@/features/notification/useNotifications';
+import { syncPushToken } from '@/shared/lib/messaging';
 
 export default function App() {
   const { user } = useAuth();
@@ -123,6 +124,12 @@ export default function App() {
   const location = useLocation();
   useNotifications(user?.id);
   const isMobilePwa = location.pathname.startsWith('/m');
+
+  // 로그인 시 FCM 토큰 동기화(권한 허용된 기기 한정, 팝업 없음).
+  // 데스크톱/모바일 공통 루트라 채팅을 열지 않는 결재 사용자도 푸시를 받는다.
+  useEffect(() => {
+    if (user?.id) void syncPushToken(user.id);
+  }, [user?.id]);
 
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩.
   // 단, 모바일 PWA(/m)는 자체 px 디자인이므로 데스크톱 확대(zoom, 기본 1.1875)를 적용하면

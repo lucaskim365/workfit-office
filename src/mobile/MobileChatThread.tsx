@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers } from '@/features/chat/useChatRooms';
@@ -154,9 +155,9 @@ export default function MobileChatThread() {
         <button
           onClick={() => { setShowSearch((v) => !v); if (showSearch) setSearchQuery(''); }}
           title="대화 검색"
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[15px] hover:bg-white/10 ${showSearch ? 'bg-white/15' : ''}`}
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10 ${showSearch ? 'bg-white/15' : ''}`}
         >
-          🔍
+          <Search size={16} />
         </button>
         {room?.type === 'group' && (
           <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[19px] leading-none hover:bg-white/10">＋</button>
@@ -169,7 +170,7 @@ export default function MobileChatThread() {
       {showSearch && (
         <div className="shrink-0 border-b border-black/10 bg-white px-4 py-2">
           <div className="flex items-center gap-2 rounded-full bg-black/5 px-3 py-1.5">
-            <span className="text-[11px] text-ink3">🔍</span>
+            <Search size={13} className="shrink-0 text-ink3" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -221,9 +222,9 @@ export default function MobileChatThread() {
               onClick={() => fileRef.current?.click()}
               disabled={sendFile.isPending}
               title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-              className="grid h-10 w-9 shrink-0 place-items-center rounded-full text-[18px] text-ink3 active:bg-black/5 disabled:opacity-40"
+              className="grid h-10 w-9 shrink-0 place-items-center rounded-full text-ink3 active:bg-black/5 disabled:opacity-40"
             >
-              📎
+              <Paperclip size={18} />
             </button>
             <input
               value={text}
@@ -250,7 +251,7 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   return (
     <div className="w-[240px] overflow-hidden rounded-2xl border border-black/10 bg-white">
       <div className="flex items-center gap-1.5 px-3 py-2 text-white" style={{ background: '#101830' }}>
-        <span className="text-[13px]">🖋️</span>
+        <FileSignature size={14} className="shrink-0" />
         <span className="text-[11.5px] font-bold">전자결재 알림</span>
         <span
           className="ml-auto rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
@@ -316,7 +317,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
         className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left"
         style={mine ? { background: '#e6960c', color: '#fff' } : { background: '#fff', color: '#1a202c' }}
       >
-        <span className="text-[18px]">📄</span>
+        <FileText size={18} className="shrink-0" />
         <span className="min-w-0">
           <span className="block max-w-[190px] truncate text-[12.5px] font-semibold">{att.name}</span>
           <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>

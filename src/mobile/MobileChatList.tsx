@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Bell, LogOut } from 'lucide-react';
+import { ClipboardCheck, Bell, LogOut, Search, Users, Pin } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -79,7 +79,7 @@ export default function MobileChatList() {
 
   const sheetActions: SheetAction[] = sheetRoom
     ? [
-        { label: pinnedIds.includes(sheetRoom.id) ? '📌 고정 해제' : '📌 상단 고정', onClick: () => togglePin(sheetRoom.id) },
+        { label: pinnedIds.includes(sheetRoom.id) ? '고정 해제' : '상단 고정', onClick: () => togglePin(sheetRoom.id) },
         ...(sheetRoom.type === 'direct'
           ? [{ label: '채팅방 삭제', danger: true, onClick: () => hideRoom(sheetRoom.id) }]
           : []),
@@ -110,7 +110,7 @@ export default function MobileChatList() {
       {/* 검색 + 새 대화 */}
       <div className="flex items-center gap-2 border-b border-black/5 bg-white px-4 py-2.5">
         <div className="flex flex-1 items-center gap-2 rounded-full bg-black/5 px-3.5 py-2">
-          <span className="text-[12px] text-ink3">🔍</span>
+          <Search size={14} className="shrink-0 text-ink3" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -141,13 +141,13 @@ export default function MobileChatList() {
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white"
                   style={{ background: r.color || '#101830' }}
                 >
-                  {r.type === 'direct' ? r.displayName[0] : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
+                  {r.type === 'direct' ? r.displayName[0] : r.type === 'group' ? <Users size={20} /> : (r.displayName[0] ?? '#')}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-[14px] font-bold text-ink">
                       {r.displayName}
-                      {isPinned && <span className="ml-1 text-[10px]">📌</span>}
+                      {isPinned && <Pin size={11} className="ml-1 inline shrink-0" />}
                     </span>
                     <span className="shrink-0 text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
                   </span>
