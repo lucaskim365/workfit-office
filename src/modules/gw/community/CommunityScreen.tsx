@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useCommunity } from '@/features/community/useCommunity';
 import type { Club, JoinPolicy } from '@/domain/community/schema';
@@ -15,6 +15,9 @@ export default function CommunityScreen() {
     voteClubEvent,
     addClubGreeting
   } = useCommunity();
+
+  // 소모임 탐색 스크롤 참조 ref
+  const exploreSectionRef = useRef<HTMLDivElement>(null);
 
   // 로그인 사용자 세션 가공
   const CURRENT_USER = useMemo(() => {
@@ -336,7 +339,6 @@ export default function CommunityScreen() {
             <div className="px-2 text-[10px] font-bold tracking-wider text-ink3 uppercase">가입한 소모임 ({myClubs.length})</div>
             <div className="flex flex-col gap-1">
               {myClubs.map((c) => {
-                // 에모지 이외의 텍스트만 추출
                 const cleanName = c.name.replace(/^[^\s]+\s+/, '');
                 return (
                   <button
@@ -395,7 +397,7 @@ export default function CommunityScreen() {
               {/* 스크롤 가능한 본문 통합 컨테이너 */}
               <div className="flex-1 overflow-y-auto pr-1 space-y-6">
                 
-                {/* 상단 파트: 최근 새 소식 (최신 피드) */}
+                {/* 상단 파트: 최근 새 소식 (최신 피드 - 최대 5개 노출) */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <h2 className="text-xs font-extrabold text-navy uppercase tracking-wider flex items-center gap-1.5">
@@ -405,13 +407,25 @@ export default function CommunityScreen() {
                   </div>
                   <div className="space-y-3.5">
                     {combinedPosts.length > 0 ? (
-                      combinedPosts.slice(0, 3).map((cp, idx) => (
-                        <div key={idx} className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-2xs hover:border-teal/30 transition-colors">
-                          <div className="flex justify-between items-center text-[11px]">
+                      combinedPosts.slice(0, 5).map((cp, idx) => (
+                        <div key={idx} className="rounded-xl border border-border bg-panel p-4.5 space-y-3.5 shadow-2xs hover:border-teal/30 transition-colors">
+                          <div className="flex justify-between items-center text-[11px] border-b border-border/40 pb-2">
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center justify-center rounded bg-teal-soft/50 px-2 py-0.5 text-[10px] font-extrabold text-teal">
-                                {cp.clubIcon} {cp.clubName.replace(/^[^\s]+\s+/, '')}
+                              {/* 소모임 출처 명확화: 프로필 배지 + 소모임명 클릭 시 해당 소모임으로 즉시 이동 */}
+                              <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft/60 text-[10.5px] shadow-3xs border border-teal/15 select-none font-bold shrink-0">
+                                {cp.clubIcon}
                               </span>
+                              <span 
+                                onClick={() => {
+                                  setSelectedClubId(cp.clubId);
+                                  setClubViewMode('detail');
+                                  setClubTab('post');
+                                }}
+                                className="text-teal font-extrabold text-[11.5px] hover:underline cursor-pointer"
+                              >
+                                {cp.clubName}
+                              </span>
+                              <span className="text-ink3">•</span>
                               <span className="text-ink font-bold">{cp.post.author}</span>
                               <span className="text-ink3 font-mono">• {cp.post.date}</span>
                             </div>
@@ -435,7 +449,7 @@ export default function CommunityScreen() {
                 </div>
 
                 {/* 하단 파트: 소모임 탐색 (검색 및 카테고리 포함) */}
-                <div className="space-y-3 pt-4 border-t border-border">
+                <div ref={exploreSectionRef} className="space-y-3 pt-4 border-t border-border">
                   <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                     <h2 className="text-xs font-extrabold text-navy uppercase tracking-wider flex items-center gap-1.5">
                       <span>👥</span>
@@ -575,7 +589,11 @@ export default function CommunityScreen() {
             <aside className="hidden lg:flex flex-col gap-4 w-[260px] shrink-0 border-l border-border pl-4.5 pt-1">
               {recommendedClubs.length > 0 && (
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3.5 shadow-xs">
-                  <h3 className="font-extrabold text-ink2 text-xs flex items-center gap-1.5">
+                  {/* 추천 소모임 헤더 클릭 시 탐색 뷰 영역으로 스크롤 이동 */}
+                  <h3 
+                    onClick={() => exploreSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    className="font-extrabold text-ink2 text-xs flex items-center gap-1.5 cursor-pointer hover:text-teal transition-colors"
+                  >
                     <span>💡</span>
                     <span>추천 소모임</span>
                   </h3>
@@ -591,7 +609,17 @@ export default function CommunityScreen() {
                               <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${badgeColor} mb-1`}>
                                 {badgeText}
                               </span>
-                              <h4 className="font-bold text-ink truncate text-[11.5px]">{c.name}</h4>
+                              {/* 소모임 명칭 클릭 시 상세 정보창으로 즉각 이동 */}
+                              <h4 
+                                onClick={() => {
+                                  setSelectedClubId(c.id);
+                                  setClubViewMode('detail');
+                                  setClubTab('post');
+                                }}
+                                className="font-bold text-ink truncate text-[11.5px] cursor-pointer hover:text-teal hover:underline transition-colors"
+                              >
+                                {c.name}
+                              </h4>
                               <p className="text-[10px] text-ink3 mt-0.5">멤버 {c.memberCount}명</p>
                             </div>
                             {waiting ? (
