@@ -302,7 +302,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-4 gap-2">
           {apps.map((a, i) => {
 
-            const enabled = a.to === 'approval' || a.to === 'orgchart' || a.to === 'leave' || a.to === 'board' || a.to === 'document' || a.to === 'contacts' || a.to === 'community';
+            const enabled = a.to === 'approval' || a.to === 'orgchart' || a.to === 'leave';
 
             return (
               <button
