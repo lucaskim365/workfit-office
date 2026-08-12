@@ -135,7 +135,20 @@ export function ApprovalDocumentView({
     const preds = getPredecessorsOf(currentUser.id);
     const isPredecessorRelated = preds.includes(doc.drafterId) || doc.steps.some(s => preds.includes(s.approverId));
 
-    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated;
+    // 시행 담당 부서 및 시행 부서원 여부 판별
+    const isExecutor = doc.executionDepts?.some((d) => {
+      if (d.id === userObj?.dept) return true;
+      const userDeptObj = org.depts.find(dept => dept.name === userObj?.dept);
+      if (userDeptObj && d.id === userDeptObj.id) return true;
+      return false;
+    }) || doc.executionsSnapshot?.some((s) => {
+      if (s.deptId === userObj?.dept || s.deptName === userObj?.dept) return true;
+      const userDeptObj = org.depts.find(dept => dept.name === userObj?.dept);
+      if (userDeptObj && s.deptId === userDeptObj.id) return true;
+      return false;
+    });
+
+    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated || !!isExecutor;
 
     // 공식 관계자 및 후임자 승계자인 경우 등급/공개범위 무관 무조건 열람 가능 (제1순위)
     if (isOfficialRelated) return true;
@@ -173,17 +186,6 @@ export function ApprovalDocumentView({
 
   const isMaskingActive = !canViewSecret || forceMaskMode;
 
-  if (!canAccessDocument) {
-    return (
-      <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
-        <div className="text-[28px]">🛡️</div>
-        <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
-        <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
-          본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
-        </div>
-      </div>
-    );
-  }
 
   const maskValue = (rawVal: string, isSecret?: boolean) => {
     if (!isSecret || !isMaskingActive) return rawVal;
@@ -349,6 +351,18 @@ export function ApprovalDocumentView({
     };
   }, [form, doc.fieldValues, amountField]);
 
+  if (!canAccessDocument) {
+    return (
+      <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
+        <div className="text-[28px]">🛡️</div>
+        <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
+        <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
+          본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
+        </div>
+      </div>
+    );
+  }
+
   let lastRenderedSection = '';
 
   const hasSecretFields = form?.fields.some(f => f.isSecret);
@@ -402,7 +416,9 @@ export function ApprovalDocumentView({
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+        {doc.status === '완료' && (
+          <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+        )}
       </div>
 
       {/* 긴급 선조치 사후 승인 (후결) 정보 카드 */}

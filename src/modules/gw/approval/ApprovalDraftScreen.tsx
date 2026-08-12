@@ -26,6 +26,7 @@ import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { DraftFormSidebar } from './components/DraftFormSidebar';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { fileStorage } from '@/shared/lib/storage';
+import { Upload, X, Paperclip } from 'lucide-react';
 
 export default function ApprovalDraftScreen() {
   const { user } = useAuth();
@@ -89,6 +90,48 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleFilesUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (f) => {
+          const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f);
+          return { name: f.name, url };
+        }),
+      );
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      setError('파일 업로드 실패: ' + String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const files = Array.from(e.dataTransfer.files);
+      await handleFilesUpload(files);
+    }
+  };
+
   // 양식 변경 시 작성내용 유실 경고 핸들러
   const handleFormChange = (newCode: string) => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
@@ -104,6 +147,11 @@ function ApprovalDraftInner({
     setValues({});
     setTitle('');
     setAmount('');
+  };
+
+  const clearAutosave = () => {
+    localStorage.removeItem('draft_autosave_' + me.id);
+    localStorage.removeItem('draft_autosave_active_' + me.id);
   };
 
   // 실시간 자동저장 (1.5초 디바운스)
@@ -124,6 +172,7 @@ function ApprovalDraftInner({
         preservationPeriod,
         timestamp: Date.now()
       }));
+      localStorage.setItem('draft_autosave_active_' + me.id, 'true');
     }, 1500);
 
     return () => clearTimeout(timer);
@@ -136,8 +185,9 @@ function ApprovalDraftInner({
     if (editDoc || hasCheckedAutosave.current) return;
     if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
+    const isActive = localStorage.getItem('draft_autosave_active_' + me.id) === 'true';
     const saved = localStorage.getItem('draft_autosave_' + me.id);
-    if (saved) {
+    if (isActive && saved) {
       try {
         const data = JSON.parse(saved);
         if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
@@ -154,13 +204,13 @@ function ApprovalDraftInner({
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
           }
-          // 수락/거절 관계없이 첫 진입 시 검사 완료 후 세션 데이터 초기화
-          localStorage.removeItem('draft_autosave_' + me.id);
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
       }
     }
+    // 복구 여부 확인에 상관없이 진입 시 플래그 즉시 해제 (중복 복구 제안 방지)
+    localStorage.removeItem('draft_autosave_active_' + me.id);
     // 최초 마운트 검사 완료 플래그 적용
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
@@ -253,6 +303,7 @@ function ApprovalDraftInner({
       setAttachments(editDoc.attachments ?? []);
       setRelatedDocs(editDoc.relatedDocs ?? []);
       setRecipients(editDoc.recipients ?? []);
+      setExecutionDepts(editDoc.executionDepts ?? []);
       setIsPostApproval(editDoc.isPostApproval ?? false);
       setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
       setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
@@ -517,6 +568,7 @@ function ApprovalDraftInner({
     setError('');
     try {
       await persistDraft();
+      clearAutosave();
       navigate('/gw/approval?box=임시');
     } catch (e) {
       setError(String(e));
@@ -530,6 +582,7 @@ function ApprovalDraftInner({
     try {
       const id = await persistDraft();
       await submitM.mutateAsync({ id, userId: me.id });
+      clearAutosave();
       navigate('/gw/approval?box=상신');
     } catch (e) {
       setError(String(e));
@@ -965,40 +1018,72 @@ function ApprovalDraftInner({
 
             {/* 첨부 파일 업로드 */}
             <Field label="첨부파일">
-              <input
-                type="file"
-                multiple
-                onChange={async (e) => {
-                  const files = Array.from(e.target.files ?? []);
-                  if (files.length === 0) return;
-                  setUploading(true);
-                  try {
-                    const uploaded = await Promise.all(
-                      files.map(async (f) => {
-                        const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f);
-                        return { name: f.name, url };
-                      }),
-                    );
-                    setAttachments((prev) => [...prev, ...uploaded]);
-                  } catch (err) {
-                    setError('파일 업로드 실패: ' + String(err));
-                  } finally {
-                    setUploading(false);
-                  }
-                }}
-                className="block w-full text-[11.5px] text-ink3 file:mr-3 file:rounded-lg file:border-0 file:bg-panel-alt file:px-3 file:py-1 file:text-[11.5px] file:font-semibold file:text-ink hover:file:bg-border"
-              />
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 transition-all cursor-pointer ${
+                  isDragActive
+                    ? 'border-teal bg-teal-soft/20 scale-[0.99]'
+                    : 'border-border bg-panel-alt/30 hover:bg-panel-alt/60 hover:border-border-hi'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    await handleFilesUpload(files);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="hidden"
+                />
+                
+                <div className="flex flex-col items-center gap-2">
+                  <div className="p-2.5 bg-panel rounded-full shadow-2xs border border-border">
+                    <Upload className="w-5 h-5 text-ink3" />
+                  </div>
+                  <div className="text-[12px] font-bold text-ink text-center">
+                    {uploading ? '파일을 업로드하는 중...' : '여기에 파일을 드래그하거나 클릭하여 추가'}
+                  </div>
+                  <p className="text-[10.5px] text-ink3 text-center">
+                    여러 개의 파일을 마우스 드래그로 선택하여 올릴 수 있습니다.
+                  </p>
+                </div>
+              </div>
+
               {attachments.length > 0 && (
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-2.5 space-y-1.5">
                   {attachments.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md">
-                      <span className="truncate">{f.name}</span>
+                    <li
+                      key={i}
+                      className="group flex items-center justify-between text-[11.5px] text-ink bg-panel-alt hover:bg-panel-alt-hi px-3 py-1.5 rounded-lg border border-border transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="w-3.5 h-3.5 text-ink3 shrink-0" />
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate font-medium hover:underline hover:text-teal cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {f.name}
+                        </a>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAttachments((prev) => prev.filter((_, idx) => idx !== i));
+                        }}
+                        className="p-1 rounded-md text-ink3 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                        title="삭제"
                       >
-                        삭제
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </li>
                   ))}
@@ -1104,9 +1189,13 @@ function ApprovalDraftInner({
           confirmLabel="저장 후 이동"
           onConfirm={async () => {
             await persistDraft();
+            clearAutosave();
             navigate('/gw/approval');
           }}
-          onDiscard={() => navigate('/gw/approval')}
+          onDiscard={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           discardLabel="저장 없이 이동"
           onCancel={() => setShowConfirmClose(false)}
           disabled={busy}
@@ -1119,7 +1208,10 @@ function ApprovalDraftInner({
           description={<>기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.</>}
           confirmLabel="변경내용 모두 취소"
           confirmColor="bg-danger"
-          onConfirm={() => navigate('/gw/approval')}
+          onConfirm={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           onCancel={() => setShowConfirmDiscard(false)}
         />
       )}

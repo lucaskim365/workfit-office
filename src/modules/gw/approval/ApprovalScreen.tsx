@@ -242,13 +242,24 @@ export default function ApprovalScreen() {
   }, [filteredList, selId]);
 
 
+  const isDocSelectable = (d: ApprovalDoc) => {
+    if (box === '삭제') return true;
+    if (box === '대기') {
+      if (todoFilter === 'progress') return false;
+      const approvers = currentApproverIds(d);
+      return approvers.includes(me) || approvers.some(id => preds.includes(id));
+    }
+    return false;
+  };
+
   // 다중 선택 처리 헬퍼
-  const isAllSelected = filteredList.length > 0 && selectedIds.length === filteredList.length;
+  const selectableList = useMemo(() => filteredList.filter(isDocSelectable), [filteredList, box, todoFilter]);
+  const isAllSelected = selectableList.length > 0 && selectedIds.length === selectableList.length;
   const toggleSelectAll = () => {
     if (isAllSelected) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredList.map((d: ApprovalDoc) => d.id));
+      setSelectedIds(selectableList.map((d: ApprovalDoc) => d.id));
     }
   };
 
@@ -481,7 +492,7 @@ export default function ApprovalScreen() {
 
                 <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
                   <div className="flex items-center gap-2">
-                    {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
+                    {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
                       <input
                         type="checkbox"
                         checked={isAllSelected}
@@ -600,7 +611,7 @@ export default function ApprovalScreen() {
                     }`}
 
                   >
-                    {(box === '대기' || box === '삭제') && (
+                    {isDocSelectable(d) && (
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -632,7 +643,7 @@ export default function ApprovalScreen() {
             </div>
 
             {/* 목록 하단 풋터 액션 바 (선택 항목 존재 시 목록 바로 아래에 조밀하게 표시) */}
-            {(box === '대기' || box === '삭제') && selectedIds.length > 0 && (
+            {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
               <div className="border-t border-border bg-panel-alt/60 p-2.5 flex items-center justify-between animate-fadeIn">
                 <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
                   {selectedIds.length}개 선택됨
@@ -809,7 +820,7 @@ function DocDetail({
   }, [doc, me]);
   const iAmDrafter = doc.drafterId === me;
   const canRecall = iAmDrafter && doc.status === '진행중' && !doc.steps.some((s) => s.kind !== '참조' && s.decision === '승인');
-  const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '회수');
+  const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '회수' || doc.status === '시행반송');
   const canEditDraft = iAmDrafter && doc.status === '임시저장';
   const isInTrash = iAmDrafter && doc.status === '삭제';
 

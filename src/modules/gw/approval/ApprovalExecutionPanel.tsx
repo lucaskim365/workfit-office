@@ -117,8 +117,8 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
     });
   }, [finalExecutions, doc, meUser, userId, depts, forceFullView]);
 
-  // 문서 결재 상태가 최종 '완료'가 아니거나 표시할 시행 임무가 없으면 패널 숨김
-  if (doc.status !== '완료' || visibleExecutions.length === 0) return null;
+  // 문서 결재 상태가 최종 '완료', '시행대기', '시행반송'이 아니거나 표시할 시행 임무가 없으면 패널 숨김
+  if (!['완료', '시행대기', '시행반송'].includes(doc.status) || visibleExecutions.length === 0) return null;
 
   const handleClaim = async (execId: string) => {
     setErrorMsg('');
@@ -268,7 +268,7 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
         {visibleExecutions.map((exec) => {
           const targetDept = depts.find((d) => d.id === exec.targetDeptId || d.name === exec.targetDeptId);
           const isDeptHead = targetDept?.headUserId === userId;
-          const isMyDept = meUser?.dept === targetDept?.name;
+          const isMyDept = meUser?.dept === targetDept?.name || (exec.targetDeptNameSnapshot && meUser?.dept === exec.targetDeptNameSnapshot);
           
           const hasExecutionAuthority = isMyDept;
 
