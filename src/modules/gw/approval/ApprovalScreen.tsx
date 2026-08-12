@@ -820,7 +820,7 @@ function DocDetail({
   }, [doc, me]);
   const iAmDrafter = doc.drafterId === me;
   const canRecall = iAmDrafter && doc.status === '진행중' && !doc.steps.some((s) => s.kind !== '참조' && s.decision === '승인');
-  const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '회수');
+  const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '회수' || doc.status === '시행반송');
   const canEditDraft = iAmDrafter && doc.status === '임시저장';
   const isInTrash = iAmDrafter && doc.status === '삭제';
 
