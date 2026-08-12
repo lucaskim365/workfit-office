@@ -91,6 +91,27 @@ function ApprovalDraftInner({
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
   const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
+  const [zoomFactor, setZoomFactor] = useState(1);
+  const [isWideScreen, setIsWideScreen] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const w = window.innerWidth;
+      const wide = w >= 1200;
+      setIsWideScreen(wide);
+
+      if (wide) {
+        // Widescreen baseline: 1750px (min zoom 0.6)
+        setZoomFactor(w < 1750 ? Math.max(0.6, w / 1750) : 1);
+      } else {
+        // Collapsed baseline: 1380px (min zoom 0.6)
+        setZoomFactor(Math.max(0.6, w / 1380));
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -732,7 +753,7 @@ function ApprovalDraftInner({
   );
 
   return (
-    <div className="flex w-full flex-col bg-panel">
+    <div className="flex w-full flex-col bg-panel" style={{ zoom: zoomFactor }}>
       {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
            (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
       <header className="sticky top-0 z-40 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
@@ -757,16 +778,18 @@ function ApprovalDraftInner({
 
         <div className="flex items-center gap-2">
           {/* 해상도 작을 때 우측 결재선 Drawer 호출 버튼 */}
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="xl:hidden flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
-          >
-            <span>🔗 결재선</span>
-            <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
-              {steps.length}명
-            </span>
-          </button>
+          {!isWideScreen && (
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
+            >
+              <span>🔗 결재선</span>
+              <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
+                {steps.length}명
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1128,42 +1151,44 @@ function ApprovalDraftInner({
         </div>
 
         {/* [3단] 우측 결재선 전용 고정 패널 — sticky self-start top-53px, 내부 스크롤 + 패널 내부 헤더 sticky 고정 */}
-        <div
-          className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
-          style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
-        >
-          {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
-            <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
-              <span>결재선 설정</span>
-            </span>
-            <span className="text-[11px] text-ink3 font-semibold">
-              {steps.length}명 지정됨
-            </span>
-          </div>
+        {isWideScreen && (
+          <div
+            className="w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
+            style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
+          >
+            {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
+              <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
+                <span>결재선 설정</span>
+              </span>
+              <span className="text-[11px] text-ink3 font-semibold">
+                {steps.length}명 지정됨
+              </span>
+            </div>
 
-          {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
-          <div className="px-4 py-4">
-            <ApprovalLineBuilder
-              steps={steps}
-              onChange={setSteps}
-              drafterId={me.id}
-              docType={code}
-              amount={amountNum}
-              docData={values}
-              bottomSlot={
-                <DraftRecipientSection
-                  recipients={recipients}
-                  setRecipients={setRecipients}
-                  executionDepts={executionDepts}
-                  setExecutionDepts={setExecutionDepts}
-                  org={org}
-                />
-              }
-            />
+            {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
+            <div className="px-4 py-4">
+              <ApprovalLineBuilder
+                steps={steps}
+                onChange={setSteps}
+                drafterId={me.id}
+                docType={code}
+                amount={amountNum}
+                docData={values}
+                bottomSlot={
+                  <DraftRecipientSection
+                    recipients={recipients}
+                    setRecipients={setRecipients}
+                    executionDepts={executionDepts}
+                    setExecutionDepts={setExecutionDepts}
+                    org={org}
+                  />
+                }
+              />
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 
