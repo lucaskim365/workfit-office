@@ -268,7 +268,7 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
         {visibleExecutions.map((exec) => {
           const targetDept = depts.find((d) => d.id === exec.targetDeptId || d.name === exec.targetDeptId);
           const isDeptHead = targetDept?.headUserId === userId;
-          const isMyDept = meUser?.dept === targetDept?.name;
+          const isMyDept = meUser?.dept === targetDept?.name || (exec.targetDeptNameSnapshot && meUser?.dept === exec.targetDeptNameSnapshot);
           
           const hasExecutionAuthority = isMyDept;
 
