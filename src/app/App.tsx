@@ -39,7 +39,11 @@ const GwExcelTestLab = lazy(() => import('@/modules/gw/approval/ExcelTestLabScre
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
 const GwDocument = lazy(() => import('@/modules/gw/document/DocumentScreen'));
+<<<<<<< HEAD
 const GwCommunity = lazy(() => import('@/modules/gw/community/CommunityScreen'));
+=======
+const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
+>>>>>>> feature/Employee
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
@@ -180,7 +184,11 @@ export default function App() {
         <Route path="/gw/leave" element={<GwLeave />} />
         <Route path="/gw/board" element={<GwBoard />} />
         <Route path="/gw/document" element={<GwDocument />} />
+<<<<<<< HEAD
         <Route path="/gw/community" element={<GwCommunity />} />
+=======
+        <Route path="/gw/contacts" element={<GwEmployee />} />
+>>>>>>> feature/Employee
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />
