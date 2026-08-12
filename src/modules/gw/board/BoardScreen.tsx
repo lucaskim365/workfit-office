@@ -8,13 +8,6 @@ interface Board {
   desc: string;
 }
 
-interface Comment {
-  id: number;
-  author: string;
-  content: string;
-  date: string;
-}
-
 interface Post {
   id: number;
   boardId: string;
@@ -25,7 +18,7 @@ interface Post {
   views: number;
   isPinned?: boolean;
   hasAttachment?: boolean;
-  comments?: Comment[];
+  attachedFiles?: { name: string; size: string }[];
 }
 
 const BOARDS: Board[] = [
@@ -46,10 +39,6 @@ const INITIAL_POSTS: Post[] = [
     date: '2026-08-10',
     views: 124,
     isPinned: true,
-    comments: [
-      { id: 1, author: '홍채원 사원', content: '연휴 일정을 확인해 주셔서 감사합니다. 차질 없이 업무 진행하겠습니다.', date: '2026-08-10 15:40' },
-      { id: 2, author: '박광래 차장', content: '부서별 상세 연휴 일정 공유도 내일까지 필요한가요?', date: '2026-08-10 16:12' },
-    ],
   },
   {
     id: 2,
@@ -61,7 +50,7 @@ const INITIAL_POSTS: Post[] = [
     views: 98,
     isPinned: true,
     hasAttachment: true,
-    comments: [],
+    attachedFiles: [{ name: '보안점검_지침서.docx', size: '1.2 MB' }],
   },
   {
     id: 3,
@@ -71,7 +60,6 @@ const INITIAL_POSTS: Post[] = [
     author: '인재개발원',
     date: '2026-08-07',
     views: 45,
-    comments: [],
   },
   {
     id: 4,
@@ -81,7 +69,6 @@ const INITIAL_POSTS: Post[] = [
     author: '총무팀',
     date: '2026-08-05',
     views: 67,
-    comments: [],
   },
   
   // 경조사
@@ -94,10 +81,6 @@ const INITIAL_POSTS: Post[] = [
     date: '2026-08-09',
     views: 245,
     isPinned: true,
-    comments: [
-      { id: 1, author: '홍채원 사원', content: '본부장님 결혼을 진심으로 축하드립니다!', date: '2026-08-09 10:30' },
-      { id: 2, author: '강윤석 팀장', content: '축하하네 김 본부장. 당일 꼭 참석하겠네.', date: '2026-08-09 11:15' },
-    ],
   },
   
   // 사내규정
@@ -111,7 +94,7 @@ const INITIAL_POSTS: Post[] = [
     views: 320,
     isPinned: true,
     hasAttachment: true,
-    comments: [],
+    attachedFiles: [{ name: '취업규칙_및_복무규정_v2.4.pdf', size: '2.4 MB' }],
   },
   {
     id: 8,
@@ -121,7 +104,6 @@ const INITIAL_POSTS: Post[] = [
     author: '보안팀',
     date: '2026-07-25',
     views: 154,
-    comments: [],
   },
   
   // 자료실
@@ -134,7 +116,7 @@ const INITIAL_POSTS: Post[] = [
     date: '2026-08-03',
     views: 189,
     hasAttachment: true,
-    comments: [],
+    attachedFiles: [{ name: '2026_표준용역도급계약서_서식.hwp', size: '1.1 MB' }],
   },
   {
     id: 10,
@@ -145,9 +127,7 @@ const INITIAL_POSTS: Post[] = [
     date: '2026-07-30',
     views: 210,
     hasAttachment: true,
-    comments: [
-      { id: 1, author: '박광래 차장', content: '영수증 분실 시 대체 청구 방법도 기술되어 있나요?', date: '2026-07-30 14:02' },
-    ],
+    attachedFiles: [{ name: '출장_및_지출증빙_처리가이드북.pdf', size: '3.8 MB' }],
   },
 ];
 
@@ -159,7 +139,8 @@ export default function BoardScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   
-
+  // 모의 첨부파일 리스트 상태
+  const [writeAttachments, setWriteAttachments] = useState<{ name: string; size: string }[]>([]);
 
   // 폼 상태 (글쓰기용)
   const [newPost, setNewPost] = useState({
@@ -197,8 +178,29 @@ export default function BoardScreen() {
   }, [posts, activeBoard, searchQuery]);
 
   const handlePostClick = (post: Post) => {
+    // 세션별 중복 조회 방지 검사
+    const sessionKey = `read_post_${post.id}`;
+    const alreadyRead = sessionStorage.getItem(sessionKey) === 'true';
+
+    if (!alreadyRead) {
+      sessionStorage.setItem(sessionKey, 'true');
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, views: p.views + 1 } : p))
+      );
+    }
+
     setSelectedPostId(post.id);
     setViewMode('detail');
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const list = Array.from(e.target.files).map((f) => ({
+        name: f.name,
+        size: (f.size / (1024 * 1024)).toFixed(1) + ' MB',
+      }));
+      setWriteAttachments((prev) => [...prev, ...list]);
+    }
   };
 
   const handleCreatePost = (e: React.FormEvent) => {
@@ -213,11 +215,12 @@ export default function BoardScreen() {
       boardId: newPost.boardId,
       title: newPost.title,
       content: newPost.content,
-      author: '홍채원 사원', // 테스트 계정 가상 필터
+      author: '홍채원 사원', // 테스트 계정
       date: new Date().toISOString().split('T')[0],
       views: 0,
       isPinned: newPost.isPinned,
-      comments: [],
+      hasAttachment: writeAttachments.length > 0,
+      attachedFiles: writeAttachments.length > 0 ? writeAttachments : undefined,
     };
 
     setPosts([created, ...posts]);
@@ -228,16 +231,15 @@ export default function BoardScreen() {
       boardId: activeBoard,
       isPinned: false,
     });
+    setWriteAttachments([]);
   };
-
-
 
   return (
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink">
       {/* ── 좌측 게시판 사이드바 (고정) ── */}
       <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm">
         <div>
-          <h2 className="text-sm font-extrabold text-navy">🌐 그룹웨어 게시판</h2>
+          <h2 className="text-sm font-extrabold text-navy">🌐 사내 게시판</h2>
           <p className="mt-1 text-[11px] text-ink3">공식 정보 및 사내 공지를 열람합니다.</p>
         </div>
 
@@ -250,7 +252,7 @@ export default function BoardScreen() {
                 onClick={() => {
                   setActiveBoard(b.id);
                   setSearchQuery('');
-                  setViewMode('list'); // 다른 게시판 이동 시 목록으로 강제 이동
+                  setViewMode('list');
                 }}
                 className={`flex w-full items-center gap-3.5 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
                   isActive
@@ -266,13 +268,12 @@ export default function BoardScreen() {
         </nav>
       </aside>
 
-      {/* ── 우측 메인 컨텐츠 영역 (viewMode에 따라 전환) ── */}
+      {/* ── 우측 메인 컨텐츠 영역 ── */}
       <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-5 shadow-sm overflow-hidden">
         
-        {/* 1) 목록 뷰 (List View) */}
+        {/* 1) 목록 뷰 */}
         {viewMode === 'list' && (
           <>
-            {/* 상단 타이틀 & 헤더 */}
             <div className="flex flex-col gap-2 border-b border-border pb-4">
               <div className="flex items-center justify-between">
                 <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
@@ -292,7 +293,6 @@ export default function BoardScreen() {
               <p className="text-[11.5px] text-ink3">{activeBoardMeta.desc}</p>
             </div>
 
-            {/* 필터 및 검색 바 */}
             <div className="flex items-center justify-end gap-2">
               <div className="relative w-72">
                 <input
@@ -306,7 +306,6 @@ export default function BoardScreen() {
               </div>
             </div>
 
-            {/* 게시글 테이블 목록 */}
             <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
               <table className="w-full border-collapse text-left text-[12px]">
                 <thead>
@@ -324,7 +323,9 @@ export default function BoardScreen() {
                       <tr
                         key={p.id}
                         onClick={() => handlePostClick(p)}
-                        className="border-b border-border hover:bg-panel-alt/30 cursor-pointer transition-colors"
+                        className={`border-b border-border hover:bg-panel-alt/30 cursor-pointer transition-colors ${
+                          p.isPinned ? 'bg-teal-soft/20 border-teal/10' : ''
+                        }`}
                       >
                         <td className="p-3 text-center">
                           {p.isPinned ? (
@@ -334,10 +335,13 @@ export default function BoardScreen() {
                           )}
                         </td>
                         <td className="p-3 font-semibold text-ink flex items-center gap-1.5 min-w-0">
-                          {p.isPinned && <span className="text-teal font-extrabold text-[10px] bg-teal-soft/40 border border-teal/20 rounded px-1 shrink-0">중요</span>}
+                          {p.isPinned && (
+                            <span className="text-teal font-extrabold text-[10px] bg-teal-soft/50 border border-teal/30 rounded px-1.5 py-0.2 shrink-0">
+                              중요
+                            </span>
+                          )}
                           <span className="truncate hover:text-teal transition-colors">{p.title}</span>
                           {p.hasAttachment && <span className="text-[10px] opacity-75 shrink-0" title="첨부파일 있음">📎</span>}
-
                         </td>
                         <td className="p-3 text-ink2 truncate">{p.author}</td>
                         <td className="p-3 text-ink3">{p.date}</td>
@@ -357,10 +361,9 @@ export default function BoardScreen() {
           </>
         )}
 
-        {/* 2) 상세 조회 뷰 (Detail View) */}
+        {/* 2) 상세 조회 뷰 */}
         {viewMode === 'detail' && selectedPost && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* 상단 액션 바 */}
             <div className="flex items-center justify-between border-b border-border pb-3">
               <button
                 onClick={() => setViewMode('list')}
@@ -373,7 +376,6 @@ export default function BoardScreen() {
               </span>
             </div>
 
-            {/* 본문/댓글 영역 */}
             <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-5">
               <div className="space-y-2 border-b border-border pb-3">
                 <h2 className="text-[15px] font-extrabold text-ink leading-snug">
@@ -410,25 +412,24 @@ export default function BoardScreen() {
               )}
 
               {/* 첨부파일 영역 */}
-              {selectedPost.hasAttachment && (
+              {selectedPost.hasAttachment && selectedPost.attachedFiles && (
                 <div className="rounded-lg border border-border bg-panel-alt/30 p-3.5 space-y-2">
-                  <div className="font-bold text-[11px] text-ink2">📎 첨부파일 (1개)</div>
-                  <div className="flex items-center justify-between gap-3 text-[11.5px] hover:text-teal cursor-pointer">
-                    <span className="underline">회사_가이드라인_및_서식문서.docx</span>
-                    <span className="text-[10px] text-ink3 font-mono">1.2 MB</span>
-                  </div>
+                  <div className="font-bold text-[11px] text-ink2">📎 첨부파일 ({selectedPost.attachedFiles.length}개)</div>
+                  {selectedPost.attachedFiles.map((file, fidx) => (
+                    <div key={fidx} className="flex items-center justify-between gap-3 text-[11.5px] hover:text-teal cursor-pointer">
+                      <span className="underline">{file.name}</span>
+                      <span className="text-[10px] text-ink3 font-mono">{file.size}</span>
+                    </div>
+                  ))}
                 </div>
               )}
-
-
             </div>
           </div>
         )}
 
-        {/* 3) 글작성 뷰 (Write View) */}
+        {/* 3) 글작성 뷰 */}
         {viewMode === 'write' && (
           <form onSubmit={handleCreatePost} className="flex-1 flex flex-col overflow-hidden">
-            {/* 상단 액션 바 */}
             <div className="flex items-center justify-between border-b border-border pb-3">
               <button
                 type="button"
@@ -440,7 +441,6 @@ export default function BoardScreen() {
               <span className="font-extrabold text-teal">✍️ 새 게시글 작성</span>
             </div>
 
-            {/* 입력 영역 */}
             <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-4">
               <div className="flex flex-col gap-1.5">
                 <label className="font-bold text-ink2">게시판 선택</label>
@@ -476,9 +476,40 @@ export default function BoardScreen() {
                   onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
                   placeholder="본문 내용을 상세히 입력하세요"
                   required
-                  rows={12}
+                  rows={10}
                   className="w-full rounded-lg border border-border-hi bg-panel p-3.5 outline-none focus:border-teal resize-y leading-relaxed"
                 />
+              </div>
+
+              {/* 모의 파일 첨부 필드 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-ink2">📎 첨부파일</label>
+                <div className="border border-dashed border-border-hi hover:border-teal rounded-lg p-5 text-center cursor-pointer transition-colors bg-panel-alt/30 relative">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <div className="text-[12px] text-ink2 font-semibold">+ 파일을 드래그하거나 클릭하여 추가하세요</div>
+                  <div className="text-[10px] text-ink3 mt-1">파일 용량 무제한 (모의 업로드)</div>
+                </div>
+                {writeAttachments.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {writeAttachments.map((f, idx) => (
+                      <li key={idx} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md border border-border/50">
+                        <span className="truncate">📎 {f.name} ({f.size})</span>
+                        <button
+                          type="button"
+                          onClick={() => setWriteAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0 font-bold"
+                        >
+                          삭제
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 pt-1.5">
