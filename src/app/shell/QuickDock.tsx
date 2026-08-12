@@ -798,9 +798,39 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
 
       {/* 메시지 */}
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-        {filteredMessages.map((m) => (
-          <MessageBubble key={m.id} m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} onReply={setReplyTo} />
-        ))}
+        {filteredMessages.map((m, idx) => {
+          const prevMsg = idx > 0 ? filteredMessages[idx - 1] : null;
+          const showDateDivider = !prevMsg || (() => {
+            const d1 = new Date(m.at).toDateString();
+            const d2 = prevMsg.at ? new Date(prevMsg.at).toDateString() : '';
+            return d1 !== d2;
+          })();
+
+          const formatDateDivider = (iso?: string) => {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            const y = d.getFullYear();
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayName = dayNames[d.getDay()];
+            return `${y}년 ${month}월 ${day}일 ${dayName}요일`;
+          };
+
+          return (
+            <div key={m.id} className="space-y-2.5">
+              {showDateDivider && (
+                <div className="my-3 flex justify-center">
+                  <span className="rounded-full bg-panel-alt px-3.5 py-1 text-[10px] font-extrabold text-ink3 tracking-wider shadow-3xs border border-border/40 select-none">
+                    📅 {formatDateDivider(m.at)}
+                  </span>
+                </div>
+              )}
+              <MessageBubble m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} onReply={setReplyTo} />
+            </div>
+          );
+        })}
         {filteredMessages.length === 0 && searchQuery && (
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
         )}
