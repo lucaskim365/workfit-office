@@ -240,7 +240,7 @@ export function matchesBox(
     case '참조':
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '시행': {
-      if (doc.status !== '완료') return false;
+      if (!['완료', '시행대기'].includes(doc.status)) return false;
       
       // 1. 복수 시행처 스냅샷 매칭
       if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {
