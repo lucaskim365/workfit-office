@@ -1,4 +1,4 @@
-import type { Club, ClubMember, ClubPost, ClubEvent } from '@/domain/community/schema';
+import type { Club, ClubMember, ClubPost, ClubEvent, ClubGreeting } from '@/domain/community/schema';
 import { CLUB_SEED_DATA } from '@/data/seeds/community.seed';
 
 class CommunityRepository {
@@ -9,13 +9,14 @@ class CommunityRepository {
     return this.clubs;
   }
 
-  addClub(club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events'>): Club {
+  addClub(club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events' | 'greetings'>): Club {
     const newClub: Club = {
       ...club,
       id: this.clubs.length + 1,
       memberCount: club.members.length,
       posts: [],
       events: [],
+      greetings: [],
     };
     this.clubs = [...this.clubs, newClub];
     return newClub;
@@ -96,6 +97,25 @@ class CommunityRepository {
             }
             return e;
           }),
+        };
+      }
+      return c;
+    });
+  }
+
+  addClubGreeting(clubId: number, content: string, author: string): void {
+    this.clubs = this.clubs.map((c) => {
+      if (c.id === clubId) {
+        const timeStr = new Date().toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) + ' ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const newGreeting: ClubGreeting = {
+          id: (c.greetings?.length || 0) + 1,
+          author,
+          content,
+          date: timeStr,
+        };
+        return {
+          ...c,
+          greetings: [newGreeting, ...(c.greetings || [])]
         };
       }
       return c;

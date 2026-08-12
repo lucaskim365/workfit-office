@@ -9,7 +9,7 @@ export function useCommunity() {
     setClubs([...communityRepo.getClubs()]);
   }, []);
 
-  const createClub = useCallback((club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events'>) => {
+  const createClub = useCallback((club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events' | 'greetings'>) => {
     communityRepo.addClub(club);
     refresh();
   }, [refresh]);
@@ -39,6 +39,11 @@ export function useCommunity() {
     refresh();
   }, [refresh]);
 
+  const addClubGreeting = useCallback((clubId: number, content: string, author: string) => {
+    communityRepo.addClubGreeting(clubId, content, author);
+    refresh();
+  }, [refresh]);
+
   return {
     clubs,
     createClub,
@@ -47,5 +52,6 @@ export function useCommunity() {
     addClubPost,
     addClubEvent,
     voteClubEvent,
+    addClubGreeting,
   };
 }

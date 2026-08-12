@@ -33,6 +33,13 @@ export const clubPostSchema = z.object({
   comments: z.array(commentSchema).default([]),
 });
 
+export const clubGreetingSchema = z.object({
+  id: z.number(),
+  author: z.string(),
+  content: z.string(),
+  date: z.string(),
+});
+
 export const clubEventSchema = z.object({
   id: z.number(),
   title: z.string(),
@@ -55,6 +62,7 @@ export const clubSchema = z.object({
   events: z.array(clubEventSchema).default([]),
   coverImage: z.string().optional(),
   tags: z.array(z.string()).default([]),
+  greetings: z.array(clubGreetingSchema).default([]),
 });
 
 export type CommentReply = z.infer<typeof commentReplySchema>;
@@ -62,5 +70,6 @@ export type Comment = z.infer<typeof commentSchema>;
 export type ClubMember = z.infer<typeof clubMemberSchema>;
 export type ClubPost = z.infer<typeof clubPostSchema>;
 export type ClubEvent = z.infer<typeof clubEventSchema>;
+export type ClubGreeting = z.infer<typeof clubGreetingSchema>;
 export type Club = z.infer<typeof clubSchema>;
 export type JoinPolicy = 'free' | 'approval' | 'invite';

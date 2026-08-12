@@ -12,7 +12,8 @@ export default function CommunityScreen() {
     leaveClub,
     addClubPost,
     addClubEvent,
-    voteClubEvent
+    voteClubEvent,
+    addClubGreeting
   } = useCommunity();
 
   // 대분류 탭: 'feed' (내 소모임 새 소식) | 'explore' (소모임 탐색)
@@ -70,6 +71,9 @@ export default function CommunityScreen() {
   const [newClubTags, setNewClubTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
+  // 소모임 관심사 가로 퀵 필터 칩 (소모임 앱 UI 적용)
+  const [selectedInterest, setSelectedInterest] = useState<string>('전체');
+
   // 소모임 검색 상태
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -84,6 +88,9 @@ export default function CommunityScreen() {
   const [eventLocation, setEventLocation] = useState('');
   const [eventDesc, setEventDesc] = useState('');
   const [isEventWriteOpen, setIsEventWriteOpen] = useState(false);
+
+  // 방명록 / 가입인사 입력 폼
+  const [greetingInput, setGreetingInput] = useState('');
 
   // 운영자(Owner) 관리 모달 상태
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -106,17 +113,29 @@ export default function CommunityScreen() {
     return activeClub.members.some((m) => m.userId === CURRENT_USER.id && m.role === 'owner');
   }, [activeClub, CURRENT_USER.id]);
 
-  // 검색 쿼리에 필터링된 소모임 목록
+  // 검색 및 관심사 퀵 필터에 따른 소모임 검색
   const filteredClubs = useMemo(() => {
-    if (!searchQuery.trim()) return clubs;
-    const q = searchQuery.toLowerCase().trim();
-    return clubs.filter((c) => {
-      const matchesName = c.name.toLowerCase().includes(q);
-      const matchesDesc = c.desc.toLowerCase().includes(q);
-      const matchesTag = c.tags?.some((t) => t.toLowerCase().includes(q));
-      return matchesName || matchesDesc || matchesTag;
-    });
-  }, [clubs, searchQuery]);
+    let result = clubs;
+
+    // 1. 관심사 퀵 필터링
+    if (selectedInterest !== '전체') {
+      const keyword = selectedInterest.split(' ')[1];
+      result = result.filter(c => c.name.includes(keyword) || c.desc.includes(keyword) || c.icon === selectedInterest.split(' ')[0]);
+    }
+
+    // 2. 검색어 필터링
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((c) => {
+        const matchesName = c.name.toLowerCase().includes(q);
+        const matchesDesc = c.desc.toLowerCase().includes(q);
+        const matchesTag = c.tags?.some((t) => t.toLowerCase().includes(q));
+        return matchesName || matchesDesc || matchesTag;
+      });
+    }
+
+    return result;
+  }, [clubs, selectedInterest, searchQuery]);
 
   // 커버 이미지 첨부 핸들러
   const handleCoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -474,7 +493,7 @@ export default function CommunityScreen() {
                 <p className="text-[11px] text-ink3 mt-0.5">회사 내 개설된 모든 동호회를 찾아 가입하고 함께 교류하세요.</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {/* 검색 필드 탑재 */}
+                {/* 검색 필드 */}
                 <div className="relative">
                   <input
                     type="text"
@@ -502,87 +521,116 @@ export default function CommunityScreen() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pr-1">
-              {filteredClubs.map((c) => {
-                const joined = c.members.some((m) => m.userId === CURRENT_USER.id);
-                const waiting = joinRequests[c.id];
-                return (
-                  <div key={c.id} className="rounded-xl border border-border bg-panel overflow-hidden flex flex-col justify-between gap-3 shadow-xs hover:border-teal/30 transition-colors">
-                    {/* 대표 사진 */}
-                    <div className="relative h-32 w-full overflow-hidden bg-panel-alt border-b border-border">
-                      <img 
-                        src={c.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
-                        onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'; }}
-                        className="w-full h-full object-cover" 
-                      />
-                      <span className="absolute left-3 top-3 px-2 py-0.5 rounded bg-black/60 font-bold text-white text-[10px]">
-                        {c.joinPolicy === 'free' ? '🔓 자유가입' : c.joinPolicy === 'approval' ? '⏳ 승인제' : '🔒 초대전용'}
-                      </span>
-                    </div>
+            {/* 소모임 관심사 가로 퀵 필터 칩 영역 (소모임 웹 메인 레퍼런스 적용) */}
+            <div className="flex gap-2 overflow-x-auto pb-1 shrink-0 scrollbar-none">
+              {['전체', '⚽ 스포츠', '📚 독서', '💻 개발', '⭐ 친목/기타'].map((interest) => (
+                <button
+                  key={interest}
+                  onClick={() => {
+                    setSelectedInterest(interest);
+                    setSearchQuery('');
+                  }}
+                  className={`rounded-full px-4 py-1.5 font-bold text-[11px] border transition-all shrink-0 ${
+                    selectedInterest === interest
+                      ? 'bg-teal border-teal text-white shadow-2xs'
+                      : 'bg-panel border-border text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  {interest}
+                </button>
+              ))}
+            </div>
 
-                    {/* 정보 표시 우선순위 조정: 소모임이름 -> 회원수/가입유형 -> 소개설명 & 태그 */}
-                    <div className="p-4 pt-3 flex-1 flex flex-col justify-between gap-3">
-                      <div className="space-y-2">
-                        <h3 className="text-sm font-extrabold text-ink">{c.name}</h3>
-                        <div className="flex items-center gap-2 text-[10.5px] text-ink3">
-                          <span className="text-teal font-extrabold">멤버 {c.memberCount}명</span>
-                          <span>•</span>
-                          <span className="font-semibold text-ink2">
-                            {c.joinPolicy === 'free' ? '자유가입' : c.joinPolicy === 'approval' ? '승인제' : '초대전용'}
-                          </span>
-                        </div>
-                        <p className="text-[11.5px] text-ink2 line-clamp-2 leading-relaxed">{c.desc}</p>
-                        
-                        {/* 소모임 태그 칩 노출 */}
-                        {c.tags && c.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 pt-1">
-                            {c.tags.map((t, idx) => (
-                              <span 
-                                key={idx} 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSearchQuery(t);
-                                }}
-                                className="text-[10px] text-teal font-bold bg-teal-soft/20 px-1.5 py-0.5 rounded cursor-pointer hover:bg-teal-soft/40"
-                              >
-                                {t}
-                              </span>
-                            ))}
+            {/* 큐레이션 타이틀 및 리스트 */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+              <h3 className="font-extrabold text-ink text-xs flex items-center gap-1.5 pt-1">
+                <span>🔥</span>
+                <span>활동이 활발한 모임 ({filteredClubs.length})</span>
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredClubs.map((c) => {
+                  const joined = c.members.some((m) => m.userId === CURRENT_USER.id);
+                  const waiting = joinRequests[c.id];
+                  return (
+                    <div key={c.id} className="rounded-xl border border-border bg-panel overflow-hidden flex flex-col justify-between gap-3 shadow-xs hover:border-teal/30 transition-colors">
+                      {/* 대표 사진 */}
+                      <div className="relative h-32 w-full overflow-hidden bg-panel-alt border-b border-border">
+                        <img 
+                          src={c.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
+                          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'; }}
+                          className="w-full h-full object-cover" 
+                        />
+                        <span className="absolute left-3 top-3 px-2 py-0.5 rounded bg-black/60 font-bold text-white text-[10px]">
+                          {c.joinPolicy === 'free' ? '🔓 자유가입' : c.joinPolicy === 'approval' ? '⏳ 승인제' : '🔒 초대전용'}
+                        </span>
+                      </div>
+
+                      {/* 정보 표시 우선순위 조정: 소모임이름 -> 회원수/가입유형 -> 소개설명 & 태그 */}
+                      <div className="p-4 pt-3 flex-1 flex flex-col justify-between gap-3">
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-extrabold text-ink">{c.name}</h3>
+                          <div className="flex items-center gap-2 text-[10.5px] text-ink3">
+                            <span className="text-teal font-extrabold">멤버 {c.memberCount}명</span>
+                            <span>•</span>
+                            <span className="font-semibold text-ink2">
+                              {c.joinPolicy === 'free' ? '자유가입' : c.joinPolicy === 'approval' ? '승인제' : '초대전용'}
+                            </span>
                           </div>
-                        )}
-                      </div>
+                          <p className="text-[11.5px] text-ink2 line-clamp-2 leading-relaxed">{c.desc}</p>
+                          
+                          {/* 소모임 태그 칩 노출 */}
+                          {c.tags && c.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {c.tags.map((t, idx) => (
+                                <span 
+                                  key={idx} 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSearchQuery(t);
+                                  }}
+                                  className="text-[10px] text-teal font-bold bg-teal-soft/20 px-1.5 py-0.5 rounded cursor-pointer hover:bg-teal-soft/40"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => {
-                            setSelectedClubId(c.id);
-                            setClubViewMode('detail');
-                            setClubTab('post');
-                          }}
-                          className="flex-1 rounded-lg border border-border-hi bg-panel py-2 text-center font-bold text-ink2 hover:bg-panel-alt transition-colors"
-                        >
-                          상세 보기
-                        </button>
-                        {joined ? (
-                          <span className="flex-1 rounded-lg bg-teal-soft/40 border border-teal/20 py-2 text-center font-bold text-teal">가입됨</span>
-                        ) : waiting ? (
-                          <span className="flex-1 rounded-lg bg-amber-soft border border-amber/20 py-2 text-center font-bold text-amber">대기중</span>
-                        ) : (
+                        <div className="flex gap-2 pt-1">
                           <button
-                            onClick={() => handleJoinClub(c)}
-                            className="flex-1 rounded-lg bg-teal py-2 text-center font-bold text-white hover:opacity-90 transition-opacity"
+                            onClick={() => {
+                              setSelectedClubId(c.id);
+                              setClubViewMode('detail');
+                              setClubTab('post');
+                            }}
+                            className="flex-1 rounded-lg border border-border-hi bg-panel py-2 text-center font-bold text-ink2 hover:bg-panel-alt transition-colors"
                           >
-                            가입 신청
+                            상세 보기
                           </button>
-                        )}
+                          {joined ? (
+                            <span className="flex-1 rounded-lg bg-teal-soft/40 border border-teal/20 py-2 text-center font-bold text-teal">가입됨</span>
+                          ) : waiting ? (
+                            <span className="flex-1 rounded-lg bg-amber-soft border border-amber/20 py-2 text-center font-bold text-amber">대기중</span>
+                          ) : (
+                            <button
+                              onClick={() => handleJoinClub(c)}
+                              className="flex-1 rounded-lg bg-teal py-2 text-center font-bold text-white hover:opacity-90 transition-opacity"
+                            >
+                              가입 신청
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              
               {filteredClubs.length === 0 && (
-                <div className="col-span-full py-16 text-center text-ink3 border border-dashed rounded-xl">
-                  🔍 '{searchQuery}'에 부합하는 소모임이 없습니다. 검색어를 달리해보세요.
+                <div className="py-16 text-center text-ink3 border border-dashed rounded-xl">
+                  🔍 조건에 부합하는 소모임이 없습니다. 검색어 또는 퀵 필터를 재조정해보세요.
                 </div>
               )}
             </div>
@@ -759,33 +807,46 @@ export default function CommunityScreen() {
               </div>
             </div>
 
-            {/* 소모임 대표 이미지 배너 헤더 (높이 축소: h-28) */}
-            <div className="relative h-28 w-full overflow-hidden rounded-xl bg-panel-alt mb-3 shadow-xs border border-border shrink-0 mt-2">
+            {/* 소모임 대표 이미지 배너 헤더 (둥근 썸네일 오버랩 레이아웃 적용) */}
+            <div className="relative h-28 w-full overflow-hidden rounded-t-xl bg-panel-alt border-x border-t border-border shrink-0 mt-3">
               <img 
                 src={activeClub.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
                 onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'; }}
                 className="w-full h-full object-cover" 
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent flex items-end p-4">
-                <div className="text-white w-full flex justify-between items-end">
+            </div>
+            
+            {/* 오버랩 정보 섹션 */}
+            <div className="bg-panel border-x border-b border-border rounded-b-xl p-4 flex gap-4 items-start shrink-0 mb-3 shadow-2xs relative">
+              {/* 입체적인 에모지 프로필 배지 */}
+              <div className="-mt-10 h-16 w-16 rounded-2xl border-2 border-panel bg-panel shadow-md flex items-center justify-center text-3xl shrink-0 z-10 select-none">
+                {activeClub.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start gap-3">
                   <div className="space-y-0.5">
-                    <h2 className="text-base font-extrabold flex items-center gap-1.5">{activeClub.name}</h2>
-                    <p className="text-[11px] opacity-90 leading-snug max-w-xl">{activeClub.desc}</p>
-                    {/* 상세 화면 상단에도 태그 노출 */}
-                    {activeClub.tags && activeClub.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1 opacity-90">
-                        {activeClub.tags.map((t, idx) => (
-                          <span key={idx} className="text-[9px] text-white bg-white/20 px-1.5 py-0.2 rounded font-semibold border border-white/10">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <h2 className="text-base font-extrabold text-ink">{activeClub.name}</h2>
+                    <div className="flex items-center gap-2 text-[10.5px] text-ink3">
+                      <span className="text-teal font-extrabold">멤버 {activeClub.memberCount}명</span>
+                      <span>•</span>
+                      <span className="font-semibold text-ink2">
+                        {activeClub.joinPolicy === 'free' ? '자유가입' : activeClub.joinPolicy === 'approval' ? '승인제' : '초대전용'}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-white/20 backdrop-blur-md border border-white/20">
-                    {activeClub.joinPolicy === 'free' ? '자유가입' : activeClub.joinPolicy === 'approval' ? '승인제' : '초대전용'}
-                  </span>
                 </div>
+                <p className="text-[11.5px] text-ink2 leading-relaxed mt-1.5">{activeClub.desc}</p>
+                
+                {/* 상세 화면 상단에도 태그 노출 */}
+                {activeClub.tags && activeClub.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1.5">
+                    {activeClub.tags.map((t, idx) => (
+                      <span key={idx} className="text-[9.5px] text-teal font-bold bg-teal-soft/20 px-1.5 py-0.5 rounded">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1142,7 +1203,58 @@ export default function CommunityScreen() {
 
               {/* 오른쪽: 소모임 사이드바 정보 위젯 */}
               <aside className="hidden lg:flex flex-col gap-4 w-[280px] shrink-0 border-l border-border pl-5 py-1 overflow-y-auto">
-                {/* 1. 소모임 정보 카드 */}
+                {/* 1. 가입 인사 / 방명록 피드 위젯 (소모임 앱 UI 피드백 반영 ⭐) */}
+                <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-xs">
+                  <h3 className="font-extrabold text-ink2 text-xs border-b border-border/40 pb-2 flex items-center gap-1.5">
+                    <span>💬</span>
+                    <span>가입 인사 / 방명록 ({activeClub.greetings?.length || 0})</span>
+                  </h3>
+                  
+                  {isMyClub && (
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!greetingInput.trim()) return;
+                        addClubGreeting(activeClub.id, greetingInput.trim(), `${CURRENT_USER.name} ${CURRENT_USER.position}`);
+                        setGreetingInput('');
+                      }}
+                      className="flex gap-1.5"
+                    >
+                      <input
+                        type="text"
+                        value={greetingInput}
+                        onChange={(e) => setGreetingInput(e.target.value)}
+                        placeholder="가입인사를 작성해 보세요!"
+                        required
+                        className="flex-1 h-7.5 rounded-lg border border-border bg-panel px-2.5 text-[11px] outline-none focus:border-teal"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-teal text-white px-2.5 text-[10.5px] font-bold hover:opacity-90 transition-opacity"
+                      >
+                        등록
+                      </button>
+                    </form>
+                  )}
+
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {activeClub.greetings && activeClub.greetings.length > 0 ? (
+                      activeClub.greetings.map((g) => (
+                        <div key={g.id} className="p-2 bg-panel-alt/30 border border-border/40 rounded-lg text-[11px] space-y-1">
+                          <div className="flex justify-between items-center text-[9.5px] text-ink3">
+                            <span className="font-bold text-ink2">{g.author}</span>
+                            <span>{g.date}</span>
+                          </div>
+                          <p className="text-ink text-[11px] leading-snug whitespace-pre-wrap">{g.content}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-[10px] text-ink3 italic py-2 text-center">등록된 가입인사가 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. 소모임 정보 카드 */}
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-ink2 text-xs border-b border-border/40 pb-2 flex items-center gap-1.5">
                     <span>📢</span>
@@ -1164,7 +1276,7 @@ export default function CommunityScreen() {
                   </div>
                 </div>
 
-                {/* 2. 다가오는 모임 일정 요약 (날짜 가독성 강화) */}
+                {/* 3. 다가오는 모임 일정 요약 (날짜 가독성 강화) */}
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-ink2 text-xs border-b border-border/40 pb-2 flex items-center gap-1.5">
                     <span>📅</span>
@@ -1173,7 +1285,6 @@ export default function CommunityScreen() {
                   <div className="space-y-3">
                     {activeClub.events && activeClub.events.length > 0 ? (
                       activeClub.events.slice(0, 2).map((ev) => {
-                        // 일시 가공
                         const displayDate = formatEventDate(ev.date);
                         return (
                           <div key={ev.id} className="p-2.5 bg-panel-alt/40 border border-border/50 rounded-lg flex flex-col gap-1 text-[11px] leading-snug">

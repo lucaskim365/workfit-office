@@ -41,7 +41,11 @@ export const CLUB_SEED_DATA: Club[] = [
       }
     ],
     coverImage: 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=800',
-    tags: ['#풋살', '#운동', '#친목도모']
+    tags: ['#풋살', '#운동', '#친목도모'],
+    greetings: [
+      { id: 1, author: '강윤석 이사', content: '반갑습니다! 열심히 차겠습니다 ㅎㅎ', date: '08-11 22:00' },
+      { id: 2, author: '홍형표 부장', content: '가입했습니다. 목요일에 봬요!', date: '08-12 10:00' }
+    ]
   },
   {
     id: 2,
@@ -81,7 +85,10 @@ export const CLUB_SEED_DATA: Club[] = [
       }
     ],
     coverImage: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800',
-    tags: ['#독서', '#소설', '#베스트셀러']
+    tags: ['#독서', '#소설', '#베스트셀러'],
+    greetings: [
+      { id: 1, author: '홍채원 사원', content: '한강 작가님 소설 너무 기대돼요! 잘 부탁드립니다.', date: '08-10 15:30' }
+    ]
   },
   {
     id: 3,
@@ -97,6 +104,7 @@ export const CLUB_SEED_DATA: Club[] = [
     posts: [],
     events: [],
     coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800',
-    tags: ['#IT스터디', '#웹개발', '#트렌드분석']
+    tags: ['#IT스터디', '#웹개발', '#트렌드분석'],
+    greetings: []
   }
 ];
