@@ -822,7 +822,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
               <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 hover:bg-black/5">✕</button>
             </div>
           )}
-          <div className="flex items-center gap-1.5 rounded-full border border-border-hi bg-panel py-1.5 pl-2 pr-1.5">
+          <div className="flex items-center gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
             <input ref={fileRef} type="file" className="hidden" onChange={onPickFile} />
             <button
               onClick={() => fileRef.current?.click()}
@@ -832,13 +832,19 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
             >
               📎
             </button>
-            <input
+            <textarea
+              rows={1}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              // 한글 IME 조합 중(isComposing) Enter 는 조합 확정용이라 무시 — 중복/부분 전송 방지.
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
+              // Shift+Enter는 줄바꿈, 그냥 Enter는 전송. IME 조합 완료 검사 포함.
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
               placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
-              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
+              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3 resize-none max-h-20 py-1 leading-normal"
             />
             <button onClick={submit} className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white">↑</button>
           </div>
