@@ -110,7 +110,7 @@ function ApprovalDraftInner({
     try {
       const uploaded = await Promise.all(
         files.map(async (f) => {
-          const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f);
+          const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f, { contentType: f.type, filename: f.name });
           return { name: f.name, url };
         }),
       );
