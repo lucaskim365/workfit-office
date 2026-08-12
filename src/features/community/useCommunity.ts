@@ -1,37 +1,15 @@
 import { useState, useCallback } from 'react';
 import { communityRepo } from '@/data/community/community.repo';
-import type { FeedPost, Club, Comment, CommentReply, ClubMember, ClubPost } from '@/domain/community/schema';
+import type { Club, ClubMember, ClubPost, ClubEvent } from '@/domain/community/schema';
 
 export function useCommunity() {
-  const [feeds, setFeeds] = useState<FeedPost[]>(() => communityRepo.getFeeds());
   const [clubs, setClubs] = useState<Club[]>(() => communityRepo.getClubs());
 
   const refresh = useCallback(() => {
-    setFeeds([...communityRepo.getFeeds()]);
     setClubs([...communityRepo.getClubs()]);
   }, []);
 
-  const createFeed = useCallback((feed: Omit<FeedPost, 'id' | 'date' | 'comments'>) => {
-    communityRepo.addFeed(feed);
-    refresh();
-  }, [refresh]);
-
-  const addFeedComment = useCallback((feedId: number, comment: Omit<Comment, 'id' | 'date' | 'replies'>) => {
-    communityRepo.addFeedComment(feedId, comment);
-    refresh();
-  }, [refresh]);
-
-  const addFeedReply = useCallback((feedId: number, commentId: number, reply: Omit<CommentReply, 'id' | 'date'>) => {
-    communityRepo.addFeedReply(feedId, commentId, reply);
-    refresh();
-  }, [refresh]);
-
-  const deleteFeed = useCallback((feedId: number) => {
-    communityRepo.deleteFeed(feedId);
-    refresh();
-  }, [refresh]);
-
-  const createClub = useCallback((club: Omit<Club, 'id' | 'memberCount' | 'posts'>) => {
+  const createClub = useCallback((club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events'>) => {
     communityRepo.addClub(club);
     refresh();
   }, [refresh]);
@@ -51,16 +29,23 @@ export function useCommunity() {
     refresh();
   }, [refresh]);
 
+  const addClubEvent = useCallback((clubId: number, event: Omit<ClubEvent, 'id' | 'votes'>) => {
+    communityRepo.addClubEvent(clubId, event);
+    refresh();
+  }, [refresh]);
+
+  const voteClubEvent = useCallback((clubId: number, eventId: number, userId: string, voteType: 'attend' | 'absent' | 'undecided') => {
+    communityRepo.voteClubEvent(clubId, eventId, userId, voteType);
+    refresh();
+  }, [refresh]);
+
   return {
-    feeds,
     clubs,
-    createFeed,
-    addFeedComment,
-    addFeedReply,
-    deleteFeed,
     createClub,
     joinClub,
     leaveClub,
     addClubPost,
+    addClubEvent,
+    voteClubEvent,
   };
 }

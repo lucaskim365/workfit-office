@@ -1,84 +1,21 @@
-import type { FeedPost, Club, Comment, CommentReply, ClubMember, ClubPost } from '@/domain/community/schema';
-import { FEED_SEED_DATA, CLUB_SEED_DATA } from '@/data/seeds/community.seed';
+import type { Club, ClubMember, ClubPost, ClubEvent } from '@/domain/community/schema';
+import { CLUB_SEED_DATA } from '@/data/seeds/community.seed';
 
 class CommunityRepository {
-  private feeds: FeedPost[] = [...FEED_SEED_DATA];
   private clubs: Club[] = [...CLUB_SEED_DATA];
-
-  // --- 자유게시판 피드 API ---
-  getFeeds(): FeedPost[] {
-    return this.feeds;
-  }
-
-  addFeed(feed: Omit<FeedPost, 'id' | 'date' | 'comments'>): FeedPost {
-    const newFeed: FeedPost = {
-      ...feed,
-      id: this.feeds.length + 1,
-      date: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      comments: [],
-    };
-    this.feeds = [newFeed, ...this.feeds];
-    return newFeed;
-  }
-
-  addFeedComment(feedId: number, comment: Omit<Comment, 'id' | 'date' | 'replies'>): Comment {
-    const newComment: Comment = {
-      ...comment,
-      id: Date.now(),
-      date: '방금 전',
-      replies: [],
-    };
-
-    this.feeds = this.feeds.map((f) => {
-      if (f.id === feedId) {
-        return { ...f, comments: [...f.comments, newComment] };
-      }
-      return f;
-    });
-
-    return newComment;
-  }
-
-  addFeedReply(feedId: number, commentId: number, reply: Omit<CommentReply, 'id' | 'date'>): CommentReply {
-    const newReply: CommentReply = {
-      ...reply,
-      id: Date.now(),
-      date: '방금 전',
-    };
-
-    this.feeds = this.feeds.map((f) => {
-      if (f.id === feedId) {
-        return {
-          ...f,
-          comments: f.comments.map((c) => {
-            if (c.id === commentId) {
-              return { ...c, replies: [...(c.replies || []), newReply] };
-            }
-            return c;
-          }),
-        };
-      }
-      return f;
-    });
-
-    return newReply;
-  }
-
-  deleteFeed(feedId: number): void {
-    this.feeds = this.feeds.filter((f) => f.id !== feedId);
-  }
 
   // --- 소모임 마당 API ---
   getClubs(): Club[] {
     return this.clubs;
   }
 
-  addClub(club: Omit<Club, 'id' | 'memberCount' | 'posts'>): Club {
+  addClub(club: Omit<Club, 'id' | 'memberCount' | 'posts' | 'events'>): Club {
     const newClub: Club = {
       ...club,
       id: this.clubs.length + 1,
       memberCount: club.members.length,
       posts: [],
+      events: [],
     };
     this.clubs = [...this.clubs, newClub];
     return newClub;
@@ -128,6 +65,41 @@ class CommunityRepository {
     });
 
     return newPost;
+  }
+
+  addClubEvent(clubId: number, event: Omit<ClubEvent, 'id' | 'votes'>): ClubEvent {
+    const newEvent: ClubEvent = {
+      ...event,
+      id: Date.now(),
+      votes: {},
+    };
+
+    this.clubs = this.clubs.map((c) => {
+      if (c.id === clubId) {
+        return { ...c, events: [newEvent, ...c.events] };
+      }
+      return c;
+    });
+
+    return newEvent;
+  }
+
+  voteClubEvent(clubId: number, eventId: number, userId: string, voteType: 'attend' | 'absent' | 'undecided'): void {
+    this.clubs = this.clubs.map((c) => {
+      if (c.id === clubId) {
+        return {
+          ...c,
+          events: c.events.map((e) => {
+            if (e.id === eventId) {
+              const updatedVotes = { ...e.votes, [userId]: voteType };
+              return { ...e, votes: updatedVotes };
+            }
+            return e;
+          }),
+        };
+      }
+      return c;
+    });
   }
 }
 
