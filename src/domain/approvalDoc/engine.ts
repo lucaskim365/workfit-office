@@ -201,14 +201,15 @@ export function matchesBox(
   switch (box) {
     case '대기': {
       if (doc.status !== '진행중') return false;
-      const acts = activeSteps(doc);
-      // 1) 직접 현재 활성 결재자인 경우
-      const isDirectActive = acts.some((s) => s.approverId === userId && s.kind !== '참조');
-      if (isDirectActive) return true;
-      // 2) 대결권자로 위임받은 원결재자가 현재 활성 결재자인 경우 (Dual-Routing)
+      
+      // 결재선(참조 제외)에 내가 포함되어 있는지 확인
+      const isInSteps = doc.steps.some((s) => s.approverId === userId && s.kind !== '참조');
+      if (isInSteps) return true;
+
+      // 대결권자로 위임받은 경우 확인
       if (absentApproverIds && absentApproverIds.length > 0) {
-        const isDelegateActive = acts.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
-        if (isDelegateActive) return true;
+        const isInStepsAsDelegate = doc.steps.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
+        if (isInStepsAsDelegate) return true;
       }
       return false;
     }
