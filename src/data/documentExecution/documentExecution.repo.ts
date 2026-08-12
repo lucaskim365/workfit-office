@@ -6,6 +6,7 @@ import {
   runTransaction,
   query,
   onSnapshot,
+  updateDoc,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { 
@@ -320,6 +321,17 @@ export const documentExecutionRepo = {
       comment: comment || '시행 완료 보고'
     });
 
+    // 해당 문서의 모든 시행처가 완료되었는지 검사 후 부모 문서 완료 처리
+    const allExecs = await this.getByDocumentId(cur.documentId);
+    const isAllCompleted = allExecs.every((e) => e.status === 'COMPLETED');
+    if (isAllCompleted && isFirebaseConfigured && db) {
+      const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
+      await updateDoc(parentDocRef, {
+        status: '완료',
+        completedAt: nowIso
+      });
+    }
+
     return cur;
   },
 
@@ -350,6 +362,14 @@ export const documentExecutionRepo = {
       comment: `반송 사유: [${reasonType === 'SUPPLEMENT' ? '단순보완' : '결재변경 필요'}] ${comment}`
     });
 
+    // 부모 결재 문서를 '시행반송' 상태로 변경
+    if (isFirebaseConfigured && db) {
+      const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
+      await updateDoc(parentDocRef, {
+        status: '시행반송'
+      });
+    }
+
     return cur;
   },
 
@@ -376,6 +396,14 @@ export const documentExecutionRepo = {
       actorName: userName,
       comment: comment || '보완 완료 후 재시행 상신'
     });
+
+    // 부모 결재 문서를 다시 '시행대기' 상태로 전환
+    if (isFirebaseConfigured && db) {
+      const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
+      await updateDoc(parentDocRef, {
+        status: '시행대기'
+      });
+    }
 
     return cur;
   },

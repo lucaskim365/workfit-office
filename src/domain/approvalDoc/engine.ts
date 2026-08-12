@@ -135,20 +135,24 @@ export function applyDecision(
   }
 
   // 승인
+  const hasExecution = (next.executionDepts && next.executionDepts.length > 0) || (next.execution && next.execution.targetId);
+  const finalStatus = hasExecution ? '시행대기' : '완료';
+  const completedAtVal = hasExecution ? null : opts.at;
+
   // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
   if (step.kind === '전결') {
-    next = { ...next, status: '완료', completedAt: opts.at, currentSeq: seq };
+    next = { ...next, status: finalStatus, completedAt: completedAtVal, currentSeq: seq };
   } else {
     // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
     const stillActive = activeGroup(next);
     if (!stillActive) {
       // 마지막 그룹 통과 → 완료.
-      next = { ...next, status: '완료', completedAt: opts.at };
+      next = { ...next, status: finalStatus, completedAt: completedAtVal };
     }
   }
 
-  // 최종 결재 완료 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
-  if (next.status === '완료' && next.execution && next.execution.targetId) {
+  // 최종 결재 완료/시행대기 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
+  if (next.status === '시행대기' && next.execution && next.execution.targetId) {
     next.execution = {
       ...next.execution,
       docId: next.id,
