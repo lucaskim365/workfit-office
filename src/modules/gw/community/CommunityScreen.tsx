@@ -408,21 +408,21 @@ export default function CommunityScreen() {
                   <div className="space-y-3.5">
                     {combinedPosts.length > 0 ? (
                       combinedPosts.slice(0, 5).map((cp, idx) => (
-                        <div key={idx} className="rounded-xl border border-border bg-panel p-4.5 space-y-3.5 shadow-2xs hover:border-teal/30 transition-colors">
+                        <div 
+                          key={idx} 
+                          onClick={() => {
+                            setSelectedClubId(cp.clubId);
+                            setClubViewMode('detail');
+                            setClubTab('post');
+                          }}
+                          className="rounded-xl border border-border bg-panel p-4.5 space-y-3.5 shadow-2xs hover:border-teal/30 hover:bg-panel-alt/10 transition-all cursor-pointer"
+                        >
                           <div className="flex justify-between items-center text-[11px] border-b border-border/40 pb-2">
                             <div className="flex items-center gap-2">
-                              {/* 소모임 출처 명확화: 프로필 배지 + 소모임명 클릭 시 해당 소모임으로 즉시 이동 */}
                               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft/60 text-[10.5px] shadow-3xs border border-teal/15 select-none font-bold shrink-0">
                                 {cp.clubIcon}
                               </span>
-                              <span 
-                                onClick={() => {
-                                  setSelectedClubId(cp.clubId);
-                                  setClubViewMode('detail');
-                                  setClubTab('post');
-                                }}
-                                className="text-teal font-extrabold text-[11.5px] hover:underline cursor-pointer"
-                              >
+                              <span className="text-teal font-extrabold text-[11.5px] hover:underline">
                                 {cp.clubName}
                               </span>
                               <span className="text-ink3">•</span>
