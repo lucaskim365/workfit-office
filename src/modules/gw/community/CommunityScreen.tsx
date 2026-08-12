@@ -16,9 +16,6 @@ export default function CommunityScreen() {
     addClubGreeting
   } = useCommunity();
 
-  // 대분류 탭: 'feed' (내 소모임 새 소식) | 'explore' (소모임 탐색)
-  const [activeTab, setActiveTab] = useState<'feed' | 'explore'>('feed');
-
   // 로그인 사용자 세션 가공
   const CURRENT_USER = useMemo(() => {
     return {
@@ -188,7 +185,7 @@ export default function CommunityScreen() {
     });
 
     setClubViewMode('list');
-    setActiveTab('explore');
+    setSelectedClubId(null);
     setNewClubName('');
     setNewClubDesc('');
     setNewClubIcon('⚽');
@@ -227,7 +224,6 @@ export default function CommunityScreen() {
       leaveClub(clubId, CURRENT_USER.id);
       setClubViewMode('list');
       setSelectedClubId(null);
-      setActiveTab('feed');
     }
   };
 
@@ -302,7 +298,6 @@ export default function CommunityScreen() {
       setIsAdminModalOpen(false);
       setSelectedClubId(null);
       setClubViewMode('list');
-      setActiveTab('feed');
     }
   };
 
@@ -310,7 +305,7 @@ export default function CommunityScreen() {
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink relative overflow-hidden">
       
       {/* ── 좌측 네비게이션 사이드바 ── */}
-      <aside className="w-[220px] shrink-0 flex flex-col gap-5 rounded-xl border border-border bg-panel p-4 shadow-sm">
+      <aside className="w-[230px] shrink-0 flex flex-col gap-5 rounded-xl border border-border bg-panel p-4.5 shadow-sm">
         <div className="space-y-5">
           <div>
             <h2 className="text-sm font-extrabold text-navy flex items-center gap-1.5">
@@ -322,60 +317,51 @@ export default function CommunityScreen() {
           <nav className="flex flex-col gap-1">
             <button
               onClick={() => {
-                setActiveTab('feed');
                 setSelectedClubId(null);
                 setClubViewMode('list');
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
-                activeTab === 'feed' && !selectedClubId
+                !selectedClubId && clubViewMode !== 'create'
                   ? 'bg-teal text-white shadow-xs'
                   : 'text-ink2 hover:bg-panel-alt hover:text-ink'
               }`}
             >
-              <span>💬</span>
-              <span>새 소식</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('explore');
-                setSelectedClubId(null);
-                setClubViewMode('list');
-              }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
-                activeTab === 'explore' && !selectedClubId && clubViewMode !== 'create'
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
-            >
-              <span>👥</span>
-              <span>소모임 탐색</span>
+              <span>🏠</span>
+              <span>커뮤니티 홈</span>
             </button>
           </nav>
 
-          {/* 가입된 소모임 단축 리스트 */}
-          <div className="space-y-1.5 pt-3 border-t border-border">
+          {/* 가입된 소모임 리스트 - 둥근 원형 아이콘(프로필 형태) 탑재 */}
+          <div className="space-y-2 pt-3.5 border-t border-border">
             <div className="px-2 text-[10px] font-bold tracking-wider text-ink3 uppercase">가입한 소모임 ({myClubs.length})</div>
-            <div className="flex flex-col gap-0.5">
-              {myClubs.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    setSelectedClubId(c.id);
-                    setClubViewMode('detail');
-                    setClubTab('post');
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-semibold transition-colors ${
-                    selectedClubId === c.id && clubViewMode === 'detail'
-                      ? 'bg-teal-soft/40 text-teal'
-                      : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-                  }`}
-                >
-                  <span>{c.icon}</span>
-                  <span className="truncate flex-1">{c.name}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-1">
+              {myClubs.map((c) => {
+                // 에모지 이외의 텍스트만 추출
+                const cleanName = c.name.replace(/^[^\s]+\s+/, '');
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setSelectedClubId(c.id);
+                      setClubViewMode('detail');
+                      setClubTab('post');
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left font-bold transition-all ${
+                      selectedClubId === c.id && clubViewMode === 'detail'
+                        ? 'bg-teal-soft/40 text-teal shadow-2xs'
+                        : 'text-ink2 hover:bg-panel-alt hover:text-ink'
+                    }`}
+                  >
+                    {/* 원형 아이콘 프레임 */}
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-teal-soft/50 text-base shadow-2xs border border-teal/10 shrink-0 select-none">
+                      {c.icon}
+                    </span>
+                    <span className="truncate flex-1 text-[11.5px]">{cleanName}</span>
+                  </button>
+                );
+              })}
               {myClubs.length === 0 && (
-                <div className="px-2 py-1.5 text-[11px] text-ink3 italic">가입된 모임이 없습니다.</div>
+                <div className="px-2 py-2 text-[11px] text-ink3 italic">가입된 모임이 없습니다.</div>
               )}
             </div>
           </div>
@@ -385,57 +371,207 @@ export default function CommunityScreen() {
       {/* ── 우측 메인 콘텐츠 영역 ── */}
       <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-5 shadow-sm overflow-hidden">
         
-        {/* ==================== 1. 내 소모임 새 소식 (통합 피드) ==================== */}
-        {activeTab === 'feed' && !selectedClubId && (
+        {/* ==================== 1. 커뮤니티 통합 홈 (새소식 + 소모임 탐색 통합 뷰) ==================== */}
+        {!selectedClubId && clubViewMode !== 'create' && (
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 overflow-hidden">
+            
+            {/* 왼쪽 컬럼: 새 소식 피드 & 소모임 탐색 통합 스크롤 */}
             <div className="flex flex-col gap-4 overflow-hidden">
-              <div className="border-b border-border pb-3 shrink-0">
-                <h1 className="text-base font-extrabold text-ink">새 소식</h1>
-                <p className="text-[11px] text-ink3 mt-0.5">가입한 소모임에서 일어나는 최근 이야기를 타임라인 피드로 빠르게 봅니다.</p>
+              
+              {/* 공통 헤더 */}
+              <div className="flex justify-between items-center border-b border-border pb-3 shrink-0">
+                <div>
+                  <h1 className="text-base font-extrabold text-ink">커뮤니티 홈</h1>
+                  <p className="text-[11px] text-ink3 mt-0.5">사내 동호회 소식 확인 및 다양한 소모임을 한곳에서 탐색합니다.</p>
+                </div>
+                <button
+                  onClick={() => setClubViewMode('create')}
+                  className="rounded-lg bg-teal px-4 py-2 font-bold text-white shadow-xs hover:opacity-90 transition-opacity text-[11.5px]"
+                >
+                  ＋ 소모임 개설
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto pr-1 space-y-3.5">
-                {combinedPosts.length > 0 ? (
-                  combinedPosts.map((cp, idx) => (
-                    <div key={idx} className="rounded-xl border border-border bg-panel p-4.5 space-y-3.5 shadow-xs hover:border-teal/30 transition-colors">
-                      <div className="flex justify-between items-center text-[11px]">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center justify-center rounded bg-teal-soft/50 px-2 py-0.5 text-[10px] font-extrabold text-teal">
-                            {cp.clubIcon} {cp.clubName}
-                          </span>
-                          <span className="text-ink font-bold">{cp.post.author}</span>
-                          <span className="text-ink3 font-mono">• {cp.post.date}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-extrabold text-ink leading-snug">{cp.post.title}</h3>
-                        <p className="text-[12px] text-ink2 leading-relaxed whitespace-pre-wrap mt-1">{cp.post.content}</p>
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px] text-ink3 border-t border-border/40 pt-2 shrink-0">
-                        <span>💬 댓글 0</span>
-                        <span>📎 첨부파일 없음</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-10 bg-panel-alt/10 rounded-2xl border border-dashed border-border-hi">
-                    <span className="text-3xl mb-3">💬</span>
-                    <h3 className="font-bold text-ink2">가입된 소모임이 없거나 새 소식이 없습니다.</h3>
-                    <p className="text-[11px] text-ink3 mt-1.5 max-w-xs leading-relaxed">
-                      취미와 관심사가 같은 동료들이 기다리고 있습니다. 새로운 소모임에 가입하여 소통을 시작해 보세요!
-                    </p>
-                    <button
-                      onClick={() => setActiveTab('explore')}
-                      className="mt-4 rounded-lg bg-teal px-4 py-2 font-bold text-white shadow-xs hover:opacity-90 transition-opacity text-[11px]"
-                    >
-                      👥 소모임 탐색하러 가기
-                    </button>
+              {/* 스크롤 가능한 본문 통합 컨테이너 */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-6">
+                
+                {/* 상단 파트: 최근 새 소식 (최신 피드) */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xs font-extrabold text-navy uppercase tracking-wider flex items-center gap-1.5">
+                      <span>💬</span>
+                      <span>새 소식 (최근 활동 피드)</span>
+                    </h2>
                   </div>
-                )}
+                  <div className="space-y-3.5">
+                    {combinedPosts.length > 0 ? (
+                      combinedPosts.slice(0, 3).map((cp, idx) => (
+                        <div key={idx} className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-2xs hover:border-teal/30 transition-colors">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center justify-center rounded bg-teal-soft/50 px-2 py-0.5 text-[10px] font-extrabold text-teal">
+                                {cp.clubIcon} {cp.clubName.replace(/^[^\s]+\s+/, '')}
+                              </span>
+                              <span className="text-ink font-bold">{cp.post.author}</span>
+                              <span className="text-ink3 font-mono">• {cp.post.date}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-extrabold text-ink leading-snug">{cp.post.title}</h3>
+                            <p className="text-[12px] text-ink2 leading-relaxed whitespace-pre-wrap mt-1">{cp.post.content}</p>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-ink3 border-t border-border/40 pt-2 shrink-0">
+                            <span>💬 댓글 0</span>
+                            <span>📎 첨부파일 없음</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-8 text-center bg-panel-alt/10 rounded-xl border border-dashed text-ink3 text-[11.5px]">
+                        가입된 소모임이 없거나 최신 소식이 없습니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 하단 파트: 소모임 탐색 (검색 및 카테고리 포함) */}
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                    <h2 className="text-xs font-extrabold text-navy uppercase tracking-wider flex items-center gap-1.5">
+                      <span>👥</span>
+                      <span>소모임 탐색 (활동이 활발한 모임)</span>
+                    </h2>
+
+                    {/* 검색 인풋 */}
+                    <div className="relative shrink-0">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="소모임 이름, 설명, 태그 검색..."
+                        className="h-8 w-56 rounded-lg border border-border bg-panel pl-7 pr-3 text-[11px] outline-none focus:border-teal"
+                      />
+                      <span className="absolute left-2.5 top-2.5 text-ink3 text-[9px]">🔍</span>
+                      {searchQuery && (
+                        <button 
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2.5 top-1.5 text-ink3 hover:text-ink font-bold text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 가로 퀵 필터 칩 */}
+                  <div className="flex gap-2 overflow-x-auto pb-1.5 shrink-0 scrollbar-none">
+                    {['전체', '⚽ 스포츠', '📚 독서', '💻 개발', '⭐ 친목/기타'].map((interest) => (
+                      <button
+                        key={interest}
+                        onClick={() => {
+                          setSelectedInterest(interest);
+                          setSearchQuery('');
+                        }}
+                        className={`rounded-full px-3.5 py-1.5 font-bold text-[10.5px] border transition-all shrink-0 ${
+                          selectedInterest === interest
+                            ? 'bg-teal border-teal text-white shadow-2xs'
+                            : 'bg-panel border-border text-ink2 hover:bg-panel-alt'
+                        }`}
+                      >
+                        {interest}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 바둑판 소모임 리스트 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredClubs.map((c) => {
+                      const joined = c.members.some((m) => m.userId === CURRENT_USER.id);
+                      const waiting = joinRequests[c.id];
+                      return (
+                        <div key={c.id} className="rounded-xl border border-border bg-panel overflow-hidden flex flex-col justify-between gap-3 shadow-2xs hover:border-teal/30 transition-colors">
+                          <div className="relative h-28 w-full overflow-hidden bg-panel-alt border-b border-border">
+                            <img 
+                              src={c.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
+                              onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'; }}
+                              className="w-full h-full object-cover" 
+                            />
+                            <span className="absolute left-3 top-3 px-2 py-0.5 rounded bg-black/60 font-bold text-white text-[9.5px]">
+                              {c.joinPolicy === 'free' ? '🔓 자유가입' : c.joinPolicy === 'approval' ? '⏳ 승인제' : '🔒 초대전용'}
+                            </span>
+                          </div>
+
+                          <div className="p-4 pt-2.5 flex-1 flex flex-col justify-between gap-3">
+                            <div className="space-y-1.5">
+                              <h3 className="text-sm font-extrabold text-ink">{c.name}</h3>
+                              <div className="flex items-center gap-2 text-[10.5px] text-ink3">
+                                <span className="text-teal font-extrabold">멤버 {c.memberCount}명</span>
+                                <span>•</span>
+                                <span className="font-semibold text-ink2">
+                                  {c.joinPolicy === 'free' ? '자유가입' : c.joinPolicy === 'approval' ? '승인제' : '초대전용'}
+                                </span>
+                              </div>
+                              <p className="text-[11.5px] text-ink2 line-clamp-2 leading-relaxed">{c.desc}</p>
+                              
+                              {c.tags && c.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {c.tags.map((t, idx) => (
+                                    <span 
+                                      key={idx} 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSearchQuery(t);
+                                      }}
+                                      className="text-[9.5px] text-teal font-bold bg-teal-soft/20 px-1.5 py-0.5 rounded cursor-pointer hover:bg-teal-soft/40"
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={() => {
+                                  setSelectedClubId(c.id);
+                                  setClubViewMode('detail');
+                                  setClubTab('post');
+                                }}
+                                className="flex-1 rounded-lg border border-border-hi bg-panel py-2 text-center font-bold text-ink2 hover:bg-panel-alt transition-colors text-[11px]"
+                              >
+                                상세 보기
+                              </button>
+                              {joined ? (
+                                <span className="flex-1 rounded-lg bg-teal-soft/40 border border-teal/20 py-2 text-center font-bold text-teal text-[11px]">가입됨</span>
+                              ) : waiting ? (
+                                <span className="flex-1 rounded-lg bg-amber-soft border border-amber/20 py-2 text-center font-bold text-amber text-[11px]">대기중</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleJoinClub(c)}
+                                  className="flex-1 rounded-lg bg-teal py-2 text-center font-bold text-white hover:opacity-90 transition-opacity text-[11px]"
+                                >
+                                  가입 신청
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {filteredClubs.length === 0 && (
+                    <div className="py-12 text-center text-ink3 border border-dashed rounded-xl text-[11.5px]">
+                      🔍 조건에 맞는 소모임이 없습니다.
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
 
-            {/* 우측 사이드 숏컷 */}
+            {/* 오른쪽 컬럼: 추천 소모임 & 안내 배너 */}
             <aside className="hidden lg:flex flex-col gap-4 w-[260px] shrink-0 border-l border-border pl-4.5 pt-1">
               {recommendedClubs.length > 0 && (
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3.5 shadow-xs">
@@ -446,7 +582,6 @@ export default function CommunityScreen() {
                   <div className="divide-y divide-border">
                     {recommendedClubs.map((c) => {
                       const waiting = joinRequests[c.id];
-                      // 단순 수동 배칭 정보 부여
                       const badgeText = c.id === 1 ? '🔥 인기 소모임' : c.id === 2 ? '✨ 신규 소모임' : '💻 최근 개설';
                       const badgeColor = c.id === 1 ? 'text-rose-500 bg-rose-50 border-rose-100' : c.id === 2 ? 'text-amber bg-amber-soft/20 border-amber/10' : 'text-teal bg-teal-soft/20 border-teal/10';
                       return (
@@ -484,160 +619,7 @@ export default function CommunityScreen() {
           </div>
         )}
 
-        {/* ==================== 2. 소모임 탐색 (Explore) ==================== */}
-        {activeTab === 'explore' && !selectedClubId && clubViewMode !== 'create' && (
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-border pb-3 shrink-0 gap-3">
-              <div>
-                <h1 className="text-base font-extrabold text-ink">소모임 탐색</h1>
-                <p className="text-[11px] text-ink3 mt-0.5">회사 내 개설된 모든 동호회를 찾아 가입하고 함께 교류하세요.</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {/* 검색 필드 */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="소모임 이름, 설명, 태그 검색..."
-                    className="h-8.5 w-60 rounded-lg border border-border bg-panel pl-7 pr-3 text-[11.5px] outline-none focus:border-teal"
-                  />
-                  <span className="absolute left-2.5 top-2.5 text-ink3 text-[10px]">🔍</span>
-                  {searchQuery && (
-                    <button 
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 top-2 text-ink3 hover:text-ink font-bold"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={() => setClubViewMode('create')}
-                  className="rounded-lg bg-teal px-4 py-2 font-bold text-white shadow-xs hover:opacity-90 transition-opacity text-[11.5px] h-8.5 flex items-center justify-center"
-                >
-                  ＋ 소모임 개설
-                </button>
-              </div>
-            </div>
-
-            {/* 소모임 관심사 가로 퀵 필터 칩 영역 (소모임 웹 메인 레퍼런스 적용) */}
-            <div className="flex gap-2 overflow-x-auto pb-1 shrink-0 scrollbar-none">
-              {['전체', '⚽ 스포츠', '📚 독서', '💻 개발', '⭐ 친목/기타'].map((interest) => (
-                <button
-                  key={interest}
-                  onClick={() => {
-                    setSelectedInterest(interest);
-                    setSearchQuery('');
-                  }}
-                  className={`rounded-full px-4 py-1.5 font-bold text-[11px] border transition-all shrink-0 ${
-                    selectedInterest === interest
-                      ? 'bg-teal border-teal text-white shadow-2xs'
-                      : 'bg-panel border-border text-ink2 hover:bg-panel-alt'
-                  }`}
-                >
-                  {interest}
-                </button>
-              ))}
-            </div>
-
-            {/* 큐레이션 타이틀 및 리스트 */}
-            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
-              <h3 className="font-extrabold text-ink text-xs flex items-center gap-1.5 pt-1">
-                <span>🔥</span>
-                <span>활동이 활발한 모임 ({filteredClubs.length})</span>
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredClubs.map((c) => {
-                  const joined = c.members.some((m) => m.userId === CURRENT_USER.id);
-                  const waiting = joinRequests[c.id];
-                  return (
-                    <div key={c.id} className="rounded-xl border border-border bg-panel overflow-hidden flex flex-col justify-between gap-3 shadow-xs hover:border-teal/30 transition-colors">
-                      {/* 대표 사진 */}
-                      <div className="relative h-32 w-full overflow-hidden bg-panel-alt border-b border-border">
-                        <img 
-                          src={c.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
-                          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'; }}
-                          className="w-full h-full object-cover" 
-                        />
-                        <span className="absolute left-3 top-3 px-2 py-0.5 rounded bg-black/60 font-bold text-white text-[10px]">
-                          {c.joinPolicy === 'free' ? '🔓 자유가입' : c.joinPolicy === 'approval' ? '⏳ 승인제' : '🔒 초대전용'}
-                        </span>
-                      </div>
-
-                      {/* 정보 표시 우선순위 조정: 소모임이름 -> 회원수/가입유형 -> 소개설명 & 태그 */}
-                      <div className="p-4 pt-3 flex-1 flex flex-col justify-between gap-3">
-                        <div className="space-y-2">
-                          <h3 className="text-sm font-extrabold text-ink">{c.name}</h3>
-                          <div className="flex items-center gap-2 text-[10.5px] text-ink3">
-                            <span className="text-teal font-extrabold">멤버 {c.memberCount}명</span>
-                            <span>•</span>
-                            <span className="font-semibold text-ink2">
-                              {c.joinPolicy === 'free' ? '자유가입' : c.joinPolicy === 'approval' ? '승인제' : '초대전용'}
-                            </span>
-                          </div>
-                          <p className="text-[11.5px] text-ink2 line-clamp-2 leading-relaxed">{c.desc}</p>
-                          
-                          {/* 소모임 태그 칩 노출 */}
-                          {c.tags && c.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 pt-1">
-                              {c.tags.map((t, idx) => (
-                                <span 
-                                  key={idx} 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSearchQuery(t);
-                                  }}
-                                  className="text-[10px] text-teal font-bold bg-teal-soft/20 px-1.5 py-0.5 rounded cursor-pointer hover:bg-teal-soft/40"
-                                >
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            onClick={() => {
-                              setSelectedClubId(c.id);
-                              setClubViewMode('detail');
-                              setClubTab('post');
-                            }}
-                            className="flex-1 rounded-lg border border-border-hi bg-panel py-2 text-center font-bold text-ink2 hover:bg-panel-alt transition-colors"
-                          >
-                            상세 보기
-                          </button>
-                          {joined ? (
-                            <span className="flex-1 rounded-lg bg-teal-soft/40 border border-teal/20 py-2 text-center font-bold text-teal">가입됨</span>
-                          ) : waiting ? (
-                            <span className="flex-1 rounded-lg bg-amber-soft border border-amber/20 py-2 text-center font-bold text-amber">대기중</span>
-                          ) : (
-                            <button
-                              onClick={() => handleJoinClub(c)}
-                              className="flex-1 rounded-lg bg-teal py-2 text-center font-bold text-white hover:opacity-90 transition-opacity"
-                            >
-                              가입 신청
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {filteredClubs.length === 0 && (
-                <div className="py-16 text-center text-ink3 border border-dashed rounded-xl">
-                  🔍 조건에 부합하는 소모임이 없습니다. 검색어 또는 퀵 필터를 재조정해보세요.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ==================== 3. 소모임 개설 폼 ==================== */}
+        {/* ==================== 2. 소모임 개설 폼 ==================== */}
         {clubViewMode === 'create' && (
           <form onSubmit={handleCreateClub} className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
@@ -771,18 +753,18 @@ export default function CommunityScreen() {
           </form>
         )}
 
-        {/* ==================== 4. 개별 소모임 프라이빗 룸 ==================== */}
+        {/* ==================== 3. 개별 소모임 프라이빗 룸 ==================== */}
         {clubViewMode === 'detail' && activeClub && (
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
               <button
                 onClick={() => {
+                  setSelectedClubId(null);
                   setClubViewMode('list');
-                  setActiveTab('feed');
                 }}
                 className="flex items-center gap-1 text-teal font-bold hover:underline"
               >
-                <span>←</span> <span>소모임 목록으로</span>
+                <span>←</span> <span>소모임 홈으로</span>
               </button>
               <div className="flex items-center gap-2">
                 {isClubOwner && (
@@ -807,7 +789,7 @@ export default function CommunityScreen() {
               </div>
             </div>
 
-            {/* 소모임 대표 이미지 배너 헤더 (둥근 썸네일 오버랩 레이아웃 적용) */}
+            {/* 소모임 대표 이미지 배너 헤더 */}
             <div className="relative h-28 w-full overflow-hidden rounded-t-xl bg-panel-alt border-x border-t border-border shrink-0 mt-3">
               <img 
                 src={activeClub.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'} 
@@ -1203,7 +1185,7 @@ export default function CommunityScreen() {
 
               {/* 오른쪽: 소모임 사이드바 정보 위젯 */}
               <aside className="hidden lg:flex flex-col gap-4 w-[280px] shrink-0 border-l border-border pl-5 py-1 overflow-y-auto">
-                {/* 1. 가입 인사 / 방명록 피드 위젯 (소모임 앱 UI 피드백 반영 ⭐) */}
+                {/* 1. 가입 인사 / 방명록 피드 위젯 */}
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-ink2 text-xs border-b border-border/40 pb-2 flex items-center gap-1.5">
                     <span>💬</span>
@@ -1276,7 +1258,7 @@ export default function CommunityScreen() {
                   </div>
                 </div>
 
-                {/* 3. 다가오는 모임 일정 요약 (날짜 가독성 강화) */}
+                {/* 3. 다가오는 모임 일정 요약 */}
                 <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-xs">
                   <h3 className="font-extrabold text-ink2 text-xs border-b border-border/40 pb-2 flex items-center gap-1.5">
                     <span>📅</span>
@@ -1307,7 +1289,7 @@ export default function CommunityScreen() {
         )}
       </main>
 
-      {/* ==================== 5. 모의 소모임 관리자(Owner) 모달 ==================== */}
+      {/* ==================== 4. 모의 소모임 관리자(Owner) 모달 ==================== */}
       {isAdminModalOpen && activeClub && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-panel border border-border w-[400px] rounded-xl p-5 shadow-2xl space-y-4">
