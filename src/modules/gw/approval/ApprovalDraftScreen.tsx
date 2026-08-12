@@ -149,6 +149,11 @@ function ApprovalDraftInner({
     setAmount('');
   };
 
+  const clearAutosave = () => {
+    localStorage.removeItem('draft_autosave_' + me.id);
+    localStorage.removeItem('draft_autosave_active_' + me.id);
+  };
+
   // 실시간 자동저장 (1.5초 디바운스)
   useEffect(() => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
@@ -167,6 +172,7 @@ function ApprovalDraftInner({
         preservationPeriod,
         timestamp: Date.now()
       }));
+      localStorage.setItem('draft_autosave_active_' + me.id, 'true');
     }, 1500);
 
     return () => clearTimeout(timer);
@@ -179,8 +185,9 @@ function ApprovalDraftInner({
     if (editDoc || hasCheckedAutosave.current) return;
     if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
+    const isActive = localStorage.getItem('draft_autosave_active_' + me.id) === 'true';
     const saved = localStorage.getItem('draft_autosave_' + me.id);
-    if (saved) {
+    if (isActive && saved) {
       try {
         const data = JSON.parse(saved);
         if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
@@ -197,13 +204,13 @@ function ApprovalDraftInner({
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
           }
-          // 수락/거절 관계없이 첫 진입 시 검사 완료 후 세션 데이터 초기화
-          localStorage.removeItem('draft_autosave_' + me.id);
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
       }
     }
+    // 복구 여부 확인에 상관없이 진입 시 플래그 즉시 해제 (중복 복구 제안 방지)
+    localStorage.removeItem('draft_autosave_active_' + me.id);
     // 최초 마운트 검사 완료 플래그 적용
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
@@ -296,6 +303,7 @@ function ApprovalDraftInner({
       setAttachments(editDoc.attachments ?? []);
       setRelatedDocs(editDoc.relatedDocs ?? []);
       setRecipients(editDoc.recipients ?? []);
+      setExecutionDepts(editDoc.executionDepts ?? []);
       setIsPostApproval(editDoc.isPostApproval ?? false);
       setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
       setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
@@ -560,6 +568,7 @@ function ApprovalDraftInner({
     setError('');
     try {
       await persistDraft();
+      clearAutosave();
       navigate('/gw/approval?box=임시');
     } catch (e) {
       setError(String(e));
@@ -573,6 +582,7 @@ function ApprovalDraftInner({
     try {
       const id = await persistDraft();
       await submitM.mutateAsync({ id, userId: me.id });
+      clearAutosave();
       navigate('/gw/approval?box=상신');
     } catch (e) {
       setError(String(e));
@@ -1179,9 +1189,13 @@ function ApprovalDraftInner({
           confirmLabel="저장 후 이동"
           onConfirm={async () => {
             await persistDraft();
+            clearAutosave();
             navigate('/gw/approval');
           }}
-          onDiscard={() => navigate('/gw/approval')}
+          onDiscard={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           discardLabel="저장 없이 이동"
           onCancel={() => setShowConfirmClose(false)}
           disabled={busy}
@@ -1194,7 +1208,10 @@ function ApprovalDraftInner({
           description={<>기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.</>}
           confirmLabel="변경내용 모두 취소"
           confirmColor="bg-danger"
-          onConfirm={() => navigate('/gw/approval')}
+          onConfirm={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           onCancel={() => setShowConfirmDiscard(false)}
         />
       )}
