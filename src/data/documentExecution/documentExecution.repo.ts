@@ -1,6 +1,7 @@
 import { 
   collection, 
   doc, 
+  getDoc,
   getDocs, 
   setDoc, 
   runTransaction,
@@ -324,12 +325,57 @@ export const documentExecutionRepo = {
     // 해당 문서의 모든 시행처가 완료되었는지 검사 후 부모 문서 완료 처리
     const allExecs = await this.getByDocumentId(cur.documentId);
     const isAllCompleted = allExecs.every((e) => e.status === 'COMPLETED');
-    if (isAllCompleted && isFirebaseConfigured && db) {
-      const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
-      await updateDoc(parentDocRef, {
-        status: '완료',
-        completedAt: nowIso
-      });
+    
+    if (isAllCompleted) {
+      let parentDoc: ApprovalDoc | null = null;
+      if (isFirebaseConfigured && db) {
+        const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
+        const parentSnap = await getDoc(parentDocRef);
+        if (parentSnap.exists()) {
+          const { approvalDocSchema } = await import('@/domain/approvalDoc/schema');
+          parentDoc = approvalDocSchema.parse(parentSnap.data()) as ApprovalDoc;
+          await updateDoc(parentDocRef, {
+            status: '완료',
+            completedAt: nowIso
+          });
+        }
+      }
+
+      // 모든 시행 완료에 따른 수신처 알림 발송 연동
+      if (parentDoc) {
+        try {
+          const { userRepo } = await import('@/data/user/user.repo');
+          const { notificationRepo } = await import('@/data/notification/notification.repo');
+          const users = await userRepo.list();
+          
+          for (const rec of parentDoc.recipients || []) {
+            if (rec.type === 'user') {
+              await notificationRepo.create({
+                userId: rec.id,
+                type: '결재',
+                title: '수신 문서 알림',
+                text: `[${parentDoc.title}] 수신 문서가 배달되었습니다.`,
+                senderName: '시스템',
+                linkUrl: `/gw/approval?doc=${parentDoc.id}`,
+              });
+            } else if (rec.type === 'dept') {
+              const deptUsers = users.filter((u) => u.dept === rec.name);
+              for (const du of deptUsers) {
+                await notificationRepo.create({
+                  userId: du.id,
+                  type: '결재',
+                  title: '수신 문서 알림',
+                  text: `[${parentDoc.title}] 부서 수신 문서가 배달되었습니다.`,
+                  senderName: '시스템',
+                  linkUrl: `/gw/approval?doc=${parentDoc.id}`,
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('시행완료 후 수신 알림 전송 실패:', err);
+        }
+      }
     }
 
     return cur;
@@ -363,11 +409,34 @@ export const documentExecutionRepo = {
     });
 
     // 부모 결재 문서를 '시행반송' 상태로 변경
+    let parentDoc: ApprovalDoc | null = null;
     if (isFirebaseConfigured && db) {
       const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
-      await updateDoc(parentDocRef, {
-        status: '시행반송'
-      });
+      const parentSnap = await getDoc(parentDocRef);
+      if (parentSnap.exists()) {
+        const { approvalDocSchema } = await import('@/domain/approvalDoc/schema');
+        parentDoc = approvalDocSchema.parse(parentSnap.data()) as ApprovalDoc;
+        await updateDoc(parentDocRef, {
+          status: '시행반송'
+        });
+      }
+    }
+
+    // 기안자에게 시행 반송 알림 발송
+    if (parentDoc) {
+      try {
+        const { notificationRepo } = await import('@/data/notification/notification.repo');
+        await notificationRepo.create({
+          userId: parentDoc.drafterId,
+          type: '결재',
+          title: '시행 반송',
+          text: `[${parentDoc.title}] 시행 부서에서 반송 처리하였습니다. (사유: ${comment})`,
+          senderName: userName,
+          linkUrl: `/gw/approval?doc=${parentDoc.id}`,
+        });
+      } catch (err) {
+        console.error('시행 반송 알림 전송 실패:', err);
+      }
     }
 
     return cur;
@@ -398,11 +467,40 @@ export const documentExecutionRepo = {
     });
 
     // 부모 결재 문서를 다시 '시행대기' 상태로 전환
+    let parentDoc: ApprovalDoc | null = null;
     if (isFirebaseConfigured && db) {
       const parentDocRef = doc(db, 'approvalDocs', cur.documentId);
-      await updateDoc(parentDocRef, {
-        status: '시행대기'
-      });
+      const parentSnap = await getDoc(parentDocRef);
+      if (parentSnap.exists()) {
+        const { approvalDocSchema } = await import('@/domain/approvalDoc/schema');
+        parentDoc = approvalDocSchema.parse(parentSnap.data()) as ApprovalDoc;
+        await updateDoc(parentDocRef, {
+          status: '시행대기'
+        });
+      }
+    }
+
+    // 시행 부서원들에게 재상신 알림 전송
+    if (parentDoc) {
+      try {
+        const { userRepo } = await import('@/data/user/user.repo');
+        const { notificationRepo } = await import('@/data/notification/notification.repo');
+        const users = await userRepo.list();
+        
+        const deptUsers = users.filter((u) => u.dept === cur.targetDeptNameSnapshot);
+        for (const du of deptUsers) {
+          await notificationRepo.create({
+            userId: du.id,
+            type: '결재',
+            title: '시행 재상신',
+            text: `[${parentDoc.title}] 보완이 완료되어 다시 발송되었습니다.`,
+            senderName: userName,
+            linkUrl: `/gw/approval?doc=${parentDoc.id}`,
+          });
+        }
+      } catch (err) {
+        console.error('시행 재상신 알림 전송 실패:', err);
+      }
     }
 
     return cur;
