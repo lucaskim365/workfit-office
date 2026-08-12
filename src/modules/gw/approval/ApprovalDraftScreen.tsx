@@ -90,6 +90,7 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -170,13 +171,17 @@ function ApprovalDraftInner({
         securityLevel,
         visibility,
         preservationPeriod,
+        attachments,
+        recipients,
+        executionDepts,
+        steps,
         timestamp: Date.now()
       }));
       localStorage.setItem('draft_autosave_active_' + me.id, 'true');
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, recipients, executionDepts, steps, me.id]);
 
   const hasCheckedAutosave = useRef(false);
 
@@ -203,6 +208,10 @@ function ApprovalDraftInner({
             if (data.securityLevel) setSecurityLevel(data.securityLevel);
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+            if (data.attachments) setAttachments(data.attachments);
+            if (data.recipients) setRecipients(data.recipients);
+            if (data.executionDepts) setExecutionDepts(data.executionDepts);
+            if (data.steps) setSteps(data.steps);
           }
         }
       } catch (e) {
@@ -214,8 +223,6 @@ function ApprovalDraftInner({
     // 최초 마운트 검사 완료 플래그 적용
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
-
-  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
 
   const executionTarget = useMemo(() => {
     if (editDoc?.execution) {
