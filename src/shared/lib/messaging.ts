@@ -63,15 +63,53 @@ export async function enablePushForUser(userId: string): Promise<{ ok: boolean; 
   }
 }
 
+/**
+ * 권한이 이미 허용된 기기에서 토큰을 조용히 재발급/저장(권한 팝업 없음).
+ * 로그인 직후 앱 루트에서 호출 → 채팅 화면을 열지 않아도 결재 등 푸시를 받는다.
+ * 권한이 아직 'default'/'denied' 면 아무 것도 하지 않는다(최초 허용은 사용자
+ * 제스처의 enablePushForUser 로 처리 — 특히 iOS).
+ */
+export async function syncPushToken(userId: string): Promise<void> {
+  if (!userId || !VAPID_KEY) return;
+  if (!isPushConfigured() || Notification.permission !== 'granted') return;
+  const msg = await getMsg();
+  if (!msg) return;
+  try {
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;
+    const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    if (token) await userRepo.updateFcmToken(userId, token);
+  } catch (e) {
+    console.warn('[push] 토큰 동기화 실패', e);
+  }
+}
+
+/** 포그라운드(앱 사용 중) 수신 payload — 타입별 딥링크에 필요한 필드 포함. */
+export interface ForegroundPushPayload {
+  title: string;
+  body: string;
+  type?: string;
+  roomId?: string;
+  docId?: string;
+  linkUrl?: string;
+}
+
 /** 포그라운드(앱 사용 중) 수신 콜백 등록. */
 export async function onForegroundMessage(
-  cb: (payload: { title: string; body: string; roomId?: string }) => void,
+  cb: (payload: ForegroundPushPayload) => void,
 ): Promise<void> {
   const msg = await getMsg();
   if (!msg) return;
   onMessage(msg, (payload) => {
     const n = payload.notification ?? {};
     const d = payload.data ?? {};
-    cb({ title: n.title ?? d.title ?? '새 메시지', body: n.body ?? d.body ?? '', roomId: d.roomId });
+    cb({
+      title: n.title ?? d.title ?? '새 알림',
+      body: n.body ?? d.body ?? '',
+      type: d.type,
+      roomId: d.roomId,
+      docId: d.docId,
+      linkUrl: d.linkUrl,
+    });
   });
 }
