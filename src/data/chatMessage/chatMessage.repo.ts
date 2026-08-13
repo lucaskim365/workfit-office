@@ -74,8 +74,9 @@ export const chatMessageRepo = {
     }
     const meta = { name: file.name, size: file.size, mime: file.type || 'application/octet-stream' };
     // 다운로드 시 원본 파일명 보존을 위해 filename 을 넘긴다(어댑터가 Content-Disposition 처리).
-    const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
-    const path = `chat/${roomId}/${Date.now()}-${safe}`;
+    const ext = file.name.split('.').pop() || '';
+    const randomHex = Math.random().toString(36).substring(2, 8);
+    const path = `chat/${roomId}/${Date.now()}-${randomHex}.${ext}`;
     const url = await fileStorage.put(path, file, { contentType: meta.mime, filename: file.name });
     return { url, ...meta };
   },

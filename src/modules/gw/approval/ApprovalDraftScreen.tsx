@@ -132,7 +132,10 @@ function ApprovalDraftInner({
     try {
       const uploaded = await Promise.all(
         files.map(async (f) => {
-          const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f, { contentType: f.type, filename: f.name });
+          const ext = f.name.split('.').pop() || '';
+          const randomHex = Math.random().toString(36).substring(2, 8);
+          const safePath = `approval/${Date.now()}_${randomHex}.${ext}`;
+          const url = await fileStorage.put(safePath, f, { contentType: f.type, filename: f.name });
           return { name: f.name, url };
         }),
       );
