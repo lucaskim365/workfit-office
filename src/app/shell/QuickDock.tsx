@@ -648,6 +648,10 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   }, [activeMenu]);
 
   const handleRenameRoom = async () => {
+    if (room.createdBy !== me) {
+      window.alert("채팅방을 생성한 사람만 이름을 변경할 수 있습니다.");
+      return;
+    }
     const newName = window.prompt("새로운 대화방 이름을 입력하세요:", room.name);
     if (!newName || !newName.trim() || newName === room.name) return;
     try {
@@ -885,7 +889,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
         <div className="min-w-0 flex-1 ml-0.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="truncate text-[12.5px] font-bold text-ink">{displayName}</span>
-            {room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
+            {room.type === 'group' && room.createdBy === me && (
               <button
                 onClick={handleRenameRoom}
                 title="대화방 이름 변경"
