@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
-import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers } from '@/features/chat/useChatRooms';
+import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
@@ -45,9 +45,21 @@ export default function MobileChatThread() {
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
+  const updateRoomName = useUpdateRoomName();
 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+
+  const handleRenameRoom = async () => {
+    if (!room) return;
+    const newName = window.prompt("새로운 대화방 이름을 입력하세요:", room.name);
+    if (!newName || !newName.trim() || newName === room.name) return;
+    try {
+      await updateRoomName.mutateAsync({ roomId: room.id, name: newName.trim(), userName: meName });
+    } catch (e) {
+      window.alert("방 이름 변경에 실패했습니다.");
+    }
+  };
   const [viewer, setViewer] = useState<Attachment | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -149,7 +161,18 @@ export default function MobileChatThread() {
       <header className="flex shrink-0 items-center gap-1 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-bold">{displayName}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="truncate text-[15px] font-bold text-white">{displayName}</div>
+            {room && room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
+              <button
+                onClick={handleRenameRoom}
+                title="방 이름 변경"
+                className="text-[11px] opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer"
+              >
+                ✏️
+              </button>
+            )}
+          </div>
           {room && room.type !== 'direct' && <div className="text-[10px] text-white/60">{room.members.length}명</div>}
         </div>
         <button

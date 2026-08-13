@@ -4,7 +4,7 @@ import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } fro
 import { Pill } from '@/shared/ui/Pill';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useGwSummary } from '@/features/gw/useGwSummary';
@@ -625,9 +625,21 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
+  const updateRoomName = useUpdateRoomName();
+  
   const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleRenameRoom = async () => {
+    const newName = window.prompt("새로운 대화방 이름을 입력하세요:", room.name);
+    if (!newName || !newName.trim() || newName === room.name) return;
+    try {
+      await updateRoomName.mutateAsync({ roomId: room.id, name: newName.trim(), userName: meName });
+    } catch (e) {
+      window.alert("방 이름 변경에 실패했습니다.");
+    }
+  };
   const [viewer, setViewer] = useState<Attachment | null>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -855,7 +867,18 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
           {room.type === 'direct' ? displayName[0] : '👥'}
         </span>
         <div className="min-w-0 flex-1 ml-0.5">
-          <div className="truncate text-[12.5px] font-bold text-ink">{displayName}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="truncate text-[12.5px] font-bold text-ink">{displayName}</span>
+            {room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
+              <button
+                onClick={handleRenameRoom}
+                title="대화방 이름 변경"
+                className="text-[10px] opacity-60 hover:opacity-100 hover:text-teal transition-all shrink-0 cursor-pointer"
+              >
+                ✏️
+              </button>
+            )}
+          </div>
           {room.type !== 'direct' && (
             <button
               onClick={() => setShowMemberList((prev) => !prev)}
