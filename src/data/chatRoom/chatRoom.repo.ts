@@ -1,5 +1,7 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { db } from '@/shared/lib/firebase';
+import { databases, APPWRITE_DATABASE_ID, Query, assertAppwriteId } from '@/shared/lib/appwrite';
+import { dbDriver } from '@/shared/lib/dbDriver';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { chatRoomSchema, type ChatRoom, type ChatRoomType, type LastMessage } from '@/domain/chatRoom/schema';
 import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
@@ -7,26 +9,138 @@ import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
 
 /**
- * 채팅방 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
- * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]] 정본 패턴)
- * Firebase 미설정 시 in-memory seed 로 graceful degrade.
+ * 채팅방 Repository — DB 접근을 캡슐화하는 유일한 계층.
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 1 PoC)
+ *
+ * 저장 백엔드(Firestore / Appwrite / in-memory)는 `VITE_DB_DRIVER` 로 결정되며,
+ * 아래 ChatRoomBackend 어댑터 뒤에 격리된다. 파생 로직(부서방 자동 동기화·1:1 중복 방지·
+ * 채번·멤버 관리·정렬)은 백엔드와 무관하게 공개 메서드에 그대로 남는다.
  */
 const COLL = 'chatRooms';
 
 /** 신규 방 색상 팔레트(생성 순서대로 순환). 시드 색과 톤 일치. */
 const ROOM_COLORS = ['#e6960c', '#3a6ee0', '#17a89a', '#e0483b', '#8b5cf6', '#1f2f55', '#d9488b', '#0ea5a0'];
 
-let memory: ChatRoom[] = CHAT_ROOM_SEED.map((r) => chatRoomSchema.parse(r));
-
-/** 신규 방 채번 'RM-000X' — 기존 최대 번호 + 1. (user.repo nextId 패턴)
- *  ⚠ 데모 한정: 동시 생성 시 충돌 가능(counters 미사용). 시연 규모에선 무영향. */
-function nextId(rows: ChatRoom[]): string {
-  const max = rows.reduce((m, r) => {
-    const n = Number(r.id.replace(/\D/g, ''));
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  return `RM-${String(max + 1).padStart(4, '0')}`;
+/** 저장소 무관 안전 파싱 — 불량 문서 하나가 전체 조회를 깨지 않도록 실패분만 건너뛴다. */
+function safeParseRoom(raw: Record<string, unknown>): ChatRoom | null {
+  const p = chatRoomSchema.safeParse(raw);
+  return p.success ? p.data : null;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 백엔드 어댑터 인터페이스 — 저장소 원시 연산만(파생 로직 제외)
+// ─────────────────────────────────────────────────────────────
+interface ChatRoomBackend {
+  loadAll(): Promise<ChatRoom[]>;
+  /** id 기준 upsert(생성/갱신 공용). */
+  save(room: ChatRoom): Promise<void>;
+}
+
+// 1) In-memory (미설정 폴백)
+class MemoryBackend implements ChatRoomBackend {
+  private rows: ChatRoom[] = CHAT_ROOM_SEED.map((r) => chatRoomSchema.parse(r));
+  async loadAll() {
+    return this.rows;
+  }
+  async save(room: ChatRoom) {
+    const i = this.rows.findIndex((x) => x.id === room.id);
+    if (i >= 0) this.rows[i] = room;
+    else this.rows = [...this.rows, room];
+  }
+}
+
+// 2) Firestore (현행)
+class FirestoreBackend implements ChatRoomBackend {
+  async loadAll() {
+    const snap = await getDocs(collection(db!, COLL));
+    const out: ChatRoom[] = [];
+    for (const d of snap.docs) {
+      const m = safeParseRoom(d.data());
+      if (m) out.push(m);
+    }
+    return out;
+  }
+  async save(room: ChatRoom) {
+    await setDoc(doc(db!, COLL, room.id), room);
+  }
+}
+
+// 3) Appwrite (이관 목표) — 중첩 lastMessage 는 JSON 문자열, $id = 방 id
+type AppwriteRow = Record<string, unknown> & { $id: string };
+
+class AppwriteBackend implements ChatRoomBackend {
+  private get dbs() {
+    return databases!;
+  }
+  private toAttrs(r: ChatRoom): Record<string, unknown> {
+    return {
+      id: r.id, // chatRooms 스키마에 id 속성(required) 존재 → $id와 동일값 저장
+      name: r.name,
+      type: r.type,
+      members: r.members,
+      color: r.color,
+      createdAt: r.createdAt,
+      deletedAt: r.deletedAt,
+      deletedBy: r.deletedBy,
+      lastMessage: r.lastMessage ? JSON.stringify(r.lastMessage) : null,
+    };
+  }
+  private fromRow(row: AppwriteRow): ChatRoom | null {
+    const parseJson = (v: unknown) => (typeof v === 'string' && v ? JSON.parse(v) : null);
+    return safeParseRoom({
+      id: row.$id,
+      name: row.name,
+      type: row.type,
+      members: row.members,
+      color: row.color,
+      createdAt: row.createdAt,
+      deletedAt: row.deletedAt,
+      deletedBy: row.deletedBy,
+      lastMessage: parseJson(row.lastMessage),
+    });
+  }
+  async loadAll() {
+    const out: ChatRoom[] = [];
+    const PAGE = 100;
+    for (let offset = 0; ; offset += PAGE) {
+      const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [
+        Query.limit(PAGE),
+        Query.offset(offset),
+      ]);
+      for (const row of res.documents as unknown as AppwriteRow[]) {
+        const m = this.fromRow(row);
+        if (m) out.push(m);
+      }
+      if (res.documents.length < PAGE) break;
+    }
+    return out;
+  }
+  async save(room: ChatRoom) {
+    const id = assertAppwriteId(room.id);
+    const attrs = this.toAttrs(room);
+    try {
+      await this.dbs.updateDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+    } catch (e) {
+      if ((e as { code?: number })?.code === 404) {
+        await this.dbs.createDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
+function selectBackend(): ChatRoomBackend {
+  switch (dbDriver) {
+    case 'appwrite':
+      return new AppwriteBackend();
+    case 'firestore':
+      return new FirestoreBackend();
+    default:
+      return new MemoryBackend();
+  }
+}
+const backend: ChatRoomBackend = selectBackend();
 
 /** 참여자 집합이 같은지(순서 무관) — 1:1 방 중복 판정용. */
 function sameMembers(a: string[], b: string[]): boolean {
@@ -38,6 +152,16 @@ function sameMembers(a: string[], b: string[]): boolean {
 /** 최신 메시지가 위로 오도록 lastMessage.at 내림차순 정렬. */
 function sortByRecent(rows: ChatRoom[]): ChatRoom[] {
   return [...rows].sort((a, b) => (b.lastMessage?.at ?? '').localeCompare(a.lastMessage?.at ?? ''));
+}
+
+/** 신규 방 채번 'RM-000X' — 기존 최대 번호 + 1. (user.repo nextId 패턴)
+ *  ⚠ 데모 한정: 동시 생성 시 충돌 가능(counters 미사용). 시연 규모에선 무영향. */
+function nextId(rows: ChatRoom[]): string {
+  const max = rows.reduce((m, r) => {
+    const n = Number(r.id.replace(/\D/g, ''));
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `RM-${String(max + 1).padStart(4, '0')}`;
 }
 
 /** 신규 방 생성 입력(시스템 필드 제외). */
@@ -54,27 +178,20 @@ export const chatRoomRepo = {
    * 기본은 소프트삭제된 방 제외. includeDeleted=true 는 어드민 감사 조회용(삭제방 포함).
    */
   async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
-    let rows: ChatRoom[];
-    if (isFirebaseConfigured && db) {
-      const fdb = db;
-      const snap = await getDocs(collection(fdb, COLL));
-      rows = snap.docs.map((d) => chatRoomSchema.parse(d.data()));
-    } else {
-      rows = memory;
-    }
+    let rows = await backend.loadAll();
 
     // 부서별 단톡방 동적 개설 및 참여 동기화
     try {
       const depts = await departmentRepo.list();
       const users = await userRepo.list();
-      
+
       for (const dept of depts) {
         const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);
         if (deptMembers.length === 0) continue;
-        
+
         const roomId = `RM-DEPT-${dept.id}`;
         const idx = rows.findIndex((r) => r.id === roomId);
-        
+
         if (idx < 0) {
           const newRoom = chatRoomSchema.parse({
             id: roomId,
@@ -85,24 +202,14 @@ export const chatRoomRepo = {
             lastMessage: { text: `${dept.name} 단체방이 개설되었습니다.`, at: nowLocalIso(), senderId: 'system' },
             createdAt: nowLocalIso(),
           });
-          // Save and push
-          if (isFirebaseConfigured && db) {
-            await setDoc(doc(db, COLL, newRoom.id), newRoom);
-          } else {
-            memory.push(newRoom);
-          }
+          await backend.save(newRoom);
           rows.push(newRoom);
         } else {
           // 구성원이 다르면 최신화
           const existingRoom = rows[idx];
           if (!sameMembers(existingRoom.members, deptMembers)) {
             const updated = { ...existingRoom, members: deptMembers };
-            if (isFirebaseConfigured && db) {
-              await setDoc(doc(db, COLL, updated.id), updated);
-            } else {
-              const mi = memory.findIndex((r) => r.id === roomId);
-              if (mi >= 0) memory[mi] = updated;
-            }
+            await backend.save(updated);
             rows[idx] = updated;
           }
         }
@@ -117,25 +224,15 @@ export const chatRoomRepo = {
   },
 
   async get(id: string): Promise<ChatRoom | null> {
-    if (isFirebaseConfigured && db) {
-      // 삭제방도 조회 가능해야 함(삭제 직후 시스템 메시지 append 등) → includeDeleted.
-      const rows = await this.list(undefined, { includeDeleted: true });
-      return rows.find((r) => r.id === id) ?? null;
-    }
-    return memory.find((r) => r.id === id) ?? null;
+    // 삭제방도 조회 가능해야 함(삭제 직후 시스템 메시지 append 등) → includeDeleted.
+    const rows = await this.list(undefined, { includeDeleted: true });
+    return rows.find((r) => r.id === id) ?? null;
   },
 
   /** 등록/수정(upsert). 문서 ID = 방 ID. 신규 방 생성·시드 적재 공용. */
   async save(room: ChatRoom): Promise<void> {
     const valid = chatRoomSchema.parse(room);
-    if (isFirebaseConfigured && db) {
-      const fdb = db;
-      await setDoc(doc(fdb, COLL, valid.id), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.id === valid.id);
-    if (i >= 0) memory[i] = valid;
-    else memory = [...memory, valid];
+    await backend.save(valid);
   },
 
   /** 신규 방 생성. 1:1(direct)은 동일 참여자 조합이 이미 있으면 그 방을 재사용(중복 방지). */

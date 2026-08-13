@@ -1,0 +1,11 @@
+{
+  "name": "workfit-bridge-f2a",
+  "version": "1.0.0",
+  "description": "듀얼 라이트 브리지 F→A (Firestore→Appwrite) Cloud Function",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "dependencies": {
+    "firebase-functions": "^6.0.0",
+    "node-appwrite": "^17.0.0"
+  }
+}

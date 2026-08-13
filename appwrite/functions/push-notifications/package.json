@@ -1,0 +1,14 @@
+{
+  "name": "workfit-push-notifications",
+  "version": "1.0.0",
+  "description": "Appwrite Function — 채팅/알림 생성 시 FCM 푸시 발송 (Cloud Functions 이식)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^17.0.0",
+    "firebase-admin": "^13.0.0"
+  }
+}

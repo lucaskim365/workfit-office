@@ -1,5 +1,7 @@
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
+import { db } from '@/shared/lib/firebase';
+import { client as appwriteClient, databases, APPWRITE_DATABASE_ID, Query, assertAppwriteId } from '@/shared/lib/appwrite';
+import { dbDriver } from '@/shared/lib/dbDriver';
 import {
   approvalDocSchema,
   type ApprovalBox,
@@ -66,40 +68,170 @@ function migrateDoc(data: any): any {
   };
 }
 
-let memory: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse(migrateDoc(d)));
-
-const listeners = new Set<() => void>();
-function notifyListeners() {
-  listeners.forEach((l) => l());
+// ─────────────────────────────────────────────────────────────
+// 저장 백엔드 어댑터 (VITE_DB_DRIVER) — DB 접근 격리.
+// Appwrite: 필드 40여개·깊은 중첩이라 **전체 문서를 payload(JSON) 통짜 저장**
+// + 쿼리/표시용 스칼라 컬럼(docNo·drafterId·status·docType·title·drafterName).
+// ─────────────────────────────────────────────────────────────
+interface ApprovalDocBackend {
+  loadAll(): Promise<ApprovalDoc[]>;
+  persist(item: ApprovalDoc): Promise<void>;
+  remove(id: string): Promise<void>;
+  subscribe(callback: (docs: ApprovalDoc[]) => void): () => void;
 }
 
-async function loadAll(): Promise<ApprovalDoc[]> {
-  if (isFirebaseConfigured && db) {
-    const snap = await getDocs(collection(db, COLL));
-    const list: ApprovalDoc[] = [];
+/** 저장소 무관 파싱 — migrateDoc(하위호환) 적용 후 안전 파싱, 불량은 건너뜀. */
+function parseDoc(raw: unknown): ApprovalDoc | null {
+  try {
+    return approvalDocSchema.parse(migrateDoc(raw));
+  } catch (err) {
+    console.error('Failed to parse approval document:', err);
+    return null;
+  }
+}
+
+class MemoryBackend implements ApprovalDocBackend {
+  private rows: ApprovalDoc[] = APPROVAL_DOC_SEED.map((d) => approvalDocSchema.parse(migrateDoc(d)));
+  private listeners = new Set<() => void>();
+  private notify() {
+    this.listeners.forEach((l) => l());
+  }
+  async loadAll() {
+    return this.rows;
+  }
+  async persist(item: ApprovalDoc) {
+    const i = this.rows.findIndex((m) => m.id === item.id);
+    if (i >= 0) this.rows[i] = item;
+    else this.rows = [item, ...this.rows];
+    this.notify();
+  }
+  async remove(id: string) {
+    this.rows = this.rows.filter((m) => m.id !== id);
+    this.notify();
+  }
+  subscribe(cb: (docs: ApprovalDoc[]) => void) {
+    const l = () => cb(this.rows);
+    this.listeners.add(l);
+    l();
+    return () => {
+      this.listeners.delete(l);
+    };
+  }
+}
+
+class FirestoreBackend implements ApprovalDocBackend {
+  async loadAll() {
+    const snap = await getDocs(collection(db!, COLL));
+    const out: ApprovalDoc[] = [];
     for (const d of snap.docs) {
-      try {
-        const parsed = approvalDocSchema.parse(migrateDoc(d.data()));
-        list.push(parsed);
-      } catch (err) {
-        console.error(`Failed to parse approval document (ID: ${d.id}):`, err);
+      const m = parseDoc(d.data());
+      if (m) out.push(m);
+    }
+    return out;
+  }
+  async persist(item: ApprovalDoc) {
+    await setDoc(doc(db!, COLL, item.id), item);
+  }
+  async remove(id: string) {
+    await deleteDoc(doc(db!, COLL, id));
+  }
+  subscribe(cb: (docs: ApprovalDoc[]) => void) {
+    return onSnapshot(
+      query(collection(db!, COLL)),
+      (snap: QuerySnapshot) => {
+        const out: ApprovalDoc[] = [];
+        for (const d of snap.docs) {
+          const m = parseDoc(d.data());
+          if (m) out.push(m);
+        }
+        cb(out);
+      },
+      (err: Error) => {
+        console.warn('Firestore approvalDocs subscription failed:', err);
+        cb([]);
+      },
+    );
+  }
+}
+
+type ApRow = Record<string, unknown> & { $id: string; payload?: string };
+class AppwriteBackend implements ApprovalDocBackend {
+  private get dbs() {
+    return databases!;
+  }
+  private toAttrs(d: ApprovalDoc): Record<string, unknown> {
+    return {
+      id: d.id,
+      docNo: d.docNo,
+      docType: d.docType,
+      title: d.title,
+      drafterId: d.drafterId,
+      status: d.status,
+      drafterName: d.drafterName ?? null,
+      payload: JSON.stringify(d), // 전체 문서(SSOT)
+    };
+  }
+  private fromRow(row: ApRow): ApprovalDoc | null {
+    if (!row.payload) return null;
+    return parseDoc(JSON.parse(row.payload));
+  }
+  async loadAll() {
+    const out: ApprovalDoc[] = [];
+    const PAGE = 100;
+    for (let offset = 0; ; offset += PAGE) {
+      const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [Query.limit(PAGE), Query.offset(offset)]);
+      for (const row of res.documents as unknown as ApRow[]) {
+        const m = this.fromRow(row);
+        if (m) out.push(m);
+      }
+      if (res.documents.length < PAGE) break;
+    }
+    return out;
+  }
+  async persist(item: ApprovalDoc) {
+    const id = assertAppwriteId(item.id);
+    const attrs = this.toAttrs(item);
+    try {
+      await this.dbs.updateDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+    } catch (e) {
+      if ((e as { code?: number })?.code === 404) {
+        await this.dbs.createDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+      } else {
+        throw e;
       }
     }
-    return list;
   }
-  return memory;
+  async remove(id: string) {
+    await this.dbs.deleteDocument(APPWRITE_DATABASE_ID, COLL, id);
+  }
+  subscribe(cb: (docs: ApprovalDoc[]) => void) {
+    void this.loadAll().then(cb); // 초기 1회
+    const dbId = APPWRITE_DATABASE_ID;
+    const channels = [`databases.${dbId}.collections.${COLL}.documents`, `databases.${dbId}.tables.${COLL}.rows`];
+    return appwriteClient!.subscribe(channels, () => {
+      void this.loadAll().then(cb);
+    });
+  }
+}
+
+function selectBackend(): ApprovalDocBackend {
+  switch (dbDriver) {
+    case 'appwrite':
+      return new AppwriteBackend();
+    case 'firestore':
+      return new FirestoreBackend();
+    default:
+      return new MemoryBackend();
+  }
+}
+const backend: ApprovalDocBackend = selectBackend();
+
+async function loadAll(): Promise<ApprovalDoc[]> {
+  return backend.loadAll();
 }
 
 async function persist(item: ApprovalDoc): Promise<void> {
-  const valid = approvalDocSchema.parse(item);
-  if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, valid.id), valid);
-    return;
-  }
-  const i = memory.findIndex((m) => m.id === valid.id);
-  if (i >= 0) memory[i] = valid;
-  else memory = [valid, ...memory];
-  notifyListeners();
+  await backend.persist(approvalDocSchema.parse(item));
 }
 
 async function getOrThrow(id: string): Promise<ApprovalDoc> {
@@ -681,12 +813,7 @@ export const approvalDocRepo = {
   async permanentlyDelete(id: string): Promise<void> {
     const cur = await getOrThrow(id);
     if (cur.status !== '삭제') throw new Error('휴지통에 있는 문서만 영구 삭제할 수 있습니다');
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLL, id));
-      return;
-    }
-    memory = memory.filter((m) => m.id !== id);
-    notifyListeners();
+    await backend.remove(id);
   },
 
   async listExecutions(userId: string, status?: '대기중' | '처리중' | '시행완료'): Promise<ApprovalDoc[]> {
@@ -876,32 +1003,6 @@ export const approvalDocRepo = {
   },
 
   subscribe(callback: (docs: ApprovalDoc[]) => void): () => void {
-    if (isFirebaseConfigured && db) {
-      const q = query(collection(db, COLL));
-      return onSnapshot(q, (snapshot: QuerySnapshot) => {
-        const list: ApprovalDoc[] = [];
-        for (const d of snapshot.docs) {
-          try {
-            const parsed = approvalDocSchema.parse(migrateDoc(d.data()));
-            list.push(parsed);
-          } catch (err) {
-            console.error(`Failed to parse approval document (ID: ${d.id}):`, err);
-          }
-        }
-        callback(list);
-      }, (err: Error) => {
-        console.warn('Firestore approvalDocs subscription failed:', err);
-        callback([]);
-      });
-    } else {
-      const listener = () => {
-        callback(memory);
-      };
-      listeners.add(listener);
-      listener();
-      return () => {
-        listeners.delete(listener);
-      };
-    }
+    return backend.subscribe(callback);
   },
 };

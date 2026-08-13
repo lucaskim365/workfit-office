@@ -1,26 +1,30 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { commonCodeSchema, groupCommonCodes, type CommonCode, type CodeGroup } from '@/domain/commonCode/schema';
 import { COMMON_CODE_SEED } from '@/data/seeds/commonCode.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
- * 공통코드 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
- * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
- * 문서 ID = `${groupCode}__${code}` (복합 PK). 미설정 시 seed degrade.
+ * 공통코드 Repository — DB 접근을 캡슐화하는 유일한 계층.
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
+ * 문서 ID = `${groupCode}__${code}` (복합 PK). 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임.
  */
-const COLL = 'commonCodes';
-const docId = (c: CommonCode) => `${c.groupCode}__${c.code}`;
-
-let memory: CommonCode[] = COMMON_CODE_SEED.map((c) => commonCodeSchema.parse(c));
+const backend = createCrudBackend<CommonCode>({
+  coll: 'commonCodes',
+  parse: (raw) => {
+    const p = commonCodeSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse commonCode:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (c) => `${c.groupCode}__${c.code}`,
+  seed: COMMON_CODE_SEED.map((c) => commonCodeSchema.parse(c)),
+});
 
 export const commonCodeRepo = {
   /** 전체 코드(flat). enum 소비자용. */
   async list(): Promise<CommonCode[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      return snap.docs.map((d) => commonCodeSchema.parse(d.data()));
-    }
-    return memory;
+    return backend.loadAll();
   },
 
   /** 특정 그룹의 사용중 코드만(enum 옵션 생성용). */
@@ -35,21 +39,10 @@ export const commonCodeRepo = {
   },
 
   async save(code: CommonCode): Promise<void> {
-    const valid = commonCodeSchema.parse(code);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, docId(valid)), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.groupCode === valid.groupCode && m.code === valid.code);
-    if (i >= 0) memory[i] = valid;
-    else memory = [...memory, valid];
+    await backend.save(commonCodeSchema.parse(code));
   },
 
   async remove(groupCode: string, code: string): Promise<void> {
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLL, `${groupCode}__${code}`));
-      return;
-    }
-    memory = memory.filter((m) => !(m.groupCode === groupCode && m.code === code));
+    await backend.remove(`${groupCode}__${code}`);
   },
 };

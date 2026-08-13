@@ -9,11 +9,14 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "seed": "tsx scripts/seed-firestore.ts",
-    "migrate-pw": "tsx scripts/migrate-passwords.ts"
+    "migrate-pw": "tsx scripts/migrate-passwords.ts",
+    "appwrite:schema": "tsx scripts/appwrite-schema.ts",
+    "etl": "tsx scripts/etl-firestore-to-appwrite.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.1",
+    "appwrite": "^26.2.0",
     "firebase": "^12.14.0",
     "googleapis": "^173.0.0",
     "lucide-react": "^0.546.0",
@@ -30,6 +33,7 @@
     "@types/react-dom": "^19.0.1",
     "@vitejs/plugin-react": "^5.0.4",
     "firebase-admin": "^14.0.0",
+    "node-appwrite": "^27.1.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.22.4",
     "typescript": "~5.8.2",

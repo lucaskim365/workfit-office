@@ -1,27 +1,32 @@
-import { collection, getDocs } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { approvalRuleSchema, type ApprovalRule } from '@/domain/approvalRule/schema';
 import { APPROVAL_RULE_SEED } from '@/data/seeds/approvalRule.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
- * 전결규정 Repository — Firestore 접근을 캡슐화하는 유일한 계층(읽기 전용 마스터).
- * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
- * Firebase 미설정이면 in-memory seed 로 graceful degrade.
+ * 전결규정 Repository — DB 접근을 캡슐화하는 유일한 계층(읽기 전용 마스터).
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임. 파생 로직만 여기 유지.
  */
-const COLL = 'approvalRules';
-const memory: ApprovalRule[] = APPROVAL_RULE_SEED.map((r) => approvalRuleSchema.parse(r));
+const backend = createCrudBackend<ApprovalRule>({
+  coll: 'approvalRules',
+  parse: (raw) => {
+    const p = approvalRuleSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse approvalRule:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (r) => r.id,
+  seed: APPROVAL_RULE_SEED.map((r) => approvalRuleSchema.parse(r)),
+});
 
 export const approvalRuleRepo = {
   async list(): Promise<ApprovalRule[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      return snap.docs.map((d) => approvalRuleSchema.parse(d.data()));
-    }
-    return memory;
+    return backend.loadAll();
   },
 
   async get(id: string): Promise<ApprovalRule | null> {
-    const rows = await this.list();
-    return rows.find((r) => r.id === id) ?? null;
+    return (await backend.loadAll()).find((r) => r.id === id) ?? null;
   },
 };

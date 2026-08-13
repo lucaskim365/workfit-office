@@ -1,16 +1,28 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hashPassword } from '@/shared/lib/crypto';
 import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
- * 사용자 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
+ * 사용자 Repository — DB 접근을 캡슐화하는 유일한 계층.
  * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
- * 문서 ID = user.id. 미설정 시 seed degrade.
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임. 파생 로직만 여기 유지.
+ * 문서 ID = user.id.
  */
-const COLL = 'users';
+const backend = createCrudBackend<User>({
+  coll: 'users',
+  parse: (raw) => {
+    const p = userSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse user:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (u) => u.id,
+  seed: USER_SEED.map((u) => userSchema.parse(u)),
+});
 
 export interface UserFilter {
   dept?: string;
@@ -18,8 +30,6 @@ export interface UserFilter {
   status?: string;
   q?: string;
 }
-
-let memory: User[] = USER_SEED.map((u) => userSchema.parse(u));
 
 function applyFilter(rows: User[], f?: UserFilter): User[] {
   if (!f) return rows;
@@ -44,12 +54,7 @@ function nextId(rows: User[]): string {
 
 export const userRepo = {
   async list(filter?: UserFilter): Promise<User[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => userSchema.parse(d.data()));
-      return applyFilter(rows, filter);
-    }
-    return applyFilter(memory, filter);
+    return applyFilter(await backend.loadAll(), filter);
   },
 
   /** 신규 등록 — id 채번 후 저장. */
@@ -97,14 +102,7 @@ export const userRepo = {
 
   /** 등록/수정(upsert). */
   async save(user: User): Promise<void> {
-    const valid = userSchema.parse(user);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.id), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.id === valid.id);
-    if (i >= 0) memory[i] = valid;
-    else memory = [valid, ...memory];
+    await backend.save(userSchema.parse(user));
   },
 
   /**
@@ -148,11 +146,6 @@ export const userRepo = {
 
   async removeMany(ids: Array<string | number>): Promise<void> {
     const set = new Set(ids.map(String));
-    if (isFirebaseConfigured && db) {
-      const fdb = db;
-      await Promise.all([...set].map((id) => deleteDoc(doc(fdb, COLL, id))));
-      return;
-    }
-    memory = memory.filter((m) => !set.has(m.id));
+    await Promise.all([...set].map((id) => backend.remove(id)));
   },
 };

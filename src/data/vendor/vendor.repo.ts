@@ -1,22 +1,31 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { vendorSchema, type Vendor } from '@/domain/vendor/schema';
 import { VENDOR_SEED } from '@/data/seeds/vendor.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
- * 거래처 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
- * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]] 정본 패턴)
- * Firebase 미설정 시 in-memory seed 로 graceful degrade.
+ * 거래처 Repository — DB 접근을 캡슐화하는 유일한 계층.
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임. 파생 로직만 여기 유지.
  */
-const COLL = 'vendors';
+const backend = createCrudBackend<Vendor>({
+  coll: 'vendors',
+  parse: (raw) => {
+    const p = vendorSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse vendor:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (v) => v.code,
+  seed: VENDOR_SEED.map((v) => vendorSchema.parse(v)),
+});
 
 export interface VendorFilter {
   type?: string;
   use?: string;
   q?: string;
 }
-
-let memory: Vendor[] = VENDOR_SEED.map((v) => vendorSchema.parse(v));
 
 function applyFilter(rows: Vendor[], f?: VendorFilter): Vendor[] {
   if (!f) return rows;
@@ -31,36 +40,19 @@ function applyFilter(rows: Vendor[], f?: VendorFilter): Vendor[] {
 
 export const vendorRepo = {
   async list(filter?: VendorFilter): Promise<Vendor[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => vendorSchema.parse(d.data()));
-      return applyFilter(rows, filter);
-    }
-    return applyFilter(memory, filter);
+    return applyFilter(await backend.loadAll(), filter);
   },
 
   async get(code: string): Promise<Vendor | null> {
-    const rows = await this.list();
-    return rows.find((v) => v.code === code) ?? null;
+    return (await backend.loadAll()).find((v) => v.code === code) ?? null;
   },
 
   /** 등록/수정(upsert). 문서 ID = 거래처코드. */
   async save(vendor: Vendor): Promise<void> {
-    const valid = vendorSchema.parse(vendor);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.code), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.code === valid.code);
-    if (i >= 0) memory[i] = valid;
-    else memory = [...memory, valid];
+    await backend.save(vendorSchema.parse(vendor));
   },
 
   async remove(code: string): Promise<void> {
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLL, code));
-      return;
-    }
-    memory = memory.filter((m) => m.code !== code);
+    await backend.remove(code);
   },
 };

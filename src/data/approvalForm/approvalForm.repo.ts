@@ -1,15 +1,12 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { approvalFormSchema, approvalFolderSchema, type ApprovalForm, type ApprovalFolder } from '@/domain/approvalForm/schema';
 import { APPROVAL_FORM_SEED } from '@/data/seeds/approvalForm.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
- * 결재서식 Repository — Firestore 'approvalForms' 접근 캡슐화(유일 계층).
- * 문서 ID = form.id(=code). Firebase 미설정 시 seed degrade.
- * ([[data-layer-pattern]] · [[DB_이관_대비_설계원칙.md]] 원칙 1)
+ * 결재서식 Repository — DB 접근을 캡슐화하는 유일한 계층.
+ * 문서 ID = form.id(=code). 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임.
+ * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 3 · [[DB_이관_대비_설계원칙.md]] 원칙 1)
  */
-const COLL = 'approvalForms';
-const COLL_FOLDERS = 'approvalFolders';
 
 // 목업/초기 폴더 시드 데이터
 const INITIAL_FOLDER_SEED: ApprovalFolder[] = [
@@ -19,10 +16,34 @@ const INITIAL_FOLDER_SEED: ApprovalFolder[] = [
   { id: 'fld-cond', name: '경조사', order: 4 },
 ];
 
-let memory: ApprovalForm[] = APPROVAL_FORM_SEED.map((x) => approvalFormSchema.parse(x));
-let memoryFolders: ApprovalFolder[] = INITIAL_FOLDER_SEED.map((x) => approvalFolderSchema.parse(x));
+const backend = createCrudBackend<ApprovalForm>({
+  coll: 'approvalForms',
+  parse: (raw) => {
+    const p = approvalFormSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse approvalForm:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (x) => x.id,
+  seed: APPROVAL_FORM_SEED.map((x) => approvalFormSchema.parse(x)),
+  jsonFields: ['fields'],
+});
 
-
+const folderBackend = createCrudBackend<ApprovalFolder>({
+  coll: 'approvalFolders',
+  parse: (raw) => {
+    const p = approvalFolderSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse approvalFolder:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (f) => f.id,
+  seed: INITIAL_FOLDER_SEED.map((x) => approvalFolderSchema.parse(x)),
+});
 
 const byOrder = (a: ApprovalForm, b: ApprovalForm) => a.order - b.order || a.name.localeCompare(b.name);
 const byFolderOrder = (a: ApprovalFolder, b: ApprovalFolder) => a.order - b.order || a.name.localeCompare(b.name);
@@ -35,89 +56,55 @@ export const approvalFormRepo = {
       '우편택배청구', '퀵서비스청구', '일반공문', '법률문서', '접대비내', '접대비초과',
       '식대', '회식비', '회의비', '교통비', '운반비'
     ];
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      let list = snap.docs.map((d) => approvalFormSchema.parse(d.data()));
-      
-      // 구 서식(obsolete) 삭제
-      for (const obsId of obsoleteFormIds) {
-        if (list.some((f) => f.id === obsId)) {
-          await deleteDoc(doc(db, COLL, obsId));
-          list = list.filter((f) => f.id !== obsId);
-        }
+    let list = await backend.loadAll();
+
+    // 구 서식(obsolete) 삭제
+    for (const obsId of obsoleteFormIds) {
+      if (list.some((f) => f.id === obsId)) {
+        await backend.remove(obsId);
+        list = list.filter((f) => f.id !== obsId);
       }
-
-
-      return list.sort(byOrder);
     }
-    memory = memory.filter((m) => !obsoleteFormIds.includes(m.id));
-    return [...memory].sort(byOrder);
+
+    return [...list].sort(byOrder);
   },
 
   async save(form: ApprovalForm): Promise<void> {
-    const valid = approvalFormSchema.parse(form);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.id), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.id === valid.id);
-    if (i >= 0) memory[i] = valid;
-    else memory = [...memory, valid];
+    await backend.save(approvalFormSchema.parse(form));
   },
 
   async remove(id: string): Promise<void> {
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLL, id));
-      return;
-    }
-    memory = memory.filter((m) => m.id !== id);
+    await backend.remove(id);
   },
 
   // --- 폴더(분류) CRUD 메서드 추가 ---
   async listFolders(): Promise<ApprovalFolder[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL_FOLDERS));
-      const list = snap.docs.map((d) => approvalFolderSchema.parse(d.data()));
-      
-      // 인사, 총무, 품의, 경조사 폴더 유실 방지 및 자동 복구
-      for (const f of INITIAL_FOLDER_SEED) {
-        if (!list.some((ex) => ex.id === f.id)) {
-          await setDoc(doc(db, COLL_FOLDERS, f.id), f);
-          list.push(f);
-        }
+    const list = await folderBackend.loadAll();
+
+    // 인사, 총무, 품의, 경조사 폴더 유실 방지 및 자동 복구
+    for (const f of INITIAL_FOLDER_SEED) {
+      if (!list.some((ex) => ex.id === f.id)) {
+        await folderBackend.save(f);
+        list.push(f);
       }
-      return list.sort(byFolderOrder);
     }
-    return [...memoryFolders].sort(byFolderOrder);
+    return [...list].sort(byFolderOrder);
   },
 
   async saveFolder(folder: ApprovalFolder): Promise<void> {
-    const valid = approvalFolderSchema.parse(folder);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL_FOLDERS, valid.id), valid);
-      return;
-    }
-    const i = memoryFolders.findIndex((f) => f.id === valid.id);
-    if (i >= 0) memoryFolders[i] = valid;
-    else memoryFolders = [...memoryFolders, valid];
+    await folderBackend.save(approvalFolderSchema.parse(folder));
   },
 
   async removeFolder(folderId: string): Promise<void> {
-    if (isFirebaseConfigured && db) {
-      // 1. 폴더 삭제
-      await deleteDoc(doc(db, COLL_FOLDERS, folderId));
+    // 1. 폴더 삭제
+    await folderBackend.remove(folderId);
 
-      // 2. 해당 폴더 아래에 있던 서식들을 루트(null)로 구출
-      const forms = await this.list();
-      const childForms = forms.filter((f) => f.folderId === folderId);
-      for (const form of childForms) {
-        form.folderId = null;
-        await this.save(form);
-      }
-      return;
+    // 2. 해당 폴더 아래에 있던 서식들을 루트(null)로 구출
+    const forms = await this.list();
+    const childForms = forms.filter((f) => f.folderId === folderId);
+    for (const form of childForms) {
+      form.folderId = null;
+      await this.save(form);
     }
-    // 메모리 모드 폴백
-    memoryFolders = memoryFolders.filter((f) => f.id !== folderId);
-    memory = memory.map((m) => m.folderId === folderId ? { ...m, folderId: null } : m);
   }
 };

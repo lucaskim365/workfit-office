@@ -1,15 +1,25 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { receiptSchema, receiptStatus, type Receipt } from '@/domain/receipt/schema';
 import { RECEIPT_SEED } from '@/data/seeds/receipt.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
  * 입고 Repository — PO 대비 입고 기록. 재고 반영은 services/receiving.service.
- * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
+ * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임. 파생 로직만 여기 유지.
  */
-const COLL = 'receipts';
-
-let memory: Receipt[] = RECEIPT_SEED.map((r) => receiptSchema.parse(r));
+const backend = createCrudBackend<Receipt>({
+  coll: 'receipts',
+  parse: (raw) => {
+    const p = receiptSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse receipt:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (r) => r.po,
+  seed: RECEIPT_SEED.map((r) => receiptSchema.parse(r)),
+});
 
 export interface ReceiptFilter {
   vendor?: string;
@@ -28,24 +38,9 @@ function applyFilter(rows: Receipt[], f?: ReceiptFilter): Receipt[] {
   );
 }
 
-async function persist(r: Receipt): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, COLL, r.po), r);
-    return;
-  }
-  const i = memory.findIndex((m) => m.po === r.po);
-  if (i >= 0) memory[i] = r;
-  else memory = [r, ...memory];
-}
-
 export const receiptRepo = {
   async list(filter?: ReceiptFilter): Promise<Receipt[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      const rows = snap.docs.map((d) => receiptSchema.parse(d.data()));
-      return applyFilter(rows, filter);
-    }
-    return applyFilter(memory, filter);
+    return applyFilter(await backend.loadAll(), filter);
   },
 
   async get(po: string): Promise<Receipt | null> {
@@ -58,7 +53,7 @@ export const receiptRepo = {
     if (!r) throw new Error(`입고 PO 없음: ${po}`);
     const applied = Math.min(qty, r.poQty - r.recvQty);
     if (applied <= 0) return 0;
-    await persist(receiptSchema.parse({ ...r, recvQty: r.recvQty + applied }));
+    await backend.save(receiptSchema.parse({ ...r, recvQty: r.recvQty + applied }));
     return applied;
   },
 };

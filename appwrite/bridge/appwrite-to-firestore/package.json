@@ -1,0 +1,10 @@
+{
+  "name": "workfit-bridge-a2f",
+  "version": "1.0.0",
+  "description": "듀얼 라이트 브리지 A→F (Appwrite→Firestore) Appwrite Function",
+  "type": "module",
+  "main": "src/main.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

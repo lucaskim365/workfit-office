@@ -1,46 +1,40 @@
-import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { positionSchema, type Position } from '@/domain/position/schema';
 import { POSITION_SEED } from '@/data/seeds/position.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 /**
- * 직급 Repository — Firestore 접근을 캡슐화하는 유일한 계층.
+ * 직급 Repository — DB 접근을 캡슐화하는 유일한 계층.
  * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[data-layer-pattern]])
- * Firebase 미설정이면 in-memory seed 로 graceful degrade.
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임. 파생 로직만 여기 유지.
  */
-const COLL = 'positions';
-let memory: Position[] = POSITION_SEED.map((p) => positionSchema.parse(p));
+const backend = createCrudBackend<Position>({
+  coll: 'positions',
+  parse: (raw) => {
+    const p = positionSchema.safeParse(raw);
+    if (!p.success) {
+      console.error('Failed to parse position:', p.error);
+      return null;
+    }
+    return p.data;
+  },
+  idOf: (x) => x.id,
+  seed: POSITION_SEED.map((p) => positionSchema.parse(p)),
+});
 
 export const positionRepo = {
   async list(): Promise<Position[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, COLL));
-      return snap.docs.map((d) => positionSchema.parse(d.data()));
-    }
-    return memory;
+    return backend.loadAll();
   },
 
   async get(id: string): Promise<Position | null> {
-    const rows = await this.list();
-    return rows.find((p) => p.id === id) ?? null;
+    return (await backend.loadAll()).find((p) => p.id === id) ?? null;
   },
 
   async save(item: Position): Promise<void> {
-    const valid = positionSchema.parse(item);
-    if (isFirebaseConfigured && db) {
-      await setDoc(doc(db, COLL, valid.id), valid);
-      return;
-    }
-    const i = memory.findIndex((m) => m.id === valid.id);
-    if (i >= 0) memory[i] = valid;
-    else memory = [...memory, valid];
+    await backend.save(positionSchema.parse(item));
   },
 
   async remove(id: string): Promise<void> {
-    if (isFirebaseConfigured && db) {
-      await deleteDoc(doc(db, COLL, id));
-      return;
-    }
-    memory = memory.filter((m) => m.id !== id);
+    await backend.remove(id);
   },
 };

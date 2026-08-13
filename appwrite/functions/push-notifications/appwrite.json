@@ -1,0 +1,22 @@
+{
+  "projectId": "6a6bf85e002acb7f71d6",
+  "functions": [
+    {
+      "$id": "push-notifications",
+      "name": "Push Notifications",
+      "runtime": "node-22.0",
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "path": ".",
+      "execute": [],
+      "events": [
+        "databases.workfit.collections.chatMessages.documents.*.create",
+        "databases.workfit.collections.notifications.documents.*.create",
+        "databases.workfit.tables.chatMessages.rows.*.create",
+        "databases.workfit.tables.notifications.rows.*.create"
+      ],
+      "scopes": ["databases.read", "documents.read", "documents.write"],
+      "timeout": 30
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "projectId": "6a6bf85e002acb7f71d6",
+  "functions": [
+    {
+      "$id": "bridge-a2f",
+      "name": "Dual-Write Bridge A→F",
+      "runtime": "node-22.0",
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "path": ".",
+      "execute": [],
+      "events": [
+        "databases.workfit.collections.chatMessages.documents.*.create",
+        "databases.workfit.collections.chatMessages.documents.*.update",
+        "databases.workfit.collections.chatMessages.documents.*.delete",
+        "databases.workfit.collections.chatRooms.documents.*.create",
+        "databases.workfit.collections.chatRooms.documents.*.update",
+        "databases.workfit.collections.chatRooms.documents.*.delete",
+        "databases.workfit.collections.notifications.documents.*.create",
+        "databases.workfit.collections.notifications.documents.*.update",
+        "databases.workfit.collections.notifications.documents.*.delete",
+        "databases.workfit.collections.documentExecutions.documents.*.create",
+        "databases.workfit.collections.documentExecutions.documents.*.update",
+        "databases.workfit.collections.documentExecutions.documents.*.delete",
+        "databases.workfit.collections.approvalDocs.documents.*.create",
+        "databases.workfit.collections.approvalDocs.documents.*.update",
+        "databases.workfit.collections.approvalDocs.documents.*.delete",
+        "databases.workfit.collections.users.documents.*.create",
+        "databases.workfit.collections.users.documents.*.update",
+        "databases.workfit.collections.users.documents.*.delete"
+      ],
+      "timeout": 30
+    }
+  ]
+}

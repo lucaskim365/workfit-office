@@ -14,6 +14,9 @@ build/
 !.env.example
 firebase-applet-config.json
 service-account.json
+# Firebase Admin SDK 서비스계정 키(비밀키) — 절대 커밋 금지
+*-firebase-adminsdk-*.json
+*serviceAccount*.json
 
 # 파일서버 이관 백업(프로덕션 데이터 포함) / 임시 마이그레이션 스크립트
 migration-backup/
@@ -36,3 +39,6 @@ _migrate*.mjs
 #UI개편 아이디어 프로젝트
 implement/UI개편아이디어/프로젝트/
 
+
+# Appwrite 함수 배포 번들(빌드 산출물)
+appwrite/_deploy_bundles/
