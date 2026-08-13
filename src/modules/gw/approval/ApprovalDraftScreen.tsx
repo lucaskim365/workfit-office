@@ -134,7 +134,7 @@ function ApprovalDraftInner({
         files.map(async (f) => {
           const ext = f.name.split('.').pop() || '';
           const randomHex = Math.random().toString(36).substring(2, 8);
-          const safePath = `approval/${Date.now()}_${randomHex}.${ext}`;
+          const safePath = `chat/approval/${Date.now()}_${randomHex}.${ext}`;
           const url = await fileStorage.put(safePath, f, { contentType: f.type, filename: f.name });
           return { name: f.name, url };
         }),
