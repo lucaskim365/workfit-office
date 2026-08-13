@@ -1210,7 +1210,7 @@ function MessageBubble({
   onOpenImage,
   onReply,
   isEditing,
-  onStartEdit,
+  onStartEdit: _onStartEdit,
   onCancelEdit,
   onContextMenu,
 }: {

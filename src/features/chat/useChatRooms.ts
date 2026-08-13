@@ -76,6 +76,7 @@ export function useInviteMembers() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
     },
     onSuccess: (_data, { roomId }) => {
@@ -102,6 +103,7 @@ export function useLeaveRoom() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
       await chatRoomRepo.leave(roomId, userId);
     },
@@ -132,6 +134,7 @@ export function useDeleteRoom() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
       await chatRoomRepo.softDelete(roomId, adminId);
     },
@@ -160,6 +163,7 @@ export function useUpdateRoomName() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
     },
     onSuccess: (_data, { roomId }) => {
