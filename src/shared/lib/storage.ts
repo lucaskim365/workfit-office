@@ -100,12 +100,16 @@ class S3StorageAdapter implements StorageAdapter {
 
   async put(path: string, data: Blob, opts?: PutOptions): Promise<string> {
     const contentType = opts?.contentType || data.type || 'application/octet-stream';
+    // S3 호환 서버(Garage 등)와의 서명(Signature V4) 생성 및 경로 호환성을 위해 
+    // 한글 등 non-ASCII 문자가 들어간 경로 세그먼트를 URL 인코딩(encodeURIComponent)합니다.
+    const safePath = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    
     // 1) 서명 API에 presigned PUT URL 요청 (앱 세션 검증은 서명 API 측에서)
     const signRes = await fetch(this.signUrl, {
       method: 'POST',
       headers: this.signHeaders(),
       credentials: 'include',
-      body: JSON.stringify({ op: 'put', path, contentType, filename: opts?.filename }),
+      body: JSON.stringify({ op: 'put', path: safePath, contentType, filename: opts?.filename }),
     });
     if (!signRes.ok) throw new Error(`서명 URL 발급 실패 (${signRes.status})`);
     // headers: 서명에 포함된 헤더(Content-Type, 필요시 Content-Disposition)를 그대로 보내야 함.
@@ -127,11 +131,12 @@ class S3StorageAdapter implements StorageAdapter {
 
   async remove(path: string): Promise<void> {
     try {
+      const safePath = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
       await fetch(this.signUrl, {
         method: 'POST',
         headers: this.signHeaders(),
         credentials: 'include',
-        body: JSON.stringify({ op: 'delete', path }),
+        body: JSON.stringify({ op: 'delete', path: safePath }),
       });
     } catch {
       /* best-effort */
