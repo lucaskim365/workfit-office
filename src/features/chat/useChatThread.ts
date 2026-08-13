@@ -88,7 +88,7 @@ export function useSendMessage(roomId: string) {
 export function useSendAttachment(roomId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ file, senderId, senderName }: { file: File; senderId: string; senderName: string }) => {
+    mutationFn: async ({ file, senderId, senderName, text = '', replyTo = null }: { file: File; senderId: string; senderName: string; text?: string; replyTo?: ReplyPreview | null }) => {
       const attachment = await chatMessageRepo.uploadAttachment(roomId, file);
       const isImage = attachment.mime.startsWith('image/');
       const at = nowLocalIso();
@@ -97,17 +97,17 @@ export function useSendAttachment(roomId: string) {
         roomId,
         senderId,
         senderName,
-        text: '',
+        text,
         type: isImage ? 'image' : 'file',
         attachment,
-        replyTo: null,
+        replyTo,
         approvalPayload: null,
         at,
         readBy: [senderId],
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, {
-        text: isImage ? '📷 사진' : `📎 ${attachment.name}`,
+        text: text || (isImage ? '📷 사진' : `📎 ${attachment.name}`),
         at,
         senderId,
       });

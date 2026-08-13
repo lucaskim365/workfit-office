@@ -646,6 +646,59 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   }, [room.members, users]);
 
   const [isDragging, setIsDragging] = useState(false);
+  interface StagedFile {
+    id: string;
+    file: File;
+    previewUrl?: string;
+  }
+
+  const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
+
+  const handleFilesAttach = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    const validFiles: StagedFile[] = [];
+    for (const file of list) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        window.alert(`파일 [${file.name}]이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
+        continue;
+      }
+      const isImg = file.type.startsWith('image/');
+      validFiles.push({
+        id: `${file.name}-${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: isImg ? URL.createObjectURL(file) : undefined,
+      });
+    }
+    if (validFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...validFiles]);
+    }
+  };
+
+  const removeAttachedFile = (id: string) => {
+    setAttachedFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((f) => f.id !== id);
+    });
+  };
+
+  const clearAttachedFiles = (filesList: StagedFile[]) => {
+    filesList.forEach((f) => {
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+    });
+    setAttachedFiles([]);
+  };
+
+  // 대화방 이동/마운트 해제 시 생성된 Object URL 정리
+  useEffect(() => {
+    return () => {
+      attachedFiles.forEach((f) => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
+    };
+  }, [room.id, attachedFiles]);
 
   const handleDragOver = (e: React.DragEvent) => {
     if (readonly) return;
@@ -660,16 +713,8 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
     e.stopPropagation();
     setIsDragging(false);
 
-    const file = e.dataTransfer.files?.[0];
-    if (!file || sendFile.isPending) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      window.alert(`파일이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
-      return;
-    }
-    try {
-      await sendFile.mutateAsync({ file, senderId: me, senderName: meName });
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesAttach(e.dataTransfer.files);
     }
   };
 
@@ -685,18 +730,10 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   }, [messages, searchQuery]);
 
   const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    if (e.target.files && e.target.files.length > 0) {
+      handleFilesAttach(e.target.files);
+    }
     e.target.value = ''; // 같은 파일 재선택 허용
-    if (!file || sendFile.isPending) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      window.alert(`파일이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
-      return;
-    }
-    try {
-      await sendFile.mutateAsync({ file, senderId: me, senderName: meName });
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-    }
   };
   // 나가기: 그룹 방만(1:1·공지는 제외). 삭제: 관리자만(모든 방).
   const canLeave = room.type === 'group';
@@ -742,19 +779,52 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
     if (el) el.scrollTop = el.scrollHeight;
   }, [filteredMessages.length]);
 
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
-    if (!t) return;
-    send.mutate({
-      text: t,
-      senderId: me,
-      senderName: meName,
-      replyTo: replyTo
-        ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) }
-        : null,
-    });
-    setText('');
-    setReplyTo(null);
+    if (!t && attachedFiles.length === 0) return;
+    if (sendFile.isPending) return;
+
+    if (attachedFiles.length > 0) {
+      try {
+        // 첫 번째 파일은 텍스트 및 답글 정보와 함께 전송
+        await sendFile.mutateAsync({
+          file: attachedFiles[0].file,
+          senderId: me,
+          senderName: meName,
+          text: t,
+          replyTo: replyTo
+            ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) }
+            : null,
+        });
+
+        // 나머지 파일들은 빈 텍스트로 순차 전송
+        for (let i = 1; i < attachedFiles.length; i++) {
+          await sendFile.mutateAsync({
+            file: attachedFiles[i].file,
+            senderId: me,
+            senderName: meName,
+            text: '',
+          });
+        }
+
+        clearAttachedFiles(attachedFiles);
+        setText('');
+        setReplyTo(null);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
+      }
+    } else {
+      send.mutate({
+        text: t,
+        senderId: me,
+        senderName: meName,
+        replyTo: replyTo
+          ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) }
+          : null,
+      });
+      setText('');
+      setReplyTo(null);
+    }
   };
 
   if (inviting) {
@@ -937,8 +1007,34 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
               <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 hover:bg-black/5">✕</button>
             </div>
           )}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2 max-h-36 overflow-y-auto px-1 py-0.5 border-b border-border">
+              {attachedFiles.map((item) => (
+                <div key={item.id} className="relative w-14 h-14 rounded-lg border border-border-hi bg-panel-alt overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
+                  {item.previewUrl ? (
+                    <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
+                      <span className="text-[16px] leading-none">📄</span>
+                      <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
+                        {item.file.name}
+                      </span>
+                    </div>
+                  )}
+                  {/* 첨부 취소 플로팅 버튼 */}
+                  <button
+                    onClick={() => removeAttachedFile(item.id)}
+                    title="첨부 취소"
+                    className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center text-[8px] transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
-            <input ref={fileRef} type="file" className="hidden" onChange={onPickFile} />
+            <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
             <button
               onClick={() => fileRef.current?.click()}
               disabled={sendFile.isPending}
@@ -1009,25 +1105,45 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
   let body: ReactNode;
   if (m.type === 'image' && att) {
     body = (
-      <button onClick={() => onOpenImage(att)} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
-        <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
-      </button>
+      <div className="flex flex-col gap-1.5">
+        <button onClick={() => onOpenImage(att)} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
+          <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
+        </button>
+        {m.text && (
+          <div
+            style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+          >
+            {m.text}
+          </div>
+        )}
+      </div>
     );
   } else if (m.type === 'file' && att) {
     body = (
-      <button
-        type="button"
-        onClick={() => downloadAttachment(att)}
-        title="다운로드"
-        style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
-        className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
-      >
-        <span className="text-[18px]">📄</span>
-        <span className="min-w-0">
-          <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
-          <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
-        </span>
-      </button>
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => downloadAttachment(att)}
+          title="다운로드"
+          style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+          className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+        >
+          <span className="text-[18px]">📄</span>
+          <span className="min-w-0">
+            <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
+            <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          </span>
+        </button>
+        {m.text && (
+          <div
+            style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+          >
+            {m.text}
+          </div>
+        )}
+      </div>
     );
   } else {
     body = (
