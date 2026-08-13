@@ -5,7 +5,7 @@ import { Pill } from '@/shared/ui/Pill';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useGwSummary } from '@/features/gw/useGwSummary';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
@@ -1103,6 +1103,14 @@ function fmtSize(bytes: number): string {
 }
 
 function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m: ChatMessage; me: string; group: boolean; roomMembers: string[]; onOpenImage: (att: Attachment) => void; onReply: (m: ChatMessage) => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editVal, setEditVal] = useState(() => m.text.replace(/ \(수정됨\)$/, ''));
+  const editMsg = useEditMessage(m.roomId);
+
+  useEffect(() => {
+    setEditVal(m.text.replace(/ \(수정됨\)$/, ''));
+  }, [m.text]);
+
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
@@ -1126,7 +1134,54 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body: ReactNode;
-  if (m.type === 'image' && att) {
+  if (isEditing) {
+    body = (
+      <div className="flex flex-col gap-1 w-full min-w-[180px]">
+        <textarea
+          value={editVal}
+          onChange={(e) => setEditVal(e.target.value)}
+          className="w-full bg-[#fcfaf5] text-[11.5px] text-ink border border-[#eecfa2] rounded-lg px-2 py-1.5 outline-none resize-none"
+          rows={2}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              const val = editVal.trim();
+              if (val) {
+                const textWithIndicator = `${val} (수정됨)`;
+                editMsg.mutate({ messageId: m.id, text: textWithIndicator });
+                setIsEditing(false);
+              }
+            }
+          }}
+        />
+        <div className="flex justify-end gap-1 text-[9.5px]">
+          <button
+            onClick={() => { setIsEditing(false); setEditVal(m.text.replace(/ \(수정됨\)$/, '')); }}
+            className="px-1.5 py-0.5 bg-[#eecfa2]/30 text-ink2 rounded hover:bg-[#eecfa2]/50"
+          >
+            취소
+          </button>
+          <button
+            onClick={async () => {
+              const val = editVal.trim();
+              if (!val) return;
+              try {
+                const textWithIndicator = `${val} (수정됨)`;
+                await editMsg.mutateAsync({ messageId: m.id, text: textWithIndicator });
+                setIsEditing(false);
+              } catch (e) {
+                window.alert("수정에 실패했습니다.");
+              }
+            }}
+            disabled={editMsg.isPending}
+            className="px-1.5 py-0.5 bg-amber text-white rounded hover:bg-amber-dark disabled:opacity-50"
+          >
+            {editMsg.isPending ? '...' : '저장'}
+          </button>
+        </div>
+      </div>
+    );
+  } else if (m.type === 'image' && att) {
     body = (
       <div className="flex flex-col gap-1.5">
         <button onClick={() => onOpenImage(att)} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
@@ -1206,13 +1261,24 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
           )}
           <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
-            <button
-              onClick={() => onReply(m)}
-              title="답글"
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] text-ink3 opacity-0 transition-opacity hover:bg-panel-alt group-hover:opacity-100"
-            >
-              ↩
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                onClick={() => onReply(m)}
+                title="답글"
+                className="grid h-6 w-6 place-items-center rounded-full text-[12px] text-ink3 hover:bg-panel-alt"
+              >
+                ↩
+              </button>
+              {mine && m.type === 'text' && !isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  title="메시지 수정"
+                  className="grid h-6 w-6 place-items-center rounded-full text-[10px] text-ink3 hover:bg-panel-alt"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
           </div>
           {bubbleMeta}
         </div>

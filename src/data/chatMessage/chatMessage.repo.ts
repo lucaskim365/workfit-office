@@ -106,6 +106,22 @@ export const chatMessageRepo = {
     }
   },
 
+  /** 메시지 내용 수정 */
+  async updateText(id: string, text: string): Promise<void> {
+    if (isFirebaseConfigured && db) {
+      const fdb = db;
+      const snap = await getDocs(collection(fdb, COLL));
+      const raw = snap.docs.find((d) => d.id === id)?.data();
+      if (!raw) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+      const message = chatMessageSchema.parse({ ...raw, text });
+      await setDoc(doc(fdb, COLL, id), message);
+    } else {
+      const idx = memory.findIndex((m) => m.id === id);
+      if (idx < 0) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+      memory[idx] = { ...memory[idx], text };
+    }
+  },
+
   /** 특정 방의 메시지 전건 삭제 */
   async deleteByRoom(roomId: string): Promise<void> {
     if (isFirebaseConfigured && db) {
