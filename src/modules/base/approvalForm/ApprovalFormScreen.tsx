@@ -187,7 +187,8 @@ export default function ApprovalFormScreen() {
                 onClick={() => setSelFolderId(f.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  setFolderMenu({ x: e.clientX, y: e.clientY, folder: f });
+                  const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
+                  setFolderMenu({ x: e.clientX / zoom, y: e.clientY / zoom, folder: f });
                 }}
                 className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] cursor-grab active:cursor-grabbing transition-all ${
                   selFolderId === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'

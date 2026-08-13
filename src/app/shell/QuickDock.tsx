@@ -572,7 +572,8 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
             onClick={() => onOpen(r.id)}
             onContextMenu={(e) => {
               e.preventDefault();
-              setMenuPos({ x: e.clientX, y: e.clientY, roomId: r.id });
+              const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
+              setMenuPos({ x: e.clientX / zoom, y: e.clientY / zoom, roomId: r.id });
             }}
             className={`flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt ${isPinned ? 'bg-panel-alt/45' : ''}`}
           >
@@ -1038,10 +1039,8 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  const computedZoom = parseFloat(window.getComputedStyle(document.body).zoom);
-                  const zoom = isNaN(computedZoom) || computedZoom <= 0
-                    ? 1
-                    : (computedZoom > 10 ? computedZoom / 100 : computedZoom);
+                  const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                  const zoom = parseFloat(fontScaleStr) || 1.1875;
                   setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
                 }}
               />

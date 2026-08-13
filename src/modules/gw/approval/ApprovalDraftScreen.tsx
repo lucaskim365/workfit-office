@@ -756,7 +756,7 @@ function ApprovalDraftInner({
     <div className="flex w-full flex-col bg-panel" style={{ zoom: zoomFactor }}>
       {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
            (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
-      <header className="sticky top-0 z-40 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
+      <header className="sticky top-0 z-30 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
         <div className="flex items-center gap-3">
           <button
             type="button"

@@ -734,16 +734,17 @@ export function TableFieldEditor({
 
   const handleCellContextMenu = (e: React.MouseEvent, rIdx: number, cIdx: number) => {
     e.preventDefault();
+    const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       setContextMenu({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: (e.clientX - rect.left) / zoom,
+        y: (e.clientY - rect.top) / zoom,
         rIdx,
         cIdx,
       });
     } else {
-      setContextMenu({ x: e.clientX, y: e.clientY, rIdx, cIdx });
+      setContextMenu({ x: e.clientX / zoom, y: e.clientY / zoom, rIdx, cIdx });
     }
   };
 
