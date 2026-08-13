@@ -116,7 +116,11 @@ class S3StorageAdapter implements StorageAdapter {
         filename: opts?.filename ? encodeURIComponent(opts.filename) : undefined,
       }),
     });
-    if (!signRes.ok) throw new Error(`서명 URL 발급 실패 (${signRes.status})`);
+    if (!signRes.ok) {
+      const errBody = await signRes.text().catch(() => '');
+      console.error('Sign API Error Response:', errBody);
+      throw new Error(`서명 URL 발급 실패 (${signRes.status}): ${errBody}`);
+    }
     // headers: 서명에 포함된 헤더(Content-Type, 필요시 Content-Disposition)를 그대로 보내야 함.
     const { putUrl, headers, getUrl } = (await signRes.json()) as {
       putUrl: string;
