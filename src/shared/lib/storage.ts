@@ -109,7 +109,12 @@ class S3StorageAdapter implements StorageAdapter {
       method: 'POST',
       headers: this.signHeaders(),
       credentials: 'include',
-      body: JSON.stringify({ op: 'put', path: safePath, contentType, filename: opts?.filename }),
+      body: JSON.stringify({
+        op: 'put',
+        path: safePath,
+        contentType,
+        filename: opts?.filename ? encodeURIComponent(opts.filename) : undefined,
+      }),
     });
     if (!signRes.ok) throw new Error(`서명 URL 발급 실패 (${signRes.status})`);
     // headers: 서명에 포함된 헤더(Content-Type, 필요시 Content-Disposition)를 그대로 보내야 함.
