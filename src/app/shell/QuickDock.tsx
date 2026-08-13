@@ -1038,7 +1038,10 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  const zoom = parseFloat(window.getComputedStyle(document.body).zoom) || 1;
+                  const computedZoom = parseFloat(window.getComputedStyle(document.body).zoom);
+                  const zoom = isNaN(computedZoom) || computedZoom <= 0
+                    ? 1
+                    : (computedZoom > 10 ? computedZoom / 100 : computedZoom);
                   setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
                 }}
               />
