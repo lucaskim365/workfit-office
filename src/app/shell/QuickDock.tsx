@@ -645,6 +645,34 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [room.members, users]);
 
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (readonly) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    if (readonly) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file || sendFile.isPending) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      window.alert(`파일이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
+      return;
+    }
+    try {
+      await sendFile.mutateAsync({ file, senderId: me, senderName: meName });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
+    }
+  };
+
   const filteredMessages = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return messages;
@@ -734,7 +762,22 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      onDragOver={handleDragOver}
+      className="flex h-full flex-col relative"
+    >
+      {isDragging && !readonly && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+          onDrop={handleDrop}
+          className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#faf6f0]/95 backdrop-blur-xs border-2 border-dashed border-amber m-2 rounded-2xl"
+        >
+          <div className="text-[32px] mb-2">📥</div>
+          <div className="text-[13px] font-extrabold text-[#1c2536]">여기에 파일을 놓아 전송</div>
+          <div className="text-[10.5px] text-ink3 mt-1">최대 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB</div>
+        </div>
+      )}
       {/* 대화 서브헤더 */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border bg-panel px-2.5 py-2.5">
         <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
