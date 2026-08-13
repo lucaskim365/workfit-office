@@ -637,6 +637,14 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [showMemberList, setShowMemberList] = useState(false);
+  const memberDetails = useMemo(() => {
+    return room.members
+      .map((mId) => users.find((u) => u.id === mId))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [room.members, users]);
+
   const filteredMessages = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return messages;
@@ -735,7 +743,14 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
         </span>
         <div className="min-w-0 flex-1 ml-0.5">
           <div className="truncate text-[12.5px] font-bold text-ink">{displayName}</div>
-          {room.type !== 'direct' && <div className="text-[10px] text-ink3">{room.members.length}명</div>}
+          {room.type !== 'direct' && (
+            <button
+              onClick={() => setShowMemberList((prev) => !prev)}
+              className="text-[10px] text-ink3 hover:text-teal font-semibold hover:underline transition-colors flex items-center gap-0.5"
+            >
+              {room.members.length}명 {showMemberList ? '▲' : '▼'}
+            </button>
+          )}
         </div>
         <button
           onClick={() => {
@@ -772,6 +787,33 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
           </div>
         )}
       </div>
+
+      {/* 참여자 목록 레이어 */}
+      {showMemberList && room.type !== 'direct' && (
+        <div className="shrink-0 border-b border-[#ebdcc5] bg-[#faf6f0] px-4 py-3 max-h-48 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-ink2">대화방 참여자 ({memberDetails.length})</span>
+            <button
+              onClick={() => setShowMemberList(false)}
+              className="text-[10px] text-ink3 hover:text-ink hover:underline"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="space-y-2">
+            {memberDetails.map((m) => (
+              <div key={m.id} className="flex items-center gap-2 text-[11.5px]">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#eecfa2] text-[10px] font-bold text-[#1c2536]">
+                  {m.name?.[0] ?? '?'}
+                </span>
+                <span className="font-semibold text-ink">{m.name}</span>
+                <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
+                <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 대화 내 실시간 검색창 */}
       {showSearch && (
