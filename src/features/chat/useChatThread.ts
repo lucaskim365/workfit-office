@@ -49,6 +49,7 @@ export function useSendMessage(roomId: string) {
         approvalPayload: null,
         at,
         readBy: [senderId],
+        isEdited: false,
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
@@ -69,6 +70,7 @@ export function useSendMessage(roomId: string) {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [senderId],
+        isEdited: false,
       };
       qc.setQueryData<ChatMessage[]>(key, [...(prev ?? []), optimistic]);
       return { prev };
@@ -117,6 +119,7 @@ export function useSendAttachment(roomId: string) {
         approvalPayload: null,
         at,
         readBy: [senderId],
+        isEdited: false,
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, {

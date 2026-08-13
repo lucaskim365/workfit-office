@@ -630,6 +630,22 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState<{ m: ChatMessage; x: number; y: number; mine: boolean } | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeMenu) return;
+    const close = () => setActiveMenu(null);
+    const timer = setTimeout(() => {
+      window.addEventListener('click', close);
+      window.addEventListener('contextmenu', close);
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [activeMenu]);
 
   const handleRenameRoom = async () => {
     const newName = window.prompt("새로운 대화방 이름을 입력하세요:", room.name);
@@ -1005,7 +1021,23 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
                   </span>
                 </div>
               )}
-              <MessageBubble m={m} me={me} group={room.type === 'group'} roomMembers={room.members} onOpenImage={setViewer} onReply={setReplyTo} />
+              <MessageBubble
+                m={m}
+                me={me}
+                group={room.type === 'group'}
+                roomMembers={room.members}
+                onOpenImage={setViewer}
+                onReply={setReplyTo}
+                isEditing={editingMsgId === m.id}
+                onStartEdit={() => setEditingMsgId(m.id)}
+                onCancelEdit={() => setEditingMsgId(null)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const zoom = parseFloat(window.getComputedStyle(document.body).zoom) || 1;
+                  setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                }}
+              />
             </div>
           );
         })}
@@ -1084,6 +1116,68 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
           </div>
         </div>
       )}
+      {activeMenu && createPortal(
+        <div
+          style={{
+            top: `${activeMenu.y}px`,
+            left: `${activeMenu.x}px`,
+            backgroundColor: '#ffffff',
+            color: '#1c2536',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)',
+            right: 'auto',
+            bottom: 'auto',
+            margin: 0,
+          }}
+          className="fixed z-[99999] min-w-[120px] rounded-lg py-1 text-[11.5px] font-medium outline-none"
+          onClick={() => setActiveMenu(null)}
+        >
+          {activeMenu.m.type === 'text' ? (
+            <>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(activeMenu.m.text);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+              >
+                메시지 복사
+              </button>
+              <button
+                onClick={() => setReplyTo(activeMenu.m)}
+                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+              >
+                답장
+              </button>
+              {activeMenu.mine && (
+                <button
+                  onClick={() => setEditingMsgId(activeMenu.m.id)}
+                  className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors text-teal cursor-pointer"
+                >
+                  수정
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setReplyTo(activeMenu.m)}
+                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+              >
+                답장
+              </button>
+              {activeMenu.m.attachment && (
+                <button
+                  onClick={() => downloadAttachment(activeMenu.m.attachment!)}
+                  className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+                >
+                  다운로드
+                </button>
+              )}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1102,23 +1196,31 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m: ChatMessage; me: string; group: boolean; roomMembers: string[]; onOpenImage: (att: Attachment) => void; onReply: (m: ChatMessage) => void }) {
-  const [isEditing, setIsEditing] = useState(false);
+function MessageBubble({
+  m,
+  me,
+  group,
+  roomMembers,
+  onOpenImage,
+  onReply,
+  isEditing,
+  onStartEdit,
+  onCancelEdit,
+  onContextMenu,
+}: {
+  m: ChatMessage;
+  me: string;
+  group: boolean;
+  roomMembers: string[];
+  onOpenImage: (att: Attachment) => void;
+  onReply: (m: ChatMessage) => void;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  };
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [contextMenu]);
 
   useEffect(() => {
     setEditVal(m.text);
@@ -1161,14 +1263,14 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
               const val = editVal.trim();
               if (val) {
                 editMsg.mutate({ messageId: m.id, text: val });
-                setIsEditing(false);
+                onCancelEdit();
               }
             }
           }}
         />
         <div className="flex justify-end gap-1 text-[9.5px]">
           <button
-            onClick={() => { setIsEditing(false); setEditVal(m.text); }}
+            onClick={() => { onCancelEdit(); setEditVal(m.text); }}
             className="px-1.5 py-0.5 bg-[#eecfa2]/30 text-ink2 rounded hover:bg-[#eecfa2]/50"
           >
             취소
@@ -1179,7 +1281,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
               if (!val) return;
               try {
                 await editMsg.mutateAsync({ messageId: m.id, text: val });
-                setIsEditing(false);
+                onCancelEdit();
               } catch (e) {
                 window.alert("수정에 실패했습니다.");
               }
@@ -1194,7 +1296,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
     );
   } else if (m.type === 'image' && att) {
     body = (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5" onContextMenu={onContextMenu}>
         <button onClick={() => onOpenImage(att)} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
           <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
         </button>
@@ -1210,7 +1312,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
     );
   } else if (m.type === 'file' && att) {
     body = (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5" onContextMenu={onContextMenu}>
         <button
           type="button"
           onClick={() => downloadAttachment(att)}
@@ -1239,6 +1341,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
       <div
         style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
         className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+        onContextMenu={onContextMenu}
       >
         {m.text}
       </div>
@@ -1275,7 +1378,6 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
           )}
           <div
             className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
-            onContextMenu={handleContextMenu}
           >
             {body}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -1291,58 +1393,6 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
           {bubbleMeta}
         </div>
       </div>
-      {contextMenu && createPortal(
-        <div
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-[100] min-w-[120px] rounded-lg border border-border bg-panel py-1 shadow-lg text-[11.5px] text-ink outline-none"
-          onClick={() => setContextMenu(null)}
-        >
-          {m.type === 'text' ? (
-            <>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(m.text);
-                }}
-                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
-              >
-                메시지 복사
-              </button>
-              <button
-                onClick={() => onReply(m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
-              >
-                답장
-              </button>
-              {mine && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors text-teal"
-                >
-                  수정
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => onReply(m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
-              >
-                답장
-              </button>
-              {m.attachment && (
-                <button
-                  onClick={() => downloadAttachment(m.attachment!)}
-                  className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
-                >
-                  다운로드
-                </button>
-              )}
-            </>
-          )}
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
