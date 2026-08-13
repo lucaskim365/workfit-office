@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Bell, LogOut, Search, Users, Pin } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser } from '@/shared/lib/messaging';
@@ -38,6 +38,20 @@ export default function MobileChatList() {
 
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadIds(PIN_KEY));
   const [hiddenIds, setHiddenIds] = useState<string[]>(() => loadIds(hiddenKeyOf(me)));
+
+  const leave = useLeaveRoom();
+
+  const handleLeaveRoom = async (roomId: string) => {
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    if (!window.confirm(`'${room.name || '채팅방'}' 방에서 나가시겠어요?\n대화 내용은 보존됩니다.`)) return;
+    try {
+      await leave.mutateAsync({ roomId, userId: me, userName: user?.name || '' });
+      setSheetRoom(null);
+    } catch (e) {
+      window.alert('방을 나가는 도중 오류가 발생했습니다.');
+    }
+  };
 
   const togglePin = (roomId: string) => {
     const next = pinnedIds.includes(roomId) ? pinnedIds.filter((id) => id !== roomId) : [...pinnedIds, roomId];
@@ -82,6 +96,9 @@ export default function MobileChatList() {
         { label: pinnedIds.includes(sheetRoom.id) ? '고정 해제' : '상단 고정', onClick: () => togglePin(sheetRoom.id) },
         ...(sheetRoom.type === 'direct'
           ? [{ label: '채팅방 삭제', danger: true, onClick: () => hideRoom(sheetRoom.id) }]
+          : []),
+        ...(sheetRoom.type === 'group'
+          ? [{ label: '방 나가기', danger: true, onClick: () => handleLeaveRoom(sheetRoom.id) }]
           : []),
       ]
     : [];
