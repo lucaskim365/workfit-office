@@ -33,6 +33,7 @@ async function loadAll(): Promise<ChatMessage[]> {
         text: raw.text ?? '',
         type: raw.type ?? 'text',
         readBy: Array.isArray(raw.readBy) ? raw.readBy : [],
+        isEdited: raw.isEdited ?? false,
       });
       if (parsed.success) {
         out.push(parsed.data);
@@ -113,12 +114,12 @@ export const chatMessageRepo = {
       const snap = await getDocs(collection(fdb, COLL));
       const raw = snap.docs.find((d) => d.id === id)?.data();
       if (!raw) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
-      const message = chatMessageSchema.parse({ ...raw, text });
+      const message = chatMessageSchema.parse({ ...raw, text, isEdited: true });
       await setDoc(doc(fdb, COLL, id), message);
     } else {
       const idx = memory.findIndex((m) => m.id === id);
       if (idx < 0) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
-      memory[idx] = { ...memory[idx], text };
+      memory[idx] = { ...memory[idx], text, isEdited: true };
     }
   },
 

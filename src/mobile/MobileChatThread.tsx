@@ -313,11 +313,11 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
   onReply: (m: ChatMessage) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editVal, setEditVal] = useState(() => m.text.replace(/ \(수정됨\)$/, ''));
+  const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
 
   useEffect(() => {
-    setEditVal(m.text.replace(/ \(수정됨\)$/, ''));
+    setEditVal(m.text);
   }, [m.text]);
 
   if (m.type === 'system') {
@@ -346,8 +346,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
               e.preventDefault();
               const val = editVal.trim();
               if (val) {
-                const textWithIndicator = `${val} (수정됨)`;
-                editMsg.mutate({ messageId: m.id, text: textWithIndicator });
+                editMsg.mutate({ messageId: m.id, text: val });
                 setIsEditing(false);
               }
             }
@@ -355,7 +354,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
         />
         <div className="flex justify-end gap-1 text-[10px]">
           <button
-            onClick={() => { setIsEditing(false); setEditVal(m.text.replace(/ \(수정됨\)$/, '')); }}
+            onClick={() => { setIsEditing(false); setEditVal(m.text); }}
             className="px-2 py-0.5 bg-black/5 text-ink2 rounded"
           >
             취소
@@ -365,8 +364,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
               const val = editVal.trim();
               if (!val) return;
               try {
-                const textWithIndicator = `${val} (수정됨)`;
-                await editMsg.mutateAsync({ messageId: m.id, text: textWithIndicator });
+                await editMsg.mutateAsync({ messageId: m.id, text: val });
                 setIsEditing(false);
               } catch (e) {
                 window.alert("수정에 실패했습니다.");
@@ -449,11 +447,14 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
               )}
             </div>
           </div>
-          <div className={`mt-0.5 flex items-center gap-1 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
+          <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
             {mine && unreadCount > 0 && (
               <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#e6960c' }}>{unreadCount}</span>
             )}
             <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+            {m.isEdited && (
+              <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
+            )}
           </div>
         </div>
       </div>
