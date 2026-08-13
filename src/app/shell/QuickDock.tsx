@@ -1106,6 +1106,19 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
   const [isEditing, setIsEditing] = useState(false);
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
 
   useEffect(() => {
     setEditVal(m.text);
@@ -1260,7 +1273,10 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
               <div className="truncate text-[10.5px] text-ink3">{m.replyTo.text}</div>
             </div>
           )}
-          <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+          <div
+            className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+            onContextMenu={handleContextMenu}
+          >
             {body}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
@@ -1270,20 +1286,63 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: { m:
               >
                 ↩
               </button>
-              {mine && m.type === 'text' && !isEditing && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  title="메시지 수정"
-                  className="grid h-6 w-6 place-items-center rounded-full text-[10px] text-ink3 hover:bg-panel-alt"
-                >
-                  ✏️
-                </button>
-              )}
             </div>
           </div>
           {bubbleMeta}
         </div>
       </div>
+      {contextMenu && createPortal(
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-[100] min-w-[120px] rounded-lg border border-border bg-panel py-1 shadow-lg text-[11.5px] text-ink outline-none"
+          onClick={() => setContextMenu(null)}
+        >
+          {m.type === 'text' ? (
+            <>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(m.text);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
+              >
+                메시지 복사
+              </button>
+              <button
+                onClick={() => onReply(m)}
+                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
+              >
+                답장
+              </button>
+              {mine && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors text-teal"
+                >
+                  수정
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => onReply(m)}
+                className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
+              >
+                답장
+              </button>
+              {m.attachment && (
+                <button
+                  onClick={() => downloadAttachment(m.attachment!)}
+                  className="w-full px-3 py-1.5 text-left hover:bg-panel-alt transition-colors"
+                >
+                  다운로드
+                </button>
+              )}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
