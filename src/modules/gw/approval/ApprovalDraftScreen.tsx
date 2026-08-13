@@ -26,6 +26,7 @@ import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { DraftFormSidebar } from './components/DraftFormSidebar';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { fileStorage } from '@/shared/lib/storage';
+import { Upload, X, Paperclip } from 'lucide-react';
 
 export default function ApprovalDraftScreen() {
   const { user } = useAuth();
@@ -68,7 +69,6 @@ function ApprovalDraftInner({
   const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? '부서');
   const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? '5년');
 
-  const [body, setBody] = useState(editDoc?.body ?? '');
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
     const initialVals = { ...(editDoc?.fieldValues ?? {}) };
@@ -90,10 +90,77 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
+  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
+  const [zoomFactor, setZoomFactor] = useState(1);
+  const [isWideScreen, setIsWideScreen] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const w = window.innerWidth;
+      const wide = w >= 1200;
+      setIsWideScreen(wide);
+
+      if (wide) {
+        // Widescreen baseline: 1750px (min zoom 0.6)
+        setZoomFactor(w < 1750 ? Math.max(0.6, w / 1750) : 1);
+      } else {
+        // Collapsed baseline: 1380px (min zoom 0.6)
+        setZoomFactor(Math.max(0.6, w / 1380));
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleFilesUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (f) => {
+          const ext = f.name.split('.').pop() || '';
+          const randomHex = Math.random().toString(36).substring(2, 8);
+          const safePath = `chat/approval/${Date.now()}_${randomHex}.${ext}`;
+          const url = await fileStorage.put(safePath, f, { contentType: f.type, filename: f.name });
+          return { name: f.name, url };
+        }),
+      );
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      setError('파일 업로드 실패: ' + String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const files = Array.from(e.dataTransfer.files);
+      await handleFilesUpload(files);
+    }
+  };
+
   // 양식 변경 시 작성내용 유실 경고 핸들러
   const handleFormChange = (newCode: string) => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
-    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+    const hasContent = title.trim().length > 0 || hasValue;
 
     if (hasContent && newCode !== code) {
       const ok = window.confirm(
@@ -104,14 +171,18 @@ function ApprovalDraftInner({
     setCode(newCode);
     setValues({});
     setTitle('');
-    setBody('');
     setAmount('');
+  };
+
+  const clearAutosave = () => {
+    localStorage.removeItem('draft_autosave_' + me.id);
+    localStorage.removeItem('draft_autosave_active_' + me.id);
   };
 
   // 실시간 자동저장 (1.5초 디바운스)
   useEffect(() => {
     const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
-    const hasContent = title.trim().length > 0 || body.trim().length > 0 || hasValue;
+    const hasContent = title.trim().length > 0 || hasValue;
 
     if (!hasContent) return;
 
@@ -119,18 +190,22 @@ function ApprovalDraftInner({
       localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
         code,
         title,
-        body,
         values,
         amount,
         securityLevel,
         visibility,
         preservationPeriod,
+        attachments,
+        recipients,
+        executionDepts,
+        steps,
         timestamp: Date.now()
       }));
+      localStorage.setItem('draft_autosave_active_' + me.id, 'true');
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [code, title, body, values, amount, securityLevel, visibility, preservationPeriod, me.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, recipients, executionDepts, steps, me.id]);
 
   const hasCheckedAutosave = useRef(false);
 
@@ -139,8 +214,9 @@ function ApprovalDraftInner({
     if (editDoc || hasCheckedAutosave.current) return;
     if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
+    const isActive = localStorage.getItem('draft_autosave_active_' + me.id) === 'true';
     const saved = localStorage.getItem('draft_autosave_' + me.id);
-    if (saved) {
+    if (isActive && saved) {
       try {
         const data = JSON.parse(saved);
         if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
@@ -151,25 +227,26 @@ function ApprovalDraftInner({
           if (ok) {
             setCode(data.code);
             setTitle(data.title || '');
-            setBody(data.body || '');
             setValues(data.values || {});
             setAmount(data.amount || '');
             if (data.securityLevel) setSecurityLevel(data.securityLevel);
             if (data.visibility) setVisibility(data.visibility);
             if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+            if (data.attachments) setAttachments(data.attachments);
+            if (data.recipients) setRecipients(data.recipients);
+            if (data.executionDepts) setExecutionDepts(data.executionDepts);
+            if (data.steps) setSteps(data.steps);
           }
-          // 수락/거절 관계없이 첫 진입 시 검사 완료 후 세션 데이터 초기화
-          localStorage.removeItem('draft_autosave_' + me.id);
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
       }
     }
+    // 복구 여부 확인에 상관없이 진입 시 플래그 즉시 해제 (중복 복구 제안 방지)
+    localStorage.removeItem('draft_autosave_active_' + me.id);
     // 최초 마운트 검사 완료 플래그 적용
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
-
-  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
 
   const executionTarget = useMemo(() => {
     if (editDoc?.execution) {
@@ -243,7 +320,6 @@ function ApprovalDraftInner({
       setSecurityLevel(editDoc.securityLevel ?? '일반');
       setVisibility(editDoc.visibility ?? '부서');
       setPreservationPeriod(editDoc.preservationPeriod ?? '5년');
-      setBody(editDoc.body ?? '');
       setAmount(editDoc.amount != null ? String(editDoc.amount) : '');
 
       const initialVals = { ...(editDoc.fieldValues ?? {}) };
@@ -258,6 +334,7 @@ function ApprovalDraftInner({
       setAttachments(editDoc.attachments ?? []);
       setRelatedDocs(editDoc.relatedDocs ?? []);
       setRecipients(editDoc.recipients ?? []);
+      setExecutionDepts(editDoc.executionDepts ?? []);
       setIsPostApproval(editDoc.isPostApproval ?? false);
       setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
       setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
@@ -271,7 +348,7 @@ function ApprovalDraftInner({
   const hasManuallyEnteredValues = (): boolean => {
     if (editDoc) {
       const titleChanged = title !== (editDoc.title ?? '');
-      const bodyChanged = body !== (editDoc.body ?? '');
+      const bodyChanged = String(values[RESERVED_BODY_KEY] ?? '') !== (editDoc.body ?? '');
       const amountChanged = amount !== (editDoc.amount != null ? String(editDoc.amount) : '');
       const filesChanged = JSON.stringify(attachments) !== JSON.stringify(editDoc.attachments ?? []);
       const valuesChanged = Object.keys(values).some((k) => JSON.stringify(values[k]) !== JSON.stringify((editDoc.fieldValues ?? {})[k]));
@@ -287,7 +364,7 @@ function ApprovalDraftInner({
       const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
 
       // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
-      const curBody = (values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body).trim();
+      const curBody = String(values[RESERVED_BODY_KEY] ?? '').trim();
       const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
       const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
       const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
@@ -300,7 +377,6 @@ function ApprovalDraftInner({
 
       // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
       const valuesHasChanged = Object.keys(values).some((k) => {
-        if (k === RESERVED_BODY_KEY) return false;
         const valStr = String(values[k] ?? '').trim();
         if (!valStr) return false;
 
@@ -400,7 +476,7 @@ function ApprovalDraftInner({
       drafterDept: me.dept,
       steps,
       amount: amountNum,
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : body.trim(),
+      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : '',
       form: leave,
       fieldValues: values,
       attachments,
@@ -523,6 +599,7 @@ function ApprovalDraftInner({
     setError('');
     try {
       await persistDraft();
+      clearAutosave();
       navigate('/gw/approval?box=임시');
     } catch (e) {
       setError(String(e));
@@ -536,6 +613,7 @@ function ApprovalDraftInner({
     try {
       const id = await persistDraft();
       await submitM.mutateAsync({ id, userId: me.id });
+      clearAutosave();
       navigate('/gw/approval?box=상신');
     } catch (e) {
       setError(String(e));
@@ -578,23 +656,6 @@ function ApprovalDraftInner({
           <Field label={field.label}>
             <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" placeholder="예: 3000000" className={INP} />
             {amountNum != null && <span className="mt-1 block text-[11px] text-ink3">₩{amountNum.toLocaleString()}</span>}
-          </Field>
-        </div>,
-      );
-    } else if (field.key === RESERVED_BODY_KEY && field.type === '장문') {
-      fieldNodes.push(
-        <div key={field.key} className="col-span-2">
-          <Field label={field.label}>
-            <textarea
-              value={values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body}
-              onChange={(e) => {
-                setVals({ [RESERVED_BODY_KEY]: e.target.value });
-                setBody(e.target.value);
-              }}
-              rows={8}
-              placeholder={field.placeholder || '내용을 입력하세요'}
-              className={`${INP} resize-y leading-relaxed`}
-            />
           </Field>
         </div>,
       );
@@ -650,7 +711,7 @@ function ApprovalDraftInner({
       docNo: editDoc?.docNo ?? 'DRAFT-PREVIEW',
       docType: code,
       title: title || '(제목 없음)',
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : body,
+      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '',
       drafterId: me.id,
       drafterDept: me.dept,
       status: '진행중',
@@ -691,14 +752,14 @@ function ApprovalDraftInner({
       postApprovedById,
       postApprovedByName: org.userById(postApprovedById)?.name ?? null,
     }),
-    [editDoc, code, title, body, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
+    [editDoc, code, title, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
   );
 
   return (
-    <div className="flex w-full flex-col bg-panel">
+    <div className="flex w-full flex-col bg-panel" style={{ zoom: zoomFactor }}>
       {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
            (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
-      <header className="sticky top-0 z-40 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
+      <header className="sticky top-0 z-30 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -720,16 +781,18 @@ function ApprovalDraftInner({
 
         <div className="flex items-center gap-2">
           {/* 해상도 작을 때 우측 결재선 Drawer 호출 버튼 */}
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="xl:hidden flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
-          >
-            <span>🔗 결재선</span>
-            <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
-              {steps.length}명
-            </span>
-          </button>
+          {!isWideScreen && (
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
+            >
+              <span>🔗 결재선</span>
+              <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
+                {steps.length}명
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -978,19 +1041,6 @@ function ApprovalDraftInner({
             <div className="grid grid-cols-2 gap-3.5">
               {fieldNodes}
             </div>
-
-            {/* 기본 본문(장문) 텍스트 입력창 (서식에 body 필드가 포함되어 있지 않을 경우만 추가 보출) */}
-            {!form?.fields.some((f) => f.key === RESERVED_BODY_KEY) && (
-              <Field label="기안 내용">
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={8}
-                  placeholder="내용을 입력하세요"
-                  className={`${INP} resize-y leading-relaxed`}
-                />
-              </Field>
-            )}
           </div>
 
           {/* 첨부파일 / 관련 문서 영역 */}
@@ -1001,40 +1051,72 @@ function ApprovalDraftInner({
 
             {/* 첨부 파일 업로드 */}
             <Field label="첨부파일">
-              <input
-                type="file"
-                multiple
-                onChange={async (e) => {
-                  const files = Array.from(e.target.files ?? []);
-                  if (files.length === 0) return;
-                  setUploading(true);
-                  try {
-                    const uploaded = await Promise.all(
-                      files.map(async (f) => {
-                        const url = await fileStorage.put(`approval/${Date.now()}_${f.name}`, f);
-                        return { name: f.name, url };
-                      }),
-                    );
-                    setAttachments((prev) => [...prev, ...uploaded]);
-                  } catch (err) {
-                    setError('파일 업로드 실패: ' + String(err));
-                  } finally {
-                    setUploading(false);
-                  }
-                }}
-                className="block w-full text-[11.5px] text-ink3 file:mr-3 file:rounded-lg file:border-0 file:bg-panel-alt file:px-3 file:py-1 file:text-[11.5px] file:font-semibold file:text-ink hover:file:bg-border"
-              />
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 transition-all cursor-pointer ${
+                  isDragActive
+                    ? 'border-teal bg-teal-soft/20 scale-[0.99]'
+                    : 'border-border bg-panel-alt/30 hover:bg-panel-alt/60 hover:border-border-hi'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    await handleFilesUpload(files);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="hidden"
+                />
+                
+                <div className="flex flex-col items-center gap-2">
+                  <div className="p-2.5 bg-panel rounded-full shadow-2xs border border-border">
+                    <Upload className="w-5 h-5 text-ink3" />
+                  </div>
+                  <div className="text-[12px] font-bold text-ink text-center">
+                    {uploading ? '파일을 업로드하는 중...' : '여기에 파일을 드래그하거나 클릭하여 추가'}
+                  </div>
+                  <p className="text-[10.5px] text-ink3 text-center">
+                    여러 개의 파일을 마우스 드래그로 선택하여 올릴 수 있습니다.
+                  </p>
+                </div>
+              </div>
+
               {attachments.length > 0 && (
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-2.5 space-y-1.5">
                   {attachments.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md">
-                      <span className="truncate">{f.name}</span>
+                    <li
+                      key={i}
+                      className="group flex items-center justify-between text-[11.5px] text-ink bg-panel-alt hover:bg-panel-alt-hi px-3 py-1.5 rounded-lg border border-border transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="w-3.5 h-3.5 text-ink3 shrink-0" />
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate font-medium hover:underline hover:text-teal cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {f.name}
+                        </a>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAttachments((prev) => prev.filter((_, idx) => idx !== i));
+                        }}
+                        className="p-1 rounded-md text-ink3 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                        title="삭제"
                       >
-                        삭제
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </li>
                   ))}
@@ -1072,42 +1154,44 @@ function ApprovalDraftInner({
         </div>
 
         {/* [3단] 우측 결재선 전용 고정 패널 — sticky self-start top-53px, 내부 스크롤 + 패널 내부 헤더 sticky 고정 */}
-        <div
-          className="hidden xl:block w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
-          style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
-        >
-          {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
-            <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
-              <span>결재선 설정</span>
-            </span>
-            <span className="text-[11px] text-ink3 font-semibold">
-              {steps.length}명 지정됨
-            </span>
-          </div>
+        {isWideScreen && (
+          <div
+            className="w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
+            style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
+          >
+            {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
+              <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
+                <span>결재선 설정</span>
+              </span>
+              <span className="text-[11px] text-ink3 font-semibold">
+                {steps.length}명 지정됨
+              </span>
+            </div>
 
-          {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
-          <div className="px-4 py-4">
-            <ApprovalLineBuilder
-              steps={steps}
-              onChange={setSteps}
-              drafterId={me.id}
-              docType={code}
-              amount={amountNum}
-              docData={values}
-              bottomSlot={
-                <DraftRecipientSection
-                  recipients={recipients}
-                  setRecipients={setRecipients}
-                  executionDepts={executionDepts}
-                  setExecutionDepts={setExecutionDepts}
-                  org={org}
-                />
-              }
-            />
+            {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
+            <div className="px-4 py-4">
+              <ApprovalLineBuilder
+                steps={steps}
+                onChange={setSteps}
+                drafterId={me.id}
+                docType={code}
+                amount={amountNum}
+                docData={values}
+                bottomSlot={
+                  <DraftRecipientSection
+                    recipients={recipients}
+                    setRecipients={setRecipients}
+                    executionDepts={executionDepts}
+                    setExecutionDepts={setExecutionDepts}
+                    org={org}
+                  />
+                }
+              />
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 
@@ -1140,9 +1224,13 @@ function ApprovalDraftInner({
           confirmLabel="저장 후 이동"
           onConfirm={async () => {
             await persistDraft();
+            clearAutosave();
             navigate('/gw/approval');
           }}
-          onDiscard={() => navigate('/gw/approval')}
+          onDiscard={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           discardLabel="저장 없이 이동"
           onCancel={() => setShowConfirmClose(false)}
           disabled={busy}
@@ -1155,7 +1243,10 @@ function ApprovalDraftInner({
           description={<>기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.</>}
           confirmLabel="변경내용 모두 취소"
           confirmColor="bg-danger"
-          onConfirm={() => navigate('/gw/approval')}
+          onConfirm={() => {
+            clearAutosave();
+            navigate('/gw/approval');
+          }}
           onCancel={() => setShowConfirmDiscard(false)}
         />
       )}

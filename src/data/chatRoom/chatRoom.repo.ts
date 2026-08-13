@@ -80,6 +80,7 @@ class AppwriteBackend implements ChatRoomBackend {
       members: r.members,
       color: r.color,
       createdAt: r.createdAt,
+      createdBy: r.createdBy,
       deletedAt: r.deletedAt,
       deletedBy: r.deletedBy,
       lastMessage: r.lastMessage ? JSON.stringify(r.lastMessage) : null,
@@ -94,6 +95,7 @@ class AppwriteBackend implements ChatRoomBackend {
       members: row.members,
       color: row.color,
       createdAt: row.createdAt,
+      createdBy: row.createdBy,
       deletedAt: row.deletedAt,
       deletedBy: row.deletedBy,
       lastMessage: parseJson(row.lastMessage),
@@ -170,6 +172,7 @@ export interface CreateRoomInput {
   type: ChatRoomType;
   /** "나"를 포함한 전체 참여자 users.id. */
   members: string[];
+  createdBy?: string;
 }
 
 export const chatRoomRepo = {
@@ -252,9 +255,17 @@ export const chatRoomRepo = {
       color: ROOM_COLORS[all.length % ROOM_COLORS.length],
       lastMessage: null,
       createdAt: nowLocalIso(),
+      createdBy: input.createdBy || input.members[0] || '',
     });
     await this.save(room);
     return room;
+  },
+
+  /** 방 이름 변경 — 생성자 전용. */
+  async updateName(id: string, name: string): Promise<void> {
+    const room = await this.get(id);
+    if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
+    await this.save({ ...room, name });
   },
 
   /** 그룹초대 — 기존 방 members 에 userIds 추가(중복 제거). */

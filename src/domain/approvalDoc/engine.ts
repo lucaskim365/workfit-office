@@ -135,20 +135,24 @@ export function applyDecision(
   }
 
   // 승인
+  const hasExecution = (next.executionDepts && next.executionDepts.length > 0) || (next.execution && next.execution.targetId);
+  const finalStatus = hasExecution ? '시행대기' : '완료';
+  const completedAtVal = hasExecution ? null : opts.at;
+
   // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
   if (step.kind === '전결') {
-    next = { ...next, status: '완료', completedAt: opts.at, currentSeq: seq };
+    next = { ...next, status: finalStatus, completedAt: completedAtVal, currentSeq: seq };
   } else {
     // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
     const stillActive = activeGroup(next);
     if (!stillActive) {
       // 마지막 그룹 통과 → 완료.
-      next = { ...next, status: '완료', completedAt: opts.at };
+      next = { ...next, status: finalStatus, completedAt: completedAtVal };
     }
   }
 
-  // 최종 결재 완료 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
-  if (next.status === '완료' && next.execution && next.execution.targetId) {
+  // 최종 결재 완료/시행대기 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
+  if (next.status === '시행대기' && next.execution && next.execution.targetId) {
     next.execution = {
       ...next.execution,
       docId: next.id,
@@ -201,21 +205,22 @@ export function matchesBox(
   switch (box) {
     case '대기': {
       if (doc.status !== '진행중') return false;
-      const acts = activeSteps(doc);
-      // 1) 직접 현재 활성 결재자인 경우
-      const isDirectActive = acts.some((s) => s.approverId === userId && s.kind !== '참조');
-      if (isDirectActive) return true;
-      // 2) 대결권자로 위임받은 원결재자가 현재 활성 결재자인 경우 (Dual-Routing)
+      
+      // 결재선(참조 제외)에 내가 포함되어 있는지 확인
+      const isInSteps = doc.steps.some((s) => s.approverId === userId && s.kind !== '참조');
+      if (isInSteps) return true;
+
+      // 대결권자로 위임받은 경우 확인
       if (absentApproverIds && absentApproverIds.length > 0) {
-        const isDelegateActive = acts.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
-        if (isDelegateActive) return true;
+        const isInStepsAsDelegate = doc.steps.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
+        if (isInStepsAsDelegate) return true;
       }
       return false;
     }
     case '상신':
       return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
     case '반려':
-      return doc.drafterId === userId && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려');
+      return doc.drafterId === userId && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송');
     case '임시':
       return doc.drafterId === userId && doc.status === '임시저장';
     case '수신': {
@@ -235,7 +240,7 @@ export function matchesBox(
     case '참조':
       return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
     case '시행': {
-      if (doc.status !== '완료') return false;
+      if (!['완료', '시행대기'].includes(doc.status)) return false;
       
       // 1. 복수 시행처 스냅샷 매칭
       if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {

@@ -346,6 +346,16 @@ export const approvalDocRepo = {
   },
 
   /**
+   * 시행(documentExecution) 결과에 따른 부모 문서 상태 반영 — driver 무관(어댑터 경유).
+   * 전체 문서를 읽어 status(+completedAt)만 바꿔 저장하므로 웹 전용 필드는 보존된다.
+   */
+  async applyExecutionStatus(id: string, status: ApprovalDoc['status'], completedAt?: string): Promise<void> {
+    const cur = await this.get(id);
+    if (!cur) return;
+    await persist({ ...cur, status, ...(completedAt ? { completedAt } : {}) });
+  },
+
+  /**
    * 결재함별 조회(§7.2). userId 관점의 5개 탭.
    * - 대기: 진행중 + 내가 현재 활성 결재자
    * - 상신: 내가 기안(임시 제외, 진행/완료/반려/회수)
@@ -591,28 +601,31 @@ export const approvalDocRepo = {
           linkUrl: `/gw/approval?doc=${next.id}`,
         });
 
-        // 수신처 알림
-        for (const rec of next.recipients || []) {
-          if (rec.type === 'user') {
-            await notificationRepo.create({
-              userId: rec.id,
-              type: '결재',
-              title: '수신 문서 알림',
-              text: `[${next.title}] 수신 문서가 배달되었습니다.`,
-              senderName: '시스템',
-              linkUrl: `/gw/approval?doc=${next.id}`,
-            });
-          } else if (rec.type === 'dept') {
-            const deptUsers = users.filter((u) => u.dept === rec.name);
-            for (const du of deptUsers) {
+        // 수신처 알림 (시행처가 없을 때만 즉시 발송)
+        const hasExecution = (next.executionDepts && next.executionDepts.length > 0) || (next.execution && next.execution.targetId);
+        if (!hasExecution) {
+          for (const rec of next.recipients || []) {
+            if (rec.type === 'user') {
               await notificationRepo.create({
-                userId: du.id,
+                userId: rec.id,
                 type: '결재',
                 title: '수신 문서 알림',
-                text: `[${next.title}] 부서 수신 문서가 배달되었습니다.`,
+                text: `[${next.title}] 수신 문서가 배달되었습니다.`,
                 senderName: '시스템',
                 linkUrl: `/gw/approval?doc=${next.id}`,
               });
+            } else if (rec.type === 'dept') {
+              const deptUsers = users.filter((u) => u.dept === rec.name);
+              for (const du of deptUsers) {
+                await notificationRepo.create({
+                  userId: du.id,
+                  type: '결재',
+                  title: '수신 문서 알림',
+                  text: `[${next.title}] 부서 수신 문서가 배달되었습니다.`,
+                  senderName: '시스템',
+                  linkUrl: `/gw/approval?doc=${next.id}`,
+                });
+              }
             }
           }
         }

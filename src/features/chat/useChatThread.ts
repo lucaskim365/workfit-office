@@ -49,6 +49,7 @@ export function useSendMessage(roomId: string) {
         approvalPayload: null,
         at,
         readBy: [senderId],
+        isEdited: false,
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
@@ -69,6 +70,7 @@ export function useSendMessage(roomId: string) {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [senderId],
+        isEdited: false,
       };
       qc.setQueryData<ChatMessage[]>(key, [...(prev ?? []), optimistic]);
       return { prev };
@@ -84,11 +86,24 @@ export function useSendMessage(roomId: string) {
   });
 }
 
+/** 메시지 수정 */
+export function useEditMessage(roomId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, text }: { messageId: string; text: string }) => {
+      await chatMessageRepo.updateText(messageId, text);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
+    },
+  });
+}
+
 /** 첨부 전송 — Storage 업로드 → image/file 메시지 append + 방 lastMessage 갱신. */
 export function useSendAttachment(roomId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ file, senderId, senderName }: { file: File; senderId: string; senderName: string }) => {
+    mutationFn: async ({ file, senderId, senderName, text = '', replyTo = null }: { file: File; senderId: string; senderName: string; text?: string; replyTo?: ReplyPreview | null }) => {
       const attachment = await chatMessageRepo.uploadAttachment(roomId, file);
       const isImage = attachment.mime.startsWith('image/');
       const at = nowLocalIso();
@@ -97,17 +112,18 @@ export function useSendAttachment(roomId: string) {
         roomId,
         senderId,
         senderName,
-        text: '',
+        text,
         type: isImage ? 'image' : 'file',
         attachment,
-        replyTo: null,
+        replyTo,
         approvalPayload: null,
         at,
         readBy: [senderId],
+        isEdited: false,
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, {
-        text: isImage ? '📷 사진' : `📎 ${attachment.name}`,
+        text: text || (isImage ? '📷 사진' : `📎 ${attachment.name}`),
         at,
         senderId,
       });

@@ -4,8 +4,8 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead } from '@/features/chat/useChatThread';
-import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers } from '@/features/chat/useChatRooms';
+import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
+import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
@@ -45,9 +45,21 @@ export default function MobileChatThread() {
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
+  const updateRoomName = useUpdateRoomName();
 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+
+  const handleRenameRoom = async () => {
+    if (!room) return;
+    const newName = window.prompt("새로운 대화방 이름을 입력하세요:", room.name);
+    if (!newName || !newName.trim() || newName === room.name) return;
+    try {
+      await updateRoomName.mutateAsync({ roomId: room.id, name: newName.trim(), userName: meName });
+    } catch (e) {
+      window.alert("방 이름 변경에 실패했습니다.");
+    }
+  };
   const [viewer, setViewer] = useState<Attachment | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -149,7 +161,18 @@ export default function MobileChatThread() {
       <header className="flex shrink-0 items-center gap-1 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-bold">{displayName}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="truncate text-[15px] font-bold text-white">{displayName}</div>
+            {room && room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
+              <button
+                onClick={handleRenameRoom}
+                title="방 이름 변경"
+                className="text-[11px] opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer"
+              >
+                ✏️
+              </button>
+            )}
+          </div>
           {room && room.type !== 'direct' && <div className="text-[10px] text-white/60">{room.members.length}명</div>}
         </div>
         <button
@@ -289,6 +312,14 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
   onOpenImage: (att: Attachment) => void;
   onReply: (m: ChatMessage) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editVal, setEditVal] = useState(m.text);
+  const editMsg = useEditMessage(m.roomId);
+
+  useEffect(() => {
+    setEditVal(m.text);
+  }, [m.text]);
+
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
@@ -302,7 +333,52 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body;
-  if (m.type === 'approval_bot' && m.approvalPayload) {
+  if (isEditing) {
+    body = (
+      <div className="flex flex-col gap-1 w-full min-w-[180px]">
+        <textarea
+          value={editVal}
+          onChange={(e) => setEditVal(e.target.value)}
+          className="w-full bg-[#fcfaf5] text-[12px] text-ink border border-[#e6960c] rounded-lg px-2 py-1.5 outline-none resize-none"
+          rows={2}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              const val = editVal.trim();
+              if (val) {
+                editMsg.mutate({ messageId: m.id, text: val });
+                setIsEditing(false);
+              }
+            }
+          }}
+        />
+        <div className="flex justify-end gap-1 text-[10px]">
+          <button
+            onClick={() => { setIsEditing(false); setEditVal(m.text); }}
+            className="px-2 py-0.5 bg-black/5 text-ink2 rounded"
+          >
+            취소
+          </button>
+          <button
+            onClick={async () => {
+              const val = editVal.trim();
+              if (!val) return;
+              try {
+                await editMsg.mutateAsync({ messageId: m.id, text: val });
+                setIsEditing(false);
+              } catch (e) {
+                window.alert("수정에 실패했습니다.");
+              }
+            }}
+            disabled={editMsg.isPending}
+            className="px-2 py-0.5 bg-[#e6960c] text-white rounded disabled:opacity-50"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    );
+  } else if (m.type === 'approval_bot' && m.approvalPayload) {
     body = <ApprovalBotCard payload={m.approvalPayload} text={m.text} />;
   } else if (m.type === 'image' && att) {
     body = (
@@ -352,19 +428,33 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
           )}
           <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
-            <button
-              onClick={() => onReply(m)}
-              title="답글"
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] text-ink3 opacity-60 active:bg-black/5"
-            >
-              ↩
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5 opacity-60">
+              <button
+                onClick={() => onReply(m)}
+                title="답글"
+                className="grid h-6 w-6 place-items-center rounded-full text-[12px] text-ink3 active:bg-black/5"
+              >
+                ↩
+              </button>
+              {mine && m.type === 'text' && !isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  title="수정"
+                  className="grid h-6 w-6 place-items-center rounded-full text-[10px] text-ink3 active:bg-black/5"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
           </div>
-          <div className={`mt-0.5 flex items-center gap-1 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
+          <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
             {mine && unreadCount > 0 && (
               <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#e6960c' }}>{unreadCount}</span>
             )}
             <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+            {m.isEdited && (
+              <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
+            )}
           </div>
         </div>
       </div>

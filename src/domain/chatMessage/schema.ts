@@ -68,6 +68,7 @@ export const chatMessageSchema = z.object({
   /** 전송 시각(ISO). 방 안 정렬 키. */
   at: z.string(),
   readBy: z.array(z.string()).default([]),
+  isEdited: z.boolean().optional().default(false),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;

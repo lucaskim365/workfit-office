@@ -76,6 +76,7 @@ export function useInviteMembers() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
     },
     onSuccess: (_data, { roomId }) => {
@@ -102,6 +103,7 @@ export function useLeaveRoom() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
       await chatRoomRepo.leave(roomId, userId);
     },
@@ -132,12 +134,41 @@ export function useDeleteRoom() {
         approvalPayload: null,
         at: nowLocalIso(),
         readBy: [],
+        isEdited: false,
       });
       await chatRoomRepo.softDelete(roomId, adminId);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+    },
+  });
+}
+
+/** 방 이름 변경 — 생성자 전용. */
+export function useUpdateRoomName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roomId, name, userName }: { roomId: string; name: string; userName: string }) => {
+      await chatRoomRepo.updateName(roomId, name);
+      await chatMessageRepo.append({
+        id: `${roomId}-sys-${Date.now()}`,
+        roomId,
+        senderId: '',
+        senderName: '',
+        text: `${userName}님이 대화방 이름을 '${name}'(으)로 변경했습니다`,
+        type: 'system',
+        attachment: null,
+        replyTo: null,
+        approvalPayload: null,
+        at: nowLocalIso(),
+        readBy: [],
+        isEdited: false,
+      });
+    },
+    onSuccess: (_data, { roomId }) => {
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
     },
   });
 }

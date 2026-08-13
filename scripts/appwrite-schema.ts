@@ -93,6 +93,7 @@ const COLLECTIONS: CollectionDef[] = [
       EN('type', ['text', 'system', 'image', 'file', 'approval_bot']),
       S('at', 40),
       SA('readBy', 64),
+      BOOL('isEdited', false), // 메시지 수정 여부(팀 기능)
       J('attachment', 4000), // url/name/size/mime
       J('replyTo', 2000),
       J('approvalPayload', 2000),
@@ -109,6 +110,7 @@ const COLLECTIONS: CollectionDef[] = [
       SA('members', 64),
       S('color', 16),
       S('createdAt', 40),
+      S('createdBy', 64), // 방 생성자(팀 기능 — 생성자만 이름변경)
       S('deletedAt', 40),
       S('deletedBy', 64),
       J('lastMessage', 8000), // text/at/senderId

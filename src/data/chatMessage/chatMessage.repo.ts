@@ -113,6 +113,7 @@ class AppwriteBackend implements ChatMessageBackend {
       type: m.type,
       at: m.at,
       readBy: m.readBy,
+      isEdited: m.isEdited,
       attachment: m.attachment ? JSON.stringify(m.attachment) : null,
       replyTo: m.replyTo ? JSON.stringify(m.replyTo) : null,
       approvalPayload: m.approvalPayload ? JSON.stringify(m.approvalPayload) : null,
@@ -131,6 +132,7 @@ class AppwriteBackend implements ChatMessageBackend {
       type: row.type,
       at: row.at,
       readBy: row.readBy,
+      isEdited: row.isEdited,
       attachment: parseJson(row.attachment),
       replyTo: parseJson(row.replyTo),
       approvalPayload: parseJson(row.approvalPayload),
@@ -229,8 +231,9 @@ export const chatMessageRepo = {
     }
     const meta = { name: file.name, size: file.size, mime: file.type || 'application/octet-stream' };
     // 다운로드 시 원본 파일명 보존을 위해 filename 을 넘긴다(어댑터가 Content-Disposition 처리).
-    const safe = file.name.replace(/[^\w.\-가-힣]/g, '_');
-    const path = `chat/${roomId}/${Date.now()}-${safe}`;
+    const ext = file.name.split('.').pop() || '';
+    const randomHex = Math.random().toString(36).substring(2, 8);
+    const path = `chat/${roomId}/${Date.now()}-${randomHex}.${ext}`;
     const url = await fileStorage.put(path, file, { contentType: meta.mime, filename: file.name });
     return { url, ...meta };
   },
@@ -247,6 +250,13 @@ export const chatMessageRepo = {
     for (const m of targets) {
       await backend.save({ ...m, readBy: [...m.readBy, userId] });
     }
+  },
+
+  /** 메시지 내용 수정 — 백엔드 무관(어댑터 경유). isEdited 플래그 세팅. */
+  async updateText(id: string, text: string): Promise<void> {
+    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+    await backend.save({ ...cur, text, isEdited: true });
   },
 
   /** 특정 방의 메시지 전건 삭제 */
