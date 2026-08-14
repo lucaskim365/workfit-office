@@ -101,21 +101,11 @@ async function handleChatMessage(msg, dbs, DB, log) {
     .messaging()
     .sendEachForMulticast({
       tokens,
-      notification: { title, body },
+      // 웹은 data-only → FCM 자동표시 없이 서비스워커(onBackgroundMessage)가 단일 표시(중복·아이콘·유지 통제).
+      // 모바일은 android.notification / apns.alert 로 백그라운드 알림 표시.
       data: { roomId: String(roomId), roomName: String(room.name), title: String(title), body: String(body) },
-      android: { priority: 'high', notification: { channelId: 'workfit_messages' } },
-      apns: { payload: { aps: { sound: 'default' } } },
-      // 웹: 아이콘 미지정 시 크롬 기본(구글) 로고로 뜨므로 Workfit 로고를 명시.
-      webpush: {
-        notification: {
-          title,
-          body,
-          icon: 'https://intra.widdyax.com/icons/icon-192.png',
-          badge: 'https://intra.widdyax.com/icons/icon-192.png',
-          requireInteraction: true,
-        },
-        fcmOptions: { link: 'https://intra.widdyax.com/' },
-      },
+      android: { priority: 'high', notification: { title, body, channelId: 'workfit_messages' } },
+      apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
     });
   log(`chat push: ${res.successCount}/${tokens.length} room ${roomId}`);
   return { sent: res.successCount, total: tokens.length };
@@ -142,7 +132,7 @@ async function handleNotification(noti, dbs, DB, log) {
       .messaging()
       .send({
         token,
-        notification: { title, body },
+        // 웹 data-only(SW 단일 표시), 모바일은 android/apns.
         data: {
           type: String(type),
           docId: String(docId),
@@ -150,19 +140,8 @@ async function handleNotification(noti, dbs, DB, log) {
           title: String(title),
           body: String(body),
         },
-        android: { priority: 'high', notification: { channelId } },
-        apns: { payload: { aps: { sound: 'default' } } },
-        // 웹: Workfit 로고 명시(미지정 시 크롬 기본 로고).
-        webpush: {
-          notification: {
-            title,
-            body,
-            icon: 'https://intra.widdyax.com/icons/icon-192.png',
-            badge: 'https://intra.widdyax.com/icons/icon-192.png',
-            requireInteraction: true,
-          },
-          fcmOptions: { link: linkUrl || 'https://intra.widdyax.com/' },
-        },
+        android: { priority: 'high', notification: { title, body, channelId } },
+        apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
       });
     log(`noti push → ${userId} (${type})`);
     return { sent: 1, user: userId };
