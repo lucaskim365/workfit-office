@@ -414,6 +414,15 @@ function fmtTime(iso?: string): string {
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+// SW 알림 클릭(데스크톱) → 메신저 도크에서 열 방 ID 를 전달하는 브릿지.
+// AppShell 이 도크를 'msg' 로 연 뒤 requestOpenChatRoom() 을 호출하면,
+// (이미 열려 있든 지금 막 열리든) MessengerPanel 이 이 값을 소비해 해당 방을 연다.
+let pendingChatRoomId: string | null = null;
+export function requestOpenChatRoom(roomId: string): void {
+  pendingChatRoomId = roomId || null;
+  window.dispatchEvent(new CustomEvent('workfit-open-chat-room'));
+}
+
 /** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
 function MessengerPanel() {
   const { user } = useAuth();
@@ -425,6 +434,20 @@ function MessengerPanel() {
   const { data: rooms = [] } = useChatRooms(me);
   const { data: users = [] } = useUsers();
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
+
+  // 알림 클릭(데스크톱) → 지정된 방 열기. 마운트 직후 대기값 소비 + 이후 이벤트 수신.
+  useEffect(() => {
+    const consume = () => {
+      if (pendingChatRoomId) {
+        setComposing(false);
+        setOpenRoomId(pendingChatRoomId);
+        pendingChatRoomId = null;
+      }
+    };
+    consume();
+    window.addEventListener('workfit-open-chat-room', consume);
+    return () => window.removeEventListener('workfit-open-chat-room', consume);
+  }, []);
 
   // 방 입장 시 자동으로 숨김(삭제) 해제 처리
   useEffect(() => {
