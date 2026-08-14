@@ -105,6 +105,16 @@ async function handleChatMessage(msg, dbs, DB, log) {
       data: { roomId: String(roomId), roomName: String(room.name), title: String(title), body: String(body) },
       android: { priority: 'high', notification: { channelId: 'workfit_messages' } },
       apns: { payload: { aps: { sound: 'default' } } },
+      // 웹: 아이콘 미지정 시 크롬 기본(구글) 로고로 뜨므로 Workfit 로고를 명시.
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: 'https://intra.widdyax.com/icons/icon-192.png',
+          badge: 'https://intra.widdyax.com/icons/icon-192.png',
+        },
+        fcmOptions: { link: 'https://intra.widdyax.com/' },
+      },
     });
   log(`chat push: ${res.successCount}/${tokens.length} room ${roomId}`);
   return { sent: res.successCount, total: tokens.length };
@@ -141,6 +151,16 @@ async function handleNotification(noti, dbs, DB, log) {
         },
         android: { priority: 'high', notification: { channelId } },
         apns: { payload: { aps: { sound: 'default' } } },
+        // 웹: Workfit 로고 명시(미지정 시 크롬 기본 로고).
+        webpush: {
+          notification: {
+            title,
+            body,
+            icon: 'https://intra.widdyax.com/icons/icon-192.png',
+            badge: 'https://intra.widdyax.com/icons/icon-192.png',
+          },
+          fcmOptions: { link: linkUrl || 'https://intra.widdyax.com/' },
+        },
       });
     log(`noti push → ${userId} (${type})`);
     return { sent: 1, user: userId };
