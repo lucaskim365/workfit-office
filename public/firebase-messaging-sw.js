@@ -25,6 +25,9 @@ messaging.onBackgroundMessage((payload) => {
     badge: '/icons/icon-192.png',
     data,
     tag: data.roomId || data.docId || undefined,
+    // 사용자가 닫기 전까지 유지(데스크톱). 기본은 몇 초 후 자동 소멸.
+    requireInteraction: true,
+    renotify: Boolean(data.roomId || data.docId),
   });
 });
 
