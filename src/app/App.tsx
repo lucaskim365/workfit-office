@@ -118,7 +118,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
 
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNotifications } from '@/features/notification/useNotifications';
-import { syncPushToken } from '@/shared/lib/messaging';
+import { syncPushToken, onForegroundMessage } from '@/shared/lib/messaging';
 
 export default function App() {
   const { user } = useAuth();
@@ -132,6 +132,34 @@ export default function App() {
   useEffect(() => {
     if (user?.id) void syncPushToken(user.id);
   }, [user?.id]);
+
+  // 데스크톱 포그라운드(앱 활성) 수신 → OS 알림 표시. 웹은 포그라운드 메시지가 onMessage 로만
+  // 들어오고 자동 배너가 없으므로 SW 등록으로 직접 표시한다(백그라운드와 동일한 Workfit 로고·유지).
+  // 모바일 PWA(/m)는 MobileApp 이 처리하므로 여기서는 제외(중복 방지).
+  useEffect(() => {
+    if (!user?.id || isMobilePwa) return;
+    void onForegroundMessage(async (p) => {
+      try {
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl };
+        const reg = await navigator.serviceWorker?.getRegistration();
+        if (reg) {
+          await reg.showNotification(p.title, {
+            body: p.body,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            data,
+            tag: p.roomId || p.docId || undefined,
+            requireInteraction: true,
+          });
+        } else {
+          new Notification(p.title, { body: p.body, icon: '/icons/icon-192.png' });
+        }
+      } catch {
+        /* 미지원 환경(iOS 비PWA 등) 무시 */
+      }
+    });
+  }, [user?.id, isMobilePwa]);
 
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩.
   // 단, 모바일 PWA(/m)는 자체 px 디자인이므로 데스크톱 확대(zoom, 기본 1.1875)를 적용하면
