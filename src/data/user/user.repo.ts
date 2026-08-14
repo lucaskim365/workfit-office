@@ -130,11 +130,22 @@ export const userRepo = {
     return { reconnectedReports: reports.length };
   },
 
-  /** FCM 푸시 토큰 저장(웹 PWA·모바일 공용 users.fcmToken). 서버 트리거가 이 토큰으로 발송. */
+  /** FCM 푸시 토큰 저장(웹 PWA·모바일 공용 users.fcmToken). 서버 트리거가 이 토큰으로 발송.
+   *  같은 브라우저/기기에서 다른 계정으로 로그인하면 그 기기의 단일 FCM 토큰이 여러 계정에
+   *  남아 중복·오배송이 생긴다. 이를 막기 위해, 저장 전에 **같은 토큰을 가진 다른 계정의
+   *  토큰을 회수**해 하나의 FCM 토큰이 한 계정에만 매핑되도록 한다(최근 로그인 우선). */
   async updateFcmToken(userId: string, token: string): Promise<void> {
-    const existing = (await this.list()).find((u) => u.id === userId);
+    const all = await this.list();
+    const existing = all.find((u) => u.id === userId);
     if (!existing) return;
-    if (existing.fcmToken === token) return; // 동일 토큰이면 저장 생략
+
+    // 다른 계정이 쥐고 있던 동일 토큰 회수(빈 토큰은 대상 아님)
+    if (token) {
+      const stale = all.filter((u) => u.id !== userId && u.fcmToken === token);
+      await Promise.all(stale.map((u) => this.save({ ...u, fcmToken: '' })));
+    }
+
+    if (existing.fcmToken === token) return; // 현재 계정 토큰 동일 → 저장 생략
     await this.save({ ...existing, fcmToken: token });
   },
 
