@@ -36,6 +36,14 @@ interface NotificationBackend {
 const byNewestFirst = (list: LiveNotification[]) =>
   [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+/** 저장소 무관 안전 파싱 — 불량 문서(예: 미허용 type) 하나가 전체 목록/구독을 깨지 않도록
+ *  실패분만 건너뛴다. (chatRoom.repo 의 safeParseRoom 과 동일 패턴) */
+function safeParseNoti(raw: unknown): LiveNotification | null {
+  const p = notificationSchema.safeParse(raw);
+  return p.success ? p.data : null;
+}
+const notNull = (n: LiveNotification | null): n is LiveNotification => n !== null;
+
 function isPendingApprovalRequest(n: LiveNotification, docId: string): boolean {
   return Boolean(
     !n.read && n.linkUrl && n.linkUrl.includes(docId) && n.type === '결재' && n.title === '결재 요청',
@@ -103,7 +111,10 @@ class FirestoreBackend implements NotificationBackend {
   async list(userId: string) {
     const snap = await getDocs(collection(db!, COLL));
     return byNewestFirst(
-      snap.docs.map((d) => notificationSchema.parse(d.data())).filter((n) => n.userId === userId),
+      snap.docs
+        .map((d) => safeParseNoti(d.data()))
+        .filter(notNull)
+        .filter((n) => n.userId === userId),
     );
   }
   async create(noti: LiveNotification) {
@@ -123,9 +134,10 @@ class FirestoreBackend implements NotificationBackend {
   }
   async removePendingRequests(docId: string) {
     const snap = await getDocs(collection(db!, COLL));
-    for (const d of snap.docs.filter((x) =>
-      isPendingApprovalRequest(notificationSchema.parse(x.data()), docId),
-    )) {
+    for (const d of snap.docs.filter((x) => {
+      const n = safeParseNoti(x.data());
+      return n !== null && isPendingApprovalRequest(n, docId);
+    })) {
       await deleteDoc(doc(db!, COLL, d.id));
     }
   }
@@ -134,7 +146,7 @@ class FirestoreBackend implements NotificationBackend {
     return onSnapshot(
       q,
       (snapshot) => {
-        callback(byNewestFirst(snapshot.docs.map((d) => notificationSchema.parse(d.data()))));
+        callback(byNewestFirst(snapshot.docs.map((d) => safeParseNoti(d.data())).filter(notNull)));
       },
       (err) => {
         console.warn('[notifications] Firestore 구독 실패(권한 등) → 빈 목록 폴백:', err);
@@ -173,8 +185,8 @@ class AppwriteBackend implements NotificationBackend {
       createdAt: n.createdAt,
     };
   }
-  private fromRow(row: Record<string, unknown> & { $id: string }): LiveNotification {
-    return notificationSchema.parse({ ...row, id: row.$id });
+  private fromRow(row: Record<string, unknown> & { $id: string }): LiveNotification | null {
+    return safeParseNoti({ ...row, id: row.$id });
   }
   newId() {
     return ID.unique();
@@ -185,18 +197,13 @@ class AppwriteBackend implements NotificationBackend {
       Query.orderDesc('createdAt'),
       Query.limit(100),
     ]);
-    return (res.documents as unknown as Array<Record<string, unknown> & { $id: string }>).map((r) =>
-      this.fromRow(r),
-    );
+    return (res.documents as unknown as Array<Record<string, unknown> & { $id: string }>)
+      .map((r) => this.fromRow(r))
+      .filter(notNull);
   }
   async create(noti: LiveNotification) {
-    const created = await this.dbs.createDocument(
-      APPWRITE_DATABASE_ID,
-      COLL,
-      noti.id,
-      this.toAttrs(noti),
-    );
-    return this.fromRow(created as unknown as Record<string, unknown> & { $id: string });
+    await this.dbs.createDocument(APPWRITE_DATABASE_ID, COLL, noti.id, this.toAttrs(noti));
+    return noti; // 방금 만든 유효 객체를 그대로 반환(재파싱 불필요).
   }
   async markAsRead(id: string) {
     await this.dbs.updateDocument(APPWRITE_DATABASE_ID, COLL, id, { read: true });
@@ -220,7 +227,7 @@ class AppwriteBackend implements NotificationBackend {
     ]);
     for (const r of res.documents as unknown as Array<Record<string, unknown> & { $id: string }>) {
       const n = this.fromRow(r);
-      if (isPendingApprovalRequest(n, docId)) {
+      if (n && isPendingApprovalRequest(n, docId)) {
         await this.dbs.deleteDocument(APPWRITE_DATABASE_ID, COLL, r.$id);
       }
     }
