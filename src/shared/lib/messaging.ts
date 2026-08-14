@@ -21,6 +21,19 @@ async function getMsg(): Promise<Messaging | null> {
   return _messaging;
 }
 
+/**
+ * 현재 창이 데스크톱 셸인지 모바일 PWA(/m)인지 SW에 알린다.
+ * SW 는 알림 클릭 시 "열린 창이 없을 때"(콜드) 목적지(데스크톱 홈 vs /m)를 이 값으로 정한다.
+ */
+function signalClientMode(swReg: ServiceWorkerRegistration): void {
+  try {
+    const mode = window.location.pathname.startsWith('/m') ? 'pwa' : 'desktop';
+    (navigator.serviceWorker.controller ?? swReg.active)?.postMessage({ type: 'workfit-mode', mode });
+  } catch {
+    /* noop */
+  }
+}
+
 /** 이 브라우저/기기에서 웹푸시가 가능한 환경인가(+VAPID 설정 여부). */
 export function isPushConfigured(): boolean {
   return (
@@ -51,6 +64,7 @@ export async function enablePushForUser(userId: string): Promise<{ ok: boolean; 
 
     const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
+    signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (!token) return { ok: false, error: '토큰 발급 실패(null)' };
 
@@ -77,6 +91,7 @@ export async function syncPushToken(userId: string): Promise<void> {
   try {
     const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
+    signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) await userRepo.updateFcmToken(userId, token);
   } catch (e) {

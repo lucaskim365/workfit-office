@@ -7,7 +7,7 @@ import { gwScreen } from './gw-screens';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
-import { QuickDock } from './QuickDock';
+import { QuickDock, requestOpenChatRoom } from './QuickDock';
 import { ToastFeed } from './ToastFeed';
 import { applyTheme } from './ThemeCustomizerModal';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -70,6 +70,32 @@ export default function AppShell() {
     const pointColor = localStorage.getItem('custom_theme_point_color') ?? '#99bbff';
     const btnColor = localStorage.getItem('custom_theme_btn_color') ?? '#1243b5';
     applyTheme(headerBg, pointColor, btnColor);
+  }, []);
+
+  // 데스크톱 알림 클릭 → SW 가 이 창에 postMessage → 메신저 도크를 해당 방으로 연다.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data;
+      if (d && d.type === 'workfit-open-chat') {
+        setDockOpen('msg');
+        requestOpenChatRoom(d.roomId || '');
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
+
+  // 콜드 클릭(데스크톱): SW 가 /?openChat=<roomId> 로 새 창을 열면 도크를 그 방으로 연다.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomId = params.get('openChat');
+    if (!roomId) return;
+    setDockOpen('msg');
+    requestOpenChatRoom(roomId);
+    params.delete('openChat');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
   }, []);
 
 

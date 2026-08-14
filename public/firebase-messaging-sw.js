@@ -31,29 +31,79 @@ messaging.onBackgroundMessage((payload) => {
   });
 });
 
-// 알림 탭 → 타입별 딥링크(결재 문서 / 대화방)로 이동.
+// 기기 모드(desktop/pwa) 저장 — 열린 창이 없는 "콜드 클릭"의 목적지를 정한다.
+// 페이지(messaging.ts)가 토큰 등록 시 postMessage('workfit-mode') 로 알려준다.
+let clientMode = null;
+self.addEventListener('message', (event) => {
+  const d = event.data || {};
+  if (d.type === 'workfit-mode' && d.mode) {
+    clientMode = d.mode;
+    event.waitUntil(caches.open('workfit-meta').then((c) => c.put('/mode', new Response(d.mode))));
+  }
+});
+async function getClientMode() {
+  if (clientMode) return clientMode;
+  try {
+    const c = await caches.open('workfit-meta');
+    const r = await c.match('/mode');
+    if (r) return (await r.text()) || 'pwa';
+  } catch (e) {
+    /* noop */
+  }
+  return 'pwa'; // 기본: 설치형 PWA(start_url=/m)
+}
+
+// 알림 탭 → 창 종류별 처리. 데스크톱은 /m 으로 보내지 않고 그 창에서(도크/결재) 처리한다.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
   const isApproval = data.type === '결재';
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if (!('focus' in client)) continue;
-        // 이미 열린 창이 있으면 그 창 종류(PWA /m vs 데스크톱)에 맞춰 이동.
-        const inPwa = client.url.includes('/m');
-        let target;
+    (async () => {
+      const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const focusable = list.filter((c) => 'focus' in c);
+      const desktop = focusable.find((c) => !c.url.includes('/m'));
+      const pwa = focusable.find((c) => c.url.includes('/m'));
+
+      // 1) 데스크톱 창이 열려 있으면: 라우트 이동 없이 그 창에서 처리.
+      if (desktop) {
         if (isApproval) {
-          target = inPwa ? `/m/approval/${data.docId || ''}` : (data.linkUrl || '/gw/approval');
+          desktop.navigate(data.linkUrl || '/gw/approval');
         } else {
-          target = data.roomId ? `/m/room/${data.roomId}` : '/m';
+          // 메신저는 데스크톱 도크를 해당 방으로 연다(현재 화면 유지).
+          desktop.postMessage({ type: 'workfit-open-chat', roomId: data.roomId || '' });
         }
-        client.navigate(target);
-        return client.focus();
+        return desktop.focus();
       }
-      // 열린 창이 없으면 새 창. 결재는 데스크톱 결재 화면, 메신저는 PWA.
-      const fallback = isApproval ? (data.linkUrl || '/gw/approval') : '/m';
+
+      // 2) PWA 창이 열려 있으면: /m 딥링크로 이동.
+      if (pwa) {
+        const target = isApproval
+          ? `/m/approval/${data.docId || ''}`
+          : data.roomId
+            ? `/m/room/${data.roomId}`
+            : '/m';
+        pwa.navigate(target);
+        return pwa.focus();
+      }
+
+      // 3) 열린 창 없음(콜드): 기기 모드에 맞춰 새 창.
+      const mode = await getClientMode();
+      let fallback;
+      if (mode === 'desktop') {
+        fallback = isApproval
+          ? data.linkUrl || '/gw/approval'
+          : data.roomId
+            ? `/?openChat=${encodeURIComponent(data.roomId)}`
+            : '/';
+      } else {
+        fallback = isApproval
+          ? `/m/approval/${data.docId || ''}`
+          : data.roomId
+            ? `/m/room/${data.roomId}`
+            : '/m';
+      }
       return self.clients.openWindow(fallback);
-    }),
+    })(),
   );
 });
