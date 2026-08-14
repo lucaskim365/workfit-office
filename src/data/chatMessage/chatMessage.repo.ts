@@ -30,8 +30,10 @@ const COLL = 'chatMessages';
 interface ChatMessageBackend {
   /** 전체 메시지 로드(불량 문서는 건너뜀). */
   loadAll(): Promise<ChatMessage[]>;
-  /** id 기준 upsert(추가/갱신 공용). */
+  /** 기존 문서 갱신 우선(markRead/수정용) — 없으면 생성 폴백. */
   save(message: ChatMessage): Promise<void>;
+  /** 신규 추가(append용) — 생성 우선, 이미 있으면 갱신 폴백. 신규 전송 시 불필요한 404 방지. */
+  create(message: ChatMessage): Promise<void>;
   /** 특정 방의 메시지 전건 삭제. */
   deleteByRoom(roomId: string): Promise<void>;
 }
@@ -60,6 +62,9 @@ class MemoryBackend implements ChatMessageBackend {
     if (i >= 0) this.rows[i] = message;
     else this.rows = [...this.rows, message];
   }
+  async create(message: ChatMessage) {
+    return this.save(message);
+  }
   async deleteByRoom(roomId: string) {
     this.rows = this.rows.filter((m) => m.roomId !== roomId);
   }
@@ -79,6 +84,10 @@ class FirestoreBackend implements ChatMessageBackend {
     return out;
   }
   async save(message: ChatMessage) {
+    await setDoc(doc(db!, COLL, message.id), message);
+  }
+  async create(message: ChatMessage) {
+    // Firestore setDoc 은 생성·덮어쓰기 겸용이라 404 노이즈가 없다.
     await setDoc(doc(db!, COLL, message.id), message);
   }
   async deleteByRoom(roomId: string) {
@@ -172,6 +181,22 @@ class AppwriteBackend implements ChatMessageBackend {
     }
   }
 
+  async create(message: ChatMessage) {
+    const id = assertAppwriteId(message.id);
+    const attrs = this.toAttrs(message);
+    try {
+      // 신규 전송: 생성 우선(불필요한 update 404 방지).
+      await this.dbs.createDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+    } catch (e) {
+      // 이미 존재(409 conflict)면 갱신으로 폴백. 그 외 오류는 전파.
+      if ((e as { code?: number })?.code === 409) {
+        await this.dbs.updateDocument(APPWRITE_DATABASE_ID, COLL, id, attrs);
+      } else {
+        throw e;
+      }
+    }
+  }
+
   async deleteByRoom(roomId: string) {
     const PAGE = 100;
     for (;;) {
@@ -238,10 +263,10 @@ export const chatMessageRepo = {
     return { url, ...meta };
   },
 
-  /** 메시지 추가(전송). 문서 ID = 메시지 ID. */
+  /** 메시지 추가(전송). 문서 ID = 메시지 ID. 생성 우선(update 404 노이즈 없음). */
   async append(message: ChatMessage): Promise<void> {
     const valid = chatMessageSchema.parse(message);
-    await backend.save(valid);
+    await backend.create(valid);
   },
 
   /** 방 진입 시 읽음 처리 — 방의 모든 메시지 readBy 에 userId 추가. */
