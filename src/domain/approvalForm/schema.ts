@@ -91,7 +91,7 @@ export const approvalFormSchema = z.object({
   /** 기본 수신 사용자 ID */
   recipientUserId: z.string().nullable().optional(),
   /** 기안자 본인을 기본 수신처로 지정 여부 */
-  recipientDrafter: z.boolean().optional(),
+  recipientDrafter: z.boolean().nullable().optional(),
   /** 기안 가능한 직급 서열 최소값 (null 이면 제한 없음) */
   allowedPositionFromRank: z.number().nullable().optional(),
   /** 기안 가능한 직급 서열 최대값 (null 이면 제한 없음) */
@@ -99,11 +99,11 @@ export const approvalFormSchema = z.object({
   /** 기안 가능한 부서 ID 목록 (null/빈 배열 이면 모든 부서 가능) */
   allowedDeptIds: z.array(z.string()).nullable().optional(),
   /** 보존연한 */
-  preservationPeriod: z.string().optional(),
+  preservationPeriod: z.string().nullable().optional(),
   /** 기본 보안 등급 */
-  securityLevel: z.enum(['일반', '대외비', '극비']).optional(),
+  securityLevel: z.enum(['일반', '대외비', '극비']).nullable().optional(),
   /** 기본 공개 범위 */
-  visibility: z.enum(['전사', '부서', '비공개']).optional(),
+  visibility: z.enum(['전사', '부서', '비공개']).nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 
