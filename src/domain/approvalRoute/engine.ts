@@ -106,9 +106,16 @@ function ruleMatches(rule: ApprovalRouteRule, ctx: RouteContext, org: Org): bool
   if (!rule.active) return false;
   if (rule.docType !== '전체' && rule.docType !== ctx.docType) return false;
   if (!scopeMatches(rule.deptScope, ctx.drafter, org)) return false;
+  
   const rank = org.rankOf(ctx.drafter.position);
-  if (rule.positionFromRank != null && rank < rule.positionFromRank) return false;
-  if (rule.positionToRank != null && rank > rule.positionToRank) return false;
+  
+  // 동적 직급명 우선 대조, 없으면 레거시 rank 숫자 폴백
+  const fromRank = rule.positionFrom ? org.rankOf(rule.positionFrom) : rule.positionFromRank;
+  if (fromRank != null && rank < fromRank) return false;
+  
+  const toRank = rule.positionTo ? org.rankOf(rule.positionTo) : rule.positionToRank;
+  if (toRank != null && rank > toRank) return false;
+
   const amt = ctx.amount ?? 0;
   if (rule.amountFrom != null && amt < rule.amountFrom) return false;
   if (rule.amountTo != null && amt >= rule.amountTo) return false;
@@ -234,9 +241,64 @@ function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
 export function resolveRoute(ctx: RouteContext): RouteResult {
   const org = buildOrg(ctx);
   const rules = [...ctx.rules].sort((a, b) => a.priority - b.priority);
-  const rule = rules.find((r) => ruleMatches(r, ctx, org)) ?? null;
 
-  const steps = rule ? buildSteps(rule, ctx.drafter, org) : [];
-  if (steps.length > 0) return { steps, rule };
+  console.log('[resolveRoute] 자동 결재선 룰 엔진 작동 시작:', {
+    drafter: ctx.drafter.name,
+    position: ctx.drafter.position,
+    rank: org.rankOf(ctx.drafter.position),
+    docType: ctx.docType,
+    amount: ctx.amount,
+    rulesCount: rules.length,
+  });
+
+  const rule = rules.find((r) => {
+    const isDocTypeMatch = r.docType === '전체' || r.docType === ctx.docType;
+    const isScopeMatch = scopeMatches(r.deptScope, ctx.drafter, org);
+    
+    const rank = org.rankOf(ctx.drafter.position);
+    const fromRank = r.positionFrom ? org.rankOf(r.positionFrom) : r.positionFromRank;
+    const toRank = r.positionTo ? org.rankOf(r.positionTo) : r.positionToRank;
+    
+    const isPosMatch =
+      (fromRank == null || rank >= fromRank) &&
+      (toRank == null || rank <= toRank);
+    const amt = ctx.amount ?? 0;
+    const isAmtMatch =
+      (r.amountFrom == null || amt >= r.amountFrom) &&
+      (r.amountTo == null || amt < r.amountTo);
+    
+    let isCondMatch = true;
+    if (r.conditionKey && r.conditionValues && r.conditionValues.length > 0) {
+      const val = ctx.docData ? String(ctx.docData[r.conditionKey] ?? '') : '';
+      isCondMatch = r.conditionValues.includes(val);
+    }
+
+    const matches = r.active && isDocTypeMatch && isScopeMatch && isPosMatch && isAmtMatch && isCondMatch;
+
+    if (!matches && r.active) {
+      console.log(`  -> 룰 [${r.name}] 매칭 실패 요인:`, {
+        docTypeMatch: isDocTypeMatch,
+        scopeMatch: isScopeMatch,
+        positionMatch: isPosMatch,
+        amountMatch: isAmtMatch,
+        conditionMatch: isCondMatch,
+        details: {
+          drafterRank: rank,
+          targetFromRank: fromRank,
+          targetToRank: toRank
+        }
+      });
+    }
+
+    return matches;
+  }) ?? null;
+
+  if (rule) {
+    console.log('[resolveRoute] 매칭 성공한 룰:', rule.name);
+    const steps = buildSteps(rule, ctx.drafter, org);
+    if (steps.length > 0) return { steps, rule };
+  }
+
+  console.warn('[resolveRoute] 매칭되는 활성 룰이 없거나 해석 결과가 비어 있어 폴백(부서장 전결) 결재선을 반환합니다.');
   return { steps: fallbackSteps(ctx.drafter, org), rule: null };
 }
