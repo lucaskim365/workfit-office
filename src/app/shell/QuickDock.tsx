@@ -12,6 +12,7 @@ import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
+import { useWiddyChat, WIDDY_SUGGESTIONS } from '@/features/widdy/useWiddyChat';
 
 interface Tool {
   key: string;
@@ -360,42 +361,93 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ---------- Widdy ---------- */
+/** Widdy 챗봇 패널 — RAG 게이트웨이(useWiddyChat) 기반 실기능. ([[Widdy_RAG_연계_개발_계획서.md]] §10) */
 function ChatbotPanel() {
-  const chips = ['오늘 생산 실적 알려줘', '설비 알람 현황', '재고 부족 품목', '결재 상신 방법'];
-  const msgs: { who: 'bot' | 'me'; t: string }[] = [
-    { who: 'bot', t: '안녕하세요,👋\nWiddy입니다. 무엇을 도와드릴까요?' },
-    { who: 'me', t: '오늘 M-Line 생산 실적 알려줘' },
-    { who: 'bot', t: '오늘 M-Line 실적은 4,182 EA로 목표 대비 104.5% 달성했습니다. 종합 가동률(OEE)은 87.4%입니다. 📈' },
-    { who: 'me', t: '불량률은 어때?' },
-    { who: 'bot', t: '현재 불량률은 312 PPM으로 전일 대비 6.1% 개선됐어요. 주요 결함은 Scratch(LB-1001)입니다.' },
-  ];
+  const { messages, send, isSending } = useWiddyChat();
+  const [input, setInput] = useState('');
+  const endRef = useRef<HTMLDivElement>(null);
+
+  // 새 메시지/응답 상태 변화 시 하단으로 스크롤.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, isSending]);
+
+  const submit = () => {
+    send(input);
+    setInput('');
+  };
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        {msgs.map((m, i) => (
-          <div key={i} className={`flex ${m.who === 'me' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`flex max-w-[82%] gap-2 ${m.who === 'me' ? 'flex-row-reverse' : 'flex-row'}`}>
-              {m.who === 'bot' && <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-teal-soft text-[14px] text-teal">✦</span>}
-              <div
-                style={m.who === 'me' ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
-                className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${m.who === 'me' ? '' : 'border border-border bg-panel text-ink'}`}
-              >
-                {m.t}
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+        {messages.map((m) => {
+          const me = m.role === 'user';
+          const bubbleStyle = me
+            ? { backgroundColor: '#eecfa2', color: '#1c2536' }
+            : m.status === 'error'
+              ? { backgroundColor: '#fdecea', color: '#b23b2e', borderColor: '#f0a89f' }
+              : undefined;
+          return (
+            <div key={m.id} className={`flex ${me ? 'justify-end' : 'justify-start'}`}>
+              <div className={`flex max-w-[82%] gap-2 ${me ? 'flex-row-reverse' : 'flex-row'}`}>
+                {!me && <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-teal-soft text-[14px] text-teal">✦</span>}
+                <div>
+                  <div
+                    style={bubbleStyle}
+                    className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${me ? '' : 'border border-border bg-panel text-ink'}`}
+                  >
+                    {m.status === 'pending' ? <TypingDots /> : m.content}
+                  </div>
+                  {m.citations.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {m.citations.map((c, i) => {
+                        const label = `${c.source.split('/').pop() || c.source || c.docId}#${c.chunkIdx}`;
+                        return c.url ? (
+                          <a key={i} href={c.url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal hover:underline">📎 {label}</a>
+                        ) : (
+                          <span key={i} className="rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal">📎 {label}</span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+        <div ref={endRef} />
       </div>
       <div className="shrink-0 border-t border-border bg-panel p-3">
         <div className="mb-2.5 flex flex-wrap gap-1.5">
-          {chips.map((c, i) => <span key={i} className="cursor-pointer rounded-full bg-teal-soft px-2.5 py-[5px] text-[10.5px] font-semibold text-teal">{c}</span>)}
+          {WIDDY_SUGGESTIONS.map((c) => (
+            <button key={c} type="button" onClick={() => send(c)} disabled={isSending} className="cursor-pointer rounded-full bg-teal-soft px-2.5 py-[5px] text-[10.5px] font-semibold text-teal disabled:opacity-50">{c}</button>
+          ))}
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-border-hi bg-panel py-1.5 pl-4 pr-1.5">
-          <span className="flex-1 text-[12px] text-ink3">메시지를 입력하세요…</span>
-          <button className="grid h-[34px] w-[34px] place-items-center rounded-full bg-teal text-[14px] text-white">↑</button>
-        </div>
+        <form
+          onSubmit={(e) => { e.preventDefault(); submit(); }}
+          className="flex items-center gap-2 rounded-full border border-border-hi bg-panel py-1.5 pl-4 pr-1.5"
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="메시지를 입력하세요…"
+            className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
+          />
+          <button type="submit" disabled={isSending || !input.trim()} aria-label="전송" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-teal text-[14px] text-white disabled:opacity-50">↑</button>
+        </form>
       </div>
     </div>
+  );
+}
+
+/** 응답 대기 중 타이핑 인디케이터(점 3개). */
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1" aria-label="응답 작성 중">
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal [animation-delay:-0.2s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal [animation-delay:-0.1s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-teal" />
+    </span>
   );
 }
 
