@@ -18,6 +18,9 @@ const log = (...a) => console.log('[widdy]', ...a);
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 const page = await ctx.newPage();
+// 인증 비활성(VITE_AUTH_ENABLED=false) 환경: 세션에 유효 사용자 id 를 심어
+// useAuth().user.id(=Widdy uid, ACL 판정용)가 채워지게 한다. U001=관리자.
+await page.addInitScript(() => { try { sessionStorage.setItem('mes.auth.uid', 'U001'); } catch {} });
 const shot = (p) => page.screenshot({ path: `${OUT}/${p}`, fullPage: false });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -49,27 +52,19 @@ try {
   await shot('widdy-01-open.png');
   log('widdy dock opened');
 
-  // 3) 질문 입력·전송
+  // 3) 질문 입력·전송 (실제 RAG 함수 경유)
   const box = page.locator('input[placeholder="메시지를 입력하세요…"]');
-  await box.fill('육아휴직 규정 알려줘');
+  await box.fill('워크핏 개발 일정 계획서 내용 알려줘');
   await shot('widdy-02-typed.png');
   await page.getByRole('button', { name: '전송' }).click();
-  log('question sent');
+  log('question sent — RAG 함수 응답 대기(최대 40s)');
 
-  // 4) 응답(스텁) 대기 — 답변 말풍선에 게이트웨이/데모 문구 등장
-  await page.waitForSelector('text=/게이트웨이|데모 모드|문서/', { timeout: 20000 }).catch(() => {});
-  await page.waitForTimeout(800);
+  // 4) 실제 응답 대기 — 타이핑 인디케이터(pending) 사라질 때까지(RAG ~수초~수십초)
+  await page.waitForSelector('[aria-label="응답 작성 중"]', { timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('[aria-label="응답 작성 중"]', { state: 'detached', timeout: 45000 }).catch(() => {});
+  await page.waitForTimeout(1000);
   await shot('widdy-03-answer.png');
   log('answer rendered');
-
-  // 5) 추천 칩 전송 확인
-  const chip = page.getByRole('button', { name: '워크핏 개발 일정' }).first();
-  if (await chip.count()) {
-    await chip.click();
-    await page.waitForTimeout(1500);
-    await shot('widdy-04-chip.png');
-    log('suggestion chip sent');
-  }
 
   // 대화 메시지 개수(간이 검증)
   const bubbles = await page.locator('div.whitespace-pre-line').count();
