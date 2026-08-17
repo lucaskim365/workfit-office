@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { widdyChatRepo } from '@/data/widdyChat/widdyChat.repo';
 import type { WiddyMessage } from '@/domain/widdyChat/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
+import { useAuth } from '@/app/auth/AuthProvider';
 
 /**
  * Widdy 챗봇 대화 훅 — 메시지 상태 + 낙관적 전송 + 게이트웨이 호출.
@@ -24,6 +25,8 @@ function makeId(): string {
 }
 
 export function useWiddyChat() {
+  const { user } = useAuth();
+  const uid = user?.id ?? '';
   const [messages, setMessages] = useState<WiddyMessage[]>(() => [
     { id: makeId(), role: 'assistant', content: GREETING, citations: [], at: nowLocalIso(), status: 'done' },
   ]);
@@ -31,7 +34,8 @@ export function useWiddyChat() {
 
   const mutation = useMutation({
     mutationFn: (vars: { query: string; history: { role: 'user' | 'assistant'; content: string }[] }) =>
-      widdyChatRepo.ask({ query: vars.query, sessionId: sessionRef.current, history: vars.history }),
+      // uid 는 게이트웨이의 ACL 판정용. (⚠️ 현재 client 주장값 — 실인증 연동 전 스톱갭)
+      widdyChatRepo.ask({ query: vars.query, uid, sessionId: sessionRef.current, history: vars.history }),
   });
 
   const send = useCallback(

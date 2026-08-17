@@ -45,6 +45,8 @@ export type WiddyMessage = z.infer<typeof widdyMessageSchema> & {
 /** 게이트웨이 질의 파라미터. */
 export interface WiddyAskParams {
   query: string;
+  /** 질의자 사용자 ID — 게이트웨이가 ACL(본인 열람 가능 문서) 판정에 사용. */
+  uid: string;
   sessionId: string;
   /** 직전 대화(멀티턴 컨텍스트). role/content 만 전달. */
   history?: { role: WiddyRole; content: string }[];
