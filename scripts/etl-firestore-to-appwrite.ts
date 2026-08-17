@@ -25,6 +25,7 @@ import { Client, Databases } from 'node-appwrite';
 import { decodeFromFirestore } from '@/shared/lib/firestore-codec';
 
 const COMMIT = process.argv.includes('--commit');
+const SEED_ONLY = process.argv.includes('--seed-only');
 
 // ── env ──
 function readEnv(key: string): string | undefined {
@@ -113,6 +114,53 @@ async function main() {
     process.exit(1);
   }
 
+  // Appwrite (쓰기)
+  const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
+
+  // Firebase 계정 키가 없어도 로컬 시드로 결재선 규칙만 즉시 채울 수 있는 특례 모드
+  if (SEED_ONLY) {
+    console.log(`▶ [SEED-ONLY] 로컬 결재선 시드 데이터를 Appwrite(${DB}) 결재선 규칙에 적재합니다...\n`);
+    const { APPROVAL_ROUTE_SEED } = await import('../src/data/seeds/approvalRoute.seed');
+    for (const rule of APPROVAL_ROUTE_SEED) {
+      const id = rule.id;
+      const row = {
+        id: rule.id,
+        name: rule.name,
+        priority: rule.priority,
+        active: rule.active,
+        docType: rule.docType,
+        conditionKey: rule.conditionKey,
+        conditionValues: rule.conditionValues,
+        deptScope: JSON.stringify(rule.deptScope),
+        positionFromRank: rule.positionFromRank,
+        positionToRank: rule.positionToRank,
+        positionFrom: rule.positionFrom,
+        positionTo: rule.positionTo,
+        amountFrom: rule.amountFrom,
+        amountTo: rule.amountTo,
+        steps: JSON.stringify(rule.steps),
+      };
+
+      if (COMMIT) {
+        try {
+          await dbs.createDocument(DB, 'approvalRouteRules', id, row);
+          console.log(`  [추가 완료] ${id} (${rule.name})`);
+        } catch (e) {
+          if (isCode(e, 409)) {
+            await dbs.updateDocument(DB, 'approvalRouteRules', id, row);
+            console.log(`  [업데이트 완료] ${id} (${rule.name})`);
+          } else {
+            console.error(`  [실패] ${id}:`, e instanceof Error ? e.message : e);
+          }
+        }
+      } else {
+        console.log(`  [적재예정] ${id} (${rule.name})`);
+      }
+    }
+    console.log(COMMIT ? '\n✅ 결재선 룰 시드 적재 완료.' : '\n(DRY-RUN) 실제 적재하려면 --commit 플래그로 재실행.');
+    process.exit(0);
+  }
+
   // Firebase admin (Firestore 읽기)
   const keyFile = readdirSync(process.cwd()).find((f) => /-adminsdk-.*\.json$/.test(f));
   if (!keyFile) {
@@ -121,9 +169,6 @@ async function main() {
   }
   initializeApp({ credential: cert(JSON.parse(readFileSync(resolve(process.cwd(), keyFile), 'utf8'))) });
   const fs = getFirestore();
-
-  // Appwrite (쓰기)
-  const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
 
   console.log(`▶ ETL Firestore → Appwrite(${DB})  [${COMMIT ? 'COMMIT(실제 적재)' : 'DRY-RUN(건수만)'}]\n`);
 

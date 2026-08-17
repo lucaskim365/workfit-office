@@ -53,6 +53,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),
   // 기준 정보
   '/base/user': lazy(() => import('@/modules/base/user/UserScreen')),
+  '/sys/user': lazy(() => import('@/modules/base/user/UserScreen')),
   '/base/department': lazy(() => import('@/modules/base/department/DepartmentScreen')),
   '/base/position': lazy(() => import('@/modules/base/position/PositionScreen')),
   '/base/approval-rule': lazy(() => import('@/modules/base/approvalRule/ApprovalRuleScreen')),
