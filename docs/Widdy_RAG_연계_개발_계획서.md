@@ -80,11 +80,16 @@
   - 입력: `{query, userId, aclContext, history?}` · 출력: **SSE 스트리밍** 답변 + `citations[]`(source_doc_id, chunk_idx, 원본 키).
 - 검색·프롬프트·Ollama 호출을 하나의 서비스로. 사설 인터페이스 바인딩.
 
-### Phase 2 — 문서 접근제어(ACL) 【최우선·치명 리스크 해소】
-- **문제**: 현재 검색은 `WHERE source_col='garage'` 전체 조회 → 누가 물어도 남의 연봉계약서·견적서 청크가 반환됨.
-- `garage_sync.py` 인제스트 시 `metadata`에 **소유자/허용 역할/원본 키/연결 docId**를 함께 적재(Garage 키 ↔ Appwrite `approvalDocs`/권한 매핑).
-- 검색 쿼리에 **사용자 권한 필터**를 WHERE에 추가 → 본인 열람 가능 문서 청크만 검색.
-- 공개 등급 구분: 전사 공지/규정(전체) vs 개인 결재첨부(당사자·결재선).
+### Phase 2 — 문서 접근제어(ACL) 【✅ 구현·검증 완료 2026-08-17】
+- **문제(해소)**: 전체 조회라 누가 물어도 남의 연봉계약서·견적서 청크가 반환되던 것 → scope 필터로 차단.
+- 구현(test-server1 `/opt/ai-embed`):
+  - `acl.py` — Garage 키 → **scope** 매핑 + 사용자별 허용 scope 계산(Appwrite `chatRooms.members`, `approvalDocs.drafterId`+`steps[].approverId`, `users.roleGroup`).
+  - scope 태그: `public` · `user:<uid>`(seals) · `room:<roomId>`(chat 멤버) · `doc:<AP-id>`(결재 참여자) · `restricted`(매핑불명→ADMIN만). **멤버십은 검색 시점 판정**(스냅샷 아님 → 항상 최신).
+  - `search_acl.py` — ACL 적용 벡터검색(`WHERE metadata->'scopes' ?| allowed`). `/chat` retrieve로 승격 예정.
+  - `garage_sync.py` 패치 — 인제스트 시 scope 자동 부여(인덱스 실패 시 fail-closed).
+  - 기존 2,461 청크 scope 백필(미부여 0), scope용 GIN 인덱스 추가.
+- 🔴 레드팀 통과: "박명규 연봉계약서"(doc:AP-260716-002) 청크가 **비참여자 미노출**, 참여자만 접근.
+- ⚠️ 잔여: Streamlit 데모(:8501) 무필터 → 외부 노출 금지. Appwrite 키 읽기전용화·index 캐싱은 하드닝 후속.
 
 ### Phase 3 — Appwrite Function `widdy-chat`
 - Appwrite 세션으로 사용자 식별 → ACL 컨텍스트 구성 → Phase 1 RAG API 호출(사설망) → 스트리밍 중계.
@@ -157,7 +162,7 @@
 
 - [ ] Phase 0: garage_sync 키 .env 이관, 외부 미노출 재확인
 - [ ] Phase 1: `/chat` 스트리밍 API + citations 동작
-- [ ] Phase 2: 사용자별 ACL 필터로 **타인 문서 청크 미반환** 검증(레드팀 질의)
+- [x] Phase 2: 사용자별 ACL 필터로 **타인 문서 청크 미반환** 검증(레드팀 질의) — 완료(2026-08-17)
 - [ ] Phase 3: `widdy-chat` Appwrite Function 배포 + 멀티턴 이력 저장
 - [ ] Phase 4: Widdy UI 실입력·스트리밍·출처링크 동작, 목업 제거
 - [ ] Phase 5: 동기화·모니터링·모델정책 확정
