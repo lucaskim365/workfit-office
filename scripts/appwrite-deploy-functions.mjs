@@ -87,6 +87,23 @@ async function main() {
     vars: [['FCM_SERVICE_ACCOUNT', FCM, true], ['APPWRITE_DATABASE_ID', DB, false]],
     tar: 'appwrite/_deploy_bundles/bridge-a2f.tar.gz',
   });
+  // 근태 인제스트는 DB 이벤트가 아니라 사내 C# 에이전트의 HTTP POST로 깨어난다.
+  // secret이 없으면 모든 요청이 401이 되므로 배포 전에 .env.local에 채워야 한다.
+  const capsSecret = get('CAPS_INGEST_SECRET');
+  if (!capsSecret) {
+    console.warn('\n⚠ CAPS_INGEST_SECRET 이 .env.local 에 없어 caps-ingest 배포를 건너뜁니다.');
+    console.warn('  에이전트 secret.txt 와 같은 값을 넣고 다시 실행하세요.');
+  } else {
+    await ensureFunction({
+      id: 'caps-ingest',
+      name: 'CAPS Attendance Ingest',
+      entrypoint: 'src/main.js',
+      events: [], // HTTP 트리거 전용
+      scopes: ['databases.read', 'documents.read', 'documents.write'],
+      vars: [['CAPS_INGEST_SECRET', capsSecret, true], ['APPWRITE_DATABASE_ID', DB, false]],
+      tar: 'appwrite/_deploy_bundles/caps-ingest.tar.gz',
+    });
+  }
   console.log('\n✅ 배포 요청 완료. 각 함수 콘솔 Deployments 에서 빌드 성공 확인 후 활성 상태인지 점검.');
   process.exit(0);
 }
