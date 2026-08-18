@@ -1,0 +1,15 @@
+{
+  "name": "workfit-mail",
+  "version": "1.0.0",
+  "description": "Appwrite Function — 메일 계정 관리와 IMAP·SMTP 연결(MailHub 브리지 대체)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "imapflow": "^1.6.6",
+    "node-appwrite": "^14.0.0",
+    "nodemailer": "^9.0.5"
+  }
+}
