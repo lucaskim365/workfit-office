@@ -41,6 +41,7 @@ const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
 const GwDocument = lazy(() => import('@/modules/gw/document/DocumentScreen'));
 const GwCommunity = lazy(() => import('@/modules/gw/community/CommunityScreen'));
 const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
+const GwCalendar = lazy(() => import('@/modules/gw/calendar/CalendarScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
@@ -212,6 +213,7 @@ export default function App() {
         <Route path="/gw/document" element={<GwDocument />} />
         <Route path="/gw/community" element={<GwCommunity />} />
         <Route path="/gw/employee" element={<GwEmployee />} />
+        <Route path="/gw/calendar" element={<GwCalendar />} />
         <Route path="/gw/:app" element={<GwComingSoon />} />
         {/* 개인 프로필 설정 */}
         <Route path="/profile" element={<ProfileScreen />} />
