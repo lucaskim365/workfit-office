@@ -157,9 +157,17 @@ function ApprovalDraftInner({
     }
   };
 
+  const SYSTEM_FIELDS = ['leaveType', 'period', 'period__end', 'period__days'];
+  const checkHasValue = (vals: Record<string, FieldValue>) => {
+    return Object.entries(vals).some(([key, v]) => {
+      if (SYSTEM_FIELDS.includes(key)) return false;
+      return v !== undefined && v !== null && v !== '';
+    });
+  };
+
   // 양식 변경 시 작성내용 유실 경고 핸들러
   const handleFormChange = (newCode: string) => {
-    const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
+    const hasValue = checkHasValue(values);
     const hasContent = title.trim().length > 0 || hasValue;
 
     if (hasContent && newCode !== code) {
@@ -179,12 +187,15 @@ function ApprovalDraftInner({
     localStorage.removeItem('draft_autosave_active_' + me.id);
   };
 
-  // 실시간 자동저장 (1.5초 디바운스)
+  // 실시간 자동저장 및 비었을 때의 클리너 연동 (1.5초 디바운스)
   useEffect(() => {
-    const hasValue = Object.values(values).some(v => v !== undefined && v !== null && v !== '');
+    const hasValue = checkHasValue(values);
     const hasContent = title.trim().length > 0 || hasValue;
 
-    if (!hasContent) return;
+    if (!hasContent) {
+      clearAutosave();
+      return;
+    }
 
     const timer = setTimeout(() => {
       localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
