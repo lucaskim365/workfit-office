@@ -157,31 +157,78 @@ function ApprovalDraftInner({
     }
   };
 
-  const SYSTEM_FIELDS = ['leaveType', 'period', 'period__end', 'period__days'];
-  const checkHasValue = (vals: unknown): boolean => {
-    if (vals === undefined || vals === null) return false;
+  const hasManuallyEnteredValues = (): boolean => {
+    if (editDoc) {
+      const titleChanged = title !== (editDoc.title ?? '');
+      const bodyChanged = String(values[RESERVED_BODY_KEY] ?? '') !== (editDoc.body ?? '');
+      const amountChanged = amount !== (editDoc.amount != null ? String(editDoc.amount) : '');
+      const filesChanged = JSON.stringify(attachments) !== JSON.stringify(editDoc.attachments ?? []);
+      const valuesChanged = Object.keys(values).some((k) => JSON.stringify(values[k]) !== JSON.stringify((editDoc.fieldValues ?? {})[k]));
+      const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
+      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
+    } else {
+      // 1) DB(approvalForms)에서 현재 선택된 서식 마스터 정보 추출
+      const formMaster = forms.find((f) => f.code === code);
+      const dbDocTitle = (formMaster?.docTitle || formMaster?.name || '').trim();
 
-    // 1) 배열 형태 (표 데이터 행 배열 등)
-    if (Array.isArray(vals)) {
-      return vals.some((item) => checkHasValue(item));
-    }
+      // 2) 문서 제목 비교: 빈 값이거나, 서식의 기본 제목과 완전히 일치하면 변경되지 않은 것으로 판단
+      const curTitle = title.trim();
+      const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
 
-    // 2) 객체 형태 (중첩 데이터 등)
-    if (typeof vals === 'object') {
-      return Object.entries(vals as Record<string, unknown>).some(([key, v]) => {
-        if (SYSTEM_FIELDS.includes(key)) return false;
-        return checkHasValue(v);
+      // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
+      const curBody = String(values[RESERVED_BODY_KEY] ?? '').trim();
+      const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
+      const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
+      const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
+
+      // 4) 금액 / 첨부파일 / 관련문서 / 후결요청 검증
+      const amountHasEntered = amount.trim() !== '';
+      const filesHasEntered = attachments.length > 0;
+      const relatedDocsHasEntered = relatedDocs.length > 0;
+      const postApprovalHasEntered = isPostApproval || postApprovalReason.trim() !== '';
+
+      // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
+      const valuesHasChanged = Object.keys(values).some((k) => {
+        const valStr = String(values[k] ?? '').trim();
+        if (!valStr) return false;
+
+        const fieldMaster = formMaster?.fields?.find((f) => f.key === k);
+        const dbPlaceholder = String(fieldMaster?.placeholder || '').trim();
+
+        // 서식 기본 placeholder와 값이 같으면 변경되지 않은 것으로 처리
+        if (dbPlaceholder && valStr === dbPlaceholder) return false;
+
+        // 필드 마스터에 설정된 기본값(defaultValue 등)이 있다면 이와 비교하는 로직 추가 가능
+        if (fieldMaster && 'defaultValue' in fieldMaster && valStr === String(fieldMaster.defaultValue ?? '')) {
+          return false;
+        }
+
+        // 휴가 신청 기본값 자동 세팅값인 경우 미입력 처리 (필요에 따라 유지 또는 보완)
+        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) {
+          return false;
+        }
+
+        // 소모품 신청서 등의 표 편집기(Grid) 빈 행(배열 형태)에 대한 미변경 예외 처리
+        if (Array.isArray(values[k])) {
+          const hasGridContent = (values[k] as unknown as Record<string, unknown>[]).some((row) => {
+            return Object.entries(row).some(([rk, rv]) => {
+              if (rk === 'id' || rk === 'amount') return false;
+              return rv !== undefined && rv !== null && rv !== '' && rv !== 0 && rv !== false;
+            });
+          });
+          return hasGridContent;
+        }
+
+        return true;
       });
-    }
 
-    // 3) 원시 값 (숫자 0, boolean false, 빈 문자열 등은 수동 작성 내용이 없는 것으로 판정)
-    return vals !== '' && vals !== 0 && vals !== false;
+      return titleHasChanged || bodyHasChanged || amountHasEntered || filesHasEntered || relatedDocsHasEntered || valuesHasChanged || postApprovalHasEntered;
+    }
   };
 
   // 양식 변경 시 작성내용 유실 경고 핸들러
   const handleFormChange = (newCode: string) => {
-    const hasValue = checkHasValue(values);
-    const hasContent = title.trim().length > 0 || hasValue;
+    const hasContent = hasManuallyEnteredValues();
 
     if (hasContent && newCode !== code) {
       const ok = window.confirm(
@@ -202,8 +249,7 @@ function ApprovalDraftInner({
 
   // 실시간 자동저장 및 비었을 때의 클리너 연동 (1.5초 디바운스)
   useEffect(() => {
-    const hasValue = checkHasValue(values);
-    const hasContent = title.trim().length > 0 || hasValue;
+    const hasContent = hasManuallyEnteredValues();
 
     if (!hasContent) {
       clearAutosave();
@@ -369,64 +415,7 @@ function ApprovalDraftInner({
 
   const isFixed = !!fixedType || !!editDoc;
 
-  const hasManuallyEnteredValues = (): boolean => {
-    if (editDoc) {
-      const titleChanged = title !== (editDoc.title ?? '');
-      const bodyChanged = String(values[RESERVED_BODY_KEY] ?? '') !== (editDoc.body ?? '');
-      const amountChanged = amount !== (editDoc.amount != null ? String(editDoc.amount) : '');
-      const filesChanged = JSON.stringify(attachments) !== JSON.stringify(editDoc.attachments ?? []);
-      const valuesChanged = Object.keys(values).some((k) => JSON.stringify(values[k]) !== JSON.stringify((editDoc.fieldValues ?? {})[k]));
-      const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
-      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
-    } else {
-      // 1) DB(approvalForms)에서 현재 선택된 서식 마스터 정보 추출
-      const formMaster = forms.find((f) => f.code === code);
-      const dbDocTitle = (formMaster?.docTitle || formMaster?.name || '').trim();
 
-      // 2) 문서 제목 비교: 빈 값이거나, 서식의 기본 제목과 완전히 일치하면 변경되지 않은 것으로 판단
-      const curTitle = title.trim();
-      const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
-
-      // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
-      const curBody = String(values[RESERVED_BODY_KEY] ?? '').trim();
-      const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
-      const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
-      const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
-
-      // 4) 금액 / 첨부파일 / 관련문서 / 후결요청 검증
-      const amountHasEntered = amount.trim() !== '';
-      const filesHasEntered = attachments.length > 0;
-      const relatedDocsHasEntered = relatedDocs.length > 0;
-      const postApprovalHasEntered = isPostApproval || postApprovalReason.trim() !== '';
-
-      // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
-      const valuesHasChanged = Object.keys(values).some((k) => {
-        const valStr = String(values[k] ?? '').trim();
-        if (!valStr) return false;
-
-        const fieldMaster = formMaster?.fields?.find((f) => f.key === k);
-        const dbPlaceholder = String(fieldMaster?.placeholder || '').trim();
-
-        // 서식 기본 placeholder와 값이 같으면 변경되지 않은 것으로 처리
-        if (dbPlaceholder && valStr === dbPlaceholder) return false;
-
-        // [추가] 필드 마스터에 설정된 기본값(defaultValue 등)이 있다면 이와 비교하는 로직 추가 가능
-        if (fieldMaster && 'defaultValue' in fieldMaster && valStr === String(fieldMaster.defaultValue ?? '')) {
-          return false;
-        }
-
-        // 휴가 신청 기본값 자동 세팅값인 경우 미입력 처리 (필요에 따라 유지 또는 보완)
-        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) {
-          // 휴가의 경우 초기 자동 계산된 값이 들어가므로, 사용자가 직접 손대지 않았으면 false 처리할 수 있도록 기본값과 비교
-          return false;
-        }
-
-        return true;
-      });
-
-      return titleHasChanged || bodyHasChanged || amountHasEntered || filesHasEntered || relatedDocsHasEntered || valuesHasChanged || postApprovalHasEntered;
-    }
-  };
 
   const handleAttemptClose = () => {
     if (hasManuallyEnteredValues()) {
