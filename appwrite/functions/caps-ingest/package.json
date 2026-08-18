@@ -1,0 +1,14 @@
+{
+  "name": "workfit-caps-ingest",
+  "version": "1.0.0",
+  "description": "Appwrite Function — CAPS 근태 인제스트 수신 (HMAC 검증 + 멱등 upsert)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^17.0.0",
+    "zod": "^4.4.3"
+  }
+}

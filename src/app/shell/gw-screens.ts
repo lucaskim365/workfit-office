@@ -24,7 +24,31 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   document: { name: '문서관리', icon: '🗂️', desc: '매뉴얼·서식·산출물 등 중요 문서를 분류·보관하는 문서고입니다.' },
   contacts: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
   task: { name: '업무관리', icon: '📗', desc: '프로젝트·업무 보고·TO-DO를 등록하고 진행을 트래킹합니다.' },
+  commute: { name: '근태', icon: '⏱️', desc: 'CAPS 출퇴근 기록을 직원·월별로 조회합니다.' },
 };
+
+/**
+ * 실제 화면이 연결된 앱 — 도크 타일 활성화와 `App.tsx` 라우트가 같은 목록을 본다.
+ *
+ * 여기 없는 앱은 `/gw/:app` 폴백으로 빠져 `GwComingSoon` 랜딩이 뜬다. 도크에 하드코딩된
+ * 목록을 따로 두면 화면을 만들고도 회색 타일로 남는 일이 생겨 한곳에 모은다.
+ */
+export const GW_READY_APPS = new Set([
+  'orgchart',
+  'approval',
+  'leave',
+  'board',
+  'community',
+  'calendar',
+  'resource',
+  'task',
+  'survey',
+  'mail',
+  'commute',
+  // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
+]);
+
+export const isGwAppReady = (slug: string) => GW_READY_APPS.has(slug);
 
 /** 그룹웨어 앱 라우트 여부. */
 export const isGwUrl = (url: string) => url.startsWith('/gw/');
