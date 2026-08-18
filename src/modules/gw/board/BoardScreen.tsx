@@ -1,143 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { boardRepo } from '@/data/board/board.repo';
+import { BOARDS_SEED } from '@/data/seeds/board.seed';
+import type { Post } from '@/domain/board/schema';
 
-interface Board {
-  id: string;
-  name: string;
-  icon: string;
-  desc: string;
-}
-
-interface Post {
-  id: number;
-  boardId: string;
-  title: string;
-  content: string;
-  author: string;
-  date: string;
-  views: number;
-  isPinned?: boolean;
-  hasAttachment?: boolean;
-  attachedFiles?: { name: string; size: string }[];
-}
-
-const BOARDS: Board[] = [
-  { id: 'notice', name: '공지사항', icon: '📢', desc: '회사의 주요 공지사항 및 긴급 안내를 전달합니다.' },
-  { id: 'event', name: '경조사', icon: '💐', desc: '임직원들의 기쁜 소식과 슬픈 소식을 함께 나눕니다.' },
-  { id: 'rule', name: '사내규정', icon: '📑', desc: '회사의 복무규정, 보안정책 및 내규를 확인합니다.' },
-  { id: 'archive', name: '자료실', icon: '📁', desc: '업무 관련 매뉴얼, 양식 및 참고 문서를 내려받습니다.' },
-];
-
-const INITIAL_POSTS: Post[] = [
-  // 공지사항
-  {
-    id: 1,
-    boardId: 'notice',
-    title: '2026년 하계 전사 공동 연휴 일정 안내',
-    content: '안녕하세요. 경영지원실입니다. 금년도 하계 공동 연휴 일정을 8월 14일(금)~8월 17일(월) 총 4일간으로 확정하여 안내드립니다. 각 부서에서는 사전에 업무 일정 조율 및 비상 연락 체계를 유지해 주시기 바랍니다.',
-    author: '경영지원실',
-    date: '2026-08-10',
-    views: 124,
-    isPinned: true,
-  },
-  {
-    id: 2,
-    boardId: 'notice',
-    title: '그룹웨어 신규 보안 강화 패치 적용 및 시스템 점검',
-    content: '안전한 사내 업무 환경 조성을 위해 8월 12일(수) 오후 8시부터 10시까지 그룹웨어 보안 패치 작업이 진행됩니다. 점검 시간 중에는 전자결재 및 메신저 접속이 일시 차단될 수 있으니 미리 작업을 저장해 주시기 바랍니다.',
-    author: '정보기술팀',
-    date: '2026-08-08',
-    views: 98,
-    isPinned: true,
-    hasAttachment: true,
-    attachedFiles: [{ name: '보안점검_지침서.docx', size: '1.2 MB' }],
-  },
-  {
-    id: 3,
-    boardId: 'notice',
-    title: '8월 전사 직무 및 안전 소양 교육 시행 안내',
-    content: '산업안전보건법에 의거한 8월 전사 정기 교육을 아래와 같이 온라인 교육(Widdy) 플랫폼을 통해 개설하였습니다. 전 임직원은 8월 25일까지 반드시 수강 완료해 주시기 바랍니다.',
-    author: '인재개발원',
-    date: '2026-08-07',
-    views: 45,
-  },
-  {
-    id: 4,
-    boardId: 'notice',
-    title: '사내 주차장 이용 및 요일제 주차 등록 신청 안내',
-    content: '사내 주차 공간 협소로 인한 혼잡을 줄이고자 차량 요일제를 전면 시행합니다. 신규 차량 등록이나 요일 변경이 필요하신 임직원 분들은 총무팀으로 신청서 서식을 작성해 제출바랍니다.',
-    author: '총무팀',
-    date: '2026-08-05',
-    views: 67,
-  },
-  
-  // 경조사
-  {
-    id: 5,
-    boardId: 'event',
-    title: '[결혼] AX개발본부 김승기 본부장 장녀 결혼 안내',
-    content: '김승기 본부장의 장녀 예식 일정을 안내드립니다.\n- 일시: 2026년 8월 29일(토) 오후 1시\n- 장소: 더프라자호텔 3층 그랜드볼룸\n임직원 여러분의 따뜻한 축하 부탁드립니다.',
-    author: '경영지원실',
-    date: '2026-08-09',
-    views: 245,
-    isPinned: true,
-  },
-  
-  // 사내규정
-  {
-    id: 7,
-    boardId: 'rule',
-    title: '취업규칙 및 복무 규정 최신 개정본 (v2.4)',
-    content: '법령 개정에 따라 당사 취업규칙 및 복무 규정이 일부 개정되었습니다. 주요 변경사항은 육아휴직 및 돌봄휴가 혜택 확대에 관한 조항입니다. 자세한 개정 세부 원문은 첨부파일을 참조하십시오.',
-    author: '인사노무팀',
-    date: '2026-08-01',
-    views: 320,
-    isPinned: true,
-    hasAttachment: true,
-    attachedFiles: [{ name: '취업규칙_및_복무규정_v2.4.pdf', size: '2.4 MB' }],
-  },
-  {
-    id: 8,
-    boardId: 'rule',
-    title: '사내 정보 보안 및 개인정보 처리 위탁 지침 v1.1',
-    content: '사내 PC 보안 가이드라인에 의거하여 개인정보를 취급하는 외주 위탁 업체들의 보안 지침 점검 및 교육 수기 기준표가 업데이트되어 공지합니다.',
-    author: '보안팀',
-    date: '2026-07-25',
-    views: 154,
-  },
-  
-  // 자료실
-  {
-    id: 9,
-    boardId: 'archive',
-    title: '2026년 표준 용역 및 자재 도급 계약서 양식',
-    content: '2026년도 신규 계약 체결 시 사용하는 당사 공식 표준 외주 계약서 및 자재 수급 도급 표준 계약서 최종 한글/워드 서식 파일입니다.',
-    author: '법무지원팀',
-    date: '2026-08-03',
-    views: 189,
-    hasAttachment: true,
-    attachedFiles: [{ name: '2026_표준용역도급계약서_서식.hwp', size: '1.1 MB' }],
-  },
-  {
-    id: 10,
-    boardId: 'archive',
-    title: '그룹웨어 출장 및 지출결의 영수증 처리 가이드북 (PDF)',
-    content: '출장 품의 및 지출결의 상신 시 헷갈리기 쉬운 법인카드 영수증 증빙 처리 방식과 증빙 불가 항목에 대한 종합 매뉴얼 PDF 파일입니다.',
-    author: '재경팀',
-    date: '2026-07-30',
-    views: 210,
-    hasAttachment: true,
-    attachedFiles: [{ name: '출장_및_지출증빙_처리가이드북.pdf', size: '3.8 MB' }],
-  },
-];
+const BOARDS = BOARDS_SEED;
 
 export default function BoardScreen() {
   const navigate = useNavigate();
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const { user } = useAuth();
+  
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeBoard, setActiveBoard] = useState<string>('notice');
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   
   // 모의 첨부파일 리스트 상태
   const [writeAttachments, setWriteAttachments] = useState<{ name: string; size: string }[]>([]);
@@ -150,12 +29,36 @@ export default function BoardScreen() {
     isPinned: false,
   });
 
+  // 게시글 비동기 로드
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPosts = async () => {
+      try {
+        setIsLoading(true);
+        const data = await boardRepo.list();
+        if (isMounted) {
+          setPosts(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch posts:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    fetchPosts();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const activeBoardMeta = useMemo(() => {
     return BOARDS.find((b) => b.id === activeBoard) || BOARDS[0];
   }, [activeBoard]);
 
   const selectedPost = useMemo(() => {
-    return posts.find((p) => p.id === selectedPostId) || null;
+    return posts.find((p) => String(p.id) === String(selectedPostId)) || null;
   }, [posts, selectedPostId]);
 
   const filteredPosts = useMemo(() => {
@@ -177,19 +80,25 @@ export default function BoardScreen() {
     });
   }, [posts, activeBoard, searchQuery]);
 
-  const handlePostClick = (post: Post) => {
-    // 세션별 중복 조회 방지 검사
+  const handlePostClick = async (post: Post) => {
     const sessionKey = `read_post_${post.id}`;
     const alreadyRead = sessionStorage.getItem(sessionKey) === 'true';
 
     if (!alreadyRead) {
       sessionStorage.setItem(sessionKey, 'true');
-      setPosts((prev) =>
-        prev.map((p) => (p.id === post.id ? { ...p, views: p.views + 1 } : p))
-      );
+      const updatedPost: Post = { ...post, views: post.views + 1 };
+      try {
+        // 백엔드 조회수 반영
+        await boardRepo.save(updatedPost);
+        setPosts((prev) =>
+          prev.map((p) => (p.id === post.id ? updatedPost : p))
+        );
+      } catch (error) {
+        console.error('Failed to update views in backend:', error);
+      }
     }
 
-    setSelectedPostId(post.id);
+    setSelectedPostId(String(post.id));
     setViewMode('detail');
   };
 
@@ -203,19 +112,23 @@ export default function BoardScreen() {
     }
   };
 
-  const handleCreatePost = (e: React.FormEvent) => {
+  const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      alert('로그인이 필요한 서비스입니다.');
+      return;
+    }
     if (!newPost.title.trim() || !newPost.content.trim()) {
       alert('제목과 내용을 모두 입력해주세요.');
       return;
     }
 
     const created: Post = {
-      id: posts.length + 1,
+      id: Date.now().toString(),
       boardId: newPost.boardId,
       title: newPost.title,
       content: newPost.content,
-      author: '홍채원 사원', // 테스트 계정
+      author: `${user.name} ${user.position}`,
       date: new Date().toISOString().split('T')[0],
       views: 0,
       isPinned: newPost.isPinned,
@@ -223,15 +136,47 @@ export default function BoardScreen() {
       attachedFiles: writeAttachments.length > 0 ? writeAttachments : undefined,
     };
 
-    setPosts([created, ...posts]);
-    setViewMode('list');
-    setNewPost({
-      title: '',
-      content: '',
-      boardId: activeBoard,
-      isPinned: false,
-    });
-    setWriteAttachments([]);
+    try {
+      await boardRepo.save(created);
+      setPosts((prev) => [created, ...prev]);
+      setViewMode('list');
+      setNewPost({
+        title: '',
+        content: '',
+        boardId: activeBoard,
+        isPinned: false,
+      });
+      setWriteAttachments([]);
+    } catch (error) {
+      console.error('Failed to save post:', error);
+      alert('게시글 저장에 실패했습니다. 다시 시도해 주세요.');
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm('정말 이 게시글을 삭제하시겠습니까?')) return;
+    try {
+      await boardRepo.remove(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setViewMode('list');
+      setSelectedPostId(null);
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+      alert('게시글 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleFileDownload = (fileName: string) => {
+    const content = `Mock file download: ${fileName}\nDownloaded from WorkFit Board.`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -318,8 +263,14 @@ export default function BoardScreen() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPosts.length > 0 ? (
-                    filteredPosts.map((p) => (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="p-10 text-center text-ink3 animate-pulse">
+                        데이터를 불러오는 중입니다...
+                      </td>
+                    </tr>
+                  ) : filteredPosts.length > 0 ? (
+                    filteredPosts.map((p, idx) => (
                       <tr
                         key={p.id}
                         onClick={() => handlePostClick(p)}
@@ -331,7 +282,7 @@ export default function BoardScreen() {
                           {p.isPinned ? (
                             <span className="text-teal font-bold" title="중요 공지">📌</span>
                           ) : (
-                            <span className="text-ink3">{p.id}</span>
+                            <span className="text-ink3">{filteredPosts.length - idx}</span>
                           )}
                         </td>
                         <td className="p-3 font-semibold text-ink flex items-center gap-1.5 min-w-0">
@@ -371,9 +322,17 @@ export default function BoardScreen() {
               >
                 <span>←</span> <span>목록으로</span>
               </button>
-              <span className="text-xs text-ink3">
-                {BOARDS.find((b) => b.id === selectedPost.boardId)?.name || '게시판'}
-              </span>
+              {user && selectedPost.author === `${user.name} ${user.position}` ? (
+                <button
+                  type="button"
+                  onClick={() => handleDeletePost(selectedPost.id)}
+                  className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                >
+                  🗑️ 삭제
+                </button>
+              ) : (
+                <div />
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-5">
@@ -398,7 +357,7 @@ export default function BoardScreen() {
               </div>
 
               {/* 연계 문서 바로가기 링크 */}
-              {selectedPost.id === 1 && (
+              {selectedPost.id === '1' && (
                 <div className="rounded-lg border border-teal/20 bg-teal-soft/10 p-3.5 flex items-center justify-between">
                   <span className="text-[11.5px] font-semibold text-ink2">💡 개정된 최신 규정집 본문은 문서관리에서 즉시 확인 가능합니다.</span>
                   <button
@@ -416,7 +375,12 @@ export default function BoardScreen() {
                 <div className="rounded-lg border border-border bg-panel-alt/30 p-3.5 space-y-2">
                   <div className="font-bold text-[11px] text-ink2">📎 첨부파일 ({selectedPost.attachedFiles.length}개)</div>
                   {selectedPost.attachedFiles.map((file, fidx) => (
-                    <div key={fidx} className="flex items-center justify-between gap-3 text-[11.5px] hover:text-teal cursor-pointer">
+                    <div
+                      key={fidx}
+                      onClick={() => handleFileDownload(file.name)}
+                      className="flex items-center justify-between gap-3 text-[11.5px] hover:text-teal cursor-pointer"
+                      title="클릭하여 다운로드"
+                    >
                       <span className="underline">{file.name}</span>
                       <span className="text-[10px] text-ink3 font-mono">{file.size}</span>
                     </div>

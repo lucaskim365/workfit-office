@@ -514,6 +514,23 @@ const COLLECTIONS: CollectionDef[] = [
     attributes: [S('cust', 128, true), INT('limit'), INT('d30'), INT('d60'), INT('over'), S('status', 16)],
     indexes: [],
   },
+  {
+    id: 'posts',
+    name: '게시판 게시글',
+    attributes: [
+      S('id', 64, true),
+      S('boardId', 64, true),
+      S('title', 200, true),
+      S('content', 8000, true),
+      S('author', 64, true),
+      S('date', 40, true),
+      INT('views', false, 0),
+      BOOL('isPinned', false),
+      BOOL('hasAttachment', false),
+      J('attachedFiles', 8000),
+    ],
+    indexes: [IX('boardId', ['boardId'])],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
