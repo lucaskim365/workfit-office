@@ -174,6 +174,11 @@ function ApprovalDraftInner({
   useEffect(() => {
     if (forms.length === 0) return;
 
+    // 이미 해당 code에 대한 스냅샷이 저장되어 있다면 갱신을 건너뛰어 스냅샷 오염 방지
+    if (initialStateRef.current && initialStateRef.current.code === code) {
+      return;
+    }
+
     const timer = setTimeout(() => {
       initialStateRef.current = {
         code,
