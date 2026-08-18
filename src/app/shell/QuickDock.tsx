@@ -12,7 +12,7 @@ import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
-import { useWiddyChat, WIDDY_SUGGESTIONS } from '@/features/widdy/useWiddyChat';
+import { useWiddyChat } from '@/features/widdy/useWiddyChat';
 import { fileStorage } from '@/shared/lib/storage';
 import type { WiddyAttachment } from '@/domain/widdyChat/schema';
 
@@ -472,11 +472,6 @@ function ChatbotPanel() {
         <div ref={endRef} />
       </div>
       <div className="shrink-0 border-t border-border bg-panel p-3">
-        <div className="mb-2.5 flex flex-wrap gap-1.5">
-          {WIDDY_SUGGESTIONS.map((c) => (
-            <button key={c} type="button" onClick={() => send(c)} disabled={isSending} className="cursor-pointer rounded-full bg-teal-soft px-2.5 py-[5px] text-[10.5px] font-semibold text-teal disabled:opacity-50">{c}</button>
-          ))}
-        </div>
         {/* 선택된 첨부 미리보기 칩 */}
         {file && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-teal-soft/40 px-2.5 py-1.5">
