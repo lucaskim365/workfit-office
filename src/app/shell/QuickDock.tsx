@@ -453,7 +453,9 @@ function ChatbotPanel() {
                   {m.citations.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {m.citations.map((c, i) => {
-                        const label = `${c.source.split('/').pop() || c.source || c.docId}#${c.chunkIdx}`;
+                        const name = c.source.split('/').pop() || c.source || c.docId;
+                        // 문서 청크는 위치 표시(#idx), 링크 없는 첨부/전체문서 citation 은 파일명만.
+                        const label = c.url ? `${name}#${c.chunkIdx}` : name;
                         return c.url ? (
                           <a key={i} href={c.url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal hover:underline">📎 {label}</a>
                         ) : (
