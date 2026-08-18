@@ -155,6 +155,12 @@ export const userRepo = {
     await this.save({ ...existing, jobTitle });
   },
 
+  async updateDept(id: string, dept: string): Promise<void> {
+    const existing = (await this.list()).find((u) => u.id === id);
+    if (!existing) return;
+    await this.save({ ...existing, dept });
+  },
+
   async removeMany(ids: Array<string | number>): Promise<void> {
     const set = new Set(ids.map(String));
     await Promise.all([...set].map((id) => backend.remove(id)));

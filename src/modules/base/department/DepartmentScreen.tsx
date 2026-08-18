@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
-import { useUsers, useUpdateUserJobTitle } from '@/features/user/useUsers';
+import { useUsers, useUpdateUserJobTitle, useUpdateUserDept } from '@/features/user/useUsers';
 import { usePositions } from '@/features/position/usePositions';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
 
@@ -20,6 +20,7 @@ export default function DepartmentScreen() {
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
   const updateJobTitle = useUpdateUserJobTitle();
+  const updateUserDept = useUpdateUserDept();
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
 
@@ -64,6 +65,14 @@ export default function DepartmentScreen() {
 
     const targetId = sel.id || nextId();
     await upsert.mutateAsync({ ...sel, id: targetId });
+
+    // 부서명 변경에 따른 소속 사용자들의 부서명 일괄 자동 업데이트 (동기화)
+    if (oldDept && oldDept.name !== sel.name) {
+      const affectedUsers = users.filter((u) => u.dept === oldDept.name);
+      for (const u of affectedUsers) {
+        await updateUserDept.mutateAsync({ id: u.id, dept: sel.name });
+      }
+    }
 
     if (sel.headUserId) {
       const rank = getRank(sel.headUserId);

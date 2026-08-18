@@ -162,7 +162,13 @@ export function ApprovalDocumentView({
     if (vis === '비공개') return false;
 
     // 부서공개 문서인 경우 소속 부서가 다르면 열람 불가 (제4순위)
-    if (vis === '부서' && doc.drafterDept !== userObj?.dept) return false;
+    const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
+    const myDeptId = myDeptObj?.id ?? '';
+    const myDeptName = userObj?.dept ?? '';
+    const isSameDept = doc.drafterDeptId 
+      ? doc.drafterDeptId === myDeptId 
+      : doc.drafterDept === myDeptName;
+    if (vis === '부서' && !isSameDept) return false;
 
     // 물리적 보안등급 체크 (제5순위)
     const secLevel = doc.securityLevel ?? '일반';

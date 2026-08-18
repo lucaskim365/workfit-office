@@ -154,6 +154,7 @@ export const approvalDocSchema = z.object({
   /** 기안자·기안부서(비정규화 — 목록 표시 성능). */
   drafterId: z.string().min(1),
   drafterDept: z.string().default(''),
+  drafterDeptId: z.string().optional().default(''),
   status: z.enum(DOC_STATUS).default('임시저장'),
   /** 결재선(임베드, §5.2). */
   steps: z.array(approvalStepSchema).default([]),

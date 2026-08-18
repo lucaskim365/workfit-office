@@ -481,11 +481,15 @@ function ApprovalDraftInner({
       postApprovalFollowup ? `[후속 조치 및 재발 방지 대책]\n${postApprovalFollowup.trim()}` : '',
     ].filter(Boolean).join('\n\n') || postApprovalReason.trim();
 
+    const myDeptObj = org.depts.find((d) => d.name === me.dept);
+    const myDeptId = myDeptObj ? myDeptObj.id : '';
+
     return {
       docType: code,
       title: title.trim(),
       drafterId: me.id,
       drafterDept: me.dept,
+      drafterDeptId: myDeptId,
       steps,
       amount: amountNum,
       body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : '',
@@ -718,14 +722,18 @@ function ApprovalDraftInner({
   const toggleFolder = (id: string) => setOpenFolders((p) => ({ ...p, [id]: p[id] === false ? true : false }));
 
   const previewDoc: ApprovalDoc = useMemo(
-    () => ({
-      id: editDoc?.id ?? 'preview-doc-id',
-      docNo: editDoc?.docNo ?? 'DRAFT-PREVIEW',
-      docType: code,
-      title: title || '(제목 없음)',
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '',
-      drafterId: me.id,
-      drafterDept: me.dept,
+    () => {
+      const myDeptObj = org.depts.find((d) => d.name === me.dept);
+      const myDeptId = myDeptObj ? myDeptObj.id : '';
+      return {
+        id: editDoc?.id ?? 'preview-doc-id',
+        docNo: editDoc?.docNo ?? 'DRAFT-PREVIEW',
+        docType: code,
+        title: title || '(제목 없음)',
+        body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '',
+        drafterId: me.id,
+        drafterDept: me.dept,
+        drafterDeptId: myDeptId,
       status: '진행중',
       amount: amountNum,
       securityLevel,
@@ -763,7 +771,8 @@ function ApprovalDraftInner({
       postApprovedAt,
       postApprovedById,
       postApprovedByName: org.userById(postApprovedById)?.name ?? null,
-    }),
+    };
+  },
     [editDoc, code, title, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
   );
 

@@ -710,7 +710,7 @@ function FormPreview({ form, onChangeField }: { form: ApprovalForm; onChangeFiel
 
     return {
       id: 'PREVIEW', docNo: 'AP-000000-000', docType: form.code || '서식', title: `${form.name || '서식'} 미리보기`,
-      drafterId: dummyDrafter.id, drafterName: dummyDrafter.name, drafterDept: dummyDrafter.dept, drafterPos: dummyDrafter.position, status: '진행중',
+      drafterId: dummyDrafter.id, drafterName: dummyDrafter.name, drafterDept: dummyDrafter.dept, drafterDeptId: 'D010', drafterPos: dummyDrafter.position, status: '진행중',
       steps: u.slice(0, 3).map((x, i) => ({ seq: i + 1, parallelGroup: null, executionType: 'sequential', kind: i === 2 ? '전결' : '결재', approverId: x.id, delegatedFromId: null, decision: i === 0 ? '승인' : '대기', decidedAt: null, comment: '' })),
       amount: amountField ? 3_000_000 : null, body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '(본문 미리보기)',
       form: leave as any,

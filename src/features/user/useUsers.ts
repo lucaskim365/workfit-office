@@ -44,3 +44,13 @@ export function useUpdateUserJobTitle() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+export function useUpdateUserDept() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, dept }: { id: string; dept: string }) => {
+      await userRepo.updateDept(id, dept);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
