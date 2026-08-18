@@ -157,73 +157,67 @@ function ApprovalDraftInner({
     }
   };
 
+  // 최초 마운트 및 양식 선택 시점의 디폴트 상태 스냅샷 Ref
+  const initialStateRef = useRef<{
+    code: string;
+    title: string;
+    values: Record<string, FieldValue>;
+    amount: string;
+    attachments: { name: string; url: string }[];
+    relatedDocs: RelatedDoc[];
+    steps: ApprovalStep[];
+    recipients: ApprovalRecipient[];
+    executionDepts: { id: string; name: string }[];
+  } | null>(null);
+
+  // 양식 설정 직후의 초기 세팅이 완벽히 끝난 상태를 150ms 딜레이 후 캡처
+  useEffect(() => {
+    if (forms.length === 0) return;
+
+    const timer = setTimeout(() => {
+      initialStateRef.current = {
+        code,
+        title,
+        values: JSON.parse(JSON.stringify(values)),
+        amount,
+        attachments: JSON.parse(JSON.stringify(attachments)),
+        relatedDocs: JSON.parse(JSON.stringify(relatedDocs)),
+        steps: JSON.parse(JSON.stringify(steps)),
+        recipients: JSON.parse(JSON.stringify(recipients)),
+        executionDepts: JSON.parse(JSON.stringify(executionDepts)),
+      };
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [code, forms, editDoc]);
+
   const hasManuallyEnteredValues = (): boolean => {
-    if (editDoc) {
-      const titleChanged = title !== (editDoc.title ?? '');
-      const bodyChanged = String(values[RESERVED_BODY_KEY] ?? '') !== (editDoc.body ?? '');
-      const amountChanged = amount !== (editDoc.amount != null ? String(editDoc.amount) : '');
-      const filesChanged = JSON.stringify(attachments) !== JSON.stringify(editDoc.attachments ?? []);
-      const valuesChanged = Object.keys(values).some((k) => JSON.stringify(values[k]) !== JSON.stringify((editDoc.fieldValues ?? {})[k]));
-      const postApprovalChanged = isPostApproval !== (editDoc.isPostApproval ?? false) || postApprovalReason !== (editDoc.postApprovalReason ?? '');
-      return titleChanged || bodyChanged || amountChanged || filesChanged || valuesChanged || postApprovalChanged;
-    } else {
-      // 1) DB(approvalForms)에서 현재 선택된 서식 마스터 정보 추출
-      const formMaster = forms.find((f) => f.code === code);
-      const dbDocTitle = (formMaster?.docTitle || formMaster?.name || '').trim();
+    if (!initialStateRef.current) return false;
+    const initialState = initialStateRef.current;
 
-      // 2) 문서 제목 비교: 빈 값이거나, 서식의 기본 제목과 완전히 일치하면 변경되지 않은 것으로 판단
-      const curTitle = title.trim();
-      const titleHasChanged = curTitle !== '' && curTitle !== dbDocTitle;
+    // 양식 코드 자체가 다르면 초기 상태 비교를 무시하고 false 처리
+    if (code !== initialState.code) return false;
 
-      // 3) 본문 내용 비교: 빈 값이거나, 본문 필드의 placeholder와 일치하면 변경되지 않은 것으로 판단
-      const curBody = String(values[RESERVED_BODY_KEY] ?? '').trim();
-      const bodyFieldMaster = formMaster?.fields?.find((f) => f.key === RESERVED_BODY_KEY);
-      const dbDefaultBodyPlaceholder = String(bodyFieldMaster?.placeholder || '').trim();
-      const bodyHasChanged = curBody !== '' && curBody !== dbDefaultBodyPlaceholder;
+    // 각 핵심 상태의 최초 스냅샷 대비 변경 사항을 엄격히 감지
+    const titleChanged = title.trim() !== initialState.title.trim();
+    const amountChanged = amount.trim() !== initialState.amount.trim();
+    const valuesChanged = JSON.stringify(values) !== JSON.stringify(initialState.values);
+    const filesChanged = JSON.stringify(attachments) !== JSON.stringify(initialState.attachments);
+    const relatedDocsChanged = JSON.stringify(relatedDocs) !== JSON.stringify(initialState.relatedDocs);
+    const stepsChanged = JSON.stringify(steps) !== JSON.stringify(initialState.steps);
+    const recipientsChanged = JSON.stringify(recipients) !== JSON.stringify(initialState.recipients);
+    const executionDeptsChanged = JSON.stringify(executionDepts) !== JSON.stringify(initialState.executionDepts);
 
-      // 4) 금액 / 첨부파일 / 관련문서 / 후결요청 검증
-      const amountHasEntered = amount.trim() !== '';
-      const filesHasEntered = attachments.length > 0;
-      const relatedDocsHasEntered = relatedDocs.length > 0;
-      const postApprovalHasEntered = isPostApproval || postApprovalReason.trim() !== '';
-
-      // 5) 동적 서식 필드 검증: 사용자가 기본 placeholder나 기본 선택값 외에 실제로 값을 변경했는가?
-      const valuesHasChanged = Object.keys(values).some((k) => {
-        const valStr = String(values[k] ?? '').trim();
-        if (!valStr) return false;
-
-        const fieldMaster = formMaster?.fields?.find((f) => f.key === k);
-        const dbPlaceholder = String(fieldMaster?.placeholder || '').trim();
-
-        // 서식 기본 placeholder와 값이 같으면 변경되지 않은 것으로 처리
-        if (dbPlaceholder && valStr === dbPlaceholder) return false;
-
-        // 필드 마스터에 설정된 기본값(defaultValue 등)이 있다면 이와 비교하는 로직 추가 가능
-        if (fieldMaster && 'defaultValue' in fieldMaster && valStr === String(fieldMaster.defaultValue ?? '')) {
-          return false;
-        }
-
-        // 휴가 신청 기본값 자동 세팅값인 경우 미입력 처리 (필요에 따라 유지 또는 보완)
-        if (code === '휴가' && (k === 'leaveType' || k === 'period__days')) {
-          return false;
-        }
-
-        // 소모품 신청서 등의 표 편집기(Grid) 빈 행(배열 형태)에 대한 미변경 예외 처리
-        if (Array.isArray(values[k])) {
-          const hasGridContent = (values[k] as unknown as Record<string, unknown>[]).some((row) => {
-            return Object.entries(row).some(([rk, rv]) => {
-              if (rk === 'id' || rk === 'amount') return false;
-              return rv !== undefined && rv !== null && rv !== '' && rv !== 0 && rv !== false;
-            });
-          });
-          return hasGridContent;
-        }
-
-        return true;
-      });
-
-      return titleHasChanged || bodyHasChanged || amountHasEntered || filesHasEntered || relatedDocsHasEntered || valuesHasChanged || postApprovalHasEntered;
-    }
+    return (
+      titleChanged ||
+      amountChanged ||
+      valuesChanged ||
+      filesChanged ||
+      relatedDocsChanged ||
+      stepsChanged ||
+      recipientsChanged ||
+      executionDeptsChanged
+    );
   };
 
   // 양식 변경 시 작성내용 유실 경고 핸들러
