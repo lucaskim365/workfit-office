@@ -54,6 +54,13 @@ interface CollectionDef {
   name: string;
   attributes: AttrDef[];
   indexes: IndexDef[];
+  /**
+   * 생성 시 컬렉션 권한. 생략하면 `POC_PERMISSIONS`(누구나 CRUD)를 쓴다.
+   *
+   * **빈 배열이면 서버 전용** — 브라우저가 직접 붙으면 401이고 API 키를 가진 Function만
+   * 읽고 쓸 수 있다. 개인정보나 자격 증명을 담는 컬렉션은 반드시 이쪽이어야 한다.
+   */
+  permissions?: string[];
 }
 
 // ── 빌더 헬퍼 (가독성) ──
@@ -75,6 +82,12 @@ const BOOL = (key: string, xdefault?: boolean): AttrDef => ({ kind: 'boolean', k
 const IX = (name: string, attributes: string[]): IndexDef => ({
   key: `idx_${name}`,
   type: DatabasesIndexType.Key,
+  attributes,
+});
+/** 유일 인덱스 — 같은 값 조합의 문서가 둘 생기는 것을 DB에서 막는다. */
+const UQ = (name: string, attributes: string[]): IndexDef => ({
+  key: `uq_${name}`,
+  type: DatabasesIndexType.Unique,
   attributes,
 });
 
@@ -802,6 +815,56 @@ const COLLECTIONS: CollectionDef[] = [
     ],
     indexes: [IX('spSurvey', ['surveyId']), IX('spUser', ['userId'])],
   },
+
+  // ── 메일 ──
+  {
+    id: 'mailAccounts',
+    name: '메일 계정',
+    /**
+     * **서버 전용.** 브라우저는 이 컬렉션에 직접 붙지 못하고 mail Function만 API 키로 접근한다.
+     *
+     * 다른 컬렉션과 달리 `POC_PERMISSIONS`를 쓰면 안 된다. 누구나 read면 남의 메일 주소
+     * 목록이 그대로 열리고, 누구나 update/delete면 남의 계정을 지우거나 서버 주소를 바꿔
+     * 자격 증명을 탈취할 수 있다. `encryptedSecret`이 암호문이라는 것과는 별개 문제다.
+     */
+    permissions: [],
+    attributes: [
+      S('id', 64, true),
+      /** 소유자. Function이 서명 토큰에서 도출한 uid와 대조해 남의 계정 접근을 막는다. */
+      S('workfitUserId', 64, true),
+      EN('provider', ['naver', 'daum', 'google', 'microsoft', 'custom']),
+      S('email', 255, true),
+      S('displayName', 50),
+      /** IMAP·SMTP 인증 아이디. 주소와 다른 공급자가 있어 따로 둔다. */
+      S('authUsername', 255),
+      /**
+       * 앱 비밀번호 암호문. `v1.{iv}.{authTag}.{ciphertext}`(AES-256-GCM, base64url).
+       * 평문은 어디에도 저장하지 않고 Function이 인증 직전에만 푼다.
+       */
+      S('encryptedSecret', 1024, true),
+      EN('authType', ['app_password', 'oauth2']),
+      EN('transport', ['imap_smtp', 'gmail_api', 'microsoft_graph']),
+      EN('status', ['active', 'error', 'disabled']),
+      // custom 공급자용 접속 정보. 프리셋 공급자는 Function이 호스트를 알고 있어 비워 둔다.
+      S('smtpHost', 255),
+      INT('smtpPort'),
+      EN('smtpSecurity', ['tls', 'starttls', 'plain']),
+      S('imapHost', 255),
+      INT('imapPort'),
+      EN('imapSecurity', ['tls', 'starttls', 'plain']),
+      S('signature', 1000),
+      S('verifiedAt', 40),
+      /** 실패 원인은 정규화된 코드만. 서버 내부 메시지는 남기지 않는다. */
+      S('lastErrorCode', 64),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('mailAcctOwner', ['workfitUserId']),
+      // 같은 사용자가 같은 주소를 두 번 등록하지 못하게 DB에서 막는다(MailHub와 동일 제약).
+      UQ('mailAcctOwnerEmail', ['workfitUserId', 'email']),
+    ],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
@@ -849,7 +912,7 @@ async function ensureCollection(dbs: Databases, dbId: string, c: CollectionDef) 
     console.log(`• collection "${c.id}" 존재 — 건너뜀`);
   } catch (e) {
     if (!isCode(e, 404)) throw e;
-    await dbs.createCollection(dbId, c.id, c.name, POC_PERMISSIONS, /* documentSecurity */ false);
+    await dbs.createCollection(dbId, c.id, c.name, c.permissions ?? POC_PERMISSIONS, /* documentSecurity */ false);
     console.log(`✓ collection "${c.id}" 생성`);
   }
 }
@@ -925,7 +988,12 @@ async function main() {
   const endpoint = readEnv('APPWRITE_ENDPOINT') ?? readEnv('VITE_APPWRITE_ENDPOINT');
   const projectId = readEnv('APPWRITE_PROJECT_ID') ?? readEnv('VITE_APPWRITE_PROJECT_ID');
   const databaseId = readEnv('APPWRITE_DATABASE_ID') ?? readEnv('VITE_APPWRITE_DATABASE_ID');
-  const apiKey = readEnv('APPWRITE_API_KEY');
+  /**
+   * `.env.local`은 dev·prod 키를 접미어로 구분해 둔다(`APPWRITE_API_KEY_DEV` / `_PROD`).
+   * 접미어 없는 이름이 없으면 **dev 키로만** 폴백한다 — 기본값이 운영이면 스키마 스크립트가
+   * 실수로 prod를 건드린다. prod에 적용할 때는 `APPWRITE_API_KEY`를 명시적으로 넘긴다.
+   */
+  const apiKey = readEnv('APPWRITE_API_KEY') ?? readEnv('APPWRITE_API_KEY_DEV');
 
   const missing = [
     ['APPWRITE_ENDPOINT', endpoint],
