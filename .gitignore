@@ -42,3 +42,6 @@ implement/UI개편아이디어/프로젝트/
 
 # Appwrite 함수 배포 번들(빌드 산출물)
 appwrite/_deploy_bundles/
+
+# 로컬 비밀 메모 — 커밋 금지
+docs/keys.md

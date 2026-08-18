@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { authRepo } from '@/data/auth/auth.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { mintWiddyToken, clearWiddyToken } from '@/data/widdyChat/widdyAuth';
 import type { User } from '@/domain/user/schema';
 
 /**
@@ -67,10 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem(SESSION_KEY, u.id);
     setUser(u);
     void authRepo.touchLastLogin(u.id);
+    // Widdy ACL 용 서명 토큰 발급(best-effort — 비밀번호가 있는 이 시점에만 가능).
+    void mintWiddyToken(loginId, password);
   }
 
   async function signOutUser() {
     sessionStorage.removeItem(SESSION_KEY);
+    clearWiddyToken();
     setUser(null);
   }
 
