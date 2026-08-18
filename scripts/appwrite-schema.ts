@@ -20,10 +20,18 @@ import {
   Client,
   Databases,
   Permission,
+  Query,
   Role,
   DatabasesIndexType,
   type Models,
 } from 'node-appwrite';
+
+/**
+ * `listAttributes` 는 기본 25건만 돌려준다. 속성이 그보다 많은 컬렉션(예: resources 29개)에서
+ * 뒤쪽 속성이 목록에 안 잡혀 "없는 것"으로 오인되고, 재생성 → 409 → available 대기가
+ * 영원히 끝나지 않는다. 모든 조회에 상한을 명시한다.
+ */
+const ATTR_PAGE = [Query.limit(500)];
 
 // ─────────────────────────────────────────────────────────────
 // 스키마 정의 (데이터 주도) — Phase 3에서 컬렉션을 여기 추가하면 된다.
@@ -847,7 +855,7 @@ async function ensureCollection(dbs: Databases, dbId: string, c: CollectionDef) 
 }
 
 async function existingAttrKeys(dbs: Databases, dbId: string, collId: string): Promise<Set<string>> {
-  const res = await dbs.listAttributes(dbId, collId);
+  const res = await dbs.listAttributes(dbId, collId, ATTR_PAGE);
   return new Set(res.attributes.map((a) => (a as unknown as { key: string }).key));
 }
 
@@ -875,11 +883,18 @@ async function ensureAttribute(dbs: Databases, dbId: string, collId: string, a: 
   }
 }
 
-/** 속성은 서버에서 비동기 처리 — 인덱스 생성 전 전부 available 될 때까지 폴링. */
+/**
+ * 속성은 서버에서 비동기 처리 — 인덱스 생성 전 전부 available 될 때까지 폴링.
+ *
+ * 대기 한도는 속성 수에 비례한다(과거 60초 고정). 큰 컬렉션일수록 워커가 오래 걸린다.
+ * 단 `resources`(29개)에서 났던 무한 대기의 진짜 원인은 시간이 아니라 **위 ATTR_PAGE 의
+ * 페이지네이션**이었다 — 25건 상한 밖의 속성은 목록에 없으니 status 판정이 영원히
+ * pending 이었다. 시간 여유는 보조 수단일 뿐이라 상한 명시가 본질적인 수정이다.
+ */
 async function waitAttributesAvailable(dbs: Databases, dbId: string, collId: string, keys: string[]) {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + Math.max(120_000, keys.length * 10_000);
   for (;;) {
-    const res = await dbs.listAttributes(dbId, collId);
+    const res = await dbs.listAttributes(dbId, collId, ATTR_PAGE);
     const byKey = new Map(res.attributes.map((a) => [(a as unknown as { key: string }).key, a as unknown as { status: string }]));
     const pending = keys.filter((k) => byKey.get(k)?.status !== 'available');
     if (pending.length === 0) return;
