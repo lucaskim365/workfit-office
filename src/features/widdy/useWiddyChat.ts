@@ -12,9 +12,8 @@ import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
  * ChatbotPanel 은 이 훅만 소비한다(백엔드/인증/API 는 repo 가 안다).
  */
 
-/** 초기 인사 + 추천 질문(사내 문서 지향). */
+/** 초기 인사. */
 const GREETING = '안녕하세요,👋\nWiddy입니다. 사내 문서에 대해 무엇이든 물어보세요.';
-export const WIDDY_SUGGESTIONS = ['육아휴직 규정 알려줘', '워크핏 개발 일정', '결재 상신 방법'];
 
 function makeId(): string {
   try {
