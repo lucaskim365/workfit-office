@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { widdyChatRepo } from '@/data/widdyChat/widdyChat.repo';
-import type { WiddyMessage } from '@/domain/widdyChat/schema';
+import type { WiddyMessage, WiddyAttachment } from '@/domain/widdyChat/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 
@@ -31,7 +31,11 @@ export function useWiddyChat() {
   const sessionRef = useRef<string>(makeId());
 
   const mutation = useMutation({
-    mutationFn: (vars: { query: string; history: { role: 'user' | 'assistant'; content: string }[] }) =>
+    mutationFn: (vars: {
+      query: string;
+      history: { role: 'user' | 'assistant'; content: string }[];
+      attachment?: WiddyAttachment;
+    }) =>
       // 서명 토큰을 게이트웨이로 전달 → 서버가 검증해 신뢰된 uid 로 ACL 판정.
       // (토큰 없음/만료 시 익명 — public 문서+일반질문만) [[widdyAuth]]
       widdyChatRepo.ask({
@@ -39,15 +43,25 @@ export function useWiddyChat() {
         token: getWiddyToken() ?? undefined,
         sessionId: sessionRef.current,
         history: vars.history,
+        attachment: vars.attachment,
       }),
   });
 
   const send = useCallback(
-    (raw: string) => {
+    (raw: string, attachment?: WiddyAttachment) => {
       const query = raw.trim();
-      if (!query || mutation.isPending) return;
+      // 질문 또는 첨부 중 하나는 있어야 전송(첨부만 있으면 요약).
+      if ((!query && !attachment) || mutation.isPending) return;
       const at = nowLocalIso();
-      const userMsg: WiddyMessage = { id: makeId(), role: 'user', content: query, citations: [], at, status: 'done' };
+      const userMsg: WiddyMessage = {
+        id: makeId(),
+        role: 'user',
+        content: query || (attachment ? '이 파일을 요약해 주세요.' : ''),
+        citations: [],
+        at,
+        status: 'done',
+        attachmentName: attachment?.name,
+      };
       const pendingId = makeId();
       const pending: WiddyMessage = { id: pendingId, role: 'assistant', content: '', citations: [], at, status: 'pending' };
 
@@ -59,7 +73,7 @@ export function useWiddyChat() {
       setMessages((prev) => [...prev, userMsg, pending]);
 
       mutation.mutate(
-        { query, history },
+        { query, history, attachment },
         {
           onSuccess: (res) =>
             setMessages((prev) =>
