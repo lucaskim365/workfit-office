@@ -3,8 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
+import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
+import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
+import { RESERVED_BODY_KEY } from '@/domain/approvalForm/schema';
+import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 
 /**
@@ -18,6 +22,8 @@ export default function MobileApprovalDetail() {
   const me = user!.id;
   const doc = useApprovalDoc(id);
   const { data: users = [] } = useUsers();
+  const { data: forms = [] } = useApprovalForms();
+  const form = forms.find((f) => f.code === doc?.docType);
   const decide = useDecideStep();
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -96,9 +102,7 @@ export default function MobileApprovalDetail() {
             <div>
               <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>본문</div>
               <Card>
-                <div className="whitespace-pre-line text-[13px] leading-relaxed text-ink">
-                  {doc.body || '(본문 없음)'}
-                </div>
+                <ApprovalBody doc={doc} form={form} users={users} />
               </Card>
             </div>
           </div>
@@ -186,4 +190,140 @@ function StepRow({ doc, step, name }: { doc: ApprovalDoc; step: ApprovalStep; na
 
 function fmtAmount(n: number): string {
   return n.toLocaleString('ko-KR');
+}
+
+/**
+ * 본문 렌더 — 결재서식 동적 필드(fieldValues)를 라벨·순서·섹션·타입대로 표시.
+ * 서식 미로드 시 freeform body 폴백, 전부 비면 '(본문 없음)'.
+ * (데스크톱 ApprovalDocumentView 와 동일한 fieldText 규칙 재사용)
+ */
+function ApprovalBody({ doc, form, users }: { doc: ApprovalDoc; form?: ApprovalForm; users: OrgLite['users'] }) {
+  const org: OrgLite = { users, depts: [] };
+  const values: Record<string, FieldValue> = { ...doc.fieldValues };
+  if (doc.body) values[RESERVED_BODY_KEY] = doc.body; // 컬럼 body 를 예약키 값으로 우선
+
+  const rows: React.ReactNode[] = [];
+
+  if (form && form.fields.length > 0) {
+    let lastSection = '';
+    const isVisible = (f: FormField) => {
+      if (!f.visibleIf) return true;
+      const parts = f.visibleIf.split(':');
+      if (parts.length !== 2) return true;
+      return String(values[parts[0]] ?? '') === parts[1];
+    };
+    for (const f of form.fields) {
+      if (f.type === '안내문') continue;
+      if (!isVisible(f)) continue;
+
+      const pushSection = () => {
+        if (f.section && f.section !== lastSection) {
+          rows.push(
+            <div key={`sec-${f.key}`} className="pb-1.5 pt-2.5 text-[12.5px] font-bold" style={{ color: '#101830' }}>
+              {f.section}
+            </div>,
+          );
+          lastSection = f.section;
+        }
+      };
+
+      if (f.type === '표') {
+        const tbl = renderTable(f, values);
+        if (!tbl) continue;
+        pushSection();
+        rows.push(
+          <div key={f.key} className="py-1.5">
+            {f.label && <div className="mb-1 text-[11.5px] text-ink3">{f.label}</div>}
+            {tbl}
+          </div>,
+        );
+        continue;
+      }
+
+      const text = fieldText(f, values, org);
+      if (!text || text === '—') continue;
+      pushSection();
+
+      if (f.type === '장문' || f.key === RESERVED_BODY_KEY) {
+        rows.push(
+          <div key={f.key} className="py-1.5">
+            {f.label && <div className="mb-1 text-[11.5px] text-ink3">{f.label}</div>}
+            <div className="whitespace-pre-line text-[13px] leading-relaxed text-ink">{text}</div>
+          </div>,
+        );
+      } else {
+        rows.push(
+          <div key={f.key} className="flex items-start gap-2 py-1">
+            <span className="w-20 shrink-0 text-[12.5px] text-ink3">{f.label}</span>
+            <span className="flex-1 text-[12.5px] font-semibold text-ink">{text}</span>
+          </div>,
+        );
+      }
+    }
+  } else if (doc.body) {
+    rows.push(
+      <div key="body" className="whitespace-pre-line text-[13px] leading-relaxed text-ink">
+        {doc.body}
+      </div>,
+    );
+  }
+
+  if (rows.length === 0) return <div className="text-[13px] text-ink">(본문 없음)</div>;
+  return <div className="flex flex-col">{rows}</div>;
+}
+
+/** 표(表) 필드 렌더 — { cols, rows, headerValues } 구조. 병합/마스킹은 생략. */
+function renderTable(f: FormField, values: Record<string, FieldValue>): React.ReactNode | null {
+  const raw = values[f.key];
+  if (typeof raw !== 'string' || !raw) return null;
+  let parsed: { cols?: unknown; rows?: unknown; headerValues?: Record<string, string> };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const cols: string[] = Array.isArray(parsed.cols) ? (parsed.cols as string[]) : [];
+  if (cols.length === 0) return null;
+  const dataRows: Array<Record<string, string>> = Array.isArray(parsed.rows) ? (parsed.rows as Array<Record<string, string>>) : [];
+  const headerValues = parsed.headerValues ?? {};
+  const isNum = (c: string) => /수량|단가|가격|금액|수|율/.test(c);
+  const fmt = (c: string, v: string) => {
+    if (v === '' || v == null) return '—';
+    if (isNum(c)) {
+      const n = Number(String(v).replace(/,/g, ''));
+      if (!isNaN(n)) return n.toLocaleString('ko-KR');
+    }
+    return v;
+  };
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[11.5px]">
+        <tbody>
+          <tr style={{ background: '#f9f9f9' }}>
+            {cols.map((c, i) => (
+              <th key={i} className="border border-black/10 p-1.5 font-bold text-ink3">
+                {headerValues[c] ?? c}
+              </th>
+            ))}
+          </tr>
+          {dataRows.map((r, ri) => (
+            <tr key={ri}>
+              {cols.map((c, ci) => (
+                <td key={ci} className={`border border-black/10 p-1.5 text-ink ${isNum(c) ? 'text-right' : 'text-left'}`}>
+                  {fmt(c, String(r?.[c] ?? ''))}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {dataRows.length === 0 && (
+            <tr>
+              <td colSpan={cols.length} className="p-2 text-center text-ink3">
+                등록된 데이터가 없습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
