@@ -158,11 +158,24 @@ function ApprovalDraftInner({
   };
 
   const SYSTEM_FIELDS = ['leaveType', 'period', 'period__end', 'period__days'];
-  const checkHasValue = (vals: Record<string, FieldValue>) => {
-    return Object.entries(vals).some(([key, v]) => {
-      if (SYSTEM_FIELDS.includes(key)) return false;
-      return v !== undefined && v !== null && v !== '';
-    });
+  const checkHasValue = (vals: unknown): boolean => {
+    if (vals === undefined || vals === null) return false;
+
+    // 1) 배열 형태 (표 데이터 행 배열 등)
+    if (Array.isArray(vals)) {
+      return vals.some((item) => checkHasValue(item));
+    }
+
+    // 2) 객체 형태 (중첩 데이터 등)
+    if (typeof vals === 'object') {
+      return Object.entries(vals as Record<string, unknown>).some(([key, v]) => {
+        if (SYSTEM_FIELDS.includes(key)) return false;
+        return checkHasValue(v);
+      });
+    }
+
+    // 3) 원시 값 (숫자 0, boolean false, 빈 문자열 등은 수동 작성 내용이 없는 것으로 판정)
+    return vals !== '' && vals !== 0 && vals !== false;
   };
 
   // 양식 변경 시 작성내용 유실 경고 핸들러
