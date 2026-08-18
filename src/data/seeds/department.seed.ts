@@ -11,11 +11,12 @@ export const DEPARTMENT_SEED: Department[] = [
   { id: 'D100', name: '대표이사', parentId: null, headUserId: 'U001', deptType: '본사', order: 1 },
   // 대표이사 직속 · 위원회 · 사업본부(대표이사 산하)
   { id: 'D110', name: '대표이사 직속', parentId: 'D100', headUserId: null, deptType: '본사', order: 1 },
-  { id: 'D200', name: 'AX사업본부', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 3 },
-  // AX사업본부 산하 팀 — 현재 사업장은 본사 하나뿐(공장·영업소 없음) → 전부 본사
-  { id: 'D210', name: '품질관리팀', parentId: 'D200', headUserId: 'U006', deptType: '본사', order: 1 },
-  { id: 'D220', name: '영업팀', parentId: 'D200', headUserId: 'U008', deptType: '본사', order: 2 },
-  { id: 'D230', name: '사업관리팀', parentId: 'D200', headUserId: 'U009', deptType: '본사', order: 3 },
-  { id: 'D240', name: 'S/W 개발팀', parentId: 'D200', headUserId: 'U011', deptType: '본사', order: 4 },
+  { id: 'D120', name: '기술경영전략위원회', parentId: 'D100', headUserId: null, deptType: '본사', order: 2 },
+  { id: 'D200', name: 'AX지능화본부', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 3 },
+  // AX지능화본부 산하 팀 — 현재 사업장은 본사 하나뿐(공장·영업소 없음) → 전부 본사
+  { id: 'D210', name: '품질심사팀', parentId: 'D200', headUserId: 'U006', deptType: '본사', order: 1 },
+  { id: 'D220', name: 'AX 솔루션컨설팅팀', parentId: 'D200', headUserId: 'U008', deptType: '본사', order: 2 },
+  { id: 'D230', name: 'AX PMO팀', parentId: 'D200', headUserId: 'U009', deptType: '본사', order: 3 },
+  { id: 'D240', name: '데이터플랫폼 개발팀', parentId: 'D200', headUserId: 'U011', deptType: '본사', order: 4 },
   { id: 'D250', name: '부설기술연구소', parentId: 'D200', headUserId: null, deptType: '본사', order: 5 },
 ];

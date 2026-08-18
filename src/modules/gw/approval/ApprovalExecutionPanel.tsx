@@ -101,7 +101,19 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
   const visibleExecutions = useMemo(() => {
     if (forceFullView) return finalExecutions;
 
-    const isDrafterOrDrafterDept = doc.drafterId === userId || (meUser?.dept && doc.drafterDept === meUser.dept);
+    const myDeptObj = depts.find((d) => d.name === meUser?.dept);
+    const myDeptId = myDeptObj?.id;
+    const drafterUser = users.find((u) => u.id === doc.drafterId);
+    const drafterCurrentDeptName = drafterUser?.dept ?? '';
+    const drafterCurrentDeptObj = depts.find((dept) => dept.name === drafterCurrentDeptName);
+    const drafterCurrentDeptId = drafterCurrentDeptObj?.id;
+    const docDeptId = doc.drafterDeptId || drafterCurrentDeptId;
+
+    const isSameDept = docDeptId 
+      ? docDeptId === myDeptId 
+      : doc.drafterDept === meUser?.dept;
+
+    const isDrafterOrDrafterDept = doc.drafterId === userId || (meUser?.dept && isSameDept);
     const isPublic = doc.visibility === '전사';
     const isAdmin = meUser?.roleGroup === 'ADMIN';
 
@@ -110,8 +122,6 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
     }
 
     // 본인 부서 시행 건만 열람 허용
-    const myDeptObj = depts.find((d) => d.name === meUser?.dept);
-    const myDeptId = myDeptObj?.id;
     return finalExecutions.filter((exec) => {
       return (myDeptId && exec.targetDeptId === myDeptId) || exec.targetDeptNameSnapshot === meUser?.dept;
     });

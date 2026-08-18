@@ -288,6 +288,7 @@ export interface ApprovalDraftInput {
   title: string;
   drafterId: string;
   drafterDept?: string;
+  drafterDeptId?: string;
   steps: ApprovalStep[];
   amount?: number | null;
   body?: string;
