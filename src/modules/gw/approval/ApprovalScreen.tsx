@@ -81,6 +81,7 @@ export default function ApprovalScreen() {
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
 
 
 
@@ -129,7 +130,7 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter]);
+  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter, rejectFilter]);
 
   // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
@@ -197,6 +198,13 @@ export default function ApprovalScreen() {
       }
       return list;
     }
+    if (box === '반려') {
+      if (rejectFilter === 'draft') return list.filter((d: ApprovalDoc) => d.drafterId === me);
+      if (rejectFilter === 'rejected') {
+        return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      }
+      return list;
+    }
     if (box === '대기') {
       const preds = getPredecessorsOf(me);
       if (todoFilter === 'pending') {
@@ -214,7 +222,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, me, userObj?.dept, docBoxFilter, org]);
+  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org]);
 
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
@@ -577,6 +585,25 @@ export default function ApprovalScreen() {
                       onClick={() => setDoneFilter(f)}
                       className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${doneFilter === f
                         ? 'bg-teal text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {box === '반려' && (
+              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                {(['draft', 'rejected'] as const).map((f) => {
+                  const label = f === 'draft' ? '반려받은 문서' : '내가 반려한 문서';
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setRejectFilter(f)}
+                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${rejectFilter === f
+                        ? 'bg-rose-500 text-white shadow-sm'
                         : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                         }`}
                     >

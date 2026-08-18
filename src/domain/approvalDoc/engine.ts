@@ -219,8 +219,14 @@ export function matchesBox(
     }
     case '상신':
       return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
-    case '반려':
-      return doc.drafterId === userId && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송');
+    case '반려': {
+      const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
+      if (!isRejectedStatus) return false;
+
+      const isMyDraftRejected = doc.drafterId === userId;
+      const isMyRejectedDecision = doc.steps.some((s) => s.approverId === userId && s.decision === '반려');
+      return isMyDraftRejected || isMyRejectedDecision;
+    }
     case '임시':
       return doc.drafterId === userId && doc.status === '임시저장';
     case '수신': {
