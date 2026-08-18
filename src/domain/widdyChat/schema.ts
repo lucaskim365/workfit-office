@@ -45,8 +45,12 @@ export type WiddyMessage = z.infer<typeof widdyMessageSchema> & {
 /** 게이트웨이 질의 파라미터. */
 export interface WiddyAskParams {
   query: string;
-  /** 질의자 사용자 ID — 게이트웨이가 ACL(본인 열람 가능 문서) 판정에 사용. */
-  uid: string;
+  /**
+   * Widdy 서명 토큰(widdy-login 발급). 게이트웨이가 서명을 검증해 '신뢰된 uid'를 도출,
+   * ACL(본인 열람 가능 문서) 판정에 사용. 없으면 익명(public 문서+일반질문)으로 강등.
+   * ⚠ 과거의 client-asserted `uid`를 대체 — 클라이언트는 uid 를 위조하지 못한다.
+   */
+  token?: string;
   sessionId: string;
   /** 직전 대화(멀티턴 컨텍스트). role/content 만 전달. */
   history?: { role: WiddyRole; content: string }[];

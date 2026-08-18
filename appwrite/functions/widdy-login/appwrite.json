@@ -1,0 +1,16 @@
+{
+  "projectId": "6a6bf85e002acb7f71d6",
+  "functions": [
+    {
+      "$id": "widdy-login",
+      "name": "Widdy Login",
+      "runtime": "node-22.0",
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "path": ".",
+      "execute": ["any"],
+      "scopes": ["databases.read", "documents.read"],
+      "timeout": 30
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "workfit-widdy-login",
+  "version": "1.0.0",
+  "description": "Appwrite Function — Widdy 로그인(자격증명 검증 → HMAC 서명 토큰 발급)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^14.0.0"
+  }
+}

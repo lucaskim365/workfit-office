@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { widdyChatRepo } from '@/data/widdyChat/widdyChat.repo';
 import type { WiddyMessage } from '@/domain/widdyChat/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
-import { useAuth } from '@/app/auth/AuthProvider';
+import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 
 /**
  * Widdy 챗봇 대화 훅 — 메시지 상태 + 낙관적 전송 + 게이트웨이 호출.
@@ -25,8 +25,6 @@ function makeId(): string {
 }
 
 export function useWiddyChat() {
-  const { user } = useAuth();
-  const uid = user?.id ?? '';
   const [messages, setMessages] = useState<WiddyMessage[]>(() => [
     { id: makeId(), role: 'assistant', content: GREETING, citations: [], at: nowLocalIso(), status: 'done' },
   ]);
@@ -34,8 +32,14 @@ export function useWiddyChat() {
 
   const mutation = useMutation({
     mutationFn: (vars: { query: string; history: { role: 'user' | 'assistant'; content: string }[] }) =>
-      // uid 는 게이트웨이의 ACL 판정용. (⚠️ 현재 client 주장값 — 실인증 연동 전 스톱갭)
-      widdyChatRepo.ask({ query: vars.query, uid, sessionId: sessionRef.current, history: vars.history }),
+      // 서명 토큰을 게이트웨이로 전달 → 서버가 검증해 신뢰된 uid 로 ACL 판정.
+      // (토큰 없음/만료 시 익명 — public 문서+일반질문만) [[widdyAuth]]
+      widdyChatRepo.ask({
+        query: vars.query,
+        token: getWiddyToken() ?? undefined,
+        sessionId: sessionRef.current,
+        history: vars.history,
+      }),
   });
 
   const send = useCallback(
