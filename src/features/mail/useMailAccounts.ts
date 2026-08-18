@@ -17,7 +17,7 @@ export const MAIL_FOLDER_KEY = 'gw-mail-folders';
  */
 export const mailContext = (actor: User): MailGatewayContext => ({ workfitUserId: actor.id });
 
-/** 로컬 범위에서 쓸 수 있는 유일한 자격 증명. */
+/** 자격 증명을 받지 않는 목업용 값. 실제 등록은 화면이 `app_password`를 넘긴다. */
 export const MOCK_CREDENTIAL: MailCredential = { kind: 'mock' };
 
 export function useMailAccounts(actor: User | null) {
@@ -41,16 +41,29 @@ function useMailAccountMutation<TInput, TResult>(mutationFn: (input: TInput) => 
   });
 }
 
+/**
+ * 연결 테스트.
+ *
+ * 자격 증명을 화면에서 받는다. 앱 비밀번호는 서버가 IMAP·SMTP 인증에 그대로 써야 해서
+ * 입력 시점에 한 번은 브라우저를 거칠 수밖에 없다 — 대신 계정 도메인(`MailAccount`)과
+ * 저장 상태에는 담기지 않고, 요청 본문으로만 지나간다.
+ */
 export function useTestMailConnection() {
   return useMutation({
-    mutationFn: ({ actor, draft }: { actor: User; draft: MailAccountDraft }) =>
-      mailGateway.testConnection(mailContext(actor), draft, MOCK_CREDENTIAL),
+    mutationFn: ({ actor, draft, credential }: {
+      actor: User;
+      draft: MailAccountDraft;
+      credential: MailCredential;
+    }) => mailGateway.testConnection(mailContext(actor), draft, credential),
   });
 }
 
 export function useCreateMailAccount() {
-  return useMailAccountMutation(({ actor, draft }: { actor: User; draft: MailAccountDraft }) =>
-    mailGateway.createAccount(mailContext(actor), draft, MOCK_CREDENTIAL));
+  return useMailAccountMutation(({ actor, draft, credential }: {
+    actor: User;
+    draft: MailAccountDraft;
+    credential: MailCredential;
+  }) => mailGateway.createAccount(mailContext(actor), draft, credential));
 }
 
 export function useUpdateMailAccount() {

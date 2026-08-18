@@ -14,7 +14,7 @@ import {
   useTestMailConnection,
   useUpdateMailAccount,
 } from '@/features/mail/useMailAccounts';
-import { isConnectionOk } from '@/data/mail/mail.gateway';
+import { isConnectionOk, type MailCredential } from '@/data/mail/mail.gateway';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 
@@ -31,9 +31,11 @@ const message = (error: unknown) => mailErrorText(error);
 /**
  * 계정 연결 모달.
  *
- * 앱 비밀번호 입력란을 두지 않는다. 자격 증명은 서버에서만 다루기로 했고, 여기에 입력란을
- * 만들면 비밀번호가 브라우저 상태로 들어온다. 실제 연결은 서버가 대신 검증한다.
- * ([[jwheo/feat/mail/DESIGN.md]] §4-3 · §4-6)
+ * 앱 비밀번호 입력란을 둔다. 원래는 "비밀번호가 브라우저 상태로 들어온다"는 이유로 뺐지만
+ * (§4-3 · §4-6), 앱 비밀번호 방식은 사용자가 어딘가에 직접 입력하는 것 말고는 서버가 값을
+ * 알 방법이 없다 — MailHub도 자체 등록 폼에서 같은 값을 받는다. 그래서 입력은 받되 흘리지
+ * 않는 쪽으로 막는다: `MailAccount`·`MailAccountDraft` 도메인에는 자리를 두지 않고,
+ * 이 컴포넌트의 로컬 state로만 들고 있다가 요청 본문으로 넘긴 뒤 즉시 지운다.
  */
 export default function MailAccountDialog({ actor, account, onClose, onDone }: Props) {
   const editing = account !== null;
@@ -41,6 +43,8 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
   const [displayName, setDisplayName] = useState(account?.displayName ?? '');
   const [email, setEmail] = useState(account?.email ?? '');
   const [signature, setSignature] = useState(account?.signature ?? '');
+  /** 앱 비밀번호. 저장하지 않고, 요청을 보낸 뒤 비운다. 수정 시 빈 값은 "안 바꿈"이다. */
+  const [secret, setSecret] = useState('');
   const [error, setError] = useState('');
   const [tested, setTested] = useState<'none' | 'ok' | 'fail'>('none');
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -54,11 +58,23 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
   const preset = mailProviderPreset(provider);
   const draft = { displayName, email, provider, signature };
 
+  /** 입력한 앱 비밀번호. 비어 있으면 자격 증명을 넘기지 않는다는 뜻이다. */
+  const typedSecret = secret.trim();
+  /** 새 계정은 앱 비밀번호가 있어야 인증할 수 있다. 수정은 빈 값이면 기존 것을 유지한다. */
+  const needsSecret = preset.authType === 'app_password' && !editing && typedSecret === '';
+
+  const credentialOf = (): MailCredential | null =>
+    typedSecret === '' ? null : { kind: 'app_password', value: typedSecret };
+
   const runTest = async () => {
     setError('');
     setTested('none');
     try {
-      const result = await test.mutateAsync({ actor, draft });
+      const result = await test.mutateAsync({
+        actor,
+        draft,
+        credential: credentialOf() ?? MOCK_CREDENTIAL,
+      });
       setTested(isConnectionOk(result) ? 'ok' : 'fail');
     } catch (caught) {
       setTested('fail');
@@ -70,10 +86,12 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
     setError('');
     try {
       if (editing) {
-        await update.mutateAsync({ actor, id: account.id, draft, credential: MOCK_CREDENTIAL });
+        await update.mutateAsync({ actor, id: account.id, draft, credential: credentialOf() });
+        setSecret('');
         onDone('계정을 수정했습니다.');
       } else {
-        await create.mutateAsync({ actor, draft });
+        await create.mutateAsync({ actor, draft, credential: credentialOf() ?? MOCK_CREDENTIAL });
+        setSecret('');
         onDone('계정을 연결했습니다.');
       }
     } catch (caught) {
@@ -112,7 +130,12 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
 
           <div className="flex items-center gap-1.5">
             <Button onClick={onClose}>취소</Button>
-            <Button variant="primary" disabled={busy || !preset.available} onClick={save}>
+            <Button
+              variant="primary"
+              disabled={busy || !preset.available || needsSecret}
+              title={needsSecret ? '앱 비밀번호를 입력하세요.' : ''}
+              onClick={save}
+            >
               {editing ? '저장' : '연결'}
             </Button>
           </div>
@@ -172,13 +195,30 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
           </label>
 
           <label className="block">
+            <span className="mb-1 block text-[10px] font-bold text-ink3">
+              앱 비밀번호{editing && <span className="ml-1 font-semibold text-ink3">(바꿀 때만 입력)</span>}
+            </span>
+            <input
+              value={secret}
+              onChange={(event) => { setSecret(event.target.value); setTested('none'); }}
+              type="password"
+              autoComplete="new-password"
+              placeholder={editing ? '입력하지 않으면 기존 비밀번호를 유지합니다' : '메일 서비스에서 발급받은 앱 비밀번호'}
+              className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none"
+            />
+            <span className="mt-1 block text-[9.5px] text-ink3">
+              계정 로그인 비밀번호가 아니라 위 안내에서 발급받은 앱 비밀번호입니다. 서버에만 저장되고 화면에 다시 표시되지 않습니다.
+            </span>
+          </label>
+
+          <label className="block">
             <span className="mb-1 block text-[10px] font-bold text-ink3">서명 (선택)</span>
             <textarea value={signature} onChange={(event) => setSignature(event.target.value)} rows={3} placeholder="이름 | 부서 직급&#10;회사명" className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none" />
             <span className="mt-1 block text-[9.5px] text-ink3">새 메일을 쓸 때 본문 아래에 자동으로 붙습니다.</span>
           </label>
 
           <div className="flex items-center gap-2">
-            <Button disabled={busy || !preset.available} onClick={runTest}>
+            <Button disabled={busy || !preset.available || needsSecret} onClick={runTest}>
               {test.isPending ? '확인 중…' : '연결 테스트'}
             </Button>
           {tested === 'ok' && <span className="text-[10.5px] font-bold text-teal">SMTP·IMAP 연결을 확인했습니다.</span>}
