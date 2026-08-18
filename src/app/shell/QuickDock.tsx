@@ -205,7 +205,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
     { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
     { l: '메일', icon: '✉️', to: 'mail', hot: true },
-    { l: '자원예약', icon: '📦', to: 'resource', badge: '99+' },
+    { l: '자원예약', icon: '📦', to: 'resource' },
     { l: '전자설문', icon: '📋', to: 'survey' },
     { l: '게시판', icon: '📌', to: 'board' },
     { l: '커뮤니티', icon: '💬', to: 'community' },
