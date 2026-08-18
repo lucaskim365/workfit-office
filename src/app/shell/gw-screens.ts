@@ -44,7 +44,7 @@ export const GW_READY_APPS = new Set([
   'task',
   'survey',
   'mail',
-  // commute(근태)는 이식 단계에서 추가한다.
+  'commute',
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 ]);
 
