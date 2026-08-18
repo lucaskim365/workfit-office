@@ -101,8 +101,6 @@ function scopeMatches(scope: DeptScope, drafter: User, org: Org): boolean {
   }
 }
 
-
-
 /**
  * resolver → 후보 결재자 id 목록(가장 구체적 → 상위로 승격 순).
  * 엔진이 이 중 기안자·중복이 아닌 첫 후보를 채택(셀프 결재 제외).

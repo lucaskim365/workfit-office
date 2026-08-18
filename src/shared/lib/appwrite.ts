@@ -10,9 +10,13 @@ import { Client, Databases, ID, Query } from 'appwrite';
  *   VITE_APPWRITE_PROJECT_ID  예: 6a6bf85e002acb7f71d6 (workfit-intra)
  *   VITE_APPWRITE_DATABASE_ID 예: workfit (Console에서 생성한 DB id)
  */
-const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
-const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
-const databaseId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
+// repo 단위 테스트는 Vite를 거치지 않고 Node(`tsx --test`)로 도는데, 거기서는
+// import.meta.env가 통째로 undefined라 바로 읽으면 모듈 로드에서 터진다(firebase.ts와 같은 가드).
+const env: Record<string, string | undefined> = import.meta.env ?? {};
+
+const endpoint = env.VITE_APPWRITE_ENDPOINT;
+const projectId = env.VITE_APPWRITE_PROJECT_ID;
+const databaseId = env.VITE_APPWRITE_DATABASE_ID;
 
 export const isAppwriteConfigured = Boolean(endpoint && projectId && databaseId);
 

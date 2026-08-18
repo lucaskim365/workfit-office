@@ -23,6 +23,86 @@ export function GwHead({ icon, name, right }: { icon: string; name: string; righ
   );
 }
 
+/** 좌측 세부 메뉴 항목([[GwSideNav]]). */
+export interface GwNavItem {
+  id: string;
+  icon: string;
+  label: string;
+  /** `참여`·`대기`처럼 주의를 끄는 짧은 알림. */
+  badge?: string;
+  badgeTone?: 'teal' | 'amber';
+  disabled?: boolean;
+  /** 비활성 이유 같은 툴팁. */
+  hint?: string;
+}
+
+/**
+ * 좌측 세부 메뉴 카드 — 게시판·조직도의 마스터-디테일 디자인 언어.
+ * 화면 상단 가로 탭 대신 이 카드를 쓰면 다른 그룹웨어 화면과 톤이 맞는다.
+ * 메뉴 없이 `children`만 채우면 일반 사이드 카드(달력 보조 패널 등)로도 쓴다.
+ */
+export function GwSideNav({ title, desc, items, activeId, onSelect, children }: {
+  title: string;
+  desc?: string;
+  items?: GwNavItem[];
+  activeId?: string;
+  onSelect?: (id: string) => void;
+  children?: ReactNode;
+}) {
+  return (
+    <aside className="flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm">
+      <div>
+        <h2 className="text-sm font-extrabold text-navy">{title}</h2>
+        {desc && <p className="mt-1 text-[11px] text-ink3">{desc}</p>}
+      </div>
+      {items && items.length > 0 && (
+        <nav className="flex flex-col gap-1">
+          {items.map((item) => {
+            const active = item.id === activeId;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                disabled={item.disabled}
+                title={item.hint}
+                onClick={() => onSelect?.(item.id)}
+                className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left text-[12.5px] font-bold transition-all ${
+                  active
+                    ? 'bg-teal text-white shadow-xs'
+                    : item.disabled
+                      ? 'cursor-not-allowed text-ink3 opacity-45'
+                      : 'text-ink2 hover:bg-panel-alt hover:text-ink'
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.badge && (
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold ${
+                    active ? 'bg-white/25 text-white' : item.badgeTone === 'amber' ? 'bg-amber text-white' : 'bg-teal text-white'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      )}
+      {children}
+    </aside>
+  );
+}
+
+/** 좌측 세부 메뉴 + 우측 본문 2단 배치. 좁은 화면에서는 위아래로 쌓인다. */
+export function GwSplit({ nav, children }: { nav: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mt-5 grid items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+      {nav}
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
 const STATUS_TONE: Record<DocStatus, string> = {
   임시저장: 'bg-ink3/12 text-ink2',
   진행중: 'bg-blue/12 text-blue',

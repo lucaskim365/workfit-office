@@ -6,7 +6,19 @@
 
 ---
 
-## 0. 현재 상태 (2026-08-13 기준)
+## 0. 현재 상태
+
+> **✅ 이 컷오버는 완료됐다 (2026-08-18 실측 확인).** 아래 08-13 기록은 착수 시점 스냅샷이다.
+>
+> 운영(`intra.widdyax.com`) 배포 번들을 직접 열어 확인한 결과:
+> `VITE_DB_DRIVER="appwrite"`가 빌드 시점 상수로 접혀 **firestore 분기가 코드에서 제거**됐고,
+> `setEndpoint("https://appwrite.widdyax.com/v1").setProject("6a6bf85e002acb7f71d6")`,
+> DB `workfit`이 구워져 있다. 즉 §1-③의 Vercel env 4종은 **이미 등록돼 있다**
+> (§5 체크박스가 미체크인 것은 문서가 갱신되지 않았을 뿐이다).
+>
+> 후속 릴리스(업무 모듈 4종 운영 배포)는 → `업무모듈_운영배포_런북.md`
+
+_(착수 시점, 2026-08-13)_
 
 - 웹 코드: 보존 repo 26개 Appwrite 전환 완료(`VITE_DB_DRIVER` 스위치). 빌드 통과.
 - Appwrite 데이터: ETL 968건 적재 + 정합 검증 통과. 앱이 실데이터로 동작 확인(로컬).
@@ -89,25 +101,40 @@ curl -s https://intra.widdyax.com/ | grep -oE '/assets/index-[^"]+\.js'   # 엔�
 
 ---
 
-## 4. 롤백 (문제 시 — 안전)
+## 4. 롤백
 
-**브리지 덕에 롤백이 안전하다.** 양쪽이 계속 동기되므로 어느 쪽으로 돌려도 데이터 정합 유지.
+> ## ⛔ 아래 절차는 **2026-08-17부터 무효**다. 그대로 실행하면 운영 데이터가 화면에서 사라진다.
+>
+> `bfd9409` "refactor(push): Firestore 폴백 제거 — Appwrite 단일 SoT로 조회 통일 (#11)"로
+> 듀얼 라이트 브리지 **`bridge-a2f`가 제거**됐고 커밋 본문이 "Firestore로 향하는 런타임
+> 연결이 0"이라고 명시한다. 즉 **Firestore 데이터는 그 시점에 멈춰 있다.**
+>
+> `VITE_DB_DRIVER`를 `firestore`로 되돌리면 앱 전체가 08-17에 정지한 스냅샷을 보게 되어,
+> 그 뒤 Appwrite에 쌓인 운영 데이터가 전부 안 보인다. **이 레버를 쓰지 말 것.**
+>
+> **현행 롤백 = Vercel → Deployments → 직전 배포로 Instant Rollback.**
+> 코드만 되돌아가고 데이터는 그대로다.
 
-1. Vercel env `VITE_DB_DRIVER = firestore` 로 변경 → **Redeploy**.
-2. 웹이 다시 Firestore로. 그동안 Appwrite에 쌓인 웹 변경은 A→F 브리지가 이미 Firestore로 미러했으므로 유실 없음.
-3. 필요 시 브리지는 계속 켜둬도 무방(양쪽 동기 유지).
+_(무효 — 브리지 가동 시절의 절차, 기록 보존용)_
 
-> 롤백 창: 컷오버 후 1~2주 모니터링. 안정되면 다음(모바일 트랙).
+~~**브리지 덕에 롤백이 안전하다.** 양쪽이 계속 동기되므로 어느 쪽으로 돌려도 데이터 정합 유지.~~
+
+1. ~~Vercel env `VITE_DB_DRIVER = firestore` 로 변경 → **Redeploy**.~~
+2. ~~웹이 다시 Firestore로. 그동안 Appwrite에 쌓인 웹 변경은 A→F 브리지가 이미 Firestore로 미러했으므로 유실 없음.~~
+3. ~~필요 시 브리지는 계속 켜둬도 무방(양쪽 동기 유지).~~
 
 ---
 
 ## 5. 컷오버 준비 체크리스트
 
+> 아래 미체크 박스는 **문서가 갱신되지 않은 것**이지 미완료라는 뜻이 아니다(2026-08-18 확인).
+> 실제로는 컷오버가 끝났고, 브리지는 오히려 **제거**됐다(§4). 아래에 실측 결과를 병기한다.
+
 - [ ] 푸시 함수 배포 + FCM_SERVICE_ACCOUNT env
-- [ ] 브리지 F→A 배포 + APPWRITE_* env
-- [ ] 브리지 A→F 배포 + FCM_SERVICE_ACCOUNT env
-- [ ] Appwrite Platforms에 `intra.widdyax.com` 등록
-- [ ] Vercel Production env 4종(VITE_DB_DRIVER·VITE_APPWRITE_*) 설정
+- [ ] 브리지 F→A 배포 + APPWRITE_* env — **이후 제거됨(`bfd9409`)**
+- [ ] 브리지 A→F 배포 + FCM_SERVICE_ACCOUNT env — **이후 제거됨(`bfd9409`)**
+- [ ] Appwrite Platforms에 `intra.widdyax.com` 등록 — **사실상 완료**(운영 브라우저가 Appwrite를 읽고 있음)
+- [ ] Vercel Production env 4종(VITE_DB_DRIVER·VITE_APPWRITE_*) 설정 — **✅ 완료**(§0 번들 확인)
 - [ ] 최종 ETL `--commit` 실행
 - [ ] (권장) Appwrite 권한 검토 — 현재 컬렉션 권한이 `Any` CRUD. 자체로그인(Appwrite Auth 미사용)이라 당장은 Any가 필요하나, **운영 보안 부채**. Firebase Auth/Appwrite Auth 도입 후 좁힐 것(계획서 §6).
 - [ ] 롤백 절차 숙지(§4)

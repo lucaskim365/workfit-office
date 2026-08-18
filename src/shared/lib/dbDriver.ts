@@ -15,8 +15,12 @@ import { isAppwriteConfigured } from '@/shared/lib/appwrite';
  */
 export type DbDriver = 'firestore' | 'appwrite' | 'memory';
 
+// repo 단위 테스트는 Vite를 거치지 않고 Node(`tsx --test`)로 도는데, 거기서는
+// import.meta.env가 통째로 undefined라 바로 읽으면 모듈 로드에서 터진다(appwrite.ts와 같은 가드).
+const env: Record<string, string | undefined> = import.meta.env ?? {};
+
 function selectDbDriver(): DbDriver {
-  const explicit = import.meta.env.VITE_DB_DRIVER as DbDriver | undefined;
+  const explicit = env.VITE_DB_DRIVER as DbDriver | undefined;
 
   if (explicit === 'appwrite') {
     if (isAppwriteConfigured) return 'appwrite';

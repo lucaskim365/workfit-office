@@ -20,10 +20,18 @@ import {
   Client,
   Databases,
   Permission,
+  Query,
   Role,
   DatabasesIndexType,
   type Models,
 } from 'node-appwrite';
+
+/**
+ * `listAttributes` 는 기본 25건만 돌려준다. 속성이 그보다 많은 컬렉션(예: resources 29개)에서
+ * 뒤쪽 속성이 목록에 안 잡혀 "없는 것"으로 오인되고, 재생성 → 409 → available 대기가
+ * 영원히 끝나지 않는다. 모든 조회에 상한을 명시한다.
+ */
+const ATTR_PAGE = [Query.limit(500)];
 
 // ─────────────────────────────────────────────────────────────
 // 스키마 정의 (데이터 주도) — Phase 3에서 컬렉션을 여기 추가하면 된다.
@@ -31,7 +39,7 @@ import {
 type AttrDef =
   | { kind: 'string'; key: string; size: number; required?: boolean; array?: boolean }
   | { kind: 'enum'; key: string; elements: string[]; required?: boolean; xdefault?: string }
-  | { kind: 'integer'; key: string; required?: boolean; array?: boolean; xdefault?: number }
+  | { kind: 'integer'; key: string; required?: boolean; array?: boolean; xdefault?: number; min?: number; max?: number }
   | { kind: 'float'; key: string; required?: boolean; array?: boolean }
   | { kind: 'boolean'; key: string; required?: boolean; xdefault?: boolean };
 
@@ -53,7 +61,16 @@ const S = (key: string, size: number, required = false): AttrDef => ({ kind: 'st
 const SA = (key: string, size: number): AttrDef => ({ kind: 'string', key, size, array: true }); // 문자열 배열
 const J = (key: string, size = 16000): AttrDef => ({ kind: 'string', key, size }); // 중첩/배열-of-객체 → JSON 문자열
 const EN = (key: string, elements: string[], required = false): AttrDef => ({ kind: 'enum', key, elements, required });
-const INT = (key: string, required = false, xdefault?: number): AttrDef => ({ kind: 'integer', key, required, xdefault });
+/**
+ * Appwrite 1.9.6 실측: integer 속성에 min/max 를 **생략하면 워커가 processing 에서 멈춘다**
+ * (속성이 available 로 넘어오지 않아 뒤따르는 인덱스 생성까지 막힌다).
+ * 그래서 호출부가 지정하지 않으면 안전한 전범위 기본값을 넣는다 — 의미상 무제한이되
+ * "지정은 된" 상태로 만드는 것이 목적이다.
+ */
+const INT_MIN = Number.MIN_SAFE_INTEGER;
+const INT_MAX = Number.MAX_SAFE_INTEGER;
+const INT = (key: string, required = false, xdefault?: number, min?: number, max?: number): AttrDef =>
+  ({ kind: 'integer', key, required, xdefault, min: min ?? INT_MIN, max: max ?? INT_MAX });
 const BOOL = (key: string, xdefault?: boolean): AttrDef => ({ kind: 'boolean', key, xdefault });
 const IX = (name: string, attributes: string[]): IndexDef => ({
   key: `idx_${name}`,
@@ -531,6 +548,260 @@ const COLLECTIONS: CollectionDef[] = [
     ],
     indexes: [IX('boardId', ['boardId'])],
   },
+
+  // ── 업무 모듈 (일정관리 / 자원예약 / 업무관리 / 전자설문) ──
+  // repo 7개를 crudBackend 로 전환하면서 필요해진 컬렉션들. 근태(employees·attendance)는
+  // 서버 전용 권한이라 이 스크립트가 아니라 인제스트 쪽 프로비저닝이 담당한다.
+  {
+    id: 'calendarEvents',
+    name: '일정',
+    attributes: [
+      S('id', 64, true),
+      S('ownerUserId', 64, true),
+      S('title', 100, true),
+      S('date', 40, true),
+      BOOL('allDay'),
+      S('startTime', 8),
+      S('endTime', 8),
+      S('memo', 2000),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('calOwner', ['ownerUserId']), IX('calDate', ['date'])],
+  },
+  {
+    id: 'resources',
+    name: '예약 자원',
+    attributes: [
+      S('id', 64, true),
+      S('code', 30, true),
+      S('name', 60, true),
+      EN('typeCode', ['ROOM', 'VEHICLE', 'EQUIPMENT', 'SUPPLY']),
+      EN('bookingMode', ['TIME_SLOT', 'QUANTITY']),
+      S('location', 100, true),
+      S('description', 300),
+      INT('capacity'),
+      INT('totalQuantity'),
+      S('unitCode', 20),
+      S('managerUserId', 64),
+      S('ownerDeptId', 64),
+      EN('approvalMode', ['INSTANT', 'APPROVAL']),
+      INT('slotMinutes'),
+      INT('minDurationMinutes'),
+      INT('maxDurationMinutes'),
+      INT('bufferBeforeMinutes'),
+      INT('bufferAfterMinutes'),
+      INT('maxAdvanceDays'),
+      INT('cancelDeadlineMinutes'),
+      S('availableFrom', 8),
+      S('availableTo', 8),
+      EN('status', ['ACTIVE', 'MAINTENANCE', 'INACTIVE']),
+      S('imageUrl', 512),
+      S('notes', 500),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedBy', 64, true),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('resCode', ['code']), IX('resStatus', ['status'])],
+  },
+  {
+    id: 'resourceReservations',
+    name: '자원 예약',
+    attributes: [
+      S('id', 64, true),
+      S('resourceId', 64, true),
+      S('resourceCodeSnapshot', 30, true),
+      S('resourceNameSnapshot', 60, true),
+      S('requesterUserId', 64, true),
+      S('requesterDeptId', 64),
+      S('title', 100, true),
+      S('purpose', 500, true),
+      S('startAt', 40),
+      S('endAt', 40),
+      INT('quantity'),
+      INT('attendeeCount'),
+      SA('attendeeUserIds', 64),
+      EN('status', ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED']),
+      EN('approvalModeSnapshot', ['INSTANT', 'APPROVAL']),
+      S('approverUserId', 64),
+      S('approvedAt', 40),
+      S('rejectedAt', 40),
+      S('rejectionReason', 500),
+      S('cancelledAt', 40),
+      S('cancelReason', 500),
+      INT('version'),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('rsvResource', ['resourceId']),
+      IX('rsvRequester', ['requesterUserId']),
+      IX('rsvStatus', ['status']),
+      IX('rsvStart', ['startAt']),
+    ],
+  },
+  {
+    id: 'workProjects',
+    name: '업무 프로젝트',
+    attributes: [
+      S('id', 64, true),
+      S('code', 30, true),
+      S('name', 100, true),
+      S('description', 2000),
+      S('ownerUserId', 64, true),
+      SA('memberUserIds', 64),
+      S('deptId', 64),
+      EN('visibility', ['PRIVATE', 'TEAM', 'COMPANY']),
+      EN('status', ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED']),
+      S('startAt', 40),
+      S('dueAt', 40),
+      S('color', 16),
+      S('chatRoomId', 64),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedBy', 64, true),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('prjOwner', ['ownerUserId']), IX('prjStatus', ['status'])],
+  },
+  {
+    id: 'workPhases',
+    name: 'WBS 단계',
+    attributes: [
+      S('id', 64, true),
+      S('projectId', 64, true),
+      S('name', 80, true),
+      INT('sortOrder'),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedBy', 64, true),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('phaseProject', ['projectId'])],
+  },
+  {
+    id: 'workTasks',
+    name: 'WBS 작업',
+    attributes: [
+      S('id', 64, true),
+      S('projectId', 64, true),
+      S('phaseId', 64, true),
+      S('title', 150, true),
+      S('description', 2000),
+      S('assigneeUserId', 64, true),
+      S('startAt', 40),
+      S('dueAt', 40),
+      EN('status', ['TODO', 'IN_PROGRESS', 'DONE']),
+      INT('progress', false, undefined, 0, 100),
+      INT('sortOrder'),
+      S('completedAt', 40),
+      INT('version'),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedBy', 64, true),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('taskProject', ['projectId']),
+      IX('taskPhase', ['phaseId']),
+      IX('taskAssignee', ['assigneeUserId']),
+    ],
+  },
+  {
+    id: 'surveys',
+    name: '전자설문',
+    attributes: [
+      S('id', 64, true),
+      S('title', 100, true),
+      S('description', 1000),
+      S('categoryCode', 64, true),
+      S('ownerUserId', 64, true),
+      EN('status', ['DRAFT', 'SCHEDULED', 'ACTIVE', 'CLOSED', 'ARCHIVED']),
+      EN('audienceType', ['COMPANY', 'DEPARTMENT', 'USERS']),
+      SA('audienceDeptIds', 64),
+      SA('audienceUserIds', 64),
+      BOOL('anonymous'),
+      S('startsAt', 40),
+      S('endsAt', 40),
+      BOOL('showResultToRespondent'),
+      INT('questionCount', false, 0),
+      INT('responseCount', false, 0),
+      S('publishedAt', 40),
+      S('firstRespondedAt', 40),
+      S('closedAt', 40),
+      INT('version'),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('surOwner', ['ownerUserId']), IX('surStatus', ['status'])],
+  },
+  {
+    id: 'surveyQuestions',
+    name: '설문 질문',
+    attributes: [
+      S('id', 64, true),
+      S('surveyId', 64, true),
+      EN('type', ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SHORT_TEXT', 'LONG_TEXT', 'RATING']),
+      S('title', 300, true),
+      S('description', 500),
+      BOOL('required'),
+      INT('order'),
+      J('options'), // array of surveyOption(id/label/order)
+      S('ratingMinLabel', 30),
+      S('ratingMaxLabel', 30),
+      INT('maxLength'),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('sqSurvey', ['surveyId'])],
+  },
+  {
+    id: 'surveyResponses',
+    name: '설문 응답',
+    attributes: [
+      S('id', 64, true),
+      S('surveyId', 64, true),
+      // 익명 설문에서는 두 필드가 비어 있다(응답자 역추적 불가가 설계 의도).
+      S('respondentUserId', 64),
+      S('respondentDeptId', 64),
+      INT('surveyVersion'),
+      S('submittedAt', 40),
+    ],
+    indexes: [IX('srSurvey', ['surveyId'])],
+  },
+  {
+    id: 'surveyAnswers',
+    name: '설문 답변',
+    attributes: [
+      S('id', 64, true),
+      S('surveyId', 64, true),
+      S('responseId', 64, true),
+      S('questionId', 64, true),
+      SA('selectedOptionIds', 64),
+      S('textValue', 2000),
+      INT('ratingValue', false, undefined, 1, 5),
+      S('createdAt', 40),
+    ],
+    indexes: [
+      IX('saSurvey', ['surveyId']),
+      IX('saResponse', ['responseId']),
+      IX('saQuestion', ['questionId']),
+    ],
+  },
+  {
+    id: 'surveyParticipations',
+    name: '설문 참여기록',
+    attributes: [
+      // 문서 ID = `설문ID__사용자ID` — 중복 제출 경쟁에서 문서가 하나만 생기게 하는 결정적 키.
+      S('id', 128, true),
+      S('surveyId', 64, true),
+      S('userId', 64, true),
+      BOOL('responded'),
+      S('respondedAt', 40),
+    ],
+    indexes: [IX('spSurvey', ['surveyId']), IX('spUser', ['userId'])],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
@@ -584,7 +855,7 @@ async function ensureCollection(dbs: Databases, dbId: string, c: CollectionDef) 
 }
 
 async function existingAttrKeys(dbs: Databases, dbId: string, collId: string): Promise<Set<string>> {
-  const res = await dbs.listAttributes(dbId, collId);
+  const res = await dbs.listAttributes(dbId, collId, ATTR_PAGE);
   return new Set(res.attributes.map((a) => (a as unknown as { key: string }).key));
 }
 
@@ -599,7 +870,7 @@ async function ensureAttribute(dbs: Databases, dbId: string, collId: string, a: 
     } else if (a.kind === 'enum') {
       await dbs.createEnumAttribute(dbId, collId, a.key, a.elements, a.required ?? false, a.xdefault);
     } else if (a.kind === 'integer') {
-      await dbs.createIntegerAttribute(dbId, collId, a.key, a.required ?? false, undefined, undefined, a.xdefault, a.array ?? false);
+      await dbs.createIntegerAttribute(dbId, collId, a.key, a.required ?? false, a.min, a.max, a.xdefault, a.array ?? false);
     } else if (a.kind === 'float') {
       await dbs.createFloatAttribute(dbId, collId, a.key, a.required ?? false, undefined, undefined, undefined, a.array ?? false);
     } else {
@@ -612,11 +883,18 @@ async function ensureAttribute(dbs: Databases, dbId: string, collId: string, a: 
   }
 }
 
-/** 속성은 서버에서 비동기 처리 — 인덱스 생성 전 전부 available 될 때까지 폴링. */
+/**
+ * 속성은 서버에서 비동기 처리 — 인덱스 생성 전 전부 available 될 때까지 폴링.
+ *
+ * 대기 한도는 속성 수에 비례한다(과거 60초 고정). 큰 컬렉션일수록 워커가 오래 걸린다.
+ * 단 `resources`(29개)에서 났던 무한 대기의 진짜 원인은 시간이 아니라 **위 ATTR_PAGE 의
+ * 페이지네이션**이었다 — 25건 상한 밖의 속성은 목록에 없으니 status 판정이 영원히
+ * pending 이었다. 시간 여유는 보조 수단일 뿐이라 상한 명시가 본질적인 수정이다.
+ */
 async function waitAttributesAvailable(dbs: Databases, dbId: string, collId: string, keys: string[]) {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + Math.max(120_000, keys.length * 10_000);
   for (;;) {
-    const res = await dbs.listAttributes(dbId, collId);
+    const res = await dbs.listAttributes(dbId, collId, ATTR_PAGE);
     const byKey = new Map(res.attributes.map((a) => [(a as unknown as { key: string }).key, a as unknown as { status: string }]));
     const pending = keys.filter((k) => byKey.get(k)?.status !== 'available');
     if (pending.length === 0) return;

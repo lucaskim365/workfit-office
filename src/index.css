@@ -34,6 +34,9 @@
   --color-blue: #3a6ee0;
   --color-blue-soft: #e7eefc;
   --color-amber: #e6960c;
+  /* 18개 파일이 `bg-amber-soft` 를 쓰고 있었지만 이 토큰이 없어 클래스가 생성되지 않았다.
+     경고 배지·버튼이 배경 없이 렌더되던 원인. blue-soft 와 같은 비율(약 12%)로 맞췄다. */
+  --color-amber-soft: #fcf2e2;
   --color-danger: #e0483b;
   --color-ok: #16a34a;
 
