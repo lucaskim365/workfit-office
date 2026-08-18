@@ -42,3 +42,14 @@ implement/UI개편아이디어/프로젝트/
 
 # Appwrite 함수 배포 번들(빌드 산출물)
 appwrite/_deploy_bundles/
+
+# 메일 개발용으로 옆에 둔 MailHub 실소스 (별도 저장소).
+# 자체 .git, node_modules, 그리고 암호화 키(.env.local)와 앱 비밀번호가 든
+# SQLite(data/*.db)를 품고 있어 이 저장소에 절대 들어가면 안 된다.
+jwheo/MailRef/MailHub/
+# CAPS 근태 연동 참고 사본(C# 에이전트). 실제 근태 개인정보가 든 ACCESS.mdb와
+# 시크릿 경로가 적힌 config.json을 품고 있어 저장소에 들어가면 안 된다.
+jwheo/CommuteRef/
+
+# CAPS 근태 로컬 수신 테스트 산출물(실데이터가 담긴다).
+.caps-local/
