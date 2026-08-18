@@ -4,6 +4,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { boardRepo } from '@/data/board/board.repo';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
+import { fileStorage } from '@/shared/lib/storage';
 
 const BOARDS = BOARDS_SEED;
 
@@ -18,8 +19,16 @@ export default function BoardScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   
-  // 모의 첨부파일 리스트 상태
-  const [writeAttachments, setWriteAttachments] = useState<{ name: string; size: string }[]>([]);
+  // 선택된 실제 파일 객체 목록 상태
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // UI 표시용 첨부파일 목록 파생
+  const writeAttachments = useMemo(() => {
+    return selectedFiles.map((f) => ({
+      name: f.name,
+      size: (f.size / (1024 * 1024)).toFixed(1) + ' MB',
+    }));
+  }, [selectedFiles]);
 
   // 폼 상태 (글쓰기용)
   const [newPost, setNewPost] = useState({
@@ -104,11 +113,8 @@ export default function BoardScreen() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const list = Array.from(e.target.files).map((f) => ({
-        name: f.name,
-        size: (f.size / (1024 * 1024)).toFixed(1) + ' MB',
-      }));
-      setWriteAttachments((prev) => [...prev, ...list]);
+      const list = Array.from(e.target.files);
+      setSelectedFiles((prev) => [...prev, ...list]);
     }
   };
 
@@ -123,20 +129,38 @@ export default function BoardScreen() {
       return;
     }
 
-    const created: Post = {
-      id: Date.now().toString(),
-      boardId: newPost.boardId,
-      title: newPost.title,
-      content: newPost.content,
-      author: `${user.name} ${user.position}`,
-      date: new Date().toISOString().split('T')[0],
-      views: 0,
-      isPinned: newPost.isPinned,
-      hasAttachment: writeAttachments.length > 0,
-      attachedFiles: writeAttachments.length > 0 ? writeAttachments : undefined,
-    };
-
     try {
+      let attachedFilesData: { name: string; size: string; url?: string }[] = [];
+      if (selectedFiles.length > 0) {
+        attachedFilesData = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const safePath = `chat/board/${Date.now()}_${file.name}`;
+            const url = await fileStorage.put(safePath, file, {
+              contentType: file.type,
+              filename: file.name,
+            });
+            return {
+              name: file.name,
+              size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+              url,
+            };
+          })
+        );
+      }
+
+      const created: Post = {
+        id: Date.now().toString(),
+        boardId: newPost.boardId,
+        title: newPost.title,
+        content: newPost.content,
+        author: `${user.name} ${user.position}`,
+        date: new Date().toISOString().split('T')[0],
+        views: 0,
+        isPinned: newPost.isPinned,
+        hasAttachment: attachedFilesData.length > 0,
+        attachedFiles: attachedFilesData.length > 0 ? attachedFilesData : undefined,
+      };
+
       await boardRepo.save(created);
       setPosts((prev) => [created, ...prev]);
       setViewMode('list');
@@ -146,7 +170,7 @@ export default function BoardScreen() {
         boardId: activeBoard,
         isPinned: false,
       });
-      setWriteAttachments([]);
+      setSelectedFiles([]);
     } catch (error) {
       console.error('Failed to save post:', error);
       alert('게시글 저장에 실패했습니다. 다시 시도해 주세요.');
@@ -166,17 +190,44 @@ export default function BoardScreen() {
     }
   };
 
-  const handleFileDownload = (fileName: string) => {
-    const content = `Mock file download: ${fileName}\nDownloaded from WorkFit Board.`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleFileDownload = async (fileName: string, fileUrl?: string) => {
+    if (!fileUrl) {
+      const content = `Mock file download: ${fileName}\nDownloaded from WorkFit Board.`;
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('File download failed, falling back to direct link:', error);
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   return (
@@ -377,7 +428,7 @@ export default function BoardScreen() {
                   {selectedPost.attachedFiles.map((file, fidx) => (
                     <div
                       key={fidx}
-                      onClick={() => handleFileDownload(file.name)}
+                      onClick={() => handleFileDownload(file.name, file.url)}
                       className="flex items-center justify-between gap-3 text-[11.5px] hover:text-teal cursor-pointer"
                       title="클릭하여 다운로드"
                     >
@@ -465,7 +516,7 @@ export default function BoardScreen() {
                         <span className="truncate">📎 {f.name} ({f.size})</span>
                         <button
                           type="button"
-                          onClick={() => setWriteAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                          onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))}
                           className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0 font-bold"
                         >
                           삭제
