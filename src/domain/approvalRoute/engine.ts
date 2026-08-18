@@ -101,33 +101,6 @@ function scopeMatches(scope: DeptScope, drafter: User, org: Org): boolean {
   }
 }
 
-/** 룰이 기안자·문서에 매칭되는가. */
-function ruleMatches(rule: ApprovalRouteRule, ctx: RouteContext, org: Org): boolean {
-  if (!rule.active) return false;
-  if (rule.docType !== '전체' && rule.docType !== ctx.docType) return false;
-  if (!scopeMatches(rule.deptScope, ctx.drafter, org)) return false;
-  
-  const rank = org.rankOf(ctx.drafter.position);
-  
-  // 동적 직급명 우선 대조, 없으면 레거시 rank 숫자 폴백
-  const fromRank = rule.positionFrom ? org.rankOf(rule.positionFrom) : rule.positionFromRank;
-  if (fromRank != null && rank < fromRank) return false;
-  
-  const toRank = rule.positionTo ? org.rankOf(rule.positionTo) : rule.positionToRank;
-  if (toRank != null && rank > toRank) return false;
-
-  const amt = ctx.amount ?? 0;
-  if (rule.amountFrom != null && amt < rule.amountFrom) return false;
-  if (rule.amountTo != null && amt >= rule.amountTo) return false;
-
-  // 드롭다운 하위 조건 체크
-  if (rule.conditionKey && rule.conditionValues && rule.conditionValues.length > 0) {
-    const val = ctx.docData ? String(ctx.docData[rule.conditionKey] ?? '') : '';
-    if (!rule.conditionValues.includes(val)) return false;
-  }
-  return true;
-}
-
 /**
  * resolver → 후보 결재자 id 목록(가장 구체적 → 상위로 승격 순).
  * 엔진이 이 중 기안자·중복이 아닌 첫 후보를 채택(셀프 결재 제외).
