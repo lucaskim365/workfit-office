@@ -43,9 +43,15 @@ export const GW_READY_APPS = new Set([
   'resource',
   'task',
   'survey',
-  'mail',
-  'commute',
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
+
+  // ── 운영 미준비로 보류(2026-08-18) — 화면·라우트는 있으나 백엔드가 없다 ──
+  // 'mail'    : 운영 Function 미이식. 브리지 URL이 없어 "서버 없음"으로 막힌다.
+  //             어느 런타임(Appwrite Function vs 별도 백엔드)에 올릴지 미결.
+  // 'commute' : prod에 employees/attendance 컬렉션 없음(404) + caps-ingest Function
+  //             미배포. 개인정보라 서버 전용 권한이어서 브라우저 조회는 401이다.
+  //             Appwrite Auth나 서버 경유 조회가 선행돼야 한다.
+  // 준비되면 이 두 줄을 위 목록에 되돌리면 된다. 상세: docs/업무모듈_운영배포_런북.md §6
 ]);
 
 export const isGwAppReady = (slug: string) => GW_READY_APPS.has(slug);
