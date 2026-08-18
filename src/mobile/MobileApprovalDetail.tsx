@@ -248,21 +248,25 @@ function ApprovalBody({ doc, form, users }: { doc: ApprovalDoc; form?: ApprovalF
         rows.push(
           <div key={f.key} className="py-1.5">
             {f.label && <div className="mb-1 text-[11.5px] text-ink3">{f.label}</div>}
-            <div className="whitespace-pre-line text-[13px] leading-relaxed text-ink">{text}</div>
+            <div className="whitespace-pre-line break-words text-[13px] leading-relaxed text-ink" style={{ overflowWrap: 'anywhere' }}>
+              {text}
+            </div>
           </div>,
         );
       } else {
         rows.push(
           <div key={f.key} className="flex items-start gap-2 py-1">
             <span className="w-20 shrink-0 text-[12.5px] text-ink3">{f.label}</span>
-            <span className="flex-1 text-[12.5px] font-semibold text-ink">{text}</span>
+            <span className="min-w-0 flex-1 break-words text-[12.5px] font-semibold text-ink" style={{ overflowWrap: 'anywhere' }}>
+              {text}
+            </span>
           </div>,
         );
       }
     }
   } else if (doc.body) {
     rows.push(
-      <div key="body" className="whitespace-pre-line text-[13px] leading-relaxed text-ink">
+      <div key="body" className="whitespace-pre-line break-words text-[13px] leading-relaxed text-ink" style={{ overflowWrap: 'anywhere' }}>
         {doc.body}
       </div>,
     );
