@@ -42,7 +42,8 @@ export const GW_READY_APPS = new Set([
   'calendar',
   'resource',
   'task',
-  // 남은 업무 모듈(survey·mail)과 commute는 이식 단계마다 하나씩 추가한다.
+  'survey',
+  // 남은 업무 모듈(mail)과 commute는 이식 단계마다 하나씩 추가한다.
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 ]);
 
