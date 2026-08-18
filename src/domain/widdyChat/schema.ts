@@ -40,7 +40,23 @@ export const widdyMessageSchema = z.object({
 export type WiddyMessage = z.infer<typeof widdyMessageSchema> & {
   /** UI 전용 상태(도메인 저장 대상 아님). */
   status?: WiddyStatus;
+  /** 사용자 메시지에 첨부한 파일명(표시용, UI 전용). */
+  attachmentName?: string;
+  /** 대기 중 안내 문구(첨부 분석·사내문서 검색 등 느린 응답 예고, UI 전용). */
+  hint?: string;
 };
+
+/** 첨부파일 참조 — 웹이 Garage 에 업로드한 임시 객체. 게이트웨이/RAG 가 다운로드·추출해 근거로 사용. */
+export interface WiddyAttachment {
+  /** Garage 객체 key(예: `widdy-uploads/<uid>/<ts>_<name>`). */
+  key: string;
+  /** 원본 파일명(표시·확장자 판별용). */
+  name: string;
+  /** 바이트 크기(선택, 표시용). */
+  size?: number;
+  /** 원본 다운로드 URL(선택, citation 링크용). */
+  url?: string;
+}
 
 /** 게이트웨이 질의 파라미터. */
 export interface WiddyAskParams {
@@ -54,6 +70,8 @@ export interface WiddyAskParams {
   sessionId: string;
   /** 직전 대화(멀티턴 컨텍스트). role/content 만 전달. */
   history?: { role: WiddyRole; content: string }[];
+  /** 첨부파일(선택). 있으면 RAG 가 그 파일을 근거로 답한다. */
+  attachment?: WiddyAttachment;
 }
 
 /** 게이트웨이 응답(비스트리밍 MVP). */

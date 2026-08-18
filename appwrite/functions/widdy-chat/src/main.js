@@ -53,7 +53,8 @@ export default async ({ req, res, log, error }) => {
 
     const body = req.bodyJson || {};
     const query = (body.query || '').trim();
-    if (!query) return res.json({ answer: '질문을 입력해 주세요.', citations: [] }, 400);
+    // 질문 또는 첨부파일 중 하나는 있어야 함(첨부만 올리면 요약).
+    if (!query && !body.attachment?.key) return res.json({ answer: '질문을 입력해 주세요.', citations: [] }, 400);
 
     // ★신뢰된 uid = 서명 토큰에서만 도출. 무효/없음 → 익명('') → public+일반질문만.
     const uid = verifyToken(body.token || '', process.env.WIDDY_TOKEN_SECRET || '');
@@ -62,7 +63,13 @@ export default async ({ req, res, log, error }) => {
     const r = await fetch(RAG, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, uid, history: body.history || [], sessionId: body.sessionId || '' }),
+      body: JSON.stringify({
+        query,
+        uid,
+        history: body.history || [],
+        sessionId: body.sessionId || '',
+        attachment: body.attachment || null, // 첨부파일(Garage 임시키). RAG 가 다운로드·추출해 근거로 사용.
+      }),
       signal: AbortSignal.timeout(120000),
     });
     if (!r.ok) {
