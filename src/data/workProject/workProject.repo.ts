@@ -1,6 +1,5 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { WORK_PROJECT_SEED } from '@/data/seeds/workProject.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { exclusiveWorkMutation } from '@/data/workManagement/mutation';
 import { loadWorkWbs, readWorkTasks } from '@/data/workWbs/workWbs.store';
 import {
@@ -24,47 +23,30 @@ export interface WorkProjectFilter {
   memberOnly?: boolean;
 }
 
-/** 프로젝트 컬렉션. 문서 ID = `WorkProject.id`(`PRJ-0001`). */
-const COLL = 'workProjects';
-
-let memory: WorkProject[] = WORK_PROJECT_SEED.map(cloneProject);
-
 function cloneProject(project: WorkProject): WorkProject {
   return { ...project, memberUserIds: [...project.memberUserIds] };
 }
 
 /**
- * 전체 프로젝트 로드(저장소 무관). Firebase 미설정 시 in-memory seed 로 graceful degrade.
- * ([[data-layer-pattern]] 정본 패턴)
+ * 프로젝트 컬렉션. 문서 ID = `WorkProject.id`(`PRJ-0001`).
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임하고 파생 로직만 여기 유지한다.
+ * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
  *
- * 열람 권한(`canViewProject`)은 문서를 읽은 뒤 코드에서 거른다. rules 가
+ * 열람 권한(`canViewProject`)은 문서를 읽은 뒤 코드에서 거른다. 저장소 권한이
  * UI-게이트 모델이라 DB 단에서 막지 못한다는 뜻이기도 하다. [[DEPLOY_PREP.md]] §2.4.
  */
-async function loadAll(): Promise<WorkProject[]> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    const snap = await getDocs(collection(fdb, COLL));
-    const out: WorkProject[] = [];
-    for (const d of snap.docs) {
-      const parsed = workProjectSchema.safeParse(d.data());
-      if (parsed.success) out.push(parsed.data);
-    }
-    return out;
-  }
-  return memory;
-}
+const backend = createCrudBackend<WorkProject>({
+  coll: 'workProjects',
+  parse: (raw) => {
+    const parsed = workProjectSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => row.id,
+  seed: WORK_PROJECT_SEED.map(cloneProject),
+});
 
-/** 한 건 저장(신규·수정 공통). */
-async function persist(row: WorkProject): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    await setDoc(doc(fdb, COLL, row.id), row);
-    return;
-  }
-  const index = memory.findIndex((item) => item.id === row.id);
-  if (index >= 0) memory = memory.map((item, itemIndex) => (itemIndex === index ? row : item));
-  else memory = [...memory, row];
-}
+const loadAll = (): Promise<WorkProject[]> => backend.loadAll();
+const persist = (row: WorkProject): Promise<void> => backend.save(row);
 
 function nextId(rows: WorkProject[]): string {
   const max = rows.reduce((value, row) => Math.max(value, Number(row.id.match(/(\d{4})$/)?.[1]) || 0), 0);

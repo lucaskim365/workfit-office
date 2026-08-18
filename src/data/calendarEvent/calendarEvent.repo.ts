@@ -1,6 +1,5 @@
-import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
@@ -21,10 +20,6 @@ export class CalendarEventError extends Error {
   }
 }
 
-/** 일정 컬렉션. 문서 ID = `CalendarEvent.id`(`CAL-20260813-0001`). */
-const COLL = 'calendarEvents';
-
-let memory: CalendarEvent[] = CALENDAR_EVENT_SEED.map(cloneEvent);
 let mutationQueue = Promise.resolve();
 
 function cloneEvent(event: CalendarEvent): CalendarEvent {
@@ -38,48 +33,27 @@ function exclusiveMutation<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /**
- * 전체 일정 로드(저장소 무관). Firebase 미설정 시 in-memory seed 로 graceful degrade.
- * ([[data-layer-pattern]] 정본 패턴)
+ * 일정 컬렉션. 문서 ID = `CalendarEvent.id`(`CAL-20260813-0001`).
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임하고 파생 로직만 여기 유지한다.
+ * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
  *
  * ⚠ 개인 일정이지만 **전건을 읽어 와서 소유자로 거른다.** 조회 규모가 커지면
- * `where('ownerUserId', '==', …)` 쿼리로 바꿔야 하고 그때 복합 인덱스가 필요하다.
+ * `ownerUserId` 로 좁히는 질의가 필요하고 그때 인덱스도 함께 걸어야 한다.
  * 지금은 다른 repo 와 같은 모양을 유지해 이관 난이도를 낮춘다.
  */
-async function loadAll(): Promise<CalendarEvent[]> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    const snap = await getDocs(collection(fdb, COLL));
-    const out: CalendarEvent[] = [];
-    for (const d of snap.docs) {
-      const parsed = calendarEventSchema.safeParse(d.data());
-      if (parsed.success) out.push(parsed.data);
-    }
-    return out;
-  }
-  return memory;
-}
+const backend = createCrudBackend<CalendarEvent>({
+  coll: 'calendarEvents',
+  parse: (raw) => {
+    const parsed = calendarEventSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => row.id,
+  seed: CALENDAR_EVENT_SEED.map(cloneEvent),
+});
 
-/** 한 건 저장(신규·수정 공통). */
-async function persist(row: CalendarEvent): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    await setDoc(doc(fdb, COLL, row.id), row);
-    return;
-  }
-  const index = memory.findIndex((item) => item.id === row.id);
-  if (index >= 0) memory = memory.map((item, itemIndex) => (itemIndex === index ? row : item));
-  else memory = [...memory, row];
-}
-
-/** 한 건 삭제. */
-async function drop(id: string): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    await deleteDoc(doc(fdb, COLL, id));
-    return;
-  }
-  memory = memory.filter((row) => row.id !== id);
-}
+const loadAll = (): Promise<CalendarEvent[]> => backend.loadAll();
+const persist = (row: CalendarEvent): Promise<void> => backend.save(row);
+const drop = (id: string): Promise<void> => backend.remove(id);
 
 function requireActive(actor: CalendarEventActor): void {
   if (!actor.active) throw new CalendarEventError('FORBIDDEN', '사용 중인 계정만 일정을 변경할 수 있습니다.');

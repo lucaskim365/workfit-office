@@ -1,5 +1,3 @@
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import {
   commuteEmployeeSchema,
   commuteRecordSchema,
@@ -7,16 +5,20 @@ import {
   type CommuteRecord,
 } from '@/domain/commute/schema';
 import { COMMUTE_EMPLOYEE_FIXTURE, COMMUTE_RECORD_FIXTURE } from './commute.fixture';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { dbDriver } from '@/shared/lib/dbDriver';
 
 /**
  * 근태 조회 Repository — 읽기 전용.
  *
- * 쓰기는 CAPS 인제스트 서버(/api/ingest, Admin SDK)만 한다. Firebase 설정 시 Firestore
- * `employees`·`attendance`를 읽고, 미설정 로컬은 fixture로 degrade한다.
+ * 쓰기는 CAPS 인제스트(서버 전용 키)만 한다. 조회는 공유 CrudBackend(VITE_DB_DRIVER)로
+ * `employees`·`attendance`를 읽고, memory 드라이버면 로컬 수신 서버(:3020) → fixture 순으로
+ * degrade한다.
  *
- * ⚠ 운영 rules는 근태 읽기를 `request.auth` 기반(본인·관리자)으로 제한한다. 현재 앱은
- * Firebase Auth 미사용이라 Firestore 모드 조회는 거부되는 것이 정상이며, 이 화면이
- * 운영에서 열리려면 Auth + userMap 도입이 선행되어야 한다(feat/commute DESIGN §3).
+ * ⚠ **이 화면은 아직 운영에서 열리지 않는다.** 근태 컬렉션은 개인정보라 서버 전용 권한
+ * (`permissions: []`)으로 프로비저닝돼 있고, 브라우저는 프로젝트 ID만 가진 익명 클라이언트라
+ * 읽기가 거부된다. 열리려면 Appwrite Auth + 문서 권한(본인·관리자) 또는 서버 경유 조회가
+ * 선행되어야 한다(feat/commute DESIGN §3).
  */
 const toIso = (value: unknown): string | null => {
   if (value == null) return null;
@@ -25,16 +27,36 @@ const toIso = (value: unknown): string | null => {
   return typeof maybe.toDate === 'function' ? maybe.toDate().toISOString() : null;
 };
 
+const employeesBackend = createCrudBackend<CommuteEmployee>({
+  coll: 'employees',
+  parse: (raw) => {
+    const parsed = commuteEmployeeSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => String(row.empId),
+  seed: [...COMMUTE_EMPLOYEE_FIXTURE],
+});
+
+const attendanceBackend = createCrudBackend<CommuteRecord>({
+  coll: 'attendance',
+  // Firestore Timestamp → ISO 정규화. Appwrite는 이미 ISO 문자열이라 그대로 통과한다.
+  parse: (raw) => {
+    const data = raw as Record<string, unknown>;
+    const parsed = commuteRecordSchema.safeParse({
+      ...data,
+      inAt: toIso(data.inAt),
+      outAt: toIso(data.outAt),
+    });
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => `${row.empId}_${row.date.replaceAll('-', '')}`, // 인제스트 계약 §4와 동일
+  seed: [...COMMUTE_RECORD_FIXTURE],
+});
+
 export const commuteRepo = {
   async listEmployees(): Promise<CommuteEmployee[]> {
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(collection(db, 'employees'));
-      return snap.docs
-        .flatMap((row) => {
-          const parsed = commuteEmployeeSchema.safeParse(row.data());
-          return parsed.success ? [parsed.data] : [];
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    if (dbDriver !== 'memory') {
+      return (await employeesBackend.loadAll()).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     }
     // 로컬 수신 서버(:3020)가 떠 있으면 CAPS 실데이터(.caps-local)를 읽고, 없으면 fixture.
     const real = await fetchLocal<unknown[]>('/api/local/employees');
@@ -54,23 +76,13 @@ export const commuteRepo = {
     const from = `${month}-01`;
     const to = `${month}-31`;
 
-    if (isFirebaseConfigured && db) {
-      const snap = await getDocs(query(
-        collection(db, 'attendance'),
-        where('empId', '==', empId),
-        where('date', '>=', from),
-        where('date', '<=', to),
-      ));
-      return snap.docs
-        .flatMap((row) => {
-          const data = row.data();
-          const parsed = commuteRecordSchema.safeParse({
-            ...data,
-            inAt: toIso(data.inAt),
-            outAt: toIso(data.outAt),
-          });
-          return parsed.success ? [parsed.data] : [];
-        })
+    if (dbDriver !== 'memory') {
+      // ⚠ 공유 백엔드가 전건 로드만 제공해 Firestore 시절의 서버측 where(empId·date 범위)가
+      // 사라졌다. 지금 규모(수백 건)는 견디지만, 근태는 직원×일수로 선형 증가하므로
+      // 백엔드에 질의 API를 추가하는 것이 다음 수순이다.
+      const rows = await attendanceBackend.loadAll();
+      return rows
+        .filter((row) => row.empId === empId && row.date >= from && row.date <= to)
         .sort((a, b) => a.date.localeCompare(b.date));
     }
 

@@ -1,5 +1,3 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import type { User } from '@/domain/user/schema';
 import type { Resource } from '@/domain/resource/schema';
 import {
@@ -18,6 +16,7 @@ import {
 } from '@/domain/reservation/engine';
 import { RESERVATION_SEED } from '@/data/seeds/reservation.seed';
 import { resourceRepo } from '@/data/resource/resource.repo';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 export interface ReservationFilter {
   resourceId?: string;
@@ -27,10 +26,6 @@ export interface ReservationFilter {
   to?: string;
 }
 
-/** 예약 컬렉션. 문서 ID = `Reservation.id`(`RSV-20260813-0001`). */
-const COLL = 'resourceReservations';
-
-let memory: Reservation[] = RESERVATION_SEED.map((row) => reservationSchema.parse(row));
 let mutationQueue: Promise<unknown> = Promise.resolve();
 
 const clone = (row: Reservation): Reservation => ({ ...row, attendeeUserIds: [...row.attendeeUserIds] });
@@ -42,39 +37,33 @@ function exclusive<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /**
- * 전체 예약 로드(저장소 무관). Firebase 미설정 시 in-memory seed 로 graceful degrade.
- * ([[data-layer-pattern]] 정본 패턴)
+ * 예약 컬렉션. 문서 ID = `Reservation.id`(`RSV-20260813-0001`).
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임하고 파생 로직만 여기 유지한다.
+ * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
+ */
+const backend = createCrudBackend<Reservation>({
+  coll: 'resourceReservations',
+  parse: (raw) => {
+    const parsed = reservationSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => row.id,
+  seed: RESERVATION_SEED.map((row) => reservationSchema.parse(row)),
+});
+
+/**
+ * 전체 예약 로드.
  *
  * 종료 시각이 지난 예약의 `COMPLETED` 전이는 **저장하지 않고 읽을 때마다 파생**한다.
  * 상태를 되쓰면 조회만 해도 문서가 갱신돼 운영에서 불필요한 쓰기가 생긴다.
  */
 async function loadAll(now = new Date()): Promise<Reservation[]> {
-  let rows: Reservation[];
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    const snap = await getDocs(collection(fdb, COLL));
-    rows = [];
-    for (const d of snap.docs) {
-      const parsed = reservationSchema.safeParse(d.data());
-      if (parsed.success) rows.push(parsed.data);
-    }
-  } else {
-    rows = memory;
-  }
+  const rows = await backend.loadAll();
   return rows.map((row) => deriveCompleted(row, now));
 }
 
 /** 한 건 저장(신규·수정 공통). 문서 ID 를 키로 덮어쓴다. */
-async function persist(row: Reservation): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    await setDoc(doc(fdb, COLL, row.id), row);
-    return;
-  }
-  const index = memory.findIndex((item) => item.id === row.id);
-  if (index >= 0) memory = memory.map((item, itemIndex) => (itemIndex === index ? row : item));
-  else memory = [...memory, row];
-}
+const persist = (row: Reservation): Promise<void> => backend.save(row);
 
 function nextId(rows: Reservation[], now: Date): string {
   const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;

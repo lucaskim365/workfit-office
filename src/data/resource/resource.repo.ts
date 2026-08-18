@@ -1,5 +1,3 @@
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import type { User } from '@/domain/user/schema';
 import {
   resourceSchema,
@@ -10,6 +8,7 @@ import {
 } from '@/domain/resource/schema';
 import { canManageResources, ReservationError } from '@/domain/reservation/engine';
 import { RESOURCE_SEED } from '@/data/seeds/resource.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
 export interface ResourceFilter {
   typeCode?: ResourceType;
@@ -17,43 +16,26 @@ export interface ResourceFilter {
   q?: string;
 }
 
-/** 자원 마스터 컬렉션. 문서 ID = `Resource.id`(`RES-0001`). */
-const COLL = 'resources';
-
-let memory: Resource[] = RESOURCE_SEED.map((row) => resourceSchema.parse(row));
-
 /**
- * 전체 자원 로드(저장소 무관). Firebase 미설정 시 in-memory seed 로 degrade.
- * ([[data-layer-pattern]] 정본 패턴 — `chatMessage.repo.ts` `loadAll` 과 같은 모양)
+ * 자원 마스터 컬렉션. 문서 ID = `Resource.id`(`RES-0001`).
+ * 저장은 공유 CrudBackend(VITE_DB_DRIVER)로 위임하고 파생 로직만 여기 유지한다.
+ * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
  *
  * 문서별 안전 파싱이다. 스키마에 맞지 않는 문서 하나 때문에 목록 전체가
  * 예외로 죽지 않도록 실패한 문서만 건너뛴다.
  */
-async function loadAll(): Promise<Resource[]> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    const snap = await getDocs(collection(fdb, COLL));
-    const out: Resource[] = [];
-    for (const d of snap.docs) {
-      const parsed = resourceSchema.safeParse(d.data());
-      if (parsed.success) out.push(parsed.data);
-    }
-    return out;
-  }
-  return memory;
-}
+const backend = createCrudBackend<Resource>({
+  coll: 'resources',
+  parse: (raw) => {
+    const parsed = resourceSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  },
+  idOf: (row) => row.id,
+  seed: RESOURCE_SEED.map((row) => resourceSchema.parse(row)),
+});
 
-/** 한 건 저장(신규·수정 공통). 문서 ID 를 키로 덮어쓴다. */
-async function persist(row: Resource): Promise<void> {
-  if (isFirebaseConfigured && db) {
-    const fdb = db;
-    await setDoc(doc(fdb, COLL, row.id), row);
-    return;
-  }
-  const index = memory.findIndex((item) => item.id === row.id);
-  if (index >= 0) memory = memory.map((item, itemIndex) => (itemIndex === index ? row : item));
-  else memory = [...memory, row];
-}
+const loadAll = (): Promise<Resource[]> => backend.loadAll();
+const persist = (row: Resource): Promise<void> => backend.save(row);
 
 const clone = (row: Resource): Resource => ({ ...row });
 

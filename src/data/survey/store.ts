@@ -1,5 +1,3 @@
-import { collection, deleteDoc, doc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/shared/lib/firebase';
 import { surveySchema, type Survey } from '@/domain/survey/schema';
 import { surveyQuestionSchema, type SurveyQuestion } from '@/domain/surveyQuestion/schema';
 import { surveyAnswerSchema, type SurveyAnswer } from '@/domain/surveyAnswer/schema';
@@ -8,10 +6,13 @@ import { surveyResponseSchema, type SurveyResponse } from '@/domain/surveyRespon
 import { deriveSurvey } from '@/domain/survey/engine';
 import { SURVEY_SEED } from '@/data/seeds/survey.seed';
 import { SURVEY_QUESTION_SEED } from '@/data/seeds/surveyQuestion.seed';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { dbDriver } from '@/shared/lib/dbDriver';
 
 /**
  * 전자설문 저장소 — 다섯 컬렉션을 한곳에서 다룬다.
- * ([[data-layer-pattern]] 정본 패턴 / Firebase 미설정 시 in-memory seed)
+ * 저장은 컬렉션별 공유 CrudBackend(VITE_DB_DRIVER)로 위임한다.
+ * ([[data-layer-pattern]] 정본 패턴 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 3)
  *
  * 설문과 질문은 `questionCount` 비정규화와 설문 복제 때문에 서로를 함께 갱신해야 하므로
  * repository 파일마다 상태를 따로 두지 않고 여기에 모은다.
@@ -42,72 +43,107 @@ export const surveyStore: SurveyStore = {
   participations: [],
 };
 
-/** 문서별 안전 파싱 — 불량 문서 하나 때문에 목록 전체가 죽지 않도록 건너뛴다. */
-function parseDocs<T>(docs: Array<{ data: () => unknown }>, schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }): T[] {
-  const out: T[] = [];
-  for (const d of docs) {
-    const parsed = schema.safeParse(d.data());
-    if (parsed.success && parsed.data !== undefined) out.push(parsed.data);
-  }
-  return out;
-}
+/** 안전 파싱 어댑터 — 불량 문서 하나 때문에 목록 전체가 죽지 않도록 건너뛴다. */
+const safeParser = <T>(schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }) =>
+  (raw: unknown): T | null => {
+    const parsed = schema.safeParse(raw);
+    return parsed.success && parsed.data !== undefined ? parsed.data : null;
+  };
+
+const surveysBackend = createCrudBackend<Survey>({
+  coll: SURVEY_COLL,
+  parse: safeParser(surveySchema),
+  idOf: (row) => row.id,
+  seed: SURVEY_SEED.map((row) => surveySchema.parse(row)),
+});
+
+const questionsBackend = createCrudBackend<SurveyQuestion>({
+  coll: SURVEY_QUESTION_COLL,
+  parse: safeParser(surveyQuestionSchema),
+  idOf: (row) => row.id,
+  seed: SURVEY_QUESTION_SEED.map((row) => surveyQuestionSchema.parse(row)),
+  // 선택지는 배열-of-객체라 Appwrite 스칼라 속성에 못 담는다 → JSON 문자열.
+  jsonFields: ['options'],
+});
+
+const responsesBackend = createCrudBackend<SurveyResponse>({
+  coll: SURVEY_RESPONSE_COLL,
+  parse: safeParser(surveyResponseSchema),
+  idOf: (row) => row.id,
+  seed: [],
+});
+
+const answersBackend = createCrudBackend<SurveyAnswer>({
+  coll: SURVEY_ANSWER_COLL,
+  parse: safeParser(surveyAnswerSchema),
+  idOf: (row) => row.id,
+  seed: [],
+});
+
+const participationsBackend = createCrudBackend<SurveyParticipation>({
+  coll: SURVEY_PARTICIPATION_COLL,
+  parse: safeParser(surveyParticipationSchema),
+  idOf: (row) => row.id,
+  seed: [],
+});
 
 /**
- * Firestore → `surveyStore` 적재. repo 의 공개 메서드마다 처음에 부른다.
- * Firebase 미설정(로컬)이면 아무것도 하지 않고 seed 를 그대로 쓴다.
+ * 컬렉션명 → 백엔드. `persistDocs`/`removeDocs` 가 컬렉션명만 받는 기존 시그니처를
+ * 유지하려고 둔 디스패치 표다(호출부 5개 파일을 건드리지 않기 위해).
+ */
+const BACKENDS: Record<string, { save(item: { id: string }): Promise<void>; remove(id: string): Promise<void> }> = {
+  [SURVEY_COLL]: surveysBackend,
+  [SURVEY_QUESTION_COLL]: questionsBackend,
+  [SURVEY_RESPONSE_COLL]: responsesBackend,
+  [SURVEY_ANSWER_COLL]: answersBackend,
+  [SURVEY_PARTICIPATION_COLL]: participationsBackend,
+};
+
+/**
+ * 저장소 → `surveyStore` 적재. repo 의 공개 메서드마다 처음에 부른다.
+ * memory 드라이버(로컬)면 아무것도 하지 않고 seed 를 그대로 쓴다 — 캐시가 곧 저장소다.
  *
  * ⚠ 응답·답변은 설문이 쌓일수록 커진다. 지금은 전건을 읽지만 결과 집계가 느려지면
- * `where('surveyId', '==', …)` 쿼리로 좁혀야 하고 그때 복합 인덱스가 필요하다.
+ * `surveyId` 로 좁히는 질의가 필요하고 그때 인덱스도 함께 걸어야 한다.
  */
 export async function loadSurveyStore(): Promise<void> {
-  if (!isFirebaseConfigured || !db) return;
-  const fdb = db;
+  if (dbDriver === 'memory') return;
   const [surveys, questions, responses, answers, participations] = await Promise.all([
-    getDocs(collection(fdb, SURVEY_COLL)),
-    getDocs(collection(fdb, SURVEY_QUESTION_COLL)),
-    getDocs(collection(fdb, SURVEY_RESPONSE_COLL)),
-    getDocs(collection(fdb, SURVEY_ANSWER_COLL)),
-    getDocs(collection(fdb, SURVEY_PARTICIPATION_COLL)),
+    surveysBackend.loadAll(),
+    questionsBackend.loadAll(),
+    responsesBackend.loadAll(),
+    answersBackend.loadAll(),
+    participationsBackend.loadAll(),
   ]);
-  surveyStore.surveys = parseDocs(surveys.docs, surveySchema);
-  surveyStore.questions = parseDocs(questions.docs, surveyQuestionSchema);
-  surveyStore.responses = parseDocs(responses.docs, surveyResponseSchema);
-  surveyStore.answers = parseDocs(answers.docs, surveyAnswerSchema);
-  surveyStore.participations = parseDocs(participations.docs, surveyParticipationSchema);
+  surveyStore.surveys = surveys;
+  surveyStore.questions = questions;
+  surveyStore.responses = responses;
+  surveyStore.answers = answers;
+  surveyStore.participations = participations;
 }
 
 /**
  * 문서 여러 건 저장. 호출부는 `surveyStore` 배열도 함께 갱신한다(캐시).
- * Firebase 미설정이면 아무것도 하지 않는다 — 캐시가 곧 저장소다.
+ * memory 드라이버면 아무것도 하지 않는다 — 캐시가 곧 저장소다.
+ *
+ * ⚠ Firestore 시절의 writeBatch(≤500)가 사라지고 **건별 순차 쓰기**가 됐다.
+ * 공유 백엔드가 원시연산(save/remove)만 노출하기 때문이다. 설문 제출 1건은
+ * 답변 수만큼 쓰기가 나가므로, 질문 수가 많은 설문에서 느려지면 배치 API를
+ * 백엔드에 추가하는 것이 다음 수순이다.
  */
 export async function persistDocs<T extends { id: string }>(coll: string, rows: T[]): Promise<void> {
-  if (!isFirebaseConfigured || !db || rows.length === 0) return;
-  const fdb = db;
-  if (rows.length === 1) {
-    await setDoc(doc(fdb, coll, rows[0].id), rows[0]);
-    return;
-  }
-  // Firestore batch 최대 500건 → 청크로 분할.
-  for (let i = 0; i < rows.length; i += 450) {
-    const batch = writeBatch(fdb);
-    for (const row of rows.slice(i, i + 450)) batch.set(doc(fdb, coll, row.id), row);
-    await batch.commit();
-  }
+  if (dbDriver === 'memory' || rows.length === 0) return;
+  const backend = BACKENDS[coll];
+  if (!backend) throw new Error(`[survey] 알 수 없는 컬렉션: ${coll}`);
+  for (const row of rows) await backend.save(row);
 }
 
 /** 문서 여러 건 삭제. */
 export async function removeDocs(coll: string, ids: string[]): Promise<void> {
-  if (!isFirebaseConfigured || !db || ids.length === 0) return;
-  const fdb = db;
-  if (ids.length === 1) {
-    await deleteDoc(doc(fdb, coll, ids[0]));
-    return;
-  }
-  for (let i = 0; i < ids.length; i += 450) {
-    const batch = writeBatch(fdb);
-    for (const id of ids.slice(i, i + 450)) batch.delete(doc(fdb, coll, id));
-    await batch.commit();
-  }
+  if (dbDriver === 'memory' || ids.length === 0) return;
+  const backend = BACKENDS[coll];
+  if (!backend) throw new Error(`[survey] 알 수 없는 컬렉션: ${coll}`);
+  for (const id of ids) await backend.remove(id);
 }
 
 let mutationQueue: Promise<unknown> = Promise.resolve();
