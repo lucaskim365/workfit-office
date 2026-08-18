@@ -56,3 +56,6 @@ jwheo/CommuteRef/
 
 # CAPS 근태 로컬 수신 테스트 산출물(실데이터가 담긴다).
 .caps-local/
+
+# 시드 적재 산출물(환경별) — gw-testdata.json 에서 재생성 가능
+scripts/gw-testdata.*.manifest.json
