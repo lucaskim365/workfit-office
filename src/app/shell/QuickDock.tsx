@@ -443,7 +443,14 @@ function ChatbotPanel() {
                     style={bubbleStyle}
                     className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${me ? '' : 'border border-border bg-panel text-ink'}`}
                   >
-                    {m.status === 'pending' ? <TypingDots /> : m.content}
+                    {m.status === 'pending' ? (
+                      <div className="flex flex-col gap-1.5">
+                        <TypingDots />
+                        {m.hint && <span className="text-[11px] leading-snug text-ink3">{m.hint}</span>}
+                      </div>
+                    ) : (
+                      m.content
+                    )}
                   </div>
                   {m.attachmentName && (
                     <div className={`mt-1 flex ${me ? 'justify-end' : 'justify-start'}`}>

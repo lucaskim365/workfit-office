@@ -15,6 +15,12 @@ import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 /** 초기 인사. */
 const GREETING = '안녕하세요,👋\nWiddy입니다. 사내 문서에 대해 무엇이든 물어보세요.';
 
+/** 느린 응답 대기 안내 문구. 첨부는 항상 로컬 분석(느림) → 즉시, 그 외는 지연 시에만. */
+const HINT_ATTACH = '📎 첨부 파일을 분석하고 있어요. 내용이 길면 시간이 조금 걸릴 수 있어요…';
+const HINT_DOC = '📄 사내 문서를 찾아보는 중이에요. 잠시만 기다려 주세요…';
+/** 일반질문(Groq)은 대개 이 시간 안에 끝남 → 이보다 오래 걸리면 사내문서 검색으로 보고 안내. */
+const HINT_DELAY_MS = 2500;
+
 function makeId(): string {
   try {
     return crypto.randomUUID();
@@ -62,7 +68,11 @@ export function useWiddyChat() {
         attachmentName: attachment?.name,
       };
       const pendingId = makeId();
-      const pending: WiddyMessage = { id: pendingId, role: 'assistant', content: '', citations: [], at, status: 'pending' };
+      // 첨부는 항상 로컬 분석(느림)이 확정 → 즉시 안내. 그 외는 지연되면(HINT_DELAY_MS) 안내.
+      const pending: WiddyMessage = {
+        id: pendingId, role: 'assistant', content: '', citations: [], at, status: 'pending',
+        hint: attachment ? HINT_ATTACH : undefined,
+      };
 
       // 전송 전 대화(멀티턴 컨텍스트) — 오류 메시지는 제외.
       const history = messages
@@ -71,23 +81,38 @@ export function useWiddyChat() {
 
       setMessages((prev) => [...prev, userMsg, pending]);
 
+      // 첨부가 없을 때: 응답이 늦으면(=사내문서 검색·로컬 생성) 안내 문구 노출.
+      let hintTimer: ReturnType<typeof setTimeout> | undefined;
+      if (!attachment) {
+        hintTimer = setTimeout(() => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === pendingId && m.status === 'pending' ? { ...m, hint: HINT_DOC } : m)),
+          );
+        }, HINT_DELAY_MS);
+      }
+      const clearHintTimer = () => { if (hintTimer) clearTimeout(hintTimer); };
+
       mutation.mutate(
         { query, history, attachment },
         {
-          onSuccess: (res) =>
+          onSuccess: (res) => {
+            clearHintTimer();
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === pendingId ? { ...m, content: res.answer, citations: res.citations, status: 'done' } : m,
+                m.id === pendingId ? { ...m, content: res.answer, citations: res.citations, status: 'done', hint: undefined } : m,
               ),
-            ),
-          onError: (e) =>
+            );
+          },
+          onError: (e) => {
+            clearHintTimer();
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === pendingId
-                  ? { ...m, content: (e as Error).message || '오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', status: 'error' }
+                  ? { ...m, content: (e as Error).message || '오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', status: 'error', hint: undefined }
                   : m,
               ),
-            ),
+            );
+          },
         },
       );
     },

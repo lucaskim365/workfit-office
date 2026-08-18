@@ -42,6 +42,8 @@ export type WiddyMessage = z.infer<typeof widdyMessageSchema> & {
   status?: WiddyStatus;
   /** 사용자 메시지에 첨부한 파일명(표시용, UI 전용). */
   attachmentName?: string;
+  /** 대기 중 안내 문구(첨부 분석·사내문서 검색 등 느린 응답 예고, UI 전용). */
+  hint?: string;
 };
 
 /** 첨부파일 참조 — 웹이 Garage 에 업로드한 임시 객체. 게이트웨이/RAG 가 다운로드·추출해 근거로 사용. */
