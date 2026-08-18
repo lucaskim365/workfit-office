@@ -9,10 +9,10 @@ export const CLUB_SEED_DATA: Club[] = [
     joinPolicy: 'free',
     memberCount: 4,
     members: [
-      { userId: 'U009', name: '박명규', dept: '사업관리팀', position: '부장', role: 'owner' },
-      { userId: 'U006', name: '강윤석', dept: '품질관리팀', position: '이사', role: 'member' },
-      { userId: 'U008', name: '홍형표', dept: '영업팀', position: '부장', role: 'member' },
-      { userId: 'U010', name: '박광래', dept: '사업관리팀', position: '차장', role: 'member' },
+      { userId: 'U009', name: '박명규', dept: 'AX PMO팀', position: '부장', role: 'owner' },
+      { userId: 'U006', name: '강윤석', dept: '품질심사팀', position: '이사', role: 'member' },
+      { userId: 'U008', name: '홍형표', dept: 'AX 솔루션컨설팅팀', position: '부장', role: 'member' },
+      { userId: 'U010', name: '박광래', dept: 'AX PMO팀', position: '차장', role: 'member' },
     ],
     posts: [
       {
@@ -55,9 +55,9 @@ export const CLUB_SEED_DATA: Club[] = [
     joinPolicy: 'approval',
     memberCount: 3,
     members: [
-      { userId: 'U011', name: '김승기', dept: 'S/W 개발팀', position: '부장', role: 'owner' },
-      { userId: 'U012', name: '홍채원', dept: 'S/W 개발팀', position: '사원', role: 'member' },
-      { userId: 'U007', name: '최지혜', dept: '품질관리팀', position: '사원', role: 'member' },
+      { userId: 'U011', name: '김승기', dept: '데이터플랫폼 개발팀', position: '부장', role: 'owner' },
+      { userId: 'U012', name: '홍채원', dept: '데이터플랫폼 개발팀', position: '사원', role: 'member' },
+      { userId: 'U007', name: '최지혜', dept: '품질심사팀', position: '사원', role: 'member' },
     ],
     posts: [
       {
@@ -98,8 +98,8 @@ export const CLUB_SEED_DATA: Club[] = [
     joinPolicy: 'invite',
     memberCount: 2,
     members: [
-      { userId: 'U011', name: '김승기', dept: 'S/W 개발팀', position: '부장', role: 'owner' },
-      { userId: 'U003', name: '손승원', dept: 'AX사업본부', position: '상무이사', role: 'member' },
+      { userId: 'U011', name: '김승기', dept: '데이터플랫폼 개발팀', position: '부장', role: 'owner' },
+      { userId: 'U003', name: '손승원', dept: 'AX지능화본부', position: '상무이사', role: 'member' },
     ],
     posts: [],
     events: [],

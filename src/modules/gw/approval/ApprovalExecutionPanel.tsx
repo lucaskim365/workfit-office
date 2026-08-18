@@ -103,8 +103,14 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
 
     const myDeptObj = depts.find((d) => d.name === meUser?.dept);
     const myDeptId = myDeptObj?.id;
-    const isSameDept = doc.drafterDeptId 
-      ? doc.drafterDeptId === myDeptId 
+    const drafterUser = users.find((u) => u.id === doc.drafterId);
+    const drafterCurrentDeptName = drafterUser?.dept ?? '';
+    const drafterCurrentDeptObj = depts.find((dept) => dept.name === drafterCurrentDeptName);
+    const drafterCurrentDeptId = drafterCurrentDeptObj?.id;
+    const docDeptId = doc.drafterDeptId || drafterCurrentDeptId;
+
+    const isSameDept = docDeptId 
+      ? docDeptId === myDeptId 
       : doc.drafterDept === meUser?.dept;
 
     const isDrafterOrDrafterDept = doc.drafterId === userId || (meUser?.dept && isSameDept);

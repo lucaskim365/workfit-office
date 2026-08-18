@@ -165,8 +165,14 @@ export function ApprovalDocumentView({
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptId = myDeptObj?.id ?? '';
     const myDeptName = userObj?.dept ?? '';
-    const isSameDept = doc.drafterDeptId 
-      ? doc.drafterDeptId === myDeptId 
+    const drafterUser = org.userById(doc.drafterId);
+    const drafterCurrentDeptName = drafterUser?.dept ?? '';
+    const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
+    const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
+    const docDeptId = doc.drafterDeptId || drafterCurrentDeptId;
+
+    const isSameDept = docDeptId 
+      ? docDeptId === myDeptId 
       : doc.drafterDept === myDeptName;
     if (vis === '부서' && !isSameDept) return false;
 

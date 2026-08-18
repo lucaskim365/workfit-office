@@ -142,7 +142,15 @@ export default function ApprovalScreen() {
           if (d.status !== '완료') return false; // 결재 완료된 문서만 노출
           const vis = d.visibility ?? '부서';
           if (vis === '비공개') return false; // 비공개는 제외
-          return d.drafterDeptId === myDeptId || (!d.drafterDeptId && d.drafterDept === myDeptName);
+
+          // drafterDeptId 가 비어있는 과거 레거시 기결재 문서는 기안자의 현재 부서 ID를 도출해 필터 대조
+          const drafterUser = org.userById(d.drafterId);
+          const drafterCurrentDeptName = drafterUser?.dept ?? '';
+          const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
+          const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
+          const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
+
+          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
         }).sort((a, b) => {
           const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -407,7 +415,14 @@ export default function ApprovalScreen() {
                     const deptDocsCount = allDocs.filter((d) => {
                       const vis = d.visibility ?? '부서';
                       if (vis === '비공개') return false;
-                      return d.drafterDeptId === myDeptId || (!d.drafterDeptId && d.drafterDept === myDeptName);
+
+                      const drafterUser = org.userById(d.drafterId);
+                      const drafterCurrentDeptName = drafterUser?.dept ?? '';
+                      const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
+                      const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
+                      const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
+
+                      return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
                     const companyDocsCount = allDocs.filter((d) => d.visibility === '전사').length;
                     badgeCount = deptDocsCount + companyDocsCount;
@@ -456,7 +471,7 @@ export default function ApprovalScreen() {
                       <span className="flex items-center gap-1.5">
                         <span>{label}</span>
                       </span>
-                      {hasBadge && (
+                      {hasBadge && b !== '문서함' && (
                         <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
                           {badgeCount}
                         </span>
