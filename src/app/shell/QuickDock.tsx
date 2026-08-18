@@ -4,6 +4,7 @@ import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } fro
 import { Pill } from '@/shared/ui/Pill';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { isGwAppReady } from '@/app/shell/gw-screens';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
@@ -303,7 +304,9 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-4 gap-2">
           {apps.map((a, i) => {
 
-            const enabled = a.to === 'approval' || a.to === 'orgchart' || a.to === 'leave' || a.to === 'board' || a.to === 'community';
+            // 활성 목록은 gw-screens.ts 단일 소스를 본다 — 화면을 만들고도 회색 타일로
+            // 남거나, 반대로 라우트 없는 타일이 켜지는 어긋남을 막는다.
+            const enabled = isGwAppReady(a.to);
 
             return (
               <button

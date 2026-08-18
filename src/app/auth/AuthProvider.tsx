@@ -47,8 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const uid = sessionStorage.getItem(SESSION_KEY);
         if (uid) {
           const users = await userRepo.list();
+          // 언마운트된 경우 아무 것도 건드리지 않는다. StrictMode는 effect를 두 번 실행하는데,
+          // 첫 번째 cleanup 이후 비동기가 끝났다고 세션을 지우면 정상 로그인 상태가 날아간다.
+          if (!alive) return;
           const found = users.find((u) => u.id === uid && u.status === '사용');
-          if (alive && found) setUser(found);
+          if (found) setUser(found);
           else sessionStorage.removeItem(SESSION_KEY);
         }
       } catch {
