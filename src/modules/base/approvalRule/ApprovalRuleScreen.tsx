@@ -37,7 +37,9 @@ const blankRule = (): ApprovalRouteRule => ({
   id: '', name: '', priority: 50, active: true, docType: '전체',
   conditionKey: null, conditionValues: [],
   deptScope: { kind: '전체', deptId: null, deptType: null },
-  positionFromRank: null, positionToRank: null, amountFrom: null, amountTo: null,
+  positionFromRank: null, positionToRank: null,
+  positionFrom: null, positionTo: null,
+  amountFrom: null, amountTo: null,
   steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false }],
 });
 
