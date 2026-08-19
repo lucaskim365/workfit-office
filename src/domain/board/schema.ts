@@ -23,6 +23,7 @@ export const postSchema = z.object({
     z.object({
       name: z.string(),
       size: z.string(),
+      url: z.string().optional(),
     })
   ).optional(),
 });
