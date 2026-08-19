@@ -33,7 +33,7 @@ import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import MailAccountDialog from './MailAccountDialog';
-import MailSignatureDialog from './MailSignatureDialog';
+import MailAccountManageDialog from './MailAccountManageDialog';
 import MailAccountPicker from './MailAccountPicker';
 import MailDraftList from './MailDraftList';
 import MailFolderNav from './MailFolderNav';
@@ -72,7 +72,7 @@ function LocalMailScreen() {
   /** 보낸사람 주소 클릭으로 여는 새 메일의 받는 사람 초기값. */
   const [composeTo, setComposeTo] = useState<MailAddress[] | null>(null);
   /** 계정 모달 — `null`이면 닫힘, `'new'`면 등록, 계정이면 수정. */
-  const [accountDialog, setAccountDialog] = useState<'new' | MailAccount | null>(null);
+  const [accountDialog, setAccountDialog] = useState<'new' | 'manage' | MailAccount | null>(null);
 
   const usersQuery = useUsers();
   const users = usersQuery.data ?? [];
@@ -431,12 +431,12 @@ function LocalMailScreen() {
             <Button disabled={inboxQuery.isFetching} onClick={() => { void inboxQuery.refetch(); }}>
               {inboxQuery.isFetching ? '불러오는 중…' : '새로고침'}
             </Button>
-            {/* 브리지는 계정 등록·수정을 지원하지 않는다. 계정은 메일 서버 화면에서 관리한다. */}
-            <Button
-              disabled={isMailBackendReady}
-              title={isMailBackendReady ? '계정 연결은 메일 서버 화면에서 관리합니다.' : '메일 계정 연결'}
-              onClick={() => setAccountDialog('new')}
-            >
+            {/*
+              계정 등록·수정·해제는 메일 Function이 처리한다. 예전에는 MailHub 브리지가
+              계정 관리를 지원하지 않아 서버가 붙으면 이 버튼을 잠갔는데, 그러면 정작
+              연결이 된 상태에서 계정을 손댈 수 없었다.
+            */}
+            <Button title="메일 계정 관리" onClick={() => setAccountDialog('manage')}>
               계정 관리
             </Button>
             <Button variant="primary" disabled={accounts.length === 0} onClick={() => { setNotice(''); setCompose('new'); }}>
@@ -665,24 +665,29 @@ function LocalMailScreen() {
         </Modal>
       )}
 
-      {accountDialog && (
-        isMailBackendReady && accountDialog !== 'new' ? (
-          <MailSignatureDialog
-            actor={actor}
-            account={accountDialog}
-            onClose={() => setAccountDialog(null)}
-            onDone={(message) => { setAccountDialog(null); setNotice(message); }}
-          />
-        ) : (
-          <MailAccountDialog
-            actor={actor}
-            account={accountDialog === 'new' ? null : accountDialog}
-            onClose={() => setAccountDialog(null)}
-            // go()가 안내 문구를 지우므로 이동을 먼저 하고 문구를 넣는다.
-            onDone={(message) => { setAccountDialog(null); go({}); setNotice(message); }}
-          />
-        )
-      )}
+      {accountDialog === 'manage' ? (
+        <MailAccountManageDialog
+          actor={actor}
+          accounts={accounts}
+          onAdd={() => setAccountDialog('new')}
+          onEdit={(account) => setAccountDialog(account)}
+          onClose={() => setAccountDialog(null)}
+          onDone={(message) => { go({}); setNotice(message); }}
+        />
+      ) : accountDialog ? (
+        /*
+          등록·수정 모두 같은 모달을 쓴다. 예전에는 서버가 붙으면 수정이 서명 전용 모달로
+          빠졌는데, 브리지가 자격 증명을 못 고쳤기 때문이다. Function은 앱 비밀번호 교체까지
+          지원하므로 그 분기를 없앤다.
+        */
+        <MailAccountDialog
+          actor={actor}
+          account={accountDialog === 'new' ? null : accountDialog}
+          onClose={() => setAccountDialog(null)}
+          // go()가 안내 문구를 지우므로 이동을 먼저 하고 문구를 넣는다.
+          onDone={(message) => { setAccountDialog(null); go({}); setNotice(message); }}
+        />
+      ) : null}
     </div>
   );
 }
