@@ -13,49 +13,20 @@ const endpoint = env.VITE_APPWRITE_ENDPOINT;
 const projectId = env.VITE_APPWRITE_PROJECT_ID;
 const databaseId = env.VITE_APPWRITE_DATABASE_ID;
 
-const missingKeys = [
-  !endpoint && 'VITE_APPWRITE_ENDPOINT',
-  !projectId && 'VITE_APPWRITE_PROJECT_ID',
-  !databaseId && 'VITE_APPWRITE_DATABASE_ID',
-].filter(Boolean) as string[];
-
-export const isAppwriteConfigured = missingKeys.length === 0;
+export const isAppwriteConfigured = Boolean(endpoint && projectId && databaseId);
 
 let client: Client | null = null;
-let _databases: Databases | null = null;
+let databases: Databases | null = null;
 
 if (isAppwriteConfigured) {
   client = new Client().setEndpoint(endpoint as string).setProject(projectId as string);
-  _databases = new Databases(client);
-} else {
-  const dbDriverVal = env.VITE_DB_DRIVER;
-  if (dbDriverVal === 'appwrite') {
-    console.error(
-      `\n[Appwrite Configuration Warning] VITE_DB_DRIVER가 'appwrite'로 지정되어 있으나, ` +
-      `필수 환경변수가 설정되지 않았습니다: ${missingKeys.join(', ')}\n` +
-      `정상 동작을 위해 .env.local 또는 배포 환경변수를 구성해 주세요.\n`
-    );
-  }
+  databases = new Databases(client);
 }
 
 /** Console에서 생성한 Database id. 미설정 시 빈 문자열. */
 export const APPWRITE_DATABASE_ID = (databaseId as string | undefined) ?? '';
 
-// Databases 접근 시 에러 가드용 Proxy
-export const databases = new Proxy({} as Databases, {
-  get(_, prop) {
-    if (!_databases) {
-      throw new Error(
-        `[Appwrite Client Error] Appwrite SDK가 올바르게 초기화되지 않았습니다.\n` +
-        `누락된 필수 환경변수: ${missingKeys.join(', ')}\n` +
-        `로컬 개발 환경에서는 .env.local 파일을 확인하시고, 운영 환경의 경우 배포 환경변수를 점검해 주세요.`
-      );
-    }
-    return Reflect.get(_databases, prop);
-  }
-});
-
-export { client, ID, Query };
+export { client, databases, ID, Query };
 
 /**
  * Appwrite 문서 $id 제약: 최대 36자, [a-zA-Z0-9._-], 선행 특수문자 불가.
