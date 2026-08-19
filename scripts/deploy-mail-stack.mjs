@@ -74,8 +74,26 @@ const TARGETS = [
     // users 조회만 한다. 쓰기 스코프를 주지 않는다.
     scopes: ['databases.read', 'documents.read'],
     timeout: 30,
-    vars: { AUTH_TOKEN_SECRET: TOKEN_SECRET, APPWRITE_DATABASE_ID: DB_ID },
-    secrets: ['AUTH_TOKEN_SECRET'],
+    /*
+      두 이름에 같은 값을 넣는다. 저장소 코드는 AUTH_TOKEN_SECRET 을 먼저 보지만, 운영에
+      돌고 있는 예전 코드는 WIDDY_TOKEN_SECRET 만 읽는다. 어느 쪽이 떠 있든 맞도록 둘 다 건다.
+    */
+    vars: { AUTH_TOKEN_SECRET: TOKEN_SECRET, WIDDY_TOKEN_SECRET: TOKEN_SECRET, APPWRITE_DATABASE_ID: DB_ID },
+    secrets: ['AUTH_TOKEN_SECRET', 'WIDDY_TOKEN_SECRET'],
+  },
+  {
+    id: 'widdy-chat',
+    name: 'Widdy Chat',
+    dir: 'appwrite/functions/widdy-chat',
+    // RAG 게이트웨이로 나가기만 한다. DB 스코프 없음(운영 실측값과 동일).
+    scopes: [],
+    timeout: 120,
+    /*
+      WIDDY_RAG_URL 은 건드리지 않는다 — secret 이라 값을 읽을 수 없고, 변수는 배포와
+      무관하게 함수에 남으므로 재배포해도 유지된다. 여기서 덮으면 복구할 방법이 없다.
+    */
+    vars: { AUTH_TOKEN_SECRET: TOKEN_SECRET, WIDDY_TOKEN_SECRET: TOKEN_SECRET },
+    secrets: ['AUTH_TOKEN_SECRET', 'WIDDY_TOKEN_SECRET'],
   },
   {
     id: 'mail',
@@ -129,7 +147,7 @@ let targets = only ? TARGETS.filter((t) => t.id === only) : TARGETS;
   덮으면 사용 중인 Widdy 토큰이 전부 무효화된다. 회전이 필요하면 `--only=widdy-login`
   으로 의도를 명시해야 한다.
 */
-if (IS_PROD && !only) targets = targets.filter((t) => t.id !== 'widdy-login');
+if (IS_PROD && !only) targets = targets.filter((t) => !t.id.startsWith('widdy-'));
 if (targets.length === 0) {
   console.error(`✗ --only=${only} 에 해당하는 대상이 없습니다.`);
   process.exit(1);
