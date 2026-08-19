@@ -71,9 +71,6 @@ export const approvalRouteRuleSchema = z.object({
   /** 기안자 직급 범위(rank, null=무한). from=상위(작은값)·to=하위(큰값). */
   positionFromRank: z.number().nullable().default(null),
   positionToRank: z.number().nullable().default(null),
-  /** 기안자 동적 직급 범위(이름 기준 매핑). 설정 시 실행 시점에 실시간 rank로 해석함. */
-  positionFrom: z.string().nullable().default(null),
-  positionTo: z.string().nullable().default(null),
   /** 금액 구간(null=무한). */
   amountFrom: z.number().nullable().default(null),
   amountTo: z.number().nullable().default(null),

@@ -229,8 +229,8 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
     const isScopeMatch = scopeMatches(r.deptScope, ctx.drafter, org);
     
     const rank = org.rankOf(ctx.drafter.position);
-    const fromRank = r.positionFrom ? org.rankOf(r.positionFrom) : r.positionFromRank;
-    const toRank = r.positionTo ? org.rankOf(r.positionTo) : r.positionToRank;
+    const fromRank = r.positionFromRank;
+    const toRank = r.positionToRank;
     
     const isPosMatch =
       (fromRank == null || rank >= fromRank) &&

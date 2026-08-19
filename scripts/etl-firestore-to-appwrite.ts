@@ -134,8 +134,6 @@ async function main() {
         deptScope: JSON.stringify(rule.deptScope),
         positionFromRank: rule.positionFromRank,
         positionToRank: rule.positionToRank,
-        positionFrom: rule.positionFrom,
-        positionTo: rule.positionTo,
         amountFrom: rule.amountFrom,
         amountTo: rule.amountTo,
         steps: JSON.stringify(rule.steps),
