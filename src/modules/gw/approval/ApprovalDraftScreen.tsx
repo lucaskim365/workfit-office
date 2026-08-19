@@ -670,7 +670,17 @@ function ApprovalDraftInner({
       fieldNodes.push(
         <div key={field.key} className={span}>
           <Field label={field.label}>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" placeholder="예: 3000000" className={INP} />
+            <input
+              value={amount}
+              onChange={(e) => {
+                const val = e.target.value;
+                setAmount(val);
+                setVals({ [field.key]: val });
+              }}
+              inputMode="numeric"
+              placeholder="예: 3000000"
+              className={INP}
+            />
             {amountNum != null && <span className="mt-1 block text-[11px] text-ink3">₩{amountNum.toLocaleString()}</span>}
           </Field>
         </div>,
