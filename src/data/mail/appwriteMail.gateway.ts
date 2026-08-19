@@ -71,22 +71,50 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
     );
   }
 
-  let body: { data?: T; error?: FnError };
+  let raw: string;
+  let status: number;
   try {
     const execution = await new Functions(client).createExecution(
       FUNCTION_ID,
       JSON.stringify({ token, action, payload }),
       false,
     );
-    body = JSON.parse(execution.responseBody || '{}');
+    raw = execution.responseBody ?? '';
+    status = execution.responseStatusCode ?? 0;
   } catch {
-    // Function 미배포·네트워크 단절·응답이 JSON이 아닌 경우가 모두 여기로 온다.
+    // Function 미배포·네트워크 단절·실행 자체가 거절된 경우가 여기로 온다.
     throw new MailError('PROVIDER_UNAVAILABLE', '메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.');
+  }
+
+  /**
+   * 빈 응답은 **성공이 아니다.**
+   *
+   * Function이 핸들러 밖에서 죽으면 런타임이 본문 없는 500을 내보낸다. 이걸 `{}`로 파싱해
+   * 넘기면 `data`가 `undefined`인 채로 정상 반환되고, 화면은 "등록했습니다"를 띄운 뒤
+   * 목록에서는 아무것도 못 찾는 상태가 된다. 실패는 실패로 올린다.
+   */
+  if (raw.trim() === '') {
+    throw new MailError(
+      'PROVIDER_UNAVAILABLE',
+      `메일 서버가 응답을 반환하지 않았습니다. (HTTP ${status})`,
+    );
+  }
+
+  let body: { data?: T; error?: FnError };
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw new MailError('PROVIDER_UNAVAILABLE', '메일 서버 응답을 이해하지 못했습니다.');
   }
 
   if (body.error) {
     const code = ERROR_MAP[body.error.code] ?? 'PROVIDER_UNAVAILABLE';
     throw new MailError(code, body.error.message || '메일 서버 요청을 처리하지 못했습니다.');
+  }
+
+  // `data` 자체가 없는 응답도 성공으로 취급하지 않는다. 계약은 `{data}` 또는 `{error}`뿐이다.
+  if (!('data' in body)) {
+    throw new MailError('PROVIDER_UNAVAILABLE', `메일 서버 응답 형식이 올바르지 않습니다. (HTTP ${status})`);
   }
   return body.data as T;
 }

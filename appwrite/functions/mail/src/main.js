@@ -38,7 +38,7 @@ function databases(req) {
   return new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
 }
 
-export default async ({ req, res, error }) => {
+export default async ({ req, res, log, error }) => {
   const fail = (code, message, status = 400) => res.json({ error: { code, message } }, status);
 
   try {
@@ -49,13 +49,31 @@ export default async ({ req, res, error }) => {
     return fail('SERVER_NOT_CONFIGURED', '메일 서버 설정이 완료되지 않았습니다.', 500);
   }
 
-  const body = req.bodyJson || {};
+  /**
+   * 본문 파싱.
+   *
+   * `req.bodyJson`은 본문이 비었거나 JSON이 아니면 **접근하는 순간 던진다**. 핸들러 밖으로
+   * 새면 런타임이 본문 없는 500을 내보내고, 호출부는 그걸 "성공했는데 데이터가 없음"으로
+   * 오해한다. 여기서 잡아 정상적인 오류 응답으로 바꾼다.
+   */
+  let body;
+  try {
+    body = req.bodyJson || {};
+  } catch {
+    error('mail: 본문이 비었거나 JSON이 아님');
+    return fail('INVALID_INPUT', '요청을 읽지 못했습니다.', 400);
+  }
 
   // ★신뢰된 uid는 서명 토큰에서만 나온다. widdy-chat과 달리 익명 강등이 없다.
   const uid = resolveUserId(body);
+  const action = String(body.action || '(없음)');
+
+  // 실행 로그. 어떤 요청이 들어왔는지 남겨야 "성공처럼 보이는데 저장이 안 됨" 같은 상황을
+  // 추적할 수 있다. 토큰·앱 비밀번호는 절대 찍지 않는다.
+  log(`action=${action} uid=${uid || '(미인증)'} hasSecret=${Boolean(body.payload?.secret)}`);
+
   if (!uid) return fail('UNAUTHORIZED', '로그인이 필요합니다. 다시 로그인해 주세요.', 401);
 
-  const action = String(body.action || '');
   const payload = body.payload || {};
   // 앱 비밀번호는 payload에서 분리해 둔다. 로그·오류 메시지에 payload를 통째로 찍는 실수를
   // 하더라도 비밀번호가 같이 나가지 않게 하려는 것이다.

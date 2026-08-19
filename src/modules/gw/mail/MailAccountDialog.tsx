@@ -63,6 +63,20 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
   /** 새 계정은 앱 비밀번호가 있어야 인증할 수 있다. 수정은 빈 값이면 기존 것을 유지한다. */
   const needsSecret = preset.authType === 'app_password' && !editing && typedSecret === '';
 
+  /** 연결 테스트를 눌러 볼 수 있는 상태인지. 주소와 비밀번호가 있어야 의미가 있다. */
+  const canTest = preset.available && email.trim() !== '' && (typedSecret !== '' || editing);
+
+  /**
+   * 저장 가능 여부.
+   *
+   * **연결 테스트를 통과해야 저장할 수 있다.** 서버도 저장 직전에 다시 확인하지만, 화면에서
+   * 먼저 막아야 사용자가 "저장은 됐는데 메일함이 안 열리는" 계정을 만들지 않는다.
+   * 수정에서 비밀번호를 건드리지 않았다면 기존 자격 증명이 그대로라 다시 시험할 필요가 없다.
+   */
+  const credentialChanged = typedSecret !== '';
+  const mustPassTest = !editing || credentialChanged;
+  const canSave = preset.available && !needsSecret && (!mustPassTest || tested === 'ok');
+
   const credentialOf = (): MailCredential | null =>
     typedSecret === '' ? null : { kind: 'app_password', value: typedSecret };
 
@@ -75,7 +89,20 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
         draft,
         credential: credentialOf() ?? MOCK_CREDENTIAL,
       });
-      setTested(isConnectionOk(result) ? 'ok' : 'fail');
+      if (isConnectionOk(result)) {
+        setTested('ok');
+        return;
+      }
+      setTested('fail');
+      /**
+       * 어느 쪽이 막혔는지 알려준다. 네이버·다음은 IMAP 사용과 SMTP 사용이 별도 설정이라
+       * "한쪽만 꺼둔" 경우가 흔한데, 뭉뚱그리면 사용자가 어디를 고칠지 알 수 없다.
+       */
+      const broken = [
+        !result.imap.ok && `IMAP(${result.imap.code ?? '실패'})`,
+        !result.smtp.ok && `SMTP(${result.smtp.code ?? '실패'})`,
+      ].filter(Boolean).join(' · ');
+      setError(`${broken} 연결에 실패했습니다. 메일 서비스에서 IMAP/SMTP 사용 여부와 앱 비밀번호를 확인하세요.`);
     } catch (caught) {
       setTested('fail');
       setError(message(caught));
@@ -132,11 +159,17 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
             <Button onClick={onClose}>취소</Button>
             <Button
               variant="primary"
-              disabled={busy || !preset.available || needsSecret}
-              title={needsSecret ? '앱 비밀번호를 입력하세요.' : ''}
+              disabled={busy || !canSave}
+              title={
+                needsSecret
+                  ? '앱 비밀번호를 입력하세요.'
+                  : !canSave
+                    ? '먼저 연결 테스트를 통과해야 저장할 수 있습니다.'
+                    : ''
+              }
               onClick={save}
             >
-              {editing ? '저장' : '연결'}
+              저장
             </Button>
           </div>
         </div>
@@ -218,11 +251,14 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
           </label>
 
           <div className="flex items-center gap-2">
-            <Button disabled={busy || !preset.available || needsSecret} onClick={runTest}>
-              {test.isPending ? '확인 중…' : '연결 테스트'}
+            <Button variant={tested === 'ok' ? undefined : 'primary'} disabled={busy || !canTest} onClick={runTest}>
+              {test.isPending ? '확인 중…' : tested === 'ok' ? '다시 확인' : '① 연결 테스트'}
             </Button>
-          {tested === 'ok' && <span className="text-[10.5px] font-bold text-teal">SMTP·IMAP 연결을 확인했습니다.</span>}
-          {tested === 'fail' && <span className="text-[10.5px] font-bold text-amber">연결하지 못했습니다.</span>}
+            {tested === 'ok' && <span className="text-[10.5px] font-bold text-teal">SMTP·IMAP 연결을 확인했습니다. 이제 저장할 수 있습니다.</span>}
+            {tested === 'fail' && <span className="text-[10.5px] font-bold text-amber">연결하지 못했습니다. 위 오류를 확인하세요.</span>}
+            {tested === 'none' && mustPassTest && (
+              <span className="text-[10.5px] text-ink3">연결을 확인해야 저장할 수 있습니다.</span>
+            )}
         </div>
       </div>
     </Modal>
