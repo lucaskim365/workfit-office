@@ -47,5 +47,8 @@ export function verifyToken(token, secret) {
  * 토큰 위치를 여기 한 곳에 가둬 둔다. 호출부는 "요청 → uid"만 알면 된다.
  */
 export function resolveUserId(body, env = process.env) {
-  return verifyToken(String(body?.token || ''), env.MAIL_TOKEN_SECRET || env.WIDDY_TOKEN_SECRET || '');
+  // 발급자(widdy-login)와 같은 순서로 키를 고른다. AUTH_TOKEN_SECRET이 정식 이름이고
+  // 나머지는 기존 배포 호환용 폴백이다 — 발급 쪽과 값이 어긋나면 전부 401이 된다.
+  const secret = env.AUTH_TOKEN_SECRET || env.MAIL_TOKEN_SECRET || env.WIDDY_TOKEN_SECRET || '';
+  return verifyToken(String(body?.token || ''), secret);
 }

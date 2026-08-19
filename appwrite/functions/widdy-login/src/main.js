@@ -20,7 +20,14 @@
 import { Client, Databases, Query } from 'node-appwrite';
 import crypto from 'crypto';
 
-const SECRET = process.env.WIDDY_TOKEN_SECRET || '';
+/**
+ * 발급 토큰의 서명 키.
+ *
+ * 이 토큰은 이제 Widdy 전용이 아니다 — 메일 Function도 같은 토큰으로 요청자를 확인한다.
+ * 그래서 중립적인 `AUTH_TOKEN_SECRET`을 먼저 보고, 기존 배포가 깨지지 않도록
+ * `WIDDY_TOKEN_SECRET`으로 폴백한다. 둘 중 어느 쪽이든 검증하는 함수와 값이 같아야 한다.
+ */
+const SECRET = process.env.AUTH_TOKEN_SECRET || process.env.WIDDY_TOKEN_SECRET || '';
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 const TTL = Number(process.env.WIDDY_TOKEN_TTL || 43200); // 초, 기본 12h
 

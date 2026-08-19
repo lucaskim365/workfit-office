@@ -3,7 +3,11 @@
  *
  * 왜 둘을 같이 올리는가: 메일 Function은 요청자의 신원을 서명 토큰으로만 판단하는데,
  * 그 토큰을 발급하는 게 `widdy-login`이다. 발급자가 없는 프로젝트에 메일만 올리면 모든
- * 요청이 401로 떨어진다. 두 함수는 같은 `WIDDY_TOKEN_SECRET`을 써야 서명이 검증된다.
+ * 요청이 401로 떨어진다. 두 함수는 같은 `AUTH_TOKEN_SECRET`을 써야 서명이 검증된다.
+ *
+ * ⚠ 함수를 지웠다 다시 만들면 옛 변수가 고아로 남아 같은 키를 다시 못 만든다(409
+ *   variable_already_exists, listVariables 에도 안 잡힌다). 키 이름을 바꾸는 것 말고
+ *   되살릴 방법을 못 찾았으니 함수 삭제는 피할 것.
  *
  * 실행: node scripts/deploy-mail-stack.mjs [--only=mail|widdy-login]
  *
@@ -11,7 +15,7 @@
  *   VITE_APPWRITE_ENDPOINT / VITE_APPWRITE_PROJECT_ID / VITE_APPWRITE_DATABASE_ID
  *   APPWRITE_API_KEY (없으면 APPWRITE_API_KEY_DEV) — functions.read/write 스코프 필요
  *   MAIL_CREDENTIALS_KEY  앱 비밀번호 암호화 키(base64url 32바이트)
- *   WIDDY_TOKEN_SECRET    신원 토큰 HMAC 시크릿(두 함수 공통)
+ *   WIDDY_TOKEN_SECRET    신원 토큰 HMAC 시크릿(두 함수 공통). 함수에는 AUTH_TOKEN_SECRET 으로 올린다.
  *
  * 멱등: 함수가 있으면 갱신하고, 변수도 있으면 갱신한다. 재실행해도 안전하다.
  */
@@ -58,8 +62,8 @@ const TARGETS = [
     // users 조회만 한다. 쓰기 스코프를 주지 않는다.
     scopes: ['databases.read', 'documents.read'],
     timeout: 30,
-    vars: { WIDDY_TOKEN_SECRET: TOKEN_SECRET, APPWRITE_DATABASE_ID: DB_ID },
-    secrets: ['WIDDY_TOKEN_SECRET'],
+    vars: { AUTH_TOKEN_SECRET: TOKEN_SECRET, APPWRITE_DATABASE_ID: DB_ID },
+    secrets: ['AUTH_TOKEN_SECRET'],
   },
   {
     id: 'mail',
@@ -70,10 +74,10 @@ const TARGETS = [
     timeout: 90,
     vars: {
       MAIL_CREDENTIALS_KEY: MAIL_KEY,
-      WIDDY_TOKEN_SECRET: TOKEN_SECRET,
+      AUTH_TOKEN_SECRET: TOKEN_SECRET,
       APPWRITE_DATABASE_ID: DB_ID,
     },
-    secrets: ['MAIL_CREDENTIALS_KEY', 'WIDDY_TOKEN_SECRET'],
+    secrets: ['MAIL_CREDENTIALS_KEY', 'AUTH_TOKEN_SECRET'],
   },
 ];
 
@@ -158,7 +162,19 @@ async function setVar(functionId, key, value, secret) {
     if (!isCode(e, 409)) throw e;
     const list = await retry(`listVariables ${functionId}`, () => fn.listVariables({ functionId }));
     const found = list.variables.find((v) => v.key === key);
-    if (!found) throw e;
+
+    if (!found) {
+      /**
+       * 고아 변수 — 만들 수도(409) 고칠 수도(목록에 없음) 없는 상태.
+       *
+       * 함수를 삭제하고 같은 ID로 다시 만들면 옛 변수가 이 상태로 남는다. 값을 확인할
+       * 방법이 없어 배포를 멈추는 대신 경고만 남긴다. 함수 코드에 기본값이 있는 키라면
+       * 그대로 두어도 되지만, 값이 달라야 하는 키라면 콘솔에서 직접 지워야 한다.
+       */
+      console.warn(`  ⚠ var ${key} — 고아 변수(생성 409 · 목록에 없음). 콘솔에서 확인 필요, 계속 진행`);
+      return;
+    }
+
     await retry(`var ${key} 갱신`, () => fn.updateVariable({ functionId, variableId: found.$id, key, value, secret }));
     console.log(`  • var ${key} 갱신${secret ? ' (secret)' : ''}`);
   }
