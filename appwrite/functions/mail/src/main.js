@@ -27,16 +27,27 @@ import {
   testConnection,
   updateAccount,
 } from './accounts.js';
+import {
+  countUnseen,
+  getMail,
+  listFolders,
+  listMails,
+  markFlagged,
+  markRead,
+  moveMail,
+} from './mailbox.js';
 
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 
 /**
  * 어느 키로 붙을지.
  *
- * 원래는 동적 키(`x-appwrite-key`)만 썼다. 함수에 정적 API 키를 심지 않는 쪽이 안전하기
- * 때문이다. 그런데 동적 키로는 `createDocument`가 예외 없이 `$id` 없는 값을 돌려주고
- * 문서가 남지 않는 현상이 있었다(읽기와 수정은 정상). 원인이 밝혀질 때까지 `APPWRITE_API_KEY`가
- * 설정돼 있으면 그쪽을 먼저 쓴다. 원인이 확인되면 동적 키로 되돌린다.
+ * 기본은 동적 키(`x-appwrite-key`)다 — 함수 스코프로 제한되고 함수에 관리자 키를 심지
+ * 않아도 된다. `APPWRITE_API_KEY`가 설정돼 있으면 그쪽을 먼저 쓴다.
+ *
+ * ※ 한때 동적 키를 문서 생성 실패의 원인으로 의심했으나 아니었다. 실제 원인은 엔드포인트가
+ *   평문 HTTP였던 것이다(아래 `normalizeEndpoint` 참고). 정적 키는 그 정리가 끝나면
+ *   빼는 것이 맞다 — 관리자 권한이라 함수에 둘 이유가 없다.
  */
 function resolveKey(req) {
   const staticKey = process.env.APPWRITE_API_KEY;
@@ -44,11 +55,40 @@ function resolveKey(req) {
   return { key: req.headers['x-appwrite-key'], kind: 'dynamic' };
 }
 
+/** 리다이렉트를 걸지 않는 내부 주소. 이런 곳은 평문 HTTP가 정상이라 손대면 안 된다. */
+const INTERNAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|appwrite|traefik|.*\.local|.*\.internal)$/i;
+
+/**
+ * 엔드포인트 정규화 — **평문 HTTP를 HTTPS로 올린다.**
+ *
+ * Appwrite가 주입하는 `APPWRITE_FUNCTION_API_ENDPOINT`가 `http://`인데 이 서버는 HTTPS로
+ * 301 리다이렉트한다. 301은 POST를 GET으로 바꾸므로 `createDocument`(POST)가 조용히
+ * `listDocuments`(GET)로 둔갑해 `{total:0, documents:[]}`를 돌려준다. 예외가 없어서
+ * "저장 성공했는데 아무것도 안 남는" 상태가 된다. GET인 조회는 멀쩡해 더 헷갈린다.
+ *
+ * 내부 호스트는 리다이렉트가 없으니 그대로 둔다.
+ */
+export function normalizeEndpoint(raw) {
+  if (!raw) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' || INTERNAL_HOST.test(url.hostname)) return raw;
+    url.protocol = 'https:';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return raw;
+  }
+}
+
+function endpointOf() {
+  // 명시 설정이 있으면 그것을 먼저 쓴다. 주입값은 프로토콜을 우리가 고를 수 없다.
+  return normalizeEndpoint(process.env.APPWRITE_ENDPOINT || process.env.APPWRITE_FUNCTION_API_ENDPOINT);
+}
+
 function databases(req) {
-  const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.APPWRITE_ENDPOINT;
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
   const { key } = resolveKey(req);
-  return new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(key));
+  return new Databases(new Client().setEndpoint(endpointOf()).setProject(projectId).setKey(key));
 }
 
 export default async ({ req, res, log, error }) => {
@@ -83,7 +123,7 @@ export default async ({ req, res, log, error }) => {
 
   // 실행 로그. 어떤 요청이 들어왔는지 남겨야 "성공처럼 보이는데 저장이 안 됨" 같은 상황을
   // 추적할 수 있다. 토큰·앱 비밀번호는 절대 찍지 않는다.
-  log(`action=${action} uid=${uid || '(미인증)'} hasSecret=${Boolean(body.payload?.secret)} key=${resolveKey(req).kind} endpoint=${process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.APPWRITE_ENDPOINT}`);
+  log(`action=${action} uid=${uid || '(미인증)'} hasSecret=${Boolean(body.payload?.secret)} key=${resolveKey(req).kind} endpoint=${endpointOf()}`);
 
   if (!uid) return fail('UNAUTHORIZED', '로그인이 필요합니다. 다시 로그인해 주세요.', 401);
 
@@ -114,6 +154,34 @@ export default async ({ req, res, log, error }) => {
         return res.json({
           data: await testConnection(dbs, DB, uid, payload.draft, secret, payload.id ? String(payload.id) : null, process.env),
         });
+
+      // ── 메일함 ──
+
+      case 'listFolders':
+        return res.json({ data: await listFolders(dbs, DB, uid, payload.accountIds, process.env) });
+
+      case 'countUnseen':
+        return res.json({ data: await countUnseen(dbs, DB, uid, process.env) });
+
+      case 'listMails':
+        return res.json({
+          data: await listMails(
+            dbs, DB, uid, payload.accountIds, String(payload.folder || 'INBOX'),
+            payload.perAccount, payload.query, process.env,
+          ),
+        });
+
+      case 'getMail':
+        return res.json({ data: await getMail(dbs, DB, uid, payload.ref, process.env) });
+
+      case 'markRead':
+        return res.json({ data: await markRead(dbs, DB, uid, payload.refs, payload.seen, process.env) });
+
+      case 'markFlagged':
+        return res.json({ data: await markFlagged(dbs, DB, uid, payload.refs, payload.flagged, process.env) });
+
+      case 'moveMail':
+        return res.json({ data: await moveMail(dbs, DB, uid, payload.ref, payload.to, process.env) });
 
       default:
         return fail('UNKNOWN_ACTION', `알 수 없는 요청입니다: ${action}`, 400);

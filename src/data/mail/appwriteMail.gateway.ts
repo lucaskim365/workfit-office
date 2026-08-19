@@ -164,15 +164,40 @@ export const appwriteMailGateway: MailGateway = {
     await call<{ id: string }>('deleteAccount', { id });
   },
 
-  // ── 아래는 Function 이식이 남은 구간 (MailHub `mail.service.ts` 기준 IMAP·SMTP 동작) ──
+  // ── 메일함 ──
 
-  async listFolders(): Promise<Record<string, MailFolder[]>> { return notYet('폴더 조회'); },
-  async countUnseen(): Promise<Record<string, number>> { return notYet('안 읽은 메일 수'); },
-  async listMails(): Promise<InboxPage[]> { return notYet('메일 목록'); },
-  async getMail(): Promise<MailDetail> { return notYet('메일 열기'); },
-  async markRead(): Promise<void> { return notYet('읽음 표시'); },
-  async markFlagged(): Promise<void> { return notYet('별표 표시'); },
+  async listFolders(_ctx, ...rest): Promise<Record<string, MailFolder[]>> {
+    // 인터페이스에는 계정 인자가 없다. 서버가 소유자의 전 계정을 대상으로 삼는다.
+    void rest;
+    return call<Record<string, MailFolder[]>>('listFolders');
+  },
+
+  async countUnseen(): Promise<Record<string, number>> {
+    return call<Record<string, number>>('countUnseen');
+  },
+
+  async listMails(_ctx, accountIds, folder, perAccount, query): Promise<InboxPage[]> {
+    return call<InboxPage[]>('listMails', { accountIds, folder, perAccount, query });
+  },
+
+  async getMail(_ctx, ref: MailRef): Promise<MailDetail> {
+    return call<MailDetail>('getMail', { ref });
+  },
+
+  async markRead(_ctx, refs, seen): Promise<void> {
+    await call<{ updated: number }>('markRead', { refs, seen });
+  },
+
+  async markFlagged(_ctx, refs, flagged): Promise<void> {
+    await call<{ updated: number }>('markFlagged', { refs, flagged });
+  },
+
+  async moveMail(_ctx, ref: MailRef, to: MailFolder): Promise<void> {
+    await call<{ moved: boolean }>('moveMail', { ref, to });
+  },
+
+  // ── 아직 이식하지 않은 구간 ──
+
   async sendMail(): Promise<MailSendResult> { return notYet('메일 보내기'); },
-  async moveMail(_ctx, _ref: MailRef, _to: MailFolder): Promise<void> { return notYet('메일 이동'); },
   async downloadAttachment(): Promise<MailAttachmentContent> { return notYet('첨부 내려받기'); },
 };
