@@ -34,13 +34,25 @@ function env(key) {
   return m ? m[1].trim() : undefined;
 }
 
+const IS_PROD = process.argv.includes('--prod');
 const ENDPOINT = env('APPWRITE_ENDPOINT') ?? env('VITE_APPWRITE_ENDPOINT');
-const PROJECT = env('APPWRITE_PROJECT_ID') ?? env('VITE_APPWRITE_PROJECT_ID');
+const PROJECT = IS_PROD
+  ? (env('APPWRITE_PROJECT_ID_PROD') ?? '6a6bf85e002acb7f71d6')
+  : (env('APPWRITE_PROJECT_ID') ?? env('VITE_APPWRITE_PROJECT_ID'));
 const DB_ID = env('APPWRITE_DATABASE_ID') ?? env('VITE_APPWRITE_DATABASE_ID') ?? 'workfit';
 // 접미어 없는 키가 없으면 dev 로만 폴백한다 — 기본값이 운영이면 배포 사고가 난다.
-const API_KEY = env('APPWRITE_API_KEY') ?? env('APPWRITE_API_KEY_DEV');
-const MAIL_KEY = env('MAIL_CREDENTIALS_KEY');
-const TOKEN_SECRET = env('WIDDY_TOKEN_SECRET');
+const API_KEY = IS_PROD
+  ? env('APPWRITE_API_KEY_PROD')
+  : (env('APPWRITE_API_KEY') ?? env('APPWRITE_API_KEY_DEV'));
+/**
+ * 환경별 비밀.
+ *
+ * `--prod`를 주면 `*_PROD` 접미어 값을 쓴다. dev와 운영이 **같은 키를 쓰면 안 된다** —
+ * dev 키가 새면 운영 메일함까지 열린다. 접미어 없는 이름은 dev 용이다.
+ */
+const PROD = process.argv.includes('--prod');
+const MAIL_KEY = PROD ? env('MAIL_CREDENTIALS_KEY_PROD') : env('MAIL_CREDENTIALS_KEY');
+const TOKEN_SECRET = PROD ? env('AUTH_TOKEN_SECRET_PROD') : env('WIDDY_TOKEN_SECRET');
 
 const missing = Object.entries({ ENDPOINT, PROJECT, API_KEY, MAIL_KEY, TOKEN_SECRET })
   .filter(([, v]) => !v).map(([k]) => k);
@@ -111,7 +123,13 @@ if (process.argv.includes('--status')) {
 }
 
 const only = process.argv.find((a) => a.startsWith('--only='))?.split('=')[1];
-const targets = only ? TARGETS.filter((t) => t.id === only) : TARGETS;
+let targets = only ? TARGETS.filter((t) => t.id === only) : TARGETS;
+/*
+  운영에서는 `widdy-login`을 기본 대상에서 뺀다. 이미 돌고 있는 토큰 발급자라 시크릿을
+  덮으면 사용 중인 Widdy 토큰이 전부 무효화된다. 회전이 필요하면 `--only=widdy-login`
+  으로 의도를 명시해야 한다.
+*/
+if (IS_PROD && !only) targets = targets.filter((t) => t.id !== 'widdy-login');
 if (targets.length === 0) {
   console.error(`✗ --only=${only} 에 해당하는 대상이 없습니다.`);
   process.exit(1);
@@ -186,7 +204,7 @@ async function setVar(functionId, key, value, secret) {
   }
 }
 
-console.log(`▶ ${ENDPOINT} / project ${PROJECT} / db ${DB_ID}`);
+console.log(`▶ ${ENDPOINT} / project ${PROJECT} / db ${DB_ID}${IS_PROD ? '  [운영]' : ''}`);
 console.log(`  대상: ${targets.map((t) => t.id).join(', ')}\n`);
 
 for (const t of targets) {
