@@ -178,34 +178,30 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
       <div className="space-y-3">
         {error && <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
 
-          <div>
-            <span className="mb-1.5 block text-[10px] font-bold text-ink3">공급자</span>
-            <div className="grid grid-cols-2 gap-1.5">
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-bold text-ink3">공급자</span>
+            {/*
+              아직 못 여는 공급자는 비활성 옵션으로 함께 보여준다. 목록에서 아예 빼면
+              "지원 예정인지 영영 없는 건지"를 사용자가 알 수 없다.
+            */}
+            <select
+              value={provider}
+              disabled={editing}
+              onChange={(event) => { setProvider(event.target.value as MailProvider); setTested('none'); }}
+              className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none disabled:opacity-60"
+            >
               {MAIL_PROVIDER_PRESETS.map((row) => (
-                <button
-                  key={row.provider}
-                  type="button"
-                  disabled={!row.available}
-                  onClick={() => { setProvider(row.provider); setTested('none'); }}
-                  title={row.available ? row.label : row.unavailableReason ?? ''}
-                  className={`rounded-lg border px-3 py-2 text-left text-[11px] font-bold transition-colors ${provider === row.provider
-                    ? 'border-teal bg-teal-soft/40 text-teal'
-                    : row.available
-                      ? 'border-border text-ink2 hover:bg-ink3/8'
-                      : 'cursor-not-allowed border-border text-ink3 opacity-50'
-                    }`}
-                >
-                  {row.label}
-                  {!row.available && <span className="mt-0.5 block text-[8.5px] font-semibold">준비 중</span>}
-                </button>
+                <option key={row.provider} value={row.provider} disabled={!row.available}>
+                  {row.label}{row.available ? '' : ' — 준비 중'}
+                </option>
               ))}
-            </div>
+            </select>
+            {/* 공급자를 바꾸면 서버 주소·인증 방식이 달라져 사실상 다른 계정이다. 수정에서는 잠근다. */}
+            {editing && <span className="mt-1 block text-[9.5px] text-ink3">공급자는 등록 후 바꿀 수 없습니다. 다른 공급자는 새 계정으로 연결하세요.</span>}
             {!preset.available && preset.unavailableReason && (
-              <div className="mt-1.5 rounded-lg border border-amber/20 bg-amber-soft/25 px-3 py-2 text-[10px] text-amber">
-                {preset.unavailableReason}
-              </div>
+              <span className="mt-1 block text-[9.5px] text-amber">{preset.unavailableReason}</span>
             )}
-          </div>
+          </label>
 
           <div className="rounded-lg border border-teal/20 bg-teal-soft/20 px-3 py-2.5 text-[10px] leading-relaxed text-ink2">
             {preset.guide}
