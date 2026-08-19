@@ -215,15 +215,6 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
   const org = buildOrg(ctx);
   const rules = [...ctx.rules].sort((a, b) => a.priority - b.priority);
 
-  console.log('[resolveRoute] 자동 결재선 룰 엔진 작동 시작:', {
-    drafter: ctx.drafter.name,
-    position: ctx.drafter.position,
-    rank: org.rankOf(ctx.drafter.position),
-    docType: ctx.docType,
-    amount: ctx.amount,
-    rulesCount: rules.length,
-  });
-
   const rule = rules.find((r) => {
     const isDocTypeMatch = r.docType === '전체' || r.docType === ctx.docType;
     const isScopeMatch = scopeMatches(r.deptScope, ctx.drafter, org);
@@ -248,30 +239,13 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
 
     const matches = r.active && isDocTypeMatch && isScopeMatch && isPosMatch && isAmtMatch && isCondMatch;
 
-    if (!matches && r.active) {
-      console.log(`  -> 룰 [${r.name}] 매칭 실패 요인:`, {
-        docTypeMatch: isDocTypeMatch,
-        scopeMatch: isScopeMatch,
-        positionMatch: isPosMatch,
-        amountMatch: isAmtMatch,
-        conditionMatch: isCondMatch,
-        details: {
-          drafterRank: rank,
-          targetFromRank: fromRank,
-          targetToRank: toRank
-        }
-      });
-    }
-
     return matches;
   }) ?? null;
 
   if (rule) {
-    console.log('[resolveRoute] 매칭 성공한 룰:', rule.name);
     const steps = buildSteps(rule, ctx.drafter, org);
     if (steps.length > 0) return { steps, rule };
   }
 
-  console.warn('[resolveRoute] 매칭되는 활성 룰이 없거나 해석 결과가 비어 있어 폴백(부서장 전결) 결재선을 반환합니다.');
   return { steps: fallbackSteps(ctx.drafter, org), rule: null };
 }
