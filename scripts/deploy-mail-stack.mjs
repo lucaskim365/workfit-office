@@ -76,8 +76,11 @@ const TARGETS = [
       MAIL_CREDENTIALS_KEY: MAIL_KEY,
       AUTH_TOKEN_SECRET: TOKEN_SECRET,
       APPWRITE_DATABASE_ID: DB_ID,
+      // 동적 키로 createDocument 가 조용히 실패하는 문제를 우회하기 위한 임시 조치.
+      // 원인이 밝혀지면 이 변수를 지우고 동적 키(x-appwrite-key)로 되돌린다.
+      APPWRITE_API_KEY: API_KEY,
     },
-    secrets: ['MAIL_CREDENTIALS_KEY', 'AUTH_TOKEN_SECRET'],
+    secrets: ['MAIL_CREDENTIALS_KEY', 'AUTH_TOKEN_SECRET', 'APPWRITE_API_KEY'],
   },
 ];
 

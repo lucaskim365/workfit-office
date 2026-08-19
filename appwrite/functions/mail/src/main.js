@@ -30,12 +30,25 @@ import {
 
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 
+/**
+ * 어느 키로 붙을지.
+ *
+ * 원래는 동적 키(`x-appwrite-key`)만 썼다. 함수에 정적 API 키를 심지 않는 쪽이 안전하기
+ * 때문이다. 그런데 동적 키로는 `createDocument`가 예외 없이 `$id` 없는 값을 돌려주고
+ * 문서가 남지 않는 현상이 있었다(읽기와 수정은 정상). 원인이 밝혀질 때까지 `APPWRITE_API_KEY`가
+ * 설정돼 있으면 그쪽을 먼저 쓴다. 원인이 확인되면 동적 키로 되돌린다.
+ */
+function resolveKey(req) {
+  const staticKey = process.env.APPWRITE_API_KEY;
+  if (staticKey) return { key: staticKey, kind: 'static' };
+  return { key: req.headers['x-appwrite-key'], kind: 'dynamic' };
+}
+
 function databases(req) {
   const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.APPWRITE_ENDPOINT;
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
-  // 동적 키(x-appwrite-key)를 우선한다 — 함수에 정적 API 키를 심어 두지 않기 위해서다.
-  const apiKey = req.headers['x-appwrite-key'] || process.env.APPWRITE_API_KEY;
-  return new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
+  const { key } = resolveKey(req);
+  return new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(key));
 }
 
 export default async ({ req, res, log, error }) => {
@@ -70,7 +83,7 @@ export default async ({ req, res, log, error }) => {
 
   // 실행 로그. 어떤 요청이 들어왔는지 남겨야 "성공처럼 보이는데 저장이 안 됨" 같은 상황을
   // 추적할 수 있다. 토큰·앱 비밀번호는 절대 찍지 않는다.
-  log(`action=${action} uid=${uid || '(미인증)'} hasSecret=${Boolean(body.payload?.secret)}`);
+  log(`action=${action} uid=${uid || '(미인증)'} hasSecret=${Boolean(body.payload?.secret)} key=${resolveKey(req).kind} endpoint=${process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.APPWRITE_ENDPOINT}`);
 
   if (!uid) return fail('UNAUTHORIZED', '로그인이 필요합니다. 다시 로그인해 주세요.', 401);
 
@@ -87,7 +100,7 @@ export default async ({ req, res, log, error }) => {
         return res.json({ data: await listAccounts(dbs, DB, uid) });
 
       case 'createAccount':
-        return res.json({ data: await createAccount(dbs, DB, uid, payload.draft, secret, process.env) });
+        return res.json({ data: await createAccount(dbs, DB, uid, payload.draft, secret, process.env, log) });
 
       case 'updateAccount':
         return res.json({

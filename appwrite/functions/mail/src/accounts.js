@@ -85,7 +85,7 @@ export async function listAccounts(dbs, dbId, uid) {
  * 연결 확인을 **먼저** 통과해야 저장한다. 순서를 뒤집으면 비밀번호가 틀린 계정이 목록에
  * 남아 매 조회마다 실패한다.
  */
-export async function createAccount(dbs, dbId, uid, draft, secret, env) {
+export async function createAccount(dbs, dbId, uid, draft, secret, env, log) {
   const email = String(draft?.email || '').trim().toLowerCase();
   const provider = String(draft?.provider || '');
 
@@ -109,24 +109,56 @@ export async function createAccount(dbs, dbId, uid, draft, secret, env) {
 
   const now = stamp();
   const id = newId();
-  const doc = await dbs.createDocument(dbId, COLLECTION, id, {
-    id,
-    workfitUserId: uid,
-    provider,
-    email,
-    displayName: String(draft?.displayName || '').trim() || email.split('@')[0],
-    authUsername: String(draft?.authUsername || '').trim(),
-    encryptedSecret: encryptSecret(secret, env),
-    authType: 'app_password',
-    transport: 'imap_smtp',
-    status: 'active',
-    signature: String(draft?.signature || '').slice(0, 1000),
-    verifiedAt: now,
-    lastErrorCode: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return toApi(doc);
+  log?.(`createAccount: 문서 생성 시도 id=${id} owner=${uid}`);
+  let doc;
+  try {
+    doc = await dbs.createDocument(dbId, COLLECTION, id, {
+      id,
+      workfitUserId: uid,
+      provider,
+      email,
+      displayName: String(draft?.displayName || '').trim() || email.split('@')[0],
+      authUsername: String(draft?.authUsername || '').trim(),
+      encryptedSecret: encryptSecret(secret, env),
+      authType: 'app_password',
+      transport: 'imap_smtp',
+      status: 'active',
+      signature: String(draft?.signature || '').slice(0, 1000),
+      verifiedAt: now,
+      lastErrorCode: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } catch (e) {
+    // 생성이 던지면 원인을 그대로 남긴다. 여기서 삼키면 다시 "성공처럼 보이는 실패"가 된다.
+    log?.(`createAccount: createDocument 예외 code=${e?.code} type=${e?.type} msg=${String(e?.message).slice(0, 200)}`);
+    throw e;
+  }
+
+  // 반환값이 문서가 아니면 그 자체가 단서다. 응답 모양을 남긴다(비밀값은 들어 있지 않다).
+  if (!doc || !doc.$id) {
+    log?.(`createAccount: createDocument 반환 이상 typeof=${typeof doc} keys=${doc ? Object.keys(doc).join(',') : '-'} raw=${JSON.stringify(doc)?.slice(0, 300)}`);
+  }
+
+  /**
+   * 쓴 것을 다시 읽어 확인한다.
+   *
+   * 생성 호출이 성공을 돌려줬는데 실제로는 남지 않는 경우를 겪었다. 그대로 성공을 반환하면
+   * 화면은 "등록했습니다"를 띄우고 목록에는 아무것도 없는, 원인을 짐작할 수 없는 상태가 된다.
+   * 여기서 확인해 실패를 실패로 만든다.
+   */
+  const saved = await dbs.listDocuments(dbId, COLLECTION, [
+    Query.equal('workfitUserId', uid),
+    Query.equal('id', id),
+    Query.limit(1),
+  ]);
+  if (saved.total === 0) {
+    log?.(`createAccount: 생성 직후 재조회 실패 id=${id} (반환된 $id=${doc?.$id})`);
+    throw new MailFnError('INTERNAL', '계정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.', 500);
+  }
+  log?.(`createAccount: 저장 확인 id=${id}`);
+
+  return toApi(saved.documents[0]);
 }
 
 /**
