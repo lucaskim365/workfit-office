@@ -3,7 +3,9 @@
  * (통합 스크립트는 제거된 bridge-a2f 를 되살리므로 사용 금지)
  * 실행: node scripts/deploy-widdy-chat.mjs
  */
-import { readFileSync } from 'node:fs';
+// import { readFileSync } from 'node:fs'; // (기존 코드 보존)
+import { readFileSync, mkdirSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 const env = readFileSync('.env.local', 'utf8');
 const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n]*)', 'm')) || [])[1];
@@ -18,6 +20,22 @@ const fn = new Functions(client);
 
 const FN_ID = 'widdy-chat';
 const TAR = 'appwrite/_deploy_bundles/widdy-chat.tar.gz';
+
+// 0) 실시간 코드 압축 (tar.gz 자동 생성)
+const bundleDir = 'appwrite/_deploy_bundles';
+if (!existsSync(bundleDir)) {
+  mkdirSync(bundleDir, { recursive: true });
+}
+const sourceDir = `appwrite/functions/${FN_ID}`;
+console.log(`[Bundle] 압축 중: ${sourceDir} -> ${TAR}`);
+try {
+  execSync(`tar -czf ${TAR} -C ${sourceDir} .`);
+  console.log(`  ✓ 압축 완료`);
+} catch (e) {
+  console.error(`  ✗ 압축 실패:`, e.message);
+  throw e;
+}
+
 const RAG_URL = process.env.WIDDY_RAG_URL || 'http://10.10.1.24:8910/chat'; // server3
 const SECRET = process.env.WIDDY_TOKEN_SECRET || ''; // 설정 시에만 갱신(미전달 시 기존 값 보존)
 const isCode = (e, c) => e && e.code === c;

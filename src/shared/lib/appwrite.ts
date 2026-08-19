@@ -2,36 +2,60 @@ import { Client, Databases, ID, Query } from 'appwrite';
 
 /**
  * Appwrite 초기화 — Firestore→Appwrite 이관 PoC(Phase 1).
- * firebase.ts 와 대칭 구조: 값이 비면 초기화를 건너뛰어 셸 UI가 깨지지 않게 한다.
- * ([[Firestore_Appwrite_이관_단계별_계획서]] Phase 1)
- *
  * 설정은 환경변수(VITE_APPWRITE_*)로 주입:
  *   VITE_APPWRITE_ENDPOINT    예: https://appwrite.widdyax.com/v1
  *   VITE_APPWRITE_PROJECT_ID  예: 6a6bf85e002acb7f71d6 (workfit-intra)
  *   VITE_APPWRITE_DATABASE_ID 예: workfit (Console에서 생성한 DB id)
  */
-// repo 단위 테스트는 Vite를 거치지 않고 Node(`tsx --test`)로 도는데, 거기서는
-// import.meta.env가 통째로 undefined라 바로 읽으면 모듈 로드에서 터진다(firebase.ts와 같은 가드).
 const env: Record<string, string | undefined> = import.meta.env ?? {};
 
 const endpoint = env.VITE_APPWRITE_ENDPOINT;
 const projectId = env.VITE_APPWRITE_PROJECT_ID;
 const databaseId = env.VITE_APPWRITE_DATABASE_ID;
 
-export const isAppwriteConfigured = Boolean(endpoint && projectId && databaseId);
+const missingKeys = [
+  !endpoint && 'VITE_APPWRITE_ENDPOINT',
+  !projectId && 'VITE_APPWRITE_PROJECT_ID',
+  !databaseId && 'VITE_APPWRITE_DATABASE_ID',
+].filter(Boolean) as string[];
+
+export const isAppwriteConfigured = missingKeys.length === 0;
 
 let client: Client | null = null;
-let databases: Databases | null = null;
+let _databases: Databases | null = null;
 
 if (isAppwriteConfigured) {
   client = new Client().setEndpoint(endpoint as string).setProject(projectId as string);
-  databases = new Databases(client);
+  _databases = new Databases(client);
+} else {
+  const dbDriverVal = env.VITE_DB_DRIVER;
+  if (dbDriverVal === 'appwrite') {
+    console.error(
+      `\n[Appwrite Configuration Warning] VITE_DB_DRIVER가 'appwrite'로 지정되어 있으나, ` +
+      `필수 환경변수가 설정되지 않았습니다: ${missingKeys.join(', ')}\n` +
+      `정상 동작을 위해 .env.local 또는 배포 환경변수를 구성해 주세요.\n`
+    );
+  }
 }
 
 /** Console에서 생성한 Database id. 미설정 시 빈 문자열. */
 export const APPWRITE_DATABASE_ID = (databaseId as string | undefined) ?? '';
 
-export { client, databases, ID, Query };
+// Databases 접근 시 에러 가드용 Proxy
+export const databases = new Proxy({} as Databases, {
+  get(_, prop) {
+    if (!_databases) {
+      throw new Error(
+        `[Appwrite Client Error] Appwrite SDK가 올바르게 초기화되지 않았습니다.\n` +
+        `누락된 필수 환경변수: ${missingKeys.join(', ')}\n` +
+        `로컬 개발 환경에서는 .env.local 파일을 확인하시고, 운영 환경의 경우 배포 환경변수를 점검해 주세요.`
+      );
+    }
+    return Reflect.get(_databases, prop);
+  }
+});
+
+export { client, ID, Query };
 
 /**
  * Appwrite 문서 $id 제약: 최대 36자, [a-zA-Z0-9._-], 선행 특수문자 불가.
