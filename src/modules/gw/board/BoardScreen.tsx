@@ -15,9 +15,12 @@ export default function BoardScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeBoard, setActiveBoard] = useState<string>('notice');
-  const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write' | 'edit'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+  // 기존 첨부파일 목록 (수정 시 사용)
+  const [existingAttachments, setExistingAttachments] = useState<{ name: string; size: string; url?: string }[]>([]);
   
   // 선택된 실제 파일 객체 목록 상태
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -187,6 +190,67 @@ export default function BoardScreen() {
     } catch (error) {
       console.error('Failed to delete post:', error);
       alert('게시글 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleStartEdit = (post: Post) => {
+    setNewPost({
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      isPinned: !!post.isPinned,
+    });
+    setExistingAttachments(post.attachedFiles ?? []);
+    setSelectedFiles([]);
+    setViewMode('edit');
+  };
+
+  const handleUpdatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPost) return;
+    if (!newPost.title.trim() || !newPost.content.trim()) {
+      alert('제목과 내용을 모두 입력해주세요.');
+      return;
+    }
+
+    try {
+      let newAttachments: { name: string; size: string; url?: string }[] = [];
+      if (selectedFiles.length > 0) {
+        newAttachments = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const safePath = `chat/board/${Date.now()}_${file.name}`;
+            const url = await fileStorage.put(safePath, file, {
+              contentType: file.type,
+              filename: file.name,
+            });
+            return {
+              name: file.name,
+              size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+              url,
+            };
+          })
+        );
+      }
+
+      const updatedAttachments = [...existingAttachments, ...newAttachments];
+
+      const updated: Post = {
+        ...selectedPost,
+        title: newPost.title,
+        content: newPost.content,
+        boardId: newPost.boardId,
+        isPinned: newPost.isPinned,
+        hasAttachment: updatedAttachments.length > 0,
+        attachedFiles: updatedAttachments.length > 0 ? updatedAttachments : undefined,
+      };
+
+      await boardRepo.save(updated);
+      setPosts((prev) => prev.map((p) => (p.id === selectedPost.id ? updated : p)));
+      setViewMode('detail');
+      setSelectedFiles([]);
+    } catch (error) {
+      console.error('Failed to update post:', error);
+      alert('게시글 수정에 실패했습니다. 다시 시도해 주세요.');
     }
   };
 
@@ -374,13 +438,22 @@ export default function BoardScreen() {
                 <span>←</span> <span>목록으로</span>
               </button>
               {user && selectedPost.author === `${user.name} ${user.position}` ? (
-                <button
-                  type="button"
-                  onClick={() => handleDeletePost(selectedPost.id)}
-                  className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
-                >
-                  🗑️ 삭제
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(selectedPost)}
+                    className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                  >
+                    ✍️ 수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePost(selectedPost.id)}
+                    className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                  >
+                    🗑️ 삭제
+                  </button>
+                </div>
               ) : (
                 <div />
               )}
@@ -442,18 +515,20 @@ export default function BoardScreen() {
           </div>
         )}
 
-        {/* 3) 글작성 뷰 */}
-        {viewMode === 'write' && (
-          <form onSubmit={handleCreatePost} className="flex-1 flex flex-col overflow-hidden">
+        {/* 3) 글작성 / 수정 뷰 */}
+        {(viewMode === 'write' || viewMode === 'edit') && (
+          <form onSubmit={viewMode === 'edit' ? handleUpdatePost : handleCreatePost} className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
+                onClick={() => setViewMode(viewMode === 'edit' ? 'detail' : 'list')}
                 className="flex items-center gap-1 text-ink2 hover:text-ink font-semibold"
               >
-                <span>←</span> <span>작성 취소</span>
+                <span>←</span> <span>{viewMode === 'edit' ? '수정 취소' : '작성 취소'}</span>
               </button>
-              <span className="font-extrabold text-teal">✍️ 새 게시글 작성</span>
+              <span className="font-extrabold text-teal">
+                {viewMode === 'edit' ? '✍️ 게시글 수정' : '✍️ 새 게시글 작성'}
+              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-4">
@@ -496,9 +571,31 @@ export default function BoardScreen() {
                 />
               </div>
 
-              {/* 모의 파일 첨부 필드 */}
+              {/* 기존 및 신규 첨부파일 영역 */}
               <div className="flex flex-col gap-1.5">
                 <label className="font-bold text-ink2">📎 첨부파일</label>
+
+                {/* 기존 첨부파일 표시 (수정 모드일 때만) */}
+                {viewMode === 'edit' && existingAttachments.length > 0 && (
+                  <div className="mb-2">
+                    <div className="text-[11px] font-bold text-ink3 mb-1">기존 첨부파일:</div>
+                    <ul className="space-y-1">
+                      {existingAttachments.map((f, idx) => (
+                        <li key={idx} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md border border-border/50 opacity-90">
+                          <span className="truncate">📎 {f.name} ({f.size})</span>
+                          <button
+                            type="button"
+                            onClick={() => setExistingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0 font-bold"
+                          >
+                            제거
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 <div className="border border-dashed border-border-hi hover:border-teal rounded-lg p-5 text-center cursor-pointer transition-colors bg-panel-alt/30 relative">
                   <input
                     type="file"
@@ -540,11 +637,11 @@ export default function BoardScreen() {
               </div>
             </div>
 
-            {/* 작성 풋터 */}
+            {/* 작성/수정 풋터 */}
             <div className="border-t border-border pt-3.5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
+                onClick={() => setViewMode(viewMode === 'edit' ? 'detail' : 'list')}
                 className="rounded-lg border border-border-hi bg-panel px-4 py-2 font-bold text-ink2 hover:bg-panel-alt"
               >
                 취소
@@ -553,7 +650,7 @@ export default function BoardScreen() {
                 type="submit"
                 className="rounded-lg bg-teal px-5 py-2 font-bold text-white hover:opacity-90"
               >
-                등록
+                {viewMode === 'edit' ? '저장' : '등록'}
               </button>
             </div>
           </form>
