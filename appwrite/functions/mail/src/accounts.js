@@ -59,6 +59,18 @@ async function ownedDoc(dbs, dbId, uid, id) {
   return found.documents[0] ?? null;
 }
 
+/**
+ * 연결 실패를 사용자가 고칠 수 있는 문구로 바꾼다.
+ *
+ * 어느 쪽이 막혔는지 알려주는 게 핵심이다 — 네이버·다음은 IMAP 사용과 SMTP 사용이
+ * 별도 설정이라 "한쪽만 꺼둔" 경우가 흔하다.
+ */
+function connectionError(result) {
+  const broken = [!result.imap.ok && 'IMAP', !result.smtp.ok && 'SMTP'].filter(Boolean);
+  const code = (!result.imap.ok ? result.imap.code : result.smtp.code) || 'CONNECT_FAILED';
+  return new MailFnError(code, `${broken.join('·')} 연결에 실패했습니다.`, 400);
+}
+
 export async function listAccounts(dbs, dbId, uid) {
   const res = await dbs.listDocuments(dbId, COLLECTION, [
     Query.equal('workfitUserId', uid),
@@ -93,9 +105,7 @@ export async function createAccount(dbs, dbId, uid, draft, secret, env) {
 
   const settings = connectionSettings({ provider, email, authUsername: draft?.authUsername }, secret);
   const result = await verifyConnection(settings);
-  if (!result.ok) {
-    throw new MailFnError(result.code, `${result.stage === 'imap' ? 'IMAP' : 'SMTP'} 연결에 실패했습니다.`, 400);
-  }
+  if (!result.ok) throw connectionError(result);
 
   const now = stamp();
   const id = newId();
@@ -136,9 +146,7 @@ export async function updateAccount(dbs, dbId, uid, id, draft, secret, env) {
   if (secret) {
     const settings = connectionSettings(current, secret);
     const result = await verifyConnection(settings);
-    if (!result.ok) {
-      throw new MailFnError(result.code, `${result.stage === 'imap' ? 'IMAP' : 'SMTP'} 연결에 실패했습니다.`, 400);
-    }
+    if (!result.ok) throw connectionError(result);
     patch.encryptedSecret = encryptSecret(secret, env);
     patch.status = 'active';
     patch.verifiedAt = patch.updatedAt;
@@ -181,6 +189,6 @@ export async function testConnection(dbs, dbId, uid, draft, secret, id, env) {
     settings = connectionSettings(current, decryptSecret(current.encryptedSecret, env));
   }
 
-  const result = await verifyConnection(settings);
-  return { ok: result.ok, stage: result.stage, code: result.code };
+  // 실패해도 던지지 않는다 — 화면이 IMAP·SMTP 어느 쪽이 막혔는지 보여줘야 한다.
+  return verifyConnection(settings);
 }

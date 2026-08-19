@@ -73,21 +73,22 @@ async function verifySmtp(settings) {
 /**
  * IMAP·SMTP 양쪽을 확인한다.
  *
- * 한쪽만 되는 경우가 실제로 있다(네이버는 IMAP과 SMTP 사용 설정이 별도). 어느 쪽이
- * 실패했는지 알려줘야 사용자가 메일 설정에서 고칠 수 있다.
+ * 한쪽이 실패해도 **다른 쪽을 건너뛰지 않는다.** 네이버·다음은 IMAP 사용과 SMTP 사용이
+ * 별도 설정이라 한쪽만 꺼진 경우가 흔하다. 먼저 실패한 쪽에서 멈추면 사용자가 고치고 다시
+ * 눌렀을 때 그제서야 나머지 실패를 알게 되어 왕복이 늘어난다.
+ *
+ * 반환 형태는 화면의 `MailConnectionResult`와 같다.
  */
 export async function verifyConnection(settings) {
-  try {
-    await verifyImap(settings);
-  } catch (error) {
-    return { ok: false, stage: 'imap', code: classifyError(error) };
-  }
+  const check = async (run) => {
+    try {
+      await run(settings);
+      return { ok: true, code: null };
+    } catch (error) {
+      return { ok: false, code: classifyError(error) };
+    }
+  };
 
-  try {
-    await verifySmtp(settings);
-  } catch (error) {
-    return { ok: false, stage: 'smtp', code: classifyError(error) };
-  }
-
-  return { ok: true, stage: null, code: null };
+  const [imap, smtp] = await Promise.all([check(verifyImap), check(verifySmtp)]);
+  return { imap, smtp, ok: imap.ok && smtp.ok };
 }
