@@ -43,9 +43,8 @@ export const GW_READY_APPS = new Set([
   'resource',
   'task',
   'survey',
-  // 메일 Function 이식 작업 중 재활성(2026-08-18). 로컬은 VITE_MAILHUB_BRIDGE_URL로
-  // MailHub 브리지를 보고, 운영은 Appwrite Function 이식이 끝나야 실제로 동작한다.
-  // 브리지 URL이 없으면 화면이 "서버 없음"으로 뜬다 — 타일은 켜져 있다.
+  // 메일 — Appwrite Function(mail)으로 동작(2026-08-19 이식 완료). Appwrite 설정이
+  // 없으면 화면이 "서버 없음"으로 뜬다 — 타일은 켜져 있다.
   'mail',
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 

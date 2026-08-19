@@ -77,14 +77,13 @@ const TARGETS = [
       MAIL_CREDENTIALS_KEY: MAIL_KEY,
       AUTH_TOKEN_SECRET: TOKEN_SECRET,
       APPWRITE_DATABASE_ID: DB_ID,
-      // 동적 키로 createDocument 가 조용히 실패하는 문제를 우회하기 위한 임시 조치.
-      // 원인이 밝혀지면 이 변수를 지우고 동적 키(x-appwrite-key)로 되돌린다.
-      APPWRITE_API_KEY: API_KEY,
       // 주입되는 APPWRITE_FUNCTION_API_ENDPOINT 가 평문 http 라서 POST 가 301 로
       // GET 으로 바뀐다(생성이 조회로 둔갑). https 를 명시해 덮어쓴다.
+      // ※ 정적 APPWRITE_API_KEY 는 원인 규명 중의 임시 우회였고 https 확정 후 제거했다.
+      //   함수는 스코프 제한된 동적 키(x-appwrite-key)로 붙는다.
       APPWRITE_ENDPOINT: ENDPOINT,
     },
-    secrets: ['MAIL_CREDENTIALS_KEY', 'AUTH_TOKEN_SECRET', 'APPWRITE_API_KEY'],
+    secrets: ['MAIL_CREDENTIALS_KEY', 'AUTH_TOKEN_SECRET'],
   },
 ];
 

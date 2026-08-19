@@ -44,11 +44,10 @@ const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
  * 어느 키로 붙을지.
  *
  * 기본은 동적 키(`x-appwrite-key`)다 — 함수 스코프로 제한되고 함수에 관리자 키를 심지
- * 않아도 된다. `APPWRITE_API_KEY`가 설정돼 있으면 그쪽을 먼저 쓴다.
+ * 않아도 된다. `APPWRITE_API_KEY`는 비상용 폴백으로만 남긴다(평시에는 설정하지 않는다).
  *
- * ※ 한때 동적 키를 문서 생성 실패의 원인으로 의심했으나 아니었다. 실제 원인은 엔드포인트가
- *   평문 HTTP였던 것이다(아래 `normalizeEndpoint` 참고). 정적 키는 그 정리가 끝나면
- *   빼는 것이 맞다 — 관리자 권한이라 함수에 둘 이유가 없다.
+ * ※ 한때 동적 키를 문서 생성 실패의 원인으로 의심해 정적 키를 임시로 넣었으나, 실제 원인은
+ *   엔드포인트가 평문 HTTP였던 것이다(아래 `normalizeEndpoint`). 확인 후 정적 키는 뺐다.
  */
 function resolveKey(req) {
   const staticKey = process.env.APPWRITE_API_KEY;
