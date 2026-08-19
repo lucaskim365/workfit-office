@@ -38,7 +38,6 @@ const blankRule = (): ApprovalRouteRule => ({
   conditionKey: null, conditionValues: [],
   deptScope: { kind: '전체', deptId: null, deptType: null },
   positionFromRank: null, positionToRank: null,
-  positionFrom: null, positionTo: null,
   amountFrom: null, amountTo: null,
   steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false }],
 });
@@ -65,6 +64,7 @@ export default function ApprovalRuleScreen() {
   const save = async () => {
     if (!sel) return;
     if (!sel.name.trim()) return setMsg('룰 이름을 입력하세요.');
+    
     await upsert.mutateAsync({ ...sel, id: sel.id || nextId() });
     setMsg('저장되었습니다 — 상신 시 즉시 반영됩니다.');
     setSel(null);

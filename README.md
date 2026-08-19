@@ -47,8 +47,18 @@ cp .env.example .env.local   # 값 채우기
 npm run dev                  # 개발 서버 (Vite)
 ```
 
-### 환경변수
-`VITE_FB_*` 키에 Firebase 웹 클라이언트 설정을 넣습니다. 자세한 항목은 [`.env.example`](./.env.example) 참조.
+### 환경변수 및 빌드 모드 분리 가이드
+
+프로젝트는 로컬 개발(Dev)과 실서버 운영(Prod) 환경을 물리적으로 격리하여 안전하게 가동합니다. 자세한 변수 목록은 [`.env.example`](./.env.example)을 참조하십시오.
+
+#### 1) 로컬 개발 환경 (`npm run dev`)
+* 로컬 구동 시 Vite 번들러는 `.env.local` 파일의 설정을 가장 최우선으로 읽어 적용합니다. (해당 파일은 Git 커밋에서 제외됩니다.)
+* **격리 원칙**: 데이터 오염 방지를 위해 개발자는 로컬 개발용 `.env.local` 에 **개발계 Appwrite 프로젝트 ID 및 Firebase 프로젝트 정보**를 기입해야 합니다.
+
+#### 2) 운영 배포 빌드 (`npm run build`)
+* **Vite 환경변수 주입 (Static Baking)**: Vite 번들러는 빌드 시점(`npm run build`)에 `import.meta.env.VITE_*` 환경변수를 정적 텍스트로 치환하여 JS 번들 파일 내에 구워냅니다(Baking). 
+* **배포 설정**: 따라서 Vercel 등 배포 플랫폼의 환경변수 설정 메뉴에 `VITE_DB_DRIVER=appwrite`를 포함하여 운영계 Appwrite Endpoint 및 Project ID를 정확히 설정하고 재배포(Redeploy)해야 배포된 사이트가 정상적으로 운영 서버를 바라보게 됩니다. (개발 전용 `APPWRITE_API_KEY` 같은 비밀키는 클라이언트 번들 유출을 방지하기 위해 운영 빌드 환경변수에 절대 넣지 마십시오.)
+
 로그인 게이트는 `VITE_AUTH_ENABLED="true"`일 때만 활성화됩니다.
 
 ## 스크립트

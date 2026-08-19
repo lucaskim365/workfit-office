@@ -3,8 +3,10 @@
  * 필요: API 키에 functions.read/write + (푸시용) databases 스코프.
  * 실행: node scripts/appwrite-deploy-functions.mjs
  */
-import { readFileSync } from 'node:fs';
+// import { readFileSync } from 'node:fs'; // (기존 코드 보존)
+import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 
 const env = readFileSync('.env.local', 'utf8');
 const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n]*)', 'm')) || [])[1];
@@ -19,7 +21,8 @@ const fn = new Functions(client);
 const DB = get('VITE_APPWRITE_DATABASE_ID');
 
 // FCM 서비스계정 JSON(파일 전체 내용) — 함수 env 로 주입.
-const keyFile = 'workfit-office-app-firebase-adminsdk-fbsvc-0b470346f3.json';
+// const keyFile = 'workfit-office-app-firebase-adminsdk-fbsvc-0b470346f3.json'; // (기존 코드 보존)
+const keyFile = 'service-account.json';
 const FCM = readFileSync(resolve(process.cwd(), keyFile), 'utf8');
 
 const evChat = (act) => `databases.${DB}.collections.chatMessages.documents.*.${act}`;
@@ -33,6 +36,22 @@ const isCode = (e, c) => e && e.code === c;
 
 async function ensureFunction(spec) {
   console.log(`\n[${spec.id}] ${spec.name}`);
+  
+  // 0) 실시간 코드 압축 (tar.gz 자동 생성)
+  const bundleDir = 'appwrite/_deploy_bundles';
+  if (!existsSync(bundleDir)) {
+    mkdirSync(bundleDir, { recursive: true });
+  }
+  const sourceDir = `appwrite/functions/${spec.id}`;
+  console.log(`  [Bundle] 압축 중: ${sourceDir} -> ${spec.tar}`);
+  try {
+    execSync(`tar -czf ${spec.tar} -C ${sourceDir} .`);
+    console.log(`  ✓ 압축 완료`);
+  } catch (e) {
+    console.error(`  ✗ 압축 실패:`, e.message);
+    throw e;
+  }
+
   // 1) 함수 생성(있으면 업데이트로 이벤트/스코프 반영)
   try {
     await fn.create(
@@ -78,6 +97,7 @@ async function main() {
     vars: [['FCM_SERVICE_ACCOUNT', FCM, true], ['APPWRITE_DATABASE_ID', DB, false]],
     tar: 'appwrite/_deploy_bundles/push-notifications.tar.gz',
   });
+  /*
   await ensureFunction({
     id: 'bridge-a2f',
     name: 'Dual-Write Bridge A->F',
@@ -87,6 +107,7 @@ async function main() {
     vars: [['FCM_SERVICE_ACCOUNT', FCM, true], ['APPWRITE_DATABASE_ID', DB, false]],
     tar: 'appwrite/_deploy_bundles/bridge-a2f.tar.gz',
   });
+  */
   // 근태 인제스트는 DB 이벤트가 아니라 사내 C# 에이전트의 HTTP POST로 깨어난다.
   // secret이 없으면 모든 요청이 401이 되므로 배포 전에 .env.local에 채워야 한다.
   const capsSecret = get('CAPS_INGEST_SECRET');

@@ -1,51 +1,61 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { Client, Databases, Query } from 'node-appwrite';
+
+function readEnv(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  const p = resolve(process.cwd(), '.env.local');
+  if (!existsSync(p)) return undefined;
+  for (const line of readFileSync(p, 'utf8').split('\n')) {
+    const m = line.match(new RegExp(`^${key}\\s*=\\s*"?([^"\\n]*)"?`));
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}
 
 async function main() {
-  const p = resolve(process.cwd(), '.env.local');
-  let projectId = 'workfit-office-app';
-  let databaseId = '';
+  const endpoint = readEnv('VITE_APPWRITE_ENDPOINT');
+  const projectId = readEnv('VITE_APPWRITE_PROJECT_ID');
+  const databaseId = readEnv('VITE_APPWRITE_DATABASE_ID') ?? 'workfit';
+  const apiKey = readEnv('APPWRITE_API_KEY');
 
-  if (existsSync(p)) {
-    for (const line of readFileSync(p, 'utf8').split('\n')) {
-      const m1 = line.match(/^VITE_FB_PROJECT_ID\s*=\s*"?([^"\n]*)"?/);
-      if (m1) projectId = m1[1].trim();
-      const m2 = line.match(/^VITE_FB_FIRESTORE_DB_ID\s*=\s*"?([^"\n]*)"?/);
-      if (m2) databaseId = m2[1].trim();
+  if (!endpoint || !projectId || !apiKey) {
+    throw new Error('Appwrite 설정 환경변수가 누락되었습니다 (.env.local 확인)');
+  }
+
+  const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+  const dbs = new Databases(client);
+
+  console.log(`Appwrite 결재선 룰 조회 중... (DB: ${databaseId})`);
+  const coll = 'approvalRouteRules';
+
+  // 페이징 처리하며 모든 문서 조회
+  const rules: any[] = [];
+  const PAGE = 100;
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await dbs.listDocuments(databaseId, coll, [
+      Query.limit(PAGE),
+      Query.offset(offset)
+    ]);
+    
+    for (const doc of res.documents) {
+      rules.push({
+        id: doc.$id,
+        name: doc.name ?? '이름 없음',
+        docType: doc.docType ?? '전체',
+        active: doc.active ?? false,
+        priority: doc.priority ?? 100,
+        amountFrom: doc.amountFrom,
+        amountTo: doc.amountTo,
+        positionFromRank: doc.positionFromRank,
+        positionToRank: doc.positionToRank,
+        steps: typeof doc.steps === 'string' ? JSON.parse(doc.steps) : (doc.steps ?? []),
+        conditionKey: doc.conditionKey,
+        conditionValues: doc.conditionValues ?? [],
+      });
     }
+    if (res.documents.length < PAGE) break;
   }
-
-  const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? resolve(process.cwd(), 'service-account.json');
-  if (!existsSync(keyPath)) {
-    throw new Error(`서비스 계정 키를 찾을 수 없습니다: ${keyPath}`);
-  }
-  const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
-
-  const app = initializeApp({ credential: cert(serviceAccount), projectId });
-  const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
-
-  const collRef = db.collection('approvalRouteRules');
-  const snap = await collRef.get();
-  
-  const rules = snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      name: data.name ?? '이름 없음',
-      docType: data.docType ?? '전체',
-      active: data.active ?? false,
-      priority: data.priority ?? 100,
-      amountFrom: data.amountFrom,
-      amountTo: data.amountTo,
-      positionFromRank: data.positionFromRank,
-      positionToRank: data.positionToRank,
-      steps: data.steps ?? [],
-      conditionKey: data.conditionKey,
-      conditionValues: data.conditionValues ?? [],
-    };
-  });
 
   // 정렬: 우선순위 오름차순, 문서유형순
   rules.sort((a, b) => a.priority - b.priority || a.docType.localeCompare(b.docType));
