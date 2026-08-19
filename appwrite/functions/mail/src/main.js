@@ -36,6 +36,7 @@ import {
   markRead,
   moveMail,
 } from './mailbox.js';
+import { getAttachment, sendMail } from './send.js';
 
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 
@@ -182,6 +183,12 @@ export default async ({ req, res, log, error }) => {
 
       case 'moveMail':
         return res.json({ data: await moveMail(dbs, DB, uid, payload.ref, payload.to, process.env) });
+
+      case 'sendMail':
+        return res.json({ data: await sendMail(dbs, DB, uid, payload.input, process.env) });
+
+      case 'getAttachment':
+        return res.json({ data: await getAttachment(dbs, DB, uid, payload.ref, payload.index, process.env) });
 
       default:
         return fail('UNKNOWN_ACTION', `알 수 없는 요청입니다: ${action}`, 400);

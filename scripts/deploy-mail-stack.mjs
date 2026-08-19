@@ -70,8 +70,9 @@ const TARGETS = [
     name: 'Mail',
     dir: 'appwrite/functions/mail',
     scopes: ['databases.read', 'databases.write', 'documents.read', 'documents.write'],
-    // IMAP 확인과 SMTP 확인을 연달아 하므로 기본 30초로는 끊긴다.
-    timeout: 90,
+    // 발송의 SMTP 소켓 타임아웃이 120초라 함수가 그보다 길어야 한다. 함수가 먼저
+    // 끊기면 발송이 실제로는 나갔는데 화면에는 실패로 뜨는 최악의 상황이 생긴다.
+    timeout: 150,
     vars: {
       MAIL_CREDENTIALS_KEY: MAIL_KEY,
       AUTH_TOKEN_SECRET: TOKEN_SECRET,

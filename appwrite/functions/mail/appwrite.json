@@ -10,7 +10,7 @@
       "path": ".",
       "execute": ["any"],
       "scopes": ["databases.read", "databases.write", "documents.read", "documents.write"],
-      "timeout": 90
+      "timeout": 150
     }
   ]
 }

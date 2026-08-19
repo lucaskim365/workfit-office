@@ -45,6 +45,14 @@ const ERROR_MAP: Record<string, MailErrorCode> = {
   TLS_FAILED: 'TLS_FAILED',
   UNREACHABLE: 'PROVIDER_UNAVAILABLE',
   CONNECT_FAILED: 'PROVIDER_UNAVAILABLE',
+  // 발송·첨부
+  NO_RECIPIENT: 'INVALID_INPUT',
+  SEND_RECIPIENT_REJECTED: 'INVALID_INPUT',
+  SEND_TIMEOUT: 'TIMEOUT',
+  SEND_TOO_LARGE: 'INVALID_INPUT',
+  SEND_ATTACHMENT_TOO_LARGE: 'INVALID_INPUT',
+  SEND_FAILED: 'SEND_FAILED',
+  ATTACHMENT_TOO_LARGE: 'INVALID_INPUT',
 };
 
 interface FnError {
@@ -132,14 +140,6 @@ function secretOf(credential: MailCredential | null): string | undefined {
   throw new MailError('PROVIDER_UNAVAILABLE', '이 인증 방식은 아직 지원하지 않습니다.');
 }
 
-/** Function이 아직 구현하지 않은 동작. 조용히 빈 값을 주면 "메일이 없다"로 오해된다. */
-function notYet(what: string): never {
-  throw new MailError(
-    'PROVIDER_UNAVAILABLE',
-    `${what}은(는) 아직 준비 중입니다. 메일 서버 이식이 끝나면 열립니다.`,
-  );
-}
-
 export const appwriteMailGateway: MailGateway = {
   async testConnection(_ctx, draft, credential): Promise<MailConnectionResult> {
     return call<MailConnectionResult>('testConnection', {
@@ -196,8 +196,17 @@ export const appwriteMailGateway: MailGateway = {
     await call<{ moved: boolean }>('moveMail', { ref, to });
   },
 
-  // ── 아직 이식하지 않은 구간 ──
+  // ── 발송·첨부 ──
 
-  async sendMail(): Promise<MailSendResult> { return notYet('메일 보내기'); },
-  async downloadAttachment(): Promise<MailAttachmentContent> { return notYet('첨부 내려받기'); },
+  async sendMail(_ctx, input): Promise<MailSendResult> {
+    /*
+      도메인 형태({name,email} 배열·origin.ref) 그대로 보낸다. 주소 문자열 조합과 스레드
+      헤더 구성은 서버 몫이다 — 원본 참조만 넘기면 서버가 원문을 다시 읽어 만든다.
+    */
+    return call<MailSendResult>('sendMail', { input });
+  },
+
+  async downloadAttachment(_ctx, ref: MailRef, index: number): Promise<MailAttachmentContent> {
+    return call<MailAttachmentContent>('getAttachment', { ref, index });
+  },
 };
