@@ -160,7 +160,8 @@ async function main() {
   }
 
   // Firebase admin (Firestore 읽기)
-  const keyFile = readdirSync(process.cwd()).find((f) => /-adminsdk-.*\.json$/.test(f));
+  // const keyFile = readdirSync(process.cwd()).find((f) => /-adminsdk-.*\.json$/.test(f)); // (기존 코드 보존)
+  const keyFile = readdirSync(process.cwd()).find((f) => /(-adminsdk-.*\.json|service-account\.json)$/.test(f));
   if (!keyFile) {
     console.error('Firebase 서비스계정 키(*-adminsdk-*.json)를 repo 루트에서 못 찾음');
     process.exit(1);
