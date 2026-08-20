@@ -9,8 +9,8 @@ import { z } from 'zod';
  * ([[groupware-feature]] · docs/전자결재_워크플로_개발_계획서.md §3.2)
  * RDB 이관 시 이 정의가 곧 테이블 DDL. ([[DB_이관_대비_설계원칙.md]])
  */
-/** 부서 유형 — 동적 결재선 룰 엔진의 역할 해석·룰 매칭 키(공장장 등). */
-export const DEPT_TYPES = ['본사', '공장', '영업소', '연구소', '기타'] as const;
+/** 부서 유형 — 동적 결재선 룰 엔진의 역할 해석·룰 매칭 키. */
+export const DEPT_TYPES = ['본사', '본부', '위원회', '연구소', '기타'] as const;
 export type DeptType = (typeof DEPT_TYPES)[number];
 
 export const departmentSchema = z.object({

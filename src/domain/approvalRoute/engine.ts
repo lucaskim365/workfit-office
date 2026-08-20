@@ -131,12 +131,7 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
       const level = asNumber(arg, 1);
       return ancestors.slice(level).map((d) => org.headOf(d)).filter((x): x is string => !!x).slice(0, 1);
     }
-    case 'ROLE_FACTORY_HEAD': {
-      const factories = ancestors.filter((d) => d.deptType === '공장');
-      const top = factories[factories.length - 1]; // 최상위 공장
-      const h = org.headOf(top);
-      return h ? [h, ...headsUp] : [];
-    }
+
     case 'ROLE_CEO': {
       const chain = org.managerChain(drafter.id);
       const top = chain[chain.length - 1];

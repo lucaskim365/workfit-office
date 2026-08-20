@@ -21,7 +21,6 @@ const RESOLVER_LABEL: Record<Resolver, string> = {
   MANAGER: '직속 상급자',
   DEPT_HEAD: '소속 부서장',
   PARENT_DEPT_HEAD: '상위 부서장(level)',
-  ROLE_FACTORY_HEAD: '공장장',
   ROLE_CEO: '대표',
   ROLE_DIVISION_HEAD: '본부장',
   POSITION_AT_LEAST: '직급 이상',
@@ -214,7 +213,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
           {rule.deptScope.kind === '부서유형' && (
             <F label="부서 유형">
               <select value={rule.deptScope.deptType ?? '본사'} onChange={(e) => set({ deptScope: { ...rule.deptScope, deptType: e.target.value as never } })} className={inp}>
-                {DEPT_TYPES.filter((t) => t !== '공장').map((t) => <option key={t} value={t}>{t}</option>)}
+                {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </F>
           )}
@@ -277,7 +276,7 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
               <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
-                {RESOLVERS.filter((r) => r !== 'ROLE_FACTORY_HEAD').map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
+                {RESOLVERS.map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
               </select>
               {s.resolver === 'SPECIFIC_USER' ? (
                 <select

@@ -11,7 +11,7 @@ import { DEPT_TYPES, type Department } from '@/domain/department/schema';
  */
 const BLANK: Department = { id: '', name: '', parentId: null, headUserId: null, deptType: '본사', order: 100 };
 
-const TYPE_TONE: Record<string, string> = { 본사: 'text-blue', 공장: 'text-teal', 영업소: 'text-amber', 연구소: 'text-ink2', 기타: 'text-ink3' };
+const TYPE_TONE: Record<string, string> = { 본사: 'text-blue', 본부: 'text-teal', 위원회: 'text-purple', 연구소: 'text-ink2', 기타: 'text-ink3' };
 
 export default function DepartmentScreen() {
   const { data: rows = [], isLoading } = useDepartments();
@@ -60,6 +60,14 @@ export default function DepartmentScreen() {
     if (!sel.name.trim()) return setMsg('부서명을 입력하세요.');
     if (sel.parentId === sel.id && sel.id) return setMsg('자기 자신을 상위로 지정할 수 없습니다.');
 
+    // 본부 중복 지정 검증
+    if (sel.deptType === '본부') {
+      const existingDiv = rows.find((d) => d.deptType === '본부' && d.id !== sel.id);
+      if (existingDiv) {
+        return setMsg(`본부는 시스템에 1개 부서만 지정할 수 있습니다. (현재: ${existingDiv.name})`);
+      }
+    }
+
     const oldDept = rows.find((d) => d.id === sel.id);
     const oldHeadUserId = oldDept?.headUserId;
 
@@ -75,17 +83,23 @@ export default function DepartmentScreen() {
     }
 
     if (sel.headUserId) {
-      const rank = getRank(sel.headUserId);
-      const newJob = rank >= 3 ? '팀장' : '임원';
+      let newJob = '팀장';
+      if (sel.deptType === '본부') {
+        newJob = '본부장';
+      } else if (sel.deptType === '위원회') {
+        newJob = '위원장';
+      } else {
+        const rank = getRank(sel.headUserId);
+        newJob = rank >= 3 ? '팀장' : '임원';
+      }
       await updateJobTitle.mutateAsync({ id: sel.headUserId, jobTitle: newJob });
 
-      if (newJob === '팀장') {
-        const deptUser = users.find((u) => u.id === sel.headUserId);
-        if (deptUser) {
-          const others = users.filter((u) => u.dept === deptUser.dept && u.jobTitle === '팀장' && u.id !== sel.headUserId);
-          for (const other of others) {
-            await updateJobTitle.mutateAsync({ id: other.id, jobTitle: '팀원' });
-          }
+      const deptUser = users.find((u) => u.id === sel.headUserId);
+      if (deptUser) {
+        // 기존 해당 부서의 부서장(팀장/본부장/위원장) 자격을 가진 다른 유저들을 팀원으로 원상복구
+        const others = users.filter((u) => u.dept === deptUser.dept && ['팀장', '본부장', '위원장'].includes(u.jobTitle) && u.id !== sel.headUserId);
+        for (const other of others) {
+          await updateJobTitle.mutateAsync({ id: other.id, jobTitle: '팀원' });
         }
       }
     }
@@ -164,7 +178,7 @@ export default function DepartmentScreen() {
               </Field>
               <Field label="부서 유형">
                 <select value={sel.deptType} onChange={(e) => setSel({ ...sel, deptType: e.target.value as Department['deptType'] })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal">
-                  {DEPT_TYPES.filter((t) => t !== '공장' && t !== '영업소').map((t) => <option key={t} value={t}>{t}</option>)}
+                  {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
               <Field label="부서장">
