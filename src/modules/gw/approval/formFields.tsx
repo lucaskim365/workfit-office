@@ -251,6 +251,40 @@ function CalendarRangePicker({
   );
 }
 
+function AutoResizeTextarea({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={className}
+      rows={4}
+      style={{ overflowY: 'hidden' }}
+    />
+  );
+}
+
 /** 단일 동적 필드 입력 위젯. values/set 로 상태를 주고받는다(기간은 다중 키). */
 export function DynamicField({
   field, values, set, org,
@@ -270,7 +304,14 @@ export function DynamicField({
       return <div className="rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] text-ink3">{field.placeholder || field.label}</div>;
 
     case '장문':
-      return <textarea value={sv} onChange={(e) => set({ [field.key]: e.target.value })} rows={4} placeholder={field.placeholder} className={`${inp} resize-none leading-relaxed`} />;
+      return (
+        <AutoResizeTextarea
+          value={sv}
+          onChange={(val) => set({ [field.key]: val })}
+          placeholder={field.placeholder}
+          className={`${inp} resize-none leading-relaxed`}
+        />
+      );
 
     case '숫자':
     case '금액':
