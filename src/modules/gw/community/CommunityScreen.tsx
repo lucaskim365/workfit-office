@@ -60,6 +60,7 @@ export default function CommunityScreen() {
   // 소모임 상태
   const [selectedClubId, setSelectedClubId] = useState<number | null>(null);
   const [clubViewMode, setClubViewMode] = useState<'list' | 'create' | 'detail'>('list');
+  const [isNoticeOpen, setIsNoticeOpen] = useState(true);
   const [clubTab, setClubTab] = useState<'post' | 'event' | 'member'>('post');
   
   // 소모임 개설 폼
@@ -1381,6 +1382,30 @@ export default function CommunityScreen() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 기능 제한 공지 모달 ── */}
+      {isNoticeOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs select-none text-ink">
+          <div className="w-[400px] rounded-2xl border border-border bg-panel p-6 shadow-2xl flex flex-col gap-4 text-center font-sans">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-2xl text-amber">
+              ⚠️
+            </div>
+            <div className="space-y-1.5 text-center">
+              <h3 className="text-base font-extrabold text-ink">서비스 이용 안내</h3>
+              <p className="text-[12px] text-ink2 leading-relaxed">
+                해당 페이지는 **아직 개발 및 구현 중**이므로<br />
+                실제 기능 및 데이터를 정상적으로 이용할 수 없습니다.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsNoticeOpen(false)}
+              className="mt-2 w-full rounded-xl bg-teal py-2.5 font-bold text-white shadow-sm hover:opacity-90 transition-opacity text-[12px]"
+            >
+              확인하였습니다
+            </button>
           </div>
         </div>
       )}

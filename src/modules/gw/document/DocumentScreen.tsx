@@ -34,8 +34,31 @@ export default function DocumentScreen() {
   const hasWriteAccess = isAdmin || isOperator;
 
   // 사이드바 카테고리 필터
-  const [activeBoxId, setActiveBoxId] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all'>('all');
+  const [isNoticeOpen, setIsNoticeOpen] = useState(true);
+  const [activeSubCategory, setActiveSubCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // 3대 대분류 전용 가상 목업 문서 데이터
+  const mockDocuments = useMemo(() => {
+    return [
+      // 1) 전사 공용 문서 (사내규정, 매뉴얼, 서양양식)
+      { id: 101, name: '사내 취업규칙 및 노사협약서', boxId: 'rule', category: 'public', subCategory: 'rule', dept: '경영지원팀', date: '2026-01-10', version: 'v3.2', isRule: true, author: '임진서 대리', desc: 'WorkFit 주식회사 사내 취업규칙 개정본입니다.', attachments: ['취업규칙_v3.2_시행본.pdf'], versions: [{ version: 'v3.2', effectiveDate: '2026-01-10', revisedDate: '2026-01-10', reason: '근로기준법 개정에 따른 유연근무 규정 보완', attachments: ['취업규칙_v3.2_시행본.pdf'] }] },
+      { id: 102, name: '정보보안 가이드라인 및 서약서', boxId: 'rule', category: 'public', subCategory: 'rule', dept: '보안관리팀', date: '2026-03-15', version: 'v2.0', isRule: true, author: '김민수 과장', desc: '보안 강화를 위한 사내 가이드라인입니다.', attachments: ['정보보안_가이드라인.pdf'], versions: [] },
+      { id: 103, name: 'Vite 개발 표준 매뉴얼', boxId: 'manual', category: 'public', subCategory: 'manual', dept: '데이터플랫폼 개발팀', date: '2026-02-20', version: 'v1.0', isRule: false, author: '홍채원 주임', desc: '프론트엔드 Vite 개발 표준 스펙 가이드입니다.', attachments: ['Vite_개발_가이드.pdf'] },
+      { id: 104, name: '지출결의서 양식 (Hwp)', boxId: 'form', category: 'public', subCategory: 'form', dept: '재무관리팀', date: '2025-12-01', version: 'v1.0', isRule: false, author: '박찬우 차장', desc: '지출결의 품의를 위한 기본 양식 문서입니다.', attachments: ['지출결의서_표준양식.hwp'] },
+
+      // 2) 부서별 문서 (품질심사팀, 경영기획팀, AX PMO팀, 데이터플랫폼 개발팀 등)
+      { id: 201, name: '[품질] 2분기 사내 안전점검 결과보고서', boxId: 'etc', category: 'dept', subCategory: '품질심사팀', dept: '품질심사팀', date: '2026-06-18', version: 'v1.0', isRule: false, author: '강윤석 이사', desc: '품질심사팀 2분기 공장 안전점검 종합결과입니다.', attachments: ['2분기_안전점검_결과보고.pdf'] },
+      { id: 202, name: '[기획] 2026 하반기 사업계획 보고서', boxId: 'etc', category: 'dept', subCategory: '경영기획팀', dept: '경영기획팀', date: '2026-07-02', version: 'v2.1', isRule: false, author: '최지혜 주임', desc: '경영기획팀 2026년 하반기 전사 사업 계획 초안입니다.', attachments: ['2026_하반기_사업계획.pdf'] },
+      { id: 203, name: '[PMO] AX 지능화 신규 프로젝트 관리대장', boxId: 'etc', category: 'dept', subCategory: 'AX PMO팀', dept: 'AX PMO팀', date: '2026-05-14', version: 'v1.0', isRule: false, author: '박명규 부장', desc: '신규 프로젝트 진척 관리 대장입니다.', attachments: ['AX_프로젝트_관리대장.xlsx'] },
+      { id: 204, name: '[개발] 데이터 플랫폼 백엔드 아키텍처 설계도', boxId: 'etc', category: 'dept', subCategory: '데이터플랫폼 개발팀', dept: '데이터플랫폼 개발팀', date: '2026-06-30', version: 'v1.5', isRule: false, author: '김승기 부장', desc: '데이터 플랫폼 실시간 수집 파이프라인 설계 명세입니다.', attachments: ['데이터플랫폼_설계도_v1.5.pdf'] },
+
+      // 3) 개인 문서함 (내 기안 초안, 보관문서)
+      { id: 301, name: '[내초안] 경비 지출 증빙 모음집', boxId: 'etc', category: 'personal', subCategory: 'draft', dept: CURRENT_USER.dept, date: '2026-08-20', version: 'v1.0', isRule: false, author: CURRENT_USER.name, desc: '8월 소모품비 지출결의용 영수증 증빙 초안입니다.', attachments: ['8월_경비증빙_모음.pdf'] },
+      { id: 302, name: '[즐겨찾기] 사내 복리후생 규정집', boxId: 'rule', category: 'personal', subCategory: 'fav', dept: '인사지원팀', date: '2026-04-01', version: 'v2.0', isRule: true, author: '조민아 부장', desc: '사내 동호회 지원 및 건강검진 복리후생 개정 규정입니다.', attachments: ['복리후생_규정집_2026.pdf'], versions: [] }
+    ];
+  }, [CURRENT_USER]);
 
   // 선택된 문서 상세
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -74,10 +97,11 @@ export default function DocumentScreen() {
     if (docIdParam) {
       const idNum = parseInt(docIdParam, 10);
       if (!isNaN(idNum)) {
-        const found = documents.find((d) => d.id === idNum);
+        const found = mockDocuments.find((d) => d.id === idNum);
         if (found) {
           setSelectedDocId(found.id);
-          setActiveBoxId(found.boxId);
+          setActiveCategory(found.category as any);
+          setActiveSubCategory(found.subCategory);
           setActiveVersionName(null); // 최신 버전
         }
       }
@@ -86,7 +110,7 @@ export default function DocumentScreen() {
 
   // 선택된 문서 데이터
   const selectedDoc = useMemo(() => {
-    return documents.find((d) => d.id === selectedDocId) || null;
+    return mockDocuments.find((d) => d.id === selectedDocId) || null;
   }, [documents, selectedDocId]);
 
   // 과거 버전이나 최신 버전 기준으로 화면 표시용 데이터 매핑
@@ -106,14 +130,14 @@ export default function DocumentScreen() {
         name: selectedDoc.name,
         version: selectedDoc.version || 'v1.0',
         date: selectedDoc.date,
-        reason: selectedDoc.isRule ? selectedDoc.versions[0]?.reason : undefined,
+        reason: selectedDoc.isRule ? selectedDoc.versions?.[0]?.reason : undefined,
         attachments: selectedDoc.attachments,
         desc: selectedDoc.desc
       };
     }
 
     // 규정 과거 버전 선택 시
-    const ver = selectedDoc.versions.find((v) => v.version === activeVersionName);
+    const ver = selectedDoc.versions?.find((v) => v.version === activeVersionName);
     if (ver) {
       return {
         name: `${selectedDoc.name} (${ver.version} 개정이력)`,
@@ -130,12 +154,16 @@ export default function DocumentScreen() {
 
   // 필터링된 문서 리스트
   const filteredDocs = useMemo(() => {
-    return documents.filter((d) => {
-      const matchBox = activeBoxId === 'all' || d.boxId === activeBoxId;
+    return mockDocuments.filter((d) => {
+      // 1. 대분류 필터
+      if (activeCategory !== 'all' && d.category !== activeCategory) return false;
+      // 2. 소분류 필터
+      if (activeSubCategory !== 'all' && d.subCategory !== activeSubCategory) return false;
+      // 3. 검색어 필터
       const matchQuery = !searchQuery.trim() || d.name.toLowerCase().includes(searchQuery.toLowerCase()) || (d.desc && d.desc.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchBox && matchQuery;
+      return matchQuery;
     });
-  }, [documents, activeBoxId, searchQuery]);
+  }, [mockDocuments, activeCategory, activeSubCategory, searchQuery]);
 
   // 1. 문서함 추가 / 편집 저장
   const handleSaveBox = (e: React.FormEvent) => {
@@ -226,62 +254,164 @@ export default function DocumentScreen() {
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink relative overflow-hidden">
       
       {/* ── 좌측 문서함 관리 사이드바 ── */}
-      <aside className="w-[200px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border pb-2">
+      <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm select-none overflow-y-auto max-h-[calc(100vh-140px)]">
+        <div className="flex items-center justify-between border-b border-border pb-2 shrink-0">
           <h2 className="text-sm font-extrabold text-navy flex items-center gap-1.5">
             <span>🗂️</span>
             <span>문서관리</span>
           </h2>
-          {isAdmin && (
-            <button
-              onClick={() => {
-                setEditingBoxId(null);
-                setBoxNameInput('');
-                setBoxDescInput('');
-                setIsBoxModalOpen(true);
-              }}
-              title="문서함 관리"
-              className="text-[10px] font-bold text-teal bg-teal-soft/40 px-1.5 py-0.5 rounded hover:bg-teal-soft/60"
-            >
-              편집
-            </button>
-          )}
         </div>
 
-        {/* 문서함 리스트 */}
-        <nav className="flex flex-col gap-1">
+        {/* 1) 전사 공용 문서함 */}
+        <div className="space-y-1">
           <button
             onClick={() => {
-              setActiveBoxId('all');
+              setActiveCategory('public');
+              setActiveSubCategory('all');
               setSelectedDocId(null);
             }}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left font-bold transition-all ${
-              activeBoxId === 'all'
-                ? 'bg-teal text-white shadow-xs'
-                : 'text-ink2 hover:bg-panel-alt hover:text-ink'
+            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left font-bold text-[12px] transition-all ${
+              activeCategory === 'public' && activeSubCategory === 'all'
+                ? 'bg-teal/10 text-teal'
+                : 'text-ink hover:bg-panel-alt'
             }`}
           >
-            <span>📁</span>
-            <span>전체 문서</span>
+            <span className="flex items-center gap-2">
+              <span>🌐</span>
+              <span>전사 공용 문서함</span>
+            </span>
           </button>
-          {boxes.map((b) => (
-            <button
-              key={b.id}
-              onClick={() => {
-                setActiveBoxId(b.id);
-                setSelectedDocId(null);
-              }}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left font-bold transition-all ${
-                activeBoxId === b.id
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
-            >
-              <span>{b.id === 'rule' ? '📑' : b.id === 'manual' ? '📘' : b.id === 'form' ? '📝' : '📁'}</span>
-              <span className="truncate flex-1">{b.name}</span>
-            </button>
-          ))}
-        </nav>
+          <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
+            {[
+              { id: 'rule', label: '사내 규정', icon: '📑' },
+              { id: 'manual', label: '업무 매뉴얼', icon: '📘' },
+              { id: 'form', label: '공통 서식 양식', icon: '📝' }
+            ].map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => {
+                  setActiveCategory('public');
+                  setActiveSubCategory(sub.id);
+                  setSelectedDocId(null);
+                }}
+                className={`flex w-full items-center gap-2 py-1 px-2 rounded text-left transition-colors text-[11px] font-semibold ${
+                  activeCategory === 'public' && activeSubCategory === sub.id
+                    ? 'text-teal font-extrabold bg-teal-soft/20'
+                    : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
+                }`}
+              >
+                <span>{sub.icon}</span>
+                <span>{sub.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2) 부서별 문서함 */}
+        <div className="space-y-1 pt-1">
+          <button
+            onClick={() => {
+              setActiveCategory('dept');
+              setActiveSubCategory('all');
+              setSelectedDocId(null);
+            }}
+            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left font-bold text-[12px] transition-all ${
+              activeCategory === 'dept' && activeSubCategory === 'all'
+                ? 'bg-teal/10 text-teal'
+                : 'text-ink hover:bg-panel-alt'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span>🏢</span>
+              <span>부서별 문서함</span>
+            </span>
+          </button>
+          <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
+            {[
+              '경영기획팀',
+              '품질심사팀',
+              'AX PMO팀',
+              '데이터플랫폼 개발팀'
+            ].map((deptName) => (
+              <button
+                key={deptName}
+                onClick={() => {
+                  setActiveCategory('dept');
+                  setActiveSubCategory(deptName);
+                  setSelectedDocId(null);
+                }}
+                className={`flex w-full items-center gap-2 py-1 px-2 rounded text-left transition-colors text-[11px] font-semibold ${
+                  activeCategory === 'dept' && activeSubCategory === deptName
+                    ? 'text-teal font-extrabold bg-teal-soft/20'
+                    : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
+                }`}
+              >
+                <span>📁</span>
+                <span className="truncate">{deptName}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 3) 개인 문서함 */}
+        <div className="space-y-1 pt-1">
+          <button
+            onClick={() => {
+              setActiveCategory('personal');
+              setActiveSubCategory('all');
+              setSelectedDocId(null);
+            }}
+            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left font-bold text-[12px] transition-all ${
+              activeCategory === 'personal' && activeSubCategory === 'all'
+                ? 'bg-teal/10 text-teal'
+                : 'text-ink hover:bg-panel-alt'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span>👤</span>
+              <span>개인 문서함</span>
+            </span>
+          </button>
+          <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
+            {[
+              { id: 'draft', label: '내 기안 초안', icon: '📝' },
+              { id: 'fav', label: '개인 보관 문서', icon: '⭐' }
+            ].map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => {
+                  setActiveCategory('personal');
+                  setActiveSubCategory(sub.id);
+                  setSelectedDocId(null);
+                }}
+                className={`flex w-full items-center gap-2 py-1 px-2 rounded text-left transition-colors text-[11px] font-semibold ${
+                  activeCategory === 'personal' && activeSubCategory === sub.id
+                    ? 'text-teal font-extrabold bg-teal-soft/20'
+                    : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
+                }`}
+              >
+                <span>{sub.icon}</span>
+                <span>{sub.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 전체 보기 리셋 */}
+        <button
+          onClick={() => {
+            setActiveCategory('all');
+            setActiveSubCategory('all');
+            setSelectedDocId(null);
+          }}
+          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left font-bold text-[11px] transition-all mt-4 border border-dashed ${
+            activeCategory === 'all'
+              ? 'border-teal bg-teal-soft/20 text-teal'
+              : 'border-border text-ink3 hover:border-ink hover:text-ink'
+          }`}
+        >
+          <span>📁 전체 보기</span>
+        </button>
       </aside>
 
       {/* ── 중앙 문서 목록 영역 ── */}
@@ -290,10 +420,16 @@ export default function DocumentScreen() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 shrink-0">
           <div>
             <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
-              <span>{activeBoxId === 'all' ? '📁' : boxes.find(b => b.id === activeBoxId)?.name}</span>
-              <span>{activeBoxId === 'all' ? '전체 문서함' : '문서함'}</span>
+              <span>{activeCategory === 'all' ? '📁' : activeCategory === 'public' ? '🌐' : activeCategory === 'dept' ? '🏢' : '👤'}</span>
+              <span>
+                {activeCategory === 'all' 
+                  ? '전체 문서함' 
+                  : `${activeCategory === 'public' ? '전사 공용' : activeCategory === 'dept' ? '부서별' : '개인'} / ${
+                      activeSubCategory === 'all' ? '전체' : activeSubCategory === 'rule' ? '사내 규정' : activeSubCategory === 'manual' ? '업무 매뉴얼' : activeSubCategory === 'form' ? '공통 서식' : activeSubCategory === 'draft' ? '내 기안 초안' : activeSubCategory === 'fav' ? '개인 보관 문서' : activeSubCategory
+                    }`}
+              </span>
             </h1>
-            <p className="text-[11px] text-ink3 mt-0.5">회사의 공식 규정서 및 매뉴얼 양식의 기준 저장소입니다.</p>
+            <p className="text-[11px] text-ink3 mt-0.5">회사의 공식 규정서, 부서 업무 파일 및 개인 문서의 체계적 보관소입니다.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -354,7 +490,7 @@ export default function DocumentScreen() {
                         {d.isRule && <span className="text-[10px] font-extrabold text-teal bg-teal-soft border border-teal/20 rounded px-1 shrink-0">규정</span>}
                         <span className="truncate hover:text-teal transition-colors">{d.name}</span>
                       </td>
-                      <td className="p-3 text-ink2">{boxes.find((b) => b.id === d.boxId)?.name || d.boxId}</td>
+                      <td className="p-3 text-ink2">{d.category === 'public' ? (d.subCategory === 'rule' ? '규정' : d.subCategory === 'manual' ? '매뉴얼' : '서식') : (d.category === 'dept' ? '부서' : '개인')}</td>
                       <td className="p-3 text-ink2 truncate">{d.dept}</td>
                       <td className="p-3 text-ink3 font-mono">{d.date}</td>
                       <td className="p-3 text-ink2 font-semibold">
@@ -496,7 +632,7 @@ export default function DocumentScreen() {
                     )}
                   </div>
                   <div className="divide-y divide-border border rounded-xl overflow-hidden bg-panel">
-                    {selectedDoc.versions.map((v) => {
+                    {(selectedDoc.versions || []).map((v) => {
                       const isActive = activeVersionName === v.version || (!activeVersionName && v.version === selectedDoc.version);
                       return (
                         <div
@@ -785,6 +921,30 @@ export default function DocumentScreen() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 기능 제한 공지 모달 ── */}
+      {isNoticeOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs select-none text-ink">
+          <div className="w-[400px] rounded-2xl border border-border bg-panel p-6 shadow-2xl flex flex-col gap-4 text-center font-sans">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-2xl text-amber">
+              ⚠️
+            </div>
+            <div className="space-y-1.5 text-center">
+              <h3 className="text-base font-extrabold text-ink">서비스 이용 안내</h3>
+              <p className="text-[12px] text-ink2 leading-relaxed">
+                해당 페이지는 **아직 개발 및 구현 중**이므로<br />
+                실제 기능 및 데이터를 정상적으로 이용할 수 없습니다.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsNoticeOpen(false)}
+              className="mt-2 w-full rounded-xl bg-teal py-2.5 font-bold text-white shadow-sm hover:opacity-90 transition-opacity text-[12px]"
+            >
+              확인하였습니다
+            </button>
           </div>
         </div>
       )}

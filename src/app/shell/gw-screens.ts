@@ -22,7 +22,7 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   board: { name: '게시판', icon: '📌', desc: '전사 공지·경조사·사내 규정 등을 게시하고 확인합니다.' },
   community: { name: '커뮤니티', icon: '💬', desc: '동호회·소모임 등 임직원 간 자유로운 소통 공간입니다.' },
   document: { name: '문서관리', icon: '🗂️', desc: '매뉴얼·서식·산출물 등 중요 문서를 분류·보관하는 문서고입니다.' },
-  contacts: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
+  employee: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
   task: { name: '업무관리', icon: '📗', desc: '프로젝트·업무 보고·TO-DO를 등록하고 진행을 트래킹합니다.' },
   commute: { name: '근태', icon: '⏱️', desc: 'CAPS 출퇴근 기록을 직원·월별로 조회합니다.' },
 };
@@ -46,6 +46,8 @@ export const GW_READY_APPS = new Set([
   // 메일 — Appwrite Function(mail)으로 동작(2026-08-19 이식 완료). Appwrite 설정이
   // 없으면 화면이 "서버 없음"으로 뜬다 — 타일은 켜져 있다.
   'mail',
+  'employee', // 인명관리 활성화
+  'document', // 문서관리 활성화
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 
   // ── 운영 미준비로 보류(2026-08-18) — 화면·라우트는 있으나 백엔드가 없다 ──
