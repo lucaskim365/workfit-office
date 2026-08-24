@@ -1,4 +1,4 @@
-import { EMAIL_PATTERN, type MailAddress, type MailDetail, type MailRef, type MailSummary, type RecentRecipient } from './schema';
+import { EMAIL_PATTERN, MAIL_FOLDERS, type MailAddress, type MailDetail, type MailFolder, type MailRef, type MailSummary, type RecentRecipient } from './schema';
 
 /**
  * 정규화된 오류 코드.
@@ -109,8 +109,8 @@ export function parseMailRefKey(value: string): MailRef | null {
   const parts = value.split(':');
   if (parts.length !== 4) return null;
   const [accountId, folder, uidValidity, uid] = parts;
-  if (!accountId || folder !== 'INBOX' || !uidValidity || !uid) return null;
-  return { accountId, folder, uidValidity, uid };
+  if (!accountId || !MAIL_FOLDERS.includes(folder as MailFolder) || !uidValidity || !uid) return null;
+  return { accountId, folder: folder as MailFolder, uidValidity, uid };
 }
 
 /* ------------------------------------------------------------------ 답장 */
