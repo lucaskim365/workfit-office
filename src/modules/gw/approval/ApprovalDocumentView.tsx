@@ -665,7 +665,7 @@ export function ApprovalDocumentView({
                                 rowSpan={rowSpan > 1 ? rowSpan : undefined}
                                 colSpan={colSpan > 1 ? colSpan : undefined}
                                 title={isCellBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                                className={`p-2 border border-[#eee] text-[#222] ${isNumLike ? 'text-right' : 'text-left'} ${
+                                className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap ${isNumLike ? 'text-right' : 'text-left'} ${
                                   isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
                                 }`}
                               >

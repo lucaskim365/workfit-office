@@ -17,7 +17,7 @@ export function MetaRow({ cells, full }: { cells: Array<[string, React.ReactNode
           <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">{k}</th>
           <td 
             title={isSecret ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
-            className={`border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] ${isSecret ? 'blur-sm select-none opacity-70 cursor-help' : ''}`} 
+            className={`border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] whitespace-pre-wrap ${isSecret ? 'blur-sm select-none opacity-70 cursor-help' : ''}`} 
             colSpan={full ? 3 : 1}
           >
             {v}
