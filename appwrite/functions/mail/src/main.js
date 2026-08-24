@@ -184,7 +184,7 @@ export default async ({ req, res, log, error }) => {
         return res.json({ data: await moveMail(dbs, DB, uid, payload.ref, payload.to, process.env) });
 
       case 'sendMail':
-        return res.json({ data: await sendMail(dbs, DB, uid, payload.input, process.env) });
+        return res.json({ data: await sendMail(dbs, DB, uid, payload.input, process.env, log) });
 
       case 'getAttachment':
         return res.json({ data: await getAttachment(dbs, DB, uid, payload.ref, payload.index, process.env) });

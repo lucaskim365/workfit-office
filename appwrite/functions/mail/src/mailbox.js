@@ -21,6 +21,8 @@ import {
 import { MailFnError } from './accounts.js';
 
 const COLLECTION = 'mailAccounts';
+/** 발신 기록 — 보낸메일함에서 "우리 팀 누가 보냈나"를 잇는다. */
+const SENT_BY_COLLECTION = 'mailSentBy';
 
 /** 소유자의 계정들. 요청에 계정 ID가 오더라도 소유자 조건을 반드시 함께 건다. */
 async function ownedAccounts(dbs, dbId, uid, accountIds) {
@@ -251,14 +253,62 @@ export async function listMails(dbs, dbId, uid, accountIds, folder, perAccount, 
   const accounts = await ownedAccounts(dbs, dbId, uid, accountIds);
   const limit = Math.min(Math.max(Number(perAccount) || 30, 1), 200);
 
-  return Promise.all(accounts.map(async (account) => {
+  const pages = await Promise.all(accounts.map(async (account) => {
     try {
       const rows = await fetchMessages(settingsOf(account, env), folder, limit, query || {});
-      return { accountId: account.id, mails: rows.map((row) => toSummary(account.id, folder, row)), error: null };
+      return { accountId: account.id, rows, mails: rows.map((row) => toSummary(account.id, folder, row)), error: null };
     } catch (e) {
-      return { accountId: account.id, mails: null, error: classifyError(e) };
+      return { accountId: account.id, rows: [], mails: null, error: classifyError(e) };
     }
   }));
+
+  // 보낸메일함에서만 "우리 팀 누가 보냈나"를 붙인다. 받은메일함은 상대가 보낸 것이라 무의미하다.
+  if (folder === 'SENT') await attachSenders(dbs, dbId, pages);
+
+  return pages.map(({ accountId, mails, error }) => ({ accountId, mails, error }));
+}
+
+/**
+ * 보낸메일함 목록에 발신자를 붙인다.
+ *
+ * 우리 앱으로 보낸 메일은 `mailSentBy`에 확정 기록이 있다. 없으면(네이버 웹메일에서 직접
+ * 보낸 경우) From 헤더의 표시 이름으로 물러선다. 둘 다 없으면 발신자 칸이 비고 화면은
+ * 지금까지처럼 받는사람만 보여준다.
+ *
+ * 기록 조회가 실패해도 목록은 그대로 내보낸다 — 발신자 이름 하나 때문에 메일함이
+ * 안 열리면 안 된다.
+ */
+async function attachSenders(dbs, dbId, pages) {
+  const messageIds = [...new Set(
+    pages.flatMap((page) => page.rows.map((row) => row.messageId).filter(Boolean)),
+  )];
+  if (messageIds.length === 0) return;
+
+  const byMessageId = new Map();
+  try {
+    // Appwrite의 IN 질의 상한을 넘지 않게 나눠 묻는다.
+    for (let i = 0; i < messageIds.length; i += 100) {
+      const chunk = messageIds.slice(i, i + 100);
+      const res = await dbs.listDocuments(dbId, SENT_BY_COLLECTION, [
+        Query.equal('messageId', chunk),
+        Query.limit(chunk.length),
+      ]);
+      for (const doc of res.documents) byMessageId.set(doc.messageId, doc);
+    }
+  } catch {
+    /* 기록이 없거나 컬렉션이 아직 없을 수 있다. From 헤더로 물러선다. */
+  }
+
+  for (const page of pages) {
+    if (!page.mails) continue;
+    page.mails.forEach((mail, index) => {
+      const row = page.rows[index];
+      const record = byMessageId.get(row?.messageId);
+      const name = record?.senderName || row?.fromName || '';
+      const email = row?.fromAddress || '';
+      if (name || email) mail.sentBy = { name, email };
+    });
+  }
 }
 
 /** 메일 하나의 상세. 원문을 받아 파싱하고 HTML은 정화한 것만 내보낸다. */

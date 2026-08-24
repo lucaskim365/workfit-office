@@ -185,6 +185,11 @@ export async function fetchMessages(settings, folder, limit, query = {}) {
         subject: message.envelope?.subject?.trim() || '(제목 없음)',
         senderAddress: counterpart?.address,
         senderName: counterpart?.name,
+        // 발신 기록과 맞춰볼 키. 보낸메일함에서 "우리 팀 누가 보냈나"를 잇는 데 쓴다.
+        messageId: message.envelope?.messageId ?? '',
+        // 보낸메일함은 위에서 상대(받는사람)로 바꿔치기하므로 실제 발신자를 따로 실어 보낸다.
+        fromName: message.envelope?.from?.[0]?.name ?? '',
+        fromAddress: message.envelope?.from?.[0]?.address ?? '',
         recipients: (message.envelope?.to ?? []).map((row) => ({ address: row.address, name: row.name })),
         receivedAt: receivedAt instanceof Date ? receivedAt : new Date(receivedAt),
         seen: message.flags?.has('\\Seen') ?? false,

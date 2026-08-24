@@ -883,6 +883,35 @@ const COLLECTIONS: CollectionDef[] = [
       UQ('mailAcctOwnerEmail', ['workfitUserId', 'email']),
     ],
   },
+  {
+    /*
+      발신 기록.
+
+      보낸메일함은 IMAP 서버에 있고 거기엔 헤더뿐이라, 공용 메일 계정을 여럿이 쓰면
+      "우리 팀 누가 보냈나"를 알 수 없다. From 표시 이름으로도 대개 갈리지만 그건
+      문자열이라 동명이인이면 겹치고 공급자가 고쳐 쓸 수도 있다.
+      `Message-ID`를 키로 확정 정보를 우리 쪽에 남긴다.
+
+      우리 앱으로 보낸 메일만 기록된다 — 네이버 웹메일에서 직접 보낸 것은 여기 없고,
+      그때는 화면이 From 헤더로 물러선다.
+    */
+    id: 'mailSentBy',
+    name: '메일 발신 기록',
+    attributes: [
+      S('id', 64, true),
+      S('messageId', 512, true),
+      S('accountId', 64, true),
+      S('workfitUserId', 64, true),
+      // 보낸 시점의 이름 스냅샷. 사람이 나가거나 개명해도 그때 누가 보냈는지는 남는다.
+      S('senderName', 30),
+      S('sentAt', 40),
+    ],
+    indexes: [
+      IX('sentByMessage', ['messageId']),
+      IX('sentByAccount', ['accountId']),
+      IX('sentByUser', ['workfitUserId']),
+    ],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
