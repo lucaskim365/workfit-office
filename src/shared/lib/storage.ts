@@ -32,6 +32,8 @@ export interface StorageAdapter {
   put(path: string, data: Blob, opts?: PutOptions): Promise<string>;
   /** 경로의 파일을 삭제(best-effort). 미지원/미존재는 조용히 무시. */
   remove(path: string): Promise<void>;
+  /** 파일 접근 임시 서명 URL 발급 (disposition: 'inline' | 'attachment') */
+  getSignUrl(path: string, disposition?: 'inline' | 'attachment'): Promise<string>;
 }
 
 /** Content-Disposition 헤더값 생성(원본 파일명 보존). */
@@ -73,6 +75,11 @@ class FirebaseStorageAdapter implements StorageAdapter {
     } catch {
       /* 이전 파일 없음 등 무시 */
     }
+  }
+
+  async getSignUrl(path: string, _disposition?: 'inline' | 'attachment'): Promise<string> {
+    const r = ref(this.storage, path);
+    return getDownloadURL(r);
   }
 }
 
@@ -151,6 +158,27 @@ class S3StorageAdapter implements StorageAdapter {
       /* best-effort */
     }
   }
+
+  async getSignUrl(path: string, disposition?: 'inline' | 'attachment'): Promise<string> {
+    const safePath = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    const signRes = await fetch(this.signUrl, {
+      method: 'POST',
+      headers: this.signHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({
+        op: 'get',
+        path: safePath,
+        disposition: disposition || 'inline',
+      }),
+    });
+    if (!signRes.ok) {
+      const errBody = await signRes.text().catch(() => '');
+      console.error('Sign API Error Response:', errBody);
+      throw new Error(`서명 URL 발급 실패 (${signRes.status}): ${errBody}`);
+    }
+    const { getUrl } = (await signRes.json()) as { getUrl: string };
+    return getUrl;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -163,6 +191,9 @@ class DataUrlAdapter implements StorageAdapter {
   }
   async remove(): Promise<void> {
     /* 저장하지 않으므로 no-op */
+  }
+  async getSignUrl(path: string, _disposition?: 'inline' | 'attachment'): Promise<string> {
+    return path;
   }
 }
 
