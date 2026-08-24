@@ -577,10 +577,28 @@ const COLLECTIONS: CollectionDef[] = [
       S('startTime', 8),
       S('endTime', 8),
       S('memo', 2000),
+      /*
+        공개 범위. 기존 문서에는 이 세 필드가 없고, 없으면 도메인 스키마가 `PRIVATE`로
+        읽으므로 마이그레이션 없이도 예전 일정은 나만 보는 상태로 남는다.
+        한글 값이 아니라 영문 코드라 enum도 가능하지만, 다른 컬렉션과 같이 String으로 둔다.
+      */
+      S('visibility', 16),
+      S('deptId', 64),
+      S('projectId', 64),
       S('createdAt', 40),
       S('updatedAt', 40),
     ],
-    indexes: [IX('calOwner', ['ownerUserId']), IX('calDate', ['date'])],
+    /*
+      공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만
+      서버측 질의로 옮길 때 필요하므로 인덱스를 미리 만들어 둔다.
+    */
+    indexes: [
+      IX('calOwner', ['ownerUserId']),
+      IX('calDate', ['date']),
+      IX('calVisibility', ['visibility']),
+      IX('calDept', ['deptId']),
+      IX('calProject', ['projectId']),
+    ],
   },
   {
     id: 'resources',
