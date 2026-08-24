@@ -256,11 +256,13 @@ function AutoResizeTextarea({
   onChange,
   placeholder,
   className,
+  rows = 4,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   className?: string;
+  rows?: number;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -279,7 +281,7 @@ function AutoResizeTextarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       className={className}
-      rows={4}
+      rows={rows}
       style={{ overflowY: 'hidden' }}
     />
   );
@@ -403,7 +405,15 @@ export function DynamicField({
         const daysVal = sv ? `${sv}일` : '—';
         return <input disabled value={daysVal} className={`${inp} opacity-70 bg-panel-alt`} />;
       }
-      return <input value={sv} onChange={(e) => set({ [field.key]: e.target.value })} placeholder={field.placeholder} className={inp} />;
+      return (
+        <AutoResizeTextarea
+          value={sv}
+          onChange={(val) => set({ [field.key]: val })}
+          placeholder={field.placeholder}
+          className={`${inp} resize-none leading-relaxed`}
+          rows={1}
+        />
+      );
     }
   }
 }
