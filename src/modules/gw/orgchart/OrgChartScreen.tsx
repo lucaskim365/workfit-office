@@ -12,6 +12,8 @@ export default function OrgChartScreen() {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const selectedUser = org.users.find((u) => u.id === selectedUserId);
 
   // 최초 로드 시 모든 부서 전체 펼침 + 첫 팀 선택.
   useEffect(() => {
@@ -102,7 +104,13 @@ export default function OrgChartScreen() {
 
           <div className="grid grid-cols-2 gap-2.5 p-4 lg:grid-cols-3">
             {members.map((m) => (
-              <MemberCard key={m.id} user={m} manager={org.userById(m.managerId)} isHead={selNode?.dept.headUserId === m.id} />
+              <MemberCard 
+                key={m.id} 
+                user={m} 
+                manager={org.userById(m.managerId)} 
+                isHead={selNode?.dept.headUserId === m.id} 
+                onClick={() => setSelectedUserId(m.id)}
+              />
             ))}
             {members.length === 0 && (
               <div className="col-span-full py-10 text-center text-[12px] text-ink3">
@@ -112,6 +120,124 @@ export default function OrgChartScreen() {
           </div>
         </div>
       </div>
+
+      {/* 임직원 상세 모달 (읽기전용, 개인신상 제외) */}
+      {selectedUserId && selectedUser && (
+        <>
+          {/* 백드롭 오버레이 */}
+          <div
+            onClick={() => setSelectedUserId(null)}
+            className="fixed inset-0 bg-black/40 z-40 backdrop-blur-xs transition-opacity"
+          />
+
+          <div className="fixed inset-0 m-auto h-[440px] w-[720px] max-w-[95vw] max-h-[90vh] shadow-2xl z-50 bg-panel border border-border rounded-3xl flex overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left">
+            {/* 좌측 프로필 카드 영역 */}
+            <div className="w-[240px] shrink-0 bg-gradient-to-b from-teal-soft/10 to-panel-alt/5 border-r border-border p-6 flex flex-col items-center justify-between select-none">
+              <div className="w-full flex flex-col items-center mt-4">
+                {/* 대형 프로필 이니셜 아바타 */}
+                <div className="grid h-22 w-22 place-items-center rounded-full bg-teal text-white text-3xl font-black shadow-md border-3 border-panel">
+                  {selectedUser.name[0]}
+                </div>
+                
+                {/* 임직원 핵심 성명/사번/직위 정보 */}
+                <div className="text-base font-extrabold text-ink mt-4 text-center">
+                  {selectedUser.name}
+                </div>
+                <div className="text-[10px] font-bold px-2 py-0.5 rounded border border-border bg-panel-alt text-ink2 font-mono mt-1.5">
+                  {selectedUser.empNo || '-'}
+                </div>
+
+                <div className="mt-5 text-center space-y-1">
+                  <div className="text-xs font-bold text-teal">
+                    {selectedUser.dept}
+                  </div>
+                  <div className="text-[11px] font-semibold text-ink3">
+                    {selectedUser.position} {selectedUser.jobTitle && `· ${selectedUser.jobTitle}`}
+                  </div>
+                </div>
+              </div>
+
+              {/* 하단 기본 권한 정보 표시 */}
+              <div className="w-full text-center py-2.5 px-3 rounded-xl bg-panel-alt/20 border border-border/40 text-[10.5px] text-ink3 leading-relaxed">
+                🏢 {selectedUser.roleGroup === 'ADMIN' ? '시스템 관리자' : selectedUser.roleGroup === 'OPERATOR' ? '운영 담당자' : '일반 사용자'}
+              </div>
+            </div>
+
+            {/* 우측 상세정보 영역 */}
+            <div className="flex-1 flex flex-col justify-between overflow-hidden bg-panel">
+              {/* 모달 닫기 헤더 */}
+              <div className="p-3.5 border-b border-border bg-panel-alt/5 flex items-center justify-end shrink-0">
+                <button
+                  onClick={() => setSelectedUserId(null)}
+                  className="text-ink3 hover:text-ink font-bold text-sm px-2 py-1 rounded hover:bg-panel-alt transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 모달 본문 */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 text-[12px]">
+                <h2 className="text-sm font-extrabold text-ink flex items-center gap-1.5 border-b border-border pb-2">
+                  <span>💼</span> 인사 및 소속 정보
+                </h2>
+
+                <div className="grid grid-cols-2 gap-y-4 gap-x-3.5">
+                  <div>
+                    <span className="text-ink3 text-[11px] block">성명</span>
+                    <span className="font-semibold text-ink mt-1 block">{selectedUser.name}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-ink3 text-[11px] block">소속 부서</span>
+                    <span className="font-semibold text-ink mt-1 block">{selectedUser.dept}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-ink3 text-[11px] block">직급 / 직책</span>
+                    <span className="font-semibold text-ink mt-1 block">
+                      {selectedUser.position} {selectedUser.jobTitle && `(${selectedUser.jobTitle})`}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-ink3 text-[11px] block">업무 이메일</span>
+                    <span className="font-semibold text-ink mt-1 block font-mono break-all">{selectedUser.email || '-'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-ink3 text-[11px] block">계정 상태</span>
+                    <span className={`font-bold mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] border ${
+                      selectedUser.status === '사용'
+                        ? 'bg-teal-soft/20 border-teal/20 text-teal'
+                        : 'bg-panel-alt border-border text-ink3'
+                    }`}>
+                      {selectedUser.status}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-ink3 text-[11px] block">직속 상급자</span>
+                    <span className="font-semibold text-ink mt-1 block">
+                      {org.userById(selectedUser.managerId)?.name || '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 모달 하단 버튼 바 */}
+              <div className="p-4 border-t border-border bg-panel-alt/10 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserId(null)}
+                  className="rounded-lg border px-5 py-2 font-bold text-ink2 hover:bg-panel-alt text-[11.5px]"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -156,9 +282,16 @@ function DeptRow({
 }
 
 /** 사원 카드. */
-function MemberCard({ user, manager, isHead }: { user: User; manager: User | undefined; isHead: boolean }) {
+function MemberCard({ 
+  user, manager, isHead, onClick 
+}: { 
+  user: User; manager: User | undefined; isHead: boolean; onClick?: () => void 
+}) {
   return (
-    <div className="rounded-xl border border-border bg-panel-alt px-3 py-2.5">
+    <div 
+      onClick={onClick}
+      className="rounded-xl border border-border bg-panel-alt px-3 py-2.5 cursor-pointer hover:border-teal/30 hover:shadow-xs transition-all select-none"
+    >
       <div className="flex items-center gap-2.5">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-soft text-[13px] font-bold text-teal">{user.name[0]}</span>
         <div className="min-w-0">
