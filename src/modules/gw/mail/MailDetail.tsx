@@ -42,8 +42,9 @@ function formatBytes(size: number): string {
 /**
  * 메일 상세.
  *
- * 본문은 서버가 텍스트로 변환한 결과만 표시한다. HTML 원문과 외부 이미지는 추적·스크립트
- * 위험 때문에 클라이언트로 내리지 않는다. ([[jwheo/feat/mail/DESIGN.md]] §8 본문 안전성)
+ * 본문 HTML은 서버(`appwrite/functions/mail/src/mailbox.js`)가 정화한 것만 받는다.
+ * 스크립트·이벤트 핸들러는 그쪽에서 제거되고, 여기서는 다시 손대지 않는다.
+ * ([[jwheo/feat/mail/DESIGN.md]] §8 본문 안전성)
  */
 export default function MailDetail({ detail, account, loading, error, onBack, onReply, onForward, onPrev, onNext, onComposeTo, onTrash, onRestore, trashing, onMarkUnread, markingUnread, onDownload, onPreview, downloadingIndex = null }: Props) {
   if (loading) {
@@ -164,10 +165,21 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
         {detail.htmlBody ? (
           <>
             <div className="mt-3 rounded-lg border border-border bg-ink3/4 px-3 py-2 text-[10px] text-ink3">
-              외부 이미지와 스크립트는 표시하지 않습니다.
+              스크립트는 제거하고 서식과 이미지만 표시합니다.
             </div>
+            {/*
+              메일이 들고 온 서식을 그대로 살린다. 인라인 style은 여기 클래스보다 우선하므로
+              아래 값들은 서식이 없는 메일에만 적용되는 기본값 역할만 한다.
+
+              표에 테두리를 넣지 않는 것은 의도다 — HTML 메일은 표를 자료가 아니라 레이아웃에
+              쓴다. 칸마다 선을 그으면 멀쩡한 메일이 그물처럼 보인다. 일반 메일 클라이언트도
+              표 테두리를 스스로 넣지 않는다.
+
+              폭이 넓은 메일(대개 600px 고정 표)은 가로로 스크롤시킨다. 상세 칸을 밀어내
+              화면 전체가 옆으로 흐르는 것을 막는다.
+            */}
             <div
-              className="mt-3 break-words text-[11.5px] leading-relaxed text-ink [&_a]:text-teal [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_h1]:my-2 [&_h1]:text-[14px] [&_h1]:font-bold [&_h2]:my-2 [&_h2]:text-[13px] [&_h2]:font-bold [&_h3]:my-2 [&_h3]:text-[12px] [&_h3]:font-bold [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-ink3/8 [&_pre]:p-2 [&_table]:my-2 [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:bg-ink3/6 [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
+              className="mt-3 overflow-x-auto break-words text-[11.5px] leading-relaxed text-ink [&_a]:text-teal [&_a]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_h1]:my-2 [&_h1]:text-[14px] [&_h1]:font-bold [&_h2]:my-2 [&_h2]:text-[13px] [&_h2]:font-bold [&_h3]:my-2 [&_h3]:text-[12px] [&_h3]:font-bold [&_img]:h-auto [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-ink3/8 [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
               // 서버가 정화한 HTML만 내려온다(설계 §8). 원문 HTML은 이 경계를 넘지 않는다.
               dangerouslySetInnerHTML={{ __html: detail.htmlBody }}
             />

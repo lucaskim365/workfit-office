@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 import { assertCredentialKey, decryptSecret, encryptSecret } from './credentials.js';
+import { inlineCidImages, sanitizeMailHtml } from './mailbox.js';
 import { verifyToken } from './token.js';
 
 const env = { MAIL_CREDENTIALS_KEY: crypto.randomBytes(32).toString('base64url') };
@@ -78,4 +79,77 @@ test('만료된 토큰을 거부한다', () => {
 test('토큰이나 시크릿이 없으면 거부한다', () => {
   assert.equal(verifyToken('', SECRET), '');
   assert.equal(verifyToken(mint('U009'), ''), '');
+});
+
+/* ------------------------------------------------------------------ 본문 정화 */
+
+test('스크립트와 이벤트 핸들러를 지운다', () => {
+  const out = sanitizeMailHtml('<p onclick="steal()">본문</p><script>steal()</script>');
+  assert.equal(out.includes('script'), false);
+  assert.equal(out.includes('onclick'), false);
+  assert.equal(out.includes('본문'), true);
+});
+
+test('서식과 표 레이아웃 속성을 남긴다', () => {
+  // 이게 지워지면 디자인된 HTML 메일이 맨 텍스트 덩어리가 된다.
+  const out = sanitizeMailHtml(
+    '<table width="600" bgcolor="#ffffff"><tr><td style="color:#333;padding:8px;text-align:center">칸</td></tr></table>',
+  );
+  assert.equal(out.includes('width="600"'), true);
+  assert.equal(out.includes('bgcolor="#ffffff"'), true);
+  assert.equal(out.includes('color:#333'), true);
+  assert.equal(out.includes('text-align:center'), true);
+});
+
+test('style 값에 숨긴 url()을 막는다', () => {
+  // background로 외부 주소를 실으면 이미지 경로를 우회해 열람 추적이 된다.
+  const out = sanitizeMailHtml('<p style="background-color:url(http://tracker.example/x.png)">본문</p>');
+  assert.equal(out.includes('tracker.example'), false);
+});
+
+test('위치 지정 속성은 통과시키지 않는다', () => {
+  // 화면 위에 겹쳐 다른 내용을 가리는 데 쓸 수 있다.
+  const out = sanitizeMailHtml('<div style="position:fixed;color:red">본문</div>');
+  assert.equal(out.includes('position'), false);
+  assert.equal(out.includes('color:red'), true);
+});
+
+test('이미지는 http·https·data만 통과한다', () => {
+  const out = sanitizeMailHtml(
+    '<img src="https://ok.example/a.png"><img src="javascript:alert(1)"><img src="data:image/png;base64,AAAA">',
+  );
+  assert.equal(out.includes('https://ok.example/a.png'), true);
+  assert.equal(out.includes('data:image/png;base64,AAAA'), true);
+  assert.equal(out.includes('javascript:'), false);
+});
+
+test('cid 이미지를 data URI로 바꾼다', () => {
+  // 브라우저는 cid:를 못 읽는다. 안 바꾸면 로고·서명이 전부 깨진 아이콘이 된다.
+  const out = inlineCidImages('<img src="cid:logo@x">', [
+    { cid: 'logo@x', contentType: 'image/png', content: Buffer.from('hello') },
+  ]);
+  assert.equal(out, `<img src="data:image/png;base64,${Buffer.from('hello').toString('base64')}">`);
+});
+
+test('꺾쇠로 감싼 contentId도 같은 것으로 본다', () => {
+  const out = inlineCidImages('<img src="cid:logo@x">', [
+    { contentId: '<logo@x>', contentType: 'image/png', content: Buffer.from('hi') },
+  ]);
+  assert.equal(out.includes('data:image/png;base64,'), true);
+});
+
+test('짝이 없는 cid는 건드리지 않는다', () => {
+  const html = '<img src="cid:missing@x">';
+  assert.equal(inlineCidImages(html, []), html);
+});
+
+test('상한을 넘는 인라인 이미지는 바꾸지 않는다', () => {
+  // 응답이 첨부 크기만큼 부푸는 것을 막는다. 일부라도 보이는 편이 낫다.
+  const html = '<img src="cid:big@x"><img src="cid:small@x">';
+  const out = inlineCidImages(html, [
+    { cid: 'big@x', contentType: 'image/png', content: Buffer.alloc(5 * 1024 * 1024) },
+    { cid: 'small@x', contentType: 'image/png', content: Buffer.from('ok') },
+  ]);
+  assert.equal(out.includes('cid:big@x'), true);
+  assert.equal(out.includes('cid:small@x'), false);
 });
