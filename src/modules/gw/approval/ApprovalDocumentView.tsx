@@ -233,31 +233,12 @@ export function ApprovalDocumentView({
   };
 
 
-  const handleDownload = async (e: any, url: string, name: string) => {
+  const handleDownload = (e: any, url: string) => {
     e.preventDefault();
-    try {
-      // CORS를 허용하여 다운로드 Blob 처리가 가능하도록 mode: 'cors' 추가
-      const response = await fetch(url, { mode: 'cors' });
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error('Download failed, falling back to hidden iframe:', error);
-      // window.open 대신 보이지 않는 iframe을 활용해 브라우저가 새 탭 미리보기 창을 띄우지 않고 다운로드하도록 지시
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = url;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 2000);
-    }
+    // 브라우저가 새 탭에서 직접 URL을 열어 다운로드하게 합니다.
+    // 서버가 Content-Disposition: attachment 헤더를 제공하는 파일은 즉시 다운로드되고,
+    // PDF/이미지 등 브라우저 지원 포맷은 새 탭에 즉시 열리며, 스크립트 fetch가 아니므로 CORS 정책의 제약을 받지 않습니다.
+    window.open(url, '_blank');
   };
 
 
@@ -827,7 +808,7 @@ export function ApprovalDocumentView({
                         {file.name}
                       </a>
                       <button
-                        onClick={(e) => handleDownload(e, file.url, file.name)}
+                        onClick={(e) => handleDownload(e, file.url)}
                         className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
                       >
                         (다운로드)
