@@ -507,7 +507,10 @@ function LocalMailScreen() {
 
       {accounts.length > 0 && (
         <div className="mt-2 text-[10px] text-ink3">
-          {inboxQuery.isFetching ? '불러오는 중…' : `${MAIL_FOLDER_LABELS[folder]} ${mails.length}건`}
+          {/* 임시보관은 로컬 저장분도 목록에 있으므로 함께 센다. */}
+          {inboxQuery.isFetching
+            ? '불러오는 중…'
+            : `${MAIL_FOLDER_LABELS[folder]} ${folder === 'DRAFTS' ? mails.length + drafts.length : mails.length}건`}
           {searchTerm && <span className="ml-2 text-ink2">검색어 “{searchTerm}”</span>}
           {unseenOnly && <span className="ml-2 text-ink2">안 읽음만</span>}
           {failures.length > 0 && (
@@ -553,17 +556,23 @@ function LocalMailScreen() {
             <MailFolderNav current={folder} available={availableFolders} onSelect={selectFolder} unseenCount={unseenTotal} />
           </div>
 
-          {/* 목록 — 임시보관은 서버가 아니라 로컬 저장이라 다른 목록을 쓴다 */}
+          {/* 목록 — 임시보관은 로컬과 서버 두 곳에 나뉘어 있어 다른 목록을 쓴다 */}
           <section className={`flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-sm ${selectedRef ? 'hidden lg:flex' : ''}`}>
-            <div className="min-h-0 flex-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               {folder === 'DRAFTS' ? (
-                <MailDraftList
-                  drafts={drafts}
-                  accounts={accounts}
-                  onOpen={openDraft}
-                  onDiscard={discardDraft}
-                  serverDraftCount={mails.length}
-                />
+                inboxQuery.isLoading ? (
+                  <div className="grid h-full place-items-center text-[11px] text-ink3">임시보관을 불러오는 중…</div>
+                ) : (
+                  <MailDraftList
+                    drafts={drafts}
+                    accounts={accounts}
+                    onOpen={openDraft}
+                    onDiscard={discardDraft}
+                    serverDrafts={mails}
+                    selectedKey={mailKey}
+                    onSelectServer={openMail}
+                  />
+                )
               ) : inboxQuery.isLoading ? (
                 <div className="grid h-full place-items-center text-[11px] text-ink3">메일을 불러오는 중…</div>
               ) : (
@@ -582,8 +591,11 @@ function LocalMailScreen() {
                 />
               )}
             </div>
-            {/* 받아온 만큼 다 찼을 때만 보인다. 덜 찼으면 그 뒤가 없다는 뜻이다. */}
-            {folder !== 'DRAFTS' && !inboxQuery.isLoading && mails.length >= fetchLimit && fetchLimit < MAIL_FETCH_PER_ACCOUNT_MAX && (
+            {/*
+              받아온 만큼 다 찼을 때만 보인다. 덜 찼으면 그 뒤가 없다는 뜻이다.
+              임시보관도 서버 목록을 그리므로 여기서 제외하지 않는다.
+            */}
+            {!inboxQuery.isLoading && mails.length >= fetchLimit && fetchLimit < MAIL_FETCH_PER_ACCOUNT_MAX && (
               <div className="border-t border-border p-2 text-center">
                 <Button
                   size="sm"
