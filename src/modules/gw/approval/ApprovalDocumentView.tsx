@@ -9,6 +9,7 @@ import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
+import { fileStorage } from '@/shared/lib/storage';
 
 
 let cachedLogoDataUrl: string | null = null;
@@ -233,12 +234,45 @@ export function ApprovalDocumentView({
   };
 
 
-  const handleDownload = (e: any, url: string) => {
+  const getStoragePath = (url: string): string => {
+    try {
+      const u = new URL(url);
+      let path = u.pathname;
+      if (path.startsWith('/')) {
+        path = path.substring(1);
+      }
+      return decodeURIComponent(path);
+    } catch {
+      return url;
+    }
+  };
+
+  const handlePreview = async (e: React.MouseEvent, fileUrl: string) => {
     e.preventDefault();
-    // 브라우저가 새 탭에서 직접 URL을 열어 다운로드하게 합니다.
-    // 서버가 Content-Disposition: attachment 헤더를 제공하는 파일은 즉시 다운로드되고,
-    // PDF/이미지 등 브라우저 지원 포맷은 새 탭에 즉시 열리며, 스크립트 fetch가 아니므로 CORS 정책의 제약을 받지 않습니다.
-    window.open(url, '_blank');
+    try {
+      const path = getStoragePath(fileUrl);
+      const signedUrl = fileStorage.getSignUrl 
+        ? await fileStorage.getSignUrl(path, 'inline') 
+        : fileUrl;
+      window.open(signedUrl, '_blank');
+    } catch (err) {
+      console.error('Failed to get preview URL:', err);
+      window.open(fileUrl, '_blank');
+    }
+  };
+
+  const handleDownload = async (e: any, fileUrl: string) => {
+    e.preventDefault();
+    try {
+      const path = getStoragePath(fileUrl);
+      const signedUrl = fileStorage.getSignUrl 
+        ? await fileStorage.getSignUrl(path, 'attachment') 
+        : fileUrl;
+      window.open(signedUrl, '_blank');
+    } catch (err) {
+      console.error('Failed to get download URL:', err);
+      window.open(fileUrl, '_blank');
+    }
   };
 
 
@@ -250,7 +284,12 @@ export function ApprovalDocumentView({
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
-  const steps = useMemo(() => [...doc.steps].sort((a, b) => a.seq - b.seq), [doc.steps]);
+  const steps = useMemo(() => 
+    [...doc.steps]
+      .filter((s) => s.kind !== '참조')
+      .sort((a, b) => a.seq - b.seq), 
+    [doc.steps]
+  );
 
   interface LayoutBlock {
     type: 'table' | 'longtext' | 'table-field';
@@ -800,9 +839,7 @@ export function ApprovalDocumentView({
                   {doc.attachments.map((file, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={(e) => handlePreview(e, file.url)}
                         className="font-semibold hover:underline text-[#222] cursor-pointer"
                       >
                         {file.name}
@@ -837,6 +874,34 @@ export function ApprovalDocumentView({
                       {r.name}{idx < doc.recipients.length - 1 ? ',' : ''}
                     </span>
                   ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      {/* 공유처 영역 (참조자 목록) */}
+      {doc.steps && doc.steps.some((s) => s.kind === '참조') && (
+        <table className="mt-2 w-full border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                공 유 처
+              </th>
+              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {doc.steps
+                    .filter((s) => s.kind === '참조')
+                    .map((s, idx, arr) => {
+                      const finalName = s.approverName || nameOf(s.approverId);
+                      const finalPos = s.approverPos || posOf(s.approverId);
+                      return (
+                        <span key={s.approverId} className="font-semibold">
+                          {finalName} {finalPos || ''}{idx < arr.length - 1 ? ',' : ''}
+                        </span>
+                      );
+                    })}
                 </div>
               </td>
             </tr>
