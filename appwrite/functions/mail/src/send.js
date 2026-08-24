@@ -13,11 +13,10 @@ import { decryptSecret } from './credentials.js';
 import { connectionSettings } from './providers.js';
 import { fetchMessageSource, applyFlag } from './imap.js';
 import { MailFnError } from './accounts.js';
+import { SENT_BY_COLLECTION, messageIdKey } from './sentBy.js';
 
 const COLLECTION = 'mailAccounts';
 const USERS_COLLECTION = 'users';
-/** 발신 기록. 어느 그룹웨어 계정이 보냈는지를 우리 쪽에 남긴다. */
-const SENT_BY_COLLECTION = 'mailSentBy';
 
 /** 첨부 총량 상한(풀어본 바이트 기준). MailHub와 동일. */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -71,11 +70,13 @@ async function senderNameOf(dbs, dbId, uid, log) {
  * 실패해도 발송은 이미 끝났다. 기록을 못 남겼다고 오류를 돌려주면 같은 메일을 다시 보낸다.
  */
 async function recordSender(dbs, dbId, { messageId, accountId, uid, senderName }, log) {
-  if (!messageId) return;
+  const key = messageIdKey(messageId);
+  if (key === '') return;
   try {
     const id = randomUUID().replace(/-/g, '').slice(0, 24);
     await dbs.createDocument(dbId, SENT_BY_COLLECTION, id, {
       id,
+      messageIdKey: key,
       messageId: String(messageId).slice(0, 512),
       accountId: String(accountId || ''),
       workfitUserId: String(uid || ''),

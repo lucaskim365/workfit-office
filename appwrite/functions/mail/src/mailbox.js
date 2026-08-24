@@ -19,10 +19,9 @@ import {
   moveMessage,
 } from './imap.js';
 import { MailFnError } from './accounts.js';
+import { SENT_BY_COLLECTION, messageIdKey } from './sentBy.js';
 
 const COLLECTION = 'mailAccounts';
-/** 발신 기록 — 보낸메일함에서 "우리 팀 누가 보냈나"를 잇는다. */
-const SENT_BY_COLLECTION = 'mailSentBy';
 
 /** 소유자의 계정들. 요청에 계정 ID가 오더라도 소유자 조건을 반드시 함께 건다. */
 async function ownedAccounts(dbs, dbId, uid, accountIds) {
@@ -279,21 +278,21 @@ export async function listMails(dbs, dbId, uid, accountIds, folder, perAccount, 
  * 안 열리면 안 된다.
  */
 async function attachSenders(dbs, dbId, pages) {
-  const messageIds = [...new Set(
-    pages.flatMap((page) => page.rows.map((row) => row.messageId).filter(Boolean)),
+  const keys = [...new Set(
+    pages.flatMap((page) => page.rows.map((row) => messageIdKey(row.messageId)).filter(Boolean)),
   )];
-  if (messageIds.length === 0) return;
+  if (keys.length === 0) return;
 
-  const byMessageId = new Map();
+  const byKey = new Map();
   try {
     // Appwrite의 IN 질의 상한을 넘지 않게 나눠 묻는다.
-    for (let i = 0; i < messageIds.length; i += 100) {
-      const chunk = messageIds.slice(i, i + 100);
+    for (let i = 0; i < keys.length; i += 100) {
+      const chunk = keys.slice(i, i + 100);
       const res = await dbs.listDocuments(dbId, SENT_BY_COLLECTION, [
-        Query.equal('messageId', chunk),
+        Query.equal('messageIdKey', chunk),
         Query.limit(chunk.length),
       ]);
-      for (const doc of res.documents) byMessageId.set(doc.messageId, doc);
+      for (const doc of res.documents) byKey.set(doc.messageIdKey, doc);
     }
   } catch {
     /* 기록이 없거나 컬렉션이 아직 없을 수 있다. From 헤더로 물러선다. */
@@ -303,7 +302,7 @@ async function attachSenders(dbs, dbId, pages) {
     if (!page.mails) continue;
     page.mails.forEach((mail, index) => {
       const row = page.rows[index];
-      const record = byMessageId.get(row?.messageId);
+      const record = byKey.get(messageIdKey(row?.messageId));
       const name = record?.senderName || row?.fromName || '';
       const email = row?.fromAddress || '';
       if (name || email) mail.sentBy = { name, email };

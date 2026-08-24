@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 
 import { assertCredentialKey, decryptSecret, encryptSecret } from './credentials.js';
 import { inlineCidImages, sanitizeMailHtml } from './mailbox.js';
+import { messageIdKey } from './sentBy.js';
 import { verifyToken } from './token.js';
 
 const env = { MAIL_CREDENTIALS_KEY: crypto.randomBytes(32).toString('base64url') };
@@ -141,6 +142,34 @@ test('꺾쇠로 감싼 contentId도 같은 것으로 본다', () => {
 test('짝이 없는 cid는 건드리지 않는다', () => {
   const html = '<img src="cid:missing@x">';
   assert.equal(inlineCidImages(html, []), html);
+});
+
+/* ------------------------------------------------------------------ 발신 기록 */
+
+test('꺾쇠가 있든 없든 같은 조인 키가 나온다', () => {
+  // 발송 라이브러리와 IMAP 서버가 꺾쇠를 붙이는 방식이 달라, 여기서 어긋나면
+  // 조인이 조용히 안 맞고 발신자 이름만 안 보인다.
+  const withAngle = messageIdKey('<abc123@naver.com>');
+  assert.equal(messageIdKey('abc123@naver.com'), withAngle);
+  assert.equal(messageIdKey('  <abc123@naver.com>  '), withAngle);
+});
+
+test('조인 키는 길이가 64로 고정된다', () => {
+  // 인덱스 키 길이 상한 때문에 해시를 쓴다. 길어지면 컬렉션 생성이 실패한다.
+  assert.equal(messageIdKey('<x@y>').length, 64);
+  assert.equal(messageIdKey(`<${'a'.repeat(500)}@example.com>`).length, 64);
+});
+
+test('다른 Message-ID는 다른 키가 된다', () => {
+  assert.notEqual(messageIdKey('<a@x.com>'), messageIdKey('<b@x.com>'));
+});
+
+test('Message-ID가 없으면 빈 키다', () => {
+  // 빈 키는 기록도 조회도 건너뛴다. 빈 값끼리 뭉쳐 엉뚱한 발신자가 붙으면 안 된다.
+  assert.equal(messageIdKey(''), '');
+  assert.equal(messageIdKey(null), '');
+  assert.equal(messageIdKey(undefined), '');
+  assert.equal(messageIdKey('<>'), '');
 });
 
 test('상한을 넘는 인라인 이미지는 바꾸지 않는다', () => {

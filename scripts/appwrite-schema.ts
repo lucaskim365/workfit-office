@@ -899,7 +899,14 @@ const COLLECTIONS: CollectionDef[] = [
     name: '메일 발신 기록',
     attributes: [
       S('id', 64, true),
-      S('messageId', 512, true),
+      /*
+        조인 키는 Message-ID 자체가 아니라 그 해시(sha256 hex 64자)다. Message-ID는 길이가
+        들쭉날쭉해 넉넉히 잡으면 인덱스 키 길이 상한에 걸리고(512로 만들었다가 실제로 걸렸다),
+        짧게 자르면 잘린 뒤가 같은 메일끼리 뭉친다. 계산은 `sentBy.js`의 `messageIdKey`.
+      */
+      S('messageIdKey', 64, true),
+      // 원본은 조회·디버깅용으로만 둔다. 인덱스를 걸지 않는다.
+      S('messageId', 512),
       S('accountId', 64, true),
       S('workfitUserId', 64, true),
       // 보낸 시점의 이름 스냅샷. 사람이 나가거나 개명해도 그때 누가 보냈는지는 남는다.
@@ -907,7 +914,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('sentAt', 40),
     ],
     indexes: [
-      IX('sentByMessage', ['messageId']),
+      IX('sentByMessageKey', ['messageIdKey']),
       IX('sentByAccount', ['accountId']),
       IX('sentByUser', ['workfitUserId']),
     ],
