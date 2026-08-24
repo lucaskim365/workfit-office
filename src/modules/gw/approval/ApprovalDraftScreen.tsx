@@ -246,8 +246,23 @@ function ApprovalDraftInner({
     localStorage.removeItem('draft_autosave_active_' + me.id);
   };
 
+  // 브라우저 새로고침 / 탭 닫기 이탈 방지
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasManuallyEnteredValues()) {
+        e.preventDefault();
+        e.returnValue = ''; // 브라우저 표준 경고창 표시 유도
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [code, title, values, amount, attachments, relatedDocs, steps, recipients, executionDepts]);
+
   // 실시간 자동저장 및 비었을 때의 클리너 연동 (1.5초 디바운스)
   useEffect(() => {
+    // 최초 상태 스냅샷이 캡처되기 전에는 기존 자동저장을 삭제하거나 덮어쓰지 않도록 가드
+    if (!initialStateRef.current) return;
+
     const hasContent = hasManuallyEnteredValues();
 
     if (!hasContent) {
@@ -290,22 +305,9 @@ function ApprovalDraftInner({
         const data = JSON.parse(saved);
         if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
           const formName = forms.find(f => f.code === data.code)?.name || data.code;
-          const ok = window.confirm(
-            `이전에 작성 중이던 임시 저장 문서가 존재합니다. (${formName})\n작성 중이던 내용을 불러오시겠습니까?`
-          );
-          if (ok) {
-            setCode(data.code);
-            setTitle(data.title || '');
-            setValues(data.values || {});
-            setAmount(data.amount || '');
-            if (data.securityLevel) setSecurityLevel(data.securityLevel);
-            if (data.visibility) setVisibility(data.visibility);
-            if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
-            if (data.attachments) setAttachments(data.attachments);
-            if (data.recipients) setRecipients(data.recipients);
-            if (data.executionDepts) setExecutionDepts(data.executionDepts);
-            if (data.steps) setSteps(data.steps);
-          }
+          setPendingAutosaveData(data);
+          setAutosaveFormName(formName);
+          setShowAutosaveRecoverModal(true);
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
@@ -336,6 +338,11 @@ function ApprovalDraftInner({
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  // 자동저장 복구 제안 모달 상태
+  const [showAutosaveRecoverModal, setShowAutosaveRecoverModal] = useState(false);
+  const [pendingAutosaveData, setPendingAutosaveData] = useState<any>(null);
+  const [autosaveFormName, setAutosaveFormName] = useState('');
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarSearch, setSidebarSearch] = useState('');
@@ -1279,6 +1286,43 @@ function ApprovalDraftInner({
             navigate('/gw/approval');
           }}
           onCancel={() => setShowConfirmDiscard(false)}
+        />
+      )}
+
+      {showAutosaveRecoverModal && (
+        <DraftConfirmDialog
+          title="작성 중이던 문서 복구"
+          description={
+            <>
+              이전에 작성 중이던 임시 저장 문서가 존재합니다.<br />
+              <strong>서식: {autosaveFormName}</strong><br /><br />
+              작성 중이던 내용을 불러오시겠습니까?
+            </>
+          }
+          confirmLabel="내용 불러오기"
+          onConfirm={() => {
+            if (pendingAutosaveData) {
+              const data = pendingAutosaveData;
+              setCode(data.code);
+              setTitle(data.title || '');
+              setValues(data.values || {});
+              setAmount(data.amount || '');
+              if (data.securityLevel) setSecurityLevel(data.securityLevel);
+              if (data.visibility) setVisibility(data.visibility);
+              if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+              if (data.attachments) setAttachments(data.attachments);
+              if (data.recipients) setRecipients(data.recipients);
+              if (data.executionDepts) setExecutionDepts(data.executionDepts);
+              if (data.steps) setSteps(data.steps);
+            }
+            setShowAutosaveRecoverModal(false);
+            setPendingAutosaveData(null);
+          }}
+          onCancel={() => {
+            setShowAutosaveRecoverModal(false);
+            setPendingAutosaveData(null);
+            clearAutosave();
+          }}
         />
       )}
 
