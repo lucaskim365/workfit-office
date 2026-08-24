@@ -136,6 +136,7 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'G_BASE_USER', name: '사용자/권한', icon: '◫', order: 10, use: true, children: [
           { id: 'S_BASE_USER', name: '사용자관리', url: '/base/user', icon: '◫', order: 10, use: true },
+          { id: 'S_BASE_VENDOR', name: '거래처관리', url: '/base/vendor', icon: '✦', order: 20, use: true },
           { id: 'S_BASE_AUTH', name: '그룹권한관리', url: '/base/auth', icon: '✦', order: 30, use: true },
         ]
       },
