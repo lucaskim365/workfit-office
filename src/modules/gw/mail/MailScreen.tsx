@@ -217,17 +217,11 @@ function LocalMailScreen() {
     if (!mail.seen && actor) markRead.mutate({ actor, refs: [mail.ref], seen: true });
   };
 
-  /** 현재 목록의 안 읽음 전부를 읽음으로. 검색·필터가 걸려 있으면 걸러진 범위만 처리한다. */
-  const markAllRead = async () => {
-    const unseen = mails.filter((row) => !row.seen).map((row) => row.ref);
-    if (unseen.length === 0) return;
-    try {
-      await markRead.mutateAsync({ actor: actor as User, refs: unseen, seen: true });
-      setNotice(`${unseen.length}건을 읽음으로 표시했습니다.`);
-    } catch (caught) {
-      setError(mailErrorText(caught, '읽음 표시를 반영하지 못했습니다.'));
-    }
-  };
+  /*
+    `모두 읽음`은 제거했다(2026-08-24). 목록 전체를 한 번에 읽음 처리하면 되돌릴 방법이
+    사실상 없고, 실수로 눌렀을 때 안 읽은 메일을 다시 찾아낼 수단이 없다.
+    선택 후 일괄 `읽음`(아래 bulkMarkRead)이 같은 일을 범위를 좁혀 안전하게 한다.
+  */
 
   /** 안 읽음 되돌리기. 목록으로 복귀한다 — 열어둔 채면 다시 읽음이 되는 것처럼 보인다. */
   const markUnread = async () => {
@@ -482,7 +476,7 @@ function LocalMailScreen() {
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="제목·보낸사람·본문 검색"
+              placeholder="제목·이름·본문 검색"
               className="h-9 w-52 rounded-lg border border-border bg-panel px-3 text-[10.5px] text-ink outline-none"
             />
             <button type="submit" className="h-9 rounded-lg border border-border px-3 text-[10.5px] font-bold text-ink2 hover:bg-ink3/8">
@@ -507,16 +501,6 @@ function LocalMailScreen() {
             >
               ★ 중요만
             </button>
-            {folder !== 'DRAFTS' && (
-              <button
-                type="button"
-                disabled={markRead.isPending || mails.every((row) => row.seen)}
-                onClick={() => { void markAllRead(); }}
-                className="h-9 rounded-lg border border-border px-3 text-[10.5px] font-bold text-ink2 hover:bg-ink3/8 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {markRead.isPending ? '표시 중…' : '모두 읽음'}
-              </button>
-            )}
           </form>
         </div>
       )}

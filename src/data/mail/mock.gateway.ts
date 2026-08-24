@@ -261,7 +261,9 @@ export const mockMailGateway: MailGateway = {
       if (query?.unseenOnly && row.seen) return false;
       if (query?.flaggedOnly && !row.flagged) return false;
       if (!text) return true;
-      return [row.subject, row.from.name, row.from.email, row.textBody]
+      // 서버와 같은 대상: 제목·보낸사람·받는사람·참조·본문.
+      const people = [row.from, ...row.to, ...row.cc].flatMap((who) => [who.name, who.email]);
+      return [row.subject, row.textBody, ...people]
         .some((value) => value.toLowerCase().includes(text));
     };
 
