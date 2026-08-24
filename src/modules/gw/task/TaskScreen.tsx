@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { resolveDeptId } from '@/domain/department/engine';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useProject, useProjects } from '@/features/project/useProjects';
@@ -24,7 +25,7 @@ function LocalProjectScreen() {
     ?? null;
   const access = useMemo<ProjectAccessContext>(() => ({
     userId: actor?.id ?? '__anonymous__',
-    deptId: actor ? departments.find((department) => department.name === actor.dept)?.id ?? null : null,
+    deptId: resolveDeptId(departments, actor?.dept),
     active: actor?.status === '사용',
   }), [actor, departments]);
   const projectsQuery = useProjects(access);
