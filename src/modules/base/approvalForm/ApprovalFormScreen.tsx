@@ -704,33 +704,38 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
               {/* 직급 설정 */}
               <div className="space-y-3">
                 <div className="text-[11.5px] font-bold text-ink2">기안 가능 직급 범위</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <F label="최소 기안직급 (직급 상한)">
-                    <select
-                      value={form.allowedPositionToRank ?? ''}
-                      onChange={(e) => set({ allowedPositionToRank: e.target.value === '' ? null : Number(e.target.value) })}
-                      className={inp}
-                    >
-                      <option value="">제한 없음 (전체)</option>
-                      {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
-                        <option key={p.id} value={p.rank}>{p.name}</option>
-                      ))}
-                    </select>
-                  </F>
-                  <F label="최대 기안직급 (직급 하한)">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="mb-0.5 block text-[10.5px] font-semibold text-ink3 text-center">최소 기안직급 (최하위)</label>
                     <select
                       value={form.allowedPositionFromRank ?? ''}
                       onChange={(e) => set({ allowedPositionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
-                      className={inp}
+                      className={`${inp} text-center`}
                     >
-                      <option value="">제한 없음 (전체)</option>
+                      <option value="">제한 없음</option>
+                      {org.positions.slice().sort((a, b) => b.rank - a.rank).map((p) => (
+                        <option key={p.id} value={p.rank}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="text-ink3 font-bold mt-4 shrink-0">~</span>
+                  <div className="flex-1">
+                    <label className="mb-0.5 block text-[10.5px] font-semibold text-ink3 text-center">최대 기안직급 (최상위)</label>
+                    <select
+                      value={form.allowedPositionToRank ?? ''}
+                      onChange={(e) => set({ allowedPositionToRank: e.target.value === '' ? null : Number(e.target.value) })}
+                      className={`${inp} text-center`}
+                    >
+                      <option value="">제한 없음</option>
                       {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
                         <option key={p.id} value={p.rank}>{p.name}</option>
                       ))}
                     </select>
-                  </F>
+                  </div>
                 </div>
-                <div className="text-[10px] text-ink3">지정된 직급 서열 범위 내의 사원만 이 서식을 기안할 수 있습니다.</div>
+                <div className="text-[10px] text-ink3 mt-1.5">
+                  기안 가능한 최하위 직급(최소)부터 최상위 직급(최대) 범위를 지정합니다. (예: 부장 ~ 제한 없음)
+                </div>
               </div>
 
               {/* 부서 설정 */}
