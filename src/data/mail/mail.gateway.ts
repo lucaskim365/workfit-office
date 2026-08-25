@@ -81,7 +81,7 @@ export type MailCredential =
  * ([[jwheo/feat/mail/DESIGN.md]] §6)
  */
 export interface MailQuery {
-  /** 제목·보낸사람·본문을 함께 찾는다. */
+  /** 제목·보낸사람·받는사람·참조·본문을 함께 찾는다. */
   text?: string;
   unseenOnly?: boolean;
   /** 별표(중요)만. */

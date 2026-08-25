@@ -123,6 +123,12 @@ export default function MailList({ mails, failures, accounts, selectedKey, onSel
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className={`min-w-0 flex-1 truncate text-[11.5px] ${mail.seen ? 'text-ink2' : 'font-bold text-ink'}`}>
+                      {/*
+                        보낸메일함은 이 칸이 받는사람이다(서버가 바꿔 보낸다). 보낸 사람은
+                        늘 나라서 상대를 보여야 목록이 쓸모 있다. 누가 보냈는지는 상세에서
+                        본다 — 목록에 방향 표시나 발신자 배지를 겹쳐 놓으니 이름이 둘로
+                        보여 더 헷갈렸다.
+                      */}
                       {mail.from.name || mail.from.email}
                     </span>
                     <span className="shrink-0 text-[9.5px] text-ink3">{formatMailListTime(mail.receivedAt)}</span>
@@ -137,6 +143,26 @@ export default function MailList({ mails, failures, accounts, selectedKey, onSel
                     <span className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink2">
                       {nameOf(mail.ref.accountId)}
                     </span>
+                    {/*
+                      보낸메일함에서만 온다 — 공용 계정을 여럿이 쓸 때 누가 보냈는지 가른다.
+                      이름이 없으면 계정 주소로 물러서지 않는다. 공용 계정에서 주소는 모두에게
+                      같은 값이라 답한 것처럼 보이기만 한다.
+                    */}
+                    {mail.sentBy && (mail.sentBy.name ? (
+                      <span
+                        title={`보낸이 ${mail.sentBy.name} · ${mail.sentBy.email}`}
+                        className="shrink-0 rounded bg-teal-soft/50 px-1.5 py-px text-[8.5px] font-semibold text-teal"
+                      >
+                        {mail.sentBy.name}
+                      </span>
+                    ) : (
+                      <span
+                        title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다."
+                        className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink3"
+                      >
+                        미확인
+                      </span>
+                    ))}
                     <span className="min-w-0 flex-1 truncate text-[10px] text-ink3">{mail.preview}</span>
                   </div>
                 </button>

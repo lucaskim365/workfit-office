@@ -1,12 +1,26 @@
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
+import { canViewEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
-export interface CalendarEventActor {
+/**
+ * 일정 조회·변경 주체.
+ *
+ * `deptId`·`projectIds`는 공유 판정에만 쓰인다. 넘기지 않으면 부서·프로젝트 공유 일정이
+ * 안 보일 뿐 내 일정은 그대로 보인다 — 공유를 아직 안 쓰는 호출부는 고치지 않아도 된다.
+ */
+export interface CalendarEventActor extends Partial<Pick<CalendarAccessContext, 'deptId' | 'projectIds'>> {
   userId: string;
   active: boolean;
 }
+
+const accessContextOf = (actor: CalendarEventActor): CalendarAccessContext => ({
+  userId: actor.userId,
+  deptId: actor.deptId ?? null,
+  projectIds: actor.projectIds ?? [],
+  active: actor.active,
+});
 
 export interface CalendarEventFilter {
   from?: string;
@@ -97,12 +111,14 @@ function sortEvents(rows: CalendarEvent[]): CalendarEvent[] {
 }
 
 export const calendarEventRepo = {
+  /** 내 일정 + 나에게 공유된 일정. 공개 범위 판정은 도메인 `canViewEvent`가 맡는다. */
   async list(actor: CalendarEventActor, filter?: CalendarEventFilter): Promise<CalendarEvent[]> {
     validateFilter(filter);
     if (!actor.active) return [];
+    const access = accessContextOf(actor);
     const rows = await loadAll();
     return sortEvents(rows
-      .filter((event) => event.ownerUserId === actor.userId)
+      .filter((event) => canViewEvent(access, event))
       .filter((event) => !filter?.from || event.date >= filter.from)
       .filter((event) => !filter?.to || event.date <= filter.to)
       .map(cloneEvent));
@@ -110,8 +126,9 @@ export const calendarEventRepo = {
 
   async get(actor: CalendarEventActor, id: string): Promise<CalendarEvent | null> {
     if (!actor.active) return null;
+    const access = accessContextOf(actor);
     const rows = await loadAll();
-    const event = rows.find((row) => row.id === id && row.ownerUserId === actor.userId);
+    const event = rows.find((row) => row.id === id && canViewEvent(access, row));
     return event ? cloneEvent(event) : null;
   },
 

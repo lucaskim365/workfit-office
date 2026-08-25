@@ -2,8 +2,12 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import { resolveDeptId } from '@/domain/department/engine';
+import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
+import { useDepartments } from '@/features/department/useDepartments';
+import { useProjects } from '@/features/project/useProjects';
 import { useUsers } from '@/features/user/useUsers';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
@@ -33,10 +37,44 @@ function LocalCalendarScreen() {
     ?? users.find((user) => user.id === demoUserId)
     ?? users.find((user) => user.status === '사용')
     ?? null;
+  /*
+    공유 판정에 쓸 소속 정보.
+
+    `user.dept`는 부서 ID가 아니라 이름이라 부서 목록으로 옮겨야 한다(`resolveDeptId`).
+    프로젝트는 **참여 중인 것만** 모은다 — `useProjects`는 전사 공개 프로젝트까지 돌려주는데,
+    그것까지 넣으면 참여하지도 않은 프로젝트의 일정이 보이게 된다.
+  */
+  const departmentsQuery = useDepartments();
+  const deptId = useMemo(
+    () => resolveDeptId(departmentsQuery.data ?? [], actor?.dept),
+    [departmentsQuery.data, actor],
+  );
+
+  const projectAccess = useMemo<ProjectAccessContext>(() => ({
+    userId: actor?.id ?? '__anonymous__',
+    deptId,
+    active: actor?.status === '사용',
+  }), [actor, deptId]);
+  const projectsQuery = useProjects(projectAccess);
+  const myProjects = useMemo(() => {
+    const userId = actor?.id ?? '';
+    return (projectsQuery.data ?? []).filter(
+      (project) => project.ownerUserId === userId || project.memberUserIds.includes(userId),
+    );
+  }, [projectsQuery.data, actor]);
+
   const access = useMemo<CalendarEventActor>(() => ({
     userId: actor?.id ?? '__anonymous__',
+    deptId,
+    projectIds: myProjects.map((project) => project.id),
     active: actor?.status === '사용',
-  }), [actor]);
+  }), [actor, deptId, myProjects]);
+  /** 공유받은 일정의 주인 이름. 내 일정이면 null이라 화면이 아무것도 덧붙이지 않는다. */
+  const ownerNameOf = (event?: CalendarEvent): string | null => {
+    if (!event || event.ownerUserId === (actor?.id ?? '')) return null;
+    return users.find((user) => user.id === event.ownerUserId)?.name ?? '다른 사용자';
+  };
+
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
   const eventsQuery = useCalendarEvents(access, range);
@@ -81,7 +119,7 @@ function LocalCalendarScreen() {
 
       <GwSplit
         nav={(
-          <GwSideNav title="내 달력" desc="개인 일정을 등록하고 관리합니다.">
+          <GwSideNav title="달력" desc="내 일정과 나에게 공유된 일정을 함께 봅니다.">
             <Button variant="primary" block onClick={() => setModalTarget({ date: selectedDate })}>+ 일정 등록</Button>
             <div>
               <div className="border-b border-border pb-2 text-[11px] font-bold text-ink2">{selectedDate} 일정 {selectedEvents.length}개</div>
@@ -89,12 +127,17 @@ function LocalCalendarScreen() {
                 <div className="py-6 text-center text-[10.5px] font-semibold text-ink3">등록된 일정이 없습니다.</div>
               ) : (
                 <div className="mt-2 space-y-2">
-                  {selectedEvents.map((event) => (
-                    <button type="button" key={event.id} onClick={() => setModalTarget({ date: event.date, event })} className="block w-full rounded-lg border border-border px-3 py-2.5 text-left hover:border-teal/35 hover:bg-teal-soft/15 focus:outline-none focus:ring-2 focus:ring-teal/30">
-                      <div className="flex items-center justify-between gap-3"><div className="truncate text-[11px] font-bold text-ink">{event.title}</div><span className="shrink-0 text-[9.5px] font-semibold text-teal">{scheduleTime(event)}</span></div>
-                      {event.memo && <p className="mt-1 line-clamp-2 text-[9.5px] text-ink3">{event.memo}</p>}
-                    </button>
-                  ))}
+                  {selectedEvents.map((event) => {
+                    const owner = ownerNameOf(event);
+                    return (
+                      <button type="button" key={event.id} onClick={() => setModalTarget({ date: event.date, event })} className="block w-full rounded-lg border border-border px-3 py-2.5 text-left hover:border-teal/35 hover:bg-teal-soft/15 focus:outline-none focus:ring-2 focus:ring-teal/30">
+                        <div className="flex items-center justify-between gap-3"><div className="truncate text-[11px] font-bold text-ink">{event.title}</div><span className="shrink-0 text-[9.5px] font-semibold text-teal">{scheduleTime(event)}</span></div>
+                        {/* 공유받은 일정은 누구 것인지 밝힌다. 내 일정과 섞이면 왜 못 고치는지 알 수 없다. */}
+                        {owner && <div className="mt-1 text-[9.5px] font-semibold text-ink3">공유 · {owner}</div>}
+                        {event.memo && <p className="mt-1 line-clamp-2 text-[9.5px] text-ink3">{event.memo}</p>}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -117,6 +160,9 @@ function LocalCalendarScreen() {
           actor={access}
           initialDate={modalTarget.date}
           event={modalTarget.event}
+          myProjects={myProjects}
+          deptName={actor?.dept ?? null}
+          ownerName={ownerNameOf(modalTarget.event)}
           onClose={() => setModalTarget(null)}
           onSaved={(saved) => {
             setModalTarget(null);

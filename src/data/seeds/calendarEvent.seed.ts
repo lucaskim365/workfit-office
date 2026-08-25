@@ -1,6 +1,11 @@
-import { calendarEventSchema, type CalendarEvent } from '@/domain/calendarEvent/schema';
+import type { z } from 'zod';
+import { calendarEventSchema } from '@/domain/calendarEvent/schema';
 
-const rows: CalendarEvent[] = [
+/*
+  파싱 **전** 값이라 공개 범위 필드를 생략할 수 있다. 아래 `parse`가 기본값 `PRIVATE`를
+  채우므로 기존 시드는 전부 나만 보는 일정으로 남는다.
+*/
+const rows: z.input<typeof calendarEventSchema>[] = [
   {
     id: 'CAL-20260812-0003',
     ownerUserId: 'U009',

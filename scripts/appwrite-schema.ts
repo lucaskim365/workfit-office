@@ -577,10 +577,28 @@ const COLLECTIONS: CollectionDef[] = [
       S('startTime', 8),
       S('endTime', 8),
       S('memo', 2000),
+      /*
+        공개 범위. 기존 문서에는 이 세 필드가 없고, 없으면 도메인 스키마가 `PRIVATE`로
+        읽으므로 마이그레이션 없이도 예전 일정은 나만 보는 상태로 남는다.
+        한글 값이 아니라 영문 코드라 enum도 가능하지만, 다른 컬렉션과 같이 String으로 둔다.
+      */
+      S('visibility', 16),
+      S('deptId', 64),
+      S('projectId', 64),
       S('createdAt', 40),
       S('updatedAt', 40),
     ],
-    indexes: [IX('calOwner', ['ownerUserId']), IX('calDate', ['date'])],
+    /*
+      공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만
+      서버측 질의로 옮길 때 필요하므로 인덱스를 미리 만들어 둔다.
+    */
+    indexes: [
+      IX('calOwner', ['ownerUserId']),
+      IX('calDate', ['date']),
+      IX('calVisibility', ['visibility']),
+      IX('calDept', ['deptId']),
+      IX('calProject', ['projectId']),
+    ],
   },
   {
     id: 'resources',
@@ -863,6 +881,42 @@ const COLLECTIONS: CollectionDef[] = [
       IX('mailAcctOwner', ['workfitUserId']),
       // 같은 사용자가 같은 주소를 두 번 등록하지 못하게 DB에서 막는다(MailHub와 동일 제약).
       UQ('mailAcctOwnerEmail', ['workfitUserId', 'email']),
+    ],
+  },
+  {
+    /*
+      발신 기록.
+
+      보낸메일함은 IMAP 서버에 있고 거기엔 헤더뿐이라, 공용 메일 계정을 여럿이 쓰면
+      "우리 팀 누가 보냈나"를 알 수 없다. From 표시 이름으로도 대개 갈리지만 그건
+      문자열이라 동명이인이면 겹치고 공급자가 고쳐 쓸 수도 있다.
+      `Message-ID`를 키로 확정 정보를 우리 쪽에 남긴다.
+
+      우리 앱으로 보낸 메일만 기록된다 — 네이버 웹메일에서 직접 보낸 것은 여기 없고,
+      그때는 화면이 From 헤더로 물러선다.
+    */
+    id: 'mailSentBy',
+    name: '메일 발신 기록',
+    attributes: [
+      S('id', 64, true),
+      /*
+        조인 키는 Message-ID 자체가 아니라 그 해시(sha256 hex 64자)다. Message-ID는 길이가
+        들쭉날쭉해 넉넉히 잡으면 인덱스 키 길이 상한에 걸리고(512로 만들었다가 실제로 걸렸다),
+        짧게 자르면 잘린 뒤가 같은 메일끼리 뭉친다. 계산은 `sentBy.js`의 `messageIdKey`.
+      */
+      S('messageIdKey', 64, true),
+      // 원본은 조회·디버깅용으로만 둔다. 인덱스를 걸지 않는다.
+      S('messageId', 512),
+      S('accountId', 64, true),
+      S('workfitUserId', 64, true),
+      // 보낸 시점의 이름 스냅샷. 사람이 나가거나 개명해도 그때 누가 보냈는지는 남는다.
+      S('senderName', 30),
+      S('sentAt', 40),
+    ],
+    indexes: [
+      IX('sentByMessageKey', ['messageIdKey']),
+      IX('sentByAccount', ['accountId']),
+      IX('sentByUser', ['workfitUserId']),
     ],
   },
 ];

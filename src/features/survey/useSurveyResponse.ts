@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { resolveDeptId } from '@/domain/department/engine';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import { surveyRepo } from '@/data/survey/survey.repo';
@@ -11,10 +12,12 @@ const RESULT_KEY = 'gw-survey-result';
 /**
  * `users.dept`는 표준 부서명 문자열이고 설문 대상은 부서 ID로 저장된다.
  * 부서 대상 판정 전에 이름을 ID로 해석한다. 매칭되는 부서가 없으면 null.
+ *
+ * 변환 규칙 자체는 `resolveDeptId`가 갖고 있다. 이 함수는 설문 쪽이 `User | null`을
+ * 그대로 넘기던 형태를 유지하기 위한 얇은 겉옷이다.
  */
 export function resolveUserDeptId(departments: Department[], user: User | null): string | null {
-  if (!user) return null;
-  return departments.find((dept) => dept.name === user.dept)?.id ?? null;
+  return resolveDeptId(departments, user?.dept);
 }
 
 /** 참여할 설문 — 대상 진행 중 설문과 이미 참여한 설문. */

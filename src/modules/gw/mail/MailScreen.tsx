@@ -217,17 +217,11 @@ function LocalMailScreen() {
     if (!mail.seen && actor) markRead.mutate({ actor, refs: [mail.ref], seen: true });
   };
 
-  /** 현재 목록의 안 읽음 전부를 읽음으로. 검색·필터가 걸려 있으면 걸러진 범위만 처리한다. */
-  const markAllRead = async () => {
-    const unseen = mails.filter((row) => !row.seen).map((row) => row.ref);
-    if (unseen.length === 0) return;
-    try {
-      await markRead.mutateAsync({ actor: actor as User, refs: unseen, seen: true });
-      setNotice(`${unseen.length}건을 읽음으로 표시했습니다.`);
-    } catch (caught) {
-      setError(mailErrorText(caught, '읽음 표시를 반영하지 못했습니다.'));
-    }
-  };
+  /*
+    `모두 읽음`은 제거했다(2026-08-24). 목록 전체를 한 번에 읽음 처리하면 되돌릴 방법이
+    사실상 없고, 실수로 눌렀을 때 안 읽은 메일을 다시 찾아낼 수단이 없다.
+    선택 후 일괄 `읽음`(아래 bulkMarkRead)이 같은 일을 범위를 좁혀 안전하게 한다.
+  */
 
   /** 안 읽음 되돌리기. 목록으로 복귀한다 — 열어둔 채면 다시 읽음이 되는 것처럼 보인다. */
   const markUnread = async () => {
@@ -482,7 +476,7 @@ function LocalMailScreen() {
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="제목·보낸사람·본문 검색"
+              placeholder="제목·이름·본문 검색"
               className="h-9 w-52 rounded-lg border border-border bg-panel px-3 text-[10.5px] text-ink outline-none"
             />
             <button type="submit" className="h-9 rounded-lg border border-border px-3 text-[10.5px] font-bold text-ink2 hover:bg-ink3/8">
@@ -507,23 +501,16 @@ function LocalMailScreen() {
             >
               ★ 중요만
             </button>
-            {folder !== 'DRAFTS' && (
-              <button
-                type="button"
-                disabled={markRead.isPending || mails.every((row) => row.seen)}
-                onClick={() => { void markAllRead(); }}
-                className="h-9 rounded-lg border border-border px-3 text-[10.5px] font-bold text-ink2 hover:bg-ink3/8 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {markRead.isPending ? '표시 중…' : '모두 읽음'}
-              </button>
-            )}
           </form>
         </div>
       )}
 
       {accounts.length > 0 && (
         <div className="mt-2 text-[10px] text-ink3">
-          {inboxQuery.isFetching ? '불러오는 중…' : `${MAIL_FOLDER_LABELS[folder]} ${mails.length}건`}
+          {/* 임시보관은 로컬 저장분도 목록에 있으므로 함께 센다. */}
+          {inboxQuery.isFetching
+            ? '불러오는 중…'
+            : `${MAIL_FOLDER_LABELS[folder]} ${folder === 'DRAFTS' ? mails.length + drafts.length : mails.length}건`}
           {searchTerm && <span className="ml-2 text-ink2">검색어 “{searchTerm}”</span>}
           {unseenOnly && <span className="ml-2 text-ink2">안 읽음만</span>}
           {failures.length > 0 && (
@@ -566,20 +553,32 @@ function LocalMailScreen() {
         <div className="mt-4 grid items-start gap-4 lg:grid-cols-[240px_minmax(300px,380px)_1fr]">
           {/* 폴더 — 좁은 화면에서는 상세를 볼 때 감춘다 */}
           <div className={selectedRef ? 'hidden lg:block' : ''}>
-            <MailFolderNav current={folder} available={availableFolders} onSelect={selectFolder} unseenCount={unseenTotal} />
+            <MailFolderNav
+              current={folder}
+              available={availableFolders}
+              onSelect={selectFolder}
+              unseenCount={unseenTotal}
+              draftCount={drafts.length}
+            />
           </div>
 
-          {/* 목록 — 임시보관은 서버가 아니라 로컬 저장이라 다른 목록을 쓴다 */}
+          {/* 목록 — 임시보관은 로컬과 서버 두 곳에 나뉘어 있어 다른 목록을 쓴다 */}
           <section className={`flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-sm ${selectedRef ? 'hidden lg:flex' : ''}`}>
-            <div className="min-h-0 flex-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               {folder === 'DRAFTS' ? (
-                <MailDraftList
-                  drafts={drafts}
-                  accounts={accounts}
-                  onOpen={openDraft}
-                  onDiscard={discardDraft}
-                  serverDraftCount={mails.length}
-                />
+                inboxQuery.isLoading ? (
+                  <div className="grid h-full place-items-center text-[11px] text-ink3">임시보관을 불러오는 중…</div>
+                ) : (
+                  <MailDraftList
+                    drafts={drafts}
+                    accounts={accounts}
+                    onOpen={openDraft}
+                    onDiscard={discardDraft}
+                    serverDrafts={mails}
+                    selectedKey={mailKey}
+                    onSelectServer={openMail}
+                  />
+                )
               ) : inboxQuery.isLoading ? (
                 <div className="grid h-full place-items-center text-[11px] text-ink3">메일을 불러오는 중…</div>
               ) : (
@@ -598,8 +597,11 @@ function LocalMailScreen() {
                 />
               )}
             </div>
-            {/* 받아온 만큼 다 찼을 때만 보인다. 덜 찼으면 그 뒤가 없다는 뜻이다. */}
-            {folder !== 'DRAFTS' && !inboxQuery.isLoading && mails.length >= fetchLimit && fetchLimit < MAIL_FETCH_PER_ACCOUNT_MAX && (
+            {/*
+              받아온 만큼 다 찼을 때만 보인다. 덜 찼으면 그 뒤가 없다는 뜻이다.
+              임시보관도 서버 목록을 그리므로 여기서 제외하지 않는다.
+            */}
+            {!inboxQuery.isLoading && mails.length >= fetchLimit && fetchLimit < MAIL_FETCH_PER_ACCOUNT_MAX && (
               <div className="border-t border-border p-2 text-center">
                 <Button
                   size="sm"

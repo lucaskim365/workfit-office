@@ -19,6 +19,7 @@ import {
   moveMessage,
 } from './imap.js';
 import { MailFnError } from './accounts.js';
+import { SENT_BY_COLLECTION, messageIdKey } from './sentBy.js';
 
 const COLLECTION = 'mailAccounts';
 
@@ -71,26 +72,137 @@ function toSummary(accountId, folder, row) {
 }
 
 /**
+ * CSS 값 패턴.
+ *
+ * 어떤 속성에도 `url(`이 들어오지 못하게 앞에서 막는다. `background`·`border-image`로
+ * 외부 주소를 실으면 이미지 경로를 거치지 않고 열람 추적이 되기 때문이다.
+ */
+const css = (body) => new RegExp(`^(?!.*url\\()${body}$`, 'i');
+
+const CSS_COLOR = [
+  css('#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})'),
+  css('rgba?\\([\\d.,%\\s]+\\)'),
+  css('[a-z]+'),
+];
+const CSS_LENGTH = [css('-?\\d+(?:\\.\\d+)?(?:px|pt|em|rem|%|vw|vh)?'), css('auto')];
+const CSS_KEYWORD = [css('[a-z-]+')];
+/** 여러 값이 이어지는 단축 속성(`1px solid #ccc`). 괄호는 rgb() 때문에 남긴다. */
+const CSS_SHORTHAND = [css('[0-9a-z#.,%()\\s-]+')];
+
+/**
+ * 인라인 서식 허용 목록.
+ *
+ * HTML 메일은 사실상 전부 `<table>` 레이아웃 + 인라인 `style`로 만들어진다. 이걸 통째로
+ * 벗기면 디자인된 메일이 맨 텍스트 덩어리가 된다. 위치 지정(`position`·`z-index`)만은
+ * 빼 둔다 — 화면 위에 겹쳐 띄워 다른 내용을 가리는 데 쓸 수 있다.
+ */
+const ALLOWED_STYLES = {
+  color: CSS_COLOR,
+  'background-color': CSS_COLOR,
+  'font-family': [css('[a-z0-9\\s,\'"-]+')],
+  'font-size': CSS_LENGTH,
+  'font-weight': [...CSS_KEYWORD, css('\\d{3}')],
+  'font-style': CSS_KEYWORD,
+  'line-height': [...CSS_LENGTH, css('\\d+(?:\\.\\d+)?')],
+  'text-align': CSS_KEYWORD,
+  'text-decoration': CSS_SHORTHAND,
+  'text-transform': CSS_KEYWORD,
+  'vertical-align': [...CSS_KEYWORD, ...CSS_LENGTH],
+  'white-space': CSS_KEYWORD,
+  display: CSS_KEYWORD,
+  width: CSS_LENGTH,
+  height: CSS_LENGTH,
+  'max-width': CSS_LENGTH,
+  'min-width': CSS_LENGTH,
+  margin: CSS_SHORTHAND,
+  'margin-top': CSS_LENGTH,
+  'margin-right': CSS_LENGTH,
+  'margin-bottom': CSS_LENGTH,
+  'margin-left': CSS_LENGTH,
+  padding: CSS_SHORTHAND,
+  'padding-top': CSS_LENGTH,
+  'padding-right': CSS_LENGTH,
+  'padding-bottom': CSS_LENGTH,
+  'padding-left': CSS_LENGTH,
+  border: CSS_SHORTHAND,
+  'border-top': CSS_SHORTHAND,
+  'border-right': CSS_SHORTHAND,
+  'border-bottom': CSS_SHORTHAND,
+  'border-left': CSS_SHORTHAND,
+  'border-color': CSS_COLOR,
+  'border-style': CSS_KEYWORD,
+  'border-width': CSS_LENGTH,
+  'border-radius': CSS_SHORTHAND,
+  'border-collapse': CSS_KEYWORD,
+  'border-spacing': CSS_SHORTHAND,
+};
+
+/** 표 레이아웃을 잡는 옛 HTML 속성들. 메일은 아직 이걸로 폭·정렬을 준다. */
+const TABLE_LAYOUT_ATTRS = ['width', 'height', 'align', 'valign', 'bgcolor', 'colspan', 'rowspan'];
+
+/**
  * 받은 HTML 본문 정화.
  *
- * 스크립트·스타일·이벤트 핸들러를 제거하고 구조 태그만 남긴다. 이미지는 전부 뺀다 —
- * 외부 이미지는 열람 추적에 쓰이고, cid 인라인 이미지는 본문에 실으면 응답이 첨부 크기만큼
- * 부푼다. 링크는 남기되 새 창에서 열게 한다.
+ * 스크립트·이벤트 핸들러·`<style>` 블록·폼은 제거하고, 서식과 표 레이아웃은 남긴다.
+ * 이미지는 통과시키되 `src` 스킴을 http(s)와 data(인라인 첨부를 바꿔 넣은 것)로 묶는다.
+ * 링크는 남기되 새 창에서 열게 한다.
+ *
+ * ⚠ 외부 이미지가 통과하므로 발신자가 열람 시각을 알 수 있다(추적 픽셀). 일반 메일
+ * 클라이언트와 같은 동작이지만, 막으려면 `img`의 허용 스킴에서 http·https를 빼면 된다.
  */
-function sanitizeMailHtml(html) {
+export function sanitizeMailHtml(html) {
   return sanitizeHtml(html, {
     allowedTags: [
       'a', 'b', 'strong', 'i', 'em', 'u', 's', 'p', 'div', 'span', 'br', 'hr',
-      'blockquote', 'pre', 'code', 'ul', 'ol', 'li',
-      'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th',
+      'blockquote', 'pre', 'code', 'ul', 'ol', 'li', 'img',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'col', 'colgroup',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     ],
-    allowedAttributes: { a: ['href'], td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] },
+    allowedAttributes: {
+      a: ['href', 'style'],
+      img: ['src', 'alt', 'width', 'height', 'style'],
+      table: [...TABLE_LAYOUT_ATTRS, 'cellpadding', 'cellspacing', 'border', 'style'],
+      td: [...TABLE_LAYOUT_ATTRS, 'style'],
+      th: [...TABLE_LAYOUT_ATTRS, 'style'],
+      tr: ['align', 'valign', 'bgcolor', 'style'],
+      col: ['width', 'span', 'style'],
+      colgroup: ['width', 'span', 'style'],
+      '*': ['style'],
+    },
+    allowedStyles: { '*': ALLOWED_STYLES },
     allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesByTag: { img: ['http', 'https', 'data'] },
     transformTags: {
       a: sanitizeHtml.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer' }),
     },
   });
+}
+
+/** 인라인 이미지를 본문에 실을 총량 상한. 넘는 첨부는 바꾸지 않고 남겨 둔다. */
+const INLINE_IMAGE_BUDGET = 4 * 1024 * 1024;
+
+/**
+ * 인라인(cid) 이미지를 data URI로 바꾼다.
+ *
+ * 브라우저는 `cid:` 주소를 읽지 못해 로고·서명·표 이미지가 전부 깨진 아이콘으로 보인다.
+ * 본문에 실으면 응답이 첨부 크기만큼 부푸므로 총량 상한을 두고, 넘으면 그 이미지는
+ * 그대로 둔다 — 일부라도 보이는 편이 전부 깨지는 것보다 낫다.
+ */
+export function inlineCidImages(html, attachments) {
+  const byCid = new Map();
+  let budget = INLINE_IMAGE_BUDGET;
+
+  for (const row of attachments ?? []) {
+    const key = String(row.cid || row.contentId || '').replace(/^<|>$/g, '').trim();
+    const body = row.content;
+    if (key === '' || !body || !String(row.contentType || '').startsWith('image/')) continue;
+    if (body.length > budget) continue;
+    budget -= body.length;
+    byCid.set(key, `data:${row.contentType};base64,${body.toString('base64')}`);
+  }
+  if (byCid.size === 0) return html;
+
+  return html.replace(/cid:([^"'\s>)]+)/gi, (whole, cid) => byCid.get(cid.trim()) ?? whole);
 }
 
 /** 본문에 박힌 인라인 이미지는 첨부 목록에서 뺀다. 로고·서명이 첨부로 잡히면 목록이 쓸모없다. */
@@ -140,14 +252,87 @@ export async function listMails(dbs, dbId, uid, accountIds, folder, perAccount, 
   const accounts = await ownedAccounts(dbs, dbId, uid, accountIds);
   const limit = Math.min(Math.max(Number(perAccount) || 30, 1), 200);
 
-  return Promise.all(accounts.map(async (account) => {
+  const pages = await Promise.all(accounts.map(async (account) => {
     try {
       const rows = await fetchMessages(settingsOf(account, env), folder, limit, query || {});
-      return { accountId: account.id, mails: rows.map((row) => toSummary(account.id, folder, row)), error: null };
+      return { accountId: account.id, rows, mails: rows.map((row) => toSummary(account.id, folder, row)), error: null };
     } catch (e) {
-      return { accountId: account.id, mails: null, error: classifyError(e) };
+      return { accountId: account.id, rows: [], mails: null, error: classifyError(e) };
     }
   }));
+
+  // 보낸메일함에서만 "우리 팀 누가 보냈나"를 붙인다. 받은메일함은 상대가 보낸 것이라 무의미하다.
+  if (folder === 'SENT') await attachSenders(dbs, dbId, pages);
+
+  return pages.map(({ accountId, mails, error }) => ({ accountId, mails, error }));
+}
+
+/**
+ * 보낸메일함 목록에 발신자를 붙인다.
+ *
+ * 우리 앱으로 보낸 메일은 `mailSentBy`에 확정 기록이 있다. 없으면(네이버 웹메일에서 직접
+ * 보낸 경우) From 헤더의 표시 이름으로 물러선다. 둘 다 없으면 발신자 칸이 비고 화면은
+ * 지금까지처럼 받는사람만 보여준다.
+ *
+ * 기록 조회가 실패해도 목록은 그대로 내보낸다 — 발신자 이름 하나 때문에 메일함이
+ * 안 열리면 안 된다.
+ */
+async function attachSenders(dbs, dbId, pages) {
+  const keys = [...new Set(
+    pages.flatMap((page) => page.rows.map((row) => messageIdKey(row.messageId)).filter(Boolean)),
+  )];
+  if (keys.length === 0) return;
+
+  const byKey = new Map();
+  try {
+    // Appwrite의 IN 질의 상한을 넘지 않게 나눠 묻는다.
+    for (let i = 0; i < keys.length; i += 100) {
+      const chunk = keys.slice(i, i + 100);
+      const res = await dbs.listDocuments(dbId, SENT_BY_COLLECTION, [
+        Query.equal('messageIdKey', chunk),
+        Query.limit(chunk.length),
+      ]);
+      for (const doc of res.documents) byKey.set(doc.messageIdKey, doc);
+    }
+  } catch {
+    /* 기록이 없거나 컬렉션이 아직 없을 수 있다. From 헤더로 물러선다. */
+  }
+
+  for (const page of pages) {
+    if (!page.mails) continue;
+    page.mails.forEach((mail, index) => {
+      const row = page.rows[index];
+      const record = byKey.get(messageIdKey(row?.messageId));
+      const name = record?.senderName || row?.fromName || '';
+      const email = row?.fromAddress || '';
+      if (name || email) mail.sentBy = { name, email };
+    });
+  }
+}
+
+/**
+ * 발신 기록 한 건 조회 — 상세용. 목록의 `attachSenders`와 같은 규칙이다.
+ *
+ * 기록이 있으면 그게 확정(우리 앱으로 보낸 메일)이고, 없으면 From 헤더 이름으로 물러선다.
+ * 조회가 실패해도 상세는 열려야 하므로 삼킨다.
+ */
+async function lookupSender(dbs, dbId, messageId, from) {
+  const key = messageIdKey(messageId);
+  let record = null;
+  if (key) {
+    try {
+      const res = await dbs.listDocuments(dbId, SENT_BY_COLLECTION, [
+        Query.equal('messageIdKey', key),
+        Query.limit(1),
+      ]);
+      record = res.documents[0] ?? null;
+    } catch {
+      /* 기록이 없거나 컬렉션이 아직 없을 수 있다. From 헤더로 물러선다. */
+    }
+  }
+  const name = record?.senderName || from?.name || '';
+  const email = from?.email || '';
+  return name || email ? { name, email } : null;
 }
 
 /** 메일 하나의 상세. 원문을 받아 파싱하고 HTML은 정화한 것만 내보낸다. */
@@ -161,14 +346,23 @@ export async function getMail(dbs, dbId, uid, ref, env) {
   if (!found) throw new MailFnError('NOT_FOUND', '메일을 찾을 수 없습니다. 다른 기기에서 지웠을 수 있습니다.', 404);
 
   const parsed = await simpleParser(found.source, { skipHtmlToText: false, skipTextToHtml: true });
-  const html = typeof parsed.html === 'string' && parsed.html.trim() !== '' ? sanitizeMailHtml(parsed.html) : null;
+  // cid를 먼저 바꾼 뒤 정화한다. 순서가 뒤집히면 아직 cid:인 src가 스킴 검사에 걸려 지워진다.
+  const rawHtml = typeof parsed.html === 'string' && parsed.html.trim() !== '' ? parsed.html : null;
+  const html = rawHtml === null ? null : sanitizeMailHtml(inlineCidImages(rawHtml, parsed.attachments));
   const text = parsed.text?.trim() || '본문이 없습니다.';
   const from = addressList(flatValues(parsed.from))[0] ?? addressOf('', 'unknown@unknown.invalid');
   const receivedAt = parsed.date instanceof Date ? parsed.date : new Date(0);
 
+  /*
+    상세에도 발신자를 붙인다. 목록에만 있으면 메일을 여는 순간 "누가 보냈나"가 사라져,
+    정작 확인이 필요한 화면에서 계정 주소만 남는다.
+  */
+  const sentBy = folder === 'SENT' ? await lookupSender(dbs, dbId, parsed.messageId, from) : null;
+
   return {
     ref: { accountId: account.id, folder, uidValidity: String(found.uidValidity), uid: String(ref.uid) },
     from,
+    sentBy,
     to: addressList(flatValues(parsed.to)),
     cc: addressList(flatValues(parsed.cc)),
     replyTo: addressList(flatValues(parsed.replyTo))[0] ?? null,

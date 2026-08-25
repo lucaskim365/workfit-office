@@ -9,6 +9,8 @@ import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeav
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useGwSummary } from '@/features/gw/useGwSummary';
+import { useUnseenCount } from '@/features/mail/useMailbox';
+import { isMailBackendReady, isMailSampleData } from '@/data/mail/mail.client';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
@@ -199,6 +201,19 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const markAllRead = useMarkAllNotificationsRead();
   const [showNotiPanel, setShowNotiPanel] = useState(false);
 
+  /**
+   * 메일 타일 배지 — 전 계정 받은메일함 안 읽은 수.
+   *
+   * 메일 화면과 같은 캐시 키를 쓰므로 메일함에서 읽으면 도크 배지도 함께 내려간다.
+   * 서버가 안 붙었으면 아예 묻지 않는다 — 목업 숫자가 진짜 배지로 보이면 안 된다.
+   * 이 패널은 도크를 열었을 때만 그려져서 IMAP 왕복이 상시로 일어나지 않는다.
+   */
+  const mailUnseenQuery = useUnseenCount(isMailBackendReady || isMailSampleData ? user : null);
+  const mailUnseen = useMemo(
+    () => Object.values(mailUnseenQuery.data ?? {}).reduce((sum, count) => sum + count, 0),
+    [mailUnseenQuery.data],
+  );
+
   // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
   const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
@@ -206,7 +221,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const apps = [
     { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
     { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
-    { l: '메일', icon: '✉️', to: 'mail', hot: true },
+    { l: '메일', icon: '✉️', to: 'mail', badge: mailUnseen > 0 ? (mailUnseen > 99 ? '99+' : String(mailUnseen)) : undefined, hot: true },
     { l: '자원예약', icon: '📦', to: 'resource' },
     { l: '전자설문', icon: '📋', to: 'survey' },
     { l: '게시판', icon: '📌', to: 'board' },
