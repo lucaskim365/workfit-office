@@ -13,9 +13,44 @@ import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { DynamicField } from '@/modules/gw/approval/formFields';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
+// 결재선 규칙(룰) 관리를 위해 추가된 임포트
+import { useRouteRules, useRemoveRouteRule, useUpsertRouteRule } from '@/features/gw/useRouteRules';
+import { resolveRoute } from '@/domain/approvalRoute/engine';
+import {
+  RESOLVERS,
+  ROUTE_STEP_KINDS,
+  type ApprovalRouteRule,
+  type Resolver,
+  type RouteStep,
+} from '@/domain/approvalRoute/schema';
+import { DEPT_TYPES } from '@/domain/department/schema';
+
 /**
  * 결재서식 관리 (기준정보) — 문서 서식 CRUD + 필드 빌더 + 미리보기(상신폼/인쇄) + 폴더 기능.
  */
+const RESOLVER_LABEL: Record<Resolver, string> = {
+  MANAGER: '직속 상급자',
+  DEPT_HEAD: '소속 부서장',
+  PARENT_DEPT_HEAD: '상위 부서장(level)',
+  ROLE_CEO: '대표',
+  ROLE_DIVISION_HEAD: '본부장',
+  POSITION_AT_LEAST: '직급 이상',
+  SPECIFIC_USER: '특정 사용자',
+  SPECIFIC_DEPT_HEAD: '특정 부서장',
+};
+const ARG_HINT: Partial<Record<Resolver, string>> = {
+  PARENT_DEPT_HEAD: 'level(예: 1)', POSITION_AT_LEAST: 'rank(예: 3)',
+  SPECIFIC_USER: 'userId', SPECIFIC_DEPT_HEAD: 'deptId',
+};
+
+const blankRule = (formId: string, docType: string): ApprovalRouteRule => ({
+  id: '', name: '', priority: 50, active: true, formId, docType,
+  conditionKey: null, conditionValues: [],
+  deptScope: { kind: '전체', deptId: null, deptType: null },
+  positionFromRank: null, positionToRank: null,
+  amountFrom: null, amountTo: null,
+  steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false }],
+});
 
 const blankField = (): FormField => ({
   key: '', label: '', type: '텍스트', required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, isSecret: false, tabOverrides: {},
@@ -269,6 +304,46 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   const [selTab, setSelTab] = useState('공통');
   const [fieldsExpanded, setFieldsExpanded] = useState(false);
   const [recipientExpanded, setRecipientExpanded] = useState(false);
+
+  // 룰 데이터 쿼리 및 뮤테이션 주입
+  const { data: rules = [], isLoading: rulesLoading } = useRouteRules();
+  const upsertRule = useUpsertRouteRule();
+  const removeRule = useRemoveRouteRule();
+
+  const [rulesExpanded, setRulesExpanded] = useState(false);
+  const [selRule, setSelRule] = useState<ApprovalRouteRule | null>(null);
+  const [ruleMsg, setRuleMsg] = useState('');
+
+  const formRules = useMemo(() => {
+    return rules.filter(
+      (r) => r.formId === form.id || (r.formId === null && r.docType === form.code)
+    ).sort((a, b) => a.priority - b.priority);
+  }, [rules, form.id, form.code]);
+
+  const saveRule = async () => {
+    if (!selRule) return;
+    if (!selRule.name.trim()) return setRuleMsg('룰 이름을 입력하세요.');
+    
+    const nextId = () => `RR-${rules.length + 1}-${Math.max(0, ...rules.map((r) => Number(r.id.split('-')[1]) || 0)) + 1}`;
+    
+    // 서식과 룰의 정합성을 100% 보장하도록 formId와 docType을 강제 연동하여 저장
+    const ruleToSave = {
+      ...selRule,
+      id: selRule.id || nextId(),
+      formId: form.id,
+      docType: form.code,
+    };
+    
+    await upsertRule.mutateAsync(ruleToSave);
+    setRuleMsg('규칙이 저장되었습니다.');
+    setSelRule(null);
+  };
+
+  const delRule = async (ruleId: string) => {
+    if (!confirm('이 결재 규칙을 삭제하시겠습니까?')) return;
+    await removeRule.mutateAsync(ruleId);
+    setSelRule(null);
+  };
 
   const tabSelectorField = form.fields.find((f) => f.type === '선택' && f.isTabSelector);
 
@@ -628,6 +703,121 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         )}
       </div>
 
+      {/* ⚙️ 해당 서식 전용 결재 규칙 설정 */}
+      {form.id && (
+        <div className="mt-4 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => setRulesExpanded(!rulesExpanded)}
+            className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+          >
+            <span>⚙️ 해당 서식 전용 결재 규칙 설정 ({formRules.length}개)</span>
+            <span className="text-[11px] text-teal font-semibold">
+              {rulesExpanded ? '접기 ▲' : '펼치기 ▼'}
+            </span>
+          </button>
+
+          {rulesExpanded && (
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10.5px] text-ink3">이 서식 기안 시 조건에 맞춰 동적 결재선을 도출하는 규칙들입니다.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelRule(blankRule(form.id, form.code));
+                    setRuleMsg('');
+                  }}
+                  className="rounded bg-teal px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90"
+                >
+                  + 규칙 추가
+                </button>
+              </div>
+
+              {rulesLoading ? (
+                <div className="py-4 text-center text-[12px] text-ink3">로딩 중...</div>
+              ) : formRules.length === 0 ? (
+                <div className="py-8 text-center text-[11.5px] border border-dashed border-border rounded-xl text-ink3">
+                  등록된 서식 전용 규칙이 없습니다. 기본 전결 규칙이나 폴백이 적용됩니다.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {formRules.map((r) => {
+                    const getScopeLabel = (rule: ApprovalRouteRule) =>
+                      rule.deptScope.kind === '전체' ? '전체부서'
+                        : rule.deptScope.kind === '부서유형' ? `유형=${rule.deptScope.deptType}`
+                          : `${rule.deptScope.kind}=${org.depts.find(d => d.id === rule.deptScope.deptId)?.name ?? rule.deptScope.deptId}`;
+
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-2 hover:border-teal/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="grid h-5 min-w-5 place-items-center rounded bg-ink3/15 px-1 text-[10px] font-bold text-ink2">
+                            {r.priority}
+                          </span>
+                          <span className="font-semibold text-[12.5px] text-ink truncate">{r.name}</span>
+                          <span className="text-[10px] text-ink3">
+                            ({getScopeLabel(r)} · {r.steps.length}단계)
+                          </span>
+                          {!r.active && (
+                            <span className="rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-600">중지됨</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelRule(r);
+                              setRuleMsg('');
+                            }}
+                            className="rounded border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:bg-border/30"
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => delRule(r.id)}
+                            className="rounded border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-500/5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 룰 편집 모달 다이얼로그 */}
+      {selRule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="relative w-[640px] max-h-[85vh] overflow-y-auto rounded-xl bg-panel border border-border p-6 shadow-2xl space-y-4">
+            <button
+              type="button"
+              onClick={() => setSelRule(null)}
+              className="absolute right-4 top-4 text-ink3 hover:text-ink text-[18px] font-semibold"
+            >
+              ✕
+            </button>
+            <RuleEditor
+              rule={selRule}
+              onChange={setSelRule}
+              onSave={saveRule}
+              onCancel={() => setSelRule(null)}
+              saving={upsertRule.isPending}
+              msg={ruleMsg}
+              forms={[form]} // 현재 편집 중인 서식 정보만 고정
+              org={org}
+            />
+          </div>
+        </div>
+      )}
+
       <FormPreview form={form} onChangeField={setField} />
 
       {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
@@ -822,6 +1012,293 @@ function OptionsInput({ value, onChange }: { value: string[]; onChange: (val: st
       placeholder="옵션(콤마 구분): 영업, 교육, 회의"
       className="mt-1.5 w-full rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
     />
+  );
+}
+
+function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, forms, org }: {
+  rule: ApprovalRouteRule; onChange: (r: ApprovalRouteRule) => void;
+  onSave: () => void; onCancel: () => void; onDelete?: () => void; saving: boolean; msg: string;
+  forms: ApprovalForm[];
+  org: ReturnType<typeof useOrgTree>;
+}) {
+  const set = (patch: Partial<ApprovalRouteRule>) => onChange({ ...rule, ...patch });
+  const setStep = (i: number, patch: Partial<RouteStep>) => set({ steps: rule.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
+  const addStep = () => set({ steps: [...rule.steps, { resolver: 'DEPT_HEAD', arg: null, kind: '결재', dedupeSelf: true, optional: false }] });
+  const delStep = (i: number) => set({ steps: rule.steps.filter((_, idx) => idx !== i) });
+  const moveStep = (i: number, dir: -1 | 1) => {
+    const j = i + dir; if (j < 0 || j >= rule.steps.length) return;
+    const next = [...rule.steps];[next[i], next[j]] = [next[j], next[i]]; set({ steps: next });
+  };
+
+  const selectedForm = useMemo(() => forms.find((f) => f.code === rule.docType), [forms, rule.docType]);
+  const dropdownFields = useMemo(() => {
+    return selectedForm?.fields.filter((f) => f.type === '선택') ?? [];
+  }, [selectedForm]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-[13px] font-bold text-ink">{rule.id ? `룰 편집 · ${rule.id}` : '새 룰'}</div>
+        <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={rule.active} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <F label="룰 이름"><input value={rule.name} onChange={(e) => set({ name: e.target.value })} className={inp} /></F>
+        <F label="우선순위(작을수록 먼저)"><input type="number" value={rule.priority} onChange={(e) => set({ priority: Number(e.target.value) })} className={inp} /></F>
+      </div>
+
+      <div className="rounded-lg border border-border bg-panel-alt p-2.5">
+        <div className="mb-2 text-[11px] font-bold text-ink2">적용 조건</div>
+        <div className="grid grid-cols-2 gap-2">
+          <F label="문서유형">
+            <select disabled value={rule.docType} onChange={(e) => set({ docType: e.target.value, conditionKey: null, conditionValues: [] })} className={`${inp} opacity-60`}>
+              {forms.map((f) => <option key={f.code} value={f.code}>{f.name}</option>)}
+            </select>
+          </F>
+          {dropdownFields.length > 0 && (
+            <F label="세부 구분 키 (드롭다운 필드)">
+              <select
+                value={rule.conditionKey ?? ''}
+                onChange={(e) => set({ conditionKey: e.target.value || null, conditionValues: [] })}
+                className={inp}
+              >
+                <option value="">(없음)</option>
+                {dropdownFields.map((df) => (
+                  <option key={df.key} value={df.key}>{df.label}</option>
+                ))}
+              </select>
+            </F>
+          )}
+          {rule.conditionKey && (
+            <div className="col-span-2">
+              <F label="세부 구분 값 (다중 선택)">
+                <div className="flex flex-wrap gap-1 mt-1 rounded border border-border bg-panel p-2">
+                  {(dropdownFields.find((df) => df.key === rule.conditionKey)?.options ?? []).map((opt) => {
+                    const checked = rule.conditionValues.includes(opt);
+                    return (
+                      <label key={opt} className="flex items-center gap-1 text-[11px] font-medium text-ink2 mr-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextValues = e.target.checked
+                              ? [...rule.conditionValues, opt]
+                              : rule.conditionValues.filter((v) => v !== opt);
+                            set({ conditionValues: nextValues });
+                          }}
+                          className="rounded border-border"
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
+                </div>
+              </F>
+            </div>
+          )}
+          <F label="부서 범위">
+            <select value={rule.deptScope.kind} onChange={(e) => set({ deptScope: { ...rule.deptScope, kind: e.target.value as never } })} className={inp}>
+              {['전체', '부서', '서브트리', '부서유형'].map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </F>
+          {rule.deptScope.kind === '부서유형' && (
+            <F label="부서 유형">
+              <select value={rule.deptScope.deptType ?? '본사'} onChange={(e) => set({ deptScope: { ...rule.deptScope, deptType: e.target.value as never } })} className={inp}>
+                {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </F>
+          )}
+          {(rule.deptScope.kind === '부서' || rule.deptScope.kind === '서브트리') && (
+            <F label="부서">
+              <select
+                value={rule.deptScope.deptId ?? ''}
+                onChange={(e) => set({ deptScope: { ...rule.deptScope, deptId: e.target.value || null } })}
+                className={inp}
+              >
+                <option value="">(부서 선택)</option>
+                {org.depts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </F>
+          )}
+          <F label="기안자 직급 이상">
+            <select
+              value={rule.positionToRank ?? ''}
+              onChange={(e) => set({ positionToRank: e.target.value === '' ? null : Number(e.target.value) })}
+              className={inp}
+            >
+              <option value="">(제한 없음)</option>
+              {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                <option key={p.id} value={p.rank}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </F>
+          <F label="기안자 직급 이하">
+            <select
+              value={rule.positionFromRank ?? ''}
+              onChange={(e) => set({ positionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
+              className={inp}
+            >
+              <option value="">(제한 없음)</option>
+              {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                <option key={p.id} value={p.rank}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </F>
+          <F label="금액 이상"><input type="number" value={rule.amountFrom ?? ''} onChange={(e) => set({ amountFrom: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
+          <F label="금액 미만"><input type="number" value={rule.amountTo ?? ''} onChange={(e) => set({ amountTo: e.target.value === '' ? null : Number(e.target.value) })} placeholder="무한" className={inp} /></F>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1.5 text-[11px] font-bold text-ink2">결재 단계(관계형)</div>
+        <div className="space-y-1.5">
+          {rule.steps.map((s, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
+              <select value={s.resolver} onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none">
+                {RESOLVERS.map((r) => <option key={r} value={r}>{RESOLVER_LABEL[r]}</option>)}
+              </select>
+              {s.resolver === 'SPECIFIC_USER' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-48 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(사용자 선택)</option>
+                  {org.users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.dept}, {u.position})
+                    </option>
+                  ))}
+                </select>
+              ) : s.resolver === 'SPECIFIC_DEPT_HEAD' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-40 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(부서 선택)</option>
+                  {org.depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              ) : s.resolver === 'POSITION_AT_LEAST' ? (
+                <select
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value || null })}
+                  className="w-32 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                >
+                  <option value="">(직급 선택)</option>
+                  {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                    <option key={p.id} value={String(p.rank)}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : ARG_HINT[s.resolver] ? (
+                <input
+                  value={s.arg ?? ''}
+                  onChange={(e) => setStep(i, { arg: e.target.value })}
+                  placeholder={ARG_HINT[s.resolver]}
+                  className="w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                />
+              ) : null}
+              <select value={s.kind} onChange={(e) => setStep(i, { kind: e.target.value as RouteStep['kind'] })} className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold text-ink outline-none">
+                {ROUTE_STEP_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+              <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={s.dedupeSelf} onChange={(e) => setStep(i, { dedupeSelf: e.target.checked })} className="h-3 w-3" />셀프제외</label>
+              <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={s.optional} onChange={(e) => setStep(i, { optional: e.target.checked })} className="h-3 w-3" />선택</label>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" onClick={() => moveStep(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>
+                <button type="button" onClick={() => moveStep(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>
+                <button type="button" onClick={() => delStep(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addStep} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 단계 추가</button>
+      </div>
+
+      <RoutePreview rule={rule} />
+
+      {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
+      <div className="flex items-center justify-between pt-1">
+        {onDelete ? <button type="button" onClick={onDelete} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-red-500 hover:bg-red-500/5">룰 삭제</button> : <span />}
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancel} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
+          <button type="button" onClick={onSave} disabled={saving} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoutePreview({ rule }: { rule: ApprovalRouteRule }) {
+  const org = useOrgTree();
+  const [drafterId, setDrafterId] = useState('');
+  const [amount, setAmount] = useState('500000');
+  const did = drafterId || org.users[0]?.id || '';
+
+  const result = useMemo(() => {
+    const drafter = org.users.find((u) => u.id === did);
+    if (!drafter) return null;
+    const dt: string = rule.docType === '전체' ? '기안' : rule.docType;
+    
+    const docData: Record<string, any> = {};
+    if (rule.conditionKey && rule.conditionValues && rule.conditionValues.length > 0) {
+      docData[rule.conditionKey] = rule.conditionValues[0];
+    }
+
+    return resolveRoute({
+      drafter,
+      docType: dt,
+      amount: amount === '' ? null : Number(amount),
+      users: org.users,
+      depts: org.depts,
+      positions: org.positions,
+      rules: [rule],
+      docData,
+    });
+  }, [rule, did, amount, org.users, org.depts, org.positions]);
+
+  const nameOf = (id: string) => org.userById(id)?.name ?? id;
+
+  return (
+    <div className="rounded-lg border border-teal/40 bg-teal-soft/30 p-2.5">
+      <div className="mb-2 text-[11px] font-bold text-teal">🧪 시뮬레이터 — 이 룰이 만드는 결재선</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={did} onChange={(e) => setDrafterId(e.target.value)} className="rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none">
+          {org.users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.dept} · {u.position}</option>)}
+        </select>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" placeholder="금액" className="w-24 rounded border border-border-hi bg-panel px-2 py-1 text-[11.5px] text-ink outline-none" />
+      </div>
+      <div className="mt-2 text-[12px]">
+        {result && result.steps.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-ink3">{nameOf(did)}(기안)</span>
+            {result.steps.map((s) => (
+              <span key={s.seq} className="flex items-center gap-1.5">
+                <span className="text-ink3">→</span>
+                <span className="rounded-md bg-panel px-2 py-0.5 font-semibold text-ink">{nameOf(s.approverId)} <span className="text-[10px] text-teal">{s.kind}</span></span>
+              </span>
+            ))}
+            <span className="ml-1 text-[10px] text-ink3">({result.rule ? `룰 적용` : '폴백'})</span>
+          </div>
+        ) : (
+          <span className="text-ink3">결재선이 생성되지 않았습니다(조건 미매칭 또는 해석 불가 → 상신 시 다른 룰/폴백 적용).</span>
+        )}
+      </div>
+    </div>
   );
 }
 

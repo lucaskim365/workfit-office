@@ -306,6 +306,7 @@ const RANK_TO_NAME: Record<number, string> = {
 
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = APPROVAL_ROUTE_SEED_RAW.map((r) => ({
   ...r,
+  formId: null,
   positionFrom: r.positionFromRank != null ? (RANK_TO_NAME[r.positionFromRank] ?? null) : null,
   positionTo: r.positionToRank != null ? (RANK_TO_NAME[r.positionToRank] ?? null) : null,
 })) as ApprovalRouteRule[];
