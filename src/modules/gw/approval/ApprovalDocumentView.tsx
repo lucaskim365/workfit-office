@@ -904,33 +904,7 @@ export function ApprovalDocumentView({
         </table>
       )}
 
-      {/* 공유처 영역 (참조자 목록) */}
-      {doc.steps && Array.isArray(doc.steps) && doc.steps.some((s) => s.kind === '참조') && (
-        <table className="mt-2 w-full border-collapse text-[12px]">
-          <tbody>
-            <tr>
-              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                공 유 처
-              </th>
-              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                <div className="flex flex-wrap gap-x-2 gap-y-1">
-                  {doc.steps
-                    .filter((s) => s.kind === '참조')
-                    .map((s, idx, arr) => {
-                      const finalName = s.approverName || nameOf(s.approverId);
-                      const finalPos = s.approverPos || posOf(s.approverId);
-                      return (
-                        <span key={s.approverId} className="font-semibold">
-                          {finalName} {finalPos || ''}{idx < arr.length - 1 ? ',' : ''}
-                        </span>
-                      );
-                    })}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
+
 
       {/* 관련 문서 연동 영역 */}
       {doc.relatedDocs && doc.relatedDocs.length > 0 && (
