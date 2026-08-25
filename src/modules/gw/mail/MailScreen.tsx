@@ -553,7 +553,13 @@ function LocalMailScreen() {
         <div className="mt-4 grid items-start gap-4 lg:grid-cols-[240px_minmax(300px,380px)_1fr]">
           {/* 폴더 — 좁은 화면에서는 상세를 볼 때 감춘다 */}
           <div className={selectedRef ? 'hidden lg:block' : ''}>
-            <MailFolderNav current={folder} available={availableFolders} onSelect={selectFolder} unseenCount={unseenTotal} />
+            <MailFolderNav
+              current={folder}
+              available={availableFolders}
+              onSelect={selectFolder}
+              unseenCount={unseenTotal}
+              draftCount={drafts.length}
+            />
           </div>
 
           {/* 목록 — 임시보관은 로컬과 서버 두 곳에 나뉘어 있어 다른 목록을 쓴다 */}
