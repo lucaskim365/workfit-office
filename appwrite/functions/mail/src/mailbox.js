@@ -310,6 +310,31 @@ async function attachSenders(dbs, dbId, pages) {
   }
 }
 
+/**
+ * 발신 기록 한 건 조회 — 상세용. 목록의 `attachSenders`와 같은 규칙이다.
+ *
+ * 기록이 있으면 그게 확정(우리 앱으로 보낸 메일)이고, 없으면 From 헤더 이름으로 물러선다.
+ * 조회가 실패해도 상세는 열려야 하므로 삼킨다.
+ */
+async function lookupSender(dbs, dbId, messageId, from) {
+  const key = messageIdKey(messageId);
+  let record = null;
+  if (key) {
+    try {
+      const res = await dbs.listDocuments(dbId, SENT_BY_COLLECTION, [
+        Query.equal('messageIdKey', key),
+        Query.limit(1),
+      ]);
+      record = res.documents[0] ?? null;
+    } catch {
+      /* 기록이 없거나 컬렉션이 아직 없을 수 있다. From 헤더로 물러선다. */
+    }
+  }
+  const name = record?.senderName || from?.name || '';
+  const email = from?.email || '';
+  return name || email ? { name, email } : null;
+}
+
 /** 메일 하나의 상세. 원문을 받아 파싱하고 HTML은 정화한 것만 내보낸다. */
 export async function getMail(dbs, dbId, uid, ref, env) {
   const accounts = await ownedAccounts(dbs, dbId, uid, [ref?.accountId]);
@@ -328,9 +353,16 @@ export async function getMail(dbs, dbId, uid, ref, env) {
   const from = addressList(flatValues(parsed.from))[0] ?? addressOf('', 'unknown@unknown.invalid');
   const receivedAt = parsed.date instanceof Date ? parsed.date : new Date(0);
 
+  /*
+    상세에도 발신자를 붙인다. 목록에만 있으면 메일을 여는 순간 "누가 보냈나"가 사라져,
+    정작 확인이 필요한 화면에서 계정 주소만 남는다.
+  */
+  const sentBy = folder === 'SENT' ? await lookupSender(dbs, dbId, parsed.messageId, from) : null;
+
   return {
     ref: { accountId: account.id, folder, uidValidity: String(found.uidValidity), uid: String(ref.uid) },
     from,
+    sentBy,
     to: addressList(flatValues(parsed.to)),
     cc: addressList(flatValues(parsed.cc)),
     replyTo: addressList(flatValues(parsed.replyTo))[0] ?? null,

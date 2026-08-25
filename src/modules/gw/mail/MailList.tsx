@@ -142,15 +142,28 @@ export default function MailList({ mails, failures, accounts, selectedKey, onSel
                     <span className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink2">
                       {nameOf(mail.ref.accountId)}
                     </span>
-                    {/* 보낸메일함에서만 온다. 공용 계정을 여럿이 쓸 때 누가 보냈는지 가른다. */}
-                    {mail.sentBy && (
+                    {/*
+                      보낸메일함에서만 온다. 공용 계정을 여럿이 쓸 때 누가 보냈는지 가른다.
+
+                      이름이 없으면 계정 주소로 물러서지 **않는다.** 공용 계정에서 주소는
+                      모두에게 같은 값이라, 보여줘 봐야 "누가 보냈나"에 아무 답이 안 되면서
+                      답한 것처럼 보인다. 가릴 수 없다는 사실을 그대로 적는다.
+                    */}
+                    {mail.sentBy && (mail.sentBy.name ? (
                       <span
-                        title={mail.sentBy.email}
+                        title={`${mail.sentBy.name} · ${mail.sentBy.email}`}
                         className="shrink-0 rounded bg-teal-soft/50 px-1.5 py-px text-[8.5px] font-semibold text-teal"
                       >
-                        보낸이 {mail.sentBy.name || mail.sentBy.email}
+                        보낸이 {mail.sentBy.name}
                       </span>
-                    )}
+                    ) : (
+                      <span
+                        title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다."
+                        className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink3"
+                      >
+                        보낸이 미확인
+                      </span>
+                    ))}
                     <span className="min-w-0 flex-1 truncate text-[10px] text-ink3">{mail.preview}</span>
                   </div>
                 </button>

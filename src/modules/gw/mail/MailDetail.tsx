@@ -129,6 +129,23 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
               </button>
             ) : formatAddress(detail.from)}
           </div>
+          {/*
+            보낸메일함에서만 온다. 공용 계정은 여러 사람이 같은 주소로 보내므로 "보낸사람"
+            줄만으로는 누가 보냈는지 알 수 없다. 우리 앱으로 보낸 메일은 발신 기록이 있어
+            그룹웨어 사용자 이름으로 확정되고, 밖에서 보낸 메일은 가릴 수단이 없다.
+          */}
+          {detail.sentBy && (
+            <div>
+              <span className="mr-2 text-ink3">보낸이</span>
+              {detail.sentBy.name ? (
+                <span className="font-bold text-teal" title={detail.sentBy.email}>{detail.sentBy.name}</span>
+              ) : (
+                <span className="text-ink3" title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다.">
+                  미확인 · 그룹웨어 밖에서 발송
+                </span>
+              )}
+            </div>
+          )}
           <div><span className="mr-2 text-ink3">받는사람</span>{formatAddressList(detail.to) || '-'}</div>
           {detail.cc.length > 0 && <div><span className="mr-2 text-ink3">참조</span>{formatAddressList(detail.cc)}</div>}
           <div className="flex flex-wrap gap-x-3 text-[9.5px] text-ink3">
