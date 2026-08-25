@@ -210,8 +210,6 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '자원예약', icon: '📦', to: 'resource' },
     { l: '전자설문', icon: '📋', to: 'survey' },
     { l: '게시판', icon: '📌', to: 'board' },
-    { l: '커뮤니티', icon: '💬', to: 'community' },
-    { l: '문서관리', icon: '🗂️', to: 'document', badge: '9' },
     { l: '인명관리', icon: '👥', to: 'employee' },
     { l: '업무관리', icon: '📗', to: 'task' },
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
