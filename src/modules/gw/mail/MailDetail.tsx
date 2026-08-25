@@ -46,8 +46,7 @@ function formatBytes(size: number): string {
  * 자칭이라 공용 계정에서는 근거가 못 되지만, 기록은 발송 시점에 우리가 남긴 확정값이다.
  */
 function senderText(detail: MailDetailModel): string {
-  const email = detail.from.email;
-  if (detail.sentBy?.name) return `${detail.sentBy.name}(워크핏) <${email}>`;
+  if (detail.sentBy?.name) return `${detail.sentBy.name} <${detail.from.email}>`;
   return formatAddress(detail.from);
 }
 
@@ -133,7 +132,7 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
 
             공용 계정은 여러 사람이 같은 주소로 보내므로 헤더만으로는 누가 보냈는지 알 수
             없다. 그렇다고 "보낸사람"과 "보낸이"를 두 줄로 두면 같은 이름이 두 번 나와
-            보낸 사람이 둘인 것처럼 읽힌다. 확정된 워크핏 사용자를 괄호로 붙여 한 줄에 담는다.
+            보낸 사람이 둘인 것처럼 읽힌다. 발신 기록의 이름을 이 줄에 그대로 채운다.
           */}
           <div>
             <span className="mr-2 text-ink3">보낸사람</span>
@@ -147,11 +146,6 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
                 {senderText(detail)}
               </button>
             ) : senderText(detail)}
-            {detail.sentBy && !detail.sentBy.name && (
-              <span className="ml-1.5 text-ink3" title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다.">
-                (워크핏 미확인)
-              </span>
-            )}
           </div>
           <div><span className="mr-2 text-ink3">받는사람</span>{formatAddressList(detail.to) || '-'}</div>
           {detail.cc.length > 0 && <div><span className="mr-2 text-ink3">참조</span>{formatAddressList(detail.cc)}</div>}

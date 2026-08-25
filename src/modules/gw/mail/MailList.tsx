@@ -1,6 +1,6 @@
 import type { MailAccount } from '@/domain/mailAccount/schema';
 import { MAIL_ERROR_GUIDE, mailRefKey, type MailAccountFailure } from '@/domain/mail/engine';
-import type { MailFolder, MailSummary } from '@/domain/mail/schema';
+import type { MailSummary } from '@/domain/mail/schema';
 import { formatMailListTime, mailDateGroupLabel } from './mailDate';
 
 interface Props {
@@ -10,8 +10,6 @@ interface Props {
   selectedKey: string | null;
   onSelect: (mail: MailSummary) => void;
   folderLabel: string;
-  /** 지금 폴더. 보낸메일함은 이름 칸이 받는사람이라 방향을 드러내야 한다. */
-  folder: MailFolder;
   /** 검색·필터가 걸려 있는지. 빈 목록의 이유를 구분해 안내한다. */
   filtered: boolean;
   /** 일괄 처리용 선택 상태. 넘기지 않으면 체크박스 없이 렌더된다(임시보관 등). */
@@ -28,7 +26,7 @@ interface Props {
  * 실패한 계정은 목록 위에 따로 알린다. 빈 목록으로 만들어 버리면 사용자는 메일이 없는
  * 것인지 못 불러온 것인지 구분할 수 없다. ([[jwheo/feat/mail/DESIGN.md]] §8)
  */
-export default function MailList({ mails, failures, accounts, selectedKey, onSelect, folderLabel, folder, filtered, checkedKeys, onToggleCheck, onToggleAll, onToggleFlag }: Props) {
+export default function MailList({ mails, failures, accounts, selectedKey, onSelect, folderLabel, filtered, checkedKeys, onToggleCheck, onToggleAll, onToggleFlag }: Props) {
   const nameOf = (accountId: string) =>
     accounts.find((row) => row.id === accountId)?.displayName ?? accountId;
   const selectable = checkedKeys !== undefined && onToggleCheck !== undefined;
@@ -127,11 +125,10 @@ export default function MailList({ mails, failures, accounts, selectedKey, onSel
                     <span className={`min-w-0 flex-1 truncate text-[11.5px] ${mail.seen ? 'text-ink2' : 'font-bold text-ink'}`}>
                       {/*
                         보낸메일함은 이 칸이 받는사람이다(서버가 바꿔 보낸다). 보낸 사람은
-                        늘 나라서 상대를 보여야 목록이 쓸모 있다. 다만 이름만 있으면 보낸
-                        사람으로 읽히므로 화살표로 방향을 드러낸다 — 공용 계정에서는 "누가
-                        보냈나"가 아래 배지로 따로 온다.
+                        늘 나라서 상대를 보여야 목록이 쓸모 있다. 누가 보냈는지는 상세에서
+                        본다 — 목록에 방향 표시나 발신자 배지를 겹쳐 놓으니 이름이 둘로
+                        보여 더 헷갈렸다.
                       */}
-                      {folder === 'SENT' && <span className="mr-0.5 text-ink3" title="받는사람">→</span>}
                       {mail.from.name || mail.from.email}
                     </span>
                     <span className="shrink-0 text-[9.5px] text-ink3">{formatMailListTime(mail.receivedAt)}</span>
@@ -146,28 +143,6 @@ export default function MailList({ mails, failures, accounts, selectedKey, onSel
                     <span className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink2">
                       {nameOf(mail.ref.accountId)}
                     </span>
-                    {/*
-                      보낸메일함에서만 온다. 공용 계정을 여럿이 쓸 때 누가 보냈는지 가른다.
-
-                      이름이 없으면 계정 주소로 물러서지 **않는다.** 공용 계정에서 주소는
-                      모두에게 같은 값이라, 보여줘 봐야 "누가 보냈나"에 아무 답이 안 되면서
-                      답한 것처럼 보인다. 가릴 수 없다는 사실을 그대로 적는다.
-                    */}
-                    {mail.sentBy && (mail.sentBy.name ? (
-                      <span
-                        title={`${mail.sentBy.name} · ${mail.sentBy.email}`}
-                        className="shrink-0 rounded bg-teal-soft/50 px-1.5 py-px text-[8.5px] font-semibold text-teal"
-                      >
-                        워크핏 {mail.sentBy.name}
-                      </span>
-                    ) : (
-                      <span
-                        title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다."
-                        className="shrink-0 rounded bg-ink3/10 px-1.5 py-px text-[8.5px] font-semibold text-ink3"
-                      >
-                        워크핏 미확인
-                      </span>
-                    ))}
                     <span className="min-w-0 flex-1 truncate text-[10px] text-ink3">{mail.preview}</span>
                   </div>
                 </button>
