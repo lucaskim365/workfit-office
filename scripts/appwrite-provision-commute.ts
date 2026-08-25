@@ -50,7 +50,11 @@ const COLLECTIONS: Record<string, Attr[]> = {
 };
 
 const INDEXES: Record<string, Array<{ key: string; attributes: string[] }>> = {
-  attendance: [{ key: 'idx_empId_date', attributes: ['empId', 'date'] }],
+  attendance: [
+    { key: 'idx_empId_date', attributes: ['empId', 'date'] },
+    // 하루치 전 직원 조회용. 위 복합 인덱스는 empId가 앞이라 날짜만으로는 못 탄다.
+    { key: 'idx_date', attributes: ['date'] },
+  ],
 };
 
 async function call(method: string, path: string, body?: unknown): Promise<{ status: number; text: string }> {

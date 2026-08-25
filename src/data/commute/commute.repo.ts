@@ -65,6 +65,29 @@ export const commuteRepo = {
       .filter((row) => row.empId === empId && row.date >= from && row.date <= to)
       .sort((a, b) => a.date.localeCompare(b.date));
   },
+
+  /** 하루치 전 직원 근태. 사번 오름차순 — 화면이 직원 이름으로 다시 정렬한다. */
+  async listDay(date: string): Promise<CommuteRecord[]> {
+    if (dbDriver !== 'memory') {
+      const rows = await commuteGateway.listDay(date);
+      return rows.sort((a, b) => a.empId - b.empId);
+    }
+
+    // 로컬 수신 서버에는 일별 엔드포인트가 없다. 월 단위로 받아 그날만 거른다.
+    const real = await fetchLocal<unknown[]>(`/api/local/attendance?month=${date.slice(0, 7)}`);
+    if (real) {
+      return real
+        .flatMap((row) => {
+          const parsed = commuteRecordSchema.safeParse(row);
+          return parsed.success && parsed.data.date === date ? [parsed.data] : [];
+        })
+        .sort((a, b) => a.empId - b.empId);
+    }
+
+    return COMMUTE_RECORD_FIXTURE
+      .filter((row) => row.date === date)
+      .sort((a, b) => a.empId - b.empId);
+  },
 };
 
 /**

@@ -276,6 +276,36 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         });
       }
 
+      case 'listDay': {
+        const date = String(payload.date || '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return readFail(res, 'INVALID_INPUT', '조회 날짜(YYYY-MM-DD)가 필요합니다.', 400);
+        }
+        /*
+          하루치 전 직원. `idx_empId_date`는 empId가 앞이라 날짜만으로는 못 탄다 —
+          `idx_date`를 따로 둔다(프로비저닝 스크립트 참조).
+          상한은 직원 수보다 넉넉하게 잡는다. 하루에 사람당 한 건이 원칙이다.
+        */
+        const rows = await dbs.listDocuments(DB, 'attendance', [
+          Query.equal('date', date),
+          Query.limit(300),
+        ]);
+        return res.json({
+          data: rows.documents.map((d) => ({
+            empId: Number(d.empId),
+            date: String(d.date),
+            inAt: d.inAt ?? null,
+            outAt: d.outAt ?? null,
+            basicMin: Number(d.basicMin ?? 0),
+            overMin: Number(d.overMin ?? 0),
+            nightMin: Number(d.nightMin ?? 0),
+            lateMin: Number(d.lateMin ?? 0),
+            totalMin: Number(d.totalMin ?? 0),
+            status: String(d.status || 'unknown'),
+          })),
+        });
+      }
+
       default:
         return readFail(res, 'UNKNOWN_ACTION', `알 수 없는 요청입니다: ${action}`, 400);
     }

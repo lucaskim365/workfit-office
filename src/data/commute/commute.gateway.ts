@@ -93,4 +93,10 @@ export const commuteGateway = {
     const rows = await call<unknown[]>('listMonth', { empId, month });
     return parseRows(rows, commuteRecordSchema);
   },
+
+  /** 하루치 전 직원. 날짜만으로 거르므로 서버가 `idx_date`를 탄다. */
+  async listDay(date: string): Promise<CommuteRecord[]> {
+    const rows = await call<unknown[]>('listDay', { date });
+    return parseRows(rows, commuteRecordSchema);
+  },
 };
