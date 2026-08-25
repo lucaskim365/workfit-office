@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
+import { CalendarEventError, type CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import {
   CALENDAR_VISIBILITIES,
   CALENDAR_VISIBILITY_LABELS,
@@ -72,6 +72,19 @@ export default function CalendarEventModal({
     return null;
   };
 
+  /**
+   * 화면에 띄울 오류 문구.
+   *
+   * 도메인 오류(`CalendarEventError`)만 그대로 보여준다 — 입력 검증 문구라 사용자가 고칠
+   * 수 있다. 그 밖의 것(저장소·네트워크 예외)은 원문을 숨긴다. 서버 메시지는 영어이거나
+   * 내부 구조를 드러내고, 사용자가 할 수 있는 일도 없다. 원인은 콘솔에 남겨 둔다.
+   */
+  const errorText = (caught: unknown, fallback: string): string => {
+    if (caught instanceof CalendarEventError) return caught.message;
+    console.error(caught);
+    return fallback;
+  };
+
   const draft = (): CalendarEventDraft => ({
     title,
     date,
@@ -94,7 +107,7 @@ export default function CalendarEventModal({
         : await createEvent.mutateAsync({ actor, draft: draft() });
       onSaved(saved as CalendarEvent);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '일정을 저장하지 못했습니다.');
+      setError(errorText(caught, '일정을 저장하지 못했습니다.'));
     }
   };
 
@@ -105,7 +118,7 @@ export default function CalendarEventModal({
       const removed = await removeEvent.mutateAsync({ actor, id: event.id });
       onRemoved(removed as CalendarEvent);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '일정을 삭제하지 못했습니다.');
+      setError(errorText(caught, '일정을 삭제하지 못했습니다.'));
     }
   };
 

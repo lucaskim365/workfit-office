@@ -112,3 +112,16 @@ test('공개 범위가 없는 예전 일정은 나만 보기로 읽힌다', asyn
   const rows = await calendarEventRepo.list(owner, { from: '2026-08-01', to: '2026-08-31' });
   assert.equal(rows.every((row) => row.visibility === 'PRIVATE'), true);
 });
+
+test('필수값이 비면 사람이 읽는 문구로 거절한다', async () => {
+  // zod가 던지는 ZodError를 그대로 흘리면 화면에 이슈 배열 JSON이 찍힌다.
+  await assert.rejects(
+    () => calendarEventRepo.create(owner, draft('')),
+    (error: Error) => {
+      assert.equal(error.name, 'CalendarEventError');
+      assert.equal((error as CalendarEventError).code, 'INVALID_INPUT');
+      assert.equal(error.message, '일정 제목을 입력하세요.');
+      return true;
+    },
+  );
+});
