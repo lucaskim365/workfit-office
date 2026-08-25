@@ -577,10 +577,28 @@ const COLLECTIONS: CollectionDef[] = [
       S('startTime', 8),
       S('endTime', 8),
       S('memo', 2000),
+      /*
+        공개 범위. 기존 문서에는 이 세 필드가 없고, 없으면 도메인 스키마가 `PRIVATE`로
+        읽으므로 마이그레이션 없이도 예전 일정은 나만 보는 상태로 남는다.
+        한글 값이 아니라 영문 코드라 enum도 가능하지만, 다른 컬렉션과 같이 String으로 둔다.
+      */
+      S('visibility', 16),
+      S('deptId', 64),
+      S('projectId', 64),
       S('createdAt', 40),
       S('updatedAt', 40),
     ],
-    indexes: [IX('calOwner', ['ownerUserId']), IX('calDate', ['date'])],
+    /*
+      공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만
+      서버측 질의로 옮길 때 필요하므로 인덱스를 미리 만들어 둔다.
+    */
+    indexes: [
+      IX('calOwner', ['ownerUserId']),
+      IX('calDate', ['date']),
+      IX('calVisibility', ['visibility']),
+      IX('calDept', ['deptId']),
+      IX('calProject', ['projectId']),
+    ],
   },
   {
     id: 'resources',
@@ -865,6 +883,49 @@ const COLLECTIONS: CollectionDef[] = [
       UQ('mailAcctOwnerEmail', ['workfitUserId', 'email']),
     ],
   },
+  {
+    /*
+      발신 기록.
+
+      보낸메일함은 IMAP 서버에 있고 거기엔 헤더뿐이라, 공용 메일 계정을 여럿이 쓰면
+      "우리 팀 누가 보냈나"를 알 수 없다. From 표시 이름으로도 대개 갈리지만 그건
+      문자열이라 동명이인이면 겹치고 공급자가 고쳐 쓸 수도 있다.
+      `Message-ID`를 키로 확정 정보를 우리 쪽에 남긴다.
+
+      우리 앱으로 보낸 메일만 기록된다 — 네이버 웹메일에서 직접 보낸 것은 여기 없고,
+      그때는 화면이 From 헤더로 물러선다.
+    */
+    id: 'mailSentBy',
+    name: '메일 발신 기록',
+    /**
+     * **서버 전용.** `mailAccounts`와 같은 이유다 — projectId는 브라우저 번들에 공개돼 있어
+     * `Any` 권한이면 누구나 이 컬렉션을 읽고 **쓸 수 있다.** 발신자 표시의 근거가 되는
+     * 기록을 아무나 위조할 수 있으면 기능 자체가 의미를 잃는다.
+     * 화면은 이 컬렉션을 직접 읽지 않고 mail Function의 응답으로만 받는다.
+     */
+    permissions: [],
+    attributes: [
+      S('id', 64, true),
+      /*
+        조인 키는 Message-ID 자체가 아니라 그 해시(sha256 hex 64자)다. Message-ID는 길이가
+        들쭉날쭉해 넉넉히 잡으면 인덱스 키 길이 상한에 걸리고(512로 만들었다가 실제로 걸렸다),
+        짧게 자르면 잘린 뒤가 같은 메일끼리 뭉친다. 계산은 `sentBy.js`의 `messageIdKey`.
+      */
+      S('messageIdKey', 64, true),
+      // 원본은 조회·디버깅용으로만 둔다. 인덱스를 걸지 않는다.
+      S('messageId', 512),
+      S('accountId', 64, true),
+      S('workfitUserId', 64, true),
+      // 보낸 시점의 이름 스냅샷. 사람이 나가거나 개명해도 그때 누가 보냈는지는 남는다.
+      S('senderName', 30),
+      S('sentAt', 40),
+    ],
+    indexes: [
+      IX('sentByMessageKey', ['messageIdKey']),
+      IX('sentByAccount', ['accountId']),
+      IX('sentByUser', ['workfitUserId']),
+    ],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
@@ -1013,11 +1074,30 @@ async function main() {
   const dbs = new Databases(client);
   const dbId = databaseId as string;
 
-  console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}\n`);
+  /**
+   * 적용 대상 한정 — `--only=coll1,coll2`.
+   *
+   * 이 스크립트는 기본적으로 **파일에 정의된 컬렉션 전부**를 만든다. dev에서는 그게 맞지만
+   * 운영에 릴리스 한 건을 반영할 때는 이번에 필요한 것만 건드려야 한다. 운영에 아직 없는
+   * 컬렉션까지 한꺼번에 생기면 그 순간부터 `Any` 권한 컬렉션이 늘어난다.
+   */
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const only = onlyArg ? onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean) : null;
+  const targets = only ? COLLECTIONS.filter((c) => only.includes(c.id)) : COLLECTIONS;
+  if (only) {
+    const unknown = only.filter((id) => !COLLECTIONS.some((c) => c.id === id));
+    if (unknown.length) {
+      console.error(`✗ 정의에 없는 컬렉션: ${unknown.join(', ')}`);
+      process.exit(1);
+    }
+  }
+
+  console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}`);
+  console.log(only ? `  대상 한정: ${only.join(', ')}\n` : `  대상: 전체 ${targets.length}종\n`);
 
   await ensureDatabase(dbs, dbId);
 
-  for (const c of COLLECTIONS) {
+  for (const c of targets) {
     console.log(`\n[${c.id}] ${c.name}`);
     await ensureCollection(dbs, dbId, c);
 

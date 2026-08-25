@@ -46,6 +46,9 @@ appwrite/_deploy_bundles/
 # 로컬 비밀 메모 — 커밋 금지
 docs/keys.md
 
+# 개인 작업 메모(jwheo/BACKLOG.md 등). 공용 문서는 docs/·implement/ 에 둔다.
+jwheo/*.md
+
 # 메일 개발용으로 옆에 둔 MailHub 실소스 (별도 저장소).
 # 자체 .git, node_modules, 그리고 암호화 키(.env.local)와 앱 비밀번호가 든
 # SQLite(data/*.db)를 품고 있어 이 저장소에 절대 들어가면 안 된다.

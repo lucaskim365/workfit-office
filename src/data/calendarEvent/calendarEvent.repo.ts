@@ -1,12 +1,26 @@
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
+import { canViewEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
-export interface CalendarEventActor {
+/**
+ * 일정 조회·변경 주체.
+ *
+ * `deptId`·`projectIds`는 공유 판정에만 쓰인다. 넘기지 않으면 부서·프로젝트 공유 일정이
+ * 안 보일 뿐 내 일정은 그대로 보인다 — 공유를 아직 안 쓰는 호출부는 고치지 않아도 된다.
+ */
+export interface CalendarEventActor extends Partial<Pick<CalendarAccessContext, 'deptId' | 'projectIds'>> {
   userId: string;
   active: boolean;
 }
+
+const accessContextOf = (actor: CalendarEventActor): CalendarAccessContext => ({
+  userId: actor.userId,
+  deptId: actor.deptId ?? null,
+  projectIds: actor.projectIds ?? [],
+  active: actor.active,
+});
 
 export interface CalendarEventFilter {
   from?: string;
@@ -14,10 +28,25 @@ export interface CalendarEventFilter {
 }
 
 export class CalendarEventError extends Error {
-  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE', message: string) {
+  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE' | 'INVALID_INPUT', message: string) {
     super(message);
     this.name = 'CalendarEventError';
   }
+}
+
+/**
+ * 스키마 검증 → 사람이 읽는 오류.
+ *
+ * `schema.parse`가 던지는 `ZodError`의 `message`는 이슈 배열을 통째로 담은 JSON이다.
+ * 화면이 그걸 그대로 띄우면 "일정 제목을 입력하세요" 대신 대괄호와 코드가 나온다.
+ * 이슈 메시지 자체는 이미 사람이 읽을 문장이라, 첫 번째 것만 꺼내 쓴다 — 한 번에 하나씩
+ * 고치게 하는 편이 여러 줄을 한꺼번에 보여 주는 것보다 낫다.
+ */
+function parseEvent(input: unknown): CalendarEvent {
+  const parsed = calendarEventSchema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  const first = parsed.error.issues[0];
+  throw new CalendarEventError('INVALID_INPUT', first?.message || '입력값을 확인하세요.');
 }
 
 let mutationQueue = Promise.resolve();
@@ -97,12 +126,14 @@ function sortEvents(rows: CalendarEvent[]): CalendarEvent[] {
 }
 
 export const calendarEventRepo = {
+  /** 내 일정 + 나에게 공유된 일정. 공개 범위 판정은 도메인 `canViewEvent`가 맡는다. */
   async list(actor: CalendarEventActor, filter?: CalendarEventFilter): Promise<CalendarEvent[]> {
     validateFilter(filter);
     if (!actor.active) return [];
+    const access = accessContextOf(actor);
     const rows = await loadAll();
     return sortEvents(rows
-      .filter((event) => event.ownerUserId === actor.userId)
+      .filter((event) => canViewEvent(access, event))
       .filter((event) => !filter?.from || event.date >= filter.from)
       .filter((event) => !filter?.to || event.date <= filter.to)
       .map(cloneEvent));
@@ -110,8 +141,9 @@ export const calendarEventRepo = {
 
   async get(actor: CalendarEventActor, id: string): Promise<CalendarEvent | null> {
     if (!actor.active) return null;
+    const access = accessContextOf(actor);
     const rows = await loadAll();
-    const event = rows.find((row) => row.id === id && row.ownerUserId === actor.userId);
+    const event = rows.find((row) => row.id === id && canViewEvent(access, row));
     return event ? cloneEvent(event) : null;
   },
 
@@ -120,7 +152,7 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const now = new Date().toISOString();
-      const created = calendarEventSchema.parse({
+      const created = parseEvent({
         ...draft,
         id: nextId(rows, draft.date),
         ownerUserId: actor.userId,
@@ -137,7 +169,7 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const current = requireOwned(rows, actor, id);
-      const updated = calendarEventSchema.parse({
+      const updated = parseEvent({
         ...current,
         ...draft,
         id: current.id,

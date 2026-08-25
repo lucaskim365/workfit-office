@@ -5,6 +5,7 @@
  * 만든다. 위조된 헤더로 남의 대화에 끼어드는 것을 막고, 헤더가 빠져 받는 쪽에서 답장이
  * 새 대화로 뜨는 것도 막는다.
  */
+import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
 import { Query } from 'node-appwrite';
@@ -12,8 +13,10 @@ import { decryptSecret } from './credentials.js';
 import { connectionSettings } from './providers.js';
 import { fetchMessageSource, applyFlag } from './imap.js';
 import { MailFnError } from './accounts.js';
+import { SENT_BY_COLLECTION, messageIdKey } from './sentBy.js';
 
 const COLLECTION = 'mailAccounts';
+const USERS_COLLECTION = 'users';
 
 /** 첨부 총량 상한(풀어본 바이트 기준). MailHub와 동일. */
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -37,6 +40,53 @@ async function ownedAccount(dbs, dbId, uid, accountId) {
 }
 
 const settingsOf = (account, env) => connectionSettings(account, decryptSecret(account.encryptedSecret, env));
+
+/**
+ * 발신자 표시 이름 — 그룹웨어 계정 이름.
+ *
+ * 메일 계정의 `displayName`이 아니라 **사람 이름**을 쓴다. 계정 표시 이름은 "업무용 네이버"
+ * 같은 별칭 용도로 안내되고 있고, 공용 계정이면 B와 C가 같은 값을 보게 된다.
+ * 그룹웨어 계정 이름은 보낸 사람마다 다르므로 공용 계정에서도 사람이 갈린다.
+ *
+ * 못 읽어도 발송은 막지 않는다 — 이름 없이 주소만 나가는 것이 못 보내는 것보다 낫다.
+ */
+async function senderNameOf(dbs, dbId, uid, log) {
+  try {
+    const user = await dbs.getDocument(dbId, USERS_COLLECTION, uid);
+    return String(user?.name || '').trim();
+  } catch (e) {
+    log?.(`senderNameOf: 사용자 이름을 읽지 못했습니다 uid=${uid} msg=${String(e?.message).slice(0, 120)}`);
+    return '';
+  }
+}
+
+/**
+ * 발신 기록 저장.
+ *
+ * 보낸메일함은 IMAP 서버에 있고 거기엔 헤더뿐이라, 공용 계정을 여럿이 쓰면 "우리 팀 누가
+ * 보냈나"를 알 수 없다. From 표시 이름으로도 대개 갈리지만 그건 문자열이라 동명이인이면
+ * 겹치고 공급자가 고쳐 쓸 수도 있다. `Message-ID`를 키로 확정 정보를 우리 쪽에 남긴다.
+ *
+ * 실패해도 발송은 이미 끝났다. 기록을 못 남겼다고 오류를 돌려주면 같은 메일을 다시 보낸다.
+ */
+async function recordSender(dbs, dbId, { messageId, accountId, uid, senderName }, log) {
+  const key = messageIdKey(messageId);
+  if (key === '') return;
+  try {
+    const id = randomUUID().replace(/-/g, '').slice(0, 24);
+    await dbs.createDocument(dbId, SENT_BY_COLLECTION, id, {
+      id,
+      messageIdKey: key,
+      messageId: String(messageId).slice(0, 512),
+      accountId: String(accountId || ''),
+      workfitUserId: String(uid || ''),
+      senderName: String(senderName || '').slice(0, 30),
+      sentAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    log?.(`recordSender: 발신 기록을 남기지 못했습니다 msg=${String(e?.message).slice(0, 120)}`);
+  }
+}
 
 /** `이름 <주소>` 형식. 이름이 없으면 주소만. */
 const formatAddress = (row) => (row?.name ? `${row.name} <${row.email}>` : row?.email || '');
@@ -102,7 +152,7 @@ async function loadOrigin(account, origin, env) {
  * 발신 주소는 요청이 아니라 **계정 문서에서** 읽는다 — 요청의 from을 믿으면 소유하지 않은
  * 주소로 발신을 위장할 수 있다.
  */
-export async function sendMail(dbs, dbId, uid, input, env) {
+export async function sendMail(dbs, dbId, uid, input, env, log) {
   const account = await ownedAccount(dbs, dbId, uid, input?.accountId);
   if (!account) throw new MailFnError('NOT_FOUND', '발신 계정을 찾을 수 없습니다.', 404);
 
@@ -165,9 +215,13 @@ export async function sendMail(dbs, dbId, uid, input, env) {
     socketTimeout: SEND_SOCKET_TIMEOUT,
   });
 
+  const senderName = await senderNameOf(dbs, dbId, uid, log);
+
+  let info;
   try {
-    await transporter.sendMail({
-      from: account.email,
+    info = await transporter.sendMail({
+      // 이름이 있으면 `허진욱 <a@naver.com>`으로 나간다. 받는 쪽도 주소 대신 사람을 본다.
+      from: senderName ? { name: senderName, address: account.email } : account.email,
       to,
       cc: formatList(input?.cc),
       bcc: formatList(input?.bcc),
@@ -183,7 +237,15 @@ export async function sendMail(dbs, dbId, uid, input, env) {
     transporter.close();
   }
 
-  // 발송은 끝났다. 답장 플래그를 못 달았다고 실패로 돌려주면 같은 메일을 다시 보내게 된다.
+  // 발송은 끝났다. 이 아래는 전부 실패해도 오류로 돌려주지 않는다 — 다시 보내게 된다.
+  await recordSender(
+    dbs,
+    dbId,
+    { messageId: info?.messageId, accountId: account.id, uid, senderName },
+    log,
+  );
+
+  // 답장 플래그를 못 달았다고 실패로 돌려주면 같은 메일을 다시 보내게 된다.
   if (origin?.mode && origin.mode !== 'forward') {
     try {
       const originAccount = origin.ref?.accountId === account.id

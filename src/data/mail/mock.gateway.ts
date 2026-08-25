@@ -261,7 +261,9 @@ export const mockMailGateway: MailGateway = {
       if (query?.unseenOnly && row.seen) return false;
       if (query?.flaggedOnly && !row.flagged) return false;
       if (!text) return true;
-      return [row.subject, row.from.name, row.from.email, row.textBody]
+      // 서버와 같은 대상: 제목·보낸사람·받는사람·참조·본문.
+      const people = [row.from, ...row.to, ...row.cc].flatMap((who) => [who.name, who.email]);
+      return [row.subject, row.textBody, ...people]
         .some((value) => value.toLowerCase().includes(text));
     };
 
@@ -274,7 +276,19 @@ export const mockMailGateway: MailGateway = {
         .filter(matches)
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
         .slice(0, perAccount)
-        .map(toSummary);
+        .map((row) => {
+          const summary = toSummary(row);
+          /*
+            실제 서버는 보낸메일함에서 발신자 자리에 받는사람을 넣고 진짜 발신자를 `sentBy`로
+            따로 보낸다. 목업이 그대로 두면 로컬에서만 다르게 보여 화면을 잘못 고치게 된다.
+          */
+          if (folder !== 'SENT') return summary;
+          return {
+            ...summary,
+            from: row.to[0] ?? summary.from,
+            sentBy: row.from,
+          };
+        });
       return { accountId: account.id, mails, error: null };
     });
   },

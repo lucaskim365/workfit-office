@@ -5,58 +5,26 @@ import {
   type CommuteRecord,
 } from '@/domain/commute/schema';
 import { COMMUTE_EMPLOYEE_FIXTURE, COMMUTE_RECORD_FIXTURE } from './commute.fixture';
-import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { commuteGateway } from './commute.gateway';
 import { dbDriver } from '@/shared/lib/dbDriver';
 
 /**
  * 근태 조회 Repository — 읽기 전용.
  *
- * 쓰기는 CAPS 인제스트(서버 전용 키)만 한다. 조회는 공유 CrudBackend(VITE_DB_DRIVER)로
- * `employees`·`attendance`를 읽고, memory 드라이버면 로컬 수신 서버(:3020) → fixture 순으로
+ * 쓰기는 CAPS 인제스트(서버 전용 키)만 한다. 조회는 `caps-ingest` Function 경유
+ * (`commute.gateway.ts`)이고, memory 드라이버면 로컬 수신 서버(:3020) → fixture 순으로
  * degrade한다.
  *
- * ⚠ **이 화면은 아직 운영에서 열리지 않는다.** 근태 컬렉션은 개인정보라 서버 전용 권한
- * (`permissions: []`)으로 프로비저닝돼 있고, 브라우저는 프로젝트 ID만 가진 익명 클라이언트라
- * 읽기가 거부된다. 열리려면 Appwrite Auth + 문서 권한(본인·관리자) 또는 서버 경유 조회가
- * 선행되어야 한다(feat/commute DESIGN §3).
+ * **왜 Function을 거치는가**: 근태 컬렉션은 개인정보라 서버 전용 권한(`permissions: []`)으로
+ * 만들어져 있고, 브라우저는 프로젝트 ID만 가진 익명 클라이언트라 직접 읽으면 401이다.
+ * 컬렉션을 열어서 푸는 건 답이 아니다 — projectId가 번들에 공개돼 있어 누구나 전 직원
+ * 출퇴근 기록을 가져가게 된다. 신원은 메일과 같은 `widdy-login` 서명 토큰을 쓴다.
  */
-const toIso = (value: unknown): string | null => {
-  if (value == null) return null;
-  if (typeof value === 'string') return value;
-  const maybe = value as { toDate?: () => Date };
-  return typeof maybe.toDate === 'function' ? maybe.toDate().toISOString() : null;
-};
-
-const employeesBackend = createCrudBackend<CommuteEmployee>({
-  coll: 'employees',
-  parse: (raw) => {
-    const parsed = commuteEmployeeSchema.safeParse(raw);
-    return parsed.success ? parsed.data : null;
-  },
-  idOf: (row) => String(row.empId),
-  seed: [...COMMUTE_EMPLOYEE_FIXTURE],
-});
-
-const attendanceBackend = createCrudBackend<CommuteRecord>({
-  coll: 'attendance',
-  // Firestore Timestamp → ISO 정규화. Appwrite는 이미 ISO 문자열이라 그대로 통과한다.
-  parse: (raw) => {
-    const data = raw as Record<string, unknown>;
-    const parsed = commuteRecordSchema.safeParse({
-      ...data,
-      inAt: toIso(data.inAt),
-      outAt: toIso(data.outAt),
-    });
-    return parsed.success ? parsed.data : null;
-  },
-  idOf: (row) => `${row.empId}_${row.date.replaceAll('-', '')}`, // 인제스트 계약 §4와 동일
-  seed: [...COMMUTE_RECORD_FIXTURE],
-});
-
 export const commuteRepo = {
   async listEmployees(): Promise<CommuteEmployee[]> {
     if (dbDriver !== 'memory') {
-      return (await employeesBackend.loadAll()).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+      const rows = await commuteGateway.listEmployees();
+      return rows.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     }
     // 로컬 수신 서버(:3020)가 떠 있으면 CAPS 실데이터(.caps-local)를 읽고, 없으면 fixture.
     const real = await fetchLocal<unknown[]>('/api/local/employees');
@@ -77,13 +45,10 @@ export const commuteRepo = {
     const to = `${month}-31`;
 
     if (dbDriver !== 'memory') {
-      // ⚠ 공유 백엔드가 전건 로드만 제공해 Firestore 시절의 서버측 where(empId·date 범위)가
-      // 사라졌다. 지금 규모(수백 건)는 견디지만, 근태는 직원×일수로 선형 증가하므로
-      // 백엔드에 질의 API를 추가하는 것이 다음 수순이다.
-      const rows = await attendanceBackend.loadAll();
-      return rows
-        .filter((row) => row.empId === empId && row.date >= from && row.date <= to)
-        .sort((a, b) => a.date.localeCompare(b.date));
+      // 범위 질의는 Function이 `idx_empId_date`로 처리한다. 전건을 받아 여기서 거르면
+      // 직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
+      const rows = await commuteGateway.listMonth(empId, month);
+      return rows.sort((a, b) => a.date.localeCompare(b.date));
     }
 
     const real = await fetchLocal<unknown[]>(`/api/local/attendance?empId=${empId}&month=${month}`);
@@ -99,6 +64,43 @@ export const commuteRepo = {
     return COMMUTE_RECORD_FIXTURE
       .filter((row) => row.empId === empId && row.date >= from && row.date <= to)
       .sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  /** 한 달치 전 직원 근태. 집계는 화면(도메인 summarize)이 맡는다. */
+  async listMonthAll(month: string): Promise<CommuteRecord[]> {
+    if (dbDriver !== 'memory') return commuteGateway.listMonthAll(month);
+
+    const real = await fetchLocal<unknown[]>(`/api/local/attendance?month=${month}`);
+    if (real) {
+      return real.flatMap((row) => {
+        const parsed = commuteRecordSchema.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      });
+    }
+    return COMMUTE_RECORD_FIXTURE.filter((row) => row.date.startsWith(month));
+  },
+
+  /** 하루치 전 직원 근태. 사번 오름차순 — 화면이 직원 이름으로 다시 정렬한다. */
+  async listDay(date: string): Promise<CommuteRecord[]> {
+    if (dbDriver !== 'memory') {
+      const rows = await commuteGateway.listDay(date);
+      return rows.sort((a, b) => a.empId - b.empId);
+    }
+
+    // 로컬 수신 서버에는 일별 엔드포인트가 없다. 월 단위로 받아 그날만 거른다.
+    const real = await fetchLocal<unknown[]>(`/api/local/attendance?month=${date.slice(0, 7)}`);
+    if (real) {
+      return real
+        .flatMap((row) => {
+          const parsed = commuteRecordSchema.safeParse(row);
+          return parsed.success && parsed.data.date === date ? [parsed.data] : [];
+        })
+        .sort((a, b) => a.empId - b.empId);
+    }
+
+    return COMMUTE_RECORD_FIXTURE
+      .filter((row) => row.date === date)
+      .sort((a, b) => a.empId - b.empId);
   },
 };
 

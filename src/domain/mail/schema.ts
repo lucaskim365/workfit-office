@@ -70,6 +70,14 @@ export const mailSummarySchema = z.object({
   /** 별표(중요) 표시. IMAP `\Flagged`로 서버에 저장되어 다른 메일 클라이언트와 공유된다. */
   flagged: z.boolean(),
   hasAttachment: z.boolean(),
+  /*
+    실제 발신자. 보낸메일함에서만 채워진다.
+
+    보낸메일함은 `from` 자리에 받는사람을 넣어 내려오므로(목록에서 상대를 봐야 쓸모 있다),
+    "누가 보냈나"는 이 칸으로 따로 온다. 공용 계정을 여럿이 쓸 때 사람을 가르는 값이다.
+    앱 밖에서 보낸 메일은 발신 기록이 없어 From 헤더 이름으로 물러서고, 그것도 없으면 비어 있다.
+  */
+  sentBy: mailAddressSchema.nullable().optional(),
 });
 
 export type MailSummary = z.infer<typeof mailSummarySchema>;

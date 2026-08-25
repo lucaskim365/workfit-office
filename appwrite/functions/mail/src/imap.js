@@ -128,8 +128,22 @@ export async function fetchMessages(settings, folder, limit, query = {}) {
       const criteria = {};
       if (query.unseenOnly) criteria.seen = false;
       if (query.flaggedOnly) criteria.flagged = true;
-      // 본문까지 넣어야 "내용으로 찾기"가 된다.
-      if (text) criteria.or = [{ subject: text }, { from: text }, { body: text }];
+      /*
+        본문까지 넣어야 "내용으로 찾기"가 된다.
+
+        받는사람(to·cc)도 함께 찾는다. 보낸메일함은 목록의 사람 이름 칸에 발신자가 아니라
+        받는사람을 보여주므로(아래 `counterpart`), to를 빼면 화면에 보이는 이름으로 검색해도
+        한 건도 안 나온다. 사용자에겐 "검색이 안 된다"로 보인다.
+      */
+      if (text) {
+        criteria.or = [
+          { subject: text },
+          { from: text },
+          { to: text },
+          { cc: text },
+          { body: text },
+        ];
+      }
 
       /*
         imapflow는 검색이 거절되면 예외 대신 false를 돌려준다. false를 빈 결과로 다루면
@@ -171,6 +185,11 @@ export async function fetchMessages(settings, folder, limit, query = {}) {
         subject: message.envelope?.subject?.trim() || '(제목 없음)',
         senderAddress: counterpart?.address,
         senderName: counterpart?.name,
+        // 발신 기록과 맞춰볼 키. 보낸메일함에서 "우리 팀 누가 보냈나"를 잇는 데 쓴다.
+        messageId: message.envelope?.messageId ?? '',
+        // 보낸메일함은 위에서 상대(받는사람)로 바꿔치기하므로 실제 발신자를 따로 실어 보낸다.
+        fromName: message.envelope?.from?.[0]?.name ?? '',
+        fromAddress: message.envelope?.from?.[0]?.address ?? '',
         recipients: (message.envelope?.to ?? []).map((row) => ({ address: row.address, name: row.name })),
         receivedAt: receivedAt instanceof Date ? receivedAt : new Date(receivedAt),
         seen: message.flags?.has('\\Seen') ?? false,

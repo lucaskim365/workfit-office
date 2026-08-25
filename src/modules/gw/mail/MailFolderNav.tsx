@@ -13,6 +13,20 @@ interface Props {
   onSelect: (folder: MailFolder) => void;
   /** 받은메일함 안 읽은 수. 0이거나 모르면 배지를 달지 않는다. */
   unseenCount?: number;
+  /**
+   * 임시보관 건수(이 기기에 저장된 것).
+   *
+   * 서버 임시보관은 세지 않는다 — 건수를 알려면 그 폴더에 IMAP STATUS를 따로 물어야 하고,
+   * 그러면 메일 화면을 열 때마다 왕복이 는다. 이 화면에서 저장한 것만으로도 "쓰다 만 게
+   * 있다"는 신호는 선다.
+   */
+  draftCount?: number;
+}
+
+/** 배지 문구. 세 자리가 넘으면 칸을 밀어내서 `99+`로 줄인다. */
+function badgeText(count: number | undefined): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return count > 99 ? '99+' : String(count);
 }
 
 /**
@@ -22,7 +36,7 @@ interface Props {
  * 나오고, 메일이 없는 것인지 폴더가 없는 것인지 구분할 수 없다.
  * ([[jwheo/feat/mail/DESIGN.md]] §3.1)
  */
-export default function MailFolderNav({ current, available, onSelect, unseenCount }: Props) {
+export default function MailFolderNav({ current, available, onSelect, unseenCount, draftCount }: Props) {
   return (
     <GwSideNav
       title="메일함"
@@ -36,9 +50,13 @@ export default function MailFolderNav({ current, available, onSelect, unseenCoun
           label: MAIL_FOLDER_LABELS[folder],
           disabled: !usable,
           hint: usable ? MAIL_FOLDER_LABELS[folder] : '연결한 계정에 이 폴더가 없습니다.',
-          // 안 읽은 수는 받은메일함에만 단다. 다른 폴더는 STATUS를 따로 물어야 해 비용만 는다.
-          badge: folder === 'INBOX' && unseenCount && unseenCount > 0
-            ? (unseenCount > 99 ? '99+' : String(unseenCount))
+          /*
+            안 읽은 수는 받은메일함에만 단다. 다른 폴더는 STATUS를 따로 물어야 해 비용만 는다.
+            임시보관만 예외로, 이미 손에 쥔 로컬 건수를 그대로 보여준다 — 쓰다 만 메일은
+            폴더를 열어보기 전에는 있는 줄도 모른다.
+          */
+          badge: folder === 'INBOX' ? badgeText(unseenCount)
+            : folder === 'DRAFTS' ? badgeText(draftCount)
             : undefined,
         };
       })}

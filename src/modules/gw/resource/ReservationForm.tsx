@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { resolveDeptId } from '@/domain/department/engine';
 import type { Department } from '@/domain/department/schema';
 import type { Resource } from '@/domain/resource/schema';
 import { RESOURCE_TYPE_LABELS } from '@/domain/resource/schema';
@@ -34,7 +35,7 @@ export default function ReservationForm({ actor, resources, departments, initial
   const createReservation = useCreateReservation();
 
   const resource = availableResources.find((item) => item.id === resourceId) ?? null;
-  const requesterDeptId = departments.find((department) => department.name === actor.dept)?.id ?? null;
+  const requesterDeptId = resolveDeptId(departments, actor.dept);
 
   const changeResource = (nextId: string) => {
     setResourceId(nextId);
