@@ -9,7 +9,7 @@ import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
-import { fileStorage } from '@/shared/lib/storage';
+
 
 
 let cachedLogoDataUrl: string | null = null;
@@ -234,43 +234,66 @@ export function ApprovalDocumentView({
   };
 
 
-  const getStoragePath = (url: string): string => {
-    try {
-      const u = new URL(url);
-      let path = u.pathname;
-      if (path.startsWith('/')) {
-        path = path.substring(1);
-      }
-      return decodeURIComponent(path);
-    } catch {
-      return url;
-    }
-  };
 
-  const handlePreview = async (e: React.MouseEvent, fileUrl: string) => {
+
+  const handlePreview = async (e: any, fileUrl: string, originalFileName: string) => {
     e.preventDefault();
     try {
-      const path = getStoragePath(fileUrl);
-      const signedUrl = fileStorage.getSignUrl 
-        ? await fileStorage.getSignUrl(path, 'inline') 
-        : fileUrl;
-      window.open(signedUrl, '_blank');
+      const lowercaseUrl = fileUrl.toLowerCase();
+      const isPdfOrImage = lowercaseUrl.endsWith('.pdf') || 
+                           lowercaseUrl.endsWith('.png') || 
+                           lowercaseUrl.endsWith('.jpg') || 
+                           lowercaseUrl.endsWith('.jpeg') || 
+                           lowercaseUrl.endsWith('.gif');
+
+      if (isPdfOrImage) {
+        // PDF 또는 이미지의 경우 브라우저 렌더링(미리보기)을 위해 Blob fetch 방식을 활용해 우회
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const blob = await response.blob();
+        let mimeType = blob.type;
+        if (lowercaseUrl.endsWith('.pdf')) {
+          mimeType = 'application/pdf';
+        }
+        
+        const previewBlob = new Blob([blob], { type: mimeType });
+        const previewUrl = window.URL.createObjectURL(previewBlob);
+        window.open(previewUrl, '_blank');
+      } else {
+        // 엑셀 등 브라우저가 화면에 바로 열지 못하는 파일은 한글명 유지를 위해 다운로드 로직으로 우회연동
+        await handleDownload(e, fileUrl, originalFileName);
+      }
     } catch (err) {
-      console.error('Failed to get preview URL:', err);
+      console.error('Failed to preview file via Blob fetch:', err);
+      // 에러 발생 시 기존 window.open 폴백 처리
       window.open(fileUrl, '_blank');
     }
   };
 
-  const handleDownload = async (e: any, fileUrl: string) => {
+  const handleDownload = async (e: any, fileUrl: string, originalFileName: string) => {
     e.preventDefault();
+    console.log('DEBUG: handleDownload execution start!', { fileUrl, originalFileName });
     try {
-      const path = getStoragePath(fileUrl);
-      const signedUrl = fileStorage.getSignUrl 
-        ? await fileStorage.getSignUrl(path, 'attachment') 
-        : fileUrl;
-      window.open(signedUrl, '_blank');
+      // 백엔드 API(api/sign)가 op: 'get'을 지원하지 않아 400(unknown op) 오류를 뱉으므로,
+      // 이미 권한이 유효한 원래의 fileUrl을 활용하여 클라이언트에서 직접 fetch를 수행합니다.
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = originalFileName;
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
-      console.error('Failed to get download URL:', err);
+      console.error('Failed to download file via Blob fetch:', err);
+      // CORS 혹은 네트워크 장애로 fetch 실패 시 기존 window.open 폴백 처리
       window.open(fileUrl, '_blank');
     }
   };
@@ -285,7 +308,7 @@ export function ApprovalDocumentView({
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
   const steps = useMemo(() => 
-    [...doc.steps]
+    [...(doc.steps || [])]
       .filter((s) => s.kind !== '참조')
       .sort((a, b) => a.seq - b.seq), 
     [doc.steps]
@@ -839,13 +862,13 @@ export function ApprovalDocumentView({
                   {doc.attachments.map((file, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <a
-                        onClick={(e) => handlePreview(e, file.url)}
+                        onClick={(e) => handlePreview(e, file.url, file.name)}
                         className="font-semibold hover:underline text-[#222] cursor-pointer"
                       >
                         {file.name}
                       </a>
                       <button
-                        onClick={(e) => handleDownload(e, file.url)}
+                        onClick={(e) => handleDownload(e, file.url, file.name)}
                         className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
                       >
                         (다운로드)
@@ -882,7 +905,7 @@ export function ApprovalDocumentView({
       )}
 
       {/* 공유처 영역 (참조자 목록) */}
-      {doc.steps && doc.steps.some((s) => s.kind === '참조') && (
+      {doc.steps && Array.isArray(doc.steps) && doc.steps.some((s) => s.kind === '참조') && (
         <table className="mt-2 w-full border-collapse text-[12px]">
           <tbody>
             <tr>

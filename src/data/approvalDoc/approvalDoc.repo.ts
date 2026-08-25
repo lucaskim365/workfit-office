@@ -173,7 +173,12 @@ class AppwriteBackend implements ApprovalDocBackend {
   }
   private fromRow(row: ApRow): ApprovalDoc | null {
     if (!row.payload) return null;
-    return parseDoc(JSON.parse(row.payload));
+    try {
+      return parseDoc(JSON.parse(row.payload));
+    } catch (err) {
+      console.error('Failed to parse approval document payload JSON:', err);
+      return null;
+    }
   }
   async loadAll() {
     const out: ApprovalDoc[] = [];
