@@ -3,6 +3,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useEmployee } from '@/features/employee/useEmployee';
 import type { Employee, EmploymentStatus } from '@/domain/employee/schema';
 
+
+
 interface OrgNode {
   id: string;
   name: string;
@@ -32,6 +34,7 @@ export default function EmployeeScreen() {
 
   // 대분류 탭: 'list' (임직원 관리) | 'org' (조직도)
   const [activeTab, setActiveTab] = useState<'list' | 'org'>('list');
+  const [isNoticeOpen, setIsNoticeOpen] = useState(true);
 
   // 필터 및 검색 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +47,9 @@ export default function EmployeeScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // 조직도 선택 부서 상태
+  const [selectedDept, setSelectedDept] = useState<string>('all');
+
   // 신규 등록 폼 상태
   const [newEmpNo, setNewEmpNo] = useState('');
   const [newEmpName, setNewEmpName] = useState('');
@@ -53,6 +59,11 @@ export default function EmployeeScreen() {
   const [newEmpEmail, setNewEmpEmail] = useState('');
   const [newEmpPhone, setNewEmpPhone] = useState('');
   const [newEmpHireDate, setNewEmpHireDate] = useState('');
+  const [newEmpRrn, setNewEmpRrn] = useState('');
+  const [newEmpAddress, setNewEmpAddress] = useState('');
+  const [newEmpPersonalEmail, setNewEmpPersonalEmail] = useState('');
+  const [newEmpEmergencyPhone, setNewEmpEmergencyPhone] = useState('');
+  const [newEmpEducation, setNewEmpEducation] = useState('');
 
   // 정보 수정 폼 상태
   const [editEmpName, setEditEmpName] = useState('');
@@ -63,6 +74,16 @@ export default function EmployeeScreen() {
   const [editEmpPhone, setEditEmpPhone] = useState('');
   const [editEmpHireDate, setEditEmpHireDate] = useState('');
   const [editEmpStatus, setEditEmpStatus] = useState<EmploymentStatus>('ACTIVE');
+  const [editEmpRrn, setEditEmpRrn] = useState('');
+  const [editEmpAddress, setEditEmpAddress] = useState('');
+  const [editEmpPersonalEmail, setEditEmpPersonalEmail] = useState('');
+  const [editEmpEmergencyPhone, setEditEmpEmergencyPhone] = useState('');
+  const [editEmpEducation, setEditEmpEducation] = useState('');
+
+  // 상세 보기 Drawer 내의 탭 상태 ('work': 인사/소속 | 'personal': 개인/신상)
+  const [detailTab, setDetailTab] = useState<'work' | 'personal'>('work');
+  // 주민번호 표시 토글
+  const [showRrn, setShowRrn] = useState(false);
 
   // 조직도 노드 접힘 상태 관리
   const [collapsedDepts, setCollapsedDepts] = useState<Record<string, boolean>>({});
@@ -108,7 +129,7 @@ export default function EmployeeScreen() {
     return [
       {
         id: 'hq',
-        name: 'WorkFit 주식회사',
+        name: '워크핏 주식회사',
         children: [
           {
             id: 'mgmt',
@@ -144,6 +165,25 @@ export default function EmployeeScreen() {
     );
   };
 
+  // 주민번호를 통한 성별 및 생년월일 자동 유추 헬퍼
+  const parseRrnInfo = (rrnVal: string) => {
+    const cleaned = rrnVal.replace(/[^0-9]/g, '');
+    if (cleaned.length < 7) return { gender: '', birthDate: '' };
+    const birthPart = cleaned.substring(0, 6);
+    const genderDigit = cleaned.charAt(6);
+
+    let gender = '';
+    if (['1', '3', '5'].includes(genderDigit)) gender = '남성';
+    else if (['2', '4', '6'].includes(genderDigit)) gender = '여성';
+
+    let yearPrefix = '19';
+    if (['3', '4'].includes(genderDigit)) yearPrefix = '20';
+    else if (['5', '6'].includes(genderDigit)) yearPrefix = '19'; // 외국인 등 폴백
+
+    const birthDate = `${yearPrefix}${birthPart.substring(0, 2)}-${birthPart.substring(2, 4)}-${birthPart.substring(4, 6)}`;
+    return { gender, birthDate };
+  };
+
   // 1. 임직원 등록 제출
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +196,8 @@ export default function EmployeeScreen() {
       return;
     }
 
+    const { gender, birthDate } = parseRrnInfo(newEmpRrn);
+
     const created = createEmployee({
       employeeNo: newEmpNo.trim(),
       name: newEmpName.trim(),
@@ -165,7 +207,14 @@ export default function EmployeeScreen() {
       email: newEmpEmail.trim(),
       phone: newEmpPhone.trim(),
       hireDate: newEmpHireDate,
-      employmentStatus: 'ACTIVE'
+      employmentStatus: 'ACTIVE',
+      rrn: newEmpRrn.trim(),
+      address: newEmpAddress.trim(),
+      personalEmail: newEmpPersonalEmail.trim(),
+      emergencyPhone: newEmpEmergencyPhone.trim(),
+      education: newEmpEducation.trim(),
+      gender,
+      birthDate
     });
 
     if (created) {
@@ -175,6 +224,11 @@ export default function EmployeeScreen() {
       setNewEmpEmail('');
       setNewEmpPhone('');
       setNewEmpHireDate('');
+      setNewEmpRrn('');
+      setNewEmpAddress('');
+      setNewEmpPersonalEmail('');
+      setNewEmpEmergencyPhone('');
+      setNewEmpEducation('');
       setIsCreateModalOpen(false);
     }
   };
@@ -189,6 +243,11 @@ export default function EmployeeScreen() {
     setEditEmpPhone(emp.phone || '');
     setEditEmpHireDate(emp.hireDate || '');
     setEditEmpStatus(emp.employmentStatus);
+    setEditEmpRrn(emp.rrn || '');
+    setEditEmpAddress(emp.address || '');
+    setEditEmpPersonalEmail(emp.personalEmail || '');
+    setEditEmpEmergencyPhone(emp.emergencyPhone || '');
+    setEditEmpEducation(emp.education || '');
     setIsEditModalOpen(true);
   };
 
@@ -196,6 +255,8 @@ export default function EmployeeScreen() {
   const handleUpdateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmpId || !editEmpName.trim()) return;
+
+    const { gender, birthDate } = parseRrnInfo(editEmpRrn);
 
     updateEmployee(selectedEmpId, {
       name: editEmpName.trim(),
@@ -205,7 +266,14 @@ export default function EmployeeScreen() {
       email: editEmpEmail.trim(),
       phone: editEmpPhone.trim(),
       hireDate: editEmpHireDate,
-      employmentStatus: editEmpStatus
+      employmentStatus: editEmpStatus,
+      rrn: editEmpRrn.trim(),
+      address: editEmpAddress.trim(),
+      personalEmail: editEmpPersonalEmail.trim(),
+      emergencyPhone: editEmpEmergencyPhone.trim(),
+      education: editEmpEducation.trim(),
+      gender,
+      birthDate
     });
 
     setIsEditModalOpen(false);
@@ -228,7 +296,7 @@ export default function EmployeeScreen() {
 
   return (
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink relative overflow-hidden">
-      
+
       {/* ── 좌측 탭 전환 사이드바 ── */}
       <aside className="w-[200px] shrink-0 flex flex-col gap-5 rounded-xl border border-border bg-panel p-4 shadow-sm">
         <div className="space-y-5">
@@ -245,11 +313,10 @@ export default function EmployeeScreen() {
                 setActiveTab('list');
                 setSelectedEmpId(null);
               }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${
-                activeTab === 'list'
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${activeTab === 'list'
+                ? 'bg-teal text-white shadow-xs'
+                : 'text-ink2 hover:bg-panel-alt hover:text-ink'
+                }`}
             >
               <span>👥</span>
               <span>임직원 관리</span>
@@ -259,11 +326,10 @@ export default function EmployeeScreen() {
                 setActiveTab('org');
                 setSelectedEmpId(null);
               }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${
-                activeTab === 'org'
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${activeTab === 'org'
+                ? 'bg-teal text-white shadow-xs'
+                : 'text-ink2 hover:bg-panel-alt hover:text-ink'
+                }`}
             >
               <span>🏢</span>
               <span>회사 조직도</span>
@@ -274,7 +340,7 @@ export default function EmployeeScreen() {
 
       {/* ── 메인 콘텐츠 영역 ── */}
       <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-5 shadow-sm overflow-hidden">
-        
+
         {/* ==================== A. 임직원 관리 탭 ==================== */}
         {activeTab === 'list' && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -389,9 +455,8 @@ export default function EmployeeScreen() {
                         <tr
                           key={e.id}
                           onClick={() => setSelectedEmpId(e.id)}
-                          className={`border-b border-border hover:bg-panel-alt/30 cursor-pointer transition-colors ${
-                            isSelected ? 'bg-teal-soft/10 font-semibold' : ''
-                          }`}
+                          className={`border-b border-border hover:bg-panel-alt/30 cursor-pointer transition-colors ${isSelected ? 'bg-teal-soft/10 font-semibold' : ''
+                            }`}
                         >
                           <td className="p-3 text-center">
                             <span className="grid h-7 w-7 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal mx-auto">
@@ -406,13 +471,12 @@ export default function EmployeeScreen() {
                           <td className="p-3 text-ink2 truncate font-mono">{e.email || '-'}</td>
                           <td className="p-3 text-ink3 font-mono">{e.phone || '-'}</td>
                           <td className="p-3 text-center">
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                              e.employmentStatus === 'ACTIVE'
-                                ? 'bg-teal-soft/20 border-teal/20 text-teal'
-                                : e.employmentStatus === 'LEAVE'
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${e.employmentStatus === 'ACTIVE'
+                              ? 'bg-teal-soft/20 border-teal/20 text-teal'
+                              : e.employmentStatus === 'LEAVE'
                                 ? 'bg-amber-soft border-amber/20 text-amber'
                                 : 'bg-panel-alt border-border text-ink3'
-                            }`}>
+                              }`}>
                               {e.employmentStatus === 'ACTIVE' ? '재직' : e.employmentStatus === 'LEAVE' ? '휴직' : '퇴직'}
                             </span>
                           </td>
@@ -445,7 +509,7 @@ export default function EmployeeScreen() {
                   <span>🏢</span>
                   <span>부서 목록</span>
                 </h3>
-                
+
                 {/* 재귀 트리 렌더러 함수 */}
                 <div className="select-none pl-1 space-y-1 text-[12px] font-bold">
                   {orgTree.map(function renderNode(node: OrgNode) {
@@ -453,18 +517,21 @@ export default function EmployeeScreen() {
                     const isLeaf = node.leaf || false;
                     const children = node.children || [];
                     const activeMembers = isLeaf ? getActiveDeptEmployees(node.name) : [];
-                    
+
                     return (
                       <div key={node.id} className="flex flex-col mt-0.5">
                         <div
                           onClick={() => {
                             if (!isLeaf) {
                               toggleDeptCollapse(node.id);
+                            } else {
+                              setSelectedDept(node.name);
                             }
                           }}
-                          className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
-                            isLeaf ? 'hover:bg-teal-soft/10 text-ink' : 'hover:bg-black/5 text-ink2'
-                          }`}
+                          className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${isLeaf
+                            ? `hover:bg-teal-soft/10 text-ink ${selectedDept === node.name ? 'bg-teal-soft/15 text-teal font-extrabold' : ''}`
+                            : 'hover:bg-black/5 text-ink2'
+                            }`}
                         >
                           {!isLeaf && (
                             <span className="text-[10px] text-ink3 w-3 h-3 grid place-items-center">
@@ -495,12 +562,22 @@ export default function EmployeeScreen() {
               <div className="overflow-y-auto space-y-4">
                 <h3 className="font-extrabold text-ink text-xs flex items-center gap-1.5 border-b border-border pb-2.5">
                   <span>👥</span>
-                  <span>부서 재직자 검색 명단</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>부서 재직자 검색 명단 {selectedDept !== 'all' && `(${selectedDept})`}</span>
+                  </div>
+                  {selectedDept !== 'all' && (
+                    <button
+                      onClick={() => setSelectedDept('all')}
+                      className="text-[10px] text-teal hover:underline font-bold bg-transparent border-none p-0 cursor-pointer"
+                    >
+                      전체 보기
+                    </button>
+                  )}
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {employees
-                    .filter((e) => e.employmentStatus !== 'RETIRED') // 조직도에서는 퇴직자 무조건 자동 제외 원칙
+                    .filter((e) => e.employmentStatus !== 'RETIRED' && (selectedDept === 'all' || e.dept === selectedDept)) // 조직도에서는 퇴직자 무조건 자동 제외 원칙
                     .map((emp) => (
                       <div
                         key={emp.id}
@@ -526,117 +603,222 @@ export default function EmployeeScreen() {
           </div>
         )}
 
+
+
       </main>
 
-      {/* ==================== C. 임직원 상세 Drawer 패널 ==================== */}
+      {/* ==================== C. 임직원 상세 모달 패널 ==================== */}
       {selectedEmpId && selectedEmp && (
         <>
           {/* 백드롭 오버레이 */}
           <div
             onClick={() => setSelectedEmpId(null)}
-            className="fixed inset-0 bg-black/25 z-40"
+            className="fixed inset-0 bg-black/40 z-40 backdrop-blur-xs transition-opacity"
           />
 
-          <div className="fixed right-0 top-0 h-full w-[440px] shadow-2xl z-50 bg-panel border-l border-border flex flex-col justify-between transition-transform duration-300 transform translate-x-0">
-            {/* Drawer 헤더 */}
-            <div className="p-5 border-b border-border bg-panel-alt/10 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="grid h-[42px] w-[42px] place-items-center rounded-full bg-teal-soft text-base font-extrabold text-teal">
+          <div className="fixed inset-0 m-auto h-[560px] w-[720px] max-w-[95vw] max-h-[90vh] shadow-2xl z-50 bg-panel border border-border rounded-3xl flex overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* 좌측 프로필 카드 영역 */}
+            <div className="w-[240px] shrink-0 bg-gradient-to-b from-teal-soft/10 to-panel-alt/5 border-r border-border p-6 flex flex-col items-center justify-between select-none">
+              <div className="w-full flex flex-col items-center mt-4">
+                {/* 대형 프로필 이니셜 아바타 */}
+                <div className="grid h-22 w-22 place-items-center rounded-full bg-teal text-white text-3xl font-black shadow-md border-3 border-panel">
                   {selectedEmp.name[0]}
-                </span>
-                <div>
-                  <div className="font-extrabold text-ink text-sm flex items-center gap-2">
-                    <span>{selectedEmp.name}</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-panel-alt border-border text-ink2 font-mono">
-                      {selectedEmp.employeeNo}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-ink3 mt-0.5 flex items-center gap-1.5">
-                    <span>{selectedEmp.dept}</span>
-                    <span>·</span>
-                    <span>{selectedEmp.position} {selectedEmp.duty && `(${selectedEmp.duty})`}</span>
-                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => setSelectedEmpId(null)}
-                className="text-ink3 hover:text-ink font-bold text-sm px-2 rounded hover:bg-panel-alt"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Drawer 스크롤 본문 */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-[12px]">
-              
-              {/* 기본 상세 정보 */}
-              <div className="space-y-3.5">
-                <h4 className="font-extrabold text-ink text-xs border-b border-border/40 pb-1.5">📌 인적 및 직무 정보</h4>
                 
-                <div className="grid grid-cols-2 gap-y-3 gap-x-2.5">
-                  <div>
-                    <span className="text-ink3 text-[11px] block">재직 상태</span>
-                    <span className={`font-bold mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] border ${
-                      selectedEmp.employmentStatus === 'ACTIVE'
-                        ? 'bg-teal-soft/20 border-teal/20 text-teal'
-                        : selectedEmp.employmentStatus === 'LEAVE'
-                        ? 'bg-amber-soft border-amber/20 text-amber'
-                        : 'bg-panel-alt border-border text-ink3'
-                    }`}>
-                      {selectedEmp.employmentStatus === 'ACTIVE' ? '재직 중' : selectedEmp.employmentStatus === 'LEAVE' ? '휴직' : '퇴직자'}
-                    </span>
-                  </div>
+                {/* 임직원 핵심 성명/사번/직위 정보 */}
+                <div className="text-base font-extrabold text-ink mt-4 text-center">
+                  {selectedEmp.name}
+                </div>
+                <div className="text-[10px] font-bold px-2 py-0.5 rounded border border-border bg-panel-alt text-ink2 font-mono mt-1.5">
+                  {selectedEmp.employeeNo}
+                </div>
 
-                  <div>
-                    <span className="text-ink3 text-[11px] block">입사일</span>
-                    <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.hireDate || '-'}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-ink3 text-[11px] block">이메일</span>
-                    <span className="font-semibold text-ink mt-1 block font-mono break-all">{selectedEmp.email || '-'}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-ink3 text-[11px] block">연락처</span>
-                    <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.phone || '-'}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-ink3 text-[11px] block">연결 계정 UID</span>
-                    <span className="font-semibold text-ink mt-1 block font-mono text-teal">{selectedEmp.userId || '없음'}</span>
+                <div className="mt-5 text-center space-y-1">
+                  <div className="text-xs font-bold text-teal">{selectedEmp.dept}</div>
+                  <div className="text-[11px] font-semibold text-ink3">
+                    {selectedEmp.position} {selectedEmp.duty && `· ${selectedEmp.duty}`}
                   </div>
                 </div>
               </div>
 
-              {/* 퇴직 사원 안내 문구 */}
-              {selectedEmp.employmentStatus === 'RETIRED' && (
-                <div className="rounded-xl border border-dashed border-border bg-panel-alt/10 p-3.5 leading-relaxed text-[11px] text-ink3">
-                  ⚠️ 본 직원은 퇴직 상태이므로, 신규 기안 결재선 선택 목록 및 대외 주소록/조직도 매핑 검색에서 즉시 비활성화 처리되었습니다. 단, 기존 기록 보존을 위해 과거 문서 결재 이력 정보는 유실 없이 정상 유지됩니다.
-                </div>
-              )}
-
+              {/* 하단 입사 정보 안내 표시 */}
+              <div className="w-full text-center py-2.5 px-3 rounded-xl bg-panel-alt/20 border border-border/40 text-[10.5px] text-ink3 leading-relaxed">
+                📅 {selectedEmp.hireDate || '-'} 입사
+              </div>
             </div>
 
-            {/* Drawer 하단 관리자 조작반 */}
-            {isAdmin && (
-              <div className="p-4 border-t border-border bg-panel-alt/20 shrink-0 flex gap-2">
+            {/* 우측 상세정보 탭 및 필드 영역 */}
+            <div className="flex-1 flex flex-col justify-between overflow-hidden bg-panel">
+              {/* 모달 닫기 헤더 */}
+              <div className="p-3.5 border-b border-border bg-panel-alt/5 flex items-center justify-end shrink-0">
                 <button
-                  onClick={() => openEditModal(selectedEmp)}
-                  className="flex-1 rounded-lg bg-teal py-2.5 text-center font-bold text-white hover:opacity-90 transition-opacity"
+                  onClick={() => setSelectedEmpId(null)}
+                  className="text-ink3 hover:text-ink font-bold text-sm px-2 py-1 rounded hover:bg-panel-alt transition-colors"
                 >
-                  ⚙️ 정보 수정
+                  ✕
                 </button>
-                {selectedEmp.employmentStatus !== 'RETIRED' && (
-                  <button
-                    onClick={() => handleRetireEmployee(selectedEmp.id)}
-                    className="rounded-lg border border-red-200 text-red px-3.5 py-2.5 font-bold bg-red-soft/20 hover:bg-red-soft/40 transition-colors"
-                  >
-                    퇴직 처리
-                  </button>
+              </div>
+
+              {/* 모달 탭 셀렉터 */}
+              <div className="flex border-b border-border shrink-0 text-[11.5px] font-bold bg-panel-alt/5">
+                <button
+                  type="button"
+                  onClick={() => setDetailTab('work')}
+                  className={`flex-1 py-2.5 text-center transition-colors border-b-2 ${
+                    detailTab === 'work' ? 'border-teal text-teal' : 'border-transparent text-ink3 hover:text-ink'
+                  }`}
+                >
+                  💼 인사 및 소속 정보
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailTab('personal');
+                    setShowRrn(false);
+                  }}
+                  className={`flex-1 py-2.5 text-center transition-colors border-b-2 ${
+                    detailTab === 'personal' ? 'border-teal text-teal' : 'border-transparent text-ink3 hover:text-ink'
+                  }`}
+                >
+                  🔒 개인 신상 정보 (인사팀용)
+                </button>
+              </div>
+
+              {/* 모달 스크롤 본문 */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 text-[12px]">
+                
+                {/* 1) 인사 및 소속 정보 탭 */}
+                {detailTab === 'work' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-3.5">
+                      <div>
+                        <span className="text-ink3 text-[11px] block">재직 상태</span>
+                        <span className={`font-bold mt-1 inline-block px-1.5 py-0.5 rounded text-[10px] border ${
+                          selectedEmp.employmentStatus === 'ACTIVE'
+                            ? 'bg-teal-soft/20 border-teal/20 text-teal'
+                            : selectedEmp.employmentStatus === 'LEAVE'
+                            ? 'bg-amber-soft border-amber/20 text-amber'
+                            : 'bg-panel-alt border-border text-ink3'
+                        }`}>
+                          {selectedEmp.employmentStatus === 'ACTIVE' ? '재직 중' : selectedEmp.employmentStatus === 'LEAVE' ? '휴직' : '퇴직자'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">입사일</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.hireDate || '-'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">사번</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.employeeNo}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">소속 부서</span>
+                        <span className="font-semibold text-ink mt-1 block">{selectedEmp.dept}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">직급 / 직책</span>
+                        <span className="font-semibold text-ink mt-1 block">{selectedEmp.position} {selectedEmp.duty && `(${selectedEmp.duty})`}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">업무 이메일</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono break-all">{selectedEmp.email || '-'}</span>
+                      </div>
+
+                      <div className="col-span-2">
+                        <span className="text-ink3 text-[11px] block">업무 연락처</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.phone || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2) 개인 신상 정보 탭 */}
+                {detailTab === 'personal' && (
+                  <div className="space-y-4">
+                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-3 text-[10.5px] text-amber-800 leading-relaxed font-bold">
+                      🔒 본 정보는 주민등록번호, 주소 등 민감한 개인 신상정보를 포함하고 있으므로 열람 및 취급에 주의를 요합니다. (인사담당자 전용 화면)
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-3.5">
+                      <div>
+                        <span className="text-ink3 text-[11px] block">생년월일</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.birthDate || '-'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">성별</span>
+                        <span className="font-semibold text-ink mt-1 block">{selectedEmp.gender || '-'}</span>
+                      </div>
+
+                      <div className="col-span-2">
+                        <span className="text-ink3 text-[11px] block">주민등록번호</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="font-semibold text-ink font-mono tracking-wider">
+                            {showRrn 
+                              ? (selectedEmp.rrn || '-') 
+                              : (selectedEmp.rrn ? `${selectedEmp.rrn.split('-')[0]}-${selectedEmp.rrn.split('-')[1]?.charAt(0) || ''}******` : '-')}
+                          </span>
+                          {selectedEmp.rrn && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRrn(!showRrn)}
+                              className="text-[10px] text-teal hover:underline font-bold bg-transparent border-none p-0 inline cursor-pointer"
+                            >
+                              {showRrn ? '🙈 숨기기' : '👁️ 전체보기'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <span className="text-ink3 text-[11px] block">주소</span>
+                        <span className="font-semibold text-ink mt-1 block leading-relaxed">{selectedEmp.address || '-'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">개인 이메일</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono break-all">{selectedEmp.personalEmail || '-'}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-ink3 text-[11px] block">비상 연락처</span>
+                        <span className="font-semibold text-ink mt-1 block font-mono">{selectedEmp.emergencyPhone || '-'}</span>
+                      </div>
+
+                      <div className="col-span-2">
+                        <span className="text-ink3 text-[11px] block">최종 학력</span>
+                        <span className="font-semibold text-ink mt-1 block">{selectedEmp.education || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
+
+              {/* 모달 하단 관리 버튼 */}
+              {isAdmin && selectedEmp.employmentStatus !== 'RETIRED' && (
+                <div className="p-4 border-t border-border bg-panel-alt/10 flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(selectedEmp)}
+                    className="flex-1 rounded-lg bg-teal text-white py-2 font-bold hover:opacity-90 transition-opacity text-[11.5px]"
+                  >
+                    ⚙️ 정보 수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRetireEmployee(selectedEmp.id)}
+                    className="flex-1 rounded-lg border border-red/20 text-red bg-red-soft/10 py-2 font-bold hover:bg-red-soft/20 transition-colors text-[11.5px]"
+                  >
+                    ⚠️ 퇴직 처리
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -650,7 +832,7 @@ export default function EmployeeScreen() {
               <button onClick={() => setIsCreateModalOpen(false)} className="text-ink3 hover:text-ink font-bold text-sm">✕</button>
             </div>
 
-            <form onSubmit={handleCreateEmployee} className="space-y-4">
+            <form onSubmit={handleCreateEmployee} className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-ink2">사번 (필수)</label>
@@ -682,7 +864,7 @@ export default function EmployeeScreen() {
                   <select
                     value={newEmpDept}
                     onChange={(e) => setNewEmpDept(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="인사지원팀">인사지원팀</option>
                     <option value="재무관리팀">재무관리팀</option>
@@ -698,7 +880,7 @@ export default function EmployeeScreen() {
                   <select
                     value={newEmpPos}
                     onChange={(e) => setNewEmpPos(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="사원">사원</option>
                     <option value="주임">주임</option>
@@ -716,7 +898,7 @@ export default function EmployeeScreen() {
                   <select
                     value={newEmpDuty}
                     onChange={(e) => setNewEmpDuty(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="팀원">팀원</option>
                     <option value="파트장">파트장</option>
@@ -757,6 +939,65 @@ export default function EmployeeScreen() {
                     className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal text-[12px]"
                   />
                 </div>
+              </div>
+
+              {/* 인사 신상정보 상세 추가 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">주민등록번호 (필수)</label>
+                  <input
+                    type="text"
+                    value={newEmpRrn}
+                    onChange={(e) => setNewEmpRrn(e.target.value)}
+                    placeholder="900412-1056432"
+                    required
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">최종 학력</label>
+                  <input
+                    type="text"
+                    value={newEmpEducation}
+                    onChange={(e) => setNewEmpEducation(e.target.value)}
+                    placeholder="대학교 학사 졸업 등"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal text-[12px]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">개인 이메일</label>
+                  <input
+                    type="email"
+                    value={newEmpPersonalEmail}
+                    onChange={(e) => setNewEmpPersonalEmail(e.target.value)}
+                    placeholder="personal@email.com"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">비상 연락처</label>
+                  <input
+                    type="text"
+                    value={newEmpEmergencyPhone}
+                    onChange={(e) => setNewEmpEmergencyPhone(e.target.value)}
+                    placeholder="010-9999-8888"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-ink2">주소</label>
+                <input
+                  type="text"
+                  value={newEmpAddress}
+                  onChange={(e) => setNewEmpAddress(e.target.value)}
+                  placeholder="지번/도로명 주소 입력"
+                  className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal text-[12px]"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border/40 shrink-0">
@@ -817,7 +1058,7 @@ export default function EmployeeScreen() {
                   <select
                     value={editEmpDept}
                     onChange={(e) => setEditEmpDept(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="인사지원팀">인사지원팀</option>
                     <option value="재무관리팀">재무관리팀</option>
@@ -833,7 +1074,7 @@ export default function EmployeeScreen() {
                   <select
                     value={editEmpPos}
                     onChange={(e) => setEditEmpPos(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="사원">사원</option>
                     <option value="주임">주임</option>
@@ -851,7 +1092,7 @@ export default function EmployeeScreen() {
                   <select
                     value={editEmpDuty}
                     onChange={(e) => setEditEmpDuty(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                    className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                   >
                     <option value="팀원">팀원</option>
                     <option value="파트장">파트장</option>
@@ -866,7 +1107,7 @@ export default function EmployeeScreen() {
                 <select
                   value={editEmpStatus}
                   onChange={(e) => setEditEmpStatus(e.target.value as EmploymentStatus)}
-                  className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal"
+                  className="h-9.5 rounded-lg border border-border bg-panel px-2 outline-none focus:border-teal text-[12px]"
                 >
                   <option value="ACTIVE">재직</option>
                   <option value="LEAVE">휴직</option>
@@ -905,6 +1146,64 @@ export default function EmployeeScreen() {
                 </div>
               </div>
 
+              {/* 신상정보 편집 추가 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">주민등록번호</label>
+                  <input
+                    type="text"
+                    value={editEmpRrn}
+                    onChange={(e) => setEditEmpRrn(e.target.value)}
+                    placeholder="900412-1056432"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">최종 학력</label>
+                  <input
+                    type="text"
+                    value={editEmpEducation}
+                    onChange={(e) => setEditEmpEducation(e.target.value)}
+                    placeholder="대학교 학사 졸업 등"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal text-[12px]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">개인 이메일</label>
+                  <input
+                    type="email"
+                    value={editEmpPersonalEmail}
+                    onChange={(e) => setEditEmpPersonalEmail(e.target.value)}
+                    placeholder="personal@email.com"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-ink2">비상 연락처</label>
+                  <input
+                    type="text"
+                    value={editEmpEmergencyPhone}
+                    onChange={(e) => setEditEmpEmergencyPhone(e.target.value)}
+                    placeholder="010-9999-8888"
+                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal font-mono text-[12px]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-ink2">주소</label>
+                <input
+                  type="text"
+                  value={editEmpAddress}
+                  onChange={(e) => setEditEmpAddress(e.target.value)}
+                  placeholder="지번/도로명 주소 입력"
+                  className="h-9 w-full rounded-lg border border-border bg-panel px-3 outline-none focus:border-teal text-[12px]"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-border/40 shrink-0">
                 <button
                   type="button"
@@ -921,6 +1220,30 @@ export default function EmployeeScreen() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 기능 제한 공지 모달 ── */}
+      {isNoticeOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs select-none text-ink">
+          <div className="w-[400px] rounded-2xl border border-border bg-panel p-6 shadow-2xl flex flex-col gap-4 text-center">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-2xl text-amber">
+              ⚠️
+            </div>
+            <div className="space-y-1.5 text-center">
+              <h3 className="text-base font-extrabold text-ink">서비스 이용 안내</h3>
+              <p className="text-[12px] text-ink2 leading-relaxed">
+                해당 페이지는 **아직 개발 및 구현 중**이므로<br />
+                실제 기능 및 데이터를 정상적으로 이용할 수 없습니다.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsNoticeOpen(false)}
+              className="mt-2 w-full rounded-xl bg-teal py-2.5 font-bold text-white shadow-sm hover:opacity-90 transition-opacity text-[12px]"
+            >
+              확인하였습니다
+            </button>
           </div>
         </div>
       )}

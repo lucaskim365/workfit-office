@@ -227,7 +227,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '게시판', icon: '📌', to: 'board' },
     { l: '커뮤니티', icon: '💬', to: 'community' },
     { l: '문서관리', icon: '🗂️', to: 'document', badge: '9' },
-    { l: '인명관리', icon: '👥', to: 'contacts' },
+    { l: '인명관리', icon: '👥', to: 'employee' },
     { l: '업무관리', icon: '📗', to: 'task' },
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },
