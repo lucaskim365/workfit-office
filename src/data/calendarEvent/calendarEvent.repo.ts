@@ -28,10 +28,25 @@ export interface CalendarEventFilter {
 }
 
 export class CalendarEventError extends Error {
-  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE', message: string) {
+  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE' | 'INVALID_INPUT', message: string) {
     super(message);
     this.name = 'CalendarEventError';
   }
+}
+
+/**
+ * 스키마 검증 → 사람이 읽는 오류.
+ *
+ * `schema.parse`가 던지는 `ZodError`의 `message`는 이슈 배열을 통째로 담은 JSON이다.
+ * 화면이 그걸 그대로 띄우면 "일정 제목을 입력하세요" 대신 대괄호와 코드가 나온다.
+ * 이슈 메시지 자체는 이미 사람이 읽을 문장이라, 첫 번째 것만 꺼내 쓴다 — 한 번에 하나씩
+ * 고치게 하는 편이 여러 줄을 한꺼번에 보여 주는 것보다 낫다.
+ */
+function parseEvent(input: unknown): CalendarEvent {
+  const parsed = calendarEventSchema.safeParse(input);
+  if (parsed.success) return parsed.data;
+  const first = parsed.error.issues[0];
+  throw new CalendarEventError('INVALID_INPUT', first?.message || '입력값을 확인하세요.');
 }
 
 let mutationQueue = Promise.resolve();
@@ -137,7 +152,7 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const now = new Date().toISOString();
-      const created = calendarEventSchema.parse({
+      const created = parseEvent({
         ...draft,
         id: nextId(rows, draft.date),
         ownerUserId: actor.userId,
@@ -154,7 +169,7 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const current = requireOwned(rows, actor, id);
-      const updated = calendarEventSchema.parse({
+      const updated = parseEvent({
         ...current,
         ...draft,
         id: current.id,
