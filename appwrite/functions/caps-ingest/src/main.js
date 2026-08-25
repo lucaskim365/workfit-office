@@ -203,6 +203,58 @@ function normalizeEndpoint(value) {
 /** 조회 응답 규약 — 메일 Function과 같다. 성공은 `{data}`, 실패는 `{error:{code,message}}`. */
 const readFail = (res, code, message, status) => res.json({ error: { code, message } }, status);
 
+/**
+ * 전 직원 근태를 볼 수 있는 사람.
+ *
+ * ⚠ 하드코딩이다. "근태 관리자"라는 권한 개념이 아직 없다 — `roleGroup`으로 가르려 했지만
+ * ADMIN이 이 넷 말고도 있고, 홍채원(U012)은 OPERATOR라 역할만으로는 못 가른다.
+ * 권한 그룹이 생기면 이 목록을 지우고 그 값으로 판정할 것.
+ */
+const ATTENDANCE_ADMINS = new Set([
+  'U003', // 손승원
+  'U011', // 김승기
+  'U012', // 홍채원
+  'U018', // 허진욱
+]);
+
+/**
+ * 요청자가 볼 수 있는 CAPS 사번 집합을 구한다.
+ *
+ * - 관리자: 제한 없음(`null`)
+ * - 부서장(`departments.headUserId`): 그 부서 소속의 사번만
+ * - 그 외: 본인 것만
+ *
+ * **사번↔계정은 이름으로 잇는다.** `users.empNo`는 사번이 아니라 로그인 아이디(`swson` 등)라
+ * 쓸 수 없고, `userMap` 컬렉션은 아직 비어 있다. 이름이 안 맞는 사람(그룹웨어 계정이 없는
+ * 직원)은 어느 부서장에게도 안 보인다 — 소속을 알 수 없으니 그게 맞다. 관리자에게만 보인다.
+ * `userMap`이 채워지면 이 함수의 매칭만 그쪽으로 바꾸면 된다.
+ */
+async function resolveVisibleEmpIds(dbs, DB, uid, log) {
+  if (ATTENDANCE_ADMINS.has(uid)) return null;
+
+  const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
+  if (!me) return new Set();
+
+  const headed = await dbs.listDocuments(DB, 'departments', [Query.equal('headUserId', uid), Query.limit(50)]);
+  const deptNames = headed.documents.map((d) => String(d.name));
+
+  // 부서장이면 그 부서 소속 전원, 아니면 나 하나.
+  const names = new Set();
+  if (deptNames.length > 0) {
+    for (const dept of deptNames) {
+      const members = await dbs.listDocuments(DB, 'users', [Query.equal('dept', dept), Query.limit(200)]);
+      for (const m of members.documents) names.add(String(m.name).trim());
+    }
+  } else {
+    names.add(String(me.name).trim());
+  }
+
+  const employees = await listAll(dbs, DB, 'employees', [], log);
+  const allowed = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
+  log(`scope uid=${uid} 부서장=${deptNames.join(',') || '아니오'} 대상 ${allowed.size}명`);
+  return allowed;
+}
+
 /** 한 번에 가져올 수 있는 상한. Appwrite `limit`의 최댓값이다. */
 const PAGE = 100;
 
@@ -261,9 +313,16 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
   const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
 
   try {
+    /*
+      볼 수 있는 범위를 **서버에서** 정한다. 화면이 보내는 값으로 정하면 요청을 고쳐 남의
+      근태를 열 수 있다. null이면 제한 없음(관리자).
+    */
+    const visible = await resolveVisibleEmpIds(dbs, DB, uid, log);
+    const canSee = (empId) => visible === null || visible.has(Number(empId));
+
     switch (action) {
       case 'listEmployees': {
-        const rows = await listAll(dbs, DB, 'employees', [], log);
+        const rows = (await listAll(dbs, DB, 'employees', [], log)).filter((d) => canSee(d.empId));
         return res.json({
           data: rows.map((d) => ({
             empId: Number(d.empId),
@@ -280,6 +339,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         if (!Number.isInteger(empId) || !/^\d{4}-\d{2}$/.test(month)) {
           return readFail(res, 'INVALID_INPUT', '사번과 조회 월(YYYY-MM)이 필요합니다.', 400);
         }
+        if (!canSee(empId)) return readFail(res, 'FORBIDDEN', '이 직원의 근태를 볼 권한이 없습니다.', 403);
         /*
           `idx_empId_date`를 그대로 타는 질의다. 전건을 받아 화면에서 거르면 근태처럼
           직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
@@ -315,7 +375,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
           `idx_date`를 따로 둔다(프로비저닝 스크립트 참조).
           직원이 몇 명이든 전량을 가져온다 — 잘리면 "그날 안 온 사람"과 구분이 안 된다.
         */
-        const rows = await listAll(dbs, DB, 'attendance', [Query.equal('date', date)], log);
+        const rows = (await listAll(dbs, DB, 'attendance', [Query.equal('date', date)], log)).filter((d) => canSee(d.empId));
         return res.json({
           data: rows.map((d) => ({
             empId: Number(d.empId),
@@ -341,10 +401,10 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
           한 달치 전 직원. 직원 수 × 일수라 셋 중 가장 크다(300명이면 6천 건대). 그래도
           커서로 전량을 가져온다 — 집계 화면에서 잘리면 합계가 조용히 틀린다.
         */
-        const rows = await listAll(dbs, DB, 'attendance', [
+        const rows = (await listAll(dbs, DB, 'attendance', [
           Query.greaterThanEqual('date', `${month}-01`),
           Query.lessThanEqual('date', `${month}-31`),
-        ], log, 20000);
+        ], log, 20000)).filter((d) => canSee(d.empId));
         return res.json({
           data: rows.map((d) => ({
             empId: Number(d.empId),
