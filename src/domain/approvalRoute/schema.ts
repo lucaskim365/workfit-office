@@ -59,6 +59,8 @@ export const approvalRouteRuleSchema = z.object({
   priority: z.number().int().default(100),
   active: z.boolean().default(true),
   // 적용 조건
+  /** 연동된 결재 서식 고유 ID (선택 사항, 기존 룰 호환성 보장) */
+  formId: z.string().nullable().optional().default(null),
   /** 문서유형(전체=모든 유형). */
   /** 문서유형 = 서식 code(자유 문자열) 또는 '전체'. */
   docType: z.string().default('전체'),

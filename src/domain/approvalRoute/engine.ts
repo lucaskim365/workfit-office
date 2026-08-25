@@ -194,12 +194,56 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
 
 /** 룰 미매칭·해석 실패 시 폴백 — 소속 부서장 전결(없으면 첫 상급자 결재). */
 function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
+  const steps: ApprovalStep[] = [];
+  const used = new Set<string>();
+  let seq = 1;
+
+  // 1. 소속 부서장 (기안자 본인이 아닐 때만 포함)
   const dept = org.deptOfUser(drafter);
-  const heads = org.deptAncestors(dept).map((d) => org.headOf(d)).filter((x): x is string => !!x);
-  const head = heads.find((id) => id !== drafter.id);
-  const pick = head ?? org.managerChain(drafter.id)[0];
-  if (!pick) return [];
-  return [{ seq: 1, parallelGroup: null, executionType: 'sequential', kind: '전결', approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' }];
+  const ancestors = org.deptAncestors(dept);
+  const deptHeads = ancestors.map((d) => org.headOf(d)).filter((x): x is string => !!x);
+  const deptHead = deptHeads.find((id) => id !== drafter.id);
+  if (deptHead) {
+    used.add(deptHead);
+    steps.push({
+      seq: seq++, parallelGroup: null, executionType: 'sequential',
+      kind: '결재', approverId: deptHead, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+    });
+  }
+
+  // 2. 본부장 (기안자 본인이 아니고 중복되지 않을 때만 포함)
+  const divHead = Array.from(org.userById.values()).find((u) => u.jobTitle === '본부장');
+  if (divHead && divHead.id !== drafter.id && !used.has(divHead.id)) {
+    used.add(divHead.id);
+    steps.push({
+      seq: seq++, parallelGroup: null, executionType: 'sequential',
+      kind: '결재', approverId: divHead.id, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+    });
+  }
+
+  // 3. 대표이사 (기안자 본인이 아니고 중복되지 않으면 최종 '전결' 처리)
+  const chain = org.managerChain(drafter.id);
+  const ceoId = chain[chain.length - 1] ?? deptHeads.slice(-1)[0];
+  if (ceoId && ceoId !== drafter.id && !used.has(ceoId)) {
+    steps.push({
+      seq: seq++, parallelGroup: null, executionType: 'sequential',
+      kind: '전결', approverId: ceoId, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+    });
+  } else if (steps.length > 0) {
+    // 대표이사가 기안자 본인이거나 이미 포함되어 있다면, 생성된 마지막 단계를 전결로 승격
+    steps[steps.length - 1].kind = '전결';
+  } else {
+    // 기안자가 최상위 권한자(예: 대표이사)인 경우, 첫 번째 상급자 또는 폴백 1단계
+    const manager = org.managerChain(drafter.id)[0];
+    if (manager) {
+      steps.push({
+        seq: seq++, parallelGroup: null, executionType: 'sequential',
+        kind: '전결', approverId: manager, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+      });
+    }
+  }
+
+  return steps;
 }
 
 /**

@@ -20,7 +20,7 @@ const scAll = { kind: '전체', deptId: null, deptType: null } as const;
 
 const 만 = 10_000;
 
-const APPROVAL_ROUTE_SEED_RAW: ApprovalRouteRule[] = [
+const APPROVAL_ROUTE_SEED_RAW: any[] = [
   // --- 대표이사 자가 전결 특례 ---
   {
     id: 'RR-CEO-SELF', name: '대표이사 기안: 자가 전결', priority: 0, active: true,
@@ -306,6 +306,7 @@ const RANK_TO_NAME: Record<number, string> = {
 
 export const APPROVAL_ROUTE_SEED: ApprovalRouteRule[] = APPROVAL_ROUTE_SEED_RAW.map((r) => ({
   ...r,
+  formId: null,
   positionFrom: r.positionFromRank != null ? (RANK_TO_NAME[r.positionFromRank] ?? null) : null,
   positionTo: r.positionToRank != null ? (RANK_TO_NAME[r.positionToRank] ?? null) : null,
 })) as ApprovalRouteRule[];

@@ -121,9 +121,9 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
       return finalExecutions;
     }
 
-    // 본인 부서 시행 건만 열람 허용
+    // 본인 부서 시행 건 또는 본인 지정 건만 열람 허용
     return finalExecutions.filter((exec) => {
-      return (myDeptId && exec.targetDeptId === myDeptId) || exec.targetDeptNameSnapshot === meUser?.dept;
+      return (myDeptId && exec.targetDeptId === myDeptId) || exec.targetDeptNameSnapshot === meUser?.dept || exec.targetDeptId === userId;
     });
   }, [finalExecutions, doc, meUser, userId, depts, forceFullView]);
 
@@ -279,15 +279,16 @@ export function ApprovalExecutionPanel({ doc, userId, forceFullView = false }: A
           const targetDept = depts.find((d) => d.id === exec.targetDeptId || d.name === exec.targetDeptId);
           const isDeptHead = targetDept?.headUserId === userId;
           const isMyDept = meUser?.dept === targetDept?.name || (exec.targetDeptNameSnapshot && meUser?.dept === exec.targetDeptNameSnapshot);
+          const isTargetUser = exec.targetDeptId === userId;
           
-          const hasExecutionAuthority = isMyDept;
+          const hasExecutionAuthority = isMyDept || isTargetUser;
 
           return (
             <div key={exec.id} className="rounded-lg border border-border-hi bg-panel-alt/30 p-4 space-y-3 shadow-3xs relative">
               {/* 시행부서 및 상태 배지 */}
               <div className="flex items-center justify-between">
                 <span className="text-[12.5px] font-bold text-ink flex items-center gap-1.5">
-                  <span>📁</span>
+                  <span>{isTargetUser ? '👤' : '📁'}</span>
                   <span>{exec.targetDeptNameSnapshot}</span>
                 </span>
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusColors[exec.status] || ''}`}>

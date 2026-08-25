@@ -346,7 +346,7 @@ function ApprovalDraftInner({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarSearch, setSidebarSearch] = useState('');
-  const [onlyAllowedForms, setOnlyAllowedForms] = useState(false);
+  const [onlyAllowedForms, setOnlyAllowedForms] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false); // 해상도 작을 때 결재선 Drawer
 
   // 후결(사후 승인) 옵션
@@ -554,13 +554,43 @@ function ApprovalDraftInner({
     if (forSubmit) {
       if (form) {
         const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
-        if (form.allowedPositionFromRank != null && userRank > form.allowedPositionFromRank) {
-          let neededTitle = '상급자';
-          if (form.allowedPositionFromRank === 1) neededTitle = '대표';
-          else if (form.allowedPositionFromRank === 2) neededTitle = '본부장';
-          else if (form.allowedPositionFromRank === 3 || form.allowedPositionFromRank === 4) neededTitle = '팀장';
-          else if (form.allowedPositionFromRank >= 5) neededTitle = '팀원';
-          return `본 서식의 기안 권한이 없습니다. (${neededTitle} 이상 기안 가능)`;
+        const userDeptNode = org.depts.find((d) => d.name === me.dept);
+        const userDeptId = userDeptNode?.id ?? null;
+        const userJobTitle = me.jobTitle || '';
+
+        // 1순위: 개별 예외 사용자 지정 허용 검사
+        const isUserExcepted = form.allowedUserIds && form.allowedUserIds.includes(me.id);
+
+        // 2순위: 허용 지정 부서 프리패스 검사
+        const isDeptExcepted = form.allowedDeptIds && form.allowedDeptIds.length > 0 && !!userDeptId && form.allowedDeptIds.includes(userDeptId);
+
+        // 3순위: 일반 규칙 (직급 범위 및 직책 범위)
+        const hasRankConstraint = form.allowedPositionFromRank != null || form.allowedPositionToRank != null;
+        const hasJobConstraint = form.allowedJobTitles && form.allowedJobTitles.length > 0;
+
+        const isRankAllowed = 
+          (form.allowedPositionFromRank == null || userRank <= form.allowedPositionFromRank) &&
+          (form.allowedPositionToRank == null || userRank >= form.allowedPositionToRank);
+
+        const isJobAllowed = 
+          !form.allowedJobTitles || 
+          form.allowedJobTitles.length === 0 || 
+          form.allowedJobTitles.includes(userJobTitle);
+
+        let isGeneralRuleAllowed = true;
+        if (hasRankConstraint && hasJobConstraint) {
+          isGeneralRuleAllowed = isRankAllowed || isJobAllowed;
+        } else if (hasRankConstraint) {
+          isGeneralRuleAllowed = isRankAllowed;
+        } else if (hasJobConstraint) {
+          isGeneralRuleAllowed = isJobAllowed;
+        }
+
+        // 전체 판정: 예외 사원이거나, 부서 프리패스 통과거나, 일반 자격 조건 만족 시 허용
+        const isDrafterAllowed = isUserExcepted || isDeptExcepted || isGeneralRuleAllowed;
+
+        if (!isDrafterAllowed) {
+          return '본 서식의 기안 권한이 없습니다. (허용 직급/직책/부서 예외 대상 아님)';
         }
       }
 
@@ -574,28 +604,49 @@ function ApprovalDraftInner({
     const userRank = org.positions.find((p) => p.name === me.position)?.rank ?? 9;
     const userDeptNode = org.depts.find((d) => d.name === me.dept);
     const userDeptId = userDeptNode?.id ?? null;
+    const userJobTitle = me.jobTitle || '';
     const disabledCodes = new Set<string>();
 
     for (const f of forms) {
       if (f.code === '기안' || f.code === '전체') continue;
 
-      if (f.allowedPositionFromRank != null && userRank > f.allowedPositionFromRank) {
-        disabledCodes.add(f.code);
-        continue;
+      // 1순위: 개별 예외 사용자 지정 허용 검사
+      const isUserExcepted = f.allowedUserIds && f.allowedUserIds.includes(me.id);
+
+      // 2순위: 허용 지정 부서 프리패스 검사
+      const isDeptExcepted = f.allowedDeptIds && f.allowedDeptIds.length > 0 && !!userDeptId && f.allowedDeptIds.includes(userDeptId);
+
+      // 3순위: 일반 규칙 (직급 범위 및 직책 범위)
+      const hasRankConstraint = f.allowedPositionFromRank != null || f.allowedPositionToRank != null;
+      const hasJobConstraint = f.allowedJobTitles && f.allowedJobTitles.length > 0;
+
+      const isRankAllowed = 
+        (f.allowedPositionFromRank == null || userRank <= f.allowedPositionFromRank) &&
+        (f.allowedPositionToRank == null || userRank >= f.allowedPositionToRank);
+
+      const isJobAllowed = 
+        !f.allowedJobTitles || 
+        f.allowedJobTitles.length === 0 || 
+        f.allowedJobTitles.includes(userJobTitle);
+
+      let isGeneralRuleAllowed = true;
+      if (hasRankConstraint && hasJobConstraint) {
+        isGeneralRuleAllowed = isRankAllowed || isJobAllowed;
+      } else if (hasRankConstraint) {
+        isGeneralRuleAllowed = isRankAllowed;
+      } else if (hasJobConstraint) {
+        isGeneralRuleAllowed = isJobAllowed;
       }
-      if (f.allowedPositionToRank != null && userRank < f.allowedPositionToRank) {
+
+      // 전체 판정: 예외 사원이거나, 부서 프리패스 통과거나, 일반 자격 조건 만족 시 허용
+      const isDrafterAllowed = isUserExcepted || isDeptExcepted || isGeneralRuleAllowed;
+
+      if (!isDrafterAllowed) {
         disabledCodes.add(f.code);
-        continue;
-      }
-      if (f.allowedDeptIds && f.allowedDeptIds.length > 0) {
-        if (!userDeptId || !f.allowedDeptIds.includes(userDeptId)) {
-          disabledCodes.add(f.code);
-          continue;
-        }
       }
     }
     return disabledCodes;
-  }, [forms, me.position, me.dept, org]);
+  }, [forms, me.position, me.dept, me.jobTitle, me.id, org]);
 
   useEffect(() => {
     if (disabledFormCodes.has(code)) {
