@@ -11,7 +11,7 @@ const f = (field: Partial<FormField> & Pick<FormField, 'key' | 'label' | 'type'>
   required: false, options: [], placeholder: '', width: 'full', section: '', isAmountKey: false, visibleIf: null, isTabSelector: false, isSecret: false, tabOverrides: {}, ...field,
 });
 
-export const APPROVAL_FORM_SEED: ApprovalForm[] = [
+const SEED_RAW: any[] = [
   // ── [인사] 기본 및 커스텀 ──
   {
     id: '기안', code: '기안', name: '기안서', icon: '📝', docTitle: '기 안 서',
@@ -258,3 +258,10 @@ export const APPROVAL_FORM_SEED: ApprovalForm[] = [
     ],
   },
 ];
+
+export const APPROVAL_FORM_SEED: ApprovalForm[] = SEED_RAW.map((form) => ({
+  allowedJobTitles: [],
+  allowedDeptIds: [],
+  allowedUserIds: [],
+  ...form,
+}));

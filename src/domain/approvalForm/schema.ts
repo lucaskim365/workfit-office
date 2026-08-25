@@ -102,6 +102,10 @@ export const approvalFormSchema = z.object({
   allowedPositionToRank: z.number().nullable().optional(),
   /** 기안 가능한 부서 ID 목록 (null/빈 배열 이면 모든 부서 가능) */
   allowedDeptIds: z.array(z.string()).nullable().optional(),
+  /** 기안 가능한 직책 목록 (null/빈 배열 이면 모든 직책 가능) */
+  allowedJobTitles: z.array(z.string()).nullable().optional(),
+  /** 기안 자격을 예외 허용하는 개별 사용자 ID 목록 */
+  allowedUserIds: z.array(z.string()).nullable().optional(),
   /** 보존연한 */
   preservationPeriod: z.string().nullable().optional(),
   /** 기본 보안 등급 */
