@@ -22,7 +22,7 @@ export const DOC_TYPES = ['기안', '품의', '지출결의', '휴가'] as const
 /** 문서 상태(§4.4 상태머신). */
 export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제', '긴급 조치 사후 검토 반려', '시행대기', '시행반송'] as const;
 /** 결재 구분 — 각 결재선 노드의 역할(§4.2). */
-export const STEP_KINDS = ['결재', '참조', '전결', '대결'] as const;
+export const STEP_KINDS = ['결재', '합의', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
 export const STEP_DECISIONS = ['대기', '승인', '반려', '보류'] as const;
 /** 휴가 종류(§5.4). */

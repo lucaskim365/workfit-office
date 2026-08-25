@@ -53,7 +53,7 @@ function Stamp({ step, name, sealUrl, isSignature, isPostApproval }: { step: App
     );
   if (step.decision === '반려')
     return <span className="grid h-[40px] w-[40px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[10px] font-bold text-[#c0392b]">반려</span>;
-  if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">보류<br />{name}</span>;
+  if (step.decision === '보류') return <span className="text-[10px] font-semibold text-[#888]">{step.kind === '합의' ? '협의요청' : '보류'}<br />{name}</span>;
 
   return <span className="text-[12px] font-bold text-[#ccc] select-none">{step.kind}</span>;
 }
@@ -74,29 +74,69 @@ export function ApprovalStampTable({
   isPostApproval?: boolean;
 }) {
   if (steps.length === 0) return null;
-  return (
-    <div className="flex shrink-0 border border-[#333] text-center">
-      <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333]">결재</div>
-      <div className="flex">
-        {steps.map((s) => {
-          const finalName = s.approverName || nameOf(s.approverId);
-          const finalPos = s.approverPos || posOf(s.approverId);
-          const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
-          const finalSealUrl = s.signType
-            ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
-            : sealOf(s.approverId);
 
-          return (
-            <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
-              <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
-              <div className="grid h-[52px] place-items-center px-0.5">
-                <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} isPostApproval={isPostApproval} />
-              </div>
-              <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
-            </div>
-          );
-        })}
-      </div>
+  const approvalSteps = steps.filter((s) => s.kind !== '합의');
+  const agreementSteps = steps.filter((s) => s.kind === '합의');
+
+  return (
+    <div className="flex items-start justify-end gap-3.5 shrink-0">
+      {/* 🤝 합의(협조) 테이블: 합의 단계가 있을 때만 좌측에 렌더링 */}
+      {agreementSteps.length > 0 && (
+        <div className="flex shrink-0 border border-[#333] text-center bg-white">
+          <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333] bg-[#f8f9fa] select-none">
+            합의
+          </div>
+          <div className="flex">
+            {agreementSteps.map((s) => {
+              const finalName = s.approverName || nameOf(s.approverId);
+              const finalPos = s.approverPos || posOf(s.approverId);
+              const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
+              const finalSealUrl = s.signType
+                ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
+                : sealOf(s.approverId);
+
+              return (
+                <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
+                  <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
+                  <div className="grid h-[52px] place-items-center px-0.5">
+                    <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} isPostApproval={isPostApproval} />
+                  </div>
+                  <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ⚖️ 결재 테이블: 직속 결재선 우측에 렌더링 */}
+      {approvalSteps.length > 0 && (
+        <div className="flex shrink-0 border border-[#333] text-center bg-white">
+          <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333] bg-[#f8f9fa] select-none">
+            결재
+          </div>
+          <div className="flex">
+            {approvalSteps.map((s) => {
+              const finalName = s.approverName || nameOf(s.approverId);
+              const finalPos = s.approverPos || posOf(s.approverId);
+              const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
+              const finalSealUrl = s.signType
+                ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
+                : sealOf(s.approverId);
+
+              return (
+                <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
+                  <div className="border-b border-[#333] bg-[#f2f2f2] py-0.5 text-[9px] font-bold text-[#333]">{finalPos || ' '}</div>
+                  <div className="grid h-[52px] place-items-center px-0.5">
+                    <Stamp step={s} name={finalName} sealUrl={finalSealUrl || ''} isSignature={finalIsSignature} isPostApproval={isPostApproval} />
+                  </div>
+                  <div className="border-t border-[#333] py-[1px] text-[8px] text-[#666]">{(s.decidedAt ? shortDate(s.decidedAt) : ' ') || ' '}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

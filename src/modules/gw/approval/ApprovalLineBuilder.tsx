@@ -64,6 +64,7 @@ export function ApprovalLineBuilder({
   amount,
   docData,
   bottomSlot,
+  isAgreementEnabled = false,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
@@ -72,6 +73,7 @@ export function ApprovalLineBuilder({
   amount: number | null;
   docData?: Record<string, any> | null;
   bottomSlot?: React.ReactNode;
+  isAgreementEnabled?: boolean;
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
@@ -89,6 +91,15 @@ export function ApprovalLineBuilder({
   >(null);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
+
+  const allowedKinds = useMemo(() => {
+    return STEP_KINDS.filter((k) => k !== '합의' || isAgreementEnabled);
+  }, [isAgreementEnabled]);
+
+  const allowedParallelKinds = useMemo(() => {
+    return STEP_KINDS.filter((k) => k !== '전결' && (k !== '합의' || isAgreementEnabled));
+  }, [isAgreementEnabled]);
+
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const deptPosOf = (id: string) => {
     const u = org.userById(id);
@@ -342,7 +353,7 @@ export function ApprovalLineBuilder({
                                 onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
                                 className={'shrink-0 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[10px] font-semibold outline-none ' + KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}
                               >
-                                {STEP_KINDS.filter((k) => k !== '전결').map((k) => (
+                                {allowedParallelKinds.map((k) => (
                                   <option key={k} value={k}>{k}</option>
                                 ))}
                               </select>
@@ -449,7 +460,7 @@ export function ApprovalLineBuilder({
                   onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
                   className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
                 >
-                  {STEP_KINDS.map((k) => (
+                  {allowedKinds.map((k) => (
                     <option key={k} value={k}>{k}</option>
                   ))}
                 </select>

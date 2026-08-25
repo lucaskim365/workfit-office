@@ -93,6 +93,11 @@ function ApprovalDraftInner({
   const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [isWideScreen, setIsWideScreen] = useState(true);
+  const [isAgreementEnabled, setIsAgreementEnabled] = useState(false);
+
+  useEffect(() => {
+    approvalProcessRepo.isOptionEnabled('dept_agreement').then(setIsAgreementEnabled);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1268,6 +1273,7 @@ function ApprovalDraftInner({
                 docType={code}
                 amount={amountNum}
                 docData={values}
+                isAgreementEnabled={isAgreementEnabled}
                 bottomSlot={
                   <DraftRecipientSection
                     recipients={recipients}
@@ -1299,6 +1305,7 @@ function ApprovalDraftInner({
               docType={code}
               amount={amountNum}
               docData={values}
+              isAgreementEnabled={isAgreementEnabled}
             />
           </div>
         </div>
