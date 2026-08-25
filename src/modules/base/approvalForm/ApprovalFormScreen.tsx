@@ -64,7 +64,7 @@ const blankForm = (folderId: string | null = null): ApprovalForm => ({
 });
 
 export default function ApprovalFormScreen() {
-  const { data: forms = [], isLoading } = useApprovalForms();
+  const { data: forms = [] } = useApprovalForms();
   const { data: folders = [] } = useApprovalFolders();
   const upsert = useUpsertApprovalForm();
   const remove = useRemoveApprovalForm();
@@ -77,6 +77,14 @@ export default function ApprovalFormScreen() {
 
   // 현재 선택된 폴더 필터 (null 이면 전체, 'root' 이면 루트 미지정 서식들)
   const [selFolderId, setSelFolderId] = useState<string | null>(null);
+
+  // 폴더 & 서식 통합 트리뷰의 각 폴더별 열림/닫힘 아코디언 상태
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({
+    root: true, // 루트(미지정) 폴더는 기본적으로 열어둡니다.
+  });
+  const toggleFolder = (folderId: string) => {
+    setOpenFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
 
   // 폴더 컨텍스트 메뉴 상태
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: ApprovalFolder } | null>(null);
@@ -172,13 +180,6 @@ export default function ApprovalFormScreen() {
     }
   };
 
-  // 폴더별 필터링된 서식 리스트
-  const filteredForms = useMemo(() => {
-    if (selFolderId === null) return forms;
-    if (selFolderId === 'root') return forms.filter((f) => !f.folderId);
-    return forms.filter((f) => f.folderId === selFolderId);
-  }, [forms, selFolderId]);
-
   return (
     <div className="flex flex-col gap-3.5 relative">
       <div className="flex items-end justify-between">
@@ -189,73 +190,112 @@ export default function ApprovalFormScreen() {
         <button onClick={() => { setSel(blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null)); setMsg(''); }} className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90">+ 서식 추가</button>
       </div>
 
-      <div className="grid grid-cols-[200px_280px_1fr] items-start gap-3.5">
-        {/* 폴더 목록 */}
+      <div className="grid grid-cols-[280px_1fr] items-start gap-3.5">
+        {/* 폴더 & 서식 통합 트리뷰 패널 */}
         <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2 text-[11.5px] font-bold text-ink2">
-            <span>폴더 분류</span>
-            <button onClick={addFolder} className="text-[10px] text-teal hover:underline">+ 폴더</button>
+          <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">
+            <span>폴더 & 서식 목록</span>
+            <button type="button" onClick={addFolder} className="text-[10px] text-teal hover:underline font-bold">+ 폴더 추가</button>
           </div>
-          <div className="p-1.5 space-y-0.5">
-            <button
-              onClick={() => setSelFolderId(null)}
-              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === null ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
-            >
-              <span>📁 전체 서식</span>
-              <span className="text-[10.5px] opacity-60">{forms.length}</span>
-            </button>
-            <button
-              onClick={() => setSelFolderId('root')}
-              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] ${selFolderId === 'root' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
-            >
-              <span>📁 루트(미지정)</span>
-              <span className="text-[10.5px] opacity-60">{forms.filter(f => !f.folderId).length}</span>
-            </button>
-            <div className="my-1 border-t border-border-hi" />
-            {localFolders.map((f, idx) => (
+          <div className="p-2 space-y-1 overflow-y-auto max-h-[75vh]">
+            
+            {/* 1. 루트(미지정) 폴더 */}
+            <div className="space-y-0.5">
               <button
-                key={f.id}
-                draggable
-                onDragStart={() => handleDragStart(idx)}
-                onDragOver={(e) => handleDragOver(e, idx)}
-                onDragEnd={handleDragEnd}
-                onClick={() => setSelFolderId(f.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
-                  setFolderMenu({ x: e.clientX / zoom, y: e.clientY / zoom, folder: f });
-                }}
-                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] cursor-grab active:cursor-grabbing transition-all ${
-                  selFolderId === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'
-                } ${draggedIdx === idx ? 'opacity-30 border border-dashed border-teal scale-95' : ''}`}
+                type="button"
+                onClick={() => toggleFolder('root')}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12px] font-bold text-ink2 hover:bg-panel-alt transition-colors"
               >
-                <span className="truncate">📁 {f.name}</span>
-                <span className="text-[10.5px] opacity-60">
-                  {forms.filter((form) => form.folderId === f.id).length}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 서식 목록 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">서식 목록 <span className="text-ink3">· {filteredForms.length}</span></div>
-          {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
-          {!isLoading && filteredForms.length === 0 && <div className="py-12 text-center text-[12.5px] text-ink3">서식이 없습니다.</div>}
-          {filteredForms.map((f) => (
-            <button key={f.id} onClick={() => { setSel(f); setMsg(''); }} className={`flex w-full items-center gap-2 border-b border-border px-3.5 py-2.5 text-left ${sel?.id === f.id ? 'bg-teal-soft/60' : 'hover:bg-panel-alt'}`}>
-              <span className="text-[16px]">{f.icon}</span>
-              <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
-                  <span className="truncate text-[12.5px] font-semibold text-ink">{f.name}</span>
-                  {f.system && <span className="rounded bg-ink3/15 px-1 text-[9px] font-bold text-ink3">기본</span>}
-                  {!f.active && <span className="text-[9.5px] text-ink3">중지</span>}
+                  <span className="text-[9px] text-ink3 w-3 select-none">{openFolders['root'] ? '▼' : '▶'}</span>
+                  <span>📁 루트 (미지정)</span>
                 </span>
-                <span className="block text-[10.5px] text-ink3">{f.code} · {f.fields.length}필드</span>
-              </span>
-            </button>
-          ))}
+                <span className="text-[10.5px] opacity-60 font-normal">{forms.filter(f => !f.folderId).length}</span>
+              </button>
+              {openFolders['root'] && (
+                <div className="pl-4 border-l border-border/60 ml-3.5 my-1 space-y-0.5">
+                  {forms.filter(f => !f.folderId).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => { setSel(f); setMsg(''); }}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                        sel?.id === f.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink hover:bg-panel-alt'
+                      }`}
+                    >
+                      <span className="text-[14px]">{f.icon}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12px]">
+                        {f.name}
+                        {f.system && <span className="ml-1 rounded bg-ink3/10 px-1 py-0.5 text-[8.5px] font-bold text-ink3">기본</span>}
+                        {!f.active && <span className="ml-1 text-[9px] text-red-500 font-bold">중지</span>}
+                      </span>
+                    </button>
+                  ))}
+                  {forms.filter(f => !f.folderId).length === 0 && (
+                    <div className="py-2 pl-2 text-[10.5px] text-ink3">등록된 서식이 없습니다.</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="my-1 border-t border-border-hi" />
+
+            {/* 2. 각 폴더 트리 */}
+            {localFolders.map((f, idx) => {
+              const folderForms = forms.filter(form => form.folderId === f.id);
+              const isOpen = !!openFolders[f.id];
+              return (
+                <div key={f.id} className="space-y-0.5">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => toggleFolder(f.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
+                      setFolderMenu({ x: e.clientX / zoom, y: e.clientY / zoom, folder: f });
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12px] font-bold cursor-grab active:cursor-grabbing transition-all ${
+                      draggedIdx === idx ? 'opacity-30 border border-dashed border-teal scale-95' : 'text-ink2 hover:bg-panel-alt'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span className="text-[9px] text-ink3 w-3 select-none">{isOpen ? '▼' : '▶'}</span>
+                      <span className="truncate">📁 {f.name}</span>
+                    </span>
+                    <span className="text-[10.5px] opacity-60 font-normal">{folderForms.length}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="pl-4 border-l border-border/60 ml-3.5 my-1 space-y-0.5">
+                      {folderForms.map((formItem) => (
+                        <button
+                          key={formItem.id}
+                          type="button"
+                          onClick={() => { setSel(formItem); setMsg(''); }}
+                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                            sel?.id === formItem.id ? 'bg-teal-soft font-bold text-teal' : 'text-ink hover:bg-panel-alt'
+                          }`}
+                        >
+                          <span className="text-[14px]">{formItem.icon}</span>
+                          <span className="min-w-0 flex-1 truncate text-[12px]">
+                            {formItem.name}
+                            {formItem.system && <span className="ml-1 rounded bg-ink3/10 px-1 py-0.5 text-[8.5px] font-bold text-ink3">기본</span>}
+                            {!formItem.active && <span className="ml-1 text-[9px] text-red-500 font-bold">중지</span>}
+                          </span>
+                        </button>
+                      ))}
+                      {folderForms.length === 0 && (
+                        <div className="py-2 pl-2 text-[10.5px] text-ink3">등록된 서식이 없습니다.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* 편집기 + 미리보기 */}
@@ -302,15 +342,12 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
   const org = useOrgTree();
   const { depts = [], users = [] } = org;
   const [selTab, setSelTab] = useState('공통');
-  const [fieldsExpanded, setFieldsExpanded] = useState(false);
-  const [recipientExpanded, setRecipientExpanded] = useState(false);
 
   // 룰 데이터 쿼리 및 뮤테이션 주입
   const { data: rules = [], isLoading: rulesLoading } = useRouteRules();
   const upsertRule = useUpsertRouteRule();
   const removeRule = useRemoveRouteRule();
 
-  const [rulesExpanded, setRulesExpanded] = useState(false);
   const [selRule, setSelRule] = useState<ApprovalRouteRule | null>(null);
   const [ruleMsg, setRuleMsg] = useState('');
 
@@ -319,6 +356,9 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
       (r) => r.formId === form.id || (r.formId === null && r.docType === form.code)
     ).sort((a, b) => a.priority - b.priority);
   }, [rules, form.id, form.code]);
+
+  // 서식편집 / 서식설정 / 결재규칙 설정을 제어할 대분류 탭 상태
+  const [activeMenuTab, setActiveMenuTab] = useState<'edit' | 'settings' | 'rules'>('edit');
 
   const saveRule = async () => {
     if (!selRule) return;
@@ -375,419 +415,422 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
 
   return (
     <div className="space-y-4">
+      {/* 서식 편집 헤더 */}
       <div className="flex items-center justify-between">
         <div className="text-[13px] font-bold text-ink">{form.id ? `서식 편집 · ${form.code}` : '새 서식'}</div>
         <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={form.active} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
       </div>
 
-      {/* 기본 정보 */}
-      <div className="grid grid-cols-4 gap-2">
-        <F label="아이콘"><input value={form.icon} onChange={(e) => set({ icon: e.target.value })} className={`${inp}`} /></F>
-        <F label="서식명"><input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="출장신청서" className={`${inp}`} /></F>
-        <F label="코드(문서유형)"><input value={form.code} onChange={(e) => set({ code: e.target.value })} placeholder="출장" className={`${inp}`} /></F>
-        <F label="소속 폴더">
-          <select
-            value={form.folderId || ''}
-            onChange={(e) => set({ folderId: e.target.value || null })}
-            className={`${inp}`}
-          >
-            <option value="">루트 (미지정)</option>
-            {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </F>
-        <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp}`} /></F>
-        <F label="보존연한">
-          <select
-            value={form.preservationPeriod || '5년'}
-            onChange={(e) => set({ preservationPeriod: e.target.value })}
-            className={`${inp}`}
-          >
-            <option value="1년">1년</option>
-            <option value="3년">3년</option>
-            <option value="5년">5년</option>
-            <option value="10년">10년</option>
-            <option value="영구">영구</option>
-          </select>
-        </F>
-        <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
-        <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
-      </div>
-
-      {/* 기본 수신(시행)처 설정 */}
-      <div className="mt-4 border-t border-border pt-4">
+      {/* 탭 네비게이션 */}
+      <div className="flex border-b border-border mb-2">
         <button
           type="button"
-          onClick={() => setRecipientExpanded(!recipientExpanded)}
-          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+          onClick={() => setActiveMenuTab('edit')}
+          className={`px-4 py-2 text-[12.5px] font-bold border-b-2 transition-all ${
+            activeMenuTab === 'edit'
+              ? 'border-teal text-teal font-extrabold'
+              : 'border-transparent text-ink3 hover:text-ink hover:border-border'
+          }`}
         >
-          <span>📨 기본 수신(시행)처 설정</span>
-          <span className="text-[11px] text-teal font-semibold">
-            {recipientExpanded ? '접기 ▲' : '펼치기 ▼'}
-          </span>
+          📝 서식 편집
         </button>
-
-        {recipientExpanded && (
-          <div className="mt-3 grid grid-cols-12 gap-3 items-center border border-dashed border-teal/40 bg-teal-soft/10 p-4 rounded-xl">
-            <div className="col-span-4 flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2">
-              <input
-                type="checkbox"
-                id="recipientDrafter"
-                checked={form.recipientDrafter || false}
-                onChange={(e) => set({ recipientDrafter: e.target.checked })}
-                className="h-4 w-4 rounded border-border-hi text-teal focus:ring-teal"
-              />
-              <label htmlFor="recipientDrafter" className="text-[12.5px] font-semibold text-ink cursor-pointer select-none">
-                👤 기안자 본인을 기본 수신처로 지정
-              </label>
-            </div>
-
-            <div className="col-span-4">
-              <F label="🏢 기본 수신 부서">
-                <select
-                  value={form.recipientDeptId || ''}
-                  onChange={(e) => set({ recipientDeptId: e.target.value || null })}
-                  className={`${inp}`}
-                >
-                  <option value="">(없음)</option>
-                  {depts.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </F>
-            </div>
-
-            <div className="col-span-4">
-              <F label="👤 기본 수신 사원">
-                <select
-                  value={form.recipientUserId || ''}
-                  onChange={(e) => set({ recipientUserId: e.target.value || null })}
-                  className={`${inp}`}
-                >
-                  <option value="">(없음)</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} {u.position} ({u.dept})
-                    </option>
-                  ))}
-                </select>
-              </F>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 🔒 서식 기본 보안 정책 설정 */}
-      <div className="mt-4 border-t border-border pt-4">
-        <div className="mb-2 text-[12px] font-bold text-ink select-none flex items-center gap-1">
-          <span>🔒 서식 기본 보안 정책 설정</span>
-        </div>
-
-        <div className="mt-3 grid grid-cols-12 gap-3 items-start border border-dashed border-red-500/40 bg-red-500/5 p-4 rounded-xl">
-          <div className="col-span-6">
-            <F label="기본 보안 등급">
-              <select
-                value={form.securityLevel || '일반'}
-                onChange={(e) => set({ securityLevel: e.target.value as any })}
-                className={`${inp} font-semibold ${
-                  form.securityLevel === '극비'
-                    ? 'text-red-600 bg-red-500/5'
-                    : form.securityLevel === '대외비'
-                    ? 'text-amber-600 bg-amber-500/5'
-                    : 'text-ink'
-                }`}
-              >
-                <option value="일반">일반 문서</option>
-                <option value="대외비">🔒 대외비</option>
-                <option value="극비">⛔ 극비</option>
-              </select>
-            </F>
-            <div className="text-[9.5px] text-ink3 mt-1">서식을 기안할 때 적용될 문서의 기본 물리적 보안 등급입니다.</div>
-          </div>
-
-          <div className="col-span-6">
-            <F label="기본 공개 범위">
-              <select
-                value={form.visibility || '부서'}
-                onChange={(e) => set({ visibility: e.target.value as any })}
-                className={`${inp} font-semibold text-ink`}
-              >
-                <option value="전사">전사 공개</option>
-                <option value="부서">부서 공개</option>
-                <option value="비공개">비공개</option>
-              </select>
-            </F>
-            <div className="text-[9.5px] text-ink3 mt-1">부서 문서함/전사 문서함 노출 여부 및 목록 탐색 범위를 한정합니다.</div>
-          </div>
-        </div>
-      </div>
-
-
-
-
-      {/* 필드 빌더 */}
-      <div className="mt-4 border-t border-border pt-4">
         <button
           type="button"
-          onClick={() => setFieldsExpanded(!fieldsExpanded)}
-          className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+          onClick={() => setActiveMenuTab('settings')}
+          className={`px-4 py-2 text-[12.5px] font-bold border-b-2 transition-all ${
+            activeMenuTab === 'settings'
+              ? 'border-teal text-teal font-extrabold'
+              : 'border-transparent text-ink3 hover:text-ink hover:border-border'
+          }`}
         >
-          <span>📋 입력 필드 설정 ({form.fields.length}개)</span>
-          <span className="text-[11px] text-teal font-semibold">
-            {fieldsExpanded ? '접기 ▲' : '펼치기 ▼'}
-          </span>
+          ⚙️ 서식 설정 (보안·수신처)
         </button>
-
-        {fieldsExpanded && (
-          <div className="mt-3 space-y-3">
-            {tabSelectorField && (
-              <div className="mb-3 flex flex-wrap gap-1 border-b border-border pb-1">
-                {['공통', ...tabSelectorField.options].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setSelTab(tab)}
-                    className={`rounded-t-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                      selTab === tab
-                        ? 'bg-teal text-white'
-                        : 'bg-panel-alt text-ink2 hover:bg-border/40'
-                    }`}
-                  >
-                    {tab === '공통' ? '🏢 공통 양식' : `📌 ${tab}`}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              {form.fields
-                .map((f, i) => ({ f, i }))
-                .filter(({ f }) => {
-                  if (selTab === '공통') return !f.visibleIf;
-                  // 선택지 탭: 공통 필드 + 해당 탭 전용 필드 모두 표시
-                  return !f.visibleIf || f.visibleIf === `${tabSelectorField?.key}:${selTab}`;
-                })
-                .map(({ f, i }) => {
-                  const isCommonInTab = selTab !== '공통' && !f.visibleIf;
-                  // 공통 필드를 선택지 탭에서 볼 때는 tabOverrides에서 effective 값 읽기
-                  const override: { width?: 'full' | 'half'; section?: string } =
-                    isCommonInTab ? (f.tabOverrides?.[selTab] ?? {}) : {};
-                  const effectiveWidth = (override.width ?? f.width) as 'full' | 'half';
-                  const effectiveSection = override.section ?? f.section;
-
-                  const setTabOverride = (patch: { width?: 'full' | 'half'; section?: string }) => {
-                    const newOverrides = {
-                      ...(f.tabOverrides ?? {}),
-                      [selTab]: { ...(f.tabOverrides?.[selTab] ?? {}), ...patch },
-                    };
-                    setField(i, { tabOverrides: newOverrides });
-                  };
-
-                  return (
-                    <div
-                      key={i}
-                      className={`rounded-lg border px-2 py-1.5 ${
-                        isCommonInTab
-                          ? 'border-border/50 bg-panel/60'
-                          : 'border-border bg-panel-alt'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">{i + 1}</span>
-                        {isCommonInTab && (
-                          <span className="rounded bg-border px-1 py-0.5 text-[9px] font-bold text-ink3">공통</span>
-                        )}
-                        <input
-                          value={f.label}
-                          onChange={(e) => setField(i, { label: e.target.value })}
-                          placeholder="라벨"
-                          disabled={isCommonInTab}
-                          className={`w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        />
-                        <input
-                          value={f.key}
-                          onChange={(e) => setField(i, { key: e.target.value })}
-                          placeholder="key"
-                          disabled={isCommonInTab}
-                          className={`w-20 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-mono text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        />
-                        <select
-                          value={f.type}
-                          onChange={(e) => setField(i, { type: e.target.value as FieldType })}
-                          disabled={isCommonInTab}
-                          className={`rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none ${isCommonInTab ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        {/* width: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
-                        <select
-                          value={effectiveWidth}
-                          onChange={(e) => {
-                            const val = e.target.value as 'half' | 'full';
-                            if (isCommonInTab) setTabOverride({ width: val });
-                            else setField(i, { width: val });
-                          }}
-                          className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                        >
-                          <option value="full">전체</option><option value="half">2열</option>
-                        </select>
-                        {/* section: 공통 필드를 탭에서 볼 때는 tabOverrides에 저장 */}
-                        <input
-                          value={effectiveSection}
-                          onChange={(e) => {
-                            if (isCommonInTab) setTabOverride({ section: e.target.value });
-                            else setField(i, { section: e.target.value });
-                          }}
-                          placeholder="섹션"
-                          className="w-16 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                        />
-                        {!isCommonInTab && (
-                          <select
-                            value={f.visibleIf ?? ''}
-                            onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
-                            className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
-                          >
-                            <option value="">언제나 노출</option>
-                            {form.fields
-                              .filter((other) => other.type === '선택' && other.key && other.label)
-                              .flatMap((other) =>
-                                other.options.map((opt) => (
-                                  <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
-                                    [{other.label}] "{opt}" 일 때
-                                  </option>
-                                ))
-                              )}
-                          </select>
-                        )}
-                        <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
-                        <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer" title="열람 권한에 따라 텍스트 마스킹 및 블러 처리됩니다.">
-                          <input
-                            type="checkbox"
-                            checked={f.isSecret ?? false}
-                            onChange={(e) => setField(i, { isSecret: e.target.checked })}
-                            className="h-3 w-3"
-                          />
-                          보안필드
-                        </label>
-                        {f.type === '선택' && (
-                          <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={f.isTabSelector ?? false}
-                              onChange={(e) => setField(i, { isTabSelector: e.target.checked })}
-                              className="h-3 w-3"
-                            />
-                            탭분할
-                          </label>
-                        )}
-                        <div className="ml-auto flex items-center gap-1">
-                          {!isCommonInTab && <button onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>}
-                          {!isCommonInTab && <button onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>}
-                          {!isCommonInTab && <button onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
-                        </div>
-                      </div>
-                      {(f.type === '선택' || f.type === '다중선택') && (
-                        <div className="mt-1 w-full">
-                          <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
-                          <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-            <button onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
-            <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>
-          </div>
-        )}
-      </div>
-
-      {/* ⚙️ 해당 서식 전용 결재 규칙 설정 */}
-      {form.id && (
-        <div className="mt-4 border-t border-border pt-4">
+        {form.id && (
           <button
             type="button"
-            onClick={() => setRulesExpanded(!rulesExpanded)}
-            className="mb-2 flex w-full items-center justify-between text-[12px] font-bold text-ink hover:text-teal select-none"
+            onClick={() => setActiveMenuTab('rules')}
+            className={`px-4 py-2 text-[12.5px] font-bold border-b-2 transition-all ${
+              activeMenuTab === 'rules'
+                ? 'border-teal text-teal font-extrabold'
+                : 'border-transparent text-ink3 hover:text-ink hover:border-border'
+            }`}
           >
-            <span>⚙️ 해당 서식 전용 결재 규칙 설정 ({formRules.length}개)</span>
-            <span className="text-[11px] text-teal font-semibold">
-              {rulesExpanded ? '접기 ▲' : '펼치기 ▼'}
-            </span>
+            ⚖️ 결재규칙 설정 ({formRules.length})
           </button>
+        )}
+      </div>
 
-          {rulesExpanded && (
+      {/* 탭 내용 분기 */}
+      {activeMenuTab === 'edit' && (
+        <div className="space-y-4">
+          {/* 기본 정보 */}
+          <div className="grid grid-cols-4 gap-2">
+            <F label="아이콘"><input value={form.icon} onChange={(e) => set({ icon: e.target.value })} className={`${inp}`} /></F>
+            <F label="서식명"><input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="출장신청서" className={`${inp}`} /></F>
+            <F label="코드(문서유형)"><input value={form.code} onChange={(e) => set({ code: e.target.value })} placeholder="출장" className={`${inp}`} /></F>
+            <F label="소속 폴더">
+              <select
+                value={form.folderId || ''}
+                onChange={(e) => set({ folderId: e.target.value || null })}
+                className={`${inp}`}
+              >
+                <option value="">루트 (미지정)</option>
+                {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </F>
+            <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp}`} /></F>
+            <F label="보존연한">
+              <select
+                value={form.preservationPeriod || '5년'}
+                onChange={(e) => set({ preservationPeriod: e.target.value })}
+                className={`${inp}`}
+              >
+                <option value="1년">1년</option>
+                <option value="3년">3년</option>
+                <option value="5년">5년</option>
+                <option value="10년">10년</option>
+                <option value="영구">영구</option>
+              </select>
+            </F>
+            <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
+            <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
+          </div>
+
+          {/* 입력 필드 설정 (상시 펼침) */}
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="mb-2 text-[12px] font-bold text-ink select-none">
+              📋 입력 필드 설정 ({form.fields.length}개)
+            </div>
+
             <div className="mt-3 space-y-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10.5px] text-ink3">이 서식 기안 시 조건에 맞춰 동적 결재선을 도출하는 규칙들입니다.</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelRule(blankRule(form.id, form.code));
-                    setRuleMsg('');
-                  }}
-                  className="rounded bg-teal px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90"
-                >
-                  + 규칙 추가
-                </button>
-              </div>
-
-              {rulesLoading ? (
-                <div className="py-4 text-center text-[12px] text-ink3">로딩 중...</div>
-              ) : formRules.length === 0 ? (
-                <div className="py-8 text-center text-[11.5px] border border-dashed border-border rounded-xl text-ink3">
-                  등록된 서식 전용 규칙이 없습니다. 기본 전결 규칙이나 폴백이 적용됩니다.
+              {tabSelectorField && (
+                <div className="mb-3 flex flex-wrap gap-1 border-b border-border pb-1">
+                  {['공통', ...tabSelectorField.options].map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setSelTab(tab)}
+                      className={`rounded-t-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                        selTab === tab
+                          ? 'bg-teal text-white'
+                          : 'text-ink2 hover:bg-panel-alt'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {formRules.map((r) => {
-                    const getScopeLabel = (rule: ApprovalRouteRule) =>
-                      rule.deptScope.kind === '전체' ? '전체부서'
-                        : rule.deptScope.kind === '부서유형' ? `유형=${rule.deptScope.deptType}`
-                          : `${rule.deptScope.kind}=${org.depts.find(d => d.id === rule.deptScope.deptId)?.name ?? rule.deptScope.deptId}`;
+              )}
 
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                {form.fields
+                  .map((f, i) => ({ f, i }))
+                  .filter(({ f }) => {
+                    if (selTab === '공통') return !f.visibleIf;
+                    return f.visibleIf === `${tabSelectorField?.key}:${selTab}`;
+                  })
+                  .map(({ f, i }) => {
+                    const isCommonInTab = f.type === '선택' && f.isTabSelector;
                     return (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-2 hover:border-teal/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="grid h-5 min-w-5 place-items-center rounded bg-ink3/15 px-1 text-[10px] font-bold text-ink2">
-                            {r.priority}
-                          </span>
-                          <span className="font-semibold text-[12.5px] text-ink truncate">{r.name}</span>
-                          <span className="text-[10px] text-ink3">
-                            ({getScopeLabel(r)} · {r.steps.length}단계)
-                          </span>
-                          {!r.active && (
-                            <span className="rounded bg-red-100 px-1 py-0.5 text-[9px] font-bold text-red-600">중지됨</span>
+                      <div key={i} className="rounded-lg border border-border bg-panel px-3 py-2.5 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            value={f.key}
+                            onChange={(e) => setField(i, { key: e.target.value })}
+                            placeholder="필드 key (영문)"
+                            className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11.5px] text-ink outline-none"
+                          />
+                          <input
+                            value={f.label}
+                            onChange={(e) => setField(i, { label: e.target.value })}
+                            placeholder="라벨 (한글)"
+                            className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11.5px] text-ink outline-none"
+                          />
+                          <select
+                            value={f.type}
+                            onChange={(e) => setField(i, { type: e.target.value as FieldType })}
+                            className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                          >
+                            {FIELD_TYPES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={f.placeholder}
+                            onChange={(e) => setField(i, { placeholder: e.target.value })}
+                            placeholder="placeholder / 테이블 스키마 JSON"
+                            className="w-32 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11.5px] text-ink outline-none"
+                          />
+                          <select
+                            value={f.width}
+                            onChange={(e) => setField(i, { width: e.target.value as FormField['width'] })}
+                            className="rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                          >
+                            <option value="full">100%</option>
+                            <option value="half">50%</option>
+                          </select>
+                          <input
+                            value={f.section ?? ''}
+                            onChange={(e) => setField(i, { section: e.target.value || '' })}
+                            placeholder="섹션명 (선택)"
+                            className="w-24 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11.5px] text-ink outline-none"
+                          />
+                          
+                          <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer" title="금액결재 규칙 대조 시 사용됩니다.">
+                            <input
+                              type="checkbox"
+                              checked={f.isAmountKey ?? false}
+                              onChange={(e) => setField(i, { isAmountKey: e.target.checked })}
+                              className="h-3 w-3"
+                            />
+                            금액키
+                          </label>
+
+                          {!isCommonInTab && (
+                            <select
+                              value={f.visibleIf ?? ''}
+                              onChange={(e) => setField(i, { visibleIf: e.target.value || null })}
+                              className="w-28 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] text-ink outline-none"
+                            >
+                              <option value="">언제나 노출</option>
+                              {form.fields
+                                .filter((other) => other.type === '선택' && other.key && other.label)
+                                .flatMap((other) =>
+                                  other.options.map((opt) => (
+                                    <option key={`${other.key}:${opt}`} value={`${other.key}:${opt}`}>
+                                      [{other.label}] "{opt}" 일 때
+                                    </option>
+                                  ))
+                                )}
+                            </select>
                           )}
+                          <label className="flex items-center gap-0.5 text-[10px] text-ink3"><input type="checkbox" checked={f.required} onChange={(e) => setField(i, { required: e.target.checked })} className="h-3 w-3" />필수</label>
+                          <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer" title="열람 권한에 따라 텍스트 마스킹 및 블러 처리됩니다.">
+                            <input
+                              type="checkbox"
+                              checked={f.isSecret ?? false}
+                              onChange={(e) => setField(i, { isSecret: e.target.checked })}
+                              className="h-3 w-3"
+                            />
+                            보안필드
+                          </label>
+                          {f.type === '선택' && (
+                            <label className="flex items-center gap-0.5 text-[10px] text-ink3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={f.isTabSelector ?? false}
+                                onChange={(e) => setField(i, { isTabSelector: e.target.checked })}
+                                className="h-3 w-3"
+                              />
+                              탭분할
+                            </label>
+                          )}
+                          <div className="ml-auto flex items-center gap-1">
+                            {!isCommonInTab && <button type="button" onClick={() => moveField(i, -1)} className="text-[9px] text-ink3 hover:text-ink">▲</button>}
+                            {!isCommonInTab && <button type="button" onClick={() => moveField(i, 1)} className="text-[9px] text-ink3 hover:text-ink">▼</button>}
+                            {!isCommonInTab && <button type="button" onClick={() => delField(i)} className="text-[12px] text-ink3 hover:text-red-500">✕</button>}
+                          </div>
                         </div>
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelRule(r);
-                              setRuleMsg('');
-                            }}
-                            className="rounded border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:bg-border/30"
-                          >
-                            수정
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => delRule(r.id)}
-                            className="rounded border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-500/5"
-                          >
-                            ✕
-                          </button>
-                        </div>
+                        {(f.type === '선택' || f.type === '다중선택') && (
+                          <div className="mt-1 w-full">
+                            <span className="text-[9.5px] text-ink3">옵션 목록 (쉼표 구분)</span>
+                            <OptionsInput value={f.options} onChange={(parsed) => setField(i, { options: parsed })} />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                </div>
-              )}
+              </div>
+              <button type="button" onClick={addField} className="mt-1.5 w-full rounded-lg border border-dashed border-border-hi py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal">+ 필드 추가</button>
+              <p className="mt-1 text-[10.5px] text-ink3">예약 key <b>body</b>(장문)=문서 본문 · 금액 필드에 <b>금액키</b> 지정 시 결재선 금액매칭에 사용.</p>
+            </div>
+          </div>
+
+          {/* 폼 미리보기 */}
+          <FormPreview form={form} onChangeField={setField} />
+        </div>
+      )}
+
+      {/* 탭 2: 서식 설정 */}
+      {activeMenuTab === 'settings' && (
+        <div className="space-y-6">
+          {/* 기본 수신(시행)처 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-4">
+            <div className="mb-3 text-[12.5px] font-bold text-ink">📨 기본 수신(시행)처 설정</div>
+            <div className="grid grid-cols-12 gap-3 items-center border border-dashed border-teal/40 bg-teal-soft/10 p-4 rounded-xl">
+              <div className="col-span-12 flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2">
+                <input
+                  type="checkbox"
+                  id="recipientDrafter"
+                  checked={form.recipientDrafter || false}
+                  onChange={(e) => set({ recipientDrafter: e.target.checked })}
+                  className="h-4 w-4 rounded border-border-hi text-teal focus:ring-teal"
+                />
+                <label htmlFor="recipientDrafter" className="text-[12.5px] font-semibold text-ink cursor-pointer select-none">
+                  👤 기안자 본인을 기본 수신처로 지정
+                </label>
+              </div>
+
+              <div className="col-span-6 mt-2">
+                <F label="🏢 기본 수신 부서">
+                  <select
+                    value={form.recipientDeptId || ''}
+                    onChange={(e) => set({ recipientDeptId: e.target.value || null })}
+                    className={`${inp}`}
+                  >
+                    <option value="">(없음)</option>
+                    {depts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </F>
+              </div>
+
+              <div className="col-span-6 mt-2">
+                <F label="👤 기본 수신 사원">
+                  <select
+                    value={form.recipientUserId || ''}
+                    onChange={(e) => set({ recipientUserId: e.target.value || null })}
+                    className={`${inp}`}
+                  >
+                    <option value="">(없음)</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} {u.position} ({u.dept})
+                      </option>
+                    ))}
+                  </select>
+                </F>
+              </div>
+            </div>
+          </div>
+
+          {/* 🔒 서식 기본 보안 정책 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-4">
+            <div className="mb-3 text-[12.5px] font-bold text-ink flex items-center gap-1">
+              <span>🔒 서식 기본 보안 정책 설정</span>
+            </div>
+
+            <div className="grid grid-cols-12 gap-3 items-start border border-dashed border-red-500/40 bg-red-500/5 p-4 rounded-xl">
+              <div className="col-span-6">
+                <F label="기본 보안 등급">
+                  <select
+                    value={form.securityLevel || '일반'}
+                    onChange={(e) => set({ securityLevel: e.target.value as any })}
+                    className={`${inp} font-semibold ${
+                      form.securityLevel === '극비'
+                        ? 'text-red-600 bg-red-500/5'
+                        : form.securityLevel === '대외비'
+                        ? 'text-amber-600 bg-amber-500/5'
+                        : 'text-ink'
+                    }`}
+                  >
+                    <option value="일반">일반 문서</option>
+                    <option value="대외비">🔒 대외비</option>
+                    <option value="극비">⛔ 극비</option>
+                  </select>
+                </F>
+                <div className="text-[9.5px] text-ink3 mt-1">서식을 기안할 때 적용될 문서의 기본 물리적 보안 등급입니다.</div>
+              </div>
+
+              <div className="col-span-6">
+                <F label="기본 공개 범위">
+                  <select
+                    value={form.visibility || '부서'}
+                    onChange={(e) => set({ visibility: e.target.value as any })}
+                    className={`${inp} font-semibold text-ink`}
+                  >
+                    <option value="전사">전사 공개</option>
+                    <option value="부서">부서 공개</option>
+                    <option value="비공개">비공개</option>
+                  </select>
+                </F>
+                <div className="text-[9.5px] text-ink3 mt-1">부서 문서함/전사 문서함 노출 여부 및 목록 탐색 범위를 한정합니다.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 탭 3: 결재규칙 설정 */}
+      {activeMenuTab === 'rules' && form.id && (
+        <div className="rounded-xl border border-border bg-panel p-4 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <div className="text-[13px] font-bold text-ink">⚖️ 해당 서식 전용 결재 규칙 설정 ({formRules.length}개)</div>
+              <div className="text-[10.5px] text-ink3 mt-0.5">이 서식 기안 시 기안자의 부서·직급 및 결재 조건에 매칭되어 작동할 결재선 규칙 목록입니다.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelRule(blankRule(form.id, form.code));
+                setRuleMsg('');
+              }}
+              className="rounded-lg bg-teal px-3 py-1.5 text-[11px] font-bold text-white hover:opacity-90"
+            >
+              + 규칙 추가
+            </button>
+          </div>
+
+          {rulesLoading ? (
+            <div className="py-8 text-center text-[12px] text-ink3">로딩 중...</div>
+          ) : formRules.length === 0 ? (
+            <div className="py-12 text-center text-[12px] border border-dashed border-border rounded-xl text-ink3">
+              등록된 서식 전용 규칙이 없습니다. 기본 전결 규칙이나 폴백이 적용됩니다.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {formRules.map((r) => {
+                const getScopeLabel = (rule: ApprovalRouteRule) =>
+                  rule.deptScope.kind === '전체' ? '전체부서'
+                    : rule.deptScope.kind === '부서유형' ? `유형=${rule.deptScope.deptType}`
+                      : `${rule.deptScope.kind}=${org.depts.find(d => d.id === rule.deptScope.deptId)?.name ?? rule.deptScope.deptId}`;
+
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between rounded-xl border border-border bg-panel px-4 py-3 hover:border-teal/30 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <span className="grid h-6 min-w-6 place-items-center rounded bg-ink3/10 px-1 text-[11px] font-bold text-ink2">
+                        {r.priority}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-semibold text-[13px] text-ink truncate block">{r.name}</span>
+                        <span className="text-[11px] text-ink3 mt-0.5 block">
+                          적용부서: <span className="text-ink2">{getScopeLabel(r)}</span> · 결재 프로세스: <span className="text-teal font-medium">{r.steps.length}단계</span>
+                        </span>
+                      </div>
+                      {!r.active && (
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-600">중지됨</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelRule(r);
+                          setRuleMsg('');
+                        }}
+                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-ink2 hover:bg-border/30 transition-colors"
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => delRule(r.id)}
+                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-red-500 hover:bg-red-500/5 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -818,17 +861,15 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
         </div>
       )}
 
-      <FormPreview form={form} onChangeField={setField} />
-
       {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
       <div className="flex items-center justify-between pt-1">
         <div className="flex gap-2">
-          {onDelete && <button onClick={onDelete} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-red-500 hover:bg-red-500/5">삭제</button>}
-          {onDuplicate && <button onClick={onDuplicate} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt">복제</button>}
+          {onDelete && <button type="button" onClick={onDelete} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-red-500 hover:bg-red-500/5">삭제</button>}
+          {onDuplicate && <button type="button" onClick={onDuplicate} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-ink2 hover:bg-panel-alt">복제</button>}
         </div>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
-          <button onClick={onSave} disabled={saving} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
+          <button type="button" onClick={onCancel} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
+          <button type="button" onClick={onSave} disabled={saving} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
         </div>
       </div>
     </div>

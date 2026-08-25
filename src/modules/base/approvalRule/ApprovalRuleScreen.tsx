@@ -33,7 +33,7 @@ const ARG_HINT: Partial<Record<Resolver, string>> = {
 };
 
 const blankRule = (): ApprovalRouteRule => ({
-  id: '', name: '', priority: 50, active: true, docType: '전체',
+  id: '', name: '', priority: 50, active: true, formId: null, docType: '전체',
   conditionKey: null, conditionValues: [],
   deptScope: { kind: '전체', deptId: null, deptType: null },
   positionFromRank: null, positionToRank: null,
