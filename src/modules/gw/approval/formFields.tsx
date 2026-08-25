@@ -690,13 +690,51 @@ export function TableFieldEditor({
     const nextRows = rows.filter((_r: Record<string, string>, idx: number) => idx !== rowIndex);
     const nextMerges = merges
       .map((m: CellMerge) => {
-        if (m.startRow < 0) return m;
-        if (m.startRow > rowIndex) return { ...m, startRow: m.startRow - 1 };
-        if (m.startRow + m.rowSpan - 1 >= rowIndex) return { ...m, rowSpan: m.rowSpan - 1 };
+        if (m.startRow > rowIndex) {
+          return { ...m, startRow: m.startRow - 1 };
+        }
+        const endRow = m.startRow + m.rowSpan - 1;
+        if (m.startRow <= rowIndex && endRow >= rowIndex) {
+          return { ...m, rowSpan: m.rowSpan - 1 };
+        }
         return m;
       })
-      .filter((m: CellMerge) => m.startRow < 0 || m.rowSpan > 0);
-    save(cols, nextRows, nextMerges);
+      .filter((m: CellMerge) => m.rowSpan > 0);
+
+    const nextAmountCells = amountCells
+      .filter((c) => c.rIdx !== rowIndex)
+      .map((c) => {
+        if (c.rIdx > rowIndex) return { ...c, rIdx: c.rIdx - 1 };
+        return c;
+      });
+
+    let nextSumCell = sumCell;
+    if (sumCell) {
+      if (sumCell.rIdx === rowIndex) {
+        nextSumCell = null;
+      } else if (sumCell.rIdx > rowIndex) {
+        nextSumCell = { ...sumCell, rIdx: sumCell.rIdx - 1 };
+      }
+    }
+
+    const nextSecretCells = secretCells
+      .filter((cellKey) => {
+        const [rStr] = cellKey.split(':');
+        return Number(rStr) !== rowIndex;
+      })
+      .map((cellKey) => {
+        const [rStr, cStr] = cellKey.split(':');
+        const r = Number(rStr);
+        if (r > rowIndex) return `${r - 1}:${cStr}`;
+        return cellKey;
+      });
+
+    const nextSecretRows = secretRows
+      .filter((r) => r !== rowIndex)
+      .map((r) => (r > rowIndex ? r - 1 : r));
+
+    const nextRowsWithSum = recalculateSum(nextRows, nextAmountCells, nextSumCell);
+    save(cols, nextRowsWithSum, nextMerges, colWidths, headerValues, nextAmountCells, nextSumCell, secretCols, nextSecretCells, nextSecretRows);
   };
 
   const addCol = (cIdx: number) => {
@@ -729,6 +767,138 @@ export function TableFieldEditor({
       })
       .filter((m: CellMerge) => m.colSpan > 0);
     save(nextCols, nextRows, nextMerges, nextWidths, nextHeaderValues);
+  };
+
+  const copyRowBelow = (rowIndex: number) => {
+    const newRow = { ...rows[rowIndex] };
+    const nextRows = [...rows];
+    nextRows.splice(rowIndex + 1, 0, newRow);
+
+    const nextMerges: CellMerge[] = [];
+    merges.forEach((m: CellMerge) => {
+      if (m.startRow < 0) {
+        nextMerges.push(m);
+      } else if (m.startRow > rowIndex) {
+        nextMerges.push({ ...m, startRow: m.startRow + 1 });
+      } else if (m.startRow === rowIndex) {
+        nextMerges.push(m);
+        nextMerges.push({ ...m, startRow: rowIndex + 1 });
+      } else {
+        const endRow = m.startRow + m.rowSpan - 1;
+        if (endRow > rowIndex) {
+          nextMerges.push({ ...m, rowSpan: m.rowSpan + 1 });
+        } else {
+          nextMerges.push(m);
+        }
+      }
+    });
+
+    const nextAmountCells = amountCells.map((c) => {
+      if (c.rIdx > rowIndex) return { ...c, rIdx: c.rIdx + 1 };
+      return c;
+    });
+    amountCells.forEach((c) => {
+      if (c.rIdx === rowIndex) {
+        nextAmountCells.push({ rIdx: rowIndex + 1, col: c.col });
+      }
+    });
+
+    let nextSumCell = sumCell;
+    if (sumCell) {
+      if (sumCell.rIdx > rowIndex) {
+        nextSumCell = { ...sumCell, rIdx: sumCell.rIdx + 1 };
+      }
+    }
+
+    const nextSecretCells: string[] = [];
+    secretCells.forEach((cellKey) => {
+      const [rStr, cStr] = cellKey.split(':');
+      const r = Number(rStr);
+      const c = Number(cStr);
+      if (r > rowIndex) {
+        nextSecretCells.push(`${r + 1}:${c}`);
+      } else {
+        nextSecretCells.push(cellKey);
+        if (r === rowIndex) {
+          nextSecretCells.push(`${rowIndex + 1}:${c}`);
+        }
+      }
+    });
+
+    const nextSecretRows = secretRows.map((r) => (r > rowIndex ? r + 1 : r));
+    if (secretRows.includes(rowIndex)) {
+      nextSecretRows.push(rowIndex + 1);
+    }
+
+    const nextRowsWithSum = recalculateSum(nextRows, nextAmountCells, nextSumCell);
+    save(cols, nextRowsWithSum, nextMerges, colWidths, headerValues, nextAmountCells, nextSumCell, secretCols, nextSecretCells, nextSecretRows);
+  };
+
+  const copyColRight = (cIdx: number) => {
+    const srcCol = cols[cIdx];
+    let suffix = 1;
+    let newColName = `${srcCol}_사본`;
+    while (cols.includes(newColName)) {
+      suffix++;
+      newColName = `${srcCol}_사본${suffix}`;
+    }
+
+    const nextCols = [...cols];
+    nextCols.splice(cIdx + 1, 0, newColName);
+
+    const nextRows = rows.map((row: Record<string, string>) => ({
+      ...row,
+      [newColName]: row[srcCol] ?? '',
+    }));
+
+    const srcHeaderVal = headerValues[srcCol] !== undefined ? headerValues[srcCol] : srcCol;
+    const nextHeaderValues = {
+      ...headerValues,
+      [newColName]: `${srcHeaderVal} 사본`,
+    };
+
+    const srcWidth = colWidths[srcCol] || '120px';
+    const nextColWidths = {
+      ...colWidths,
+      [newColName]: srcWidth,
+    };
+
+    const nextMerges = merges.map((m: CellMerge) => {
+      if (m.startCol > cIdx) return { ...m, startCol: m.startCol + 1 };
+      if (m.startCol <= cIdx && m.startCol + m.colSpan - 1 >= cIdx) {
+        return { ...m, colSpan: m.colSpan + 1 };
+      }
+      return m;
+    });
+
+    const nextSecretCols = secretCols.includes(srcCol)
+      ? [...secretCols, newColName]
+      : secretCols;
+
+    const nextSecretCells: string[] = [];
+    secretCells.forEach((cellKey) => {
+      const [rStr, cStr] = cellKey.split(':');
+      const r = Number(rStr);
+      const c = Number(cStr);
+      if (c > cIdx) {
+        nextSecretCells.push(`${r}:${c + 1}`);
+      } else {
+        nextSecretCells.push(cellKey);
+        if (c === cIdx) {
+          nextSecretCells.push(`${r}:${c + 1}`);
+        }
+      }
+    });
+
+    const nextAmountCells = [...amountCells];
+    amountCells.forEach((ac) => {
+      if (ac.col === srcCol) {
+        nextAmountCells.push({ rIdx: ac.rIdx, col: newColName });
+      }
+    });
+
+    const nextRowsWithSum = recalculateSum(nextRows, nextAmountCells, sumCell);
+    save(nextCols, nextRowsWithSum, nextMerges, nextColWidths, nextHeaderValues, nextAmountCells, sumCell, nextSecretCols, nextSecretCells);
   };
 
   const handleResizeStart = (e: React.MouseEvent, colName: string) => {
@@ -1128,6 +1298,29 @@ export function TableFieldEditor({
               <hr className="border-border my-1" />
             </>
           )}
+          {contextMenu.rIdx !== -1 && (
+            <button
+              type="button"
+              onClick={() => {
+                copyRowBelow(contextMenu.rIdx);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold"
+            >
+              📋 행: 아래에 현재 행 복사
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              copyColRight(contextMenu.cIdx);
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold"
+          >
+            📋 열: 오른쪽에 현재 열 복사
+          </button>
+          <hr className="border-border my-1" />
           <button type="button" onClick={() => { mergeRight(contextMenu.rIdx, contextMenu.cIdx); setContextMenu(null); }}
             disabled={contextMenu.cIdx >= cols.length - 1}
             className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent">
