@@ -19,8 +19,9 @@
  *   APPWRITE_DATABASE_ID — 기본 'workfit'
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Client, Databases } from 'node-appwrite';
+import { Client, Databases, Query } from 'node-appwrite';
 import { z } from 'zod';
+import { resolveUserId } from './token.js';
 
 /* ------------------------------------------------------------------ 계약 §2 인증 */
 
@@ -192,15 +193,127 @@ async function storePayload(dbs, DB, payload, now, log) {
 
 /* ------------------------------------------------------------------ 엔트리포인트 */
 
+/** http로 주입된 엔드포인트를 https로 고정한다. 위 주석의 301 함정 대응. */
+function normalizeEndpoint(value) {
+  const raw = String(value || '').trim();
+  if (raw === '') return raw;
+  return raw.startsWith('http://') ? `https://${raw.slice('http://'.length)}` : raw;
+}
+
+/** 조회 응답 규약 — 메일 Function과 같다. 성공은 `{data}`, 실패는 `{error:{code,message}}`. */
+const readFail = (res, code, message, status) => res.json({ error: { code, message } }, status);
+
+/**
+ * 그룹웨어 화면의 근태 조회.
+ *
+ * 신원은 `widdy-login`이 발급한 서명 토큰에서만 나온다. 본문의 사용자 ID를 믿으면 아무나
+ * 남의 근태를 열 수 있다. 검증 실패는 익명 강등이 아니라 401이다.
+ *
+ * ⚠ 지금은 **인증된 사용자면 전 직원 근태를 조회할 수 있다.** `userMap`(empId↔uid)이 비어
+ * 있어 "내 근태"를 가릴 근거가 없기 때문이다. 매핑이 채워지면 여기서 본인·관리자만 통과하게
+ * 좁혀야 한다 — 그 전까지는 화면 노출 범위로 관리한다.
+ */
+async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey, DB }) {
+  let body;
+  try {
+    // 빈 본문에서 bodyJson은 접근하는 순간 던진다. 새면 본문 없는 500이 되고 호출부가 성공으로 오해한다.
+    body = req.bodyJson || {};
+  } catch {
+    return readFail(res, 'INVALID_INPUT', '요청을 읽지 못했습니다.', 400);
+  }
+
+  const uid = resolveUserId(body);
+  const action = String(body.action || '(없음)');
+  log(`read action=${action} uid=${uid || '(미인증)'} endpoint=${endpoint}`);
+  if (!uid) return readFail(res, 'UNAUTHORIZED', '로그인이 필요합니다. 다시 로그인해 주세요.', 401);
+
+  const payload = body.payload || {};
+  const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
+
+  try {
+    switch (action) {
+      case 'listEmployees': {
+        const rows = await dbs.listDocuments(DB, 'employees', [Query.limit(500)]);
+        return res.json({
+          data: rows.documents.map((d) => ({
+            empId: Number(d.empId),
+            name: String(d.name ?? ''),
+            active: Boolean(d.active),
+            retireDate: d.retireDate ?? null,
+          })),
+        });
+      }
+
+      case 'listMonth': {
+        const empId = Number(payload.empId);
+        const month = String(payload.month || '');
+        if (!Number.isInteger(empId) || !/^\d{4}-\d{2}$/.test(month)) {
+          return readFail(res, 'INVALID_INPUT', '사번과 조회 월(YYYY-MM)이 필요합니다.', 400);
+        }
+        /*
+          `idx_empId_date`를 그대로 타는 질의다. 전건을 받아 화면에서 거르면 근태처럼
+          직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
+        */
+        const rows = await dbs.listDocuments(DB, 'attendance', [
+          Query.equal('empId', empId),
+          Query.greaterThanEqual('date', `${month}-01`),
+          Query.lessThanEqual('date', `${month}-31`),
+          Query.limit(100),
+        ]);
+        return res.json({
+          data: rows.documents.map((d) => ({
+            empId: Number(d.empId),
+            date: String(d.date),
+            inAt: d.inAt ?? null,
+            outAt: d.outAt ?? null,
+            basicMin: Number(d.basicMin ?? 0),
+            overMin: Number(d.overMin ?? 0),
+            nightMin: Number(d.nightMin ?? 0),
+            lateMin: Number(d.lateMin ?? 0),
+            totalMin: Number(d.totalMin ?? 0),
+            status: String(d.status || 'unknown'),
+          })),
+        });
+      }
+
+      default:
+        return readFail(res, 'UNKNOWN_ACTION', `알 수 없는 요청입니다: ${action}`, 400);
+    }
+  } catch (e) {
+    // 원문에는 컬렉션·키 정보가 섞일 수 있어 로그에만 남긴다.
+    error(`caps read(${action}): ${e?.message || e}`);
+    return readFail(res, 'INTERNAL', '근태 조회 중 오류가 발생했습니다.', 500);
+  }
+}
+
 export default async ({ req, res, log, error }) => {
   if (req.method !== 'POST') {
     return res.json({ ok: false, error: 'method_not_allowed' }, 405);
   }
 
-  const endpoint = process.env.APPWRITE_FUNCTION_API_ENDPOINT || process.env.APPWRITE_ENDPOINT;
+  /*
+    ⚠ Appwrite가 주입하는 `APPWRITE_FUNCTION_API_ENDPOINT`는 평문 http다. 서버가 https로
+    301 하면서 POST가 GET으로 바뀌어 문서 생성이 조용히 목록 조회로 둔갑한다(예외도 안 난다).
+    메일 Function에서 며칠을 태운 함정이라 여기서도 https를 우선하고 마지막에 강제한다.
+  */
+  const endpoint = normalizeEndpoint(process.env.APPWRITE_ENDPOINT || process.env.APPWRITE_FUNCTION_API_ENDPOINT);
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
   const apiKey = req.headers['x-appwrite-key'] || process.env.APPWRITE_API_KEY;
   const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
+
+  /*
+    두 종류의 호출이 한 함수로 들어온다.
+
+    - 사내 에이전트의 **적재**: HMAC 서명 헤더를 붙인다(아래 기존 경로)
+    - 그룹웨어 화면의 **조회**: `widdy-login`이 발급한 토큰을 본문에 싣는다
+
+    서명 헤더 유무로 가른다. 조회를 같은 함수에 두는 이유는 배포·시크릿·DB 접근을 한 벌로
+    유지하기 위해서다. 근태 컬렉션은 서버 전용 권한이라 브라우저가 직접 못 읽는다 —
+    이 조회 경로가 유일한 통로다.
+  */
+  if (!req.headers['x-caps-signature']) {
+    return handleAppRead({ req, res, log, error, endpoint, projectId, apiKey, DB });
+  }
 
   // 서명 대상은 파싱 전 원문이다. req.bodyRaw를 쓰고 절대 재직렬화하지 않는다.
   const rawBody = req.bodyRaw ?? '';
