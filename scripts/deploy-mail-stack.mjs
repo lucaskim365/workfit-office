@@ -9,7 +9,9 @@
  *   variable_already_exists, listVariables 에도 안 잡힌다). 키 이름을 바꾸는 것 말고
  *   되살릴 방법을 못 찾았으니 함수 삭제는 피할 것.
  *
- * 실행: node scripts/deploy-mail-stack.mjs [--only=mail|widdy-login]
+ * 실행: node scripts/deploy-mail-stack.mjs [--only=mail|widdy-login] [--prod] [--skip-vars]
+ *   --skip-vars : 코드만 올리고 함수 변수는 그대로 둔다. 이미 돌고 있는 운영에 코드 수정만
+ *                 반영할 때 쓴다(시크릿을 덮어쓰면 복구가 어렵다).
  *
  * 필요 env (.env.local):
  *   VITE_APPWRITE_ENDPOINT / VITE_APPWRITE_PROJECT_ID / VITE_APPWRITE_DATABASE_ID
@@ -35,6 +37,8 @@ function env(key) {
 }
 
 const IS_PROD = process.argv.includes('--prod');
+/** 코드만 배포하고 함수 변수는 그대로 둔다. 아래 `--skip-vars` 주석 참조. */
+const SKIP_VARS = process.argv.includes('--skip-vars');
 const ENDPOINT = env('APPWRITE_ENDPOINT') ?? env('VITE_APPWRITE_ENDPOINT');
 const PROJECT = IS_PROD
   ? (env('APPWRITE_PROJECT_ID_PROD') ?? '6a6bf85e002acb7f71d6')
@@ -251,8 +255,21 @@ for (const t of targets) {
     console.log(`  • function 존재 → 갱신 (timeout ${t.timeout}s)`);
   }
 
-  for (const [key, value] of Object.entries(t.vars)) {
-    await setVar(t.id, key, value, t.secrets.includes(key));
+  /*
+    `--skip-vars` — 코드만 올리고 변수는 손대지 않는다.
+
+    이 스크립트는 변수를 **덮어쓴다.** 이미 돌고 있는 운영에 코드 수정만 반영할 때는
+    그게 위험하다. `MAIL_CREDENTIALS_KEY`가 어긋나면 등록된 앱 비밀번호가 전부 복호화
+    불능이 되고, `AUTH_TOKEN_SECRET`이 어긋나면 발급자(widdy-login)와 서명이 갈려
+    모든 요청이 401이 된다. 둘 다 secret이라 API로 현재 값을 읽어 대조할 수 없다.
+    값을 바꿀 의도가 없으면 이 플래그를 쓰는 편이 안전하다.
+  */
+  if (SKIP_VARS) {
+    console.log('  • 변수 건드리지 않음 (--skip-vars)');
+  } else {
+    for (const [key, value] of Object.entries(t.vars)) {
+      await setVar(t.id, key, value, t.secrets.includes(key));
+    }
   }
 
   const tar = bundle(t);
