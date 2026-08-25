@@ -133,13 +133,23 @@ function LocalMailScreen() {
     const ids = selectedAccountIds.length > 0 ? selectedAccountIds : Object.keys(counts);
     return ids.reduce((sum, id) => sum + (counts[id] ?? 0), 0);
   }, [unseenQuery.data, selectedAccountIds]);
-  /** 선택한 계정 중 **하나라도** 가진 폴더는 열어 둔다. 계정마다 구성이 다를 수 있다. */
+  /**
+   * 선택한 계정 중 **하나라도** 가진 폴더는 열어 둔다. 계정마다 구성이 다를 수 있다.
+   *
+   * 서버는 폴더를 못 읽은 계정을 응답에서 **뺀다**(빈 배열이면 "폴더가 없는 계정"과 구분이
+   * 안 되므로). 그래서 여기서 빠진 계정을 "폴더 없음"으로 읽으면 안 된다 — IMAP이 한 번
+   * 흔들린 것뿐인데 보낸메일함·임시보관·휴지통이 전부 잠기고, 화면은 "연결한 계정에 이
+   * 폴더가 없습니다"라고 엉뚱한 이유를 댄다. 아무 계정도 못 읽었으면 `null`(모름)로 두어
+   * 잠그지 않는다.
+   */
   const availableFolders = useMemo(() => {
     const map = foldersQuery.data;
     if (!map) return null;
     const ids = selectedAccountIds.length > 0 ? selectedAccountIds : Object.keys(map);
+    const known = ids.filter((id) => map[id] !== undefined);
+    if (known.length === 0) return null;
     const union = new Set<MailFolder>();
-    for (const id of ids) for (const item of map[id] ?? []) union.add(item);
+    for (const id of known) for (const item of map[id] ?? []) union.add(item);
     return [...union];
   }, [foldersQuery.data, selectedAccountIds]);
 
