@@ -589,6 +589,7 @@ function LocalMailScreen() {
                   selectedKey={mailKey}
                   onSelect={openMail}
                   folderLabel={MAIL_FOLDER_LABELS[folder]}
+                  folder={folder}
                   filtered={searchTerm !== '' || unseenOnly || flaggedOnly}
                   checkedKeys={checkedKeys}
                   onToggleCheck={toggleCheck}

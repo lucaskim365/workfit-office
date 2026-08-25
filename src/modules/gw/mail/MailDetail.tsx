@@ -40,6 +40,18 @@ function formatBytes(size: number): string {
 }
 
 /**
+ * 보낸사람 한 줄.
+ *
+ * 발신 기록이 있으면(우리 앱으로 보낸 메일) 그 워크핏 사용자를 괄호로 붙인다. 헤더 이름은
+ * 자칭이라 공용 계정에서는 근거가 못 되지만, 기록은 발송 시점에 우리가 남긴 확정값이다.
+ */
+function senderText(detail: MailDetailModel): string {
+  const email = detail.from.email;
+  if (detail.sentBy?.name) return `${detail.sentBy.name}(워크핏) <${email}>`;
+  return formatAddress(detail.from);
+}
+
+/**
  * 메일 상세.
  *
  * 본문 HTML은 서버(`appwrite/functions/mail/src/mailbox.js`)가 정화한 것만 받는다.
@@ -116,6 +128,13 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
         <h2 className="text-[14px] font-bold leading-snug text-ink">{detail.subject || '(제목 없음)'}</h2>
 
         <div className="mt-2.5 space-y-1 border-b border-border pb-3 text-[10.5px] text-ink2">
+          {/*
+            보낸사람은 한 줄로 끝낸다.
+
+            공용 계정은 여러 사람이 같은 주소로 보내므로 헤더만으로는 누가 보냈는지 알 수
+            없다. 그렇다고 "보낸사람"과 "보낸이"를 두 줄로 두면 같은 이름이 두 번 나와
+            보낸 사람이 둘인 것처럼 읽힌다. 확정된 워크핏 사용자를 괄호로 붙여 한 줄에 담는다.
+          */}
           <div>
             <span className="mr-2 text-ink3">보낸사람</span>
             {onComposeTo ? (
@@ -125,27 +144,15 @@ export default function MailDetail({ detail, account, loading, error, onBack, on
                 title="이 주소로 새 메일 쓰기"
                 className="text-left hover:text-teal hover:underline"
               >
-                {formatAddress(detail.from)}
+                {senderText(detail)}
               </button>
-            ) : formatAddress(detail.from)}
+            ) : senderText(detail)}
+            {detail.sentBy && !detail.sentBy.name && (
+              <span className="ml-1.5 text-ink3" title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다.">
+                (워크핏 미확인)
+              </span>
+            )}
           </div>
-          {/*
-            보낸메일함에서만 온다. 공용 계정은 여러 사람이 같은 주소로 보내므로 "보낸사람"
-            줄만으로는 누가 보냈는지 알 수 없다. 우리 앱으로 보낸 메일은 발신 기록이 있어
-            그룹웨어 사용자 이름으로 확정되고, 밖에서 보낸 메일은 가릴 수단이 없다.
-          */}
-          {detail.sentBy && (
-            <div>
-              <span className="mr-2 text-ink3">보낸이</span>
-              {detail.sentBy.name ? (
-                <span className="font-bold text-teal" title={detail.sentBy.email}>{detail.sentBy.name}</span>
-              ) : (
-                <span className="text-ink3" title="그룹웨어 밖에서 보낸 메일이라 보낸 사람을 가릴 수 없습니다.">
-                  미확인 · 그룹웨어 밖에서 발송
-                </span>
-              )}
-            </div>
-          )}
           <div><span className="mr-2 text-ink3">받는사람</span>{formatAddressList(detail.to) || '-'}</div>
           {detail.cc.length > 0 && <div><span className="mr-2 text-ink3">참조</span>{formatAddressList(detail.cc)}</div>}
           <div className="flex flex-wrap gap-x-3 text-[9.5px] text-ink3">
