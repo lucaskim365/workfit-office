@@ -203,6 +203,36 @@ function normalizeEndpoint(value) {
 /** 조회 응답 규약 — 메일 Function과 같다. 성공은 `{data}`, 실패는 `{error:{code,message}}`. */
 const readFail = (res, code, message, status) => res.json({ error: { code, message } }, status);
 
+/** 한 번에 가져올 수 있는 상한. Appwrite `limit`의 최댓값이다. */
+const PAGE = 100;
+
+/**
+ * 전량 조회 — 커서로 끝까지 넘긴다.
+ *
+ * `limit`만 크게 잡으면 그 수를 넘긴 순간부터 **조용히 잘린다.** 직원이 늘면 목록 끝사람이
+ * 아무 표시 없이 사라지고, 근태는 "그날 안 온 사람"과 구분이 안 된다. 잘림을 만들지 않는다.
+ * 안전장치로 상한을 둔다 — 넘으면 잘린 사실을 로그에 남긴다.
+ */
+async function listAll(dbs, DB, collection, queries, log, cap = 5000) {
+  const out = [];
+  let cursor = null;
+  for (;;) {
+    const page = await dbs.listDocuments(DB, collection, [
+      ...queries,
+      Query.limit(PAGE),
+      ...(cursor ? [Query.cursorAfter(cursor)] : []),
+    ]);
+    out.push(...page.documents);
+    if (page.documents.length < PAGE) break;
+    if (out.length >= cap) {
+      log(`⚠ ${collection} 조회가 상한(${cap})에 걸려 잘렸다. 화면이 전부를 보여주지 못한다.`);
+      break;
+    }
+    cursor = page.documents[page.documents.length - 1].$id;
+  }
+  return out;
+}
+
 /**
  * 그룹웨어 화면의 근태 조회.
  *
@@ -233,9 +263,9 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
   try {
     switch (action) {
       case 'listEmployees': {
-        const rows = await dbs.listDocuments(DB, 'employees', [Query.limit(500)]);
+        const rows = await listAll(dbs, DB, 'employees', [], log);
         return res.json({
-          data: rows.documents.map((d) => ({
+          data: rows.map((d) => ({
             empId: Number(d.empId),
             name: String(d.name ?? ''),
             active: Boolean(d.active),
@@ -254,14 +284,13 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
           `idx_empId_date`를 그대로 타는 질의다. 전건을 받아 화면에서 거르면 근태처럼
           직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
         */
-        const rows = await dbs.listDocuments(DB, 'attendance', [
+        const rows = await listAll(dbs, DB, 'attendance', [
           Query.equal('empId', empId),
           Query.greaterThanEqual('date', `${month}-01`),
           Query.lessThanEqual('date', `${month}-31`),
-          Query.limit(100),
-        ]);
+        ], log);
         return res.json({
-          data: rows.documents.map((d) => ({
+          data: rows.map((d) => ({
             empId: Number(d.empId),
             date: String(d.date),
             inAt: d.inAt ?? null,
@@ -284,14 +313,11 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         /*
           하루치 전 직원. `idx_empId_date`는 empId가 앞이라 날짜만으로는 못 탄다 —
           `idx_date`를 따로 둔다(프로비저닝 스크립트 참조).
-          상한은 직원 수보다 넉넉하게 잡는다. 하루에 사람당 한 건이 원칙이다.
+          직원이 몇 명이든 전량을 가져온다 — 잘리면 "그날 안 온 사람"과 구분이 안 된다.
         */
-        const rows = await dbs.listDocuments(DB, 'attendance', [
-          Query.equal('date', date),
-          Query.limit(300),
-        ]);
+        const rows = await listAll(dbs, DB, 'attendance', [Query.equal('date', date)], log);
         return res.json({
-          data: rows.documents.map((d) => ({
+          data: rows.map((d) => ({
             empId: Number(d.empId),
             date: String(d.date),
             inAt: d.inAt ?? null,

@@ -26,7 +26,8 @@ export function GwHead({ icon, name, right }: { icon: string; name: string; righ
 /** 좌측 세부 메뉴 항목([[GwSideNav]]). */
 export interface GwNavItem {
   id: string;
-  icon: string;
+  /** 생략하면 아이콘 칸 없이 라벨만 그린다. 사람 이름처럼 아이콘이 의미를 못 더할 때 쓴다. */
+  icon?: string;
   label: string;
   /** `참여`·`대기`처럼 주의를 끄는 짧은 알림. */
   badge?: string;
@@ -41,12 +42,16 @@ export interface GwNavItem {
  * 화면 상단 가로 탭 대신 이 카드를 쓰면 다른 그룹웨어 화면과 톤이 맞는다.
  * 메뉴 없이 `children`만 채우면 일반 사이드 카드(달력 보조 패널 등)로도 쓴다.
  */
-export function GwSideNav({ title, desc, items, activeId, onSelect, children }: {
+export function GwSideNav({ title, desc, items, activeId, onSelect, filter, scrollItems, children }: {
   title: string;
   desc?: string;
   items?: GwNavItem[];
   activeId?: string;
   onSelect?: (id: string) => void;
+  /** 목록 위에 놓을 검색·필터 UI. 항목이 많아 눈으로 찾기 어려운 화면에서 쓴다. */
+  filter?: ReactNode;
+  /** 항목이 많을 때 카드 높이를 묶고 목록만 스크롤한다. 없으면 화면 아래로 계속 늘어난다. */
+  scrollItems?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -55,8 +60,9 @@ export function GwSideNav({ title, desc, items, activeId, onSelect, children }: 
         <h2 className="text-sm font-extrabold text-navy">{title}</h2>
         {desc && <p className="mt-1 text-[11px] text-ink3">{desc}</p>}
       </div>
+      {filter}
       {items && items.length > 0 && (
-        <nav className="flex flex-col gap-1">
+        <nav className={`flex flex-col gap-1 ${scrollItems ? 'content-scroll max-h-[52vh] min-h-0 overflow-y-auto pr-0.5' : ''}`}>
           {items.map((item) => {
             const active = item.id === activeId;
             return (
@@ -74,7 +80,7 @@ export function GwSideNav({ title, desc, items, activeId, onSelect, children }: 
                       : 'text-ink2 hover:bg-panel-alt hover:text-ink'
                 }`}
               >
-                <span className="text-base">{item.icon}</span>
+                {item.icon && <span className="text-base">{item.icon}</span>}
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.badge && (
                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold ${
