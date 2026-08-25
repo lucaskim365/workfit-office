@@ -99,4 +99,10 @@ export const commuteGateway = {
     const rows = await call<unknown[]>('listDay', { date });
     return parseRows(rows, commuteRecordSchema);
   },
+
+  /** 한 달치 전 직원. 집계 화면이 사람별로 묶어 쓴다. */
+  async listMonthAll(month: string): Promise<CommuteRecord[]> {
+    const rows = await call<unknown[]>('listMonthAll', { month });
+    return parseRows(rows, commuteRecordSchema);
+  },
 };

@@ -28,3 +28,13 @@ export function useCommuteDay(date: string | null) {
     staleTime: 60_000,
   });
 }
+
+/** 한 달치 전 직원. 월별 집계 화면이 쓴다. */
+export function useCommuteMonthAll(month: string | null) {
+  return useQuery({
+    queryKey: ['commute', 'month-all', month],
+    queryFn: () => commuteRepo.listMonthAll(month as string),
+    enabled: month !== null,
+    staleTime: 60_000,
+  });
+}

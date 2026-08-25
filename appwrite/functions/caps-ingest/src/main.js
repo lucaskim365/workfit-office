@@ -332,6 +332,35 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         });
       }
 
+      case 'listMonthAll': {
+        const month = String(payload.month || '');
+        if (!/^\d{4}-\d{2}$/.test(month)) {
+          return readFail(res, 'INVALID_INPUT', '조회 월(YYYY-MM)이 필요합니다.', 400);
+        }
+        /*
+          한 달치 전 직원. 직원 수 × 일수라 셋 중 가장 크다(300명이면 6천 건대). 그래도
+          커서로 전량을 가져온다 — 집계 화면에서 잘리면 합계가 조용히 틀린다.
+        */
+        const rows = await listAll(dbs, DB, 'attendance', [
+          Query.greaterThanEqual('date', `${month}-01`),
+          Query.lessThanEqual('date', `${month}-31`),
+        ], log, 20000);
+        return res.json({
+          data: rows.map((d) => ({
+            empId: Number(d.empId),
+            date: String(d.date),
+            inAt: d.inAt ?? null,
+            outAt: d.outAt ?? null,
+            basicMin: Number(d.basicMin ?? 0),
+            overMin: Number(d.overMin ?? 0),
+            nightMin: Number(d.nightMin ?? 0),
+            lateMin: Number(d.lateMin ?? 0),
+            totalMin: Number(d.totalMin ?? 0),
+            status: String(d.status || 'unknown'),
+          })),
+        });
+      }
+
       default:
         return readFail(res, 'UNKNOWN_ACTION', `알 수 없는 요청입니다: ${action}`, 400);
     }

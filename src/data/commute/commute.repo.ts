@@ -66,6 +66,20 @@ export const commuteRepo = {
       .sort((a, b) => a.date.localeCompare(b.date));
   },
 
+  /** 한 달치 전 직원 근태. 집계는 화면(도메인 summarize)이 맡는다. */
+  async listMonthAll(month: string): Promise<CommuteRecord[]> {
+    if (dbDriver !== 'memory') return commuteGateway.listMonthAll(month);
+
+    const real = await fetchLocal<unknown[]>(`/api/local/attendance?month=${month}`);
+    if (real) {
+      return real.flatMap((row) => {
+        const parsed = commuteRecordSchema.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      });
+    }
+    return COMMUTE_RECORD_FIXTURE.filter((row) => row.date.startsWith(month));
+  },
+
   /** 하루치 전 직원 근태. 사번 오름차순 — 화면이 직원 이름으로 다시 정렬한다. */
   async listDay(date: string): Promise<CommuteRecord[]> {
     if (dbDriver !== 'memory') {
