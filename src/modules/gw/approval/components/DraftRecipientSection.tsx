@@ -362,19 +362,22 @@ export function DraftRecipientSection({
       <div className="relative p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold text-teal flex items-center gap-1">
-            <span>📦</span><span>시행처 (집행 의무 부서)</span>
+            <span>📦</span><span>시행처 (집행 의무 대상)</span>
           </div>
-          <InfoTooltip text="문서 완료 후 실무 집행 및 처리를 전담하여 수행할 시행 부서들을 지정합니다. 지정된 각 부서 단위로 독립적인 시행 임무(시행 관리)가 자동 이관됩니다." />
+          <InfoTooltip text="문서 완료 후 실무 집행 및 처리를 전담하여 수행할 시행처(부서 또는 사원)를 지정합니다. 지정된 각 대상 단위로 독립적인 시행 임무(시행 관리)가 자동 이관됩니다." />
         </div>
 
         {executionDepts.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            {executionDepts.map((d) => (
-              <span key={d.id} className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs">
-                📁 {d.name}
-                <button type="button" onClick={() => setExecutionDepts((p) => p.filter((x) => x.id !== d.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
-              </span>
-            ))}
+            {executionDepts.map((d) => {
+              const isDept = org.depts.some((dept: any) => dept.id === d.id);
+              return (
+                <span key={d.id} className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs">
+                  {isDept ? '📁' : '👤'} {d.name}
+                  <button type="button" onClick={() => setExecutionDepts((p) => p.filter((x) => x.id !== d.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
+                </span>
+              );
+            })}
           </div>
         ) : (
           <p className="text-[10.5px] text-ink3">지정된 시행처가 없습니다.</p>
@@ -382,7 +385,7 @@ export function DraftRecipientSection({
 
         <button type="button" onClick={() => setExecDialog(true)}
           className="w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
-          + 시행 부서 추가
+          + 시행처 추가
         </button>
       </div>
 
@@ -400,7 +403,7 @@ export function DraftRecipientSection({
       )}
 
       {execDialog && (
-        <SelectorDialog title="시행 부서 추가" org={org} excludeIds={excludeExecDeptIds} singleSelect={false} deptOnly={true}
+        <SelectorDialog title="시행처 추가" org={org} excludeIds={excludeExecDeptIds} singleSelect={false}
           onConfirm={(items) => {
             setExecutionDepts((prev) => [
               ...prev,

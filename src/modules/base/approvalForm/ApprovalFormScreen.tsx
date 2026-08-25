@@ -430,6 +430,37 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
     setLimitState(hasLimit ? 'LIMITED' : 'ALL');
   }, [form.id]);
 
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) return;
+
+    const nextRules = [...formRules];
+    const draggedItem = nextRules[draggedIdx];
+    nextRules.splice(draggedIdx, 1);
+    nextRules.splice(targetIdx, 0, draggedItem);
+
+    const updated = nextRules.map((rule, idx) => ({
+      ...rule,
+      priority: idx + 1
+    }));
+
+    for (const rule of updated) {
+      await upsertRule.mutateAsync(rule);
+    }
+    setDraggedIdx(null);
+  };
+
   const saveRule = async () => {
     if (!selRule) return;
     if (!selRule.name.trim()) return setRuleMsg('룰 이름을 입력하세요.');
@@ -442,6 +473,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
       id: selRule.id || nextId(),
       formId: form.id,
       docType: form.code,
+      priority: selRule.priority || (formRules.length + 1)
     };
     
     await upsertRule.mutateAsync(ruleToSave);
@@ -1146,20 +1178,30 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
             </div>
           ) : (
             <div className="space-y-2">
-              {formRules.map((r) => {
+              {formRules.map((r, idx) => {
                 const getScopeLabel = (rule: ApprovalRouteRule) =>
                   rule.deptScope.kind === '전체' ? '전체부서'
                     : rule.deptScope.kind === '부서유형' ? `유형=${rule.deptScope.deptType}`
                       : `${rule.deptScope.kind}=${org.depts.find(d => d.id === rule.deptScope.deptId)?.name ?? rule.deptScope.deptId}`;
 
+                const isDragged = draggedIdx === idx;
+
                 return (
                   <div
                     key={r.id}
-                    className="flex items-center justify-between rounded-xl border border-border bg-panel px-4 py-3 hover:border-teal/30 hover:shadow-sm transition-all"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-all cursor-grab active:cursor-grabbing ${
+                      isDragged
+                        ? 'border-dashed border-teal/40 bg-teal-soft/10 opacity-40 shadow-xs'
+                        : 'border-border bg-panel hover:border-teal/30 hover:shadow-sm'
+                    }`}
                   >
-                    <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="flex items-center gap-3.5 min-w-0 pointer-events-none select-none">
                       <span className="grid h-6 min-w-6 place-items-center rounded bg-ink3/10 px-1 text-[11px] font-bold text-ink2">
-                        {r.priority}
+                        {idx + 1}
                       </span>
                       <div className="min-w-0">
                         <span className="font-semibold text-[13px] text-ink truncate block">{r.name}</span>
@@ -1178,14 +1220,14 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                           setSelRule(r);
                           setRuleMsg('');
                         }}
-                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-ink2 hover:bg-border/30 transition-colors"
+                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-ink2 hover:bg-border/30 transition-colors cursor-pointer"
                       >
                         수정
                       </button>
                       <button
                         type="button"
                         onClick={() => delRule(r.id)}
-                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-red-500 hover:bg-red-500/5 transition-colors"
+                        className="rounded-lg border border-border-hi bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-red-500 hover:bg-red-500/5 transition-colors cursor-pointer"
                       >
                         ✕
                       </button>

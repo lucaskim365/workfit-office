@@ -171,7 +171,7 @@ export default function ApprovalScreen() {
     if (box === '시행') {
       const myDeptId = userObj?.dept ? (org.depts.find(d => d.name === userObj.dept)?.id ?? '') : '';
       return list.filter((d: ApprovalDoc) => {
-        const execs = deptExecutions.filter(e => e.documentId === d.id && e.targetDeptId === myDeptId);
+        const execs = deptExecutions.filter(e => e.documentId === d.id && (e.targetDeptId === myDeptId || e.targetDeptId === me));
         const hasLegacyMatch = d.execution && (
           d.execution.targetId === myDeptId || d.execution.targetId === userObj?.dept
         );
@@ -408,7 +408,7 @@ export default function ApprovalScreen() {
 
                   const myDeptId = userObj?.dept ? (org.depts.find(d => d.name === userObj.dept)?.id ?? '') : '';
                   const executionCount = deptExecutions.filter(
-                    (e) => e.targetDeptId === myDeptId && (e.status === 'UNASSIGNED' || e.status === 'IN_PROGRESS' || e.status === 'RETURNED')
+                    (e) => (e.targetDeptId === myDeptId || e.targetDeptId === me) && (e.status === 'UNASSIGNED' || e.status === 'IN_PROGRESS' || e.status === 'RETURNED')
                   ).length;
                   const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
                     (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)
