@@ -48,13 +48,17 @@ export const GW_READY_APPS = new Set([
   'mail',
   'employee', // 인명관리 활성화
   'document', // 문서관리 활성화
-  // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
+  /*
+    근태 — 브라우저 직접 조회(401)는 `caps-ingest` Function 경유로 해결했다(2026-08-25).
 
-  // ── 운영 미준비로 보류(2026-08-18) — 화면·라우트는 있으나 백엔드가 없다 ──
-  // 'commute' : prod에 employees/attendance 컬렉션 없음(404) + caps-ingest Function
-  //             미배포. 개인정보라 서버 전용 권한이어서 브라우저 조회는 401이다.
-  //             Appwrite Auth나 서버 경유 조회가 선행돼야 한다.
-  // 준비되면 이 줄을 위 목록에 되돌리면 된다. 상세: docs/업무모듈_운영배포_런북.md §6
+    ⚠ **운영에 내보내기 전에 두 가지가 선행돼야 한다.** 안 하면 운영에서 빈 화면이 된다.
+      1) `npx tsx scripts/appwrite-provision-commute.ts --prod` — 컬렉션 5종이 아직 없다
+      2) `node scripts/deploy-caps-ingest.mjs --prod` — 함수가 아직 안 올라가 있다
+    그리고 에이전트가 운영으로 쏘기 시작해야(`CAPS_INGEST_SECRET` + IngestUrl 전환)
+    데이터가 쌓인다. 그전까지는 열려도 0건이다.
+  */
+  'commute',
+  // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 ]);
 
 export const isGwAppReady = (slug: string) => GW_READY_APPS.has(slug);
