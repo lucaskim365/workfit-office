@@ -58,7 +58,8 @@ const blankField = (): FormField => ({
 
 const blankForm = (folderId: string | null = null): ApprovalForm => ({
   id: '', code: '', name: '', icon: '📄', docTitle: '', closing: '', active: true, order: 99, system: false, folderId,
-  recipientDeptId: null, recipientUserId: null, recipientDrafter: false, preservationPeriod: '5년',
+  recipientDeptId: null, recipientUserId: null, recipientDrafter: false,
+  executionDeptId: null, executionUserId: null, preservationPeriod: '5년',
   allowedPositionFromRank: null, allowedPositionToRank: null, allowedDeptIds: [],
   fields: [{ ...blankField(), key: 'body', label: '본문', type: '장문', required: true }],
 });
@@ -479,20 +480,7 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
               </select>
             </F>
             <F label="정렬"><input type="number" value={form.order} onChange={(e) => set({ order: Number(e.target.value) })} className={`${inp}`} /></F>
-            <F label="보존연한">
-              <select
-                value={form.preservationPeriod || '5년'}
-                onChange={(e) => set({ preservationPeriod: e.target.value })}
-                className={`${inp}`}
-              >
-                <option value="1년">1년</option>
-                <option value="3년">3년</option>
-                <option value="5년">5년</option>
-                <option value="10년">10년</option>
-                <option value="영구">영구</option>
-              </select>
-            </F>
-            <div className="col-span-2"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
+            <div className="col-span-3"><F label="격식 문서명(인쇄)"><input value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="출 장 신 청 서" className={`${inp}`} /></F></div>
             <div className="col-span-4"><F label="맺음말(인쇄)"><input value={form.closing} onChange={(e) => set({ closing: e.target.value })} placeholder="위와 같이 신청하오니 재가하여 주시기 바랍니다." className={`${inp}`} /></F></div>
           </div>
 
@@ -656,11 +644,133 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
       {/* 탭 2: 서식 설정 */}
       {activeMenuTab === 'settings' && (
         <div className="space-y-6">
-          {/* 기본 수신(시행)처 설정 */}
-          <div className="rounded-xl border border-border bg-panel p-4">
-            <div className="mb-3 text-[12.5px] font-bold text-ink">📨 기본 수신(시행)처 설정</div>
-            <div className="grid grid-cols-12 gap-3 items-center border border-dashed border-teal/40 bg-teal-soft/10 p-4 rounded-xl">
-              <div className="col-span-12 flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-2">
+          {/* 🔒 1. 서식 기본 보안정책 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
+            <div className="text-[13px] font-bold text-ink flex items-center gap-1.5 border-b border-border pb-2.5">
+              <span>🔒 1. 서식 기본 보안정책 설정</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <F label="기본 보안 등급">
+                <select
+                  value={form.securityLevel || '일반'}
+                  onChange={(e) => set({ securityLevel: e.target.value as any })}
+                  className={`${inp} font-semibold ${
+                    form.securityLevel === '극비'
+                      ? 'text-red-600 bg-red-500/5'
+                      : form.securityLevel === '대외비'
+                      ? 'text-amber-600 bg-amber-500/5'
+                      : 'text-ink'
+                  }`}
+                >
+                  <option value="일반">일반 문서</option>
+                  <option value="대외비">🔒 대외비</option>
+                  <option value="극비">⛔ 극비</option>
+                </select>
+              </F>
+              <F label="기본 공개 범위">
+                <select
+                  value={form.visibility || '부서'}
+                  onChange={(e) => set({ visibility: e.target.value as any })}
+                  className={`${inp} font-semibold text-ink`}
+                >
+                  <option value="전사">전사 공개</option>
+                  <option value="부서">부서 공개</option>
+                  <option value="비공개">비공개</option>
+                </select>
+              </F>
+              <F label="보존연한">
+                <select
+                  value={form.preservationPeriod || '5년'}
+                  onChange={(e) => set({ preservationPeriod: e.target.value })}
+                  className={`${inp}`}
+                >
+                  <option value="1년">1년</option>
+                  <option value="3년">3년</option>
+                  <option value="5년">5년</option>
+                  <option value="10년">10년</option>
+                  <option value="영구">영구</option>
+                </select>
+              </F>
+            </div>
+            <div className="text-[10.5px] text-ink3 mt-1">서식을 기안할 때 적용될 기본 보안 등급, 부서/전사 공개 범위, 그리고 문서의 법적 보존연한을 설정합니다.</div>
+          </div>
+
+          {/* 👥 2. 기안가능 부서 또는 직급 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
+            <div className="text-[13px] font-bold text-ink flex items-center gap-1.5 border-b border-border pb-2.5">
+              <span>👥 2. 기안가능 부서 또는 직급 설정</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {/* 직급 설정 */}
+              <div className="space-y-3">
+                <div className="text-[11.5px] font-bold text-ink2">기안 가능 직급 범위</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <F label="최소 기안직급 (직급 상한)">
+                    <select
+                      value={form.allowedPositionToRank ?? ''}
+                      onChange={(e) => set({ allowedPositionToRank: e.target.value === '' ? null : Number(e.target.value) })}
+                      className={inp}
+                    >
+                      <option value="">제한 없음 (전체)</option>
+                      {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                        <option key={p.id} value={p.rank}>{p.name}</option>
+                      ))}
+                    </select>
+                  </F>
+                  <F label="최대 기안직급 (직급 하한)">
+                    <select
+                      value={form.allowedPositionFromRank ?? ''}
+                      onChange={(e) => set({ allowedPositionFromRank: e.target.value === '' ? null : Number(e.target.value) })}
+                      className={inp}
+                    >
+                      <option value="">제한 없음 (전체)</option>
+                      {org.positions.slice().sort((a, b) => a.rank - b.rank).map((p) => (
+                        <option key={p.id} value={p.rank}>{p.name}</option>
+                      ))}
+                    </select>
+                  </F>
+                </div>
+                <div className="text-[10px] text-ink3">지정된 직급 서열 범위 내의 사원만 이 서식을 기안할 수 있습니다.</div>
+              </div>
+
+              {/* 부서 설정 */}
+              <div className="space-y-2.5">
+                <div className="text-[11.5px] font-bold text-ink2">기안 가능 부서 목록</div>
+                <div className="rounded-lg border border-border bg-panel-alt p-3 max-h-[120px] overflow-y-auto space-y-2">
+                  {depts.map((d) => {
+                    const currentDepts = form.allowedDeptIds ?? [];
+                    const checked = currentDepts.includes(d.id);
+                    return (
+                      <label key={d.id} className="flex items-center gap-2 text-[11.5px] font-medium text-ink2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextDepts = e.target.checked
+                              ? [...currentDepts, d.id]
+                              : currentDepts.filter((id) => id !== d.id);
+                            set({ allowedDeptIds: nextDepts });
+                          }}
+                          className="rounded border-border text-teal focus:ring-teal h-3.5 w-3.5"
+                        />
+                        {d.name}
+                      </label>
+                    );
+                  })}
+                  {depts.length === 0 && <div className="text-[11px] text-ink3">부서 정보가 없습니다.</div>}
+                </div>
+                <div className="text-[10px] text-ink3">아무것도 체크하지 않으면 모든 부서의 사원이 기안 가능합니다.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 📨 3. 기본 수신처 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
+            <div className="text-[13px] font-bold text-ink flex items-center gap-1.5 border-b border-border pb-2.5">
+              <span>📨 3. 기본 수신처 설정</span>
+            </div>
+            <div className="grid grid-cols-12 gap-3 items-center">
+              <div className="col-span-12 flex items-center gap-2 rounded-lg border border-border bg-teal-soft/10 px-3.5 py-2.5">
                 <input
                   type="checkbox"
                   id="recipientDrafter"
@@ -668,90 +778,81 @@ function FormEditor({ form, folders, onChange, onSave, onCancel, onDelete, onDup
                   onChange={(e) => set({ recipientDrafter: e.target.checked })}
                   className="h-4 w-4 rounded border-border-hi text-teal focus:ring-teal"
                 />
-                <label htmlFor="recipientDrafter" className="text-[12.5px] font-semibold text-ink cursor-pointer select-none">
-                  👤 기안자 본인을 기본 수신처로 지정
+                <label htmlFor="recipientDrafter" className="text-[12px] font-semibold text-ink cursor-pointer select-none">
+                  👤 기안자 본인을 기본 수신처에 자동 포함
                 </label>
               </div>
 
-              <div className="col-span-6 mt-2">
+              <div className="col-span-6 mt-1.5">
                 <F label="🏢 기본 수신 부서">
                   <select
                     value={form.recipientDeptId || ''}
                     onChange={(e) => set({ recipientDeptId: e.target.value || null })}
                     className={`${inp}`}
                   >
-                    <option value="">(없음)</option>
+                    <option value="">지정 안 함</option>
                     {depts.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
+                      <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
                 </F>
               </div>
 
-              <div className="col-span-6 mt-2">
+              <div className="col-span-6 mt-1.5">
                 <F label="👤 기본 수신 사원">
                   <select
                     value={form.recipientUserId || ''}
                     onChange={(e) => set({ recipientUserId: e.target.value || null })}
                     className={`${inp}`}
                   >
-                    <option value="">(없음)</option>
+                    <option value="">지정 안 함</option>
                     {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} {u.position} ({u.dept})
-                      </option>
+                      <option key={u.id} value={u.id}>{u.name} {u.position} ({u.dept})</option>
                     ))}
                   </select>
                 </F>
               </div>
             </div>
+            <div className="text-[10.5px] text-ink3">문서 결재가 완료된 후 본 문서가 기본적으로 수신 공유되는 대상을 정합니다.</div>
           </div>
 
-          {/* 🔒 서식 기본 보안 정책 설정 */}
-          <div className="rounded-xl border border-border bg-panel p-4">
-            <div className="mb-3 text-[12.5px] font-bold text-ink flex items-center gap-1">
-              <span>🔒 서식 기본 보안 정책 설정</span>
+          {/* 📢 4. 기본 시행처 설정 */}
+          <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
+            <div className="text-[13px] font-bold text-ink flex items-center gap-1.5 border-b border-border pb-2.5">
+              <span>📢 4. 기본 시행처 설정</span>
             </div>
-
-            <div className="grid grid-cols-12 gap-3 items-start border border-dashed border-red-500/40 bg-red-500/5 p-4 rounded-xl">
+            <div className="grid grid-cols-12 gap-3 items-center">
               <div className="col-span-6">
-                <F label="기본 보안 등급">
+                <F label="🏢 기본 시행 부서">
                   <select
-                    value={form.securityLevel || '일반'}
-                    onChange={(e) => set({ securityLevel: e.target.value as any })}
-                    className={`${inp} font-semibold ${
-                      form.securityLevel === '극비'
-                        ? 'text-red-600 bg-red-500/5'
-                        : form.securityLevel === '대외비'
-                        ? 'text-amber-600 bg-amber-500/5'
-                        : 'text-ink'
-                    }`}
+                    value={form.executionDeptId || ''}
+                    onChange={(e) => set({ executionDeptId: e.target.value || null })}
+                    className={`${inp}`}
                   >
-                    <option value="일반">일반 문서</option>
-                    <option value="대외비">🔒 대외비</option>
-                    <option value="극비">⛔ 극비</option>
+                    <option value="">지정 안 함</option>
+                    {depts.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
                   </select>
                 </F>
-                <div className="text-[9.5px] text-ink3 mt-1">서식을 기안할 때 적용될 문서의 기본 물리적 보안 등급입니다.</div>
               </div>
 
               <div className="col-span-6">
-                <F label="기본 공개 범위">
+                <F label="👤 기본 시행 사원">
                   <select
-                    value={form.visibility || '부서'}
-                    onChange={(e) => set({ visibility: e.target.value as any })}
-                    className={`${inp} font-semibold text-ink`}
+                    value={form.executionUserId || ''}
+                    onChange={(e) => set({ executionUserId: e.target.value || null })}
+                    className={`${inp}`}
                   >
-                    <option value="전사">전사 공개</option>
-                    <option value="부서">부서 공개</option>
-                    <option value="비공개">비공개</option>
+                    <option value="">지정 안 함</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name} {u.position} ({u.dept})</option>
+                    ))}
                   </select>
                 </F>
-                <div className="text-[9.5px] text-ink3 mt-1">부서 문서함/전사 문서함 노출 여부 및 목록 탐색 범위를 한정합니다.</div>
               </div>
             </div>
+            <div className="text-[10.5px] text-ink3">결재 완료 후 문서의 구체적인 업무 협조 및 실행/시행 임무가 할당되는 대상 부서 또는 담당자를 지정합니다.</div>
           </div>
         </div>
       )}
