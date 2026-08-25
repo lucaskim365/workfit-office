@@ -897,6 +897,13 @@ const COLLECTIONS: CollectionDef[] = [
     */
     id: 'mailSentBy',
     name: '메일 발신 기록',
+    /**
+     * **서버 전용.** `mailAccounts`와 같은 이유다 — projectId는 브라우저 번들에 공개돼 있어
+     * `Any` 권한이면 누구나 이 컬렉션을 읽고 **쓸 수 있다.** 발신자 표시의 근거가 되는
+     * 기록을 아무나 위조할 수 있으면 기능 자체가 의미를 잃는다.
+     * 화면은 이 컬렉션을 직접 읽지 않고 mail Function의 응답으로만 받는다.
+     */
+    permissions: [],
     attributes: [
       S('id', 64, true),
       /*
@@ -1067,11 +1074,30 @@ async function main() {
   const dbs = new Databases(client);
   const dbId = databaseId as string;
 
-  console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}\n`);
+  /**
+   * 적용 대상 한정 — `--only=coll1,coll2`.
+   *
+   * 이 스크립트는 기본적으로 **파일에 정의된 컬렉션 전부**를 만든다. dev에서는 그게 맞지만
+   * 운영에 릴리스 한 건을 반영할 때는 이번에 필요한 것만 건드려야 한다. 운영에 아직 없는
+   * 컬렉션까지 한꺼번에 생기면 그 순간부터 `Any` 권한 컬렉션이 늘어난다.
+   */
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const only = onlyArg ? onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean) : null;
+  const targets = only ? COLLECTIONS.filter((c) => only.includes(c.id)) : COLLECTIONS;
+  if (only) {
+    const unknown = only.filter((id) => !COLLECTIONS.some((c) => c.id === id));
+    if (unknown.length) {
+      console.error(`✗ 정의에 없는 컬렉션: ${unknown.join(', ')}`);
+      process.exit(1);
+    }
+  }
+
+  console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}`);
+  console.log(only ? `  대상 한정: ${only.join(', ')}\n` : `  대상: 전체 ${targets.length}종\n`);
 
   await ensureDatabase(dbs, dbId);
 
-  for (const c of COLLECTIONS) {
+  for (const c of targets) {
     console.log(`\n[${c.id}] ${c.name}`);
     await ensureCollection(dbs, dbId, c);
 
