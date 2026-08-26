@@ -43,9 +43,17 @@ test('부서장은 맡은 부서 범위, 직책 팀장은 소속 부서로 대�
   assert.deepEqual(fallback, { kind: 'depts', deptNames: ['AX PMO팀'] });
 });
 
-test('일반 사원과 중지 계정에는 범위가 없다', () => {
+test('직책 팀장 폴백은 headUserId가 이미 딴 사람으로 채워진 부서에는 안 걸린다', () => {
+  // 품질심사팀은 DEPTS에서 headUserId=U006 — 다른 사람이 정본 부서장이다.
+  const notTheHead = resolveCalendarSupervisor(person({ id: 'U999', jobTitle: '팀장', dept: '품질심사팀' }), DEPTS);
+  assert.equal(notTheHead, null);
+});
+
+test('일반 사원과 비활성 계정에는 범위가 없다', () => {
   assert.equal(resolveCalendarSupervisor(person(), DEPTS), null);
-  assert.equal(resolveCalendarSupervisor(person({ position: '대표이사', status: '중지' as never }), DEPTS), null);
+  // 도메인 실제 비활성 상태는 '잠금'·'미사용' 둘뿐이다(USER_STATUS) — 둘 다 확인한다.
+  assert.equal(resolveCalendarSupervisor(person({ position: '대표이사', status: '잠금' }), DEPTS), null);
+  assert.equal(resolveCalendarSupervisor(person({ position: '대표이사', status: '미사용' }), DEPTS), null);
 });
 
 const eventOf = (over: Partial<CalendarEvent>): CalendarEvent => calendarEventSchema.parse({

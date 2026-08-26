@@ -12,10 +12,12 @@ function actorKey(actor: CalendarEventActor) {
   return [actor.userId, actor.active] as const;
 }
 
-export function useCalendarEvents(actor: CalendarEventActor, filter?: CalendarEventFilter) {
+export function useCalendarEvents(actor: CalendarEventActor, filter?: CalendarEventFilter, enabled = true) {
   return useQuery({
     queryKey: [CALENDAR_EVENTS_KEY, 'list', ...actorKey(actor), filter ?? null],
     queryFn: () => calendarEventRepo.list(actor, filter),
+    // 팀 탭이 떠 있는 동안에는 끈다 — 전건 로드가 탭당 한 번이면 충분하다.
+    enabled,
   });
 }
 

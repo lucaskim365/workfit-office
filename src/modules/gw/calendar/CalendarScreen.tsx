@@ -133,19 +133,30 @@ function LocalCalendarScreen() {
     return (departmentsQuery.data ?? []).map((dept) => dept.name);
   }, [supervisorScope, departmentsQuery.data]);
 
+  /*
+    부서 필터의 유효값. 저장된 선택이 지금 범위의 선택지에 없으면(데모 사용자 전환,
+    부서 개편) 전체로 되돌린다 — 잔존값을 그대로 쓰면 화면의 "열람 범위" 표기와 실제
+    데이터가 어긋난다. 특히 단일 부서 팀장에게는 선택기 자체가 안 그려져 되돌릴 수단이 없다.
+  */
+  const effectiveDeptSel = teamDeptSel !== ALL_DEPTS && teamDeptOptions.includes(teamDeptSel)
+    ? teamDeptSel
+    : ALL_DEPTS;
+
   /** 팀 일정의 소유자 목록. null = 전 직원(관리자가 '전체 부서'를 본 경우). */
   const teamOwners = useMemo<string[] | null>(() => {
     if (!supervisorScope) return [];
-    const deptNames = teamDeptSel === ALL_DEPTS
+    const deptNames = effectiveDeptSel === ALL_DEPTS
       ? (supervisorScope.kind === 'depts' ? supervisorScope.deptNames : null)
-      : [teamDeptSel];
+      : [effectiveDeptSel];
     if (deptNames === null) return null;
-    return users.filter((user) => deptNames.includes(user.dept)).map((user) => user.id);
-  }, [supervisorScope, teamDeptSel, users]);
+    // 재직자만 — 이 화면의 다른 대상 계산(공유 알림 수신자)과 같은 기준을 쓴다.
+    return users.filter((user) => deptNames.includes(user.dept) && user.status === '사용').map((user) => user.id);
+  }, [supervisorScope, effectiveDeptSel, users]);
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
-  const eventsQuery = useCalendarEvents(access, range);
+  // 팀 탭이 떠 있는 동안 내 일정 쿼리는 끈다 — 둘 다 전건 로드라 한 화면에 두 번 읽을 이유가 없다.
+  const eventsQuery = useCalendarEvents(access, range, !isTeam);
   const teamViewer = useMemo(
     () => ({ userId: actor?.id ?? '__anonymous__', active: actor?.status === '사용' }),
     [actor],
@@ -156,7 +167,11 @@ function LocalCalendarScreen() {
   const visibleEvents = isTeam ? (teamQuery.data ?? []) : events;
   const dayEvents = dayListDate ? visibleEvents.filter((event) => event.date === dayListDate) : [];
   const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading;
-  const queryError = usersQuery.error ?? eventsQuery.error ?? (isTeam ? teamQuery.error : undefined);
+  /*
+    팀 쿼리의 로딩·오류는 전체 화면을 대체하지 않고 격자 자리에만 그린다 — 내 일정은
+    멀쩡한데 팀 조회가 잠깐 실패했다고 탭 버튼까지 사라지면 돌아갈 길이 없다.
+  */
+  const queryError = usersQuery.error ?? eventsQuery.error;
 
   /** 등록·수정 모달로 넘어간다. 목록 모달은 겹치지 않게 닫는다. */
   const openEventModal = (target: { date: string; event?: CalendarEvent }) => {
@@ -176,7 +191,7 @@ function LocalCalendarScreen() {
         right={(
           <div className="flex items-center gap-2">
             {!authenticatedUser && (
-              <select value={actor.id} onChange={(event) => { setDemoUserId(event.target.value); setModalTarget(null); setTab('me'); }} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
+              <select value={actor.id} onChange={(event) => { setDemoUserId(event.target.value); setModalTarget(null); setTab('me'); setTeamDeptSel(ALL_DEPTS); }} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
                 {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
               </select>
             )}
@@ -213,7 +228,7 @@ function LocalCalendarScreen() {
               <span className="rounded-lg border border-teal/25 bg-teal-soft/25 px-2.5 py-1.5 text-[10.5px] font-bold text-teal">{supervisorScope.deptNames[0]}</span>
             ) : (
               <select
-                value={teamDeptSel}
+                value={effectiveDeptSel}
                 onChange={(event) => setTeamDeptSel(event.target.value)}
                 title="부서 선택"
                 className="h-8 rounded-lg border border-border bg-panel px-2.5 text-[10.5px] font-bold text-ink outline-none"
@@ -235,6 +250,15 @@ function LocalCalendarScreen() {
       </div>
 
       <div className="mt-4">
+        {/* 팀 조회의 로딩·오류는 격자 자리에만 그린다 — 내 일정은 멀쩡한데 탭 버튼까지 사라지면 돌아갈 길이 없다. */}
+        {isTeam && teamQuery.isLoading ? (
+          <div className="grid min-h-[40vh] place-items-center rounded-xl border border-border bg-panel text-[12px] font-semibold text-ink3">팀 일정을 불러오는 중…</div>
+        ) : isTeam && teamQuery.error ? (
+          <div className="grid min-h-[40vh] place-items-center gap-2 rounded-xl border border-border bg-panel px-5 text-center text-[12px] font-semibold text-danger">
+            팀 일정을 불러오지 못했습니다.
+            <Button onClick={() => teamQuery.refetch()}>다시 시도</Button>
+          </div>
+        ) : (
         <MonthCalendar
           month={month}
           today={today}
@@ -249,6 +273,7 @@ function LocalCalendarScreen() {
           ownerNameOf={isTeam ? (event) => ownerNameOf(event) : undefined}
           isMutedChip={isTeam ? (event) => isMaskedForSupervisor(actor.id, event) : undefined}
         />
+        )}
       </div>
 
       {/* 그 날 일정 전체. 칸 안 미리보기는 3개까지라 나머지는 여기서 본다. */}

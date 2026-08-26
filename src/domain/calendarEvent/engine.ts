@@ -96,9 +96,11 @@ const FULL_ACCESS_NAMES = new Set(['손승원', '김경일', '김승기', '홍�
 /**
  * 이 사용자의 팀 일정 열람 범위. 없으면 null — 화면은 탭을 그리지 않는다.
  *
- * 부서장 판정은 `departments.headUserId`가 정본이고(근태 서버와 동일), 거기 안 걸리면
- * 직책 '팀장'일 때 본인 소속 부서로 대신한다 — 운영 부서 데이터에 headUserId가 아직
- * 안 채워진 팀이 있어도 팀장이 조용히 권한을 잃지 않게 하는 안전망이다.
+ * 부서장 판정은 `departments.headUserId`가 정본이고(근태 서버와 동일), 직책 '팀장' 폴백은
+ * **본인 소속 부서에 headUserId가 아직 안 채워진 경우에만** 동작한다 — 데이터 미비로
+ * 팀장이 조용히 권한을 잃지 않게 하는 안전망이지, 정본을 이기는 규칙이 아니다.
+ * headUserId가 딴 사람으로 채워져 있는데도 직책만으로 부여하면, 부서장이 교체된 뒤
+ * 전 팀장의 직책이 정리되지 않은 동안 그 사람이 부서 범위를 계속 갖게 된다.
  */
 export function resolveCalendarSupervisor(
   user: Pick<User, 'id' | 'name' | 'dept' | 'position' | 'jobTitle' | 'status'>,
@@ -117,7 +119,11 @@ export function resolveCalendarSupervisor(
 
   const headed = departments.filter((dept) => dept.headUserId === user.id).map((dept) => dept.name);
   if (headed.length > 0) return { kind: 'depts', deptNames: headed };
-  if (user.jobTitle.trim() === '팀장' && user.dept) return { kind: 'depts', deptNames: [user.dept] };
+  if (user.jobTitle.trim() === '팀장' && user.dept) {
+    const own = departments.find((dept) => dept.name === user.dept);
+    // 부서 레코드가 없는 것도 데이터 미비다 — 안전망 취지대로 부여한다.
+    if (!own || !own.headUserId) return { kind: 'depts', deptNames: [user.dept] };
+  }
   return null;
 }
 
