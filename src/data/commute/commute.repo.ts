@@ -3,6 +3,7 @@ import {
   commuteRecordSchema,
   type CommuteEmployee,
   type CommuteRecord,
+  type CommuteViewer,
 } from '@/domain/commute/schema';
 import { COMMUTE_EMPLOYEE_FIXTURE, COMMUTE_RECORD_FIXTURE } from './commute.fixture';
 import { commuteGateway } from './commute.gateway';
@@ -21,6 +22,18 @@ import { dbDriver } from '@/shared/lib/dbDriver';
  * 출퇴근 기록을 가져가게 된다. 신원은 메일과 같은 `widdy-login` 서명 토큰을 쓴다.
  */
 export const commuteRepo = {
+  /**
+   * 내 열람 범위. 판정은 서버가 하고 화면은 결과만 쓴다.
+   *
+   * memory 드라이버에는 로그인 개념이 없어 물어볼 상대가 없다. 전부 보이는 셈이라 `admin`으로
+   * 두되 사번은 못 구하므로 "내 근태"는 열리지 않는다 — 목업에서 남의 기록을 내 것으로
+   * 보여주는 것보다 낫다.
+   */
+  async viewerScope(): Promise<CommuteViewer> {
+    if (dbDriver !== 'memory') return commuteGateway.viewerScope();
+    return { empId: null, name: '', kind: 'admin', deptNames: [] };
+  },
+
   async listEmployees(): Promise<CommuteEmployee[]> {
     if (dbDriver !== 'memory') {
       const rows = await commuteGateway.listEmployees();

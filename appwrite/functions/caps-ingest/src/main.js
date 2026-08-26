@@ -204,23 +204,37 @@ function normalizeEndpoint(value) {
 const readFail = (res, code, message, status) => res.json({ error: { code, message } }, status);
 
 /**
- * 전 직원 근태를 볼 수 있는 사람.
+ * 전 직원 근태를 볼 수 있는 직급·직책.
  *
- * ⚠ 하드코딩이다. "근태 관리자"라는 권한 개념이 아직 없다 — `roleGroup`으로 가르려 했지만
- * ADMIN이 이 넷 말고도 있고, 홍채원(U012)은 OPERATOR라 역할만으로는 못 가른다.
- * 권한 그룹이 생기면 이 목록을 지우고 그 값으로 판정할 것.
+ * `position`(직급)과 `jobTitle`(직책) 어느 쪽에 적혀 있어도 인정한다 — 조직마다 대표를
+ * 직급에 두기도 하고 직책에 두기도 한다. 부분 일치라 '대표이사'·'상무이사'·'위원장님'처럼
+ * 접미어가 붙어도 걸린다. 인사가 바뀌어도 코드를 고칠 일이 없는 것이 이 방식의 목적이다.
  */
-const ATTENDANCE_ADMINS = new Set([
+const FULL_ACCESS_TITLES = ['대표', '상무', '전무', '위원장'];
+
+/**
+ * 직급으로는 안 걸리지만 전 직원 근태를 봐야 하는 사람(인사·총무 담당).
+ *
+ * 예전에는 이 명단이 판정의 전부였다. 직급 규칙을 얹으면서도 **명단을 지우지 않는다** —
+ * 지우면 지금 쓰고 있는 사람이 조용히 권한을 잃는다. 담당이 바뀌면 여기서 뺀다.
+ */
+const FULL_ACCESS_USER_IDS = new Set([
   'U003', // 손승원
   'U011', // 김승기
   'U012', // 홍채원
   'U018', // 허진욱
 ]);
 
+/** 직급·직책이 전체 열람 대상인지. */
+function hasFullAccessTitle(user) {
+  const text = `${user?.position ?? ''} ${user?.jobTitle ?? ''}`;
+  return FULL_ACCESS_TITLES.some((title) => text.includes(title));
+}
+
 /**
- * 요청자가 볼 수 있는 CAPS 사번 집합을 구한다.
+ * 요청자의 열람 범위.
  *
- * - 관리자: 제한 없음(`null`)
+ * - 관리자(직급·직책 또는 예외 명단): 제한 없음(`empIds: null`)
  * - 부서장(`departments.headUserId`): 그 부서 소속의 사번만
  * - 그 외: 본인 것만
  *
@@ -228,12 +242,23 @@ const ATTENDANCE_ADMINS = new Set([
  * 쓸 수 없고, `userMap` 컬렉션은 아직 비어 있다. 이름이 안 맞는 사람(그룹웨어 계정이 없는
  * 직원)은 어느 부서장에게도 안 보인다 — 소속을 알 수 없으니 그게 맞다. 관리자에게만 보인다.
  * `userMap`이 채워지면 이 함수의 매칭만 그쪽으로 바꾸면 된다.
+ *
+ * `myEmpId`는 화면의 "내 근태"가 쓴다. 관리자도 자기 사번은 알아야 하므로 권한과 무관하게
+ * 항상 구한다 — 직원 목록은 십수 건이라 한 번 더 읽어도 부담이 없다.
  */
-async function resolveVisibleEmpIds(dbs, DB, uid, log) {
-  if (ATTENDANCE_ADMINS.has(uid)) return null;
-
+async function resolveViewerScope(dbs, DB, uid, log) {
   const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
-  if (!me) return new Set();
+  const myName = me ? String(me.name).trim() : '';
+
+  const employees = await listAll(dbs, DB, 'employees', [], log);
+  const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
+  const myEmpId = matched === undefined ? null : Number(matched.empId);
+
+  if (FULL_ACCESS_USER_IDS.has(uid) || hasFullAccessTitle(me)) {
+    log(`scope uid=${uid} kind=admin empId=${myEmpId ?? '(없음)'}`);
+    return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
+  }
+  if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
   const headed = await dbs.listDocuments(DB, 'departments', [Query.equal('headUserId', uid), Query.limit(50)]);
   const deptNames = headed.documents.map((d) => String(d.name));
@@ -246,13 +271,13 @@ async function resolveVisibleEmpIds(dbs, DB, uid, log) {
       for (const m of members.documents) names.add(String(m.name).trim());
     }
   } else {
-    names.add(String(me.name).trim());
+    names.add(myName);
   }
 
-  const employees = await listAll(dbs, DB, 'employees', [], log);
-  const allowed = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
-  log(`scope uid=${uid} 부서장=${deptNames.join(',') || '아니오'} 대상 ${allowed.size}명`);
-  return allowed;
+  const empIds = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
+  const kind = deptNames.length > 0 ? 'head' : 'self';
+  log(`scope uid=${uid} kind=${kind} 부서=${deptNames.join(',') || '-'} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+  return { empIds, kind, deptNames, myEmpId, myName };
 }
 
 /** 한 번에 가져올 수 있는 상한. Appwrite `limit`의 최댓값이다. */
@@ -317,10 +342,26 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
       볼 수 있는 범위를 **서버에서** 정한다. 화면이 보내는 값으로 정하면 요청을 고쳐 남의
       근태를 열 수 있다. null이면 제한 없음(관리자).
     */
-    const visible = await resolveVisibleEmpIds(dbs, DB, uid, log);
-    const canSee = (empId) => visible === null || visible.has(Number(empId));
+    const scope = await resolveViewerScope(dbs, DB, uid, log);
+    const canSee = (empId) => scope.empIds === null || scope.empIds.has(Number(empId));
 
     switch (action) {
+      /*
+        화면이 자기 권한을 스스로 판정하지 않게 서버가 알려준다. 같은 규칙을 프런트에
+        복제해 두면 언젠가 한쪽만 바뀌어 어긋난다 — 판정은 여기 한 곳에만 둔다.
+        `empId`는 "내 근태"가 쓸 본인 사번이고, 이름이 안 맞으면 null이다.
+      */
+      case 'viewerScope': {
+        return res.json({
+          data: {
+            empId: scope.myEmpId,
+            name: scope.myName,
+            kind: scope.kind,
+            deptNames: scope.deptNames,
+          },
+        });
+      }
+
       case 'listEmployees': {
         const rows = (await listAll(dbs, DB, 'employees', [], log)).filter((d) => canSee(d.empId));
         return res.json({

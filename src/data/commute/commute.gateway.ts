@@ -4,8 +4,10 @@ import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 import {
   commuteEmployeeSchema,
   commuteRecordSchema,
+  commuteViewerSchema,
   type CommuteEmployee,
   type CommuteRecord,
+  type CommuteViewer,
 } from '@/domain/commute/schema';
 
 /**
@@ -84,6 +86,11 @@ const parseRows = <T>(rows: unknown[], schema: { safeParse: (v: unknown) => { su
   });
 
 export const commuteGateway = {
+  /** 내 열람 범위. 화면이 자기 권한을 스스로 판정하지 않도록 서버에 물어본다. */
+  async viewerScope(): Promise<CommuteViewer> {
+    return commuteViewerSchema.parse(await call<unknown>('viewerScope'));
+  },
+
   async listEmployees(): Promise<CommuteEmployee[]> {
     const rows = await call<unknown[]>('listEmployees');
     return parseRows(rows, commuteEmployeeSchema);

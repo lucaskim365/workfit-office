@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   COMMUTE_STATUS_LABELS,
+  canSeeOthers,
   summarizeCommuteMonth,
   type CommuteEmployee,
   type CommuteRecord,
@@ -12,6 +13,7 @@ import {
   useCommuteEmployees,
   useCommuteMonth,
   useCommuteMonthAll,
+  useCommuteViewer,
 } from '@/features/commute/useCommute';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
@@ -19,15 +21,22 @@ import { Button } from '@/shared/ui/Button';
 /**
  * 근태 조회 — CAPS 연동 데이터의 읽기 화면.
  *
- * 보는 방향이 셋이다. **일별**은 하루를 전 직원으로(오늘 누가 안 왔나), **월별**은 한 달을
- * 전 직원 집계로(이번 달 누가 많이 빠졌나), **직원별**은 한 사람의 한 달을 날짜별로 본다.
- * 전환은 화면 머리의 토글이 맡는다 — 좌측 직원 목록에 섞으면 성격이 다른 항목이 같은 줄에 선다.
+ * **자리에 따라 화면이 다르다.** 누구나 자기 근태는 보고(`내 근태`), 남의 근태를 볼 수 있는
+ * 사람에게만 `부서원 근태`가 열린다 — 관리자는 전 직원, 부서장은 자기 부서원까지. 그 판정은
+ * **서버(`caps-ingest`)가 한다.** 화면은 `viewerScope`가 알려준 결과로 탭 노출과 범위 표기만
+ * 정한다. 같은 규칙을 화면에도 두면 언젠가 한쪽만 바뀌어 어긋나고, 화면이 숨기는 것과 서버가
+ * 막는 것이 갈라지면 그때부터는 화면을 믿을 수 없다.
+ *
+ * 부서원 근태는 보는 방향이 셋이다. **일별**은 하루를 전원으로(오늘 누가 안 왔나), **월별**은
+ * 한 달을 전원 집계로(이번 달 누가 많이 빠졌나), **직원별**은 한 사람의 한 달을 날짜별로 본다.
  *
  * 데이터는 읽기 전용이다. 쓰기는 CAPS 인제스트(서버 전용 키)만 한다. status는 계약상
  * 추정 매핑이라 참고용 안내를 함께 둔다.
  */
 const DAY_VIEW = 'day';
 const MONTH_VIEW = 'month';
+const ME_TAB = 'me';
+const TEAM_TAB = 'team';
 
 /**
  * 근태 대상이 아닌 등록명.
@@ -108,6 +117,10 @@ const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-bord
 const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] text-ink outline-none placeholder:text-ink3';
 
 export default function CommuteScreen() {
+  const viewerQuery = useCommuteViewer();
+  const viewer = viewerQuery.data;
+  /** 부서원 탭을 열 수 있는 자리인지. 실제 걸러내기는 서버가 하고 이건 노출 판단이다. */
+  const canTeam = canSeeOthers(viewer);
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
   // 근태 대상이 아닌 등록명은 어느 화면에서도 세지 않는다. 집계까지 흔들린다.
@@ -116,7 +129,9 @@ export default function CommuteScreen() {
     [allEmployees],
   );
 
-  /** 보기 대상. `day`·`month`면 전 직원, 숫자면 그 사번의 월별. */
+  /** 내 근태 / 부서원 근태. 볼 수 없는 자리면 아래에서 내 근태로 되돌린다. */
+  const [tab, setTab] = useState<string>(ME_TAB);
+  /** 부서원 탭 안의 보기. `day`·`month`면 전원, 숫자면 그 사번의 월별. */
   const [view, setView] = useState<string>(DAY_VIEW);
   const [month, setMonth] = useState(thisMonth());
   const [date, setDate] = useState(today());
@@ -124,21 +139,30 @@ export default function CommuteScreen() {
   const [keyword, setKeyword] = useState('');
   const [showRetired, setShowRetired] = useState(false);
 
+  /*
+    권한이 없으면 상태와 무관하게 내 근태로 고정한다. 상태를 되돌리는 effect를 쓰면 권한을
+    아직 모르는 첫 렌더에 한 번 깜빡인다 — 그릴 때 계산하면 그 틈이 없다.
+  */
+  const activeTab = canTeam ? tab : ME_TAB;
+  const isTeam = activeTab === TEAM_TAB;
+
   const isEmployeeView = view !== DAY_VIEW && view !== MONTH_VIEW;
-  const empId = isEmployeeView ? Number(view) : null;
+  const teamEmpId = isEmployeeView ? Number(view) : null;
+  /** 월별 표가 볼 사번. 내 탭이면 나, 부서원 탭이면 고른 직원. */
+  const monthEmpId = activeTab === ME_TAB ? (viewer?.empId ?? null) : teamEmpId;
   const firstEmpId = (employees.find((row) => row.active) ?? employees[0])?.empId;
 
   useEffect(() => {
     if (isEmployeeView && Number.isNaN(Number(view)) && firstEmpId !== undefined) setView(String(firstEmpId));
   }, [firstEmpId, isEmployeeView, view]);
 
-  const monthQuery = useCommuteMonth(empId, month);
-  const dayQuery = useCommuteDay(view === DAY_VIEW ? date : null);
-  const monthAllQuery = useCommuteMonthAll(view === MONTH_VIEW ? month : null);
+  const monthQuery = useCommuteMonth(monthEmpId, month);
+  const dayQuery = useCommuteDay(isTeam && view === DAY_VIEW ? date : null);
+  const monthAllQuery = useCommuteMonthAll(isTeam && view === MONTH_VIEW ? month : null);
 
   const monthRows = useMemo(() => monthQuery.data ?? [], [monthQuery.data]);
   const summary = useMemo(() => summarizeCommuteMonth(monthRows), [monthRows]);
-  const selected = employees.find((row) => row.empId === empId);
+  const selected = employees.find((row) => row.empId === teamEmpId);
 
   const matches = (employee: CommuteEmployee) => {
     const text = keyword.trim();
@@ -184,14 +208,11 @@ export default function CommuteScreen() {
     over: monthAllRows.reduce((sum, row) => sum + row.summary.overMinTotal, 0),
   }), [monthAllRows]);
 
-  const modeButton = (id: string, label: string, active: boolean) => (
+  const toggleButton = (key: string, label: string, active: boolean, onClick: () => void) => (
     <button
-      key={id}
+      key={key}
       type="button"
-      onClick={() => {
-        if (id === DAY_VIEW || id === MONTH_VIEW) setView(id);
-        else if (firstEmpId !== undefined) setView(String(firstEmpId));
-      }}
+      onClick={onClick}
       className={`rounded-md px-3 py-1.5 text-[11.5px] font-bold transition-colors ${
         active ? 'bg-teal text-white' : 'text-ink3 hover:text-ink2'
       }`}
@@ -200,13 +221,27 @@ export default function CommuteScreen() {
     </button>
   );
 
-  const modeToggle = (
-    <div className="flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5">
-      {modeButton(DAY_VIEW, '일별', view === DAY_VIEW)}
-      {modeButton(MONTH_VIEW, '월별', view === MONTH_VIEW)}
-      {modeButton('employee', '직원별', isEmployeeView)}
+  const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5';
+
+  /** 1차 전환. 부서원 탭은 볼 수 있는 사람에게만 보인다 — 없는 권한을 눌러 보게 두지 않는다. */
+  const tabToggle = (
+    <div className={toggleShell}>
+      {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => setTab(ME_TAB))}
+      {canTeam && toggleButton(TEAM_TAB, '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
     </div>
   );
+
+  /** 2차 전환 — 부서원 탭 안에서만 쓴다. */
+  const modeToggle = (
+    <div className={toggleShell}>
+      {toggleButton(DAY_VIEW, '일별', view === DAY_VIEW, () => setView(DAY_VIEW))}
+      {toggleButton(MONTH_VIEW, '월별', view === MONTH_VIEW, () => setView(MONTH_VIEW))}
+      {toggleButton('employee', '직원별', isEmployeeView, () => { if (firstEmpId !== undefined) setView(String(firstEmpId)); })}
+    </div>
+  );
+
+  /** 부서원 탭이 지금 덮는 범위. 관리자는 전 직원, 부서장은 맡은 부서다. */
+  const scopeLabel = viewer?.kind === 'admin' ? '전 직원' : (viewer?.deptNames.join(' · ') || '내 부서');
 
   const searchBox = (
     <input
@@ -295,7 +330,7 @@ export default function CommuteScreen() {
           <button type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="이전 달" className={navButton}>‹</button>
           <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
           <button type="button" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="다음 달" className={navButton}>›</button>
-          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · 전 직원</h2>
+          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {scopeLabel}</h2>
           <div className="ml-auto">{searchBox}</div>
         </div>
 
@@ -336,10 +371,15 @@ export default function CommuteScreen() {
     </>
   );
 
-  const monthPanel = (
+  /**
+   * 한 사람의 한 달. 내 탭과 부서원>직원별이 같은 표를 쓴다 — 보는 사람만 다르지 표는 같다.
+   * `canDrillToDay`는 내 탭에서 끈다. 그 날 전원 보기는 부서원 탭의 권한이라 내 탭에서
+   * 열리면 안 된다.
+   */
+  const renderMonthPanel = (ownerName: string, canDrillToDay: boolean) => (
     <>
       <div className="flex flex-wrap gap-2">
-        <StatCard label="근무" value={`${summary.workDays}일`} sub={selected?.name ?? '직원 선택'} tone="border-teal/25 bg-teal/8" />
+        <StatCard label="근무" value={`${summary.workDays}일`} sub={ownerName} tone="border-teal/25 bg-teal/8" />
         <StatCard label="지각" value={`${summary.lateDays}회`} tone="border-amber/25 bg-amber/8" />
         <StatCard label="결근" value={`${summary.absentDays}일`} tone="border-red-500/20 bg-red-500/6" />
         <StatCard label="연장" value={hourText(summary.overMinTotal)} />
@@ -350,7 +390,7 @@ export default function CommuteScreen() {
           <button type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="이전 달" className={navButton}>‹</button>
           <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
           <button type="button" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="다음 달" className={navButton}>›</button>
-          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {selected?.name ?? '직원 선택'}</h2>
+          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {ownerName}</h2>
         </div>
 
         {monthQuery.isLoading ? (
@@ -370,10 +410,12 @@ export default function CommuteScreen() {
                 {monthRows.map((row: CommuteRecord) => (
                   <tr key={row.date} className="border-b border-border/60 text-ink">
                     <td className="p-2 font-semibold">
-                      {/* 날짜 → 그날 전 직원. 사람에서 하루로 나오는 방향. */}
-                      <button type="button" onClick={() => { setDate(row.date); setView(DAY_VIEW); }} title="이 날짜의 전 직원 보기" className="hover:text-teal hover:underline">
-                        {row.date.slice(5).replace('-', '/')}
-                      </button>
+                      {/* 날짜 → 그날 전원. 사람에서 하루로 나오는 방향(부서원 탭에서만). */}
+                      {canDrillToDay ? (
+                        <button type="button" onClick={() => { setDate(row.date); setView(DAY_VIEW); }} title="이 날짜의 전원 보기" className="hover:text-teal hover:underline">
+                          {row.date.slice(5).replace('-', '/')}
+                        </button>
+                      ) : row.date.slice(5).replace('-', '/')}
                     </td>
                     <td className="p-2">{timeOf(row.inAt)}</td>
                     <td className="p-2">{timeOf(row.outAt)}</td>
@@ -392,39 +434,82 @@ export default function CommuteScreen() {
     </>
   );
 
+  /** 내 근태. CAPS 등록명과 이름이 안 맞으면 사번을 못 찾는다 — 왜 비었는지 밝힌다. */
+  const mePanel = viewer?.empId === null || viewer?.empId === undefined ? (
+    <div className="rounded-xl border border-dashed border-border bg-panel px-6 py-12 text-center">
+      <div className="text-2xl">🪪</div>
+      <div className="mt-2 text-[12px] font-bold text-ink">근태 시스템에서 내 기록을 찾지 못했습니다.</div>
+      <div className="mt-1 text-[10.5px] leading-relaxed text-ink3">
+        그룹웨어 이름{viewer?.name ? ` ‘${viewer.name}’` : ''}과 근태 단말에 등록된 이름이 다르면 연결되지 않습니다.
+        <br />관리자에게 근태 등록명 확인을 요청하세요.
+      </div>
+    </div>
+  ) : renderMonthPanel(viewer.name || '내 근태', false);
+
+  const teamPanel = isEmployeeView ? (
+    <GwSplit
+      nav={(
+        <GwSideNav
+          title="직원"
+          desc={`${visible.length}명 / 전체 ${employees.length}명`}
+          scrollItems
+          filter={(
+            <div className="flex flex-col gap-2">
+              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="이름·사번 검색" className={`${searchInput} w-full`} />
+              <label className="flex cursor-pointer items-center gap-1.5 text-[10.5px] text-ink3">
+                <input type="checkbox" checked={showRetired} onChange={(event) => setShowRetired(event.target.checked)} className="h-3 w-3 accent-teal" />
+                퇴사자 포함
+              </label>
+            </div>
+          )}
+          items={visible.map((row) => ({
+            id: String(row.empId),
+            label: row.active ? row.name : `${row.name} (퇴사)`,
+          }))}
+          activeId={view}
+          onSelect={setView}
+        />
+      )}
+    >
+      {renderMonthPanel(selected?.name ?? '직원 선택', true)}
+    </GwSplit>
+  ) : (
+    <div className="mt-5">{view === DAY_VIEW ? dayPanel : monthAllPanel}</div>
+  );
+
+  /*
+    권한을 모르는 동안에는 아무 탭도 그리지 않는다. 먼저 내 근태를 그려 두면 관리자에게는
+    화면이 한 번 접혔다 펴지고, 조회가 실패한 것인지 권한이 없는 것인지도 구분되지 않는다.
+  */
+  if (viewerQuery.isLoading) {
+    return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">근태 권한을 확인하는 중…</div>;
+  }
+  if (viewerQuery.isError) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center px-5 text-center text-[12px] font-semibold text-danger">
+        근태 열람 권한을 확인하지 못했습니다.
+        <br />
+        <span className="mt-1 block text-[10.5px] font-semibold text-ink3">
+          {viewerQuery.error instanceof Error ? viewerQuery.error.message : ''}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
-      <GwHead icon="⏱️" name="근태" right={modeToggle} />
+      <GwHead icon="⏱️" name="근태" right={tabToggle} />
 
-      {isEmployeeView ? (
-        <GwSplit
-          nav={(
-            <GwSideNav
-              title="직원"
-              desc={`${visible.length}명 / 전체 ${employees.length}명`}
-              scrollItems
-              filter={(
-                <div className="flex flex-col gap-2">
-                  <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="이름·사번 검색" className={`${searchInput} w-full`} />
-                  <label className="flex cursor-pointer items-center gap-1.5 text-[10.5px] text-ink3">
-                    <input type="checkbox" checked={showRetired} onChange={(event) => setShowRetired(event.target.checked)} className="h-3 w-3 accent-teal" />
-                    퇴사자 포함
-                  </label>
-                </div>
-              )}
-              items={visible.map((row) => ({
-                id: String(row.empId),
-                label: row.active ? row.name : `${row.name} (퇴사)`,
-              }))}
-              activeId={view}
-              onSelect={setView}
-            />
-          )}
-        >
-          {monthPanel}
-        </GwSplit>
+      {isTeam ? (
+        <>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {modeToggle}
+            <span className="text-[10.5px] font-semibold text-ink3">열람 범위 · {scopeLabel}</span>
+          </div>
+          {teamPanel}
+        </>
       ) : (
-        <div className="mt-5">{view === DAY_VIEW ? dayPanel : monthAllPanel}</div>
+        <div className="mt-5">{mePanel}</div>
       )}
     </div>
   );

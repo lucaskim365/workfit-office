@@ -31,6 +31,31 @@ export const commuteEmployeeSchema = z.object({
 
 export type CommuteEmployee = z.infer<typeof commuteEmployeeSchema>;
 
+/**
+ * 열람 범위 — **서버가 정한다.**
+ *
+ * 같은 판정 규칙을 화면에도 두면 언젠가 한쪽만 바뀌어 어긋난다. 화면은 이 값으로 탭 노출과
+ * 범위 표기만 정하고, 실제 걸러내기는 서버가 한다(요청을 고쳐도 남의 근태는 안 나온다).
+ */
+export const COMMUTE_SCOPE_KINDS = ['admin', 'head', 'self'] as const;
+
+export type CommuteScopeKind = (typeof COMMUTE_SCOPE_KINDS)[number];
+
+export const commuteViewerSchema = z.object({
+  /** 내 CAPS 사번. 이름이 CAPS 등록명과 안 맞으면 null이라 "내 근태"를 열 수 없다. */
+  empId: z.number().int().nullable(),
+  name: z.string().default(''),
+  kind: z.enum(COMMUTE_SCOPE_KINDS),
+  /** 부서장일 때 내가 맡은 부서 이름. 관리자·일반은 빈 배열. */
+  deptNames: z.array(z.string()).default([]),
+});
+
+export type CommuteViewer = z.infer<typeof commuteViewerSchema>;
+
+/** 남의 근태를 볼 수 있는 자리인지. 탭 노출 판단에만 쓴다. */
+export const canSeeOthers = (viewer: CommuteViewer | undefined): boolean =>
+  viewer?.kind === 'admin' || viewer?.kind === 'head';
+
 export const commuteRecordSchema = z.object({
   empId: z.number().int(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
