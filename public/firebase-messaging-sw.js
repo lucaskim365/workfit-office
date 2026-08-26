@@ -57,7 +57,6 @@ async function getClientMode() {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const isApproval = data.type === '결재';
   event.waitUntil(
     (async () => {
       const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -67,41 +66,46 @@ self.addEventListener('notificationclick', (event) => {
 
       // 1) 데스크톱 창이 열려 있으면: 라우트 이동 없이 그 창에서 처리.
       if (desktop) {
-        if (isApproval) {
-          desktop.navigate(data.linkUrl || '/gw/approval');
-        } else {
-          // 메신저는 데스크톱 도크를 해당 방으로 연다(현재 화면 유지).
-          desktop.postMessage({ type: 'workfit-open-chat', roomId: data.roomId || '' });
+        if (data.roomId) {
+          desktop.postMessage({ type: 'workfit-open-chat', roomId: data.roomId });
+        } else if (data.linkUrl) {
+          desktop.navigate(data.linkUrl);
         }
         return desktop.focus();
       }
 
       // 2) PWA 창이 열려 있으면: /m 딥링크로 이동.
       if (pwa) {
-        const target = isApproval
-          ? `/m/approval/${data.docId || ''}`
-          : data.roomId
-            ? `/m/room/${data.roomId}`
-            : '/m';
+        let target = '/m';
+        if (data.roomId) {
+          target = `/m/room/${data.roomId}`;
+        } else if (data.docId) {
+          target = `/m/approval/${data.docId}`;
+        } else if (data.linkUrl) {
+          target = data.linkUrl.replace(/^\/gw/, '/m');
+        }
         pwa.navigate(target);
         return pwa.focus();
       }
 
       // 3) 열린 창 없음(콜드): 기기 모드에 맞춰 새 창.
       const mode = await getClientMode();
-      let fallback;
+      let fallback = '/';
       if (mode === 'desktop') {
-        fallback = isApproval
-          ? data.linkUrl || '/gw/approval'
-          : data.roomId
-            ? `/?openChat=${encodeURIComponent(data.roomId)}`
-            : '/';
+        if (data.roomId) {
+          fallback = `/?openChat=${encodeURIComponent(data.roomId)}`;
+        } else if (data.linkUrl) {
+          fallback = data.linkUrl;
+        }
       } else {
-        fallback = isApproval
-          ? `/m/approval/${data.docId || ''}`
-          : data.roomId
-            ? `/m/room/${data.roomId}`
-            : '/m';
+        fallback = '/m';
+        if (data.roomId) {
+          fallback = `/m/room/${data.roomId}`;
+        } else if (data.docId) {
+          fallback = `/m/approval/${data.docId}`;
+        } else if (data.linkUrl) {
+          fallback = data.linkUrl.replace(/^\/gw/, '/m');
+        }
       }
       return self.clients.openWindow(fallback);
     })(),
