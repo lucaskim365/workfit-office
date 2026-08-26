@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
@@ -11,6 +10,7 @@ import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable
 import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
 import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
+import { RelatedDocDetailModal } from './RelatedDocDetailModal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -50,8 +50,8 @@ export function ApprovalDocumentView({
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
-  const nav = useNavigate();
   const [accessibleRelatedDocs, setAccessibleRelatedDocs] = useState<RelatedDoc[]>([]);
+  const [activeRelatedDocId, setActiveRelatedDocId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!doc.relatedDocs || doc.relatedDocs.length === 0) {
@@ -949,7 +949,7 @@ export function ApprovalDocumentView({
                       <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
                       <button
                         type="button"
-                        onClick={() => !isPreview && nav(`${window.location.pathname}?doc=${rd.docId}`)}
+                        onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
                         className={`font-semibold text-ink2 text-left transition-colors ${
                           isPreview
                             ? 'cursor-default'
@@ -1015,6 +1015,9 @@ export function ApprovalDocumentView({
           )}
         </div>
       </div>
+      {activeRelatedDocId && (
+        <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
+      )}
     </div>
     </>
   );
