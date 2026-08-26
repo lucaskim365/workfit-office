@@ -93,10 +93,13 @@ function LocalCalendarScreen() {
     setSelectedDate(today);
   };
 
+  /*
+    달만 넘긴다 — selectedDate는 건드리지 않는다. 한 번 넘길 때마다 그 달 1일로 덮어쓰면,
+    다음달 → 이전달처럼 왕복만 해도 원래 선택돼 있던 날짜 정보 자체가 사라져 좌측 목록이
+    엉뚱한 날짜에 멈춘다. "선택된 날짜"와 "지금 보고 있는 달"은 별개로 둔다.
+  */
   const moveMonth = (amount: number) => {
-    const next = moveCalendarMonth(month, amount);
-    setMonth(next);
-    setSelectedDate(`${next}-01`);
+    setMonth(moveCalendarMonth(month, amount));
   };
 
   if (loading) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">일정을 불러오는 중…</div>;
