@@ -62,6 +62,9 @@ function ApprovalDraftInner({
   const { data: forms = [] } = useActiveApprovalForms();
   const org = useOrgTree();
   const bal = useLeave(me.id);
+  const userDeptId = useMemo(() => {
+    return org.depts.find((d) => d.name === me.dept)?.id;
+  }, [org.depts, me.dept]);
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
@@ -1397,13 +1400,25 @@ function ApprovalDraftInner({
         <RelatedDocSearchModal
           userId={me.id}
           userDept={me.dept}
+          userDeptId={userDeptId}
           selectedDocIds={relatedDocs.map((x) => x.docId)}
-          onSelect={(selectedList) => {
+          onSelect={(selectedList, attachmentsFromDocs) => {
+            // 1. 관련 기결재 문서 참조 링크 연동
             setRelatedDocs((prev) => {
               const existingIds = new Set(prev.map((x) => x.docId));
               const newItems = selectedList.filter((x) => !existingIds.has(x.docId));
               return [...prev, ...newItems];
             });
+            
+            // 2. 관련 문서에 포함된 첨부파일들을 현재 기안서 첨부파일 목록에 중복 없이 자동 복사 추가
+            if (attachmentsFromDocs && attachmentsFromDocs.length > 0) {
+              setAttachments((prev) => {
+                const existingUrls = new Set(prev.map((x) => x.url));
+                const newFiles = attachmentsFromDocs.filter((f) => !existingUrls.has(f.url));
+                return [...prev, ...newFiles];
+              });
+            }
+            
             setShowRelatedModal(false);
           }}
           onClose={() => setShowRelatedModal(false)}
