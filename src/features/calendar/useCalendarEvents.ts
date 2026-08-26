@@ -12,10 +12,30 @@ function actorKey(actor: CalendarEventActor) {
   return [actor.userId, actor.active] as const;
 }
 
-export function useCalendarEvents(actor: CalendarEventActor, filter?: CalendarEventFilter) {
+export function useCalendarEvents(actor: CalendarEventActor, filter?: CalendarEventFilter, enabled = true) {
   return useQuery({
     queryKey: [CALENDAR_EVENTS_KEY, 'list', ...actorKey(actor), filter ?? null],
     queryFn: () => calendarEventRepo.list(actor, filter),
+    // 팀 탭이 떠 있는 동안에는 끈다 — 전건 로드가 탭당 한 번이면 충분하다.
+    enabled,
+  });
+}
+
+/**
+ * 관리자 종합 조회(팀 일정). `owners`가 null이면 전 직원, 배열이면 그 소유자들만.
+ * `enabled`로 게이트한다 — 범위 판정(resolveCalendarSupervisor)을 통과 못 한 사용자는
+ * 조회 자체를 던지지 않는다.
+ */
+export function useTeamCalendarEvents(
+  viewer: { userId: string; active: boolean },
+  owners: string[] | null,
+  filter: CalendarEventFilter | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [CALENDAR_EVENTS_KEY, 'team', viewer.userId, viewer.active, owners, filter ?? null],
+    queryFn: () => calendarEventRepo.listTeam(viewer, owners, filter),
+    enabled,
   });
 }
 

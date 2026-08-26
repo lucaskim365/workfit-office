@@ -1,4 +1,6 @@
 import type { CalendarEvent } from './schema';
+import type { Department } from '@/domain/department/schema';
+import type { User } from '@/domain/user/schema';
 
 /**
  * 일정 접근 판정에 필요한 사용자 정보.
@@ -55,3 +57,92 @@ export function canManageEvent(actor: CalendarAccessContext, event: CalendarEven
 /** 내가 만든 일정인가. 화면이 공유받은 일정과 내 일정을 다르게 그리는 데 쓴다. */
 export const isOwnEvent = (actor: CalendarAccessContext, event: CalendarEvent): boolean =>
   event.ownerUserId === actor.userId;
+
+/* ------------------------------------------------------------- 관리자 종합 조회 */
+
+/**
+ * 팀 일정(관리자 종합 조회)의 열람 범위.
+ *
+ * - `all`: 전 직원 일정. 경영진(대표·상무)과 개발 담당자.
+ * - `depts`: 이름이 나열된 부서 소속의 일정만. 부서장(팀장).
+ * - `null`(함수 반환): 팀 일정 화면 자체가 열리지 않는다.
+ *
+ * ⚠ 일정 컬렉션은 브라우저가 직접 읽는 UI-게이트 모델이라(다른 업무 모듈과 동일,
+ * DEPLOY_PREP §2.4) 이 판정은 화면 노출 제어다. 서버 강제까지 가려면 근태처럼
+ * Function 경유로 조회를 옮겨야 하고, 그때 이 규칙을 서버로 그대로 옮기면 된다.
+ */
+export type CalendarSupervisorScope =
+  | { kind: 'all' }
+  | { kind: 'depts'; deptNames: string[] };
+
+/**
+ * 전 직원 일정을 볼 수 있는 직급·직책. 근태(caps-ingest)의 FULL_ACCESS_TITLES와 같은
+ * 목록 — 두 화면의 "경영진" 기준이 달라지면 사용자가 규칙을 신뢰할 수 없다.
+ * 부분 일치라 '대표이사'·'상무이사'처럼 접미어가 붙어도 걸린다.
+ */
+const FULL_ACCESS_TITLES = ['대표', '상무', '전무', '위원장'];
+
+/**
+ * 직급으로 안 걸리지만 전 직원 일정을 봐야 하는 사람 — 지정 인원 하드코딩.
+ *
+ * 시드(U003 등)와 운영 실데이터의 사용자 ID가 다를 수 있어 ID와 이름 어느 쪽이 걸려도
+ * 인정한다. 손승원(상무)·김경일(대표)은 직급 규칙으로도 걸리지만, "이 두 사람은 반드시"
+ * 라는 지시가 있었으므로 직급 표기가 바뀌어도 깨지지 않게 명단에도 둔다.
+ * 권한 그룹 개념이 생기면 이 명단을 지우고 그 값으로 판정할 것.
+ */
+const FULL_ACCESS_IDS = new Set(['U003', 'U011', 'U012', 'U018']);
+const FULL_ACCESS_NAMES = new Set(['손승원', '김경일', '김승기', '홍채원', '허진욱']);
+
+/**
+ * 이 사용자의 팀 일정 열람 범위. 없으면 null — 화면은 탭을 그리지 않는다.
+ *
+ * 부서장 판정은 `departments.headUserId`가 정본이고(근태 서버와 동일), 직책 '팀장' 폴백은
+ * **본인 소속 부서에 headUserId가 아직 안 채워진 경우에만** 동작한다 — 데이터 미비로
+ * 팀장이 조용히 권한을 잃지 않게 하는 안전망이지, 정본을 이기는 규칙이 아니다.
+ * headUserId가 딴 사람으로 채워져 있는데도 직책만으로 부여하면, 부서장이 교체된 뒤
+ * 전 팀장의 직책이 정리되지 않은 동안 그 사람이 부서 범위를 계속 갖게 된다.
+ */
+export function resolveCalendarSupervisor(
+  user: Pick<User, 'id' | 'name' | 'dept' | 'position' | 'jobTitle' | 'status'>,
+  departments: Pick<Department, 'name' | 'headUserId'>[],
+): CalendarSupervisorScope | null {
+  if (user.status !== '사용') return null;
+
+  const title = `${user.position} ${user.jobTitle}`;
+  if (
+    FULL_ACCESS_IDS.has(user.id)
+    || FULL_ACCESS_NAMES.has(user.name.trim())
+    || FULL_ACCESS_TITLES.some((keyword) => title.includes(keyword))
+  ) {
+    return { kind: 'all' };
+  }
+
+  const headed = departments.filter((dept) => dept.headUserId === user.id).map((dept) => dept.name);
+  if (headed.length > 0) return { kind: 'depts', deptNames: headed };
+  if (user.jobTitle.trim() === '팀장' && user.dept) {
+    const own = departments.find((dept) => dept.name === user.dept);
+    // 부서 레코드가 없는 것도 데이터 미비다 — 안전망 취지대로 부여한다.
+    if (!own || !own.headUserId) return { kind: 'depts', deptNames: [user.dept] };
+  }
+  return null;
+}
+
+/** 팀 일정 화면에서 가린 일정의 표시 제목. 화면이 이 값으로 "클릭 무시"도 판단하지 않는다 — 판정은 아래 함수로. */
+export const MASKED_EVENT_TITLE = '비공개 일정';
+
+/** 팀 일정 화면에서 내용 없이 시간만 보여야 하는 일정인가 — 남의 '나만 보기' 일정. */
+export const isMaskedForSupervisor = (viewerId: string, event: CalendarEvent): boolean =>
+  event.visibility === 'PRIVATE' && event.ownerUserId !== viewerId;
+
+/**
+ * 관리자 종합 조회용 가림 처리.
+ *
+ * 남의 '나만 보기' 일정은 **있다는 사실(시간대)만** 보이고 제목·메모는 가린다 — 아웃룩의
+ * "바쁨" 표시와 같은 관행이다. 관리자라도 개인 일정의 내용까지 볼 이유는 없고, 일정이
+ * 겹치는지(그 시간에 바쁜지)만 알면 종합 조회의 목적은 충분하다.
+ * 부서·프로젝트·전사 공유는 이미 집단에 공개된 것이라 그대로 보여 준다.
+ */
+export function maskEventForSupervisor(viewerId: string, event: CalendarEvent): CalendarEvent {
+  if (!isMaskedForSupervisor(viewerId, event)) return event;
+  return { ...event, title: MASKED_EVENT_TITLE, memo: '' };
+}

@@ -1,7 +1,7 @@
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
-import { canViewEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
+import { canViewEvent, maskEventForSupervisor, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
 /**
@@ -116,6 +116,64 @@ function nextId(rows: CalendarEvent[], date: string): string {
   return `${prefix}${String(max + 1).padStart(4, '0')}`;
 }
 
+/**
+ * 공유 대상에게 새 일정 알림을 보낸다.
+ *
+ * 결재(`approvalDoc.repo.ts`)와 같은 자리 — 저장이 끝난 뒤, 실패해도 저장 자체는
+ * 그대로 두는 try/catch로 감싼다. 알림은 부가 효과지 일정 저장의 전제조건이 아니다.
+ * 대상 조회에 필요한 user·department·project repo는 동적 import로 끌어와
+ * calendarEvent.repo가 그 모듈들을 상시로 물지 않게 한다.
+ *
+ * 수정(update)은 대상으로 삼지 않는다 — "공유로 바뀐 것"과 "공유인 채 내용만 바뀐 것"을
+ * 가르려면 이전 값과 비교해야 하는데, 지금은 생성 시점만으로 충분하다.
+ */
+async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent): Promise<void> {
+  if (event.visibility === 'PRIVATE') return;
+
+  const { userRepo } = await import('@/data/user/user.repo');
+  let recipientIds: string[] = [];
+
+  if (event.visibility === 'COMPANY') {
+    recipientIds = (await userRepo.list({ status: '사용' })).map((row) => row.id);
+  } else if (event.visibility === 'TEAM' && event.deptId) {
+    const { departmentRepo } = await import('@/data/department/department.repo');
+    const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
+    if (dept) recipientIds = (await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id);
+  } else if (event.visibility === 'PROJECT' && event.projectId) {
+    const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
+    // 이 프로젝트로 공유를 걸 수 있었다는 것 자체가 actor가 이미 그 프로젝트를 볼 수 있다는
+    // 뜻이라(화면이 참여 중인 프로젝트만 고르게 한다), 같은 actor로 조회해도 막히지 않는다.
+    const project = await workProjectRepo.get(
+      { userId: actor.userId, deptId: actor.deptId ?? null, active: actor.active },
+      event.projectId,
+    );
+    if (project) recipientIds = [project.ownerUserId, ...project.memberUserIds];
+  }
+
+  const uniqueRecipients = [...new Set(recipientIds)].filter((id) => id !== event.ownerUserId);
+  if (uniqueRecipients.length === 0) return;
+
+  const owner = (await userRepo.list()).find((row) => row.id === event.ownerUserId);
+  const { notificationRepo } = await import('@/data/notification/notification.repo');
+  const when = event.allDay ? `${event.date} 종일` : `${event.date} ${event.startTime}`;
+
+  await Promise.all(uniqueRecipients.map((userId) => notificationRepo.create({
+    userId,
+    type: '일정',
+    title: '새 일정 공유',
+    text: `[${event.title}] ${when}${scopeLabel(event.visibility)}`,
+    senderName: owner?.name ?? '동료',
+    linkUrl: `/gw/calendar?date=${event.date}`,
+  })));
+}
+
+function scopeLabel(visibility: CalendarEvent['visibility']): string {
+  if (visibility === 'TEAM') return ' · 부서 공유';
+  if (visibility === 'PROJECT') return ' · 프로젝트 공유';
+  if (visibility === 'COMPANY') return ' · 전사 공개';
+  return '';
+}
+
 function sortEvents(rows: CalendarEvent[]): CalendarEvent[] {
   return rows.sort((a, b) => (
     a.date.localeCompare(b.date)
@@ -139,6 +197,32 @@ export const calendarEventRepo = {
       .map(cloneEvent));
   },
 
+  /**
+   * 관리자 종합 조회 — 지정한 소유자들의 일정 전부(공개 범위 무관).
+   *
+   * **호출 전에 열람 범위 판정(`resolveCalendarSupervisor`)을 통과했어야 한다.** 여기는
+   * 판정하지 않는다 — 판정에 필요한 부서·사용자 정보를 repo가 다시 모으면 화면과 이중
+   * 조회가 되고, 이 저장소는 어차피 UI-게이트 모델이라(클라이언트가 컬렉션을 직접 읽음)
+   * repo 검사가 보안 경계도 아니다. 남의 '나만 보기' 일정은 제목·메모를 가려서 돌려준다.
+   *
+   * `ownerUserIds`가 null이면 전 직원(all 범위), 배열이면 그 소유자들만(부서 범위).
+   */
+  async listTeam(
+    viewer: { userId: string; active: boolean },
+    ownerUserIds: string[] | null,
+    filter?: CalendarEventFilter,
+  ): Promise<CalendarEvent[]> {
+    validateFilter(filter);
+    if (!viewer.active) return [];
+    const owners = ownerUserIds === null ? null : new Set(ownerUserIds);
+    const rows = await loadAll();
+    return sortEvents(rows
+      .filter((event) => owners === null || owners.has(event.ownerUserId))
+      .filter((event) => !filter?.from || event.date >= filter.from)
+      .filter((event) => !filter?.to || event.date <= filter.to)
+      .map((event) => maskEventForSupervisor(viewer.userId, cloneEvent(event))));
+  },
+
   async get(actor: CalendarEventActor, id: string): Promise<CalendarEvent | null> {
     if (!actor.active) return null;
     const access = accessContextOf(actor);
@@ -158,8 +242,14 @@ export const calendarEventRepo = {
         ownerUserId: actor.userId,
         createdAt: now,
         updatedAt: now,
+        reminded: false,
       });
       await persist(created);
+      try {
+        await notifyRecipients(actor, created);
+      } catch (e) {
+        console.error('일정 공유 알림 전송 실패:', e);
+      }
       return cloneEvent(created);
     });
   },
@@ -169,6 +259,12 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const current = requireOwned(rows, actor, id);
+      /*
+        시작 시각이 바뀌면 리마인더도 다시 대상이 돼야 한다. 3시 회의를 3시 50분에 이미
+        리마인더 받은 뒤 5시로 옮기면, reminded=true가 그대로 남아 새 시각엔 영영 안 온다.
+        날짜·시작 시각 중 하나라도 바뀌면 플래그를 되돌린다.
+      */
+      const timeChanged = draft.date !== current.date || draft.startTime !== current.startTime;
       const updated = parseEvent({
         ...current,
         ...draft,
@@ -176,6 +272,7 @@ export const calendarEventRepo = {
         ownerUserId: current.ownerUserId,
         createdAt: current.createdAt,
         updatedAt: new Date().toISOString(),
+        reminded: timeChanged ? false : current.reminded,
       });
       await persist(updated);
       return cloneEvent(updated);

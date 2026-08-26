@@ -587,6 +587,12 @@ const COLLECTIONS: CollectionDef[] = [
       S('projectId', 64),
       S('createdAt', 40),
       S('updatedAt', 40),
+      /*
+        시작 10분 전 리마인더를 보냈는지. 기본값 false — 기존 문서는 전부 "아직 안 보냄"으로
+        읽혀 리마인더 대상이 될 수 있지만, 이미 지난 일정이라 스케줄 쿼리(날짜=오늘) 밖이라
+        실제로 걸리지 않는다. 한 번 보내면 true로 바꿔 같은 일정을 다시 보내지 않는다.
+      */
+      BOOL('reminded', false),
     ],
     /*
       공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만
@@ -598,6 +604,8 @@ const COLLECTIONS: CollectionDef[] = [
       IX('calVisibility', ['visibility']),
       IX('calDept', ['deptId']),
       IX('calProject', ['projectId']),
+      /* 리마인더 함수가 매 실행마다 던지는 질의와 같은 모양(날짜+미발송+시간 일정). */
+      IX('calReminder', ['date', 'reminded', 'allDay']),
     ],
   },
   {

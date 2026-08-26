@@ -11,6 +11,10 @@ interface MonthCalendarProps {
   /** 그 날짜로 새 일정을 등록한다(칸 우상단 +). */
   onAddOn: (date: string) => void;
   onSelectEvent: (event: CalendarEvent) => void;
+  /** 칩에 붙일 소유자 이름(팀 일정). null이면 안 붙인다 — 내 일정에 내 이름을 붙일 이유는 없다. */
+  ownerNameOf?: (event: CalendarEvent) => string | null;
+  /** 흐리게 그릴 칩 — 가림 처리된 남의 비공개 일정. 시간대만 보이고 열리지 않는다. */
+  isMutedChip?: (event: CalendarEvent) => boolean;
 }
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -19,7 +23,7 @@ function eventLabel(event: CalendarEvent): string {
   return event.allDay ? event.title : `${event.startTime} ${event.title}`;
 }
 
-export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn, onSelectEvent }: MonthCalendarProps) {
+export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn, onSelectEvent, ownerNameOf, isMutedChip }: MonthCalendarProps) {
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const eventsByDate = useMemo(() => {
     const rows = new Map<string, CalendarEvent[]>();
@@ -69,12 +73,17 @@ export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn
                   </button>
                 </div>
                 <span className="mt-1.5 block space-y-1">
-                  {rows.slice(0, 3).map((event) => (
-                    /* 일정 칩은 상세를 연다. 칸 선택까지 겹쳐 일어나지 않게 전파를 끊는다. */
-                    <button type="button" key={event.id} onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }} title={eventLabel(event)} className={`block w-full truncate rounded px-1.5 py-1 text-left text-[8.5px] font-semibold focus:outline-none focus:ring-2 focus:ring-teal/40 ${event.allDay ? 'bg-teal-soft/75 text-teal' : 'bg-blue/10 text-blue'}`}>
-                      {eventLabel(event)}
-                    </button>
-                  ))}
+                  {rows.slice(0, 3).map((event) => {
+                    const owner = ownerNameOf?.(event) ?? null;
+                    const label = owner ? `${owner} · ${eventLabel(event)}` : eventLabel(event);
+                    const muted = isMutedChip?.(event) ?? false;
+                    return (
+                      /* 일정 칩은 상세를 연다. 칸 선택까지 겹쳐 일어나지 않게 전파를 끊는다. */
+                      <button type="button" key={event.id} onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }} title={label} className={`block w-full truncate rounded px-1.5 py-1 text-left text-[8.5px] font-semibold focus:outline-none focus:ring-2 focus:ring-teal/40 ${muted ? 'bg-ink3/10 text-ink3' : event.allDay ? 'bg-teal-soft/75 text-teal' : 'bg-blue/10 text-blue'}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
                   {rows.length > 3 && (
                     <button type="button" onClick={(clicked) => { clicked.stopPropagation(); onOpenDay(cell.date); }} className="block px-1 text-[8.5px] font-bold text-ink3 hover:text-teal">
                       +{rows.length - 3}개 더보기

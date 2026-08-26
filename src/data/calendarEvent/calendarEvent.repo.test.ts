@@ -125,3 +125,36 @@ test('필수값이 비면 사람이 읽는 문구로 거절한다', async () => 
     },
   );
 });
+
+/* --------------------------------------------------------- 관리자 종합 조회 */
+
+test('팀 조회는 지정 소유자의 일정을 공개 범위와 무관하게 모으되, 남의 나만 보기는 가린다', async () => {
+  const mine = await calendarEventRepo.create(owner, draft('부서장에겐 시간만'));
+  const shared = await calendarEventRepo.create(owner, draft('부서 회의', { visibility: 'TEAM', deptId: 'D240' }));
+
+  // 감독자(other)는 owner의 일정을 전부 받되, PRIVATE는 제목·메모가 가려진다.
+  const rows = await calendarEventRepo.listTeam(other, [owner.userId], { from: '2026-08-01', to: '2026-08-31' });
+  const maskedRow = rows.find((row) => row.id === mine.id);
+  const sharedRow = rows.find((row) => row.id === shared.id);
+  assert.equal(maskedRow?.title, '비공개 일정');
+  assert.equal(maskedRow?.memo, '');
+  assert.equal(maskedRow?.startTime, '09:00');
+  assert.equal(sharedRow?.title, '부서 회의');
+
+  // 소유자 목록 밖의 일정은 안 나온다.
+  assert.equal(rows.every((row) => row.ownerUserId === owner.userId), true);
+
+  // null = 전 직원. 방금 만든 두 건이 모두 잡힌다.
+  const all = await calendarEventRepo.listTeam(other, null, { from: '2026-08-01', to: '2026-08-31' });
+  assert.equal(all.some((row) => row.id === mine.id), true);
+
+  // 본인 소유는 팀 조회에서도 안 가려진다.
+  const asOwner = await calendarEventRepo.listTeam(owner, [owner.userId], { from: '2026-08-01', to: '2026-08-31' });
+  assert.equal(asOwner.find((row) => row.id === mine.id)?.title, '부서장에겐 시간만');
+
+  // 비활성 계정은 빈 목록.
+  assert.deepEqual(await calendarEventRepo.listTeam({ ...other, active: false }, null), []);
+
+  await calendarEventRepo.remove(owner, mine.id);
+  await calendarEventRepo.remove(owner, shared.id);
+});

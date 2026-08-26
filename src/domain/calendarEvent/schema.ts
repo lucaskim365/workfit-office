@@ -40,6 +40,13 @@ export const calendarEventSchema = z.object({
   projectId: z.string().nullable().default(null),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  /**
+   * 시작 10분 전 리마인더를 보냈는지 — `calendar-reminder` Function 전용 필드다.
+   * 화면은 이 값을 직접 안 다룬다(`CalendarEventDraft`에서 뺌). 예전 문서는 필드가 없어도
+   * 기본값 false로 읽혀 리마인더 대상이 될 수 있지만, 이미 지난 날짜라 스케줄 쿼리
+   * (오늘 날짜만 훑음) 밖이라 실제로 다시 보내지지 않는다.
+   */
+  reminded: z.boolean().default(false),
 }).superRefine((value, ctx) => {
   if (value.allDay && (value.startTime !== null || value.endTime !== null)) {
     ctx.addIssue({ code: 'custom', path: ['startTime'], message: '종일 일정에는 시작·종료 시각을 지정할 수 없습니다.' });
@@ -64,4 +71,4 @@ export const calendarEventSchema = z.object({
 
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarVisibility = (typeof CALENDAR_VISIBILITIES)[number];
-export type CalendarEventDraft = Omit<CalendarEvent, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt'>;
+export type CalendarEventDraft = Omit<CalendarEvent, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded'>;
