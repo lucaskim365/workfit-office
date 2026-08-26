@@ -30,7 +30,7 @@ interface Tool {
 const DOCK_TOOLS: Tool[] = [
   { key: 'gw', label: '그룹웨어', icon: '🌐', color: '#c7ecc5' },
   { key: 'bot', label: 'Widdy', icon: '✦', color: '#a9c8f5' },
-  { key: 'msg', label: '메신저', icon: '👤', color: '#eecfa2' },
+  { key: 'msg', label: '메신저', icon: '👤', color: '#bae0ff' },
 ];
 
 function getRoomDisplayName(room: ChatRoom, me: string, users: any[]): string {
@@ -81,7 +81,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
         style={{
           width: PANEL_W,
           right: open ? 0 : -(PANEL_W + 12),
-          backgroundColor: open === 'gw' ? '#f2faf3' : open === 'bot' ? '#eaf2ff' : open === 'msg' ? '#faf6f0' : '#f3f6fa'
+          backgroundColor: open === 'gw' ? '#f2faf3' : open === 'bot' ? '#eaf2ff' : open === 'msg' ? '#f2f8fc' : '#f3f6fa'
         }}
         className="fixed bottom-0 top-0 z-[73] flex flex-col shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
       >
@@ -104,7 +104,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
               {/* 메신저 알림 기록 슬라이드 오버레이 */}
               {tool.key === 'msg' && (
                 <div
-                  className="absolute inset-0 flex flex-col overflow-hidden bg-[#faf6f0] transition-transform duration-300"
+                  className="absolute inset-0 flex flex-col overflow-hidden bg-[#f2f8fc] transition-transform duration-300"
                   style={{ transform: msgNotiView ? 'translateX(0)' : 'translateX(100%)' }}
                 >
                   <div className="border-b border-border px-4 py-2.5">
@@ -119,7 +119,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
                           key={n.id}
                           className={`flex items-start gap-3 border-b border-border px-4 py-3 ${n.read ? 'opacity-55' : ''}`}
                         >
-                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eecfa2] text-[15px]">👤</span>
+                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#bae0ff] text-[15px]">👤</span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
                               <span className="truncate text-[11.5px] font-bold text-ink">{n.from}</span>
@@ -448,7 +448,7 @@ function ChatbotPanel() {
         {messages.map((m) => {
           const me = m.role === 'user';
           const bubbleStyle = me
-            ? { backgroundColor: '#eecfa2', color: '#1c2536' }
+            ? { backgroundColor: '#bae0ff', color: '#1c2536' }
             : m.status === 'error'
               ? { backgroundColor: '#fdecea', color: '#b23b2e', borderColor: '#f0a89f' }
               : undefined;
@@ -723,8 +723,8 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 border-b border-border bg-panel px-4 py-3">
-        <div className="flex flex-1 items-center gap-2 rounded-full border border-border-hi px-3.5 py-2">
+      <div className="flex items-center gap-2.5 border-b border-border/80 bg-panel/60 backdrop-blur-xs px-4 py-3 select-none">
+        <div className="flex flex-1 items-center gap-2 rounded-full border border-border bg-white/70 px-3.5 py-1.5 focus-within:border-[#4ea8de] focus-within:ring-2 focus-within:ring-[#4ea8de]/15 focus-within:bg-white transition-all">
           <span className="text-[12px] text-ink3">🔍</span>
           <input
             value={q}
@@ -733,7 +733,13 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
             className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
           />
         </div>
-        <button onClick={onCompose} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber text-[19px] leading-none text-white">＋</button>
+        <button
+          onClick={onCompose}
+          title="새 대화"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#4ea8de] hover:bg-[#358ab8] active:scale-95 transition-all text-[20px] leading-none text-white shadow-[0_3px_10px_rgba(78,168,222,0.4)]"
+        >
+          ＋
+        </button>
       </div>
       {sortedRooms.map((r) => {
         const n = unread[r.id] ?? 0;
@@ -747,9 +753,14 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
               const zoom = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875') || 1;
               setMenuPos({ x: e.clientX / zoom, y: e.clientY / zoom, roomId: r.id });
             }}
-            className={`flex w-full items-center gap-3 border-b border-border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-alt ${isPinned ? 'bg-panel-alt/45' : ''}`}
+            className={`flex w-full items-center gap-3 border-b border-border/60 bg-panel px-4 py-3.5 text-left transition-all hover:bg-[#eaf4fc]/40 active:bg-[#eaf4fc]/60 ${
+              isPinned ? 'bg-[#e3f2fd]/50 border-l-4 border-l-[#4ea8de]' : ''
+            }`}
           >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] text-[17px] font-bold" style={{ background: r.color + '22', color: r.color }}>
+            <span
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] text-[17px] font-bold transition-transform group-hover:scale-105"
+              style={{ background: r.color + '15', color: r.color }}
+            >
               {r.type === 'direct' ? r.displayName[0] : '👥'}
             </span>
             <div className="min-w-0 flex-1">
@@ -762,7 +773,11 @@ function MessengerList({ rooms, me, users, onOpen, onCompose }: { rooms: ChatRoo
               </div>
               <div className="mt-0.5 flex justify-between gap-2">
                 <span className="truncate text-[11.5px] text-ink3">{r.lastMessage?.text ?? '대화를 시작해보세요'}</span>
-                {n > 0 && <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-danger px-[5px] text-[9.5px] font-extrabold text-white">{n}</span>}
+                {n > 0 && (
+                  <span className="grid h-[16px] min-w-[16px] shrink-0 place-items-center rounded-full bg-[#ff4d4f] px-1.5 text-[9px] font-extrabold text-white shadow-[0_2px_6px_rgba(255,77,79,0.35)]">
+                    {n}
+                  </span>
+                )}
               </div>
             </div>
           </button>
@@ -1046,7 +1061,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
           onDrop={handleDrop}
-          className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#faf6f0]/95 backdrop-blur-xs border-2 border-dashed border-amber m-2 rounded-2xl"
+          className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#f2f8fc]/95 backdrop-blur-xs border-2 border-dashed border-amber m-2 rounded-2xl"
         >
           <div className="text-[32px] mb-2">📥</div>
           <div className="text-[13px] font-extrabold text-[#1c2536]">여기에 파일을 놓아 전송</div>
@@ -1119,7 +1134,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
 
       {/* 참여자 목록 레이어 */}
       {showMemberList && room.type !== 'direct' && (
-        <div className="shrink-0 border-b border-[#ebdcc5] bg-[#faf6f0] px-4 py-3 max-h-48 overflow-y-auto">
+        <div className="shrink-0 border-b border-[#d0e6f7] bg-[#f2f8fc] px-4 py-3 max-h-48 overflow-y-auto">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-ink2">대화방 참여자 ({memberDetails.length})</span>
             <button
@@ -1132,7 +1147,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
           <div className="space-y-2">
             {memberDetails.map((m) => (
               <div key={m.id} className="flex items-center gap-2 text-[11.5px]">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#eecfa2] text-[10px] font-bold text-[#1c2536]">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#bae0ff] text-[10px] font-bold text-[#1c2536]">
                   {m.name?.[0] ?? '?'}
                 </span>
                 <span className="font-semibold text-ink">{m.name}</span>
@@ -1433,7 +1448,7 @@ function MessageBubble({
         <textarea
           value={editVal}
           onChange={(e) => setEditVal(e.target.value)}
-          className="w-full bg-[#fcfaf5] text-[11.5px] text-ink border border-[#eecfa2] rounded-lg px-2 py-1.5 outline-none resize-none"
+          className="w-full bg-[#f8fbfe] text-[11.5px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
           rows={2}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1449,7 +1464,7 @@ function MessageBubble({
         <div className="flex justify-end gap-1 text-[9.5px]">
           <button
             onClick={() => { onCancelEdit(); setEditVal(m.text); }}
-            className="px-1.5 py-0.5 bg-[#eecfa2]/30 text-ink2 rounded hover:bg-[#eecfa2]/50"
+            className="px-1.5 py-0.5 bg-[#bae0ff]/30 text-ink2 rounded hover:bg-[#bae0ff]/50"
           >
             취소
           </button>
@@ -1480,7 +1495,7 @@ function MessageBubble({
         </button>
         {m.text && (
           <div
-            style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+            style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
             className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {m.text}
@@ -1495,7 +1510,7 @@ function MessageBubble({
           type="button"
           onClick={() => downloadAttachment(att)}
           title="다운로드"
-          style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+          style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
           className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         >
           <span className="text-[18px]">📄</span>
@@ -1506,7 +1521,7 @@ function MessageBubble({
         </button>
         {m.text && (
           <div
-            style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+            style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
             className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {m.text}
@@ -1517,7 +1532,7 @@ function MessageBubble({
   } else {
     body = (
       <div
-        style={mine ? { backgroundColor: '#eecfa2', color: '#1c2536' } : undefined}
+        style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
         className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         onContextMenu={onContextMenu}
       >
@@ -1531,7 +1546,7 @@ function MessageBubble({
     <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
       {/* 읽음 카운트: 내 메시지이고 안 읽은 사람이 있을 때만 노란색 숫자 표시 (카카오톡 '1' 스타일) */}
       {mine && unreadCount > 0 && (
-        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#e6960c' }}>
+        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}

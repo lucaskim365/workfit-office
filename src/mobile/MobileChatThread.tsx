@@ -157,7 +157,7 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="flex shrink-0 items-center gap-1 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
@@ -231,9 +231,9 @@ export default function MobileChatThread() {
       ) : (
         <div className="shrink-0 border-t border-black/10 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {replyTo && (
-            <div className="mx-2.5 mt-2 flex items-center gap-2 rounded-lg border-l-[3px] px-2.5 py-1.5" style={{ borderColor: '#e6960c', background: '#faf6f0' }}>
+            <div className="mx-2.5 mt-2 flex items-center gap-2 rounded-lg border-l-[3px] px-2.5 py-1.5" style={{ borderColor: '#4ea8de', background: '#f2f8fc' }}>
               <div className="min-w-0 flex-1">
-                <div className="text-[10.5px] font-bold" style={{ color: '#e6960c' }}>{replyTo.senderName || '메시지'}에게 답장</div>
+                <div className="text-[10.5px] font-bold" style={{ color: '#1890ff' }}>{replyTo.senderName || '메시지'}에게 답장</div>
                 <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo)}</div>
               </div>
               <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 active:bg-black/5">✕</button>
@@ -256,7 +256,7 @@ export default function MobileChatThread() {
               placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
               className="min-w-0 flex-1 rounded-full bg-black/5 px-4 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink3"
             />
-            <button onClick={submit} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[15px] text-white" style={{ background: '#e6960c' }}>↑</button>
+            <button onClick={submit} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[15px] text-white" style={{ background: '#4ea8de' }}>↑</button>
           </div>
         </div>
       )}
@@ -295,7 +295,7 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
           onClick={() => canOpen && nav(`/m/approval/${payload.docId}`)}
           disabled={!canOpen}
           className="mt-2.5 w-full rounded-lg py-2 text-[12px] font-bold text-white disabled:opacity-40"
-          style={{ background: '#e6960c' }}
+          style={{ background: '#4ea8de' }}
         >
           결재 문서 상세 보기 →
         </button>
@@ -339,7 +339,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
         <textarea
           value={editVal}
           onChange={(e) => setEditVal(e.target.value)}
-          className="w-full bg-[#fcfaf5] text-[12px] text-ink border border-[#e6960c] rounded-lg px-2 py-1.5 outline-none resize-none"
+          className="w-full bg-[#f8fbfe] text-[12px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
           rows={2}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -371,7 +371,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
               }
             }}
             disabled={editMsg.isPending}
-            className="px-2 py-0.5 bg-[#e6960c] text-white rounded disabled:opacity-50"
+            className="px-2 py-0.5 bg-[#4ea8de] text-white rounded disabled:opacity-50"
           >
             저장
           </button>
@@ -391,7 +391,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
       <button
         onClick={() => downloadAttachment(att)}
         className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left"
-        style={mine ? { background: '#e6960c', color: '#fff' } : { background: '#fff', color: '#1a202c' }}
+        style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0">
@@ -404,7 +404,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
     body = (
       <div
         className="whitespace-pre-line break-words rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
-        style={mine ? { background: '#e6960c', color: '#fff' } : { background: '#fff', color: '#1a202c' }}
+        style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         {m.text}
       </div>
@@ -449,7 +449,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
           </div>
           <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
             {mine && unreadCount > 0 && (
-              <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#e6960c' }}>{unreadCount}</span>
+              <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>{unreadCount}</span>
             )}
             <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
             {m.isEdited && (
@@ -502,7 +502,7 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
   };
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={onDone} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
@@ -513,7 +513,7 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
           onClick={submit}
           disabled={!selected.length || invite.isPending}
           className="rounded-lg px-3 py-1.5 text-[12.5px] font-bold text-white transition-opacity disabled:opacity-40"
-          style={{ background: '#e6960c' }}
+          style={{ background: '#4ea8de' }}
         >
           초대 ({selected.length})
         </button>

@@ -34,7 +34,7 @@ export default function MobileNewRoom() {
   };
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="text-[15px] font-bold">새 대화</span>
@@ -42,7 +42,7 @@ export default function MobileNewRoom() {
           onClick={submit}
           disabled={!selected.length || create.isPending}
           className="ml-auto rounded-lg px-3 py-1.5 text-[12.5px] font-bold text-white transition-opacity disabled:opacity-40"
-          style={{ background: '#e6960c' }}
+          style={{ background: '#4ea8de' }}
         >
           {create.isPending ? '생성 중…' : isGroup ? `그룹 만들기 (${selected.length})` : '대화 시작'}
         </button>
