@@ -550,7 +550,24 @@ function LocalMailScreen() {
         </div>
       )}
 
-      {accounts.length === 0 ? (
+      {accountsQuery.isError ? (
+        /*
+          계정이 0개인 것과 "목록을 못 불러온 것"은 다르다. 뭉뚱그리면 실제로는 연결된
+          계정이 있는데도 "신규 연결" 화면으로 떨어져 사용자가 이미 등록한 계정을 다시
+          등록하려 들거나 계정이 사라졌다고 오해한다. (2026-08-26 실사고 — 위디 토큰
+          만료로 목록 조회가 401이 됐을 때 이 화면이 뜸)
+        */
+        <div className="mt-5 rounded-xl border border-dashed border-red-500/30 bg-red-500/5 px-6 py-12 text-center">
+          <div className="text-2xl">⚠️</div>
+          <div className="mt-2 text-[12px] font-bold text-ink">메일 계정 목록을 불러오지 못했습니다.</div>
+          <div className="mt-1 text-[10.5px] text-ink3">{mailErrorText(accountsQuery.error)}</div>
+          <div className="mt-3">
+            <Button variant="primary" disabled={accountsQuery.isFetching} onClick={() => { void accountsQuery.refetch(); }}>
+              {accountsQuery.isFetching ? '다시 불러오는 중…' : '다시 시도'}
+            </Button>
+          </div>
+        </div>
+      ) : accounts.length === 0 ? (
         <div className="mt-5 rounded-xl border border-dashed border-border bg-panel px-6 py-12 text-center">
           <div className="text-2xl">📮</div>
           <div className="mt-2 text-[12px] font-bold text-ink">연결된 메일 계정이 없습니다.</div>
