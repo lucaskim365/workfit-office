@@ -228,6 +228,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '게시판', icon: '📌', to: 'board' },
     { l: '인명관리', icon: '👥', to: 'employee' },
     { l: '업무관리', icon: '📗', to: 'task' },
+    { l: '업무계획', icon: '🗓️', to: 'work-plan' },
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
     { l: '근태', icon: '⏱️', to: 'commute' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },

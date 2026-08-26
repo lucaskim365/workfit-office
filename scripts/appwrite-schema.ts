@@ -609,6 +609,28 @@ const COLLECTIONS: CollectionDef[] = [
     ],
   },
   {
+    id: 'workPlans',
+    name: '업무계획',
+    /*
+      일정관리(calendarEvents)와 자매 컬렉션이지만 공유 범위 필드가 없다 — 전체 보기는
+      항상 전원 공개고, 고치는 건 본인 것만(repo가 ownerUserId로 막는다). 시간 개념도
+      없어 시작/종료 시각 필드가 없다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('ownerUserId', 64, true),
+      S('date', 40, true),
+      S('title', 100, true),
+      S('memo', 2000),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('wpOwner', ['ownerUserId']),
+      IX('wpDate', ['date']),
+    ],
+  },
+  {
     id: 'resources',
     name: '예약 자원',
     attributes: [

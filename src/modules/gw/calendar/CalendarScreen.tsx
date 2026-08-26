@@ -111,6 +111,19 @@ function LocalCalendarScreen() {
     if (!event || event.ownerUserId === (actor?.id ?? '')) return null;
     return users.find((user) => user.id === event.ownerUserId)?.name ?? '다른 사용자';
   };
+  /**
+   * 팀 일정 전용 표기 — 이름·부서. 소유자가 나여도 항상 붙인다.
+   *
+   * `ownerNameOf`는 "내 일정" 탭에서 공유받은 것만 표시하려고 본인 소유는 일부러 null을
+   * 준다. 팀 탭에 그대로 쓰면 본인 소유 항목만 아무 표기 없이 떠서 "이름이 안 붙는
+   * 버그"처럼 보인다 — 팀 조회는 누구 것이든 항상 밝히는 게 맞아서 따로 둔다.
+   */
+  const teamLabelOf = (event?: CalendarEvent): string | null => {
+    if (!event) return null;
+    const user = users.find((row) => row.id === event.ownerUserId);
+    if (!user) return '다른 사용자';
+    return `${user.name} · ${user.dept}`;
+  };
 
   /*
     관리자 종합 조회(팀 일정) 범위.
@@ -270,7 +283,7 @@ function LocalCalendarScreen() {
             if (isTeam && isMaskedForSupervisor(actor.id, event)) return;
             openEventModal({ date: event.date, event });
           }}
-          ownerNameOf={isTeam ? (event) => ownerNameOf(event) : undefined}
+          ownerNameOf={isTeam ? (event) => teamLabelOf(event) : undefined}
           isMutedChip={isTeam ? (event) => isMaskedForSupervisor(actor.id, event) : undefined}
         />
         )}
@@ -298,7 +311,7 @@ function LocalCalendarScreen() {
           ) : (
             <div className="space-y-2">
               {dayEvents.map((event) => {
-                const owner = ownerNameOf(event);
+                const owner = isTeam ? teamLabelOf(event) : ownerNameOf(event);
                 const masked = isTeam && isMaskedForSupervisor(actor.id, event);
                 const body = (
                   <>

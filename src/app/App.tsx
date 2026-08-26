@@ -44,6 +44,7 @@ const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
 const GwCalendar = lazy(() => import('@/modules/gw/calendar/CalendarScreen'));
 const GwResource = lazy(() => import('@/modules/gw/resource/ResourceScreen'));
 const GwTask = lazy(() => import('@/modules/gw/task/TaskScreen'));
+const GwWorkPlan = lazy(() => import('@/modules/gw/task/WorkPlanScreen'));
 const GwSurvey = lazy(() => import('@/modules/gw/survey/SurveyScreen'));
 const GwMail = lazy(() => import('@/modules/gw/mail/MailScreen'));
 const GwCommute = lazy(() => import('@/modules/gw/commute/CommuteScreen'));
@@ -221,6 +222,7 @@ export default function App() {
         <Route path="/gw/calendar" element={<GwCalendar />} />
         <Route path="/gw/resource" element={<GwResource />} />
         <Route path="/gw/task" element={<GwTask />} />
+        <Route path="/gw/work-plan" element={<GwWorkPlan />} />
         <Route path="/gw/survey" element={<GwSurvey />} />
         <Route path="/gw/mail" element={<GwMail />} />
         <Route path="/gw/commute" element={<GwCommute />} />
