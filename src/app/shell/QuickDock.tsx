@@ -15,6 +15,7 @@ import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
+import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { useWiddyChat } from '@/features/widdy/useWiddyChat';
 import { fileStorage } from '@/shared/lib/storage';
 import type { WiddyAttachment } from '@/domain/widdyChat/schema';
@@ -299,7 +300,7 @@ function GroupwarePanel({ onClose }: { onClose: () => void }) {
                     }`}
                 >
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-panel border text-[13px]">
-                    {n.type === '결재' ? '🖋️' : n.type === '메신저' ? '👤' : '📢'}
+                    {(n.type === '메신저' ? '👤' : NOTIFICATION_TYPE_META[n.type]?.icon) || '📢'}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">

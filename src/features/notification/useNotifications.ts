@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationRepo } from '@/data/notification/notification.repo';
 import type { LiveNotification } from '@/domain/liveNotification/schema';
+import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 
 const NOTI_KEY = 'liveNotifications';
 
@@ -49,9 +50,8 @@ export function useToastNotificationsTrigger(userId: string | undefined) {
       if (lastCount.current !== -1 && unread.length > lastCount.current) {
         const newest = unread[0];
         if (newest) {
-          const typeIcon = newest.type === '결재' ? '🖋️' : newest.type === '메신저' ? '💬' : '📢';
-          const typeColor = newest.type === '결재' ? '#6c5ce7' : '#16b8cf';
-          triggerToast(newest.type, newest.senderName, newest.text, typeIcon, typeColor);
+          const meta = NOTIFICATION_TYPE_META[newest.type] || { icon: '📢', color: '#16b8cf' };
+          triggerToast(newest.type, newest.senderName, newest.text, meta.icon, meta.color);
         }
       }
       lastCount.current = unread.length;

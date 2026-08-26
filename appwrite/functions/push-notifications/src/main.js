@@ -106,7 +106,11 @@ async function handleNotification(noti, dbs, DB, log) {
   const linkUrl = noti.linkUrl || '';
   const docMatch = /[?&]doc=([^&]+)/.exec(linkUrl);
   const docId = docMatch ? decodeURIComponent(docMatch[1]) : '';
-  const channelId = type === '결재' ? 'workfit_approvals' : 'workfit_messages';
+  const channelId = type === '결재'
+    ? 'workfit_approvals'
+    : type === '메신저'
+      ? 'workfit_messages'
+      : 'workfit_general';
 
   try {
     await ensureAdmin()

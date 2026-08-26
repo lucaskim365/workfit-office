@@ -9,6 +9,7 @@ import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
+import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import defaultLogo from '@/assets/logo.png';
@@ -282,7 +283,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                       }`}
                     >
                       <span className="text-[16px] shrink-0 mt-0.5 select-none">
-                        {n.type === '결재' ? '🖋️' : n.type === '메신저' ? '💬' : '📢'}
+                        {NOTIFICATION_TYPE_META[n.type]?.icon || '📢'}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
