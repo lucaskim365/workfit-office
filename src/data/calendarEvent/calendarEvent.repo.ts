@@ -1,7 +1,7 @@
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
-import { canViewEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
+import { canViewEvent, maskEventForSupervisor, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
 /**
@@ -195,6 +195,32 @@ export const calendarEventRepo = {
       .filter((event) => !filter?.from || event.date >= filter.from)
       .filter((event) => !filter?.to || event.date <= filter.to)
       .map(cloneEvent));
+  },
+
+  /**
+   * 관리자 종합 조회 — 지정한 소유자들의 일정 전부(공개 범위 무관).
+   *
+   * **호출 전에 열람 범위 판정(`resolveCalendarSupervisor`)을 통과했어야 한다.** 여기는
+   * 판정하지 않는다 — 판정에 필요한 부서·사용자 정보를 repo가 다시 모으면 화면과 이중
+   * 조회가 되고, 이 저장소는 어차피 UI-게이트 모델이라(클라이언트가 컬렉션을 직접 읽음)
+   * repo 검사가 보안 경계도 아니다. 남의 '나만 보기' 일정은 제목·메모를 가려서 돌려준다.
+   *
+   * `ownerUserIds`가 null이면 전 직원(all 범위), 배열이면 그 소유자들만(부서 범위).
+   */
+  async listTeam(
+    viewer: { userId: string; active: boolean },
+    ownerUserIds: string[] | null,
+    filter?: CalendarEventFilter,
+  ): Promise<CalendarEvent[]> {
+    validateFilter(filter);
+    if (!viewer.active) return [];
+    const owners = ownerUserIds === null ? null : new Set(ownerUserIds);
+    const rows = await loadAll();
+    return sortEvents(rows
+      .filter((event) => owners === null || owners.has(event.ownerUserId))
+      .filter((event) => !filter?.from || event.date >= filter.from)
+      .filter((event) => !filter?.to || event.date <= filter.to)
+      .map((event) => maskEventForSupervisor(viewer.userId, cloneEvent(event))));
   },
 
   async get(actor: CalendarEventActor, id: string): Promise<CalendarEvent | null> {

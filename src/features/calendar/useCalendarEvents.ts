@@ -19,6 +19,24 @@ export function useCalendarEvents(actor: CalendarEventActor, filter?: CalendarEv
   });
 }
 
+/**
+ * 관리자 종합 조회(팀 일정). `owners`가 null이면 전 직원, 배열이면 그 소유자들만.
+ * `enabled`로 게이트한다 — 범위 판정(resolveCalendarSupervisor)을 통과 못 한 사용자는
+ * 조회 자체를 던지지 않는다.
+ */
+export function useTeamCalendarEvents(
+  viewer: { userId: string; active: boolean },
+  owners: string[] | null,
+  filter: CalendarEventFilter | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [CALENDAR_EVENTS_KEY, 'team', viewer.userId, viewer.active, owners, filter ?? null],
+    queryFn: () => calendarEventRepo.listTeam(viewer, owners, filter),
+    enabled,
+  });
+}
+
 export function useCalendarEvent(actor: CalendarEventActor, id?: string) {
   return useQuery({
     queryKey: [CALENDAR_EVENTS_KEY, 'detail', ...actorKey(actor), id ?? null],
