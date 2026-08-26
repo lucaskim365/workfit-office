@@ -285,8 +285,11 @@ export function useCompletedDocsForSelection(params: {
     let list = allDocs.filter((d) => d.status === '완료');
 
     list = list.filter((doc) => {
+      // 1. 내가 기안한 문서
       if (doc.drafterId === userId) return true;
+      // 2. 내가 결재/합의선에 포함된 문서
       if (doc.steps.some((s) => s.approverId === userId)) return true;
+      // 3. 나 또는 내 부서가 참조/수신처로 지정된 문서
       if (
         doc.recipients?.some((r) => {
           if (r.type === 'user') return r.id === userId;
@@ -297,6 +300,7 @@ export function useCompletedDocsForSelection(params: {
       ) {
         return true;
       }
+      // 4. 나 또는 내 부서가 시행 담당처로 지정된 문서
       if (doc.execution) {
         if (doc.execution.targetType === 'USER' && doc.execution.targetId === userId) return true;
         if (
@@ -305,6 +309,15 @@ export function useCompletedDocsForSelection(params: {
         ) {
           return true;
         }
+      }
+      // 5. 전사 공개 완료 문서
+      if (doc.visibility === '전사') return true;
+      // 6. 우리 부서 공개 완료 문서
+      if (
+        doc.visibility === '부서' &&
+        ((userDeptId && doc.drafterDeptId === userDeptId) || (userDept && doc.drafterDept === userDept))
+      ) {
+        return true;
       }
       return false;
     });

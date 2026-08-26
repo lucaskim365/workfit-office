@@ -150,9 +150,8 @@ function RuleEditor({ rule, onChange, onSave, onCancel, onDelete, saving, msg, f
         <label className="flex items-center gap-1.5 text-[11.5px] text-ink2"><input type="checkbox" checked={rule.active} onChange={(e) => set({ active: e.target.checked })} /> 사용</label>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1">
         <F label="룰 이름"><input value={rule.name} onChange={(e) => set({ name: e.target.value })} className={inp} /></F>
-        <F label="우선순위(작을수록 먼저)"><input type="number" value={rule.priority} onChange={(e) => set({ priority: Number(e.target.value) })} className={inp} /></F>
       </div>
 
       <div className="rounded-lg border border-border bg-panel-alt p-2.5">

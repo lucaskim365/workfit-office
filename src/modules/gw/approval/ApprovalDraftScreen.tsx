@@ -62,6 +62,9 @@ function ApprovalDraftInner({
   const { data: forms = [] } = useActiveApprovalForms();
   const org = useOrgTree();
   const bal = useLeave(me.id);
+  const userDeptId = useMemo(() => {
+    return org.depts.find((d) => d.name === me.dept)?.id;
+  }, [org.depts, me.dept]);
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
   const [title, setTitle] = useState(editDoc?.title ?? '');
@@ -1397,13 +1400,16 @@ function ApprovalDraftInner({
         <RelatedDocSearchModal
           userId={me.id}
           userDept={me.dept}
+          userDeptId={userDeptId}
           selectedDocIds={relatedDocs.map((x) => x.docId)}
           onSelect={(selectedList) => {
+            // 관련 기결재 문서 참조 링크 연동 (중복 저장 방지를 위해 첨부파일 복사는 수행하지 않음)
             setRelatedDocs((prev) => {
               const existingIds = new Set(prev.map((x) => x.docId));
               const newItems = selectedList.filter((x) => !existingIds.has(x.docId));
               return [...prev, ...newItems];
             });
+            
             setShowRelatedModal(false);
           }}
           onClose={() => setShowRelatedModal(false)}

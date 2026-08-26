@@ -104,7 +104,7 @@ export default function MobileChatList() {
     : [];
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: '#101830' }}>
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
@@ -135,7 +135,7 @@ export default function MobileChatList() {
             className="w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink3"
           />
         </div>
-        <button onClick={() => nav('/m/new')} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[20px] leading-none text-white" style={{ background: '#e6960c' }}>＋</button>
+        <button onClick={() => nav('/m/new')} title="새 대화" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[20px] leading-none text-white" style={{ background: '#4ea8de' }}>＋</button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -148,7 +148,7 @@ export default function MobileChatList() {
           return (
             <div
               key={r.id}
-              className={`flex items-center border-b border-black/5 bg-white active:bg-black/5 ${isPinned ? 'bg-[#faf6f0]' : ''}`}
+              className={`flex items-center border-b border-black/5 bg-white active:bg-black/5 ${isPinned ? 'bg-[#f2f8fc]' : ''}`}
             >
               <button
                 onClick={() => nav(`/m/room/${r.id}`)}

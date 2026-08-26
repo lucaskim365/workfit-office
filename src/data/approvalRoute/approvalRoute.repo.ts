@@ -36,7 +36,13 @@ export const approvalRouteRepo = {
 
   /** 등록/수정(upsert). */
   async save(item: ApprovalRouteRule): Promise<void> {
-    await backend.save(approvalRouteRuleSchema.parse(item));
+    const parsed = approvalRouteRuleSchema.parse(item);
+    
+    // 💡 Appwrite DB 스키마에는 formId 속성이 부재하여 Unknown attribute 에러가 나므로, 전송 직전에 삭제합니다.
+    const payload: any = { ...parsed };
+    delete payload.formId;
+
+    await backend.save(payload);
   },
 
   async remove(id: string): Promise<void> {
