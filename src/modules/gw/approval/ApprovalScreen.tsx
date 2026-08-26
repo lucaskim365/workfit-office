@@ -229,16 +229,34 @@ export default function ApprovalScreen() {
   useEffect(() => {
     const docId = params.get('doc');
     if (!docId) return;
-    for (const b of APPROVAL_BOXES) {
-      if ((byBox[b] ?? []).some((d) => d.id === docId)) {
-        setBox(b);
+
+    const targetDoc = allDocs.find((d) => d.id === docId);
+    if (targetDoc) {
+      let found = false;
+      // 1. 개인 결재함(대기, 상신, 완료 등)에서 먼저 조회
+      for (const b of APPROVAL_BOXES) {
+        if ((byBox[b] ?? []).some((d) => d.id === docId)) {
+          setBox(b);
+          setSelId(docId);
+          found = true;
+          break;
+        }
+      }
+      // 2. 개인 결재함에 없는 경우, 부서/전사 공개 문서함에서 매칭 처리
+      if (!found) {
+        setBox('문서함');
+        if (targetDoc.visibility === '전사') {
+          setDocBoxFilter('all');
+        } else {
+          setDocBoxFilter('dept');
+        }
         setSelId(docId);
-        break;
       }
     }
+
     params.delete('doc');
     setParams(params, { replace: true });
-  }, [params, byBox, setParams]);
+  }, [params, byBox, allDocs, setParams]);
 
   // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
   useEffect(() => {

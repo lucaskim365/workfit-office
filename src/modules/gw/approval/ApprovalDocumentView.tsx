@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
-import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
@@ -9,8 +9,8 @@ import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
-
-
+import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
+import { RelatedDocDetailModal } from './RelatedDocDetailModal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -50,6 +50,34 @@ export function ApprovalDocumentView({
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
+  const [accessibleRelatedDocs, setAccessibleRelatedDocs] = useState<RelatedDoc[]>([]);
+  const [activeRelatedDocId, setActiveRelatedDocId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!doc.relatedDocs || doc.relatedDocs.length === 0) {
+      setAccessibleRelatedDocs([]);
+      return;
+    }
+    let active = true;
+    const checkPermissions = async () => {
+      const results = await Promise.allSettled(
+        doc.relatedDocs.map(async (rd) => {
+          // B 문서를 get 해봄으로써 실제 열람 권한이 있는지 체크 (에러 시 rejected)
+          await approvalDocRepo.get(rd.docId);
+          return rd;
+        })
+      );
+      if (!active) return;
+      const filtered = results
+        .filter((r): r is PromiseFulfilledResult<RelatedDoc> => r.status === 'fulfilled')
+        .map((r) => r.value);
+      setAccessibleRelatedDocs(filtered);
+    };
+    checkPermissions();
+    return () => {
+      active = false;
+    };
+  }, [doc.relatedDocs]);
 
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
 
@@ -907,7 +935,7 @@ export function ApprovalDocumentView({
 
 
       {/* 관련 문서 연동 영역 */}
-      {doc.relatedDocs && doc.relatedDocs.length > 0 && (
+      {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
         <table className="mt-2 w-full border-collapse text-[12px]">
           <tbody>
             <tr>
@@ -916,10 +944,20 @@ export function ApprovalDocumentView({
               </th>
               <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
                 <div className="space-y-1">
-                  {doc.relatedDocs.map((rd) => (
+                  {accessibleRelatedDocs.map((rd) => (
                     <div key={rd.docId} className="flex items-center gap-2">
                       <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
-                      <span className="font-semibold text-[#222]">{rd.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
+                        className={`font-semibold text-ink2 text-left transition-colors ${
+                          isPreview
+                            ? 'cursor-default'
+                            : 'cursor-pointer text-[#008080] hover:underline hover:text-[#4ea8de]'
+                        }`}
+                      >
+                        {rd.title}
+                      </button>
                       <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
                     </div>
                   ))}
@@ -977,6 +1015,9 @@ export function ApprovalDocumentView({
           )}
         </div>
       </div>
+      {activeRelatedDocId && (
+        <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
+      )}
     </div>
     </>
   );

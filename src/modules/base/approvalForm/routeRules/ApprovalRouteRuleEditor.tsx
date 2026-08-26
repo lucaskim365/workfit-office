@@ -73,17 +73,9 @@ export function ApprovalRouteRuleEditor({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1">
         <F label="룰 이름">
           <input value={rule.name} onChange={(e) => set({ name: e.target.value })} className={inp} />
-        </F>
-        <F label="우선순위(작을수록 먼저)">
-          <input
-            type="number"
-            value={rule.priority}
-            onChange={(e) => set({ priority: Number(e.target.value) })}
-            className={inp}
-          />
         </F>
       </div>
 

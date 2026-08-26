@@ -26,6 +26,7 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
 
   // Drag and Drop reordering states & handlers
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [draggableRuleId, setDraggableRuleId] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
@@ -123,18 +124,28 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
             return (
               <div
                 key={r.id}
-                draggable
+                draggable={draggableRuleId === r.id}
                 onDragStart={(e) => handleDragStart(e, idx)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, idx)}
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-all cursor-grab active:cursor-grabbing ${
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-all ${
                   isDragged
                     ? 'border-dashed border-teal/40 bg-teal-soft/10 opacity-40 shadow-xs'
                     : 'border-border bg-panel hover:border-teal/30 hover:shadow-sm'
                 }`}
               >
-                <div className="flex items-center gap-3.5 min-w-0 pointer-events-none select-none">
-                  <span className="grid h-6 min-w-6 place-items-center rounded bg-ink3/10 px-1 text-[11px] font-bold text-ink2">
+                <div className="flex items-center gap-3">
+                  {/* 드래그 핸들 (좌측 그립만 드래그 가능하게 통제) */}
+                  <span
+                    onMouseDown={() => setDraggableRuleId(r.id)}
+                    onMouseUp={() => setDraggableRuleId(null)}
+                    onMouseLeave={() => setDraggableRuleId(null)}
+                    className="cursor-grab active:cursor-grabbing text-ink3 hover:text-teal transition-colors p-1 text-[14px] select-none"
+                    title="드래그하여 순서 변경"
+                  >
+                    ☰
+                  </span>
+                  <span className="grid h-6 min-w-6 place-items-center rounded bg-ink3/10 px-1 text-[11px] font-bold text-ink2 pointer-events-none">
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
