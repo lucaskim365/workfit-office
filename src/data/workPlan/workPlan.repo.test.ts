@@ -6,13 +6,13 @@ import { WorkPlanError, workPlanRepo, type WorkPlanActor } from './workPlan.repo
 const owner: WorkPlanActor = { userId: 'U011', active: true };
 const other: WorkPlanActor = { userId: 'U012', active: true };
 
-const draft = (title: string): WorkPlanDraft => ({ date: '2026-08-27', title, memo: '' });
+const draft = (content: string): WorkPlanDraft => ({ date: '2026-08-27', content });
 
 test('본인 계획을 생성·수정·삭제한다', async () => {
   const created = await workPlanRepo.create(owner, draft('영업 미팅'));
   assert.equal(created.ownerUserId, owner.userId);
   const updated = await workPlanRepo.update(owner, created.id, draft('영업 미팅(변경)'));
-  assert.equal(updated.title, '영업 미팅(변경)');
+  assert.equal(updated.content, '영업 미팅(변경)');
   await workPlanRepo.remove(owner, created.id);
   assert.deepEqual(await workPlanRepo.list(owner, { from: '2026-08-01', to: '2026-08-31' }), []);
 });

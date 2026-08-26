@@ -44,8 +44,7 @@ const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
 const GwCalendar = lazy(() => import('@/modules/gw/calendar/CalendarScreen'));
 const GwResource = lazy(() => import('@/modules/gw/resource/ResourceScreen'));
 const GwTask = lazy(() => import('@/modules/gw/task/TaskScreen'));
-// GwWorkPlan(src/modules/gw/task/WorkPlanScreen.tsx)은 workPlans 컬렉션을 프로비저닝한 뒤
-// 라우트에 다시 연결한다 — 아래 work-plan 주석 참고.
+const GwWorkPlan = lazy(() => import('@/modules/gw/task/WorkPlanScreen'));
 const GwSurvey = lazy(() => import('@/modules/gw/survey/SurveyScreen'));
 const GwMail = lazy(() => import('@/modules/gw/mail/MailScreen'));
 const GwCommute = lazy(() => import('@/modules/gw/commute/CommuteScreen'));
@@ -223,12 +222,7 @@ export default function App() {
         <Route path="/gw/calendar" element={<GwCalendar />} />
         <Route path="/gw/resource" element={<GwResource />} />
         <Route path="/gw/task" element={<GwTask />} />
-        {/*
-          work-plan 라우트는 아직 안 건다 — workPlans 컬렉션이 dev/운영 Appwrite에
-          없어서(스키마 코드만 넣고 프로비저닝 전) 열면 그대로 에러가 난다. GW_READY_APPS에도
-          안 넣었으니 도크 타일은 그대로 GwComingSoon으로 떨어진다. 컬렉션 만들고 나면
-          이 줄만 살리면 된다: <Route path="/gw/work-plan" element={<GwWorkPlan />} />
-        */}
+        <Route path="/gw/work-plan" element={<GwWorkPlan />} />
         <Route path="/gw/survey" element={<GwSurvey />} />
         <Route path="/gw/mail" element={<GwMail />} />
         <Route path="/gw/commute" element={<GwCommute />} />

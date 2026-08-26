@@ -58,6 +58,8 @@ export const GW_READY_APPS = new Set([
     데이터가 쌓인다. 그전까지는 열려도 0건이다.
   */
   'commute',
+  // 업무계획 — workPlans 컬렉션 dev 프로비저닝 완료(2026-08-26). 운영은 아직.
+  'work-plan',
   // 라우트 없이 여기 먼저 올리면 도크 타일이 켜진 채 GwComingSoon으로 떨어진다.
 ]);
 
