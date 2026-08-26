@@ -63,7 +63,7 @@ function migrateDoc(data: any): any {
     postApprovedByName: data.postApprovedByName ?? null,
     steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
-      kind: s.kind === '합의' ? '결재' : s.kind,
+      kind: s.kind,
     })) : [],
   };
 }

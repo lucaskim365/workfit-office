@@ -57,7 +57,7 @@ export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
     name: '부서 간 합의',
     description: '문서 기안 시 타 부서와의 병렬 또는 순차 합의 결재선을 추가하고 의견을 수렴할 수 있는 합의 프로세스를 지원합니다.',
     enabled: false,
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     id: 'agreement_reject_cancel',
@@ -65,7 +65,7 @@ export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
     name: '합의 거부 시 즉시 반려',
     description: '합의 단계에서 1명 이상의 합의자가 거부 처리할 경우 결재 진행을 즉시 중단하고 문서를 반려 처리합니다.',
     enabled: false,
-    isImplemented: false,
+    isImplemented: true,
   },
 
   // 3. 수신/참조/시행

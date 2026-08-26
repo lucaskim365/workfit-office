@@ -147,6 +147,7 @@ export function DecisionBadge({ decision }: { decision: StepDecision }) {
 /** 결재 구분 라벨 색(참조는 약하게, 전결은 강조). */
 export const KIND_TONE: Record<StepKind, string> = {
   결재: 'text-ink2',
+  합의: 'text-purple-600',
   참조: 'text-ink3',
   전결: 'text-teal',
   대결: 'text-amber',

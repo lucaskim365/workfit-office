@@ -825,6 +825,8 @@ function DocDetail({
 
   // 내 차례(직접 활성 결재자 또는 대결자)의 seq.
   const [mySeq, setMySeq] = useState<number | null>(null);
+  const myStep = useMemo(() => doc.steps.find((s) => s.seq === mySeq), [doc.steps, mySeq]);
+  const isMyStepAgreement = myStep?.kind === '합의';
 
   useEffect(() => {
     let isMounted = true;
@@ -1058,11 +1060,11 @@ function DocDetail({
                               statusText = '반려';
                               statusBg = 'bg-red-500/10 text-red-500';
                             } else if (s.decision === '보류') {
-                              statusText = '보류';
-                              statusBg = 'bg-amber/10 text-amber';
+                              statusText = s.kind === '합의' ? '협의요청' : '보류';
+                              statusBg = s.kind === '합의' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400 border border-purple-200' : 'bg-amber/10 text-amber';
                             } else if (isActive) {
-                              statusText = '결재대기';
-                              statusBg = 'bg-amber text-white animate-pulse';
+                              statusText = s.kind === '합의' ? '합의대기' : '결재대기';
+                              statusBg = s.kind === '합의' ? 'bg-purple-600 text-white animate-pulse' : 'bg-amber text-white animate-pulse';
                             }
 
                             return (
@@ -1103,11 +1105,11 @@ function DocDetail({
                             statusText = '반려';
                             statusBg = 'bg-red-500/10 text-red-500';
                           } else if (s.decision === '보류') {
-                            statusText = '보류';
-                            statusBg = 'bg-amber/10 text-amber';
+                            statusText = s.kind === '합의' ? '협의요청' : '보류';
+                            statusBg = s.kind === '합의' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400 border border-purple-200' : 'bg-amber/10 text-amber';
                           } else if (isActive) {
-                            statusText = '결재대기';
-                            statusBg = 'bg-amber text-white animate-pulse';
+                            statusText = s.kind === '합의' ? '합의대기' : '결재대기';
+                            statusBg = s.kind === '합의' ? 'bg-purple-600 text-white animate-pulse' : 'bg-amber text-white animate-pulse';
                           }
 
                           return (
@@ -1261,7 +1263,9 @@ function DocDetail({
         {mySeq != null && !reject && (
           <>
             <button onClick={() => setReject({ seq: mySeq, comment: '' })} disabled={busy} className="rounded-lg border border-red-500/50 px-3.5 py-2 text-[12.5px] font-bold text-red-500 hover:bg-red-500/5 disabled:opacity-50">반려</button>
-            <button onClick={hold} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-ink3 disabled:opacity-50">보류</button>
+            <button onClick={hold} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-ink3 disabled:opacity-50">
+              {isMyStepAgreement ? '협의 요청' : '보류'}
+            </button>
             <button onClick={() => setShowApproveModal(true)} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">승인</button>
           </>
         )}
@@ -1312,11 +1316,13 @@ function DocDetail({
       {/* 단일 결재 승인 의견 입력 모달 */}
       {showApproveModal && (
         <ApprovalOpinionModal
-          title="결재 승인 확인"
+          title={isMyStepAgreement ? "합의 승인 확인" : "결재 승인 확인"}
           description={
             <div className="space-y-1 text-teal-800 dark:text-teal-200 font-semibold">
               <p className="font-extrabold text-[13px] text-ink">{doc.title}</p>
-              <p className="text-[11.5px] font-normal text-ink2">위 결재 문서를 승인하시겠습니까?</p>
+              <p className="text-[11.5px] font-normal text-ink2">
+                {isMyStepAgreement ? "위 결재 문서를 합의 승인하시겠습니까?" : "위 결재 문서를 승인하시겠습니까?"}
+              </p>
             </div>
           }
           confirmText="승인 확정"
