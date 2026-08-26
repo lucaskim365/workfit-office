@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     (async () => {
       try {
-        const uid = sessionStorage.getItem(SESSION_KEY);
+        const uid = localStorage.getItem(SESSION_KEY);
         if (uid) {
           const users = await userRepo.list();
           // 언마운트된 경우 아무 것도 건드리지 않는다. StrictMode는 effect를 두 번 실행하는데,
@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!alive) return;
           const found = users.find((u) => u.id === uid && u.status === '사용');
           if (found) setUser(found);
-          else sessionStorage.removeItem(SESSION_KEY);
+          else localStorage.removeItem(SESSION_KEY);
         }
       } catch {
         /* 복원 실패 시 미로그인으로 처리 */
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(loginId: string, password: string) {
     const u = await authRepo.authenticate(loginId, password);
-    sessionStorage.setItem(SESSION_KEY, u.id);
+    localStorage.setItem(SESSION_KEY, u.id);
     setUser(u);
     void authRepo.touchLastLogin(u.id);
     // Widdy ACL 용 서명 토큰 발급(best-effort — 비밀번호가 있는 이 시점에만 가능).
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOutUser() {
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
     clearWiddyToken();
     setUser(null);
   }
