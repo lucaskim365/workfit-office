@@ -116,6 +116,64 @@ function nextId(rows: CalendarEvent[], date: string): string {
   return `${prefix}${String(max + 1).padStart(4, '0')}`;
 }
 
+/**
+ * 공유 대상에게 새 일정 알림을 보낸다.
+ *
+ * 결재(`approvalDoc.repo.ts`)와 같은 자리 — 저장이 끝난 뒤, 실패해도 저장 자체는
+ * 그대로 두는 try/catch로 감싼다. 알림은 부가 효과지 일정 저장의 전제조건이 아니다.
+ * 대상 조회에 필요한 user·department·project repo는 동적 import로 끌어와
+ * calendarEvent.repo가 그 모듈들을 상시로 물지 않게 한다.
+ *
+ * 수정(update)은 대상으로 삼지 않는다 — "공유로 바뀐 것"과 "공유인 채 내용만 바뀐 것"을
+ * 가르려면 이전 값과 비교해야 하는데, 지금은 생성 시점만으로 충분하다.
+ */
+async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent): Promise<void> {
+  if (event.visibility === 'PRIVATE') return;
+
+  const { userRepo } = await import('@/data/user/user.repo');
+  let recipientIds: string[] = [];
+
+  if (event.visibility === 'COMPANY') {
+    recipientIds = (await userRepo.list({ status: '사용' })).map((row) => row.id);
+  } else if (event.visibility === 'TEAM' && event.deptId) {
+    const { departmentRepo } = await import('@/data/department/department.repo');
+    const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
+    if (dept) recipientIds = (await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id);
+  } else if (event.visibility === 'PROJECT' && event.projectId) {
+    const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
+    // 이 프로젝트로 공유를 걸 수 있었다는 것 자체가 actor가 이미 그 프로젝트를 볼 수 있다는
+    // 뜻이라(화면이 참여 중인 프로젝트만 고르게 한다), 같은 actor로 조회해도 막히지 않는다.
+    const project = await workProjectRepo.get(
+      { userId: actor.userId, deptId: actor.deptId ?? null, active: actor.active },
+      event.projectId,
+    );
+    if (project) recipientIds = [project.ownerUserId, ...project.memberUserIds];
+  }
+
+  const uniqueRecipients = [...new Set(recipientIds)].filter((id) => id !== event.ownerUserId);
+  if (uniqueRecipients.length === 0) return;
+
+  const owner = (await userRepo.list()).find((row) => row.id === event.ownerUserId);
+  const { notificationRepo } = await import('@/data/notification/notification.repo');
+  const when = event.allDay ? `${event.date} 종일` : `${event.date} ${event.startTime}`;
+
+  await Promise.all(uniqueRecipients.map((userId) => notificationRepo.create({
+    userId,
+    type: '일정',
+    title: '새 일정 공유',
+    text: `[${event.title}] ${when}${scopeLabel(event.visibility)}`,
+    senderName: owner?.name ?? '동료',
+    linkUrl: `/gw/calendar?date=${event.date}`,
+  })));
+}
+
+function scopeLabel(visibility: CalendarEvent['visibility']): string {
+  if (visibility === 'TEAM') return ' · 부서 공유';
+  if (visibility === 'PROJECT') return ' · 프로젝트 공유';
+  if (visibility === 'COMPANY') return ' · 전사 공개';
+  return '';
+}
+
 function sortEvents(rows: CalendarEvent[]): CalendarEvent[] {
   return rows.sort((a, b) => (
     a.date.localeCompare(b.date)
@@ -160,6 +218,11 @@ export const calendarEventRepo = {
         updatedAt: now,
       });
       await persist(created);
+      try {
+        await notifyRecipients(actor, created);
+      } catch (e) {
+        console.error('일정 공유 알림 전송 실패:', e);
+      }
       return cloneEvent(created);
     });
   },

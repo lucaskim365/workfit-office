@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
+import { buildCalendarMonth, calendarToday, isValidCalendarDate, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { resolveDeptId } from '@/domain/department/engine';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
@@ -36,9 +37,26 @@ function scheduleTime(event: { allDay: boolean; startTime: string | null; endTim
 function LocalCalendarScreen() {
   const { user: authenticatedUser, loading: authLoading } = useAuth();
   const today = calendarToday();
-  const [month, setMonth] = useState(today.slice(0, 7));
+  const [searchParams, setSearchParams] = useSearchParams();
+  /*
+    알림(`/gw/calendar?date=2026-08-26`)에서 들어온 진입점. 있으면 그 달을 열고 목록
+    모달도 바로 띄운다 — 없으면(직접 메뉴로 들어온 보통 경우) 오늘 달을 그대로 연다.
+    쿼리는 한 번 읽은 뒤 지운다 — 남아 있으면 "오늘" 버튼을 눌러도 계속 그 날짜로
+    돌아오는 것처럼 보인다.
+  */
+  const linkedDate = searchParams.get('date');
+  const initialDate = linkedDate && isValidCalendarDate(linkedDate) ? linkedDate : null;
+  const [month, setMonth] = useState((initialDate ?? today).slice(0, 7));
   /** 목록 모달을 띄운 날짜. 닫혀 있으면 null. */
-  const [dayListDate, setDayListDate] = useState<string | null>(null);
+  const [dayListDate, setDayListDate] = useState<string | null>(initialDate);
+
+  /*
+    읽고 나면 지운다 — 안 지우면 주소창에 남아 "오늘"을 눌러도 다시 이 날짜로 보인다.
+    마운트 시 1회만 확인하면 된다 — 이후 달력 안 조작(달 이동·모달 열기)은 이 쿼리와 무관하다.
+  */
+  useEffect(() => {
+    if (searchParams.has('date')) setSearchParams((prev) => { prev.delete('date'); return prev; }, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [demoUserId, setDemoUserId] = useState('U009');
   const [modalTarget, setModalTarget] = useState<{ date: string; event?: CalendarEvent } | null>(null);
   const [notice, setNotice] = useState('');
