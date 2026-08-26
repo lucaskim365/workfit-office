@@ -8,7 +8,7 @@ interface RelatedDocSearchModalProps {
   userDept?: string;
   userDeptId?: string;
   selectedDocIds: string[];
-  onSelect: (docs: RelatedDoc[], attachments: { name: string; url: string }[]) => void;
+  onSelect: (docs: RelatedDoc[]) => void;
   onClose: () => void;
 }
 
@@ -131,9 +131,7 @@ export function RelatedDocSearchModal({
       drafterDept: d.drafterDept || '',
       completedAt: d.completedAt,
     }));
-    // 💡 선택된 문서들의 모든 첨부파일 수집
-    const collectedAttachments = tempSelected.flatMap((d) => d.attachments ?? []);
-    onSelect(relatedList, collectedAttachments);
+    onSelect(relatedList);
     onClose();
   };
 
