@@ -1,0 +1,13 @@
+{
+  "name": "workfit-calendar-reminder",
+  "version": "1.0.0",
+  "description": "Appwrite Function — 일정 시작 10분 전 리마인더(스케줄 실행)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^17.0.0"
+  }
+}

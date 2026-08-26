@@ -216,6 +216,7 @@ export const calendarEventRepo = {
         ownerUserId: actor.userId,
         createdAt: now,
         updatedAt: now,
+        reminded: false,
       });
       await persist(created);
       try {
@@ -232,6 +233,12 @@ export const calendarEventRepo = {
       requireActive(actor);
       const rows = await loadAll();
       const current = requireOwned(rows, actor, id);
+      /*
+        시작 시각이 바뀌면 리마인더도 다시 대상이 돼야 한다. 3시 회의를 3시 50분에 이미
+        리마인더 받은 뒤 5시로 옮기면, reminded=true가 그대로 남아 새 시각엔 영영 안 온다.
+        날짜·시작 시각 중 하나라도 바뀌면 플래그를 되돌린다.
+      */
+      const timeChanged = draft.date !== current.date || draft.startTime !== current.startTime;
       const updated = parseEvent({
         ...current,
         ...draft,
@@ -239,6 +246,7 @@ export const calendarEventRepo = {
         ownerUserId: current.ownerUserId,
         createdAt: current.createdAt,
         updatedAt: new Date().toISOString(),
+        reminded: timeChanged ? false : current.reminded,
       });
       await persist(updated);
       return cloneEvent(updated);
