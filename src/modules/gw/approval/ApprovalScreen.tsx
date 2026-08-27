@@ -42,15 +42,15 @@ import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionP
  * 모든 전이는 features 훅(엔진 위임) → 성공 시 캐시 무효화로 함·배지 자동 갱신.
  */
 const BOX_LABEL: Record<ApprovalBox, string> = {
-  대기: '결재함',
-  상신: '상신함',
+  대기: '결재 대기함',
+  상신: '기안 상신함',
   반려: '반려함',
-  임시: '임시저장',
+  임시: '임시 저장함',
   수신: '수신함',
-  참조: '참조함',
+  참조: '참조/열람함',
   시행: '시행함',
   후열: '후열함',
-  완료: '완료함',
+  완료: '기결재 완료함',
   삭제: '휴지통',
 };
 
@@ -64,7 +64,7 @@ export default function ApprovalScreen() {
   const userObj = org.userById(me);
   const { data: users = [] } = useUsers();
 
-  const { byBox, counts, isLoading } = useApprovalBoxes(me);
+  const { byBox, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
   const { data: deptExecutions = [] } = useAllExecutions();
 
@@ -78,10 +78,11 @@ export default function ApprovalScreen() {
   }, [byBox, me]);
 
   const [selId, setSelId] = useState<string | null>(null);
-  const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
+  const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
+  const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
 
 
 
@@ -130,7 +131,7 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter, rejectFilter]);
+  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter, rejectFilter, draftFilter]);
 
   // 완료함, 결재함, 시행함 필터링 적용
   const filteredList = useMemo(() => {
@@ -192,9 +193,23 @@ export default function ApprovalScreen() {
       });
     }
     if (box === '완료') {
-      if (doneFilter === 'draft') return list.filter((d: ApprovalDoc) => d.drafterId === me);
       if (doneFilter === 'approved') {
         return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+      }
+      if (doneFilter === 'rejected') {
+        return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      }
+      return list;
+    }
+    if (box === '상신') {
+      if (draftFilter === 'progress') {
+        return list.filter((d: ApprovalDoc) => d.status === '진행중');
+      }
+      if (draftFilter === 'completed') {
+        return list.filter((d: ApprovalDoc) => d.status === '완료' || d.status === '시행대기');
+      }
+      if (draftFilter === 'rejected') {
+        return list.filter((d: ApprovalDoc) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송');
       }
       return list;
     }
@@ -363,56 +378,40 @@ export default function ApprovalScreen() {
             + 새 상신
           </button>
 
-          <button
-            onClick={() => setBox('임시')}
-            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === '임시' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
-          >
-            <span>{BOX_LABEL['임시']}</span>
-            {(counts['임시'] ?? 0) > 0 && (
-              <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${box === '임시' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'}`}>
-                {counts['임시']}
-              </span>
-            )}
-          </button>
-          <div className="h-px bg-border -mt-0.5 mb-1" />
           {[
             {
-              title: '문서함',
+              title: '개인 문서함',
               boxes: [
-                { key: '문서함', label: '문서함' },
+                { key: '상신', label: '기안 상신함' },
+                { key: '임시', label: '임시 저장함' },
+                { key: '참조', label: '참조/열람함' },
               ] as const,
-              titleBg: 'bg-teal/10 text-teal dark:text-teal-soft',
+              titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
-              title: '결재할 문서',
-              boxes: [{ key: '대기', label: BOX_LABEL['대기'] }] as const,
-              titleBg: 'bg-panel-alt text-ink2',
+              title: '결재함',
+              boxes: [
+                { key: '대기', label: '결재 대기함' },
+                { key: '완료', label: '기결재 완료함' },
+                { key: '후열', label: '후열함' },
+              ] as const,
+              titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
-              title: '내가 올린 문서',
+              title: '부서/시행 문서함',
               boxes: [
-                { key: '상신', label: BOX_LABEL['상신'] },
-                { key: '반려', label: BOX_LABEL['반려'] },
+                { key: '수신', label: '수신함' },
+                { key: '시행', label: '시행함' },
+                { key: '문서함', label: '부서 문서함' },
               ] as const,
-              titleBg: 'bg-panel-alt text-ink2',
-            },
-            {
-              title: '공유 문서',
-              boxes: [
-                { key: '수신', label: BOX_LABEL['수신'] },
-                { key: '참조', label: BOX_LABEL['참조'] },
-                { key: '시행', label: BOX_LABEL['시행'] },
-                { key: '후열', label: BOX_LABEL['후열'] },
-              ] as const,
-              titleBg: 'bg-panel-alt text-ink2',
+              titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
               title: '관리',
               boxes: [
-                { key: '완료', label: BOX_LABEL['완료'] },
-                { key: '삭제', label: BOX_LABEL['삭제'] },
+                { key: '삭제', label: '휴지통' },
               ] as const,
-              titleBg: 'bg-panel-alt text-ink2',
+              titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
           ].map((g) => (
             <div key={g.title} className="flex flex-col gap-1.5">
@@ -467,7 +466,14 @@ export default function ApprovalScreen() {
                     });
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
-                    badgeCount = uniqueIds.size;
+                    if (b === '상신') {
+                      badgeCount = Array.from(uniqueIds)
+                        .map(id => combined.find(d => d.id === id)!)
+                        .filter((d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송')
+                        .length;
+                    } else {
+                      badgeCount = uniqueIds.size;
+                    }
                   }
 
 
@@ -477,21 +483,25 @@ export default function ApprovalScreen() {
                     ? (myActivePendingCount > 0
                       ? 'bg-red-500 text-white animate-pulse'
                       : 'bg-ink3/15 text-ink2')
-                    : b === '시행'
-                      ? (executionCount > 0
-                        ? 'bg-amber-500 text-white animate-pulse'
+                    : b === '상신'
+                      ? (badgeCount > 0
+                        ? 'bg-red-500 text-white animate-pulse'
                         : 'bg-ink3/15 text-ink2')
-                      : b === '후열'
-                        ? (unconfirmedPostReadCount > 0
+                      : b === '시행'
+                        ? (executionCount > 0
                           ? 'bg-amber-500 text-white animate-pulse'
                           : 'bg-ink3/15 text-ink2')
-                        : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+                        : b === '후열'
+                          ? (unconfirmedPostReadCount > 0
+                            ? 'bg-amber-500 text-white animate-pulse'
+                            : 'bg-ink3/15 text-ink2')
+                          : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   return (
                     <button
                       key={b}
                       onClick={() => setBox(b)}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      className={`flex w-full items-center justify-between rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       <span className="flex items-center gap-1.5">
@@ -555,6 +565,26 @@ export default function ApprovalScreen() {
               </div>
             </div>
 
+            {box === '상신' && (
+              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                {(['all', 'progress', 'completed', 'rejected'] as const).map((f) => {
+                  const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'completed' ? '완료' : '반려';
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setDraftFilter(f)}
+                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${draftFilter === f
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                        }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {box === '대기' && (
               <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
                 {(['all', 'pending', 'progress'] as const).map((f) => {
@@ -595,8 +625,8 @@ export default function ApprovalScreen() {
             )}
             {box === '완료' && (
               <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['all', 'draft', 'approved'] as const).map((f) => {
-                  const label = f === 'all' ? '전체' : f === 'draft' ? '기안한 문서' : '결재한 문서';
+                {(['all', 'approved', 'rejected'] as const).map((f) => {
+                  const label = f === 'all' ? '전체' : f === 'approved' ? '승인한 문서' : '반려한 문서';
                   return (
                     <button
                       key={f}

@@ -192,6 +192,88 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
  * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */
+/** 대기함 판정: 진행중이고 현재 결재 순번(차례)이 나 또는 내 대결 위임 대상자인 경우 (To-Do) */
+export function isTodoBoxMatch(doc: ApprovalDoc, userId: string, absentApproverIds?: string[]): boolean {
+  if (doc.status !== '진행중') return false;
+  
+  const activeIds = currentApproverIds(doc);
+  if (activeIds.includes(userId)) return true;
+  
+  if (absentApproverIds && absentApproverIds.length > 0) {
+    return activeIds.some((id) => absentApproverIds.includes(id));
+  }
+  return false;
+}
+
+/** 상신함 판정: 내가 기안자이고 임시저장 상태가 아닌 모든 문서 */
+export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
+  return doc.drafterId === userId && doc.status !== '임시저장';
+}
+
+/** 반려함 판정: 반려 상태의 문서 중 내가 기안했거나 내가 반려 처리한 문서 */
+export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
+  const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
+  if (!isRejectedStatus) return false;
+  const isMyDraft = doc.drafterId === userId;
+  const isMyRejectedDecision = doc.steps.some((s) => s.approverId === userId && s.decision === '반려');
+  return isMyDraft || isMyRejectedDecision;
+}
+
+/** 수신함 판정: 완료된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 */
+export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
+  if (doc.status !== '완료') return false;
+  const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
+  const isCustomRecipient = doc.recipients?.some((r) => {
+    if (r.type === 'user') return r.id === userId;
+    if (r.type === 'dept' && userDeptName) {
+      const parts = userDeptName.split('||');
+      return parts.includes(r.name) || parts.includes(r.id);
+    }
+    if (r.type === 'drafter') return doc.drafterId === userId;
+    return false;
+  }) ?? false;
+  return isExecutorDrafter || isCustomRecipient;
+}
+
+/** 시행함 판정: 시행 조치 대상(완료, 시행대기)이면서 시행처 부서 스케일이 매칭되는 문서 */
+export function isExecutionBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
+  if (!['완료', '시행대기'].includes(doc.status)) return false;
+  
+  if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {
+    if (!userDeptName) return false;
+    const parts = userDeptName.split('||');
+    return doc.executionsSnapshot.some((snapshot) => 
+      parts.includes(snapshot.deptId) || parts.includes(snapshot.deptName)
+    );
+  }
+
+  if (!doc.execution) return false;
+  const targetId = doc.execution.targetId;
+  const targetType = doc.execution.targetType;
+  if (targetType === 'USER') {
+    return targetId === userId;
+  } else if (targetType === 'DEPT') {
+    if (!userDeptName) return false;
+    const parts = userDeptName.split('||');
+    return parts.includes(targetId);
+  }
+  return false;
+}
+
+/** 완료함 판정: 최종 완료/시행대기/반려된 문서 중 내가 기안자가 아니고, 결재 결정을 완료(승인/반려)한 이력이 있는 문서 */
+export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
+  const isFinalStatus = doc.status === '완료' || doc.status === '시행대기' || doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
+  if (!isFinalStatus) return false;
+  
+  if (doc.drafterId === userId) return false;
+  
+  return doc.steps.some((s) => s.approverId === userId && (s.decision === '승인' || s.decision === '반려'));
+}
+
+/**
+ * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
+ * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
+ */
 export function matchesBox(
   doc: ApprovalDoc,
   userId: string,
@@ -203,79 +285,16 @@ export function matchesBox(
     return box === '삭제' && doc.drafterId === userId;
   }
   switch (box) {
-    case '대기': {
-      if (doc.status !== '진행중') return false;
-      
-      // 결재선(참조 제외)에 내가 포함되어 있는지 확인
-      const isInSteps = doc.steps.some((s) => s.approverId === userId && s.kind !== '참조');
-      if (isInSteps) return true;
-
-      // 대결권자로 위임받은 경우 확인
-      if (absentApproverIds && absentApproverIds.length > 0) {
-        const isInStepsAsDelegate = doc.steps.some((s) => absentApproverIds.includes(s.approverId) && s.kind !== '참조');
-        if (isInStepsAsDelegate) return true;
-      }
-      return false;
-    }
-    case '상신':
-      return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수' || doc.status === '시행대기');
-    case '반려': {
-      const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
-      if (!isRejectedStatus) return false;
-
-      const isMyDraftRejected = doc.drafterId === userId;
-      const isMyRejectedDecision = doc.steps.some((s) => s.approverId === userId && s.decision === '반려');
-      return isMyDraftRejected || isMyRejectedDecision;
-    }
-    case '임시':
-      return doc.drafterId === userId && doc.status === '임시저장';
-    case '수신': {
-      if (doc.status !== '완료') return false;
-      const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
-      const isCustomRecipient = doc.recipients?.some((r) => {
-        if (r.type === 'user') return r.id === userId;
-        if (r.type === 'dept' && userDeptName) {
-          const parts = userDeptName.split('||');
-          return parts.includes(r.name) || parts.includes(r.id);
-        }
-        if (r.type === 'drafter') return doc.drafterId === userId;
-        return false;
-      }) ?? false;
-      return isExecutorDrafter || isCustomRecipient;
-    }
-    case '참조':
-      return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
-    case '시행': {
-      if (!['완료', '시행대기'].includes(doc.status)) return false;
-      
-      // 1. 복수 시행처 스냅샷 매칭
-      if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {
-        if (!userDeptName) return false;
-        const parts = userDeptName.split('||');
-        return doc.executionsSnapshot.some((snapshot) => 
-          parts.includes(snapshot.deptId) || parts.includes(snapshot.deptName)
-        );
-      }
-
-      // 2. 하위 호환성 (Legacy doc.execution)
-      if (!doc.execution) return false;
-      const targetId = doc.execution.targetId;
-      const targetType = doc.execution.targetType;
-      if (targetType === 'USER') {
-        return targetId === userId;
-      } else if (targetType === 'DEPT') {
-        if (!userDeptName) return false;
-        const parts = userDeptName.split('||');
-        return parts.includes(targetId);
-      }
-      return false;
-    }
-    case '후열':
-      return doc.status === '완료' && doc.steps.some((s) => s.delegatedFromId === userId);
-    case '완료':
-      return doc.status === '완료' && (doc.drafterId === userId || doc.steps.some((s) => s.approverId === userId));
-    case '삭제':
-      return false;
+    case '대기':   return isTodoBoxMatch(doc, userId, absentApproverIds);
+    case '상신':   return isDrafterBoxMatch(doc, userId);
+    case '반려':   return isRejectedBoxMatch(doc, userId);
+    case '임시':   return doc.drafterId === userId && doc.status === '임시저장';
+    case '수신':   return isReceivedBoxMatch(doc, userId, userDeptName);
+    case '참조':   return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
+    case '시행':   return isExecutionBoxMatch(doc, userId, userDeptName);
+    case '후열':   return doc.status === '완료' && doc.steps.some((s) => s.delegatedFromId === userId);
+    case '완료':   return isCompletedBoxMatch(doc, userId);
+    case '삭제':   return false;
   }
   return false;
 }

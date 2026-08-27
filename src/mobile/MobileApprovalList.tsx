@@ -294,6 +294,29 @@ export default function MobileApprovalList() {
 
 function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) {
   const drafter = doc.drafterName || doc.drafterId;
+  
+  let statusText: string = doc.status;
+  let sColor = statusColor(doc.status);
+
+  if (doc.status === '시행대기' || doc.status === '완료') {
+    if (doc.execution) {
+      const execStatus = doc.execution.status;
+      if (execStatus === '시행완료') {
+        statusText = '시행완료';
+        sColor = '#10b981';
+      } else if (execStatus === '처리중' || execStatus === '대기중') {
+        statusText = execStatus === '처리중' ? '시행중' : '시행대기';
+        sColor = execStatus === '처리중' ? '#f59e0b' : '#3b82f6';
+      }
+    } else if (doc.status === '완료') {
+      statusText = '완료';
+      sColor = '#14b8a6';
+    } else {
+      statusText = '시행대기';
+      sColor = '#3b82f6';
+    }
+  }
+
   return (
     <button
       onClick={onOpen}
@@ -305,9 +328,9 @@ function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) 
         </span>
         <span
           className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-          style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}
+          style={{ background: `${sColor}1f`, color: sColor }}
         >
-          {doc.status}
+          {statusText}
         </span>
         <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{doc.docNo}</span>
       </div>

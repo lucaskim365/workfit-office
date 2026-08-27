@@ -499,7 +499,7 @@ export function ApprovalDocumentView({
 
       <div className="relative mb-5 flex items-start justify-between gap-4">
         <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        {doc.status === '완료' && (
+        {(doc.status === '완료' || doc.status === '시행대기') && (
           <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
         )}
       </div>
