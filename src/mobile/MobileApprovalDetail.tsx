@@ -10,6 +10,14 @@ import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/
 import { RESERVED_BODY_KEY } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge, type OrgLite } from '@/modules/gw/approval/formFields';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
+import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+
+const FALLBACK_CLOSING: Record<string, string> = {
+  기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
+  품의: '위와 같이 품의하오니 재가하여 주시기 바랍니다.',
+  지출결의: '위와 같이 지출을 청구하오니 재가하여 주시기 바랍니다.',
+  휴가: '위와 같이 휴가를 신청하오니 재가하여 주시기 바랍니다.',
+};
 
 /**
  * 모바일 PWA 전자결재 상세 — 문서 열람 + 승인/반려(반려 시 의견 필수).
@@ -27,6 +35,7 @@ export default function MobileApprovalDetail() {
   const decide = useDecideStep();
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [viewMode, setViewMode] = useState<'compact' | 'original'>('compact');
 
   const back = () => nav('/m/approval');
 
@@ -104,9 +113,19 @@ export default function MobileApprovalDetail() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
-        <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
-        <span className="text-[15px] font-bold">전자결재 상세</span>
+      <header className="flex shrink-0 items-center justify-between px-3 py-3 text-white" style={{ background: '#101830' }}>
+        <div className="flex items-center gap-2">
+          <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+          <span className="text-[15px] font-bold">전자결재 상세</span>
+        </div>
+        {doc && (
+          <button
+            onClick={() => setViewMode((m) => (m === 'compact' ? 'original' : 'compact'))}
+            className="rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-bold hover:bg-white/20 transition-all select-none active:scale-95"
+          >
+            {viewMode === 'compact' ? '📄 원본문서 보기' : '📱 컴팩트 보기'}
+          </button>
+        )}
       </header>
 
       {!doc ? (
@@ -122,78 +141,99 @@ export default function MobileApprovalDetail() {
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            {/* 문서 헤더 카드 */}
-            <Card>
-              <div className="flex items-center gap-1.5">
-                <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: '#101830' }}>{doc.docType}</span>
-                <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}>{doc.status}</span>
-                <span className="ml-auto text-[11px] tabular-nums text-ink3">{doc.docNo}</span>
+          {viewMode === 'original' ? (
+            <div className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner">
+              <div className="origin-top-left min-w-[780px]">
+                <ApprovalDocumentView doc={doc} currentUser={{ id: me }} />
               </div>
-              <div className="mt-2.5 text-[17px] font-bold" style={{ color: '#101830' }}>{doc.title}</div>
-              <div className="my-3 h-px bg-black/10" />
-              <InfoRow label="기안자" value={`${doc.drafterName || nameOf(doc.drafterId)}${doc.drafterDept ? ` (${doc.drafterDept})` : ''}`} />
-              <InfoRow label="기안일시" value={fmtDocDate(doc.submittedAt ?? doc.createdAt)} />
-              {doc.amount != null && <InfoRow label="금액" value={`${fmtAmount(doc.amount)} 원`} />}
-              {doc.docType === '휴가' && doc.form && (
-                <>
-                  <InfoRow label="휴가종류" value={doc.form.leaveType} />
-                  <InfoRow label="기간" value={`${doc.form.startDate} ~ ${doc.form.endDate}${doc.form.days ? ` (${doc.form.days}일)` : ''}`} />
-                </>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              {/* 문서 헤더 카드 */}
+              <Card>
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: '#101830' }}>{doc.docType}</span>
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}>{doc.status}</span>
+                  <span className="ml-auto text-[11px] tabular-nums text-ink3">{doc.docNo}</span>
+                </div>
+                <div className="mt-2.5 text-[17px] font-bold" style={{ color: '#101830' }}>{doc.title}</div>
+                <div className="my-3 h-px bg-black/10" />
+                <InfoRow label="기안자" value={`${doc.drafterName || nameOf(doc.drafterId)}${doc.drafterDept ? ` (${doc.drafterDept})` : ''}`} />
+                <InfoRow label="기안일시" value={fmtDocDate(doc.submittedAt ?? doc.createdAt)} />
+                {doc.amount != null && <InfoRow label="금액" value={`${fmtAmount(doc.amount)} 원`} />}
+                {doc.docType === '휴가' && doc.form && (
+                  <>
+                    <InfoRow label="휴가종류" value={doc.form.leaveType} />
+                    <InfoRow label="기간" value={`${doc.form.startDate} ~ ${doc.form.endDate}${doc.form.days ? ` (${doc.form.days}일)` : ''}`} />
+                  </>
+                )}
+              </Card>
+
+              {/* 선조치 결재(사후 감사 대상) 카드 */}
+              {doc.isPostApproval && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50/30 p-4 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-[13px] font-bold text-rose-800">
+                    <span>🚨 사후 감사 대상 (선조치 결재)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] border-b border-rose-100 pb-2">
+                    <div>
+                      <span className="text-rose-700/80">선조치 일시: </span>
+                      <span className="font-semibold text-rose-900">{doc.postApprovedAt ? fmtDocDate(doc.postApprovedAt) : '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-rose-700/80">임시 승인자: </span>
+                      <span className="font-semibold text-rose-900">{doc.postApprovedByName ?? '—'}</span>
+                    </div>
+                  </div>
+                  {doc.postApprovalActionTaken && (
+                    <div className="text-[11.5px]">
+                      <div className="font-bold text-rose-800">1. 선조치 내용 및 결과</div>
+                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalActionTaken}</div>
+                    </div>
+                  )}
+                  {doc.postApprovalNecessity && (
+                    <div className="text-[11.5px]">
+                      <div className="font-bold text-rose-800">2. 긴급성 및 불가피성 소명</div>
+                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalNecessity}</div>
+                    </div>
+                  )}
+                </div>
               )}
-            </Card>
 
-            {/* 선조치 결재(사후 감사 대상) 카드 */}
-            {doc.isPostApproval && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/30 p-4 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-[13px] font-bold text-rose-800">
-                  <span>🚨 사후 감사 대상 (선조치 결재)</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11.5px] border-b border-rose-100 pb-2">
-                  <div>
-                    <span className="text-rose-700/80">선조치 일시: </span>
-                    <span className="font-semibold text-rose-900">{doc.postApprovedAt ? fmtDocDate(doc.postApprovedAt) : '—'}</span>
+              {/* 결재선 타임라인 */}
+              <div>
+                <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>결재선</div>
+                <Card>
+                  <div className="flex flex-col">
+                    {doc.steps.map((s) => (
+                      <StepRow key={s.seq} doc={doc} step={s} name={nameOf(s.approverId, s.approverName)} />
+                    ))}
                   </div>
-                  <div>
-                    <span className="text-rose-700/80">임시 승인자: </span>
-                    <span className="font-semibold text-rose-900">{doc.postApprovedByName ?? '—'}</span>
-                  </div>
-                </div>
-                {doc.postApprovalActionTaken && (
-                  <div className="text-[11.5px]">
-                    <div className="font-bold text-rose-800">1. 선조치 내용 및 결과</div>
-                    <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalActionTaken}</div>
-                  </div>
-                )}
-                {doc.postApprovalNecessity && (
-                  <div className="text-[11.5px]">
-                    <div className="font-bold text-rose-800">2. 긴급성 및 불가피성 소명</div>
-                    <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalNecessity}</div>
-                  </div>
-                )}
+                </Card>
               </div>
-            )}
 
-            {/* 결재선 타임라인 */}
-            <div>
-              <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>결재선</div>
-              <Card>
-                <div className="flex flex-col">
-                  {doc.steps.map((s) => (
-                    <StepRow key={s.seq} doc={doc} step={s} name={nameOf(s.approverId, s.approverName)} />
-                  ))}
-                </div>
-              </Card>
+              {/* 본문 */}
+              <div>
+                <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>본문</div>
+                <Card>
+                  <ApprovalBody doc={doc} form={form} users={users} isMaskingActive={isMaskingActive} maskValue={maskValue} />
+                  
+                  {/* 맺음말 격식 보완 */}
+                  <div className="mt-4 pt-3 border-t border-black/5 text-center">
+                    <div className="text-[11.5px] italic text-ink3 leading-relaxed">
+                      {form?.closing || FALLBACK_CLOSING[doc.docType] || '위와 같이 신청하오니 재가하여 주시기 바랍니다.'}
+                    </div>
+                    <div className="mt-3.5 text-[11px] font-bold text-ink2 tabular-nums">
+                      {fmtDocDate(doc.submittedAt ?? doc.createdAt)}
+                    </div>
+                    <div className="mt-1 text-[12px] font-bold text-ink" style={{ color: '#101830' }}>
+                      기안자: {doc.drafterName || nameOf(doc.drafterId)}
+                    </div>
+                  </div>
+                </Card>
+              </div>
             </div>
-
-            {/* 본문 */}
-            <div>
-              <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>본문</div>
-              <Card>
-                <ApprovalBody doc={doc} form={form} users={users} isMaskingActive={isMaskingActive} maskValue={maskValue} />
-              </Card>
-            </div>
-          </div>
+          )}
 
           {/* 액션바 — 내 결재 차례일 때만 */}
           {myTurn && (
