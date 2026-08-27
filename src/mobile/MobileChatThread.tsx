@@ -170,6 +170,8 @@ export default function MobileChatThread() {
     });
   }, [messages, searchQuery]);
 
+  const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
+
   useEffect(() => {
     unhideRoom(me, roomId);
     markRead.mutate({ roomId, userId: me });
@@ -322,17 +324,28 @@ export default function MobileChatThread() {
       )}
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-        {filteredMessages.length === 0 && (
+        {processedItems.length === 0 && (
           <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
-        {filteredMessages.map((m, idx) => {
-          const prevMsg = idx > 0 ? filteredMessages[idx - 1] : null;
-          const nextMsg = idx < filteredMessages.length - 1 ? filteredMessages[idx + 1] : null;
+        {processedItems.map((item, idx) => {
+          const m = item.message;
+          let prevMsg: ChatMessage | null = null;
+          if (idx > 0) {
+            const prevItem = processedItems[idx - 1];
+            if (prevItem.type === 'image-bundle' && prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
+              prevMsg = prevItem.bundleMessages[prevItem.bundleMessages.length - 1];
+            } else {
+              prevMsg = prevItem.message;
+            }
+          }
+          const nextMsg = idx < processedItems.length - 1 ? processedItems[idx + 1].message : null;
 
           const showDateDivider = !prevMsg || !isSameDay(prevMsg.at, m.at);
 
-          // 다음 메시지가 있고 동일인물이며 동일한 분에 보냈으면 현재 시간 표시를 생략(가장 마지막에만 출력)
-          const hideTime = nextMsg && m.senderId === nextMsg.senderId && isSameMinute(m.at, nextMsg.at);
+          const lastMsgOfGroup = item.type === 'image-bundle' && item.bundleMessages
+            ? item.bundleMessages[item.bundleMessages.length - 1]
+            : m;
+          const hideTime = nextMsg && lastMsgOfGroup.senderId === nextMsg.senderId && isSameMinute(lastMsgOfGroup.at, nextMsg.at);
           const showTime = !hideTime;
 
           return (
@@ -344,18 +357,31 @@ export default function MobileChatThread() {
                   </span>
                 </div>
               )}
-              <MessageBubble
-                m={m}
-                me={me}
-                group={room?.type === 'group'}
-                roomMembers={room?.members ?? []}
-                onOpenImage={setViewer}
-                showTime={showTime}
-                isEditing={editingMessageId === m.id}
-                onCancelEdit={() => setEditingMessageId(null)}
-                onLongPress={setSheetMessage}
-                onToggleEmoji={handleToggleEmoji}
-              />
+              {item.type === 'image-bundle' && item.bundleMessages ? (
+                <ImageBundleBubble
+                  bundle={item.bundleMessages}
+                  me={me}
+                  group={room?.type === 'group'}
+                  roomMembers={room?.members ?? []}
+                  onOpenImage={setViewer}
+                  showTime={showTime}
+                  onLongPress={setSheetMessage}
+                  onToggleEmoji={handleToggleEmoji}
+                />
+              ) : (
+                <MessageBubble
+                  m={m}
+                  me={me}
+                  group={room?.type === 'group'}
+                  roomMembers={room?.members ?? []}
+                  onOpenImage={setViewer}
+                  showTime={showTime}
+                  isEditing={editingMessageId === m.id}
+                  onCancelEdit={() => setEditingMessageId(null)}
+                  onLongPress={setSheetMessage}
+                  onToggleEmoji={handleToggleEmoji}
+                />
+              )}
             </div>
           );
         })}
@@ -533,6 +559,187 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
         >
           결재 문서 상세 보기 →
         </button>
+      </div>
+    </div>
+  );
+}
+
+function ImageBundleBubble({
+  bundle,
+  me,
+  group,
+  roomMembers,
+  onOpenImage,
+  showTime,
+  onLongPress,
+  onToggleEmoji,
+}: {
+  bundle: ChatMessage[];
+  me: string;
+  group?: boolean;
+  roomMembers: string[];
+  onOpenImage: (att: Attachment) => void;
+  showTime: boolean;
+  onLongPress: (m: ChatMessage) => void;
+  onToggleEmoji?: (messageId: string, emoji: string) => void;
+}) {
+  const m = bundle[0];
+  const mine = m.senderId === me;
+  const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMoving = useRef(false);
+
+  const handleTouchStart = () => {
+    isMoving.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!isMoving.current) {
+        onLongPress(m);
+      }
+    }, 600);
+  };
+
+  const handleTouchMove = () => {
+    isMoving.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const handleTouchEnd = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const fmtBubbleTime = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const renderGrid = () => {
+    const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
+    if (attachments.length === 0) return null;
+    const len = attachments.length;
+
+    if (len === 2) {
+      return (
+        <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-black/10">
+          {attachments.map((att, i) => (
+            <button key={i} onClick={() => onOpenImage(att)} className="w-full h-full overflow-hidden block">
+              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (len === 3) {
+      return (
+        <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-black/10">
+          <button onClick={() => onOpenImage(attachments[0])} className="flex-1 h-full overflow-hidden block">
+            <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
+          </button>
+          <div className="flex flex-col gap-1 w-[38%] h-full">
+            <button onClick={() => onOpenImage(attachments[1])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+              <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
+            </button>
+            <button onClick={() => onOpenImage(attachments[2])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+              <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const displayList = attachments.slice(0, 4);
+    const extraCount = attachments.length - 4;
+
+    return (
+      <div className="grid grid-cols-2 gap-1 w-60 h-60 overflow-hidden rounded-xl border border-black/10">
+        {displayList.map((att, i) => {
+          const isLast = i === 3 && extraCount > 0;
+          return (
+            <button
+              key={i}
+              onClick={() => onOpenImage(att)}
+              className="relative w-full h-full overflow-hidden block"
+            >
+              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+              {isLast && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[16px] font-bold">
+                  +{extraCount}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const bubbleMeta = (
+    <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+      {mine && unreadCount > 0 && (
+        <span className="text-[10px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
+          {unreadCount}
+        </span>
+      )}
+      {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+    </div>
+  );
+
+  const reactions = m.reactions as Record<string, string[]> | undefined;
+
+  return (
+    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+        {!mine && (
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center self-end rounded-full bg-[#e8f4fd] text-[12px] font-bold text-[#1890ff]">
+            {m.senderName?.[0] ?? '?'}
+          </span>
+        )}
+        <div className="group min-w-0">
+          {!mine && group && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
+          {m.replyTo && (
+            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}>
+              <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
+              <div className="truncate text-[10px] text-ink3">{m.replyTo.text}</div>
+            </div>
+          )}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+            className={`relative flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+          >
+            {renderGrid()}
+          </div>
+          {reactions && Object.keys(reactions).length > 0 && (
+            <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+              {Object.entries(reactions).map(([emoji, uids]) => {
+                if (!uids || uids.length === 0) return null;
+                const active = uids.includes(me);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onToggleEmoji?.(m.id, emoji)}
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all active:scale-95"
+                    style={active
+                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' }
+                      : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
+                    }
+                  >
+                    <span>{emoji}</span>
+                    <span className="tabular-nums">{uids.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {bubbleMeta}
+        </div>
       </div>
     </div>
   );
@@ -861,4 +1068,54 @@ function fmtDateDivider(dateStr?: string | null): string {
   const d = new Date(dateStr);
   const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}`;
+}
+
+export interface RenderMessageItem {
+  type: 'message' | 'image-bundle';
+  message: ChatMessage;
+  bundleMessages?: ChatMessage[];
+}
+
+export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] {
+  const items: RenderMessageItem[] = [];
+  let i = 0;
+  while (i < msgs.length) {
+    const cur = msgs[i];
+    if (cur.type !== 'image' || cur.text || !cur.attachment) {
+      items.push({ type: 'message', message: cur });
+      i++;
+      continue;
+    }
+
+    const bundle: ChatMessage[] = [cur];
+    let j = i + 1;
+    while (j < msgs.length) {
+      const next = msgs[j];
+      if (
+        next.type === 'image' &&
+        !next.text &&
+        next.attachment &&
+        next.senderId === cur.senderId &&
+        isSameMinute(cur.at, next.at)
+      ) {
+        bundle.push(next);
+        j++;
+      } else {
+        break;
+      }
+    }
+
+    if (bundle.length >= 2) {
+      items.push({
+        type: 'image-bundle',
+        message: cur,
+        bundleMessages: bundle,
+      });
+      i = j;
+    } else {
+      items.push({ type: 'message', message: cur });
+      i++;
+    }
+  }
+  return items;
 }

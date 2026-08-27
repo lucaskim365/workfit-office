@@ -389,6 +389,8 @@ function MessengerThread({
     });
   }, [messages, searchQuery]);
 
+  const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
+
   const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       handleFilesAttach(e.target.files);
@@ -503,7 +505,7 @@ function MessengerThread({
           <div className="text-[10.5px] text-ink3 mt-1">최대 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB</div>
         </div>
       )}
-      
+
       <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
         <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
@@ -616,8 +618,20 @@ function MessengerThread({
       )}
 
       <div ref={scrollRef} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-        {filteredMessages.map((m, idx) => {
-          const prevMsg = idx > 0 ? filteredMessages[idx - 1] : null;
+        {processedItems.length === 0 && (
+          <div className="py-12 text-center text-[11.5px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다' : '대화 내용이 없습니다'}</div>
+        )}
+        {processedItems.map((item, idx) => {
+          const m = item.message;
+          let prevMsg: ChatMessage | null = null;
+          if (idx > 0) {
+            const prevItem = processedItems[idx - 1];
+            if (prevItem.type === 'image-bundle' && prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
+              prevMsg = prevItem.bundleMessages[prevItem.bundleMessages.length - 1];
+            } else {
+              prevMsg = prevItem.message;
+            }
+          }
           const showDateDivider = !prevMsg || (() => {
             const d1 = new Date(m.at).toDateString();
             const d2 = prevMsg.at ? new Date(prevMsg.at).toDateString() : '';
@@ -645,25 +659,44 @@ function MessengerThread({
                   </span>
                 </div>
               )}
-              <MessageBubble
-                m={m}
-                me={me}
-                group={room.type === 'group'}
-                roomMembers={room.members}
-                onOpenImage={setViewer}
-                onReply={setReplyTo}
-                isEditing={editingMsgId === m.id}
-                onStartEdit={() => setEditingMsgId(m.id)}
-                onCancelEdit={() => setEditingMsgId(null)}
-                onToggleEmoji={handleToggleEmoji}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
-                  const zoom = parseFloat(fontScaleStr) || 1.1875;
-                  setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
-                }}
-              />
+              {item.type === 'image-bundle' && item.bundleMessages ? (
+                <ImageBundleBubble
+                  bundle={item.bundleMessages}
+                  me={me}
+                  group={room.type === 'group'}
+                  roomMembers={room.members}
+                  onOpenImage={setViewer}
+                  onReply={setReplyTo}
+                  onToggleEmoji={handleToggleEmoji}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                    const zoom = parseFloat(fontScaleStr) || 1.1875;
+                    setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                  }}
+                />
+              ) : (
+                <MessageBubble
+                  m={m}
+                  me={me}
+                  group={room.type === 'group'}
+                  roomMembers={room.members}
+                  onOpenImage={setViewer}
+                  onReply={setReplyTo}
+                  isEditing={editingMsgId === m.id}
+                  onStartEdit={() => setEditingMsgId(m.id)}
+                  onCancelEdit={() => setEditingMsgId(null)}
+                  onToggleEmoji={handleToggleEmoji}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                    const zoom = parseFloat(fontScaleStr) || 1.1875;
+                    setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                  }}
+                />
+              )}
             </div>
           );
         })}
@@ -822,6 +855,166 @@ function MessengerThread({
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+
+function ImageBundleBubble({
+  bundle,
+  me,
+  group,
+  roomMembers,
+  onOpenImage,
+  onReply,
+  onContextMenu,
+  onToggleEmoji,
+}: {
+  bundle: ChatMessage[];
+  me: string;
+  group: boolean;
+  roomMembers: string[];
+  onOpenImage: (att: Attachment) => void;
+  onReply: (m: ChatMessage) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  onToggleEmoji?: (messageId: string, emoji: string) => void;
+}) {
+  const m = bundle[0];
+  const mine = m.senderId === me;
+  const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
+
+  const fmtBubbleTime = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const renderGrid = () => {
+    const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
+    if (attachments.length === 0) return null;
+    const len = attachments.length;
+
+    if (len === 2) {
+      return (
+        <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-border">
+          {attachments.map((att, i) => (
+            <button key={i} onClick={() => onOpenImage(att)} className="w-full h-full overflow-hidden block">
+              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (len === 3) {
+      return (
+        <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-border">
+          <button onClick={() => onOpenImage(attachments[0])} className="flex-1 h-full overflow-hidden block">
+            <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
+          </button>
+          <div className="flex flex-col gap-1 w-[38%] h-full">
+            <button onClick={() => onOpenImage(attachments[1])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+              <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
+            </button>
+            <button onClick={() => onOpenImage(attachments[2])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+              <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const displayList = attachments.slice(0, 4);
+    const extraCount = attachments.length - 4;
+
+    return (
+      <div className="grid grid-cols-2 gap-1 w-60 h-60 overflow-hidden rounded-xl border border-border">
+        {displayList.map((att, i) => {
+          const isLast = i === 3 && extraCount > 0;
+          return (
+            <button
+              key={i}
+              onClick={() => onOpenImage(att)}
+              className="relative w-full h-full overflow-hidden block"
+            >
+              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+              {isLast && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[16px] font-bold">
+                  +{extraCount}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const bubbleMeta = (
+    <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+      {mine && unreadCount > 0 && (
+        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
+          {unreadCount}
+        </span>
+      )}
+      <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+    </div>
+  );
+
+  return (
+    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+        {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
+        <div className="group min-w-0">
+          {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {m.replyTo && (
+            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}>
+              <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
+              <div className="truncate text-[10.5px] text-ink3">{m.replyTo.text}</div>
+            </div>
+          )}
+          <div
+            className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+            onContextMenu={onContextMenu}
+          >
+            {renderGrid()}
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                onClick={() => onReply(m)}
+                title="답글"
+                className="grid h-6 w-6 place-items-center rounded-full text-[12px] text-ink3 hover:bg-panel-alt"
+              >
+                ↩
+              </button>
+            </div>
+          </div>
+          {m.reactions && Object.keys(m.reactions as Record<string, string[]>).length > 0 && (
+            <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+              {Object.entries(m.reactions as Record<string, string[]>).map(([emoji, uids]) => {
+                if (!uids || uids.length === 0) return null;
+                const active = uids.includes(me);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onToggleEmoji?.(m.id, emoji)}
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all hover:scale-105"
+                    style={active
+                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' }
+                      : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
+                    }
+                  >
+                    <span>{emoji}</span>
+                    <span className="tabular-nums">{uids.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {bubbleMeta}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1028,8 +1221,8 @@ function MessageBubble({
                     key={emoji}
                     onClick={() => onToggleEmoji?.(m.id, emoji)}
                     className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all hover:scale-105"
-                    style={active 
-                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' } 
+                    style={active
+                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' }
                       : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
                     }
                   >
@@ -1362,4 +1555,67 @@ function InviteView({ room, meName, onCancel, onDone }: { room: ChatRoom; meName
       </div>
     </div>
   );
+}
+
+function isSameMinute(dateStr1?: string | null, dateStr2?: string | null): boolean {
+  if (!dateStr1 || !dateStr2) return false;
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate() &&
+    d1.getHours() === d2.getHours() &&
+    d1.getMinutes() === d2.getMinutes()
+  );
+}
+
+export interface RenderMessageItem {
+  type: 'message' | 'image-bundle';
+  message: ChatMessage;
+  bundleMessages?: ChatMessage[];
+}
+
+export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] {
+  const items: RenderMessageItem[] = [];
+  let i = 0;
+  while (i < msgs.length) {
+    const cur = msgs[i];
+    if (cur.type !== 'image' || cur.text || !cur.attachment) {
+      items.push({ type: 'message', message: cur });
+      i++;
+      continue;
+    }
+
+    const bundle: ChatMessage[] = [cur];
+    let j = i + 1;
+    while (j < msgs.length) {
+      const next = msgs[j];
+      if (
+        next.type === 'image' &&
+        !next.text &&
+        next.attachment &&
+        next.senderId === cur.senderId &&
+        isSameMinute(cur.at, next.at)
+      ) {
+        bundle.push(next);
+        j++;
+      } else {
+        break;
+      }
+    }
+
+    if (bundle.length >= 2) {
+      items.push({
+        type: 'image-bundle',
+        message: cur,
+        bundleMessages: bundle,
+      });
+      i = j;
+    } else {
+      items.push({ type: 'message', message: cur });
+      i++;
+    }
+  }
+  return items;
 }
