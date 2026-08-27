@@ -211,17 +211,37 @@ export default function MobileChatThread() {
         {filteredMessages.length === 0 && (
           <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
-        {filteredMessages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            m={m}
-            me={me}
-            group={room?.type === 'group'}
-            roomMembers={room?.members ?? []}
-            onOpenImage={setViewer}
-            onReply={setReplyTo}
-          />
-        ))}
+        {filteredMessages.map((m, idx) => {
+          const prevMsg = idx > 0 ? filteredMessages[idx - 1] : null;
+          const nextMsg = idx < filteredMessages.length - 1 ? filteredMessages[idx + 1] : null;
+
+          const showDateDivider = !prevMsg || !isSameDay(prevMsg.at, m.at);
+
+          // 다음 메시지가 있고 동일인물이며 동일한 분에 보냈으면 현재 시간 표시를 생략(가장 마지막에만 출력)
+          const hideTime = nextMsg && m.senderId === nextMsg.senderId && isSameMinute(m.at, nextMsg.at);
+          const showTime = !hideTime;
+
+          return (
+            <div key={m.id} className="space-y-2">
+              {showDateDivider && (
+                <div className="my-3 flex justify-center">
+                  <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">
+                    {fmtDateDivider(m.at)}
+                  </span>
+                </div>
+              )}
+              <MessageBubble
+                m={m}
+                me={me}
+                group={room?.type === 'group'}
+                roomMembers={room?.members ?? []}
+                onOpenImage={setViewer}
+                onReply={setReplyTo}
+                showTime={showTime}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {readonly ? (
@@ -304,13 +324,14 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   );
 }
 
-function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
+function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTime }: {
   m: ChatMessage;
   me: string;
   group?: boolean;
   roomMembers: string[];
   onOpenImage: (att: Attachment) => void;
   onReply: (m: ChatMessage) => void;
+  showTime: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editVal, setEditVal] = useState(m.text);
@@ -451,7 +472,9 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply }: {
             {mine && unreadCount > 0 && (
               <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>{unreadCount}</span>
             )}
-            <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+            {showTime && (
+              <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+            )}
             {m.isEdited && (
               <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
             )}
@@ -523,4 +546,35 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
       </div>
     </div>
   );
+}
+
+function isSameDay(dateStr1?: string | null, dateStr2?: string | null): boolean {
+  if (!dateStr1 || !dateStr2) return false;
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
+function isSameMinute(dateStr1?: string | null, dateStr2?: string | null): boolean {
+  if (!dateStr1 || !dateStr2) return false;
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate() &&
+    d1.getHours() === d2.getHours() &&
+    d1.getMinutes() === d2.getMinutes()
+  );
+}
+
+function fmtDateDivider(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}`;
 }
