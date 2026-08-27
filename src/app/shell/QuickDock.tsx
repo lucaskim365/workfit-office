@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { isGwAppReady } from '@/app/shell/gw-screens';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useGwSummary } from '@/features/gw/useGwSummary';
 import { useUnseenCount } from '@/features/mail/useMailbox';
@@ -814,6 +814,34 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
   const updateRoomName = useUpdateRoomName();
+  const updateReactions = useUpdateMessageReactions(room.id);
+
+  const handleToggleEmoji = async (messageId: string, emoji: string) => {
+    const targetMsg = messages.find((m) => m.id === messageId);
+    if (!targetMsg) return;
+
+    const curReactions = targetMsg.reactions ? { ...targetMsg.reactions } as Record<string, string[]> : {} as Record<string, string[]>;
+    const userList = curReactions[emoji] ? [...curReactions[emoji]] : [];
+
+    let nextUserList: string[];
+    if (userList.includes(me)) {
+      nextUserList = userList.filter((uid) => uid !== me);
+    } else {
+      nextUserList = [...userList, me];
+    }
+
+    if (nextUserList.length === 0) {
+      delete curReactions[emoji];
+    } else {
+      curReactions[emoji] = nextUserList;
+    }
+
+    try {
+      await updateReactions.mutateAsync({ messageId, reactions: curReactions });
+    } catch {
+      window.alert("반응 업데이트에 실패했습니다.");
+    }
+  };
   
   const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -1223,6 +1251,7 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
                 isEditing={editingMsgId === m.id}
                 onStartEdit={() => setEditingMsgId(m.id)}
                 onCancelEdit={() => setEditingMsgId(null)}
+                onToggleEmoji={handleToggleEmoji}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1322,9 +1351,30 @@ function MessengerThread({ room, me, meName, isAdmin, users, onBack }: { room: C
             bottom: 'auto',
             margin: 0,
           }}
-          className="fixed z-[99999] min-w-[120px] rounded-lg py-1 text-[11.5px] font-medium outline-none"
+          className="fixed z-[99999] min-w-[150px] rounded-lg py-1 text-[11.5px] font-medium outline-none"
           onClick={() => setActiveMenu(null)}
         >
+          {/* 이모지 리액션 단축 5종 */}
+          <div className="flex items-center justify-around border-b border-border/40 px-2 py-1 bg-panel-alt/30" onClick={(e) => e.stopPropagation()}>
+            {['👍', '❤️', '😄', '😮', '😢'].map((emoji) => {
+              const list = (activeMenu.m.reactions as Record<string, string[]> | undefined)?.[emoji] ?? [];
+              const active = list.includes(me);
+              return (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    handleToggleEmoji(activeMenu.m.id, emoji);
+                    setActiveMenu(null);
+                  }}
+                  className="grid h-6 w-6 place-items-center text-[13px] rounded-md hover:bg-black/5 active:bg-black/10 transition-colors"
+                  style={active ? { background: '#e6960c20' } : undefined}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+          </div>
+
           {activeMenu.m.type === 'text' ? (
             <>
               <button
@@ -1400,6 +1450,7 @@ function MessageBubble({
   onStartEdit: _onStartEdit,
   onCancelEdit,
   onContextMenu,
+  onToggleEmoji,
 }: {
   m: ChatMessage;
   me: string;
@@ -1411,6 +1462,7 @@ function MessageBubble({
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onToggleEmoji?: (messageId: string, emoji: string) => void;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -1583,6 +1635,29 @@ function MessageBubble({
               </button>
             </div>
           </div>
+          {/* 이모지 반응 배지 목록 */}
+          {m.reactions && Object.keys(m.reactions as Record<string, string[]>).length > 0 && (
+            <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+              {Object.entries(m.reactions as Record<string, string[]>).map(([emoji, uids]) => {
+                if (!uids || uids.length === 0) return null;
+                const active = uids.includes(me);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onToggleEmoji?.(m.id, emoji)}
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all hover:scale-105"
+                    style={active 
+                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' } 
+                      : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
+                    }
+                  >
+                    <span>{emoji}</span>
+                    <span className="tabular-nums">{uids.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {bubbleMeta}
         </div>
       </div>
