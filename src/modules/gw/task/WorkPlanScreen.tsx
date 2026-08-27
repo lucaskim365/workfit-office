@@ -13,6 +13,7 @@ import {
 } from '@/features/workPlan/useWorkPlans';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
+import { Modal } from '@/shared/ui/Modal';
 
 /**
  * 업무계획 — 이사진 등이 구글시트로 적던 개인 영업/업무 예정을 옮겨오는 화면.
@@ -54,8 +55,9 @@ export default function WorkPlanScreen() {
   const today = calendarToday();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(today);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [draftText, setDraftText] = useState<string | null>(null);
+  const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [notice, setNotice] = useState('');
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
@@ -77,11 +79,24 @@ export default function WorkPlanScreen() {
     return rows;
   }, [mineQuery.data]);
 
-  /** 로스터 대상 — 재직 + 대표/상무/이사 제외, 이름순. */
+  /** 로스터 대상 — 재직 + 대표/상무/이사 제외, 부서순(부서 안에서는 이름순). */
   const roster = useMemo(
-    () => users.filter((user) => user.status === '사용' && !isExecutive(user)).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    () =>
+      users
+        .filter((user) => user.status === '사용' && !isExecutive(user))
+        .sort((a, b) => a.dept.localeCompare(b.dept, 'ko') || a.name.localeCompare(b.name, 'ko')),
     [users],
   );
+  /** 부서별로 묶어서 보여준다 — roster가 이미 부서순 정렬이라 등장 순서 그대로 묶으면 된다. */
+  const rosterGroups = useMemo(() => {
+    const groups: Array<{ dept: string; members: User[] }> = [];
+    for (const user of roster) {
+      const last = groups[groups.length - 1];
+      if (last && last.dept === user.dept) last.members.push(user);
+      else groups.push({ dept: user.dept, members: [user] });
+    }
+    return groups;
+  }, [roster]);
   const dayPlanByOwner = useMemo(() => {
     const rows = new Map<string, WorkPlan>();
     (allDayQuery.data ?? []).forEach((plan) => rows.set(plan.ownerUserId, plan));
@@ -129,103 +144,132 @@ export default function WorkPlanScreen() {
 
       {notice && <div aria-live="polite" className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">{notice}</div>}
 
-      {/* 달력은 보조 — 내 항목이 있는 날만 훑어보는 용도라 접어둘 수 있다. */}
-      <div className="mt-5 rounded-xl border border-border bg-panel shadow-sm">
-        <button type="button" onClick={() => setCalendarOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
-          <span className={`text-[11px] text-ink3 transition-transform ${calendarOpen ? 'rotate-90' : ''}`}>▶</span>
-          <span className="text-[12px] font-bold text-ink">{monthLabel(month)} 달력 {calendarOpen ? '접기' : '펼치기'}</span>
-          <span className="ml-1 text-[10px] font-semibold text-ink3">(내 항목만 표시 — 선택: {selectedDate})</span>
-        </button>
-        {calendarOpen && (
-          <div className="border-t border-border p-3">
-            <div className="flex items-center gap-2 pb-2">
-              <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">‹</button>
-              <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>오늘</Button>
-              <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">›</button>
+      {/* 내 카드 — 날짜 선택도 여기 붙는다(달력만 따로 떨어져 덩그러니 있던 걸 팝업으로 합침, 2026-08-27 피드백).
+          요약만 여기, 실제 작성/수정도 팝업으로(항상 펼쳐진 입력칸이 화면을 잡아먹지 않게). */}
+      <section className="mt-5 rounded-xl border border-teal/30 bg-teal-soft/10 shadow-sm">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[12.5px] font-extrabold text-ink">{dayTitle(selectedDate)} · 내 계획</h3>
+              <button
+                type="button"
+                onClick={() => setDatePickerOpen(true)}
+                className="rounded-md border border-border bg-panel px-1.5 py-0.5 text-[10px] font-semibold text-ink3 hover:border-teal/40 hover:text-teal"
+              >
+                📅 날짜 변경
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <div className="min-w-[640px]">
-                <div className="grid grid-cols-7 border-b border-border bg-panel-alt/65">
-                  {WEEKDAYS.map((day, index) => (
-                    <div key={day} className={`px-2 py-2 text-center text-[9.5px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7">
-                  {cells.map((cell, index) => {
-                    const mine = myPlansByDate.get(cell.date) ?? [];
-                    const isToday = cell.date === today;
-                    const selected = cell.date === selectedDate;
-                    return (
-                      <div
-                        key={cell.date}
-                        onClick={() => setSelectedDate(cell.date)}
-                        className={`min-h-16 cursor-pointer border-b border-r border-border p-1.5 text-left align-top transition-colors ${selected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/45'} ${index % 7 === 6 ? 'border-r-0' : ''}`}
-                      >
-                        <span className={`grid h-5 w-5 place-items-center rounded-full text-[9.5px] font-bold ${isToday ? 'bg-teal text-white' : cell.inCurrentMonth ? 'text-ink2' : 'text-ink3/55'}`}>{Number(cell.date.slice(-2))}</span>
-                        {mine.length > 0 && <span className="mt-1 block h-1.5 w-1.5 rounded-full bg-teal" title={`내 계획 ${mine.length}건`} />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <p className={`mt-1 truncate text-[11px] ${myDayPlan ? 'text-ink2' : 'text-ink3'}`}>{myDayPlan?.content || '작성 없음'}</p>
           </div>
-        )}
-      </div>
-
-      {/* 내 카드 — 항상 맨 위, 바로 쓰고 고칠 수 있게. */}
-      <section className="mt-4 rounded-xl border border-teal/30 bg-teal-soft/10 shadow-sm">
-        <div className="flex items-center justify-between border-b border-teal/20 px-4 py-2.5">
-          <h3 className="text-[12.5px] font-extrabold text-ink">{dayTitle(selectedDate)} · 내 계획</h3>
-          {myDayPlan && draftText === null && <Button size="sm" variant="danger" onClick={() => void removeMine()}>삭제</Button>}
-        </div>
-        <div className="p-3">
-          {draftText !== null ? (
-            <div className="space-y-2">
-              <textarea
-                value={draftText}
-                onChange={(event) => setDraftText(event.target.value)}
-                maxLength={1000}
-                rows={4}
-                autoFocus
-                placeholder="오늘 할 일을 자유롭게 적으세요"
-                className="w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none"
-              />
-              <div className="flex justify-end gap-1.5">
-                <Button size="sm" onClick={() => setDraftText(null)}>취소</Button>
-                <Button size="sm" variant="primary" disabled={draftText.trim() === ''} onClick={() => void save()}>저장</Button>
-              </div>
-            </div>
-          ) : myDayPlan ? (
-            <button type="button" onClick={() => setDraftText(myDayPlan.content)} className="block w-full whitespace-pre-wrap rounded-lg px-1 py-1 text-left text-[11.5px] text-ink hover:bg-panel-alt/50">
-              {myDayPlan.content}
-            </button>
-          ) : (
-            <button type="button" onClick={() => setDraftText('')} className="w-full rounded-lg border border-dashed border-border py-4 text-center text-[11px] font-semibold text-ink3 hover:border-teal/40 hover:text-teal">
-              + 이 날짜에 계획 작성
-            </button>
-          )}
+          <div className="flex shrink-0 gap-1.5">
+            {myDayPlan && <Button size="sm" variant="danger" onClick={() => void removeMine()}>삭제</Button>}
+            <Button size="sm" variant="primary" onClick={() => setDraftText(myDayPlan?.content ?? '')}>{myDayPlan ? '수정' : '작성'}</Button>
+          </div>
         </div>
       </section>
 
-      {/* 로스터 — 재직 전원(경영진 제외), 남의 카드는 읽기 전용. */}
+      {/* 날짜 선택 팝업 — 달력은 이 용도 하나뿐이라 별도 상시 영역 대신 팝업으로. */}
+      <Modal open={datePickerOpen} onClose={() => setDatePickerOpen(false)} title="날짜 선택" width={320}>
+        <div className="flex items-center gap-1.5 pb-2">
+          <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">‹</button>
+          <span className="min-w-[64px] text-center text-[11.5px] font-bold text-ink">{monthLabel(month)}</span>
+          <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">›</button>
+          <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>오늘</Button>
+        </div>
+        <div className="grid grid-cols-7 border-b border-border bg-panel-alt/65">
+          {WEEKDAYS.map((day, index) => (
+            <div key={day} className={`py-1 text-center text-[9.5px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((cell, index) => {
+            const mine = myPlansByDate.get(cell.date) ?? [];
+            const isToday = cell.date === today;
+            const selected = cell.date === selectedDate;
+            return (
+              <button
+                key={cell.date}
+                type="button"
+                onClick={() => { setSelectedDate(cell.date); setDatePickerOpen(false); }}
+                className={`flex h-9 cursor-pointer flex-col items-center justify-center border-b border-r border-border text-left transition-colors ${selected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/45'} ${index % 7 === 6 ? 'border-r-0' : ''}`}
+              >
+                <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${isToday ? 'bg-teal text-white' : cell.inCurrentMonth ? 'text-ink2' : 'text-ink3/55'}`}>{Number(cell.date.slice(-2))}</span>
+                {mine.length > 0 && <span className="mt-0.5 block h-1 w-1 rounded-full bg-teal" title={`내 계획 ${mine.length}건`} />}
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
+
+      <Modal
+        open={draftText !== null}
+        onClose={() => setDraftText(null)}
+        title={`${dayTitle(selectedDate)} · 내 계획`}
+        width={640}
+        footer={(
+          <>
+            <Button size="sm" onClick={() => setDraftText(null)}>취소</Button>
+            <Button size="sm" variant="primary" disabled={(draftText ?? '').trim() === ''} onClick={() => void save()}>저장</Button>
+          </>
+        )}
+      >
+        <textarea
+          value={draftText ?? ''}
+          onChange={(event) => setDraftText(event.target.value)}
+          maxLength={1000}
+          rows={18}
+          autoFocus
+          placeholder="오늘 할 일을 자유롭게 적으세요"
+          className="min-h-[50vh] w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none"
+        />
+      </Modal>
+
+      {/* 남의 계획 열람 — 로스터 행은 미리보기 2줄만 보여주고, 전체 내용은 여기서 본다. */}
+      <Modal
+        open={viewingUser !== null}
+        onClose={() => setViewingUser(null)}
+        title={viewingUser ? `${viewingUser.name} · ${viewingUser.dept}` : ''}
+        footer={<Button size="sm" onClick={() => setViewingUser(null)}>닫기</Button>}
+      >
+        <p className="whitespace-pre-wrap text-[11.5px] text-ink">{viewingUser && dayPlanByOwner.get(viewingUser.id)?.content}</p>
+      </Modal>
+
+      {/* 로스터 — 재직 전원(경영진 제외), 부서별로 묶어서. 본인 행도 포함하되 수정은 위 팝업에서만.
+          내용은 길이에 관계없이 2줄로 잘라 행 높이를 맞춘다 — 안 그러면 긴 계획 하나가 목록 전체를
+          들쭉날쭉하게 만든다(2026-08-27 실사용 피드백). 전체 내용은 클릭해서 팝업으로 본다. */}
       <section className="mt-4 rounded-xl border border-border bg-panel shadow-sm">
         <div className="border-b border-border px-4 py-2.5">
           <h3 className="text-[12.5px] font-extrabold text-ink">전체 현황 · {roster.length}명</h3>
         </div>
         <div className="divide-y divide-border">
-          {roster.map((user) => {
-            if (user.id === actor.id) return null; // 본인은 위 카드에서 이미 다룬다.
-            const plan = dayPlanByOwner.get(user.id);
-            return (
-              <div key={user.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="w-24 shrink-0 text-[11px] font-bold text-ink2">{user.name}<span className="ml-1 font-normal text-ink3">{user.dept}</span></div>
-                <div className="min-w-0 flex-1 text-[11px] text-ink">
-                  {plan ? <p className="whitespace-pre-wrap">{plan.content}</p> : <span className="text-ink3">작성 없음</span>}
-                </div>
-              </div>
-            );
-          })}
+          {rosterGroups.map((group) => (
+            <div key={group.dept}>
+              <div className="bg-panel-alt/60 px-4 py-1.5 text-[10px] font-bold text-ink3">{group.dept}</div>
+              {group.members.map((user) => {
+                const isSelf = user.id === actor.id;
+                const plan = dayPlanByOwner.get(user.id);
+                const onOpen = isSelf ? () => setDraftText(myDayPlan?.content ?? '') : plan ? () => setViewingUser(user) : undefined;
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    disabled={!onOpen}
+                    onClick={onOpen}
+                    className={`flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors ${isSelf ? 'bg-teal-soft/10' : ''} ${onOpen ? 'cursor-pointer hover:bg-panel-alt/45' : 'cursor-default'}`}
+                  >
+                    <div className="w-20 shrink-0 pt-0.5 text-[11px] font-bold text-ink2">{user.name}{isSelf && <span className="ml-1 font-normal text-teal">(나)</span>}</div>
+                    <div className="min-w-0 flex-1 text-[11px] text-ink">
+                      {plan ? (
+                        <p className="line-clamp-2 whitespace-pre-wrap">{plan.content}</p>
+                      ) : (
+                        <span className="text-ink3">작성 없음</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </section>
     </div>
