@@ -42,23 +42,6 @@ export function SelectorDialog({
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<{ id: string; name: string; type: 'user' | 'dept' }[]>([]);
 
-  const normalizeSelections = (prevSelected: typeof selected) => {
-    let next = [...prevSelected];
-    for (const dept of org.depts) {
-      const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !excludeIds?.has(u.id));
-      if (deptUsers.length === 0) continue;
-
-      const allUsersSelected = deptUsers.every((u: any) => next.some((s) => s.id === u.id));
-      const isDeptSelected = next.some((s) => s.id === dept.id);
-
-      if (allUsersSelected && !isDeptSelected) {
-        // 부서원 전원 선택 시 -> 부서 1개 선택으로 자동 전환
-        next = next.filter((s) => !deptUsers.some((u: any) => u.id === s.id));
-        next.push({ id: dept.id, name: dept.name, type: 'dept' as const });
-      }
-    }
-    return next;
-  };
 
   const handleToggleDept = (dept: any) => {
     const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !excludeIds?.has(u.id));
@@ -102,7 +85,7 @@ export function SelectorDialog({
         const next = isUserSelected
           ? prev.filter((s) => s.id !== user.id)
           : [...prev, { id: user.id, name: `${user.name} · ${user.dept}`, type: 'user' as const }];
-        return normalizeSelections(next);
+        return next;
       });
     }
   };
