@@ -162,12 +162,8 @@ export default function MobileApprovalDetail() {
             <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner relative select-none">
               <div
                 style={{
-                  transform: zoomIn ? 'scale(1)' : `scale(${Math.max(0.1, (containerWidth - 24) / 780)})`,
-                  transformOrigin: 'top left',
+                  zoom: zoomIn ? 1 : Math.max(0.1, (containerWidth - 24) / 780),
                   width: '780px',
-                  // 축소 모드일 때 불필요한 아래 여백이 늘어나는 현상을 막기 위해 높이를 동적으로 보정합니다.
-                  height: zoomIn ? 'auto' : `calc(100% * (${780 / Math.max(10, containerWidth - 24)}))`,
-                  transition: 'transform 180ms ease-out',
                   cursor: zoomIn ? 'zoom-out' : 'zoom-in',
                 }}
                 onClick={() => setZoomIn((z) => !z)}
@@ -272,6 +268,30 @@ export default function MobileApprovalDetail() {
                   </div>
                 </Card>
               </div>
+
+              {/* 첨부파일 */}
+              {doc.attachments && doc.attachments.length > 0 && (
+                <div>
+                  <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>첨부파일</div>
+                  <Card>
+                    <div className="flex flex-col gap-2">
+                      {doc.attachments.map((file, idx) => (
+                        <a
+                          key={idx}
+                          href={file.url}
+                          download={file.name}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2 text-[12.5px] hover:bg-black/[0.04] active:scale-[0.99] transition-all"
+                        >
+                          <span className="font-semibold text-ink truncate mr-2">📎 {file.name}</span>
+                          <span className="shrink-0 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">다운로드</span>
+                        </a>
+                      ))}
+                    </div>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
