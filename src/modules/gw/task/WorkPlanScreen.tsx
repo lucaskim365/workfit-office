@@ -28,8 +28,16 @@ import { Modal } from '@/shared/ui/Modal';
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
 
-/** 로스터 제외 직급. "이사"가 들어가면 다 걸린다(대표이사·상무이사·이사 전부). */
-const isExecutive = (user: User) => user.position.includes('이사');
+/**
+ * 로스터 제외 대상 — 대표(대표이사)·위원회 소속·테스트 계정만 뺀다(2026-08-27 지시로 범위 축소).
+ * 상무이사·이사급은 이제 포함된다 — 실무 인원 현황판에 임원도 넣어달라는 요청.
+ */
+const isExcludedFromRoster = (user: User) =>
+  user.position.includes('대표') ||
+  user.dept.includes('위원회') ||
+  user.dept.includes('테스트') ||
+  user.name.includes('테스터') ||
+  user.name.includes('테스트');
 
 function monthLabel(month: string): string {
   const [year, m] = month.split('-').map(Number);
@@ -79,11 +87,11 @@ export default function WorkPlanScreen() {
     return rows;
   }, [mineQuery.data]);
 
-  /** 로스터 대상 — 재직 + 대표/상무/이사 제외, 부서순(부서 안에서는 이름순). */
+  /** 로스터 대상 — 재직 + 대표/위원회 제외, 부서순(부서 안에서는 이름순). */
   const roster = useMemo(
     () =>
       users
-        .filter((user) => user.status === '사용' && !isExecutive(user))
+        .filter((user) => user.status === '사용' && !isExcludedFromRoster(user))
         .sort((a, b) => a.dept.localeCompare(b.dept, 'ko') || a.name.localeCompare(b.name, 'ko')),
     [users],
   );
