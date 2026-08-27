@@ -178,6 +178,8 @@ function ApprovalDraftInner({
     executionDepts: { id: string; name: string }[];
   } | null>(null);
 
+  const prevCodeRef = useRef<string>('');
+
   // 양식 설정 직후의 초기 세팅이 완벽히 끝난 상태를 150ms 딜레이 후 캡처
   useEffect(() => {
     if (forms.length === 0) return;
@@ -400,6 +402,11 @@ function ApprovalDraftInner({
   // 서식 변경에 따른 기본 수신처/시행처 매핑 자동 주입
   useEffect(() => {
     if (!code || forms.length === 0 || editDoc) return;
+    
+    // 사용자가 서식을 실제로 바꿨을 때만 기본값을 주입하고, 이후 사용자 추가/삭제 수정 내역 보호
+    if (prevCodeRef.current === code) return;
+    prevCodeRef.current = code;
+
     const currentForm = forms.find((f) => f.code === code);
     if (!currentForm) return;
 
@@ -452,20 +459,10 @@ function ApprovalDraftInner({
       }
     }
 
-    // ⚠️ 무한 업데이트 차단 비교 방어벽
-    const recStr = JSON.stringify(autoRecipients);
-    const currRecStr = JSON.stringify(recipients);
-    if (recStr !== currRecStr) {
-      setRecipients(autoRecipients);
-    }
+    setRecipients(autoRecipients);
+    setExecutionDepts(autoExecs);
 
-    const execStr = JSON.stringify(autoExecs);
-    const currExecStr = JSON.stringify(executionDepts);
-    if (execStr !== currExecStr) {
-      setExecutionDepts(autoExecs);
-    }
-
-  }, [code, forms, org.users, org.depts, me, editDoc, recipients, executionDepts]);
+  }, [code, forms, org.users, org.depts, me, editDoc]);
 
 
   useEffect(() => {

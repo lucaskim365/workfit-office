@@ -380,6 +380,7 @@ export function DraftRecipientSection({
               ...items.filter((item) => !prev.some((r) => r.id === item.id))
                 .map((item) => ({ id: item.id, name: item.name, type: item.type as 'user' | 'dept' })),
             ]);
+            setRecipientDialog(false);
           }}
           onClose={() => setRecipientDialog(false)}
         />
@@ -393,6 +394,7 @@ export function DraftRecipientSection({
               ...items.filter((item) => !prev.some((d) => d.id === item.id))
                 .map((item) => ({ id: item.id, name: item.name })),
             ]);
+            setExecDialog(false);
           }}
           onClose={() => setExecDialog(false)}
         />

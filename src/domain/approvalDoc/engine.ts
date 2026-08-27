@@ -260,12 +260,9 @@ export function isExecutionBoxMatch(doc: ApprovalDoc, userId: string, userDeptNa
   return false;
 }
 
-/** 완료함 판정: 최종 완료/시행대기/반려된 문서 중 내가 기안자가 아니고, 결재 결정을 완료(승인/반려)한 이력이 있는 문서 */
 export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   const isFinalStatus = doc.status === '완료' || doc.status === '시행대기' || doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
   if (!isFinalStatus) return false;
-  
-  if (doc.drafterId === userId) return false;
   
   return doc.steps.some((s) => s.approverId === userId && (s.decision === '승인' || s.decision === '반려'));
 }

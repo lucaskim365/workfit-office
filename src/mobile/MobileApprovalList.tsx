@@ -6,24 +6,39 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
 /**
  * 모바일 PWA 전자결재 결재함 — 열람·결재 중심(Flutter 모바일과 동일 스코프).
  * 웹 데스크톱과 동일한 useApprovalBoxes 훅/엔진을 재사용하므로 데이터가 실시간 공유된다.
  */
-const FIXED_BOXES: { key: ApprovalBox; label: string }[] = [
-  { key: '대기', label: '결재함' },
+const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
+  '대기': 1,    // 결재 대기함
+  '상신': 2,    // 상신함
+  '완료': 3,    // 기결재 완료함
+  '참조': 4,    // 참조함
+  '수신': 5,    // 수신함
+  '시행': 6,    // 시행함
+  '후열': 7,    // 후열함
+  '문서함': 8,  // 부서 문서함
+  '임시': 9,
+  '반려': 10,
+  '삭제': 11
+};
+
+const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
+  { key: '대기', label: '결재 대기함' },
   { key: '상신', label: '상신함' },
-  { key: '완료', label: '완료함' },
-  { key: '반려', label: '반려함' },
+  { key: '완료', label: '기결재 완료함' },
 ];
 
-const EXTRA_BOX_OPTIONS: { key: ApprovalBox; label: string }[] = [
-  { key: '수신', label: '수신함' },
+const EXTRA_BOX_OPTIONS: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '참조', label: '참조함' },
+  { key: '수신', label: '수신함' },
   { key: '시행', label: '시행함' },
   { key: '후열', label: '후열함' },
+  { key: '문서함', label: '부서 문서함' },
 ];
 
 /** 문서 일시(상신/생성) 포맷 — YYYY.MM.DD HH:mm. */
@@ -54,14 +69,19 @@ export default function MobileApprovalList() {
   const nav = useNavigate();
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
-  const [box, setBox] = useState<ApprovalBox>('대기');
+  const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
+  const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
+  const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
+  const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
+  const org = useOrgTree();
 
   // 로컬스토리지 키 설정
-  const STORAGE_KEY = 'workfit-approval-extra-tabs';
+  const STORAGE_KEY = 'workfit-approval-extra-tabs-v2';
 
   // 로컬스토리지에서 추가 활성화 탭 읽기
-  const [extraTabs, setExtraTabs] = useState<ApprovalBox[]>(() => {
+  const [extraTabs, setExtraTabs] = useState<(ApprovalBox | '문서함')[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : [];
@@ -73,20 +93,21 @@ export default function MobileApprovalList() {
   // 현재 활성화된 모든 결재함 탭들
   const activeBoxes = useMemo(() => {
     const extra = EXTRA_BOX_OPTIONS.filter((b) => extraTabs.includes(b.key));
-    return [...FIXED_BOXES, ...extra];
+    const combined = [...FIXED_BOXES, ...extra];
+    return combined.sort((a, b) => BOX_PRIORITY[a.key] - BOX_PRIORITY[b.key]);
   }, [extraTabs]);
 
   // 설정 변경 모달 열림 여부
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // 모달 안에서 편집할 임시 설정 값
-  const [tempExtraTabs, setTempExtraTabs] = useState<ApprovalBox[]>(extraTabs);
+  const [tempExtraTabs, setTempExtraTabs] = useState<(ApprovalBox | '문서함')[]>(extraTabs);
 
   const openSettings = () => {
     setTempExtraTabs(extraTabs);
     setIsSettingsOpen(true);
   };
 
-  const handleToggleExtraTab = (key: ApprovalBox) => {
+  const handleToggleExtraTab = (key: ApprovalBox | '문서함') => {
     setTempExtraTabs((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
@@ -117,24 +138,79 @@ export default function MobileApprovalList() {
   };
 
   const docs = useMemo(() => {
-    const rawDocs = byBox[box] ?? [];
-    if (box !== '대기') return rawDocs;
+    // 5. 부서 문서함은 byBox에 키가 없으므로 별도 데이터 구성
+    if (box === '문서함') {
+      const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
+      const myDeptId = myDeptObj?.id ?? '';
+      const myDeptName = user?.dept ?? '';
 
-    const preds = getPredecessorsOf(me);
-    if (todoFilter === 'pending') {
-      return rawDocs.filter((d: ApprovalDoc) => {
-        const approvers = currentApproverIds(d);
-        return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      const allDocs = Object.values(byBox).flat();
+      if (docBoxFilter === 'dept') {
+        return allDocs.filter((d) => {
+          if (d.status !== '완료') return false;
+          if (d.visibility === '비공개') return false;
+          const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
+          const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
+          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
+        });
+      }
+      if (docBoxFilter === 'all') {
+        return allDocs.filter((d) => d.status === '완료' && d.visibility === '전사');
+      }
+      return [];
+    }
+
+    const rawDocs = byBox[box as ApprovalBox] ?? [];
+
+    // 1. 결재 대기함 필터링
+    if (box === '대기') {
+      const preds = getPredecessorsOf(me);
+      if (todoFilter === 'pending') {
+        return rawDocs.filter((d: ApprovalDoc) => {
+          const approvers = currentApproverIds(d);
+          return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+        });
+      }
+      if (todoFilter === 'progress') {
+        return rawDocs.filter((d: ApprovalDoc) => {
+          const approvers = currentApproverIds(d);
+          return !approvers.includes(me) && !approvers.some((id) => preds.includes(id));
+        });
+      }
+      return rawDocs;
+    }
+
+    // 2. 상신함 필터링
+    if (box === '상신') {
+      if (draftFilter === 'progress') return rawDocs.filter((d) => d.status === '진행중');
+      if (draftFilter === 'completed') return rawDocs.filter((d) => d.status === '완료' || d.status === '시행대기');
+      if (draftFilter === 'rejected') {
+        return rawDocs.filter((d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송');
+      }
+      return rawDocs;
+    }
+
+    // 3. 기결재 완료함 필터링
+    if (box === '완료') {
+      if (doneFilter === 'approved') return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+      if (doneFilter === 'rejected') return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      return rawDocs;
+    }
+
+    // 4. 시행함 필터링
+    if (box === '시행') {
+      const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
+      const myDeptId = myDeptObj?.id ?? '';
+      return rawDocs.filter((d) => {
+        const hasLegacyMatch = d.execution && (d.execution.targetId === myDeptId || d.execution.targetId === user?.dept);
+        if (execFilter === 'pending') return hasLegacyMatch && (d.execution!.status === '대기중' || d.execution!.status === '처리중');
+        if (execFilter === 'completed') return hasLegacyMatch && d.execution!.status === '시행완료';
+        return hasLegacyMatch;
       });
     }
-    if (todoFilter === 'progress') {
-      return rawDocs.filter((d: ApprovalDoc) => {
-        const approvers = currentApproverIds(d);
-        return !approvers.includes(me) && !approvers.some((id) => preds.includes(id));
-      });
-    }
+
     return rawDocs;
-  }, [byBox, box, todoFilter, me]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, execFilter, docBoxFilter, me, org, user?.dept]);
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
@@ -162,13 +238,17 @@ export default function MobileApprovalList() {
       >
         {activeBoxes.map((b) => {
           const active = b.key === box;
-          const cnt = counts[b.key] ?? 0;
+          const cnt = counts[b.key as ApprovalBox] ?? 0;
           return (
             <button
               key={b.key}
               onClick={() => {
                 setBox(b.key);
                 setTodoFilter('all');
+                setDraftFilter('all');
+                setDoneFilter('all');
+                setExecFilter('all');
+                setDocBoxFilter('dept');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
             >
@@ -199,9 +279,87 @@ export default function MobileApprovalList() {
                 key={f}
                 onClick={() => setTodoFilter(f)}
                 className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
-                  active
-                    ? 'bg-[#3b82f6] text-white shadow-sm shadow-blue-500/20'
-                    : 'bg-black/5 text-ink3 hover:bg-black/10'
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {box === '상신' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['all', 'progress', 'completed', 'rejected'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'completed' ? '완료' : '반려';
+            const active = draftFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setDraftFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {box === '완료' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['all', 'approved', 'rejected'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'approved' ? '결재승인' : '결재반려';
+            const active = doneFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setDoneFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {box === '시행' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['all', 'pending', 'completed'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'pending' ? '시행대기' : '시행완료';
+            const active = execFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setExecFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {box === '문서함' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['dept', 'all'] as const).map((f) => {
+            const label = f === 'dept' ? '부서 수신 문서' : '전사 공개 문서';
+            const active = docBoxFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setDocBoxFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
                 {label}
