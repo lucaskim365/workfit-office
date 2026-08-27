@@ -43,11 +43,11 @@ import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionP
  */
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '결재 대기함',
-  상신: '기안 상신함',
+  상신: '상신함',
   반려: '반려함',
   임시: '임시 저장함',
   수신: '수신함',
-  참조: '참조/열람함',
+  참조: '참조함',
   시행: '시행함',
   후열: '후열함',
   완료: '기결재 완료함',
@@ -101,7 +101,7 @@ export default function ApprovalScreen() {
   // 본인 및 전임자(들)의 approval boxes 데이터를 병합하여 단일 결재함 리스트 구성 (권한 승계 완벽 반영)
   const list = useMemo(() => {
     if (box === '문서함') return [];
-    
+
     // 1. 본인의 기본 문서 목록
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
@@ -113,7 +113,7 @@ export default function ApprovalScreen() {
       if (!predUser) return;
       const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
       const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
-      
+
       const predDocs = allDocs.filter((d) => matchesBox(d, predId, box as ApprovalBox, predDeptNameOrId));
       combined = [...combined, ...predDocs];
     });
@@ -378,13 +378,29 @@ export default function ApprovalScreen() {
             + 새 상신
           </button>
 
+          {/* 임시 저장함 단독 버튼 (새 상신 바로 밑 배치) */}
+          <button
+            onClick={() => setBox('임시')}
+            className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors mb-1 ${box === '임시' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'
+              }`}
+          >
+            <span className="flex items-center gap-1.5">
+              <span>임시 저장함</span>
+            </span>
+            {(byBox['임시'] ?? []).length > 0 && (
+              <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${box === '임시' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
+                }`}>
+                {(byBox['임시'] ?? []).length}
+              </span>
+            )}
+          </button>
+
           {[
             {
               title: '개인 문서함',
               boxes: [
-                { key: '상신', label: '기안 상신함' },
-                { key: '임시', label: '임시 저장함' },
-                { key: '참조', label: '참조/열람함' },
+                { key: '상신', label: '상신함' },
+                { key: '참조', label: '참조함' },
               ] as const,
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
@@ -398,7 +414,7 @@ export default function ApprovalScreen() {
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
-              title: '부서/시행 문서함',
+              title: '공유/시행 문서함',
               boxes: [
                 { key: '수신', label: '수신함' },
                 { key: '시행', label: '시행함' },
@@ -528,7 +544,7 @@ export default function ApprovalScreen() {
               <span className="text-[20px]">🖋️</span>
               <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
             </div>
-            
+
             <button
               type="button"
               onClick={() => setIsListCollapsed(!isListCollapsed)}
@@ -557,248 +573,247 @@ export default function ApprovalScreen() {
                       />
                     )}
                     <span>
-                      {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]} 
+                      {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
                       <span className="text-ink3">· {filteredList.length}</span>
                     </span>
 
 
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            {box === '상신' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['all', 'progress', 'completed', 'rejected'] as const).map((f) => {
-                  const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'completed' ? '완료' : '반려';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setDraftFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${draftFilter === f
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {box === '대기' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['all', 'pending', 'progress'] as const).map((f) => {
-                  const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setTodoFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${todoFilter === f
-                        ? 'bg-teal text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {box === '시행' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['all', 'pending', 'completed'] as const).map((f) => {
-                  const label = f === 'all' ? '전체' : f === 'pending' ? '미처리·진행중' : '시행완료';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setExecFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${execFilter === f
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {box === '완료' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['all', 'approved', 'rejected'] as const).map((f) => {
-                  const label = f === 'all' ? '전체' : f === 'approved' ? '승인한 문서' : '반려한 문서';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setDoneFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${doneFilter === f
-                        ? 'bg-teal text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {box === '반려' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['draft', 'rejected'] as const).map((f) => {
-                  const label = f === 'draft' ? '반려받은 문서' : '내가 반려한 문서';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setRejectFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${rejectFilter === f
-                        ? 'bg-rose-500 text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {box === '문서함' && (
-              <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                {(['dept', 'all'] as const).map((f) => {
-                  const label = f === 'dept' ? '부서 문서' : '전사 문서';
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setDocBoxFilter(f)}
-                      className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${docBoxFilter === f
-                        ? 'bg-teal text-white shadow-sm'
-                        : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-
-            {/* 목록 데이터 영역 */}
-            <div>
-              {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
-              {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
-              {filteredList.map((d: ApprovalDoc) => {
-                const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
-                const isChecked = selectedIds.includes(d.id);
-
-                const isActive = selId === d.id;
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() => setSelId(d.id)}
-                    className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-3 text-left transition-all ${
-                      isActive
-                        ? 'bg-teal-soft/50 border-l-4 border-l-teal shadow-2xs font-semibold'
-                        : isRecentCompleted
-                          ? 'bg-teal-soft/10 border-l-4 border-l-teal/30 hover:bg-teal-soft/20'
-                          : 'hover:bg-panel-alt border-l-4 border-l-transparent'
-                    }`}
-
-                  >
-                    {isDocSelectable(d) && (
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => { }}
-                        onClick={(e) => toggleSelectOne(d.id, e)}
-                        className="mt-1 rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 shrink-0"
-                      />
-                    )}
-                    <div className="flex flex-col gap-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
-                        {isRecentCompleted && (
-                          <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                            <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
-                            최근 완료
-                          </span>
-                        )}
-                        <DocStatusBadge doc={d} me={me} />
-                      </div>
-                      <div className="flex items-center justify-between text-[10.5px] text-ink3">
-                        <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
-                        <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 목록 하단 풋터 액션 바 (선택 항목 존재 시 목록 바로 아래에 조밀하게 표시) */}
-            {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
-              <div className="border-t border-border bg-panel-alt/60 p-2.5 flex items-center justify-between animate-fadeIn">
-                <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
-                  {selectedIds.length}개 선택됨
-                </span>
-
-                {box === '대기' && (
-                  <button
-                    onClick={() => setShowBatchApproveConfirm(true)}
-                    className="group relative inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal to-emerald-600 text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-teal/20 hover:shadow-md hover:shadow-teal/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                  >
-                    <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>일괄 승인</span>
-                  </button>
+                {box === '상신' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['all', 'progress', 'completed', 'rejected'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'completed' ? '완료' : '반려';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setDraftFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${draftFilter === f
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
 
-                {box === '삭제' && (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handleBatchRestore}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                    >
-                      <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span>일괄 복원</span>
-                    </button>
-                    <button
-                      onClick={handleBatchPermanentDelete}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/20 hover:border-rose-500 rounded-lg text-[11.5px] font-bold shadow-xs hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                    >
-                      <svg className="w-3.5 h-3.5 stroke-[2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      <span>영구 삭제</span>
-                    </button>
+                {box === '대기' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['all', 'pending', 'progress'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setTodoFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${todoFilter === f
+                            ? 'bg-teal text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {box === '시행' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['all', 'pending', 'completed'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'pending' ? '미처리·진행중' : '시행완료';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setExecFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${execFilter === f
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {box === '완료' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['all', 'approved', 'rejected'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'approved' ? '승인한 문서' : '반려한 문서';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setDoneFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${doneFilter === f
+                            ? 'bg-teal text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {box === '반려' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['draft', 'rejected'] as const).map((f) => {
+                      const label = f === 'draft' ? '반려받은 문서' : '내가 반려한 문서';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setRejectFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${rejectFilter === f
+                            ? 'bg-rose-500 text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {box === '문서함' && (
+                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
+                    {(['dept', 'all'] as const).map((f) => {
+                      const label = f === 'dept' ? '부서 문서' : '전사 문서';
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setDocBoxFilter(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${docBoxFilter === f
+                            ? 'bg-teal text-white shadow-sm'
+                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                            }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+
+                {/* 목록 데이터 영역 */}
+                <div>
+                  {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
+                  {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
+                  {filteredList.map((d: ApprovalDoc) => {
+                    const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
+                    const isChecked = selectedIds.includes(d.id);
+
+                    const isActive = selId === d.id;
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => setSelId(d.id)}
+                        className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-3 text-left transition-all ${isActive
+                          ? 'bg-teal-soft/50 border-l-4 border-l-teal shadow-2xs font-semibold'
+                          : isRecentCompleted
+                            ? 'bg-teal-soft/10 border-l-4 border-l-teal/30 hover:bg-teal-soft/20'
+                            : 'hover:bg-panel-alt border-l-4 border-l-transparent'
+                          }`}
+
+                      >
+                        {isDocSelectable(d) && (
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => { }}
+                            onClick={(e) => toggleSelectOne(d.id, e)}
+                            className="mt-1 rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 shrink-0"
+                          />
+                        )}
+                        <div className="flex flex-col gap-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
+                            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
+                            {isRecentCompleted && (
+                              <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+                                <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
+                                최근 완료
+                              </span>
+                            )}
+                            <DocStatusBadge doc={d} me={me} />
+                          </div>
+                          <div className="flex items-center justify-between text-[10.5px] text-ink3">
+                            <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
+                            <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 목록 하단 풋터 액션 바 (선택 항목 존재 시 목록 바로 아래에 조밀하게 표시) */}
+                {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
+                  <div className="border-t border-border bg-panel-alt/60 p-2.5 flex items-center justify-between animate-fadeIn">
+                    <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
+                      {selectedIds.length}개 선택됨
+                    </span>
+
+                    {box === '대기' && (
+                      <button
+                        onClick={() => setShowBatchApproveConfirm(true)}
+                        className="group relative inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal to-emerald-600 text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-teal/20 hover:shadow-md hover:shadow-teal/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                      >
+                        <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>일괄 승인</span>
+                      </button>
+                    )}
+
+                    {box === '삭제' && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={handleBatchRestore}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                        >
+                          <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span>일괄 복원</span>
+                        </button>
+                        <button
+                          onClick={handleBatchPermanentDelete}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/20 hover:border-rose-500 rounded-lg text-[11.5px] font-bold shadow-xs hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
+                        >
+                          <svg className="w-3.5 h-3.5 stroke-[2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span>영구 삭제</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
+
+            {/* 우: 상세 */}
+            <div className="overflow-hidden rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
+              {selDoc ? (
+                <DocDetail
+                  doc={selDoc}
+                  me={me}
+                  users={users}
+                  onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
+                />
+
+              ) : (
+                <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
+              )}
+            </div>
           </div>
-        )}
-
-        {/* 우: 상세 */}
-        <div className="overflow-hidden rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
-          {selDoc ? (
-            <DocDetail
-              doc={selDoc}
-              me={me}
-              users={users}
-              onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
-            />
-
-          ) : (
-            <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
-          )}
         </div>
       </div>
-    </div>
-  </div>
 
 
 
@@ -993,7 +1008,7 @@ function DocDetail({
           {/* 우측: 결재 단계 수에 따른 동적 크기 결재선 플로우차트 (스크롤바 없이 한눈에 맞춤) */}
           {(() => {
             const approvalSteps = doc.steps.filter((s) => s.kind !== '참조').sort((a, b) => a.seq - b.seq);
-            
+
             // 병렬 그룹으로 묶기
             const flowGroups: any[] = [];
             approvalSteps.forEach((s) => {
@@ -1224,7 +1239,7 @@ function DocDetail({
                 const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
                 const isRetired = u?.status === '미사용';
                 const displayName = isRetired ? `${u?.name || s.approverName || s.approverId}(퇴사)` : (s.approverName || nameOf(s.approverId));
-                
+
                 const pos = s.approverPos || u?.position || '';
                 const dept = s.approverDept || u?.dept || '';
                 const posDept = dept || pos ? ` (${dept} ${pos})` : '';

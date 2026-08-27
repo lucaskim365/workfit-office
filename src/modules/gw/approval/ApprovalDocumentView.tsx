@@ -150,7 +150,7 @@ export function ApprovalDocumentView({
     // 1. 문서 공식 관계자 여부 판별 (최우선순위)
     const isDrafter = doc.drafterId === currentUser.id;
     const isApprover = doc.steps.some((s) => s.approverId === currentUser.id);
-    
+
     // 수신 부서 ID 혹은 부서명 교차 비교 지원
     const isRecipient = doc.recipients?.some((r) => {
       if (r.id === currentUser.id) return true;
@@ -200,15 +200,15 @@ export function ApprovalDocumentView({
     const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
     const docDeptId = doc.drafterDeptId || drafterCurrentDeptId;
 
-    const isSameDept = docDeptId 
-      ? docDeptId === myDeptId 
+    const isSameDept = docDeptId
+      ? docDeptId === myDeptId
       : doc.drafterDept === myDeptName;
     if (vis === '부서' && !isSameDept) return false;
 
     // 물리적 보안등급 체크 (제5순위)
     const secLevel = doc.securityLevel ?? '일반';
     if (secLevel === '일반') return true; // 일반 등급은 타 부서원도 전사 공개 탭 등에서 확인 가능
-    
+
     return false; // 그 외 대외비/극비 문서는 관계자/임원이 아니므로 열람 불가
   })();
 
@@ -268,23 +268,23 @@ export function ApprovalDocumentView({
     e.preventDefault();
     try {
       const lowercaseUrl = fileUrl.toLowerCase();
-      const isPdfOrImage = lowercaseUrl.endsWith('.pdf') || 
-                           lowercaseUrl.endsWith('.png') || 
-                           lowercaseUrl.endsWith('.jpg') || 
-                           lowercaseUrl.endsWith('.jpeg') || 
-                           lowercaseUrl.endsWith('.gif');
+      const isPdfOrImage = lowercaseUrl.endsWith('.pdf') ||
+        lowercaseUrl.endsWith('.png') ||
+        lowercaseUrl.endsWith('.jpg') ||
+        lowercaseUrl.endsWith('.jpeg') ||
+        lowercaseUrl.endsWith('.gif');
 
       if (isPdfOrImage) {
         // PDF 또는 이미지의 경우 브라우저 렌더링(미리보기)을 위해 Blob fetch 방식을 활용해 우회
         const response = await fetch(fileUrl);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
+
         const blob = await response.blob();
         let mimeType = blob.type;
         if (lowercaseUrl.endsWith('.pdf')) {
           mimeType = 'application/pdf';
         }
-        
+
         const previewBlob = new Blob([blob], { type: mimeType });
         const previewUrl = window.URL.createObjectURL(previewBlob);
         window.open(previewUrl, '_blank');
@@ -307,16 +307,16 @@ export function ApprovalDocumentView({
       // 이미 권한이 유효한 원래의 fileUrl을 활용하여 클라이언트에서 직접 fetch를 수행합니다.
       const response = await fetch(fileUrl);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
-      
+
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = originalFileName;
       document.body.appendChild(link);
       link.click();
-      
+
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
@@ -335,10 +335,10 @@ export function ApprovalDocumentView({
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
-  const steps = useMemo(() => 
+  const steps = useMemo(() =>
     [...(doc.steps || [])]
       .filter((s) => s.kind !== '참조')
-      .sort((a, b) => a.seq - b.seq), 
+      .sort((a, b) => a.seq - b.seq),
     [doc.steps]
   );
 
@@ -458,8 +458,8 @@ export function ApprovalDocumentView({
           <div className="flex items-center gap-2">
             <span>🔒</span>
             <span>
-              {canViewSecret 
-                ? '귀하는 본 보안 문서의 공식 권한자(기안자/결재자)입니다.' 
+              {canViewSecret
+                ? '귀하는 본 보안 문서의 공식 권한자(기안자/결재자)입니다.'
                 : '본 문서에는 보안 규정에 의해 블러 처리된 항목이 포함되어 있습니다.'}
             </span>
           </div>
@@ -469,14 +469,12 @@ export function ApprovalDocumentView({
               <button
                 type="button"
                 onClick={() => setForceMaskMode(!forceMaskMode)}
-                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  forceMaskMode ? 'bg-amber-600' : 'bg-gray-300'
-                }`}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${forceMaskMode ? 'bg-amber-600' : 'bg-gray-300'
+                  }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    forceMaskMode ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${forceMaskMode ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
               <span className="text-[10px] text-amber-800">{forceMaskMode ? '마스킹 켜짐' : '마스킹 꺼짐'}</span>
@@ -489,121 +487,369 @@ export function ApprovalDocumentView({
 
       <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a]" style={{ maxWidth: 800 }}>
 
-      <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
-        <div className="flex items-center gap-2 h-full">
-          <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
-          <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
+        <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
+          <div className="flex items-center gap-2 h-full">
+            <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
+            <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
+          </div>
+          <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
         </div>
-        <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
-      </div>
 
-      <div className="relative mb-5 flex items-start justify-between gap-4">
-        <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-        {(doc.status === '완료' || doc.status === '시행대기') && (
-          <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+        <div className="relative mb-5 flex items-start justify-between gap-4">
+          <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
+          {(doc.status === '완료' || doc.status === '시행대기') && (
+            <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+          )}
+        </div>
+
+        {/* 긴급 선조치 사후 승인 (후결) 정보 카드 */}
+        {doc.isPostApproval && (
+          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-[12px] print-avoid-break">
+            <div className="flex items-center justify-between border-b border-rose-500/20 pb-2 mb-2.5">
+              <span className="font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5 text-[12.5px]">
+                <span>🚨</span>
+                <span>긴급 선조치 내용 (후결 사후 승인 문서)</span>
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10.5px] font-extrabold ${doc.status === '긴급 조치 사후 검토 반려'
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-rose-500/15 text-rose-700'
+                }`}>
+                {doc.status === '긴급 조치 사후 검토 반려' ? '🚨 사후 검토 반려됨 (감사 영구 보존)' : '사후 감사 대상'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 text-[11.5px] mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-[#555] shrink-0">선조치 일시:</span>
+                <span className="font-semibold text-rose-700">{doc.postApprovedAt ? korDate(doc.postApprovedAt) + ' ' + new Date(doc.postApprovedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-[#555] shrink-0">구두/임시 승인자:</span>
+                <span className="font-semibold text-ink">{doc.postApprovedByName ?? '—'}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-rose-500/15 pt-2 text.11.5px]">
+              {doc.postApprovalActionTaken && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-rose-800 text-[11px]">1. 선조치(긴급 조치) 내용 및 결과:</span>
+                  <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                    {doc.postApprovalActionTaken}
+                  </div>
+                </div>
+              )}
+              {doc.postApprovalNecessity && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-rose-800 text-[11px]">2. 긴급성 및 불가피성 소명 (Why?):</span>
+                  <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                    {doc.postApprovalNecessity}
+                  </div>
+                </div>
+              )}
+              {(doc.postApprovalCostDetails || doc.postApprovalFollowup) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {doc.postApprovalCostDetails && (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-bold text-[#555] text-[11px]">3. 소요 비용 및 집행 내역:</span>
+                      <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                        {doc.postApprovalCostDetails}
+                      </div>
+                    </div>
+                  )}
+                  {doc.postApprovalFollowup && (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-bold text-[#555] text-[11px]">4. 후속 조치 및 재발 방지 대책:</span>
+                      <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                        {doc.postApprovalFollowup}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {!doc.postApprovalActionTaken && !doc.postApprovalNecessity && doc.postApprovalReason && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 소명 내역:</span>
+                  <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                    {doc.postApprovalReason}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
-      </div>
 
-      {/* 긴급 선조치 사후 승인 (후결) 정보 카드 */}
-      {doc.isPostApproval && (
-        <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-[12px] print-avoid-break">
-          <div className="flex items-center justify-between border-b border-rose-500/20 pb-2 mb-2.5">
-            <span className="font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5 text-[12.5px]">
-              <span>🚨</span>
-              <span>긴급 선조치 내용 (후결 사후 승인 문서)</span>
-            </span>
-            <span className={`px-2 py-0.5 rounded text-[10.5px] font-extrabold ${
-              doc.status === '긴급 조치 사후 검토 반려'
-                ? 'bg-rose-600 text-white'
-                : 'bg-rose-500/15 text-rose-700'
-            }`}>
-              {doc.status === '긴급 조치 사후 검토 반려' ? '🚨 사후 검토 반려됨 (감사 영구 보존)' : '사후 감사 대상'}
-            </span>
-          </div>
+        <ApprovalDocMetaTable
+          doc={doc}
+          form={form}
+          drafterName={drafterName}
+          drafterPos={drafterPos}
+          isAmountInDetails={isAmountInDetails}
+          amountLabel={amountLabel}
+        />
 
-          <div className="grid grid-cols-2 gap-2.5 text-[11.5px] mb-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-[#555] shrink-0">선조치 일시:</span>
-              <span className="font-semibold text-rose-700">{doc.postApprovedAt ? korDate(doc.postApprovedAt) + ' ' + new Date(doc.postApprovedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-[#555] shrink-0">구두/임시 승인자:</span>
-              <span className="font-semibold text-ink">{doc.postApprovedByName ?? '—'}</span>
-            </div>
-          </div>
+        {/* 서식 동적 상세 블록 렌더링 (순서 보존 및 섹션별 테이블/독립 장문박스 배치) */}
+        {blocks.length > 0 && (
+          <div className="space-y-3.5 mt-2">
+            {blocks.map((block, blockIdx) => {
+              const showSectionHeader = block.section && block.section !== lastRenderedSection;
+              if (block.section) {
+                lastRenderedSection = block.section;
+              }
 
-          <div className="flex flex-col gap-2 border-t border-rose-500/15 pt-2 text.11.5px]">
-            {doc.postApprovalActionTaken && (
-              <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-rose-800 text-[11px]">1. 선조치(긴급 조치) 내용 및 결과:</span>
-                <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-                  {doc.postApprovalActionTaken}
-                </div>
-              </div>
-            )}
-            {doc.postApprovalNecessity && (
-              <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-rose-800 text-[11px]">2. 긴급성 및 불가피성 소명 (Why?):</span>
-                <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-                  {doc.postApprovalNecessity}
-                </div>
-              </div>
-            )}
-            {(doc.postApprovalCostDetails || doc.postApprovalFollowup) && (
-              <div className="grid grid-cols-2 gap-2">
-                {doc.postApprovalCostDetails && (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-[#555] text-[11px]">3. 소요 비용 및 집행 내역:</span>
-                    <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-                      {doc.postApprovalCostDetails}
+              if (block.type === 'longtext') {
+                const f = block.fields[0];
+                const rawVal = fieldText(f, doc.fieldValues, org);
+                const val = maskValue(rawVal, f.isSecret);
+                const isBlurred = f.isSecret && isMaskingActive;
+                return (
+                  <div key={blockIdx} className="space-y-1">
+                    {showSectionHeader && (
+                      <div className="text-[11px] font-bold text-teal mt-2.5">
+                        {block.section}
+                      </div>
+                    )}
+                    <div className="text-[11px] font-semibold text-ink2 mb-0.5 flex items-center gap-1">
+                      {f.label}
+                      {isBlurred && <span className="text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">🔒 보안</span>}
+                    </div>
+                    <div
+                      title={isBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
+                      className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
+                    >
+                      {val || ' '}
                     </div>
                   </div>
-                )}
-                {doc.postApprovalFollowup && (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-[#555] text-[11px]">4. 후속 조치 및 재발 방지 대책:</span>
-                    <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-                      {doc.postApprovalFollowup}
-                    </div>
+
+                );
+              }
+
+              if (block.type === 'table-field') {
+                const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
+
+                const renderTableOnly = (f: FormField) => {
+                  const val = doc.fieldValues[f.key];
+                  const defaultCols = ['구분', '항목', '내용'];
+                  const defaultRows: Array<Record<string, string>> = [
+                    { '구분': '', '항목': '', '내용': '' },
+                    { '구분': '', '항목': '', '내용': '' },
+                    { '구분': '', '항목': '', '내용': '' }
+                  ];
+                  let cols: string[] = [...defaultCols];
+                  let rows: Array<Record<string, string>> = [...defaultRows];
+                  let colWidths: Record<string, string> = {};
+                  let merges: CellMerge[] = [];
+                  let headerValues: Record<string, string> = {};
+                  let secretCols: string[] = [];
+                  let secretCells: string[] = [];
+                  let secretRows: number[] = [];
+
+                  if (f.placeholder) {
+                    try {
+                      const cfg = JSON.parse(f.placeholder);
+                      if (cfg && typeof cfg === 'object') {
+                        if (cfg.colWidths) colWidths = cfg.colWidths;
+                        if (cfg.cols) cols = cfg.cols;
+                        if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
+                        if (Array.isArray(cfg.merges)) merges = cfg.merges;
+                        if (cfg.headerValues) headerValues = cfg.headerValues;
+                        if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
+                        if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
+                        if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
+                      }
+                    } catch (e) { }
+                  }
+
+                  try {
+                    if (typeof val === 'string' && val) {
+                      const parsed = JSON.parse(val);
+                      if (parsed && typeof parsed === 'object') {
+                        if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
+                          cols = parsed.cols;
+                          rows = parsed.rows;
+                          colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
+                          if (Array.isArray(parsed.merges)) merges = parsed.merges;
+                          if (parsed.headerValues) headerValues = parsed.headerValues;
+                          if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
+                          if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
+                          if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
+                        }
+                      }
+                    }
+                  } catch (e) { }
+
+                  return (
+                    <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
+                      <colgroup>
+                        {cols.map((col, cIdx) => (
+                          <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
+                        ))}
+                      </colgroup>
+                      <tbody>
+                        {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
+                        <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
+                          {cols.map((col, cIdx) => {
+                            const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
+                            if (isMerged && !isStart) return null;
+                            return (
+                              <th
+                                key={col}
+                                rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                                colSpan={colSpan > 1 ? colSpan : undefined}
+                                className="p-2 border border-[#eee] font-bold text-[#555]"
+                              >
+                                {headerValues[col] !== undefined ? headerValues[col] : col}
+                              </th>
+                            );
+                          })}
+                        </tr>
+                        {rows.map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
+                            {cols.map((col, cIdx) => {
+                              const isCellSecret =
+                                f.isSecret ||
+                                secretCols.includes(col) ||
+                                secretRows.includes(rIdx) ||
+                                secretCells.includes(`${rIdx}:${cIdx}`);
+
+                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
+                              const cellVal = row[col] ?? '';
+                              let displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                                ? Number(cellVal.replace(/,/g, '')).toLocaleString()
+                                : cellVal;
+
+                              if (isCellSecret && isMaskingActive) {
+                                displayVal = maskValue(displayVal, true);
+                              }
+
+                              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
+
+                              if (isMerged && !isStart) return null;
+
+                              const isCellBlurred = isCellSecret && isMaskingActive;
+
+                              return (
+                                <td
+                                  key={col}
+                                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                                  colSpan={colSpan > 1 ? colSpan : undefined}
+                                  title={isCellBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
+                                  className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap ${isNumLike ? 'text-right' : 'text-left'} ${isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
+                                    }`}
+                                >
+
+                                  {displayVal || '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        {rows.length === 0 && (
+                          <tr>
+                            <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
+                              등록된 데이터가 없습니다.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  );
+                };
+
+                return (
+                  <div key={blockIdx} className={`space-y-1 ${isHalf ? 'print-avoid-break' : ''}`}>
+                    {showSectionHeader && (
+                      <div className="text-[11px] font-bold text-teal mt-2.5">
+                        {block.section}
+                      </div>
+                    )}
+                    {isHalf ? (
+                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
+                        {block.fields.map((f) => {
+                          const hasLabel = !!(f.label && f.label.trim());
+                          return (
+                            <div key={f.key} className="flex flex-col">
+                              {hasLabel && (
+                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
+                                  {f.label}
+                                </div>
+                              )}
+                              <div className="overflow-x-auto">
+                                {renderTableOnly(f)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {block.fields.length === 1 && <div />}
+                      </div>
+                    ) : (
+                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
+                        {(() => {
+                          const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
+                          return (
+                            <>
+                              {hasLabel && (
+                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
+                                  {block.fields[0].label}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        <div className="overflow-x-auto">
+                          {renderTableOnly(block.fields[0])}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-            {!doc.postApprovalActionTaken && !doc.postApprovalNecessity && doc.postApprovalReason && (
-              <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 소명 내역:</span>
-                <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
-                  {doc.postApprovalReason}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                );
+              }
 
-      <ApprovalDocMetaTable
-        doc={doc}
-        form={form}
-        drafterName={drafterName}
-        drafterPos={drafterPos}
-        isAmountInDetails={isAmountInDetails}
-        amountLabel={amountLabel}
-      />
+              // table 타입 블록 렌더링
+              const tableRows: React.ReactNode[] = [];
+              const fields = block.fields;
 
-      {/* 서식 동적 상세 블록 렌더링 (순서 보존 및 섹션별 테이블/독립 장문박스 배치) */}
-      {blocks.length > 0 && (
-        <div className="space-y-3.5 mt-2">
-          {blocks.map((block, blockIdx) => {
-            const showSectionHeader = block.section && block.section !== lastRenderedSection;
-            if (block.section) {
-              lastRenderedSection = block.section;
-            }
+              for (let i = 0; i < fields.length; i++) {
+                const f = fields[i];
+                const rawVal = fieldText(f, doc.fieldValues, org);
+                const val = maskValue(rawVal, f.isSecret);
+                const { width: fw } = effectiveFieldProps(f);
 
-            if (block.type === 'longtext') {
-              const f = block.fields[0];
-              const rawVal = fieldText(f, doc.fieldValues, org);
-              const val = maskValue(rawVal, f.isSecret);
-              const isBlurred = f.isSecret && isMaskingActive;
+                if (fw === 'half') {
+                  const next = fields[i + 1];
+                  const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
+                  if (next && nw === 'half') {
+                    const rawNextVal = fieldText(next, doc.fieldValues, org);
+                    const nextVal = maskValue(rawNextVal, next.isSecret);
+                    tableRows.push(
+                      <MetaRow
+                        key={f.key}
+                        cells={[
+                          [f.label, val, f.isSecret && isMaskingActive],
+                          [next.label, nextVal, next.isSecret && isMaskingActive]
+                        ]}
+                      />
+                    );
+                    i++;
+                  } else {
+                    tableRows.push(
+                      <MetaRow
+                        key={f.key}
+                        cells={[[f.label, val, f.isSecret && isMaskingActive], ['', '']]}
+                      />
+                    );
+                  }
+                } else {
+                  tableRows.push(
+                    <MetaRow
+                      key={f.key}
+                      cells={[[f.label, val, f.isSecret && isMaskingActive]]}
+                      full
+                    />
+                  );
+                }
+
+              }
+
               return (
                 <div key={blockIdx} className="space-y-1">
                   {showSectionHeader && (
@@ -611,414 +857,163 @@ export function ApprovalDocumentView({
                       {block.section}
                     </div>
                   )}
-                  <div className="text-[11px] font-semibold text-ink2 mb-0.5 flex items-center gap-1">
-                    {f.label}
-                    {isBlurred && <span className="text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">🔒 보안</span>}
-                  </div>
-                  <div 
-                    title={isBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                    className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
-                  >
-                    {val || ' '}
-                  </div>
-                </div>
-
-              );
-            }
-
-            if (block.type === 'table-field') {
-              const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
-
-              const renderTableOnly = (f: FormField) => {
-                const val = doc.fieldValues[f.key];
-                const defaultCols = ['구분', '항목', '내용'];
-                const defaultRows: Array<Record<string, string>> = [
-                  { '구분': '', '항목': '', '내용': '' },
-                  { '구분': '', '항목': '', '내용': '' },
-                  { '구분': '', '항목': '', '내용': '' }
-                ];
-                let cols: string[] = [...defaultCols];
-                let rows: Array<Record<string, string>> = [...defaultRows];
-                let colWidths: Record<string, string> = {};
-                let merges: CellMerge[] = [];
-                let headerValues: Record<string, string> = {};
-                let secretCols: string[] = [];
-                let secretCells: string[] = [];
-                let secretRows: number[] = [];
-
-                if (f.placeholder) {
-                  try {
-                    const cfg = JSON.parse(f.placeholder);
-                    if (cfg && typeof cfg === 'object') {
-                      if (cfg.colWidths) colWidths = cfg.colWidths;
-                      if (cfg.cols) cols = cfg.cols;
-                      if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
-                      if (Array.isArray(cfg.merges)) merges = cfg.merges;
-                      if (cfg.headerValues) headerValues = cfg.headerValues;
-                      if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
-                      if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
-                      if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
-                    }
-                  } catch (e) { }
-                }
-
-                try {
-                  if (typeof val === 'string' && val) {
-                    const parsed = JSON.parse(val);
-                    if (parsed && typeof parsed === 'object') {
-                      if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-                        cols = parsed.cols;
-                        rows = parsed.rows;
-                        colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
-                        if (Array.isArray(parsed.merges)) merges = parsed.merges;
-                        if (parsed.headerValues) headerValues = parsed.headerValues;
-                        if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
-                        if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
-                        if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
-                      }
-                    }
-                  }
-                } catch (e) { }
-
-                return (
-                  <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
-                    <colgroup>
-                      {cols.map((col, cIdx) => (
-                        <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
-                      ))}
-                    </colgroup>
-                    <tbody>
-                      {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
-                      <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                        {cols.map((col, cIdx) => {
-                          const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
-                          if (isMerged && !isStart) return null;
-                          return (
-                            <th
-                              key={col}
-                              rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                              colSpan={colSpan > 1 ? colSpan : undefined}
-                              className="p-2 border border-[#eee] font-bold text-[#555]"
-                            >
-                              {headerValues[col] !== undefined ? headerValues[col] : col}
-                            </th>
-                          );
-                        })}
-                      </tr>
-                      {rows.map((row, rIdx) => (
-                        <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                          {cols.map((col, cIdx) => {
-                            const isCellSecret =
-                              f.isSecret ||
-                              secretCols.includes(col) ||
-                              secretRows.includes(rIdx) ||
-                              secretCells.includes(`${rIdx}:${cIdx}`);
-
-                            const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
-                            const cellVal = row[col] ?? '';
-                            let displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
-                              ? Number(cellVal.replace(/,/g, '')).toLocaleString()
-                              : cellVal;
-
-                            if (isCellSecret && isMaskingActive) {
-                              displayVal = maskValue(displayVal, true);
-                            }
-
-                            const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
-
-                            if (isMerged && !isStart) return null;
-
-                            const isCellBlurred = isCellSecret && isMaskingActive;
-
-                            return (
-                              <td
-                                key={col}
-                                rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                colSpan={colSpan > 1 ? colSpan : undefined}
-                                title={isCellBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                                className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap ${isNumLike ? 'text-right' : 'text-left'} ${
-                                  isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
-                                }`}
-                              >
-
-                                {displayVal || '—'}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                      {rows.length === 0 && (
-                        <tr>
-                          <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
-                            등록된 데이터가 없습니다.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
+                  <table className="w-full border-collapse text-[12px]">
+                    <tbody>{tableRows}</tbody>
                   </table>
-                );
-              };
-
-              return (
-                <div key={blockIdx} className={`space-y-1 ${isHalf ? 'print-avoid-break' : ''}`}>
-                  {showSectionHeader && (
-                    <div className="text-[11px] font-bold text-teal mt-2.5">
-                      {block.section}
-                    </div>
-                  )}
-                  {isHalf ? (
-                    <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
-                      {block.fields.map((f) => {
-                        const hasLabel = !!(f.label && f.label.trim());
-                        return (
-                          <div key={f.key} className="flex flex-col">
-                            {hasLabel && (
-                              <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
-                                {f.label}
-                              </div>
-                            )}
-                            <div className="overflow-x-auto">
-                              {renderTableOnly(f)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {block.fields.length === 1 && <div />}
-                    </div>
-                  ) : (
-                    <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
-                      {(() => {
-                        const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
-                        return (
-                          <>
-                            {hasLabel && (
-                              <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
-                                {block.fields[0].label}
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                      <div className="overflow-x-auto">
-                        {renderTableOnly(block.fields[0])}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
-            }
+            })}
+          </div>
+        )}
 
-            // table 타입 블록 렌더링
-            const tableRows: React.ReactNode[] = [];
-            const fields = block.fields;
+        {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
+        {longTextFields.length === 0 && doc.body && doc.body.trim() !== '' && doc.body !== '(본문 미리보기)' && (
+          <div className="mt-3 min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+            {doc.body}
+          </div>
+        )}
 
-            for (let i = 0; i < fields.length; i++) {
-              const f = fields[i];
-              const rawVal = fieldText(f, doc.fieldValues, org);
-              const val = maskValue(rawVal, f.isSecret);
-              const { width: fw } = effectiveFieldProps(f);
-
-              if (fw === 'half') {
-                const next = fields[i + 1];
-                const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
-                if (next && nw === 'half') {
-                  const rawNextVal = fieldText(next, doc.fieldValues, org);
-                  const nextVal = maskValue(rawNextVal, next.isSecret);
-                  tableRows.push(
-                    <MetaRow
-                      key={f.key}
-                      cells={[
-                        [f.label, val, f.isSecret && isMaskingActive],
-                        [next.label, nextVal, next.isSecret && isMaskingActive]
-                      ]}
-                    />
-                  );
-                  i++;
-                } else {
-                  tableRows.push(
-                    <MetaRow
-                      key={f.key}
-                      cells={[[f.label, val, f.isSecret && isMaskingActive], ['', '']]}
-                    />
-                  );
-                }
-              } else {
-                tableRows.push(
-                  <MetaRow
-                    key={f.key}
-                    cells={[[f.label, val, f.isSecret && isMaskingActive]]}
-                    full
-                  />
-                );
-              }
-
-            }
-
-            return (
-              <div key={blockIdx} className="space-y-1">
-                {showSectionHeader && (
-                  <div className="text-[11px] font-bold text-teal mt-2.5">
-                    {block.section}
+        {/* 첨부파일 영역 */}
+        {doc.attachments && doc.attachments.length > 0 && (
+          <table className="mt-4 w-full border-collapse text-[12px]">
+            <tbody>
+              <tr>
+                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                  첨부파일
+                </th>
+                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                  <div className="space-y-1">
+                    {doc.attachments.map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <a
+                          onClick={(e) => handlePreview(e, file.url, file.name)}
+                          className="font-semibold hover:underline text-[#222] cursor-pointer"
+                        >
+                          {file.name}
+                        </a>
+                        <button
+                          onClick={(e) => handleDownload(e, file.url, file.name)}
+                          className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
+                        >
+                          (다운로드)
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                )}
-                <table className="w-full border-collapse text-[12px]">
-                  <tbody>{tableRows}</tbody>
-                </table>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
-      {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-      {longTextFields.length === 0 && doc.body && doc.body.trim() !== '' && doc.body !== '(본문 미리보기)' && (
-        <div className="mt-3 min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
-          {doc.body}
-        </div>
-      )}
-
-      {/* 첨부파일 영역 */}
-      {doc.attachments && doc.attachments.length > 0 && (
-        <table className="mt-4 w-full border-collapse text-[12px]">
-          <tbody>
-            <tr>
-              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                첨부파일
-              </th>
-              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                <div className="space-y-1">
-                  {doc.attachments.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <a
-                        onClick={(e) => handlePreview(e, file.url, file.name)}
-                        className="font-semibold hover:underline text-[#222] cursor-pointer"
-                      >
-                        {file.name}
-                      </a>
-                      <button
-                        onClick={(e) => handleDownload(e, file.url, file.name)}
-                        className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
-                      >
-                        (다운로드)
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-
-      {/* 수신처 영역 */}
-      {doc.recipients && doc.recipients.length > 0 && (
-        <table className="mt-2 w-full border-collapse text-[12px]">
-          <tbody>
-            <tr>
-              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                수 신 처
-              </th>
-              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                <div className="flex flex-wrap gap-x-2 gap-y-1">
-                  {doc.recipients.map((r, idx) => (
-                    <span key={r.id} className="font-semibold">
-                      {r.name}{idx < doc.recipients.length - 1 ? ',' : ''}
-                    </span>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
+        {/* 수신처 영역 */}
+        {doc.recipients && doc.recipients.length > 0 && (
+          <table className="mt-2 w-full border-collapse text-[12px]">
+            <tbody>
+              <tr>
+                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                  수 신 처
+                </th>
+                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                  <div className="flex flex-wrap gap-x-2 gap-y-1">
+                    {doc.recipients.map((r, idx) => (
+                      <span key={r.id} className="font-semibold">
+                        {r.name}{idx < doc.recipients.length - 1 ? ',' : ''}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
 
 
-      {/* 관련 문서 연동 영역 */}
-      {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
-        <table className="mt-2 w-full border-collapse text-[12px]">
-          <tbody>
-            <tr>
-              <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                관련 문서
-              </th>
-              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                <div className="space-y-1">
-                  {accessibleRelatedDocs.map((rd) => (
-                    <div key={rd.docId} className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
-                      <button
-                        type="button"
-                        onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
-                        className={`font-semibold text-ink2 text-left transition-colors ${
-                          isPreview
-                            ? 'cursor-default'
-                            : 'cursor-pointer text-[#008080] hover:underline hover:text-[#4ea8de]'
-                        }`}
-                      >
-                        {rd.title}
-                      </button>
-                      <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
-                    </div>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
+        {/* 관련 문서 연동 영역 */}
+        {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
+          <table className="mt-2 w-full border-collapse text-[12px]">
+            <tbody>
+              <tr>
+                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                  관련 문서
+                </th>
+                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                  <div className="space-y-1">
+                    {accessibleRelatedDocs.map((rd) => (
+                      <div key={rd.docId} className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
+                        <button
+                          type="button"
+                          onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
+                          className={`font-semibold text-ink2 text-left transition-colors ${isPreview
+                              ? 'cursor-default'
+                              : 'cursor-pointer text-[#008080] hover:underline hover:text-[#4ea8de]'
+                            }`}
+                        >
+                          {rd.title}
+                        </button>
+                        <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
+                      </div>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
-      <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
-        {closing.trim() && <div>{closing}</div>}
-        <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
-        <div className="mt-1 flex items-center justify-center gap-1">
-          기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-          {isDrafterSignature() ? (
-            // 서명 모드
-            drafterSeal() ? (
-              // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
-              <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
-                <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
-                <img
-                  src={drafterSeal()}
-                  alt="서명"
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
-                />
-              </span>
-            ) : (
-              // (2) 서명 이미지가 없는 경우 (폴백): 붉은 원 없이 '서명미등록' 가이드 표시
-              <span className="relative inline-flex h-9 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[10px] font-bold text-danger/80 select-none">
-                서명미등록
-              </span>
-            )
-          ) : (
-            // 도장 모드
-            drafterSeal() ? (
-              // (3) 도장 이미지가 있는 경우: (인) 링 위에 도장 오버레이
-              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none">
-                <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
-                <img
-                  src={drafterSeal()}
-                  alt="인감"
-                  className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
-                />
-              </span>
-            ) : (
-              // (4) 도장 이미지가 없는 경우 (폴백): 붉은 원형 링 + 희미한 (인) 글씨 위에 이름을 비스듬히 겹쳐 출력
-              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none bg-white">
-                <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
-                  {drafterName}
+        <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
+          {closing.trim() && <div>{closing}</div>}
+          <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
+          <div className="mt-1 flex items-center justify-center gap-1">
+            기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
+            {isDrafterSignature() ? (
+              // 서명 모드
+              drafterSeal() ? (
+                // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
+                <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
+                  <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+                  <img
+                    src={drafterSeal()}
+                    alt="서명"
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
+                  />
                 </span>
-              </span>
-            )
-          )}
+              ) : (
+                // (2) 서명 이미지가 없는 경우 (폴백): 붉은 원 없이 '서명미등록' 가이드 표시
+                <span className="relative inline-flex h-9 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[10px] font-bold text-danger/80 select-none">
+                  서명미등록
+                </span>
+              )
+            ) : (
+              // 도장 모드
+              drafterSeal() ? (
+                // (3) 도장 이미지가 있는 경우: (인) 링 위에 도장 오버레이
+                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none">
+                  <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+                  <img
+                    src={drafterSeal()}
+                    alt="인감"
+                    className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
+                  />
+                </span>
+              ) : (
+                // (4) 도장 이미지가 없는 경우 (폴백): 붉은 원형 링 + 희미한 (인) 글씨 위에 이름을 비스듬히 겹쳐 출력
+                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none bg-white">
+                  <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
+                    {drafterName}
+                  </span>
+                </span>
+              )
+            )}
+          </div>
         </div>
+        {activeRelatedDocId && (
+          <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
+        )}
       </div>
-      {activeRelatedDocId && (
-        <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
-      )}
-    </div>
     </>
   );
 }
