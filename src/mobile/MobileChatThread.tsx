@@ -100,7 +100,7 @@ export default function MobileChatThread() {
       window.alert("방 이름 변경에 실패했습니다.");
     }
   };
-  const [viewer, setViewer] = useState<Attachment | null>(null);
+  const [viewer, setViewer] = useState<{ attachments: Attachment[]; initialIdx: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -363,7 +363,7 @@ export default function MobileChatThread() {
                   me={me}
                   group={room?.type === 'group'}
                   roomMembers={room?.members ?? []}
-                  onOpenImage={setViewer}
+                  onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
                   showTime={showTime}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
@@ -374,7 +374,7 @@ export default function MobileChatThread() {
                   me={me}
                   group={room?.type === 'group'}
                   roomMembers={room?.members ?? []}
-                  onOpenImage={setViewer}
+                  onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
                   showTime={showTime}
                   isEditing={editingMessageId === m.id}
                   onCancelEdit={() => setEditingMessageId(null)}
@@ -450,7 +450,7 @@ export default function MobileChatThread() {
         </div>
       )}
 
-      {viewer && <ImageViewer att={viewer} onClose={() => setViewer(null)} />}
+      {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
       {menuOpen && <MobileActionSheet title={room?.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
       {sheetMessage && createPortal(
         <div className="fixed inset-0 z-[120] flex flex-col justify-end bg-black/40" onClick={() => setSheetMessage(null)}>
@@ -578,7 +578,7 @@ function ImageBundleBubble({
   me: string;
   group?: boolean;
   roomMembers: string[];
-  onOpenImage: (att: Attachment) => void;
+  onOpenImage: (att: Attachment, list: Attachment[]) => void;
   showTime: boolean;
   onLongPress: (m: ChatMessage) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
@@ -626,7 +626,7 @@ function ImageBundleBubble({
       return (
         <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-black/10">
           {attachments.map((att, i) => (
-            <button key={i} onClick={() => onOpenImage(att)} className="w-full h-full overflow-hidden block">
+            <button key={i} onClick={() => onOpenImage(att, attachments)} className="w-full h-full overflow-hidden block">
               <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
             </button>
           ))}
@@ -637,14 +637,14 @@ function ImageBundleBubble({
     if (len === 3) {
       return (
         <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-black/10">
-          <button onClick={() => onOpenImage(attachments[0])} className="flex-1 h-full overflow-hidden block">
+          <button onClick={() => onOpenImage(attachments[0], attachments)} className="flex-1 h-full overflow-hidden block">
             <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
           </button>
           <div className="flex flex-col gap-1 w-[38%] h-full">
-            <button onClick={() => onOpenImage(attachments[1])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+            <button onClick={() => onOpenImage(attachments[1], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
               <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
             </button>
-            <button onClick={() => onOpenImage(attachments[2])} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+            <button onClick={() => onOpenImage(attachments[2], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
               <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
             </button>
           </div>
@@ -662,7 +662,7 @@ function ImageBundleBubble({
           return (
             <button
               key={i}
-              onClick={() => onOpenImage(att)}
+              onClick={() => onOpenImage(att, attachments)}
               className="relative w-full h-full overflow-hidden block"
             >
               <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
@@ -761,7 +761,7 @@ function MessageBubble({
   me: string;
   group?: boolean;
   roomMembers: string[];
-  onOpenImage: (att: Attachment) => void;
+  onOpenImage: (att: Attachment, list: Attachment[]) => void;
   showTime: boolean;
   isEditing: boolean;
   onCancelEdit: () => void;
@@ -866,7 +866,7 @@ function MessageBubble({
   } else if (m.type === 'image' && att) {
     body = (
       <button 
-        onClick={() => onOpenImage(att)} 
+        onClick={() => onOpenImage(att, [att])} 
         onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -976,26 +976,85 @@ function MessageBubble({
   );
 }
 
-/** 이미지 라이트박스 — 전체화면 원본 표시 + 다운로드. 배경/✕ 로 닫기. */
-function ImageViewer({ att, onClose }: { att: Attachment; onClose: () => void }) {
+/** 이미지 라이트박스 — 전체화면 원본 표시 + 다운로드 + 이전/다음 슬라이드. 배경/✕ 로 닫기. */
+function ImageViewer({
+  attachments,
+  initialIdx,
+  onClose,
+}: {
+  attachments: Attachment[];
+  initialIdx: number;
+  onClose: () => void;
+}) {
+  const [currentIdx, setCurrentIdx] = useState(initialIdx);
+  const att = attachments[currentIdx];
+
+  const hasPrev = currentIdx > 0;
+  const hasNext = currentIdx < attachments.length - 1;
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasPrev) setCurrentIdx((prev) => prev - 1);
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasNext) setCurrentIdx((prev) => prev + 1);
+  };
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'ArrowLeft' && hasPrev) {
+        setCurrentIdx((prev) => prev - 1);
+      } else if (e.key === 'ArrowRight' && hasNext) {
+        setCurrentIdx((prev) => prev + 1);
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, hasPrev, hasNext]);
+
+  if (!att) return null;
 
   return createPortal(
     <div onClick={onClose} className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/90 p-4">
+      {/* 상단 헤더 영역 */}
       <div
         className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white"
         style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{att.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+          {att.name} {attachments.length > 1 ? `(${currentIdx + 1}/${attachments.length})` : ''}
+        </span>
         <button onClick={() => downloadAttachment(att)} title="다운로드" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[15px] active:bg-white/25">⤓</button>
         <button onClick={onClose} title="닫기" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[16px] active:bg-white/25">✕</button>
       </div>
-      <img src={att.url} alt={att.name} onClick={(e) => e.stopPropagation()} className="max-h-[82vh] max-w-full rounded-lg object-contain" />
+
+      {/* 이미지 렌더링 및 이전/다음 버튼 */}
+      <div className="relative flex w-full max-w-full items-center justify-center h-[75vh]" onClick={(e) => e.stopPropagation()}>
+        {hasPrev && (
+          <button
+            onClick={handlePrev}
+            title="이전 사진"
+            className="absolute left-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none"
+          >
+            ◀
+          </button>
+        )}
+        <img src={att.url} alt={att.name} className="max-h-full max-w-full rounded-lg object-contain" />
+        {hasNext && (
+          <button
+            onClick={handleNext}
+            title="다음 사진"
+            className="absolute right-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none"
+          >
+            ▶
+          </button>
+        )}
+      </div>
     </div>,
     document.body,
   );
