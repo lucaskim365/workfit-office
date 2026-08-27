@@ -429,8 +429,6 @@ function ApprovalDraftInner({
       }
     }
 
-    setRecipients(autoRecipients);
-
     // 2. 시행처 빌드
     const autoExecs: { id: string; name: string }[] = [];
     // (A) 기본 시행 사용자
@@ -454,9 +452,20 @@ function ApprovalDraftInner({
       }
     }
 
-    setExecutionDepts(autoExecs);
+    // ⚠️ 무한 업데이트 차단 비교 방어벽
+    const recStr = JSON.stringify(autoRecipients);
+    const currRecStr = JSON.stringify(recipients);
+    if (recStr !== currRecStr) {
+      setRecipients(autoRecipients);
+    }
 
-  }, [code, forms, org.users, org.depts, me, editDoc]);
+    const execStr = JSON.stringify(autoExecs);
+    const currExecStr = JSON.stringify(executionDepts);
+    if (execStr !== currExecStr) {
+      setExecutionDepts(autoExecs);
+    }
+
+  }, [code, forms, org.users, org.depts, me, editDoc, recipients, executionDepts]);
 
 
   useEffect(() => {
