@@ -916,11 +916,27 @@ export function ApprovalDocumentView({
                 </th>
                 <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
                   <div className="flex flex-wrap gap-x-2 gap-y-1">
-                    {doc.recipients.map((r, idx) => (
-                      <span key={r.id} className="font-semibold">
-                        {r.name}{idx < doc.recipients.length - 1 ? ',' : ''}
-                      </span>
-                    ))}
+                    {doc.recipients.map((r, idx) => {
+                      let displayName = r.name;
+                      if (r.type === 'user') {
+                        const u = org.users.find((x) => x.id === r.id);
+                        if (u && u.position) {
+                          if (r.name.includes(' · ')) {
+                            const parts = r.name.split(' · ');
+                            const namePart = parts[0];
+                            const deptPart = parts.slice(1).join(' · ');
+                            displayName = `${namePart} ${u.position} · ${deptPart}`;
+                          } else {
+                            displayName = `${r.name} ${u.position}`;
+                          }
+                        }
+                      }
+                      return (
+                        <span key={r.id} className="font-semibold">
+                          {displayName}{idx < doc.recipients.length - 1 ? ',' : ''}
+                        </span>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>
