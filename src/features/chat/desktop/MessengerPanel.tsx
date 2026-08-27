@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { Search } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
@@ -21,6 +22,25 @@ export function fmtTime(iso?: string): string {
   yst.setDate(now.getDate() - 1);
   if (d.toDateString() === yst.toDateString()) return '어제';
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+}
+
+/** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
+export function getAvatarStyle(userId: string): { bg: string; text: string } {
+  const PASTEL_PALETTE = [
+    { bg: '#e0f2fe', text: '#0369a1' }, // 파스텔 스카이 블루
+    { bg: '#fce7f3', text: '#be185d' }, // 파스텔 핑크
+    { bg: '#dcfce7', text: '#15803d' }, // 파스텔 민트/그린
+    { bg: '#fef9c3', text: '#a16207' }, // 파스텔 옐로우
+    { bg: '#f3e8ff', text: '#6b21a8' }, // 파스텔 퍼플
+    { bg: '#ffedd5', text: '#c2410c' }, // 파스텔 오렌지
+    { bg: '#e0e7ff', text: '#3730a3' }, // 파스텔 인디고
+  ];
+  if (!userId) return PASTEL_PALETTE[0];
+  let sum = 0;
+  for (let i = 0; i < userId.length; i++) {
+    sum += userId.charCodeAt(i);
+  }
+  return PASTEL_PALETTE[sum % PASTEL_PALETTE.length];
 }
 
 // SW 알림 클릭(데스크톱) → 메신저 도크에서 열 방 ID 를 전달하는 브릿지.
@@ -69,7 +89,9 @@ export function MessengerPanel() {
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
+  const { data: unreadMap = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
+  const [q, setQ] = useState('');
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
 
   // 알림 클릭(데스크톱) → 지정된 방 열기. 마운트 직후 대기값 소비 + 이후 이벤트 수신.
@@ -108,11 +130,17 @@ export function MessengerPanel() {
     try {
       const key = `workfit-hidden-rooms-${me}`;
       const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      return rooms.filter((r) => !hidden.includes(r.id));
+      const list = rooms.filter((r) => !hidden.includes(r.id));
+      const kw = q.trim().toLowerCase();
+      if (!kw) return list;
+      return list.filter((r) => {
+        const display = getRoomDisplayName(r, me, users).toLowerCase();
+        return display.includes(kw);
+      });
     } catch {
       return rooms;
     }
-  }, [rooms, me]);
+  }, [rooms, me, q, users]);
 
   if (composing) {
     return <NewRoomView me={me} onCancel={() => setComposing(false)} onCreated={handleCreated} />;
@@ -144,12 +172,22 @@ export function MessengerPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel px-4 py-2.5">
-        <span className="text-[12.5px] font-bold text-ink2">대화방 ({visibleRooms.length})</span>
+      {/* 검색 + 새 대화 (PWA와 완벽히 동일화) */}
+      <div className="flex items-center gap-2 border-b border-border bg-white px-4 py-2.5 select-none">
+        <div className="flex flex-1 items-center gap-2 rounded-full bg-black/5 px-3.5 py-2">
+          <Search size={14} className="shrink-0 text-ink3" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="이름, 채팅방 검색"
+            className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
+          />
+        </div>
         <button
           onClick={() => setComposing(true)}
-          title="새 대화방"
-          className="grid h-7 w-7 place-items-center rounded-lg text-[15px] font-extrabold text-[#2a3344] hover:bg-panel-alt"
+          title="새 대화"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[20px] leading-none text-white transition-all active:scale-95"
+          style={{ background: '#4ea8de' }}
         >
           ＋
         </button>
@@ -162,7 +200,7 @@ export function MessengerPanel() {
           visibleRooms.map((r) => {
             const display = getRoomDisplayName(r, me, users);
             // 내 미읽음 수
-            const unread = r.lastMessage && r.lastMessage.senderId !== me && !(r.lastMessage as any).readBy?.includes(me);
+            const n = unreadMap[r.id] ?? 0;
             return (
               <div
                 key={r.id}
@@ -180,9 +218,15 @@ export function MessengerPanel() {
                     <span className="truncate text-[12.5px] font-bold text-ink">{display}</span>
                     <span className="shrink-0 text-[10px] text-ink3">{fmtTime(r.lastMessage?.at)}</span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11.5px] text-ink3">{r.lastMessage ? msgPreview(r.lastMessage as any) : '대화 내용이 없습니다.'}</div>
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                    <span className="truncate text-[11.5px] text-ink3">{r.lastMessage ? msgPreview(r.lastMessage as any) : '대화 내용이 없습니다.'}</span>
+                    {n > 0 && (
+                      <span className="grid h-[16px] min-w-[16px] shrink-0 place-items-center rounded-full bg-[#ff4d4f] px-1.5 text-[8.5px] font-extrabold text-white shadow-[0_2px_6px_rgba(255,77,79,0.3)] select-none">
+                        {n}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {unread && <span className="absolute right-4 top-[22px] h-2.5 w-2.5 rounded-full bg-danger" />}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -583,7 +627,7 @@ function MessengerThread({
           <div className="space-y-2">
             {memberDetails.map((m) => (
               <div key={m.id} className="flex items-center gap-2 text-[11.5px]">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#bae0ff] text-[10px] font-bold text-[#1c2536]">
+                <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold">
                   {m.name?.[0] ?? '?'}
                 </span>
                 <span className="font-semibold text-ink">{m.name}</span>
@@ -967,7 +1011,7 @@ function ImageBundleBubble({
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
+        {!mine && <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">{m.senderName?.[0] ?? '?'}</span>}
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
@@ -1189,7 +1233,7 @@ function MessageBubble({
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">{m.senderName?.[0] ?? '?'}</span>}
+        {!mine && <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">{m.senderName?.[0] ?? '?'}</span>}
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (

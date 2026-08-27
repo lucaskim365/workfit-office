@@ -5,6 +5,7 @@ import { ClipboardCheck, Bell, Settings } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
+import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
 /**
@@ -12,7 +13,7 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
  * 웹 데스크톱과 동일한 useApprovalBoxes 훅/엔진을 재사용하므로 데이터가 실시간 공유된다.
  */
 const FIXED_BOXES: { key: ApprovalBox; label: string }[] = [
-  { key: '대기', label: '결재 대기' },
+  { key: '대기', label: '결재함' },
   { key: '상신', label: '상신함' },
   { key: '완료', label: '완료함' },
   { key: '반려', label: '반려함' },
@@ -42,7 +43,7 @@ export function statusColor(status: string): string {
     case '반려':
       return '#e0483b';
     case '진행중':
-      return '#101830';
+      return '#2563eb';
     default:
       return '#8a8f98';
   }
@@ -54,6 +55,7 @@ export default function MobileApprovalList() {
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const [box, setBox] = useState<ApprovalBox>('대기');
+  const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
 
   // 로컬스토리지 키 설정
   const STORAGE_KEY = 'workfit-approval-extra-tabs';
@@ -114,10 +116,28 @@ export default function MobileApprovalList() {
     setTimeout(() => setNotice(''), 8000);
   };
 
-  const docs = byBox[box] ?? [];
+  const docs = useMemo(() => {
+    const rawDocs = byBox[box] ?? [];
+    if (box !== '대기') return rawDocs;
+
+    const preds = getPredecessorsOf(me);
+    if (todoFilter === 'pending') {
+      return rawDocs.filter((d: ApprovalDoc) => {
+        const approvers = currentApproverIds(d);
+        return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      });
+    }
+    if (todoFilter === 'progress') {
+      return rawDocs.filter((d: ApprovalDoc) => {
+        const approvers = currentApproverIds(d);
+        return !approvers.includes(me) && !approvers.some((id) => preds.includes(id));
+      });
+    }
+    return rawDocs;
+  }, [byBox, box, todoFilter, me]);
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
       <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
@@ -137,7 +157,7 @@ export default function MobileApprovalList() {
 
       {/* 결재함 탭 */}
       <div 
-        className="flex shrink-0 border-b border-black/10 bg-white overflow-x-auto whitespace-nowrap scrollbar-none flex-row flex-nowrap"
+        className="flex shrink-0 border-b border-[#e2e8f0] bg-white overflow-x-auto whitespace-nowrap scrollbar-none flex-row flex-nowrap"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {activeBoxes.map((b) => {
@@ -146,7 +166,10 @@ export default function MobileApprovalList() {
           return (
             <button
               key={b.key}
-              onClick={() => setBox(b.key)}
+              onClick={() => {
+                setBox(b.key);
+                setTodoFilter('all');
+              }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
             >
               <span className="inline-flex items-center gap-1">
@@ -154,17 +177,39 @@ export default function MobileApprovalList() {
                 {cnt > 0 && (
                   <span
                     className="grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white"
-                    style={{ background: b.key === '대기' ? '#e6960c' : '#a3a7ad' }}
+                    style={{ background: b.key === '대기' ? '#3b82f6' : '#94a3b8' }}
                   >
                     {cnt}
                   </span>
                 )}
               </span>
-              {active && <span className="absolute inset-x-3 bottom-0 h-[2.5px] rounded-full" style={{ background: '#e6960c' }} />}
+              {active && <span className="absolute inset-x-3 bottom-0 h-[2.5px] rounded-full" style={{ background: '#3b82f6' }} />}
             </button>
           );
         })}
       </div>
+
+      {box === '대기' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['all', 'pending', 'progress'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
+            const active = todoFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setTodoFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active
+                    ? 'bg-[#3b82f6] text-white shadow-sm shadow-blue-500/20'
+                    : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
 
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -252,10 +297,10 @@ function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) 
   return (
     <button
       onClick={onOpen}
-      className="flex w-full flex-col gap-1 border-b border-black/5 bg-white px-4 py-3 text-left active:bg-black/5"
+      className="flex w-full flex-col gap-1 border-b border-slate-100 bg-white px-4 py-3 text-left active:bg-slate-50 transition-colors"
     >
       <div className="flex items-center gap-1.5">
-        <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: '#101830' }}>
+        <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>
           {doc.docType}
         </span>
         <span

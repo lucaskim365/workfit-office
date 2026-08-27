@@ -218,7 +218,7 @@ export function matchesBox(
       return false;
     }
     case '상신':
-      return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수');
+      return doc.drafterId === userId && (doc.status === '진행중' || doc.status === '회수' || doc.status === '시행대기');
     case '반려': {
       const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
       if (!isRejectedStatus) return false;
