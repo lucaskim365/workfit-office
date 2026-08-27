@@ -77,6 +77,7 @@ export function useInviteMembers() {
         at: nowLocalIso(),
         readBy: [],
         isEdited: false,
+        reactions: {},
       });
     },
     onSuccess: (_data, { roomId }) => {
@@ -104,6 +105,7 @@ export function useLeaveRoom() {
         at: nowLocalIso(),
         readBy: [],
         isEdited: false,
+        reactions: {},
       });
       await chatRoomRepo.leave(roomId, userId);
     },
@@ -135,6 +137,7 @@ export function useDeleteRoom() {
         at: nowLocalIso(),
         readBy: [],
         isEdited: false,
+        reactions: {},
       });
       await chatRoomRepo.softDelete(roomId, adminId);
     },
@@ -164,6 +167,7 @@ export function useUpdateRoomName() {
         at: nowLocalIso(),
         readBy: [],
         isEdited: false,
+        reactions: {},
       });
     },
     onSuccess: (_data, { roomId }) => {

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
@@ -46,9 +46,49 @@ export default function MobileChatThread() {
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
   const updateRoomName = useUpdateRoomName();
+  const updateReactions = useUpdateMessageReactions(roomId);
 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+
+  const [sheetMessage, setSheetMessage] = useState<ChatMessage | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  const copyToClipboard = async (val: string) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      window.alert('메시지가 복사되었습니다.');
+    } catch {
+      window.alert('복사에 실패했습니다.');
+    }
+  };
+
+  const handleToggleEmoji = async (messageId: string, emoji: string) => {
+    const targetMsg = messages.find((m) => m.id === messageId);
+    if (!targetMsg) return;
+
+    const curReactions = targetMsg.reactions ? { ...targetMsg.reactions } as Record<string, string[]> : {} as Record<string, string[]>;
+    const userList = curReactions[emoji] ? [...curReactions[emoji]] : [];
+
+    let nextUserList: string[];
+    if (userList.includes(me)) {
+      nextUserList = userList.filter((uid) => uid !== me);
+    } else {
+      nextUserList = [...userList, me];
+    }
+
+    if (nextUserList.length === 0) {
+      delete curReactions[emoji];
+    } else {
+      curReactions[emoji] = nextUserList;
+    }
+
+    try {
+      await updateReactions.mutateAsync({ messageId, reactions: curReactions });
+    } catch {
+      window.alert("반응 업데이트에 실패했습니다.");
+    }
+  };
 
   const handleRenameRoom = async () => {
     if (!room) return;
@@ -236,8 +276,11 @@ export default function MobileChatThread() {
                 group={room?.type === 'group'}
                 roomMembers={room?.members ?? []}
                 onOpenImage={setViewer}
-                onReply={setReplyTo}
                 showTime={showTime}
+                isEditing={editingMessageId === m.id}
+                onCancelEdit={() => setEditingMessageId(null)}
+                onLongPress={setSheetMessage}
+                onToggleEmoji={handleToggleEmoji}
               />
             </div>
           );
@@ -283,6 +326,77 @@ export default function MobileChatThread() {
 
       {viewer && <ImageViewer att={viewer} onClose={() => setViewer(null)} />}
       {menuOpen && <MobileActionSheet title={room?.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
+      {sheetMessage && createPortal(
+        <div className="fixed inset-0 z-[120] flex flex-col justify-end bg-black/40" onClick={() => setSheetMessage(null)}>
+          <div
+            className="mx-2 mb-2 overflow-hidden rounded-2xl bg-white shadow-xl p-3"
+            style={{ marginBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 이모지 리액션 단축 5종 */}
+            <div className="flex items-center justify-around py-2 border-b border-black/5">
+              {['👍', '❤️', '😄', '😮', '😢'].map((emoji) => {
+                const list = (sheetMessage.reactions as Record<string, string[]> | undefined)?.[emoji] ?? [];
+                const active = list.includes(me);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      handleToggleEmoji(sheetMessage.id, emoji);
+                      setSheetMessage(null);
+                    }}
+                    className="grid h-10 w-10 place-items-center text-[22px] rounded-full active:bg-black/5"
+                    style={active ? { background: '#e6960c20' } : undefined}
+                  >
+                    {emoji}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 메시지 액션 목록 */}
+            <div className="flex flex-col mt-2">
+              <button
+                onClick={() => {
+                  setReplyTo(sheetMessage);
+                  setSheetMessage(null);
+                }}
+                className="w-full py-3.5 text-center text-[14px] font-semibold border-b border-black/5 text-ink active:bg-black/5"
+              >
+                답글 달기
+              </button>
+              <button
+                onClick={() => {
+                  copyToClipboard(sheetMessage.text || '');
+                  setSheetMessage(null);
+                }}
+                className="w-full py-3.5 text-center text-[14px] font-semibold border-b border-black/5 text-ink active:bg-black/5"
+              >
+                텍스트 복사
+              </button>
+              {sheetMessage.senderId === me && sheetMessage.type === 'text' && (
+                <button
+                  onClick={() => {
+                    setEditingMessageId(sheetMessage.id);
+                    setSheetMessage(null);
+                  }}
+                  className="w-full py-3.5 text-center text-[14px] font-semibold text-ink active:bg-black/5"
+                >
+                  메시지 수정
+                </button>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setSheetMessage(null)}
+            className="mx-2 mb-2 rounded-2xl bg-white py-3.5 text-center text-[14px] font-bold text-ink2 shadow-xl active:bg-black/5"
+            style={{ marginBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
+          >
+            취소
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -324,22 +438,63 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   );
 }
 
-function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTime }: {
+function MessageBubble({
+  m,
+  me,
+  group,
+  roomMembers,
+  onOpenImage,
+  showTime,
+  isEditing,
+  onCancelEdit,
+  onLongPress,
+  onToggleEmoji,
+}: {
   m: ChatMessage;
   me: string;
   group?: boolean;
   roomMembers: string[];
   onOpenImage: (att: Attachment) => void;
-  onReply: (m: ChatMessage) => void;
   showTime: boolean;
+  isEditing: boolean;
+  onCancelEdit: () => void;
+  onLongPress: (msg: ChatMessage) => void;
+  onToggleEmoji: (messageId: string, emoji: string) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMoving = useRef(false);
 
   useEffect(() => {
     setEditVal(m.text);
   }, [m.text]);
+
+  const handleTouchStart = () => {
+    isMoving.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!isMoving.current) {
+        onLongPress(m);
+      }
+    }, 600); // 0.6초 롱탭 인식
+  };
+
+  const handleTouchMove = () => {
+    isMoving.current = true;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   if (m.type === 'system') {
     return (
@@ -368,14 +523,14 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTi
               const val = editVal.trim();
               if (val) {
                 editMsg.mutate({ messageId: m.id, text: val });
-                setIsEditing(false);
+                onCancelEdit();
               }
             }
           }}
         />
         <div className="flex justify-end gap-1 text-[10px]">
           <button
-            onClick={() => { setIsEditing(false); setEditVal(m.text); }}
+            onClick={() => { onCancelEdit(); setEditVal(m.text); }}
             className="px-2 py-0.5 bg-black/5 text-ink2 rounded"
           >
             취소
@@ -386,7 +541,7 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTi
               if (!val) return;
               try {
                 await editMsg.mutateAsync({ messageId: m.id, text: val });
-                setIsEditing(false);
+                onCancelEdit();
               } catch (e) {
                 window.alert("수정에 실패했습니다.");
               }
@@ -403,19 +558,36 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTi
     body = <ApprovalBotCard payload={m.approvalPayload} text={m.text} />;
   } else if (m.type === 'image' && att) {
     body = (
-      <button onClick={() => onOpenImage(att)} className="block overflow-hidden rounded-2xl border border-black/10">
-        <img src={att.url} alt={att.name} className="max-h-52 max-w-full object-cover" />
+      <button 
+        onClick={() => onOpenImage(att)} 
+        onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onPointerDown={handleTouchStart}
+        onPointerMove={handleTouchMove}
+        onPointerUp={handleTouchEnd}
+        className="block overflow-hidden rounded-2xl border border-black/10 select-none -webkit-touch-callout-none"
+      >
+        <img src={att.url} alt={att.name} className="max-h-52 max-w-full object-cover pointer-events-none" />
       </button>
     );
   } else if (m.type === 'file' && att) {
     body = (
       <button
         onClick={() => downloadAttachment(att)}
-        className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left"
+        onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onPointerDown={handleTouchStart}
+        onPointerMove={handleTouchMove}
+        onPointerUp={handleTouchEnd}
+        className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         <FileText size={18} className="shrink-0" />
-        <span className="min-w-0">
+        <span className="min-w-0 pointer-events-none">
           <span className="block max-w-[190px] truncate text-[12.5px] font-semibold">{att.name}</span>
           <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
@@ -424,7 +596,14 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTi
   } else {
     body = (
       <div
-        className="whitespace-pre-line break-words rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
+        onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onPointerDown={handleTouchStart}
+        onPointerMove={handleTouchMove}
+        onPointerUp={handleTouchEnd}
+        className="whitespace-pre-line break-words rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         {m.text}
@@ -449,25 +628,30 @@ function MessageBubble({ m, me, group, roomMembers, onOpenImage, onReply, showTi
           )}
           <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
-            <div className="flex shrink-0 items-center gap-0.5 opacity-60">
-              <button
-                onClick={() => onReply(m)}
-                title="답글"
-                className="grid h-6 w-6 place-items-center rounded-full text-[12px] text-ink3 active:bg-black/5"
-              >
-                ↩
-              </button>
-              {mine && m.type === 'text' && !isEditing && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  title="수정"
-                  className="grid h-6 w-6 place-items-center rounded-full text-[10px] text-ink3 active:bg-black/5"
-                >
-                  ✏️
-                </button>
-              )}
-            </div>
           </div>
+          {/* 이모지 반응 배지 목록 */}
+          {m.reactions && Object.keys(m.reactions as Record<string, string[]>).length > 0 && (
+            <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+              {Object.entries(m.reactions as Record<string, string[]>).map(([emoji, uids]) => {
+                if (!uids || uids.length === 0) return null;
+                const active = uids.includes(me);
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onToggleEmoji(m.id, emoji)}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold shadow-sm transition-all"
+                    style={active 
+                      ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' } 
+                      : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
+                    }
+                  >
+                    <span>{emoji}</span>
+                    <span className="tabular-nums">{uids.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
             {mine && unreadCount > 0 && (
               <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>{unreadCount}</span>

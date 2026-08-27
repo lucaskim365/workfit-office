@@ -50,6 +50,7 @@ export function useSendMessage(roomId: string) {
         at,
         readBy: [senderId],
         isEdited: false,
+        reactions: {},
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
@@ -71,6 +72,7 @@ export function useSendMessage(roomId: string) {
         at: nowLocalIso(),
         readBy: [senderId],
         isEdited: false,
+        reactions: {},
       };
       qc.setQueryData<ChatMessage[]>(key, [...(prev ?? []), optimistic]);
       return { prev };
@@ -99,6 +101,19 @@ export function useEditMessage(roomId: string) {
   });
 }
 
+/** 메시지 이모지 반응 업데이트 훅 */
+export function useUpdateMessageReactions(roomId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, reactions }: { messageId: string; reactions: Record<string, string[]> }) => {
+      await chatMessageRepo.updateReactions(messageId, reactions);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
+    },
+  });
+}
+
 /** 첨부 전송 — Storage 업로드 → image/file 메시지 append + 방 lastMessage 갱신. */
 export function useSendAttachment(roomId: string) {
   const qc = useQueryClient();
@@ -120,6 +135,7 @@ export function useSendAttachment(roomId: string) {
         at,
         readBy: [senderId],
         isEdited: false,
+        reactions: {},
       };
       await chatMessageRepo.append(message);
       await chatRoomRepo.updateLastMessage(roomId, {

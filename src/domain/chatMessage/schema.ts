@@ -69,6 +69,7 @@ export const chatMessageSchema = z.object({
   at: z.string(),
   readBy: z.array(z.string()).default([]),
   isEdited: z.boolean().optional().default(false),
+  reactions: z.record(z.string(), z.array(z.string())).optional().default({}),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
