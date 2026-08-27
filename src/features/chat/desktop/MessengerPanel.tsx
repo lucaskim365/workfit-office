@@ -689,6 +689,7 @@ function MessengerThread({
                   onCancelEdit={() => setEditingMsgId(null)}
                   onToggleEmoji={handleToggleEmoji}
                   onContextMenu={(e) => {
+                    if (m.type === 'system') return;
                     e.preventDefault();
                     e.stopPropagation();
                     const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
