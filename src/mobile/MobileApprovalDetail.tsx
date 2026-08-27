@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useUsers } from '@/features/user/useUsers';
@@ -36,6 +36,23 @@ export default function MobileApprovalDetail() {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [viewMode, setViewMode] = useState<'compact' | 'original'>('compact');
+  const [zoomIn, setZoomIn] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(360);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [viewMode]);
 
   const back = () => nav('/m/approval');
 
@@ -142,9 +159,32 @@ export default function MobileApprovalDetail() {
       ) : (
         <>
           {viewMode === 'original' ? (
-            <div className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner">
-              <div className="origin-top-left min-w-[780px]">
+            <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner relative select-none">
+              <div
+                style={{
+                  transform: zoomIn ? 'scale(1)' : `scale(${Math.max(0.1, (containerWidth - 24) / 780)})`,
+                  transformOrigin: 'top left',
+                  width: '780px',
+                  // 축소 모드일 때 불필요한 아래 여백이 늘어나는 현상을 막기 위해 높이를 동적으로 보정합니다.
+                  height: zoomIn ? 'auto' : `calc(100% * (${780 / Math.max(10, containerWidth - 24)}))`,
+                  transition: 'transform 180ms ease-out',
+                  cursor: zoomIn ? 'zoom-out' : 'zoom-in',
+                }}
+                onClick={() => setZoomIn((z) => !z)}
+                title={zoomIn ? "클릭 시 화면에 맞춤" : "클릭 시 100% 크기로 확대"}
+              >
                 <ApprovalDocumentView doc={doc} currentUser={{ id: me }} />
+              </div>
+
+              {/* 줌 제어 플로팅 버튼 */}
+              <div className="absolute bottom-4 right-4 z-10">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setZoomIn((z) => !z); }}
+                  className="rounded-full bg-[#101830] px-3 py-2 text-[10.5px] font-extrabold text-white shadow-xl active:scale-95 transition-all select-none border border-white/10"
+                >
+                  {zoomIn ? '📱 화면맞춤' : '🔍 100% 확대'}
+                </button>
               </div>
             </div>
           ) : (
