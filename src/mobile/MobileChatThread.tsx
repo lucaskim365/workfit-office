@@ -14,6 +14,25 @@ import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { statusColor } from './MobileApprovalList';
 
+/** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
+export function getAvatarStyle(userId: string): { bg: string; text: string } {
+  const PASTEL_PALETTE = [
+    { bg: '#e0f2fe', text: '#0369a1' }, // 파스텔 스카이 블루
+    { bg: '#fce7f3', text: '#be185d' }, // 파스텔 핑크
+    { bg: '#dcfce7', text: '#15803d' }, // 파스텔 민트/그린
+    { bg: '#fef9c3', text: '#a16207' }, // 파스텔 옐로우
+    { bg: '#f3e8ff', text: '#6b21a8' }, // 파스텔 퍼플
+    { bg: '#ffedd5', text: '#c2410c' }, // 파스텔 오렌지
+    { bg: '#e0e7ff', text: '#3730a3' }, // 파스텔 인디고
+  ];
+  if (!userId) return PASTEL_PALETTE[0];
+  let sum = 0;
+  for (let i = 0; i < userId.length; i++) {
+    sum += userId.charCodeAt(i);
+  }
+  return PASTEL_PALETTE[sum % PASTEL_PALETTE.length];
+}
+
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
   try {
@@ -695,7 +714,7 @@ function ImageBundleBubble({
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && (
-          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center self-end rounded-full bg-[#e8f4fd] text-[12px] font-bold text-[#1890ff]">
+          <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] shrink-0 place-items-center self-end rounded-full text-[12px] font-bold">
             {m.senderName?.[0] ?? '?'}
           </span>
         )}
@@ -922,7 +941,7 @@ function MessageBubble({
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && (
-          <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full bg-teal-soft text-[11px] font-bold text-teal">
+          <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">
             {m.senderName?.[0] ?? '?'}
           </span>
         )}

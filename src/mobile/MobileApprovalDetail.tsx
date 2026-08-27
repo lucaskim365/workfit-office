@@ -129,7 +129,7 @@ export default function MobileApprovalDetail() {
   };
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#faf6f0' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
       <header className="flex shrink-0 items-center justify-between px-3 py-3 text-white" style={{ background: '#101830' }}>
         <div className="flex items-center gap-2">
           <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
@@ -154,7 +154,7 @@ export default function MobileApprovalDetail() {
           <div className="text-[11.5px] text-ink3 max-w-xs leading-relaxed">
             본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 모바일 PWA에서의 접근 권한이 제한되어 있습니다.
           </div>
-          <button onClick={back} className="mt-2 rounded-lg bg-[#101830] px-4 py-2 text-[12.5px] font-semibold text-white">뒤로가기</button>
+          <button onClick={back} className="mt-2 rounded-lg bg-[#2563eb] px-4 py-2 text-[12.5px] font-semibold text-white">뒤로가기</button>
         </div>
       ) : (
         <>
@@ -177,7 +177,7 @@ export default function MobileApprovalDetail() {
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setZoomIn((z) => !z); }}
-                  className="rounded-full bg-[#101830] px-3 py-2 text-[10.5px] font-extrabold text-white shadow-xl active:scale-95 transition-all select-none border border-white/10"
+                  className="rounded-full bg-[#2563eb] px-3 py-2 text-[10.5px] font-extrabold text-white shadow-xl active:scale-95 transition-all select-none border border-white/10"
                 >
                   {zoomIn ? '📱 화면맞춤' : '🔍 100% 확대'}
                 </button>
@@ -188,7 +188,7 @@ export default function MobileApprovalDetail() {
               {/* 문서 헤더 카드 */}
               <Card>
                 <div className="flex items-center gap-1.5">
-                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: '#101830' }}>{doc.docType}</span>
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>{doc.docType}</span>
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}>{doc.status}</span>
                   <span className="ml-auto text-[11px] tabular-nums text-ink3">{doc.docNo}</span>
                 </div>
@@ -240,10 +240,48 @@ export default function MobileApprovalDetail() {
               <div>
                 <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>결재선</div>
                 <Card>
-                  <div className="flex flex-col">
-                    {doc.steps.map((s) => (
-                      <StepRow key={s.seq} doc={doc} step={s} name={nameOf(s.approverId, s.approverName)} />
-                    ))}
+                  <div className="flex flex-col gap-2">
+                    {(() => {
+                      interface StepGroup {
+                        key: string;
+                        parallelGroup: string | number | null;
+                        steps: ApprovalStep[];
+                      }
+                      const groups: StepGroup[] = [];
+                      doc.steps.forEach((s) => {
+                        if (s.parallelGroup) {
+                          const last = groups[groups.length - 1];
+                          if (last && last.parallelGroup === s.parallelGroup) {
+                            last.steps.push(s);
+                          } else {
+                            groups.push({ key: `p-${s.parallelGroup}`, parallelGroup: s.parallelGroup, steps: [s] });
+                          }
+                        } else {
+                          groups.push({ key: `s-${s.seq}`, parallelGroup: null, steps: [s] });
+                        }
+                      });
+
+                      return groups.map((g) => {
+                        if (g.steps.length > 1) {
+                          return (
+                            <div key={g.key} className="flex items-start gap-2.5 py-0.5">
+                              {/* 박스 바깥 좌측에 위치할 단일 대표 순번 원 */}
+                              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white mt-3" style={{ background: '#8b5cf6' }}>
+                                {g.steps[0].seq}
+                              </span>
+                              {/* 병렬 묶음 박스 */}
+                              <div className="flex-1 min-w-0 rounded-2xl border border-[#d0e6f7] bg-[#f8fbfe]/60 p-3 space-y-1 shadow-[0_2px_8px_rgba(30,50,90,0.015)]">
+                                {g.steps.map((s) => (
+                                  <StepRow key={s.seq} doc={doc} step={s} name={nameOf(s.approverId, s.approverName)} hideSeq={true} users={users} />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        const s = g.steps[0];
+                        return <StepRow key={s.seq} doc={doc} step={s} name={nameOf(s.approverId, s.approverName)} users={users} />;
+                      });
+                    })()}
                   </div>
                 </Card>
               </div>
@@ -303,7 +341,7 @@ export default function MobileApprovalDetail() {
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="결재 의견 (반려 시 필수)"
                 rows={2}
-                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-[13px] text-ink outline-none focus:border-amber"
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-[13px] text-ink outline-none focus:border-[#2563eb]"
               />
               <div className="mt-2.5 flex gap-2.5">
                 <button
@@ -332,7 +370,7 @@ export default function MobileApprovalDetail() {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-black/10 bg-white p-4">{children}</div>;
+  return <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_4px_20px_rgba(30,50,90,0.03)]">{children}</div>;
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -344,31 +382,67 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StepRow({ doc, step, name }: { doc: ApprovalDoc; step: ApprovalStep; name: string }) {
+function StepRow({ doc, step, name, hideSeq, users }: { doc: ApprovalDoc; step: ApprovalStep; name: string; hideSeq?: boolean; users?: any[] }) {
   const isApproved = step.decision === '승인';
   const isRejected = step.decision === '반려';
+  const isPending = step.decision === '대기';
+  const isHold = step.decision === '보류';
   const isActive = activeSteps(doc).some((s) => s.seq === step.seq);
-  const color = isApproved ? '#16a34a' : isRejected ? '#e0483b' : isActive ? '#e6960c' : '#c7cace';
-  const badgeText = isActive && step.decision === '대기' ? '진행중' : step.decision;
+
+  const position = step.approverPos || users?.find((u) => u.id === step.approverId)?.position || '';
+
+  const color = (() => {
+    if (isRejected) return '#e0483b'; // 반려 (레드)
+    if (isApproved) return '#1890ff'; // 승인 (하늘색/연파랑)
+    if (isHold) return '#e6960c';     // 보류 (오렌지/골드)
+    
+    // 합의 대기 또는 합의 요청 중일 때 보라색 적용
+    if (step.kind === '합의' && isPending) {
+      return '#8b5cf6'; // 보라색
+    }
+    
+    // 일반 결재대기인 경우 주황색
+    if (isActive && isPending && step.kind === '결재') {
+      return '#e6960c'; // 주황색
+    }
+    
+    if (isActive) return '#2563eb';   // 일반 진행중 (블루)
+    return '#8a8f98';                 // 미지정/대기 (그레이)
+  })();
+
+  const badgeText = (() => {
+    if (isApproved) return '승인';
+    if (isRejected) return '반려';
+    if (isHold) return '보류';
+    if (step.kind === '합의') {
+      if (isActive && isPending) return '합의대기';
+      if (isPending) return '합의요청';
+      return step.decision;
+    }
+    if (isActive && isPending) return '결재대기';
+    return step.decision;
+  })();
 
   return (
     <div className="flex items-center gap-2.5 py-1.5">
-      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ background: color }}>
-        {step.seq}
-      </span>
+      {!hideSeq && (
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white transition-colors" style={{ background: color }}>
+          {step.seq}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="shrink-0 text-[10px] font-bold text-ink3">{step.kind}</span>
+          <span className="shrink-0 text-[10px] font-bold text-ink3" style={{ color: step.kind === '합의' ? '#8b5cf6' : undefined }}>{step.kind}</span>
           <span className="truncate text-[12.5px] font-bold text-ink">
             {name}
-            {step.approverPos ? ` ${step.approverPos}` : ''}
+            {position ? ` ${position}` : ''}
           </span>
         </div>
         {step.comment && <div className="mt-0.5 truncate text-[11px] italic text-ink3">“{step.comment}”</div>}
       </div>
       <span
-        className="shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-bold"
-        style={{ background: isActive || isApproved || isRejected ? `${color}22` : '#faf6f0', color: isActive || isApproved || isRejected ? color : '#8a8f98' }}
+        className="shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-bold transition-all"
+        style={{ background: `${color}1a`, color: color }}
       >
         {badgeText}
       </span>

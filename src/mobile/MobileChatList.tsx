@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Bell, LogOut, Search, Users, Pin } from 'lucide-react';
+import { ClipboardCheck, Bell, LogOut, Search, Pin } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -12,6 +12,7 @@ import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 // 데스크톱 QuickDock 과 동일 localStorage 키 — 고정/숨김 상태를 두 화면이 공유.
 const PIN_KEY = 'workfit-pinned-rooms';
 const hiddenKeyOf = (me: string) => `workfit-hidden-rooms-${me}`;
+
 
 function loadIds(key: string): string[] {
   try {
@@ -155,10 +156,10 @@ export default function MobileChatList() {
                 className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
               >
                 <span
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white"
-                  style={{ background: r.color || '#101830' }}
+                  style={{ background: (r.color || '#101830') + '22', color: r.color || '#101830' }}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[15px] font-bold"
                 >
-                  {r.type === 'direct' ? r.displayName[0] : r.type === 'group' ? <Users size={20} /> : (r.displayName[0] ?? '#')}
+                  {r.type === 'direct' ? r.displayName[0] : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
