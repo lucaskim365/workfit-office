@@ -108,6 +108,56 @@ export default function MobileChatThread() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  interface StagedFile {
+    id: string;
+    file: File;
+    previewUrl?: string;
+  }
+  const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
+
+  const handleFilesAttach = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    const validFiles: StagedFile[] = [];
+    for (const file of list) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        window.alert(`파일 [${file.name}]이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
+        continue;
+      }
+      const isImg = file.type.startsWith('image/');
+      validFiles.push({
+        id: `${file.name}-${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: isImg ? URL.createObjectURL(file) : undefined,
+      });
+    }
+    if (validFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...validFiles]);
+    }
+  };
+
+  const removeAttachedFile = (id: string) => {
+    setAttachedFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((f) => f.id !== id);
+    });
+  };
+
+  const clearAttachedFiles = (filesList: StagedFile[]) => {
+    filesList.forEach((f) => {
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+    });
+    setAttachedFiles([]);
+  };
+
+  useEffect(() => {
+    return () => {
+      attachedFiles.forEach((f) => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
+    };
+  }, [roomId, attachedFiles]);
+
   const readonly = room?.type === 'notice';
   const displayName = room ? getRoomDisplayName(room, me, users) : '채팅방';
 
@@ -131,32 +181,55 @@ export default function MobileChatThread() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [filteredMessages.length]);
 
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
-    if (!t) return;
-    send.mutate({
-      text: t,
-      senderId: me,
-      senderName: meName,
-      replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
-    });
-    setText('');
-    setReplyTo(null);
+    if (!t && attachedFiles.length === 0) return;
+    if (sendFile.isPending) return;
+
+    if (attachedFiles.length > 0) {
+      try {
+        // 첫 번째 파일은 텍스트 및 답글 정보와 함께 전송
+        await sendFile.mutateAsync({
+          file: attachedFiles[0].file,
+          senderId: me,
+          senderName: meName,
+          text: t,
+          replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
+        });
+
+        // 나머지 파일들은 빈 텍스트로 순차 전송
+        for (let i = 1; i < attachedFiles.length; i++) {
+          await sendFile.mutateAsync({
+            file: attachedFiles[i].file,
+            senderId: me,
+            senderName: meName,
+            text: '',
+          });
+        }
+
+        clearAttachedFiles(attachedFiles);
+        setText('');
+        setReplyTo(null);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
+      }
+    } else {
+      send.mutate({
+        text: t,
+        senderId: me,
+        senderName: meName,
+        replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
+      });
+      setText('');
+      setReplyTo(null);
+    }
   };
 
   const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    if (e.target.files && e.target.files.length > 0) {
+      handleFilesAttach(e.target.files);
+    }
     e.target.value = '';
-    if (!file || sendFile.isPending) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      window.alert(`파일이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
-      return;
-    }
-    try {
-      await sendFile.mutateAsync({ file, senderId: me, senderName: meName });
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-    }
   };
 
   const onLeave = async () => {
@@ -186,6 +259,7 @@ export default function MobileChatThread() {
 
   const menuActions: SheetAction[] = room
     ? [
+        ...(room.type === 'group' && (room.createdBy === me || !room.createdBy) ? [{ label: '대화방 이름 변경', onClick: handleRenameRoom }] : []),
         ...(room.type === 'group' ? [{ label: '방 나가기', danger: true, onClick: onLeave }] : []),
         ...(isAdmin ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
         ...(room.type === 'direct' ? [{ label: '채팅방 삭제', danger: true, onClick: onDeleteDirect }] : []),
@@ -302,8 +376,34 @@ export default function MobileChatThread() {
               <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 active:bg-black/5">✕</button>
             </div>
           )}
+          {/* 다중 첨부 대기 파일 칩 목록 */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2 max-h-36 overflow-y-auto px-4 py-2 border-b border-black/5">
+              {attachedFiles.map((item) => (
+                <div key={item.id} className="relative w-14 h-14 rounded-lg border border-black/10 bg-black/5 overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
+                  {item.previewUrl ? (
+                    <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
+                      <span className="text-[16px] leading-none">📄</span>
+                      <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
+                        {item.file.name}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeAttachedFile(item.id)}
+                    title="첨부 취소"
+                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-4 h-4 grid place-items-center text-[8px]"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 p-2.5">
-            <input ref={fileRef} type="file" className="hidden" onChange={onPickFile} />
+            <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
             <button
               onClick={() => fileRef.current?.click()}
               disabled={sendFile.isPending}
