@@ -45,6 +45,7 @@ function safeParse(raw: Record<string, unknown>): ChatMessage | null {
     text: raw.text ?? '',
     type: raw.type ?? 'text',
     readBy: Array.isArray(raw.readBy) ? raw.readBy : [],
+    reactions: raw.reactions ?? {},
   });
   return parsed.success ? parsed.data : null;
 }
@@ -126,6 +127,7 @@ class AppwriteBackend implements ChatMessageBackend {
       attachment: m.attachment ? JSON.stringify(m.attachment) : null,
       replyTo: m.replyTo ? JSON.stringify(m.replyTo) : null,
       approvalPayload: m.approvalPayload ? JSON.stringify(m.approvalPayload) : null,
+      reactions: m.reactions ? JSON.stringify(m.reactions) : null,
     };
   }
 
@@ -145,6 +147,7 @@ class AppwriteBackend implements ChatMessageBackend {
       attachment: parseJson(row.attachment),
       replyTo: parseJson(row.replyTo),
       approvalPayload: parseJson(row.approvalPayload),
+      reactions: parseJson(row.reactions) ?? {},
     });
   }
 
@@ -282,6 +285,13 @@ export const chatMessageRepo = {
     const cur = (await backend.loadAll()).find((m) => m.id === id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     await backend.save({ ...cur, text, isEdited: true });
+  },
+
+  /** 메시지 이모지 반응 수정 */
+  async updateReactions(id: string, reactions: Record<string, string[]>): Promise<void> {
+    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+    await backend.save({ ...cur, reactions });
   },
 
   /** 특정 방의 메시지 전건 삭제 */
