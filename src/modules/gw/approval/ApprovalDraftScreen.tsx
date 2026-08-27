@@ -397,6 +397,68 @@ function ApprovalDraftInner({
   }, [code]);
 
 
+  // 서식 변경에 따른 기본 수신처/시행처 매핑 자동 주입
+  useEffect(() => {
+    if (!code || forms.length === 0 || editDoc) return;
+    const currentForm = forms.find((f) => f.code === code);
+    if (!currentForm) return;
+
+    // 1. 수신처 빌드
+    const autoRecipients: ApprovalRecipient[] = [];
+
+    // (A) 기본 수신 사용자
+    if (currentForm.recipientUserId) {
+      const u = org.users.find((x: any) => x.id === currentForm.recipientUserId);
+      if (u) {
+        autoRecipients.push({
+          id: u.id,
+          name: `${u.name} · ${u.dept}`,
+          type: 'user' as const
+        });
+      }
+    }
+    // (B) 기본 수신 부서
+    if (currentForm.recipientDeptId) {
+      const d = org.depts.find((x: any) => x.id === currentForm.recipientDeptId);
+      if (d) {
+        autoRecipients.push({
+          id: d.id,
+          name: d.name,
+          type: 'dept' as const
+        });
+      }
+    }
+
+    setRecipients(autoRecipients);
+
+    // 2. 시행처 빌드
+    const autoExecs: { id: string; name: string }[] = [];
+    // (A) 기본 시행 사용자
+    if (currentForm.executionUserId) {
+      const u = org.users.find((x: any) => x.id === currentForm.executionUserId);
+      if (u) {
+        autoExecs.push({
+          id: u.id,
+          name: `${u.name} · ${u.dept}`
+        });
+      }
+    }
+    // (B) 기본 시행 부서
+    if (currentForm.executionDeptId) {
+      const d = org.depts.find((x: any) => x.id === currentForm.executionDeptId);
+      if (d) {
+        autoExecs.push({
+          id: d.id,
+          name: d.name
+        });
+      }
+    }
+
+    setExecutionDepts(autoExecs);
+
+  }, [code, forms, org.users, org.depts, me, editDoc]);
+
+
   useEffect(() => {
     if (editDoc) {
       setCode(editDoc.docType);
