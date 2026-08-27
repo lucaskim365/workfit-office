@@ -168,7 +168,25 @@ export default function CalendarEventModal({
         </div>
         {!allDay && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="시작 시각" required><TextField aria-label="시작 시각" type="time" value={startTime} onChange={(input) => setStartTime(input.target.value)} className="w-full" /></Field>
+            <Field label="시작 시각" required>
+              <TextField
+                aria-label="시작 시각"
+                type="time"
+                step={300}
+                value={startTime}
+                // 종료 시각은 시작 시각을 따라간다 — 그대로 두면 예전 시작보다 앞선 채로 남아
+                // 매번 둘 다 고쳐야 했다(2026-08-27 피드백). 저장하려면 어차피 시작 이후로
+                // 다시 골라야 하니, 일단 시작과 같게 맞춰 놓고 사용자가 그 뒤로 조정하게 한다.
+                onChange={(input) => { setStartTime(input.target.value); setEndTime(input.target.value); }}
+                className="w-full"
+              />
+            </Field>
+            {/*
+              step을 안 준다 — `min`(시작 시각)과 `step`을 같이 주면 브라우저가 유효값을
+              "min 기준 step배수"로 좁혀서, 시작이 10:52면 10:52·10:57·11:02…만 되고 22:00
+              같은 멀쩡한 시각이 "유효하지 않음"으로 튕긴다(2026-08-27 실사용 버그). step
+              기본값(60=1분)은 어떤 min과 합쳐도 전체 분 단위를 다 허용해 이 문제가 없다.
+            */}
             <Field label="종료 시각" required><TextField aria-label="종료 시각" type="time" value={endTime} onChange={(input) => setEndTime(input.target.value)} min={startTime || undefined} className="w-full" /></Field>
           </div>
         )}
