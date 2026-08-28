@@ -98,7 +98,9 @@ export default function ProjectWbs({
     if (!isWbsProjectMutable(project)) {
       return `${WORK_PROJECT_STATUS_LABELS[project.status]} 상태의 프로젝트는 읽기 전용입니다.`;
     }
-    return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가하거나 관리자 권한이 있어야 과업을 만들 수 있습니다.';
+    // 관리자면 여기 오지 않는다. 즉 이 문구가 보인다는 건 계정 권한그룹이 ADMIN 이 아니라는 뜻 —
+    // 그걸 밝혀 줘야 "우회가 안 먹는다"와 "권한그룹이 다르다"를 구분할 수 있다.
+    return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가해야 합니다. (현재 계정의 권한그룹이 ADMIN이면 자동으로 열립니다)';
   }, [access.active, canCreateTask, project]);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);

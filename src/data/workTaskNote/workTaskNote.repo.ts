@@ -143,13 +143,16 @@ export const workTaskNoteRepo = {
     });
   },
 
-  /** 댓글 삭제는 **작성자 본인만**. 남의 발언을 소유자가 지우면 기록이 아니라 검열이 된다. */
+  /**
+   * 댓글 삭제는 **작성자 본인과 관리자**. 소유자에게는 열지 않는다 — 프로젝트 소유자가
+   * 참여자 발언을 지우는 건 관리가 아니라 검열에 가깝다. 관리자는 계정 기준 전권이다.
+   */
   removeComment(actor: ProjectAccessContext, id: string): Promise<void> {
     return exclusiveWorkMutation(async () => {
       await load();
       const current = comments.find((row) => row.id === id);
       if (!current) throw new WbsDomainError('INVALID_PROJECT', '댓글을 찾을 수 없습니다.');
-      if (current.authorUserId !== actor.userId) {
+      if (!isProjectAdmin(actor) && current.authorUserId !== actor.userId) {
         throw new WbsDomainError('FORBIDDEN', '작성자만 댓글을 삭제할 수 있습니다.');
       }
       const replies = comments.filter((row) => row.parentId === id);

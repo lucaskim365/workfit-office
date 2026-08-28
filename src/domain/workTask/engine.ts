@@ -82,6 +82,7 @@ export function canUpdateWbsTaskProgress(
  * 온전히 안 잡히고 `path`의 유일성(트랙 그룹 내)도 깨진다.
  */
 export function assertTaskReferences(
+  actor: ProjectAccessContext,
   project: WorkProject,
   parent: WorkTask | null,
   draft: WorkTaskDraft,
@@ -97,7 +98,9 @@ export function assertTaskReferences(
       throw new WbsDomainError('INVALID_TRACK', '상위 과업과 트랙이 달라 배치할 수 없습니다.');
     }
   }
-  if (!project.memberUserIds.includes(draft.assigneeUserId)) {
+  // 관리자는 참여자 명단 밖(자기 자신 포함)도 담당자로 지정할 수 있다.
+  // 참여자가 아닌 관리자가 과업을 만들 때 담당자를 못 골라 막히는 상황을 없앤다.
+  if (!isProjectAdmin(actor) && !project.memberUserIds.includes(draft.assigneeUserId)) {
     throw new WbsDomainError('INVALID_ASSIGNEE', '프로젝트 참여자만 작업 담당자로 지정할 수 있습니다.');
   }
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
 import type { WorkProject } from '@/domain/workProject/schema';
 import { isTaskOutsideProjectSchedule } from '@/domain/workTask/engine';
 import { WORK_TASK_MAX_LEVEL, type WorkTask, type WorkTaskDraft } from '@/domain/workTask/schema';
@@ -42,11 +42,18 @@ function isoToDate(iso: string | null): string {
 }
 
 export default function WorkTaskFormModal({ actor, project, tracks, tasks, users, task, preset, onClose, onSaved }: WorkTaskFormModalProps) {
-  const assignees = useMemo(
-    () => users.filter((user) => project.memberUserIds.includes(user.id)
-      && (user.status === '사용' || user.id === task?.assigneeUserId)),
-    [project.memberUserIds, task?.assigneeUserId, users],
-  );
+  /**
+   * 담당자 후보 — 원칙은 프로젝트 참여자다.
+   * 다만 **관리자는 참여자가 아니어도 본인을 고를 수 있다.** 참여자 명단 밖의 관리자가
+   * 과업을 만들 때 담당자를 못 골라 저장이 막히는 상황을 없앤다.
+   */
+  const assignees = useMemo(() => {
+    const members = users.filter((user) => project.memberUserIds.includes(user.id)
+      && (user.status === '사용' || user.id === task?.assigneeUserId));
+    if (!isProjectAdmin(actor) || members.some((user) => user.id === actor.userId)) return members;
+    const me = users.find((user) => user.id === actor.userId);
+    return me ? [me, ...members] : members;
+  }, [actor, project.memberUserIds, task?.assigneeUserId, users]);
 
   // 트리 위치는 **만들 때만** 정한다. 옮기기는 하위 전체를 함께 갱신해야 해서 별도
   // 연산이다([[프로젝트관리_고도화_계획서.md]] §3) — 수정 폼에서 슬쩍 바꾸면 경로가 어긋난다.

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
 import type { WorkProject } from '@/domain/workProject/schema';
 import type { WorkTask } from '@/domain/workTask/schema';
 import { formatFileSize } from '@/domain/workTaskNote/schema';
@@ -34,7 +34,7 @@ export default function ProjectFiles({ project, access, tasks, users, onSelectTa
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const files = filesQuery.data ?? [];
-  const isMember = project.memberUserIds.includes(access.userId);
+  const isMember = project.memberUserIds.includes(access.userId) || isProjectAdmin(access);
 
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
@@ -78,7 +78,7 @@ export default function ProjectFiles({ project, access, tasks, users, onSelectTa
                 <a href={file.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[11px] font-bold text-ink hover:text-teal hover:underline">
                   {file.name}
                 </a>
-                {(file.uploadedBy === access.userId || project.ownerUserId === access.userId) && (
+                {(file.uploadedBy === access.userId || project.ownerUserId === access.userId || isProjectAdmin(access)) && (
                   <button
                     type="button"
                     onClick={() => removeFile.mutate({ actor: access, id: file.id })}

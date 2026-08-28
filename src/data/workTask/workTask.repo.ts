@@ -127,7 +127,7 @@ export const workTaskRepo = {
         throw new WbsDomainError('FORBIDDEN', '프로젝트 참여자만 WBS 작업을 추가할 수 있습니다.');
       }
       const parent = taskFor(draft.parentId);
-      assertTaskReferences(project, parent, draft);
+      assertTaskReferences(actor, project, parent, draft);
 
       // 트리 위치를 정한다 — 같은 부모·같은 트랙의 맨 뒤에 붙인다.
       const nodes = treeNodes(project.id);
@@ -167,7 +167,7 @@ export const workTaskRepo = {
         throw new WbsDomainError('FORBIDDEN', '작업 작성자 또는 프로젝트 소유자만 작업을 수정할 수 있습니다.');
       }
       assertWbsTaskVersion(current, expectedVersion);
-      assertTaskReferences(project, taskFor(current.parentId), { ...draft, parentId: current.parentId, trackId: current.trackId });
+      assertTaskReferences(actor, project, taskFor(current.parentId), { ...draft, parentId: current.parentId, trackId: current.trackId });
       const timestamp = new Date().toISOString();
       const updated = workTaskSchema.parse({
         ...current,

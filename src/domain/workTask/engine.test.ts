@@ -54,6 +54,22 @@ test('프로젝트 소유자와 참여자의 WBS 권한을 구분한다', () => 
   assert.equal(canUpdateWbsTaskProgress(assignee, project, task), true);
 });
 
+test('관리자는 참여자 아닌 사람도 담당자로 지정할 수 있다', () => {
+  // 참여자 명단 밖의 관리자가 과업을 만들 때 담당자를 못 골라 막히면 안 된다.
+  const admin: ProjectAccessContext = { userId: 'U999', deptId: null, active: true, isAdmin: true };
+  const draft: WorkTaskDraft = {
+    projectId: project.id, trackId: null, parentId: null,
+    title: '관리자가 만든 과업', description: '',
+    assigneeUserId: admin.userId, startAt: null, dueAt: null,
+    status: 'TODO', progress: 0,
+  };
+  assert.throws(
+    () => assertTaskReferences(owner, project, null, draft),
+    (error) => error instanceof WbsDomainError && error.code === 'INVALID_ASSIGNEE',
+  );
+  assert.doesNotThrow(() => assertTaskReferences(admin, project, null, draft));
+});
+
 test('관리자는 참여자·소유자 판정을 건너뛴다', () => {
   // 담당자 퇴사·잘못 만든 트리 정리처럼 남의 프로젝트를 손봐야 하는 상황에서
   // 소유자를 찾아다니게 두면 도구가 멈춘다.
@@ -91,20 +107,20 @@ test('상위 과업·프로젝트·담당자 참조를 검증한다', () => {
     status: 'TODO', progress: 0,
   };
   // 대과업은 확인할 상위가 없다.
-  assert.doesNotThrow(() => assertTaskReferences(project, null, draft));
+  assert.doesNotThrow(() => assertTaskReferences(owner, project, null, draft));
   assert.throws(
-    () => assertTaskReferences(project, null, { ...draft, assigneeUserId: outsider.userId }),
+    () => assertTaskReferences(owner, project, null, { ...draft, assigneeUserId: outsider.userId }),
     (error) => error instanceof WbsDomainError && error.code === 'INVALID_ASSIGNEE',
   );
   // 상위를 지정했는데 넘어온 상위가 없으면 거부한다.
   assert.throws(
-    () => assertTaskReferences(project, null, { ...draft, parentId: task.id }),
+    () => assertTaskReferences(owner, project, null, { ...draft, parentId: task.id }),
     (error) => error instanceof WbsDomainError && error.code === 'INVALID_PARENT',
   );
-  assert.doesNotThrow(() => assertTaskReferences(project, task, { ...draft, parentId: task.id }));
+  assert.doesNotThrow(() => assertTaskReferences(owner, project, task, { ...draft, parentId: task.id }));
   // 한 트리가 두 트랙에 걸치면 트랙 진행률이 어느 쪽에도 온전히 안 잡힌다.
   assert.throws(
-    () => assertTaskReferences(project, task, { ...draft, parentId: task.id, trackId: 'TRK-0001' }),
+    () => assertTaskReferences(owner, project, task, { ...draft, parentId: task.id, trackId: 'TRK-0001' }),
     (error) => error instanceof WbsDomainError && error.code === 'INVALID_TRACK',
   );
 });
