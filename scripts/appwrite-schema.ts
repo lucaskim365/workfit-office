@@ -805,8 +805,6 @@ const COLLECTIONS: CollectionDef[] = [
       S('parentId', 64),
       INT('level', false, 1, 1, 5),
       S('path', 120),
-      /* 옛 WBS 단계 — 트리 이관이 끝나면 이 속성과 workPhases 컬렉션을 함께 없앤다(§12). */
-      S('phaseId', 64),
       S('title', 150, true),
       S('description', 2000),
       S('assigneeUserId', 64, true),
@@ -824,7 +822,6 @@ const COLLECTIONS: CollectionDef[] = [
     ],
     indexes: [
       IX('taskProject', ['projectId']),
-      IX('taskPhase', ['phaseId']),
       IX('taskAssignee', ['assigneeUserId']),
       IX('taskTrack', ['projectId', 'trackId']),
       /* 하위 전체 조회(prefix)와 트리 정렬이 이 인덱스 하나로 해결된다. */

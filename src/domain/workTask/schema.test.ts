@@ -1,18 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { workPhaseSchema } from '@/domain/workPhase/schema';
 import { workTaskSchema } from './schema';
-
-const phase = {
-  id: 'PHASE-0001',
-  projectId: 'PRJ-0001',
-  name: '기획',
-  sortOrder: 0,
-  createdBy: 'U011',
-  createdAt: '2026-08-12T00:00:00.000Z',
-  updatedBy: 'U011',
-  updatedAt: '2026-08-12T00:00:00.000Z',
-};
 
 const task = {
   id: 'TASK-20260812-0001',
@@ -21,7 +9,6 @@ const task = {
   parentId: null,
   level: 1,
   path: '0000',
-  phaseId: 'PHASE-0001',
   title: '요구사항 정리',
   description: '',
   assigneeUserId: 'U011',
@@ -38,8 +25,7 @@ const task = {
   updatedAt: '2026-08-12T00:00:00.000Z',
 };
 
-test('프로젝트 WBS 단계와 작업 계약을 검증한다', () => {
-  assert.equal(workPhaseSchema.safeParse(phase).success, true);
+test('과업 계약을 검증한다', () => {
   assert.equal(workTaskSchema.safeParse(task).success, true);
 });
 

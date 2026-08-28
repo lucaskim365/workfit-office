@@ -89,7 +89,6 @@ export default function WorkTaskFormModal({ actor, project, tracks, tasks, users
       projectId: project.id,
       trackId: task?.trackId ?? trackId,
       parentId: task?.parentId ?? parentId,
-      phaseId: task?.phaseId ?? null,
       title,
       description,
       assigneeUserId,

@@ -146,11 +146,6 @@ export function updateTaskProgress(
   };
 }
 
-function averageProgress(tasks: WorkTask[]): number {
-  if (tasks.length === 0) return 0;
-  return Math.round(tasks.reduce((sum, task) => sum + task.progress, 0) / tasks.length);
-}
-
 /**
  * 프로젝트 전체 진행률 — 대과업들의 기간 가중 평균.
  * ([[프로젝트관리_고도화_계획서.md]] §4)
@@ -165,10 +160,6 @@ export function deriveProjectWbsProgress(tasks: WorkTask[], projectId: string): 
   return rollupTrack(roots, rolled);
 }
 
-/** 옛 WBS 단계별 진행률. 이관 기간 동안만 남는다([[프로젝트관리_고도화_계획서.md]] §12). */
-export function derivePhaseProgress(tasks: WorkTask[], phaseId: string): number {
-  return averageProgress(tasks.filter((task) => task.phaseId === phaseId));
-}
 
 function seoulDateKey(iso: string): string {
   return new Intl.DateTimeFormat('en-CA', {

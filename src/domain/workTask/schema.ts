@@ -23,7 +23,6 @@ function fillLegacyTreeFields(raw: unknown): unknown {
   const row = { ...(raw as Record<string, unknown>) };
   if (row.trackId === undefined) row.trackId = null;
   if (row.parentId === undefined) row.parentId = null;
-  if (row.phaseId === undefined) row.phaseId = null;
 
   const hasPath = typeof row.path === 'string' && WORK_TASK_PATH_PATTERN.test(row.path);
   if (!hasPath) {
@@ -60,11 +59,6 @@ export const workTaskSchema = z.preprocess(fillLegacyTreeFields, z.object({
    *   재계산한다([[path.ts]]의 `rebuildPaths`).
    */
   path: z.string().regex(WORK_TASK_PATH_PATTERN, '경로 형식이 올바르지 않습니다.'),
-  /**
-   * 옛 WBS 단계. 트리로 이관하는 동안만 남겨 둔다 — 이관 검증 후 제거한다.
-   * ([[프로젝트관리_고도화_계획서.md]] §12)
-   */
-  phaseId: z.string().regex(/^PHASE-\d{4}$/, 'WBS 단계 ID 형식이 올바르지 않습니다.').nullable(),
   title: z.string().trim().min(1, '작업명을 입력하세요.').max(150),
   description: z.string().trim().max(2_000),
   assigneeUserId: z.string().min(1, '담당자를 선택하세요.'),

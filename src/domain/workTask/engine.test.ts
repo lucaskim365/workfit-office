@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import type { WorkProject } from '@/domain/workProject/schema';
-import type { WorkPhase } from '@/domain/workPhase/schema';
 import type { WorkTask, WorkTaskDraft } from './schema';
 import {
   assertTaskReferences,
@@ -11,7 +10,6 @@ import {
   canEditWbsTask,
   canManageWbsPhases,
   canUpdateWbsTaskProgress,
-  derivePhaseProgress,
   deriveProjectWbsProgress,
   isTaskOutsideProjectSchedule,
   progressForStatus,
@@ -36,14 +34,8 @@ const project = {
   updatedBy: owner.userId, updatedAt: '2026-08-01T00:00:00.000Z',
 } satisfies WorkProject;
 
-const phase = {
-  id: 'PHASE-0001', projectId: project.id, name: '기획', sortOrder: 0,
-  createdBy: owner.userId, createdAt: '2026-08-01T00:00:00.000Z',
-  updatedBy: owner.userId, updatedAt: '2026-08-01T00:00:00.000Z',
-} satisfies WorkPhase;
-
 const task = {
-  id: 'TASK-20260812-0001', projectId: project.id, phaseId: phase.id,
+  id: 'TASK-20260812-0001', projectId: project.id,
   trackId: null, parentId: null, level: 1, path: '0000',
   title: '요구사항 정리', description: '', assigneeUserId: assignee.userId,
   startAt: '2026-08-12T00:00:00.000Z', dueAt: '2026-08-14T14:59:59.999Z',
@@ -93,7 +85,7 @@ test('완료 프로젝트의 WBS를 읽기 전용으로 잠근다', () => {
 
 test('상위 과업·프로젝트·담당자 참조를 검증한다', () => {
   const draft: WorkTaskDraft = {
-    projectId: project.id, trackId: null, parentId: null, phaseId: null,
+    projectId: project.id, trackId: null, parentId: null,
     title: task.title, description: '',
     assigneeUserId: assignee.userId, startAt: task.startAt, dueAt: task.dueAt,
     status: 'TODO', progress: 0,
@@ -139,7 +131,6 @@ test('프로젝트 진척률은 대과업의 기간 가중 평균이다', () => 
   ];
   // 두 대과업 모두 같은 기간(3일)이라 가중치가 같다 → (0 + 50) / 2 = 25.
   assert.equal(deriveProjectWbsProgress(tasks, project.id), 25);
-  assert.equal(derivePhaseProgress(tasks, phase.id), 25);
   assert.equal(deriveProjectWbsProgress([], project.id), 0);
 });
 

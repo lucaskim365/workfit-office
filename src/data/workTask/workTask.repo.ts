@@ -31,8 +31,6 @@ export interface WorkTaskFilter {
   trackId?: string;
   /** 이 과업의 **직속** 자식만. 하위 전체가 아니다. */
   parentId?: string;
-  /** 옛 WBS 단계. 이관 기간 동안만 남는다. */
-  phaseId?: string;
   assigneeUserId?: string;
   status?: WorkTaskStatus;
   query?: string;
@@ -97,7 +95,6 @@ function sortedProjectTasks(projectId: string, filter?: WorkTaskFilter): WorkTas
     .filter((task) => task.projectId === projectId)
     .filter((task) => !filter?.trackId || task.trackId === filter.trackId)
     .filter((task) => !filter?.parentId || task.parentId === filter.parentId)
-    .filter((task) => !filter?.phaseId || task.phaseId === filter.phaseId)
     .filter((task) => !filter?.assigneeUserId || task.assigneeUserId === filter.assigneeUserId)
     .filter((task) => !filter?.status || task.status === filter.status)
     .filter((task) => !keyword || [task.title, task.description].some((value) => value.toLowerCase().includes(keyword)))
