@@ -1536,9 +1536,29 @@ function ApprovalDraftInner({
           description={<>입력한 내용이 있습니다.<br />작성 중인 내용을 저장하고 이동하시겠습니까?</>}
           confirmLabel="저장 후 이동"
           onConfirm={async () => {
-            await persistDraft();
-            clearAutosave();
-            navigate('/gw/approval');
+            /**
+             * **저장 조건을 먼저 확인한다.**
+             *
+             * 임시저장 버튼은 `validate(false)` 를 거쳐 "제목을 입력하세요"를 띄우는데,
+             * 이 경로는 그걸 건너뛰고 곧장 저장을 시도했다. 제목이 없으면 저장이 실패하고
+             * 아무 안내도 없이 화면만 그대로 있어 **"눌러도 아무 일이 없다"** 로 보였다.
+             */
+            const err = validate(false);
+            if (err) {
+              setShowConfirmClose(false);
+              setError(err);
+              return;
+            }
+            try {
+              await persistDraft();
+              clearAutosave();
+              setShowConfirmClose(false);
+              navigate('/gw/approval');
+            } catch (e) {
+              // 저장이 실패하면 이동하지 않는다. 원인을 화면에 남긴다.
+              setShowConfirmClose(false);
+              setError(e instanceof Error ? e.message : String(e));
+            }
           }}
           onDiscard={() => {
             clearAutosave();
