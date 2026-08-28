@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
-import { rollupTasks, rollupTrack } from '@/domain/workProject/rollup';
+import { rollupTrack, type RollupResult } from '@/domain/workProject/rollup';
 import type { WorkProject } from '@/domain/workProject/schema';
 import { canCreateWbsTask, canEditWbsTask, canUpdateWbsTaskProgress } from '@/domain/workTask/engine';
 import { WORK_TASK_MAX_LEVEL, WORK_TASK_STATUS_LABELS, type WorkTask, type WorkTaskStatus } from '@/domain/workTask/schema';
 import type { WorkTrack } from '@/domain/workTrack/schema';
 import type { User } from '@/domain/user/schema';
-import { useProjectTracks } from '@/features/project/useProjectTracks';
-import { useRemoveWorkTask, useSetWorkTaskProgress, useWorkTasks } from '@/features/project/useProjectWbs';
+import { useRemoveWorkTask, useSetWorkTaskProgress } from '@/features/project/useProjectWbs';
 import { Button } from '@/shared/ui/Button';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
@@ -17,6 +16,16 @@ interface ProjectWbsProps {
   project: WorkProject;
   access: ProjectAccessContext;
   users: User[];
+  /** 조회는 상세 화면이 한 번만 한다 — 달력·파일·트리가 같은 목록을 봐야 어긋나지 않는다. */
+  tracks: WorkTrack[];
+  tasks: WorkTask[];
+  rolled: Map<string, RollupResult>;
+  isLoading: boolean;
+  error: unknown;
+  /** 수정 모달을 밖(과업 상세)에서도 열 수 있게 상태를 위로 올렸다. */
+  openTaskId: string | null;
+  onOpenTaskChange: (id: string | null) => void;
+  onSelectTask: (task: WorkTask) => void;
 }
 
 const STATUS_TONES: Record<WorkTaskStatus, Tone> = {
@@ -54,29 +63,23 @@ function ProgressBar({ value, label }: { value: number; label: string }) {
   );
 }
 
-export default function ProjectWbs({ project, access, users }: ProjectWbsProps) {
-  const [editingTask, setEditingTask] = useState<WorkTask | 'new' | null>(null);
+export default function ProjectWbs({
+  project, access, users, tracks, tasks, rolled, isLoading, error,
+  openTaskId, onOpenTaskChange, onSelectTask,
+}: ProjectWbsProps) {
+  const [creating, setCreating] = useState(false);
   const [preset, setPreset] = useState<{ trackId: string | null; parentId: string | null } | undefined>();
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
   const [progressTaskId, setProgressTaskId] = useState<string | null>(null);
-  const tracksQuery = useProjectTracks(access, project.id);
-  const tasksQuery = useWorkTasks(access, project.id);
   const removeTask = useRemoveWorkTask();
   const setTaskProgress = useSetWorkTaskProgress();
-  const tracks = useMemo(() => tracksQuery.data ?? [], [tracksQuery.data]);
-  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
-  /**
-   * 표시용 진행률·상태 — **리프의 저장값에서 접어 올린 값**이다.
-   * 상위 과업의 저장된 progress 는 쓰지 않는다([[프로젝트관리_고도화_계획서.md]] §4).
-   */
-  const rolled = useMemo(() => rollupTasks(tasks), [tasks]);
   const rootTasks = useMemo(() => tasks.filter((task) => task.parentId === null), [tasks]);
   const progress = rollupTrack(rootTasks, rolled);
+  const editingTask = openTaskId ? tasks.find((task) => task.id === openTaskId) ?? null : null;
 
-  const error = tracksQuery.error ?? tasksQuery.error;
   const canCreateTask = canCreateWbsTask(access, project);
 
   /** 트랙이 없는 프로젝트는 `null` 그룹 하나로 그린다 — 대과업이 최상위. */
@@ -132,10 +135,10 @@ export default function ProjectWbs({ project, access, users }: ProjectWbsProps) 
 
   const openNewTask = (trackId: string | null, parentId: string | null) => {
     setPreset({ trackId, parentId });
-    setEditingTask('new');
+    setCreating(true);
   };
 
-  if (tracksQuery.isLoading || tasksQuery.isLoading) {
+  if (isLoading) {
     return <Card title="세부 항목"><div className="py-8 text-center text-[11px] font-semibold text-ink3">과업을 불러오는 중…</div></Card>;
   }
 
@@ -208,7 +211,14 @@ export default function ProjectWbs({ project, access, users }: ProjectWbsProps) 
                             <span className="shrink-0 rounded bg-panel-alt px-1.5 py-0.5 text-[8.5px] font-extrabold text-ink3">
                               {LEVEL_LABELS[task.level - 1] ?? task.level}
                             </span>
-                            <span className="min-w-0 break-words text-[11px] font-extrabold text-ink">{task.title}</span>
+                            {/* 제목을 누르면 상세(댓글·파일)로 — 아사나처럼 목록에서 바로 들어간다. */}
+                            <button
+                              type="button"
+                              onClick={() => onSelectTask(task)}
+                              className="min-w-0 break-words text-left text-[11px] font-extrabold text-ink hover:text-teal hover:underline"
+                            >
+                              {task.title}
+                            </button>
                           </div>
                           <div className="mt-1 text-[9.5px] font-semibold text-ink3">
                             {userById.get(task.assigneeUserId)?.name ?? task.assigneeUserId} · {formatDate(task.startAt)} ~ {formatDate(task.dueAt)}
@@ -221,7 +231,7 @@ export default function ProjectWbs({ project, access, users }: ProjectWbsProps) 
                           )}
                           {canEditWbsTask(access, project, task) && (
                             <>
-                              <button type="button" onClick={() => { setPreset(undefined); setEditingTask(task); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
+                              <button type="button" onClick={() => { setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
                               <button type="button" onClick={() => deleteTask(task)} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
                             </>
                           )}
@@ -258,19 +268,20 @@ export default function ProjectWbs({ project, access, users }: ProjectWbsProps) 
         );
       })}
 
-      {editingTask && (
+      {(creating || editingTask) && (
         <WorkTaskFormModal
-          key={editingTask === 'new' ? `new-${preset?.parentId ?? preset?.trackId ?? 'root'}` : `${editingTask.id}-${editingTask.version}`}
+          key={creating ? `new-${preset?.parentId ?? preset?.trackId ?? 'root'}` : `${editingTask!.id}-${editingTask!.version}`}
           actor={access}
           project={project}
           tracks={tracks}
           tasks={tasks}
           users={users}
-          task={editingTask === 'new' ? undefined : editingTask}
-          preset={editingTask === 'new' ? preset : undefined}
-          onClose={() => { setEditingTask(null); setPreset(undefined); }}
+          task={creating ? undefined : editingTask ?? undefined}
+          preset={creating ? preset : undefined}
+          onClose={() => { setCreating(false); onOpenTaskChange(null); setPreset(undefined); }}
           onSaved={(saved) => {
-            setEditingTask(null);
+            setCreating(false);
+            onOpenTaskChange(null);
             setPreset(undefined);
             setActionError('');
             setNotice(`‘${saved.title}’ 과업을 저장했습니다.`);

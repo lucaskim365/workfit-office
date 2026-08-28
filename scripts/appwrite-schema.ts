@@ -832,6 +832,53 @@ const COLLECTIONS: CollectionDef[] = [
     ],
   },
   {
+    id: 'workTaskComments',
+    name: '과업 댓글',
+    /*
+      taskId 가 null 이면 프로젝트 직속 댓글. 답글은 1단까지만(parentId) —
+      무한 중첩하면 읽는 순서가 무너진다. ([[프로젝트관리_고도화_계획서.md]] §6)
+    */
+    attributes: [
+      S('id', 64, true),
+      S('projectId', 64, true),
+      S('taskId', 64),
+      S('parentId', 64),
+      S('authorUserId', 64, true),
+      S('body', 2000, true),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('cmtProject', ['projectId', 'createdAt']),
+      IX('cmtTask', ['taskId', 'createdAt']),
+    ],
+  },
+  {
+    id: 'workTaskFiles',
+    name: '과업 첨부',
+    /*
+      실제 바이트는 fileStorage(VITE_STORAGE_DRIVER)가 들고 여기엔 메타만 남는다.
+      storagePath 를 따로 두는 이유: 삭제할 때 URL 에서 경로를 되짚으면 드라이버마다
+      규칙이 달라 깨진다. taskId 가 null 이면 과업에 묶이지 않은 프로젝트 직속 파일.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('projectId', 64, true),
+      S('taskId', 64),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 100),
+      S('uploadedBy', 64, true),
+      S('uploadedAt', 40),
+    ],
+    indexes: [
+      IX('fileProject', ['projectId', 'uploadedAt']),
+      IX('fileTask', ['taskId']),
+    ],
+  },
+  {
     id: 'surveys',
     name: '전자설문',
     attributes: [
