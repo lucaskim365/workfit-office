@@ -31,37 +31,36 @@ import { Upload, X, Paperclip } from 'lucide-react';
 /**
  * 브라우저 보관 상태 표시.
  *
- * 배포·새로고침 사고로 작성 내용이 사라진 뒤 붙였다. **보관되고 있다는 사실 자체가
- * 보여야** 사용자가 안심하고, 문제가 생겼을 때 "언제 것까지 남았는지" 판단할 수 있다.
+ * 배포·새로고침 사고로 작성 내용이 사라진 뒤 붙였다. 보관되고 있다는 사실이 보여야
+ * 사용자가 안심한다. 서버 임시저장과 헷갈리지 않게 "보관"이라고 부른다 —
+ * 이건 이 브라우저에만 있다.
  *
- * 서버 임시저장과 헷갈리지 않게 "보관"이라고 부른다 — 이건 이 브라우저에만 있다.
+ * **경과 초를 계속 세지 않는다.** 숫자가 1초마다 올라가면 시선을 계속 끌어 작성에
+ * 방해가 된다. 보관 직후 잠깐만 알리고, 그 뒤에는 조용한 상시 문구로 가라앉힌다.
  */
 function AutosaveIndicator({ at }: { at: number | null }) {
-  const [, tick] = useState(0);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     if (at === null) return;
-    // 경과 시간을 초 단위로 살아 움직이게 한다. 멈춰 있는 시각은 언제 것인지 감이 안 온다.
-    const id = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(id);
+    setJustSaved(true);
+    const id = setTimeout(() => setJustSaved(false), 1600);
+    return () => clearTimeout(id);
   }, [at]);
 
   if (at === null) return null;
 
-  const seconds = Math.max(0, Math.floor((Date.now() - at) / 1000));
-  const label = seconds < 3
-    ? '방금 보관됨'
-    : seconds < 60
-      ? `${seconds}초 전 보관됨`
-      : `${Math.floor(seconds / 60)}분 전 보관됨`;
+  const stamp = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).format(at);
 
   return (
     <span
       className="flex items-center gap-1.5 px-1 text-[11px] font-semibold text-ink3"
-      title="작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침해도 복구할 수 있습니다."
+      title={`마지막 보관 ${stamp} · 작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침해도 복구할 수 있습니다.`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${seconds < 3 ? 'bg-ok' : 'bg-ink3/50'}`} />
-      {label}
+      <span className={`h-1.5 w-1.5 rounded-full transition-colors ${justSaved ? 'bg-ok' : 'bg-ink3/40'}`} />
+      {justSaved ? '보관됨' : '자동 보관 중'}
     </span>
   );
 }
@@ -214,6 +213,10 @@ function ApprovalDraftInner({
     steps: ApprovalStep[];
     recipients: ApprovalRecipient[];
     executionDepts: { id: string; name: string }[];
+    /** 셀렉트 박스 3종. 이게 비교 대상에서 빠져 있어 값을 바꿔도 "작성한 게 없다"로 봤다. */
+    securityLevel: string;
+    visibility: string;
+    preservationPeriod: string;
   } | null>(null);
 
   const prevCodeRef = useRef<string>('');
@@ -238,6 +241,9 @@ function ApprovalDraftInner({
         steps: JSON.parse(JSON.stringify(steps)),
         recipients: JSON.parse(JSON.stringify(recipients)),
         executionDepts: JSON.parse(JSON.stringify(executionDepts)),
+        securityLevel,
+        visibility,
+        preservationPeriod,
       };
     }, 150);
 
@@ -260,6 +266,14 @@ function ApprovalDraftInner({
     const stepsChanged = JSON.stringify(steps) !== JSON.stringify(initialState.steps);
     const recipientsChanged = JSON.stringify(recipients) !== JSON.stringify(initialState.recipients);
     const executionDeptsChanged = JSON.stringify(executionDepts) !== JSON.stringify(initialState.executionDepts);
+    /**
+     * 셀렉트 박스(공개범위·보존연한·문서보안)도 사용자가 만진 것이다.
+     * 예전에는 비교 대상에서 빠져 있어, 셀렉트만 바꾸면 "작성한 게 없다"로 판정돼
+     * **보관이 안 될 뿐 아니라 기존 보관본까지 지워졌고**, 이탈 경고도 뜨지 않았다.
+     */
+    const securityChanged = securityLevel !== initialState.securityLevel;
+    const visibilityChanged = visibility !== initialState.visibility;
+    const preservationChanged = preservationPeriod !== initialState.preservationPeriod;
 
     return (
       titleChanged ||
@@ -269,7 +283,10 @@ function ApprovalDraftInner({
       relatedDocsChanged ||
       stepsChanged ||
       recipientsChanged ||
-      executionDeptsChanged
+      executionDeptsChanged ||
+      securityChanged ||
+      visibilityChanged ||
+      preservationChanged
     );
   };
 
