@@ -602,11 +602,18 @@ function MessengerThread({
   }
 
   return (
-    <div className="flex h-full w-full bg-white select-none">
-      <div
-        onDragOver={handleDragOver}
-        className="flex-1 flex h-full flex-col relative min-w-0"
-      >
+    <div className="flex h-full w-full bg-white select-none relative">
+      {showFileBox ? (
+        <DesktopFileBoxPanel
+          files={filesInRoom}
+          onClose={() => setShowFileBox(false)}
+          onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
+        />
+      ) : (
+        <div
+          onDragOver={handleDragOver}
+          className="flex-1 flex h-full flex-col relative min-w-0"
+        >
       {isDragging && !readonly && (
         <div
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -935,12 +942,6 @@ function MessengerThread({
         </div>
       )}
       </div>
-      {showFileBox && (
-        <DesktopFileBoxPanel
-          files={filesInRoom}
-          onClose={() => setShowFileBox(false)}
-          onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
-        />
       )}
       {activeMenu && createPortal(
         <div
@@ -2218,22 +2219,31 @@ function DesktopFileBoxPanel({
   onOpenImage: (att: Attachment) => void;
 }) {
   const handleGoToMessage = (messageId: string) => {
-    const el = document.getElementById(`msg-${messageId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.style.transition = 'background-color 0.3s ease';
-      el.style.backgroundColor = '#ffd33d55';
-      setTimeout(() => {
-        el.style.backgroundColor = '';
-      }, 1500);
-    }
+    onClose();
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background-color 0.3s ease';
+        el.style.backgroundColor = '#ffd33d55';
+        setTimeout(() => {
+          el.style.backgroundColor = '';
+        }, 1500);
+      }
+    }, 150);
   };
 
   return (
-    <div className="w-[280px] shrink-0 border-l border-border bg-panel-alt/5 flex flex-col h-full select-none" style={{ color: '#1c2536' }}>
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-panel px-3.5 py-3">
-        <span className="text-[12px] font-bold text-ink">📁 파일함 모아보기</span>
-        <button onClick={onClose} className="text-[14px] text-ink3 hover:text-ink transition-colors cursor-pointer">✕</button>
+    <div className="w-full h-full bg-white flex flex-col select-none" style={{ color: '#1c2536' }}>
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-panel px-3.5 py-3 text-ink">
+        <button
+          onClick={onClose}
+          title="대화방으로 돌아가기"
+          className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
+        >
+          ←
+        </button>
+        <span className="text-[13px] font-bold text-ink flex-1">📁 파일함 모아보기</span>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-3.5 space-y-3 menu-scroll">
         {files.length === 0 ? (
