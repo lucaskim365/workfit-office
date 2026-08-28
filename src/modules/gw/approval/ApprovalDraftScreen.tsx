@@ -28,6 +28,44 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { fileStorage } from '@/shared/lib/storage';
 import { Upload, X, Paperclip } from 'lucide-react';
 
+/**
+ * 브라우저 보관 상태 표시.
+ *
+ * 배포·새로고침 사고로 작성 내용이 사라진 뒤 붙였다. **보관되고 있다는 사실 자체가
+ * 보여야** 사용자가 안심하고, 문제가 생겼을 때 "언제 것까지 남았는지" 판단할 수 있다.
+ *
+ * 서버 임시저장과 헷갈리지 않게 "보관"이라고 부른다 — 이건 이 브라우저에만 있다.
+ */
+function AutosaveIndicator({ at }: { at: number | null }) {
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (at === null) return;
+    // 경과 시간을 초 단위로 살아 움직이게 한다. 멈춰 있는 시각은 언제 것인지 감이 안 온다.
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [at]);
+
+  if (at === null) return null;
+
+  const seconds = Math.max(0, Math.floor((Date.now() - at) / 1000));
+  const label = seconds < 3
+    ? '방금 보관됨'
+    : seconds < 60
+      ? `${seconds}초 전 보관됨`
+      : `${Math.floor(seconds / 60)}분 전 보관됨`;
+
+  return (
+    <span
+      className="flex items-center gap-1.5 px-1 text-[11px] font-semibold text-ink3"
+      title="작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침해도 복구할 수 있습니다."
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${seconds < 3 ? 'bg-ok' : 'bg-ink3/50'}`} />
+      {label}
+    </span>
+  );
+}
+
 export default function ApprovalDraftScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -251,9 +289,13 @@ function ApprovalDraftInner({
     setAmount('');
   };
 
+  /** 마지막으로 브라우저에 보관한 시각. 화면에 "n초 전 보관됨"으로 보여 준다. */
+  const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
+
   const clearAutosave = () => {
     localStorage.removeItem('draft_autosave_' + me.id);
     localStorage.removeItem('draft_autosave_active_' + me.id);
+    setAutosavedAt(null);
   };
 
   // 브라우저 새로고침 / 탭 닫기 이탈 방지
@@ -280,7 +322,13 @@ function ApprovalDraftInner({
       return;
     }
 
-    const timer = setTimeout(() => {
+    /**
+     * **시간 기준(디바운스)으로 보관한다. 포커스 아웃 기준이 아니다.**
+     *
+     * 기안내용처럼 한 칸에 오래 머무는 경우가 정확히 가장 잃기 쉬운 상황인데,
+     * blur 기준이면 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
+     */
+    const snapshot = () => {
       localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
         // 어느 문서를 쓰다 만 것인지 남긴다. 이게 없으면 신규 작성분과 수정 중이던
         // 문서를 구분할 수 없어, 복구가 엉뚱한 문서에 붙을 위험 때문에 아예 막혀 있었다.
@@ -302,9 +350,20 @@ function ApprovalDraftInner({
         timestamp: Date.now()
       }));
       localStorage.setItem('draft_autosave_active_' + me.id, 'true');
-    }, 1500);
+      setAutosavedAt(Date.now());
+    };
 
-    return () => clearTimeout(timer);
+    const timer = setTimeout(snapshot, 1000);
+    // 탭을 옮기거나 창을 벗어나면 디바운스를 기다리지 않고 바로 보관한다.
+    const flush = () => { if (document.visibilityState === 'hidden') snapshot(); };
+    window.addEventListener('blur', snapshot);
+    document.addEventListener('visibilitychange', flush);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('blur', snapshot);
+      document.removeEventListener('visibilitychange', flush);
+    };
   }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, executionDepts, steps, me.id, editDoc?.id]);
 
   const hasCheckedAutosave = useRef(false);
@@ -970,6 +1029,7 @@ function ApprovalDraftInner({
             </button>
           )}
 
+          <AutosaveIndicator at={autosavedAt} />
           <button
             type="button"
             onClick={() => setShowPreview(true)}
