@@ -83,7 +83,33 @@ export default function ApprovalDraftScreen() {
     );
   }
 
-  return <ApprovalDraftInner me={user} editDoc={fetchedDoc ?? null} fixedType={params.get('type') ?? undefined} navigate={navigate} />;
+  /**
+   * **수정할 문서를 다 받은 뒤에 본문을 마운트한다.**
+   *
+   * 예전에는 `fetchedDoc` 이 아직 없을 때도 `editDoc={null}` 로 먼저 그렸다. 그러면
+   * 복구 검사가 "새 기안"으로 판단해 헛돌고, 문서가 도착해 다시 돌 때는 이미 검사를
+   * 마쳤다고 표시돼 **두 번째 기회가 없었다.** "임시저장 문서를 편집하다 탭을 닫으면
+   * 아무것도 안 남는다"가 여기서 나왔다.
+   *
+   * `key` 로 대상을 고정해, 다른 문서로 옮겨갈 때 이전 상태가 섞이지 않게 한다.
+   */
+  if (editDocId && !fetchedDoc) {
+    return (
+      <div className="flex h-full items-center justify-center py-20 text-[13px] text-ink3">
+        문서를 불러오는 중…
+      </div>
+    );
+  }
+
+  return (
+    <ApprovalDraftInner
+      key={editDocId ?? 'new'}
+      me={user}
+      editDoc={fetchedDoc ?? null}
+      fixedType={params.get('type') ?? undefined}
+      navigate={navigate}
+    />
+  );
 }
 
 function ApprovalDraftInner({
@@ -323,22 +349,32 @@ function ApprovalDraftInner({
   /** 마지막으로 실제 쓰기가 일어난 시각. 스로틀 간격 판정에 쓴다. */
   const lastSnapshotAtRef = useRef(0);
 
+  /**
+   * **보관 칸을 대상별로 나눈다.**
+   *
+   * 예전에는 사용자당 한 칸(`draft_autosave_{userId}`)이라 **새 기안과 문서 편집이 같은
+   * 칸을 썼다.** 편집 중 보관한 내용이 새 기안 칸을 덮어쓰고 그 반대도 일어났다.
+   * "새 상신을 눌렀는데 엉뚱한 내용이 뜬다", "편집하던 게 사라진다"가 모두 여기서 나왔다.
+   */
+  const draftKey = `draft_autosave_${me.id}_${editDoc?.id ?? 'new'}`;
+  const activeKey = `draft_autosave_active_${me.id}_${editDoc?.id ?? 'new'}`;
+
   const bootDraftRef = useRef<{ data: unknown; active: boolean } | null>(null);
   if (bootDraftRef.current === null) {
     let data: unknown = null;
     try {
-      const raw = localStorage.getItem('draft_autosave_' + me.id);
+      const raw = localStorage.getItem(draftKey);
       data = raw ? JSON.parse(raw) : null;
     } catch { /* 형식이 깨졌으면 없는 것으로 본다 */ }
     bootDraftRef.current = {
       data,
-      active: localStorage.getItem('draft_autosave_active_' + me.id) === 'true',
+      active: localStorage.getItem(activeKey) === 'true',
     };
   }
 
   const clearAutosave = () => {
-    localStorage.removeItem('draft_autosave_' + me.id);
-    localStorage.removeItem('draft_autosave_active_' + me.id);
+    localStorage.removeItem(draftKey);
+    localStorage.removeItem(activeKey);
     setAutosavedAt(null);
   };
 
@@ -377,7 +413,7 @@ function ApprovalDraftInner({
      * 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
      */
     const snapshot = () => {
-      localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
+      localStorage.setItem(draftKey, JSON.stringify({
         // 어느 문서를 쓰다 만 것인지 남긴다. 이게 없으면 신규 작성분과 수정 중이던
         // 문서를 구분할 수 없어, 복구가 엉뚱한 문서에 붙을 위험 때문에 아예 막혀 있었다.
         docId: editDoc?.id ?? null,
@@ -397,7 +433,7 @@ function ApprovalDraftInner({
         steps,
         timestamp: Date.now()
       }));
-      localStorage.setItem('draft_autosave_active_' + me.id, 'true');
+      localStorage.setItem(activeKey, 'true');
       lastSnapshotAtRef.current = Date.now();
       setAutosavedAt(lastSnapshotAtRef.current);
     };
@@ -470,7 +506,7 @@ function ApprovalDraftInner({
     }
     // 제안을 띄웠을 때만 플래그를 내린다. 예전에는 무조건 지워서, 이 화면에 잠깐
     // 들렀다 나가기만 해도 다음번 복구 제안이 사라졌다(내용은 남아 있는데도).
-    if (offered) localStorage.removeItem('draft_autosave_active_' + me.id);
+    if (offered) localStorage.removeItem(activeKey);
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
