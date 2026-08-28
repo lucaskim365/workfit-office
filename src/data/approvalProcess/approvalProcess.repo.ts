@@ -150,7 +150,7 @@ export const approvalProcessRepo = {
         return idxA - idxB;
       });
     } catch (e) {
-      console.warn('Failed to fetch approval process options from Appwrite:', e);
+      console.error('Failed to fetch approval process options from Appwrite:', e);
       return DEFAULT_PROCESS_OPTIONS;
     }
   },
@@ -158,7 +158,7 @@ export const approvalProcessRepo = {
   /** 프로세스 설정 옵션 목록 저장 */
   async saveOptions(options: ProcessOption[]): Promise<ProcessOption[]> {
     if (!databases || !APPWRITE_DATABASE_ID) {
-      return options;
+      throw new Error('Appwrite Database is not configured');
     }
     try {
       for (const opt of options) {
@@ -176,11 +176,14 @@ export const approvalProcessRepo = {
               enabled: opt.enabled,
             });
             opt.$id = doc.$id;
+          } else {
+            throw new Error(`Option document for key '${opt.id}' not found in Appwrite`);
           }
         }
       }
     } catch (e) {
       console.error('Failed to save approval process options to Appwrite:', e);
+      throw e; // 예외를 상위로 전파
     }
     return options;
   },

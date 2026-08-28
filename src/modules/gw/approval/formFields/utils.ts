@@ -50,8 +50,12 @@ export function fieldText(field: FormField, values: Record<string, FieldValue>, 
   switch (field.type) {
     case '표':
       return '(표 형식 데이터)';
-    case '금액':
-      return v ? `₩${Number(v).toLocaleString()}` : '—';
+    case '금액': {
+      if (v == null || v === '') return '—';
+      const clean = String(v).replace(/[^0-9.-]/g, '');
+      const num = Number(clean);
+      return !isNaN(num) ? `₩${num.toLocaleString()}` : '—';
+    }
     case '기간': {
       const start = (v as string) ?? '';
       const end = (values[field.key + END_SUFFIX] as string) ?? '';
