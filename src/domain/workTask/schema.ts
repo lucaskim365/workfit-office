@@ -8,7 +8,36 @@ export const WORK_TASK_MAX_LEVEL = 5;
 /** `path` 한 마디 = 형제 순번 4자리 제로패딩. `"0002.0005.0001"` */
 export const WORK_TASK_PATH_PATTERN = /^\d{4}(\.\d{4})*$/;
 
-export const workTaskSchema = z.object({
+/**
+ * 트리 도입 **전에 저장된 문서**를 읽을 수 있게 채워 준다.
+ *
+ * Appwrite에 속성을 추가해도 기존 문서에는 값이 없어 `null`로 내려온다. 그대로 두면
+ * zod 파싱이 실패하고 `crudBackend`가 그 문서를 조용히 건너뛴다 — **에러 없이 과업이
+ * 화면에서 사라진다.** 이관 스크립트가 돌기 전에도 목록이 멀쩡히 보여야 한다.
+ *
+ * `path`가 있으면 마디 수로 `level`을 되찾고, 둘 다 없으면 옛 `sortOrder`를 순번으로 써서
+ * 대과업 한 층으로 눕힌다. 정확한 순서·유일성은 이관 스크립트가 다시 매긴다(계획서 §12).
+ */
+function fillLegacyTreeFields(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const row = { ...(raw as Record<string, unknown>) };
+  if (row.trackId === undefined) row.trackId = null;
+  if (row.parentId === undefined) row.parentId = null;
+  if (row.phaseId === undefined) row.phaseId = null;
+
+  const hasPath = typeof row.path === 'string' && WORK_TASK_PATH_PATTERN.test(row.path);
+  if (!hasPath) {
+    const order = typeof row.sortOrder === 'number' ? Math.min(Math.max(row.sortOrder, 0), 9999) : 0;
+    row.path = String(order).padStart(4, '0');
+    row.level = 1;
+    row.parentId = null; // 경로가 없으면 계층을 알 수 없다. 대과업으로 눕힌다.
+    return row;
+  }
+  if (typeof row.level !== 'number') row.level = (row.path as string).split('.').length;
+  return row;
+}
+
+export const workTaskSchema = z.preprocess(fillLegacyTreeFields, z.object({
   id: z.string().regex(/^TASK-\d{8}-\d{4}$/, 'WBS 작업 ID 형식이 올바르지 않습니다.'),
   projectId: z.string().regex(/^PRJ-\d{4}$/, '프로젝트 ID 형식이 올바르지 않습니다.'),
   /**
@@ -83,7 +112,7 @@ export const workTaskSchema = z.object({
   if (value.status !== 'DONE' && value.completedAt) {
     ctx.addIssue({ code: 'custom', path: ['completedAt'], message: '미완료 작업에는 완료일시를 둘 수 없습니다.' });
   }
-});
+}));
 
 export type WorkTask = z.infer<typeof workTaskSchema>;
 export type WorkTaskStatus = (typeof WORK_TASK_STATUSES)[number];

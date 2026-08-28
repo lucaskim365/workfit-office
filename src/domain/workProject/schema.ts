@@ -16,7 +16,27 @@ export const WORK_PROJECT_TYPES = ['CONTRACT', 'INTERNAL'] as const;
 /** 재원 — 수주사업일 때만 쓴다. */
 export const WORK_FUNDING_TYPES = ['GOVERNMENT', 'PRIVATE'] as const;
 
-export const workProjectSchema = z.object({
+/**
+ * 유형 도입 **전에 저장된 문서**를 읽을 수 있게 채워 준다.
+ *
+ * Appwrite에 속성을 추가해도 기존 문서에는 값이 없어 `null`로 내려온다. 그대로 두면
+ * zod 파싱이 실패하고 `crudBackend`가 그 문서를 건너뛴다 — **에러 없이 프로젝트가
+ * 목록에서 사라진다.** 이관 전에도 화면이 멀쩡해야 한다.
+ *
+ * 기본값은 자체사업이다. 계약 정보가 없는 문서를 수주사업으로 두면 "재원을 지정해야
+ * 한다"는 규칙에 걸려 또 사라진다.
+ */
+function fillLegacyProjectFields(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const row = { ...(raw as Record<string, unknown>) };
+  if (row.projectType !== 'CONTRACT' && row.projectType !== 'INTERNAL') row.projectType = 'INTERNAL';
+  for (const key of ['fundingType', 'clientName', 'contractNo', 'contractStartAt', 'contractEndAt']) {
+    if (row[key] === undefined) row[key] = null;
+  }
+  return row;
+}
+
+export const workProjectSchema = z.preprocess(fillLegacyProjectFields, z.object({
   id: z.string().regex(/^PRJ-\d{4}$/, '프로젝트 ID 형식이 올바르지 않습니다.'),
   code: z.string().trim().min(1, '프로젝트 코드를 입력하세요.').max(30),
   name: z.string().trim().min(1, '프로젝트명을 입력하세요.').max(100),
@@ -73,7 +93,7 @@ export const workProjectSchema = z.object({
   if (value.contractStartAt && value.contractEndAt && value.contractStartAt > value.contractEndAt) {
     ctx.addIssue({ code: 'custom', path: ['contractEndAt'], message: '계약 종료일은 시작일보다 빠를 수 없습니다.' });
   }
-});
+}));
 
 export type WorkProject = z.infer<typeof workProjectSchema>;
 export type WorkProjectStatus = (typeof WORK_PROJECT_STATUSES)[number];
