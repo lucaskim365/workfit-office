@@ -1,4 +1,5 @@
 export interface ProcessOption {
+  $id?: string;
   id: string;
   category: '결재 프로세스' | '합의 프로세스' | '수신·참조·시행' | '예외·제어';
   name: string;
@@ -113,30 +114,74 @@ export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
   },
 ];
 
-const STORAGE_KEY = 'workfit_approval_process_options';
+import { databases, APPWRITE_DATABASE_ID, Query } from '@/shared/lib/appwrite';
+
+const COLL_ID = 'approvalProcessSettings';
 
 export const approvalProcessRepo = {
   /** 프로세스 설정 옵션 목록 조회 */
   async getOptions(): Promise<ProcessOption[]> {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const storedOptions: ProcessOption[] = JSON.parse(raw);
-        // 디폴트 옵션과 병합 (신규 추가된 옵션 보존)
-        return DEFAULT_PROCESS_OPTIONS.map((def) => {
-          const match = storedOptions.find((s) => s.id === def.id);
-          return match ? { ...def, enabled: match.enabled } : def;
-        });
-      }
-    } catch (e) {
-      console.warn('Failed to parse approval process options:', e);
+    if (!databases || !APPWRITE_DATABASE_ID) {
+      return DEFAULT_PROCESS_OPTIONS;
     }
-    return DEFAULT_PROCESS_OPTIONS;
+    try {
+      const res = await databases.listDocuments(APPWRITE_DATABASE_ID, COLL_ID, [
+        Query.limit(100)
+      ]);
+      
+      if (res.total === 0) {
+        return DEFAULT_PROCESS_OPTIONS;
+      }
+
+      const storedOptions: ProcessOption[] = res.documents.map((doc) => ({
+        $id: doc.$id,
+        id: doc.key,
+        category: doc.category as any,
+        name: doc.name,
+        description: doc.description,
+        enabled: doc.enabled,
+        isImplemented: doc.isImplemented,
+      }));
+
+      // DEFAULT_PROCESS_OPTIONS의 순서를 기준으로 정렬 (순서 보장)
+      return storedOptions.sort((a, b) => {
+        const idxA = DEFAULT_PROCESS_OPTIONS.findIndex((x) => x.id === a.id);
+        const idxB = DEFAULT_PROCESS_OPTIONS.findIndex((x) => x.id === b.id);
+        return idxA - idxB;
+      });
+    } catch (e) {
+      console.warn('Failed to fetch approval process options from Appwrite:', e);
+      return DEFAULT_PROCESS_OPTIONS;
+    }
   },
 
   /** 프로세스 설정 옵션 목록 저장 */
   async saveOptions(options: ProcessOption[]): Promise<ProcessOption[]> {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
+    if (!databases || !APPWRITE_DATABASE_ID) {
+      return options;
+    }
+    try {
+      for (const opt of options) {
+        if (opt.$id) {
+          await databases.updateDocument(APPWRITE_DATABASE_ID, COLL_ID, opt.$id, {
+            enabled: opt.enabled,
+          });
+        } else {
+          const res = await databases.listDocuments(APPWRITE_DATABASE_ID, COLL_ID, [
+            Query.equal('key', opt.id)
+          ]);
+          if (res.total > 0) {
+            const doc = res.documents[0];
+            await databases.updateDocument(APPWRITE_DATABASE_ID, COLL_ID, doc.$id, {
+              enabled: opt.enabled,
+            });
+            opt.$id = doc.$id;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to save approval process options to Appwrite:', e);
+    }
     return options;
   },
 
