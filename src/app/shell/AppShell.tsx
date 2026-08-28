@@ -111,7 +111,23 @@ export default function AppShell() {
   // MES 화면은 openTab 이 먼저 추가하므로 여기선 no-op, 그룹웨어는 여기서 탭이 생긴다.
   useEffect(() => {
     const s = SCREEN_BY_URL[activeUrl] ?? gwScreen(activeUrl);
-    if (s) setTabs((prev) => (prev.some((t) => t.url === s.url) ? prev : [...prev, s]));
+    if (!s) return;
+    setTabs((prev) => {
+      /**
+       * **같은 앱이면 탭을 새로 만들지 않고 그 탭의 주소만 옮긴다.**
+       *
+       * 탭 중복 판정이 `url` 기준이라, `/gw/approval` 을 열어 둔 채 임시저장함에서
+       * 편집을 누르면 `/gw/approval/edit/xxx` 는 다른 주소라 **"전자결재" 탭이 하나 더
+       * 생겼다.** 이름이 같아 어느 쪽이 무엇인지 구분도 안 된다.
+       *
+       * 앱 단위(`id`)로 보고, 이미 열려 있으면 주소만 갱신한다 — 브라우저 탭에서
+       * 같은 사이트를 옮겨 다니는 것과 같은 동작이다.
+       */
+      const existing = prev.findIndex((t) => t.id === s.id);
+      if (existing === -1) return [...prev, s];
+      if (prev[existing].url === s.url) return prev;
+      return prev.map((t, i) => (i === existing ? { ...t, url: s.url } : t));
+    });
   }, [activeUrl]);
 
   // 전자결재 화면(/gw/approval) 진입 시 좌측 사이드바 메뉴 기본 닫힘 처리
@@ -126,7 +142,12 @@ export default function AppShell() {
   const activeModule = MENU_TREE.find((m) => m.id === activeModuleId) ?? MENU_TREE[0];
 
   const openTab = (s: FlatScreen) => {
-    setTabs((prev) => (prev.some((t) => t.url === s.url) ? prev : [...prev, s]));
+    // 사이드바에서 열 때도 같은 규칙 — 이미 있으면 그 탭의 주소를 옮긴다.
+    setTabs((prev) => {
+      const existing = prev.findIndex((t) => t.id === s.id);
+      if (existing === -1) return [...prev, s];
+      return prev.map((t, i) => (i === existing ? { ...t, url: s.url } : t));
+    });
     setOpenModule(null);
     if (s.url !== activeUrl) navigate(s.url);
   };
