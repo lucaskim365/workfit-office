@@ -926,6 +926,19 @@ const COLLECTIONS: CollectionDef[] = [
       IX('sentByUser', ['workfitUserId']),
     ],
   },
+  {
+    id: 'approvalProcessSettings',
+    name: '결재 프로세스 설정',
+    attributes: [
+      S('key', 64, true),
+      S('category', 64, true),
+      S('name', 128, true),
+      S('description', 500, true),
+      BOOL('enabled', false),
+      BOOL('isImplemented', false),
+    ],
+    indexes: [UQ('key', ['key'])],
+  },
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */

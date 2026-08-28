@@ -11,10 +11,13 @@ const CATEGORY_ICONS: Record<ProcessOption['category'], string> = {
 export default function ApprovalProcessScreen() {
   const [options, setOptions] = useState<ProcessOption[]>(DEFAULT_PROCESS_OPTIONS);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    setIsLoading(true);
     approvalProcessRepo.getOptions().then((res) => {
       setOptions(res);
+      setIsLoading(false);
     });
   }, []);
 
@@ -32,14 +35,22 @@ export default function ApprovalProcessScreen() {
   };
 
   const handleSave = async () => {
+    setIsLoading(true);
     await approvalProcessRepo.saveOptions(options);
+    const fresh = await approvalProcessRepo.getOptions();
+    setOptions(fresh);
+    setIsLoading(false);
     setToastMsg('결재 세부 프로세스 설정이 성공적으로 저장되었습니다.');
     setTimeout(() => setToastMsg(null), 3000);
   };
 
   const handleReset = async () => {
+    if (!confirm('정말로 모든 설정을 기본값으로 초기화하시겠습니까?')) return;
+    setIsLoading(true);
     await approvalProcessRepo.saveOptions(DEFAULT_PROCESS_OPTIONS);
-    setOptions(DEFAULT_PROCESS_OPTIONS);
+    const fresh = await approvalProcessRepo.getOptions();
+    setOptions(fresh);
+    setIsLoading(false);
     setToastMsg('기본 설정으로 초기화되었습니다.');
     setTimeout(() => setToastMsg(null), 3000);
   };
@@ -68,15 +79,17 @@ export default function ApprovalProcessScreen() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="rounded-lg border border-border bg-panel px-3.5 py-2 text-[12.5px] font-medium text-ink2 hover:bg-panel-alt hover:text-ink transition-colors"
+            disabled={isLoading}
+            className="rounded-lg border border-border bg-panel px-3.5 py-2 text-[12.5px] font-medium text-ink2 hover:bg-panel-alt hover:text-ink transition-colors disabled:opacity-50"
           >
             기본값 초기화
           </button>
           <button
             onClick={handleSave}
-            className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-opacity shadow-sm"
+            disabled={isLoading}
+            className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50"
           >
-            설정 저장
+            {isLoading ? '저장 중...' : '설정 저장'}
           </button>
         </div>
       </div>
@@ -162,8 +175,9 @@ export default function ApprovalProcessScreen() {
                         type="button"
                         role="switch"
                         aria-checked={opt.enabled}
+                        disabled={isLoading}
                         onClick={() => toggleOption(opt.id)}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
                           opt.enabled ? 'bg-teal' : 'bg-gray-300'
                         }`}
                       >
