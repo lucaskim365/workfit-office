@@ -17,7 +17,7 @@
  *
  * 대상은 `.env.local`의 dev 프로젝트다. 운영에 돌리려면 `APPWRITE_PROJECT_ID`를 명시한다.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Client, Databases, Query } from 'node-appwrite';
 
@@ -53,13 +53,36 @@ async function listAll<T>(dbs: Databases, dbId: string, coll: string): Promise<T
 }
 
 /**
+ * 이관 전 원본을 통째로 떠 둔다.
+ *
+ * 이관은 문서를 지우지 않지만 `parentId`·`level`·`path`·`sortOrder` 를 덮어쓰고, 뒤이어
+ * `phaseId` 속성을 지운다. 그 뒤에는 "원래 어느 단계 소속이었는지"를 되짚을 방법이 없다.
+ * 되돌릴 근거를 파일로 남긴다 — `migration-backup/` 은 gitignore 대상이라 커밋되지 않는다.
+ */
+function writeBackup(projectId: string, phases: PhaseRow[], tasks: TaskRow[]): string {
+  const dir = resolve(process.cwd(), 'migration-backup');
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const file = resolve(dir, `work-tree-${projectId}-${stamp}.json`);
+  writeFileSync(
+    file,
+    JSON.stringify({ takenAt: new Date().toISOString(), projectId, phases, tasks }, null, 2),
+    'utf8',
+  );
+  return file;
+}
+
+/**
  * 레거시 `phaseId` 속성 제거 — **이관을 마치고 화면으로 확인한 뒤에만** 돌린다.
  *
  * 이 속성이 "무엇이 무엇의 하위였는지"를 아는 유일한 근거라 먼저 지우면 복원할 수 없다.
  * 지운 뒤에는 앱도 이 필드를 보내면 안 된다(`Unknown attribute` 오류) — 코드에서 함께 뺀다.
  */
-async function dropPhaseId(dbs: Databases, dbId: string) {
+async function dropPhaseId(dbs: Databases, dbId: string, projectId: string) {
   const tasks = await listAll<TaskRow>(dbs, dbId, 'workTasks');
+  const phases = await listAll<PhaseRow>(dbs, dbId, 'workPhases');
+  // 속성을 지우면 그 칸의 값이 사라진다. 지우기 직전 상태를 한 번 더 떠 둔다.
+  console.log(`  [백업] ${writeBackup(projectId, phases, tasks)}`);
   const orphan = tasks.filter((t) => !t.parentId && !t.path);
   if (orphan.length > 0) {
     console.error(`✗ 아직 트리로 안 옮겨진 작업이 ${orphan.length}건 있습니다. 먼저 --apply 로 이관하세요.`);
@@ -86,7 +109,7 @@ async function main() {
   const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
 
   if (process.argv.includes('--drop-phase-id')) {
-    await dropPhaseId(dbs, dbId);
+    await dropPhaseId(dbs, dbId, projectId);
     return;
   }
 
@@ -95,7 +118,13 @@ async function main() {
 
   const phases = await listAll<PhaseRow>(dbs, dbId, 'workPhases');
   const tasks = await listAll<TaskRow>(dbs, dbId, 'workTasks');
-  console.log(`  단계 ${phases.length}건 · 작업 ${tasks.length}건 조회\n`);
+  console.log(`  단계 ${phases.length}건 · 작업 ${tasks.length}건 조회`);
+
+  // 실제로 바꾸기 전에 원본을 떠 둔다. dry-run 에서는 뜨지 않는다.
+  if (apply) {
+    console.log(`  [백업] ${writeBackup(projectId, phases, tasks)}`);
+  }
+  console.log('');
 
   const projectIds = [...new Set([...phases, ...tasks].map((r) => r.projectId))]
     .filter((id) => !only || id === only)
