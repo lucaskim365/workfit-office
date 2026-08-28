@@ -14,7 +14,24 @@ interface ProjectCalendarProps {
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const DAY_MS = 86_400_000;
 /** 한 주에 보여 줄 막대 줄 수. 넘치면 "+N"으로 접는다. */
-const MAX_LANES = 3;
+const MAX_LANES = 4;
+
+/**
+ * 과업 색 팔레트 — 트랙이 없는 프로젝트에서 막대를 구분한다.
+ *
+ * 트랙 색을 쓰면 트랙 없는 프로젝트는 전부 같은 색(프로젝트 색)이 되어 막대가 구분되지
+ * 않는다. 옆자리끼리 확실히 갈리도록 색상환을 건너뛰며 골랐다.
+ */
+const TASK_PALETTE = [
+  '#0f9488', // teal
+  '#d97706', // amber
+  '#4f6bd8', // indigo
+  '#c2405f', // rose
+  '#3f9c53', // green
+  '#9333ea', // violet
+  '#0891b2', // cyan
+  '#b45309', // bronze
+];
 
 /** 한국 시간 기준 `YYYY-MM-DD`. 저장값이 UTC ISO라 그대로 자르면 하루가 밀린다. */
 function seoulDateKey(iso: string): string {
@@ -79,6 +96,19 @@ export default function ProjectCalendar({ project, tasks, tracks, onSelectTask }
     })
     .filter((bar): bar is Bar => bar !== null)
     .sort((a, b) => a.from.localeCompare(b.from) || b.to.localeCompare(a.to)), [tasks]);
+
+  /**
+   * 막대 색 — 트랙이 있으면 트랙 색, 없으면 과업마다 팔레트를 돌려 쓴다.
+   *
+   * 시작일 순으로 번호를 매기므로 달력에서 이웃하는 막대가 서로 다른 색이 된다.
+   */
+  const barColor = useMemo(() => {
+    const map = new Map<string, string>();
+    bars.forEach((bar, index) => {
+      map.set(bar.task.id, trackColor.get(bar.task.trackId ?? '') ?? TASK_PALETTE[index % TASK_PALETTE.length]);
+    });
+    return map;
+  }, [bars, trackColor]);
 
   /** 주 단위 격자 — 각 주는 일요일 시작 7일. */
   const weeks = useMemo(() => {
@@ -153,8 +183,13 @@ export default function ProjectCalendar({ project, tasks, tracks, onSelectTask }
       bodyClassName="p-3"
     >
       <div className="grid grid-cols-7">
-        {WEEKDAYS.map((label) => (
-          <div key={label} className="pb-1.5 text-center text-[9px] font-bold text-ink3">{label}</div>
+        {WEEKDAYS.map((label, index) => (
+          <div
+            key={label}
+            className={`pb-1.5 text-center text-[9px] font-bold ${index === 0 ? 'text-danger/70' : index === 6 ? 'text-blue/80' : 'text-ink3'}`}
+          >
+            {label}
+          </div>
         ))}
       </div>
 
@@ -162,18 +197,26 @@ export default function ProjectCalendar({ project, tasks, tracks, onSelectTask }
         {weeks.map((week, weekIndex) => (
           <div key={week[0].key} className={weekIndex > 0 ? 'border-t border-border' : ''}>
             <div className="grid grid-cols-7">
-              {week.map((cell) => (
-                <div key={cell.key} className={`px-1.5 pt-1 text-[9px] font-bold ${cell.key === todayKey ? 'text-teal' : cell.inMonth ? 'text-ink3' : 'text-ink3/40'}`}>
-                  {cell.day}
-                </div>
-              ))}
+              {week.map((cell, dayIndex) => {
+                const isToday = cell.key === todayKey;
+                const tone = !cell.inMonth
+                  ? 'text-ink3/35'
+                  : dayIndex === 0 ? 'text-danger/70' : dayIndex === 6 ? 'text-blue/80' : 'text-ink3';
+                return (
+                  <div key={cell.key} className="px-1 pt-1">
+                    <span className={`inline-grid h-[17px] min-w-[17px] place-items-center rounded-full px-1 text-[9px] font-bold ${isToday ? 'bg-teal' : tone}`}>
+                      {cell.day}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="space-y-0.5 px-1 pb-1.5 pt-0.5">
+            <div className="space-y-[3px] px-1 pb-1.5 pt-1">
               {layout[weekIndex].lanes.map((lane, laneIndex) => (
-                <div key={laneIndex} className="grid grid-cols-7 gap-x-0.5">
+                <div key={laneIndex} className="grid grid-cols-7 gap-x-[3px]">
                   {lane.map((segment) => {
-                    const color = trackColor.get(segment.task.trackId ?? '') ?? project.color;
+                    const color = barColor.get(segment.task.id) ?? project.color;
                     return (
                       <button
                         key={`${segment.task.id}-${segment.colStart}`}
@@ -183,13 +226,16 @@ export default function ProjectCalendar({ project, tasks, tracks, onSelectTask }
                         style={{
                           gridColumnStart: segment.colStart + 1,
                           gridColumnEnd: `span ${segment.span}`,
-                          background: `${color}26`,
-                          borderLeft: segment.continuesLeft ? 'none' : `3px solid ${color}`,
+                          background: `${color}1f`,
+                          color,
+                          boxShadow: segment.continuesLeft ? undefined : `inset 3px 0 0 ${color}`,
                         }}
-                        className={`truncate px-1.5 py-[3px] text-left text-[9px] font-bold text-ink2 hover:brightness-95 ${segment.continuesLeft ? 'rounded-l-none' : 'rounded-l'} ${segment.continuesRight ? 'rounded-r-none' : 'rounded-r'}`}
+                        className={`flex h-[19px] items-center gap-1 overflow-hidden text-left text-[9.5px] font-bold transition-[filter] hover:brightness-[0.97] ${segment.continuesLeft ? 'rounded-l-none pl-1' : 'rounded-l-[4px] pl-2'} ${segment.continuesRight ? 'rounded-r-none pr-1' : 'rounded-r-[4px] pr-1.5'}`}
                       >
                         {/* 이어지는 막대는 제목을 다시 쓰지 않는다 — 반복이 곧 글자 벽이다. */}
-                        {segment.continuesLeft ? ' ' : segment.task.title}
+                        {segment.continuesLeft && <span className="shrink-0 opacity-50">‹</span>}
+                        <span className="truncate">{segment.task.title}</span>
+                        {segment.continuesRight && <span className="ml-auto shrink-0 opacity-50">›</span>}
                       </button>
                     );
                   })}
@@ -204,8 +250,23 @@ export default function ProjectCalendar({ project, tasks, tracks, onSelectTask }
         ))}
       </div>
 
-      {bars.length === 0 && (
-        <p className="mt-2 text-center text-[9.5px] text-ink3">기간이 지정된 대과업이 없습니다.</p>
+      {bars.length === 0 ? (
+        <p className="mt-3 text-center text-[9.5px] text-ink3">기간이 지정된 대과업이 없습니다.</p>
+      ) : (
+        /* 범례 — 색이 어느 과업인지 되짚어 준다. 막대가 잘려 보일 때 이게 없으면 못 찾는다. */
+        <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-border pt-2.5">
+          {bars.map((bar) => (
+            <button
+              key={bar.task.id}
+              type="button"
+              onClick={() => onSelectTask(bar.task)}
+              className="flex min-w-0 items-center gap-1.5 text-[9px] font-bold text-ink3 hover:text-ink"
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: barColor.get(bar.task.id) }} />
+              <span className="max-w-[150px] truncate">{bar.task.title}</span>
+            </button>
+          ))}
+        </div>
       )}
     </Card>
   );
