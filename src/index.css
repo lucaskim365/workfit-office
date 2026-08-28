@@ -85,6 +85,50 @@ body {
   animation: mes-marquee-scroll 28s linear infinite;
 }
 
+/* 과업 트리 — 펼칠 때 행이 위에서 내려오듯 들어온다.
+   접기/펼치기가 즉시 튀면 무엇이 늘고 줄었는지 눈이 못 따라간다. */
+@keyframes tree-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tree-row-in {
+  animation: tree-row-in 0.16s ease-out both;
+}
+
+/* 과업 상세 패널 — 오른쪽에서 밀려 들어온다. */
+@keyframes detail-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.detail-panel-in {
+  animation: detail-panel-in 0.18s ease-out both;
+}
+
+/* 움직임을 줄여 달라는 설정을 존중한다. */
+@media (prefers-reduced-motion: reduce) {
+
+  .tree-row-in,
+  .detail-panel-in {
+    animation: none;
+  }
+}
+
 /* 우하단 토스트 진입 */
 @keyframes toast-in {
   from {

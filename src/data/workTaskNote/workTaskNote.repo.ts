@@ -212,6 +212,17 @@ export const workTaskNoteRepo = {
         contentType: file.type || 'application/octet-stream',
         filename: file.name,
       });
+      /**
+       * 저장소가 없으면 `fileStorage` 가 base64 data URL 을 돌려준다(폴백 어댑터).
+       * 그대로 저장하면 Appwrite 의 `url` 512자 제한에 걸려 **정체 모를 스키마 오류**로
+       * 튄다. 원인을 여기서 밝혀 준다 — 파일이 큰 게 아니라 저장소가 없는 것이다.
+       */
+      if (url.length > 512) {
+        throw new WbsDomainError(
+          'INVALID_PROJECT',
+          '파일 저장소가 설정되지 않아 첨부를 저장할 수 없습니다. 관리자에게 Storage 버킷 설정을 요청하세요.',
+        );
+      }
       const created = workTaskFileSchema.parse({
         id,
         projectId: project.id,

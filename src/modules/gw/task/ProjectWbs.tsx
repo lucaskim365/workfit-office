@@ -277,7 +277,10 @@ export default function ProjectWbs({
                       return (
                         <li
                           key={task.id}
-                          className={`py-2.5 pr-3 ${isSelected ? 'bg-teal-soft/25' : ''}`}
+                          // 카드(행) 어디를 눌러도 상세가 열린다. 제목만 눌러야 하면 표적이 너무 작다.
+                          // 안쪽 버튼·선택기는 각자 stopPropagation 으로 이 클릭을 막는다.
+                          onClick={() => onSelectTask(task)}
+                          className={`tree-row-in cursor-pointer py-2.5 pr-3 transition-colors ${isSelected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/60'}`}
                           style={{ paddingLeft: `${10 + (task.level - 1) * 18}px` }}
                         >
                           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -286,12 +289,13 @@ export default function ProjectWbs({
                               {kids > 0 ? (
                                 <button
                                   type="button"
-                                  onClick={() => toggleCollapse(task.id)}
+                                  onClick={(event) => { event.stopPropagation(); toggleCollapse(task.id); }}
                                   aria-label={`${task.title} ${isCollapsed ? '펼치기' : '접기'}`}
                                   aria-expanded={!isCollapsed}
                                   className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded text-[8px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
                                 >
-                                  {isCollapsed ? '▶' : '▼'}
+                                  {/* 같은 글리프를 돌린다 — 모양이 바뀌면 회전이 안 보인다. */}
+                                  <span className={`transition-transform duration-150 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>▼</span>
                                 </button>
                               ) : (
                                 <span className="h-4 w-4 shrink-0" />
@@ -301,13 +305,9 @@ export default function ProjectWbs({
                                   <span className="shrink-0 rounded bg-panel-alt px-1.5 py-0.5 text-[8.5px] font-extrabold text-ink3">
                                     {LEVEL_LABELS[task.level - 1] ?? task.level}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => onSelectTask(task)}
-                                    className={`min-w-0 break-words text-left text-[11px] font-extrabold hover:text-teal hover:underline ${isSelected ? 'text-teal' : 'text-ink'}`}
-                                  >
+                                  <span className={`min-w-0 break-words text-[11px] font-extrabold ${isSelected ? 'text-teal' : 'text-ink'}`}>
                                     {task.title}
-                                  </button>
+                                  </span>
                                   {isCollapsed && kids > 0 && (
                                     <span className="shrink-0 rounded-full bg-panel-alt px-1.5 py-px text-[8px] font-bold text-ink3">+{kids}</span>
                                   )}
@@ -324,12 +324,12 @@ export default function ProjectWbs({
                             <div className="flex shrink-0 items-center gap-1">
                               <Pill tone={STATUS_TONES[view.status]}>{WORK_TASK_STATUS_LABELS[view.status]}</Pill>
                               {!compact && canCreateTask && task.level < WORK_TASK_MAX_LEVEL && (
-                                <button type="button" onClick={() => openNewTask(task.trackId, task.id)} aria-label={`${task.title} 하위 추가`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위</button>
+                                <button type="button" onClick={(event) => { event.stopPropagation(); openNewTask(task.trackId, task.id); }} aria-label={`${task.title} 하위 추가`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위</button>
                               )}
                               {!compact && canEditWbsTask(access, project, task) && (
                                 <>
-                                  <button type="button" onClick={() => { setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
-                                  <button type="button" onClick={() => deleteTask(task)} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
+                                  <button type="button" onClick={(event) => { event.stopPropagation(); setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
+                                  <button type="button" onClick={(event) => { event.stopPropagation(); deleteTask(task); }} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
                                 </>
                               )}
                             </div>
@@ -343,6 +343,7 @@ export default function ProjectWbs({
                                 value={task.progress}
                                 disabled={progressTaskId !== null}
                                 aria-label={`${task.title} 진척률 변경`}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) => changeProgress(task, Number(event.target.value))}
                                 className="h-6 rounded border border-border bg-panel px-1 text-[9.5px] font-bold text-ink2 outline-none focus:border-teal disabled:cursor-wait disabled:opacity-50"
                               >
@@ -377,9 +378,15 @@ export default function ProjectWbs({
             users={users}
             rolled={rolled}
             canEdit={canEditWbsTask(access, project, selectedTask)}
+            canAddChild={canCreateTask && selectedTask.level < WORK_TASK_MAX_LEVEL}
+            canSetProgress={canUpdateWbsTaskProgress(access, project, selectedTask)}
+            progressPending={progressTaskId !== null}
             onSelectTask={(next) => onSelectTask(next)}
             onClose={() => onSelectTask(null)}
             onEdit={() => onOpenTaskChange(selectedTask.id)}
+            onAddChild={() => openNewTask(selectedTask.trackId, selectedTask.id)}
+            onDelete={() => deleteTask(selectedTask)}
+            onChangeProgress={(next) => changeProgress(selectedTask, next)}
           />
         )}
       </div>

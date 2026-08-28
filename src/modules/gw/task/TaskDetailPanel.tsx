@@ -26,9 +26,16 @@ interface TaskDetailPanelProps {
   users: User[];
   rolled: Map<string, RollupResult>;
   canEdit: boolean;
+  /** 트리가 좁아지면 행의 관리 버튼이 사라진다 — 그 자리를 패널 머리가 대신한다. */
+  canAddChild: boolean;
+  canSetProgress: boolean;
+  progressPending: boolean;
   onSelectTask: (task: WorkTask) => void;
   onClose: () => void;
   onEdit: () => void;
+  onAddChild: () => void;
+  onDelete: () => void;
+  onChangeProgress: (next: number) => void;
 }
 
 const STATUS_TONES: Record<WorkTask['status'], Tone> = { TODO: 'mute', IN_PROGRESS: 'info', DONE: 'ok' };
@@ -59,7 +66,9 @@ function formatStamp(iso: string): string {
  * 같은 모양을 유지한다. 리프에는 하위 칸이 없어 자연히 논의가 주가 된다.
  */
 export default function TaskDetailPanel({
-  project, access, task, tracks, tasks, users, rolled, canEdit, onSelectTask, onClose, onEdit,
+  project, access, task, tracks, tasks, users, rolled,
+  canEdit, canAddChild, canSetProgress, progressPending,
+  onSelectTask, onClose, onEdit, onAddChild, onDelete, onChangeProgress,
 }: TaskDetailPanelProps) {
   const [tab, setTab] = useState<'comments' | 'files'>('comments');
   const [includeSubtree, setIncludeSubtree] = useState(false);
@@ -127,7 +136,7 @@ export default function TaskDetailPanel({
   };
 
   return (
-    <aside className="lg:sticky lg:top-3 flex max-h-[calc(100vh-2rem)] min-h-0 flex-col rounded-[10px] border border-border bg-panel">
+    <aside className="detail-panel-in lg:sticky lg:top-3 flex max-h-[calc(100vh-2rem)] min-h-0 flex-col rounded-[10px] border border-border bg-panel shadow-[0_1px_2px_rgba(23,34,65,0.06)]">
       {/* ── 머리: 어디에 있는가 ── */}
       <header className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-start justify-between gap-2">
@@ -149,9 +158,32 @@ export default function TaskDetailPanel({
           <span>{userById.get(task.assigneeUserId)?.name ?? task.assigneeUserId}</span>
           <span>{formatDate(task.startAt)} ~ {formatDate(task.dueAt)}</span>
           <Pill tone={STATUS_TONES[view.status]}>{WORK_TASK_STATUS_LABELS[view.status]}</Pill>
-          <span className="font-extrabold text-teal">{view.progress}%{view.isLeaf ? '' : ' 자동'}</span>
-          {canEdit && <button type="button" onClick={onEdit} className="ml-auto rounded border border-border px-2 py-0.5 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>}
+          {/* 진행률은 리프에서만 입력한다. 상위는 하위에서 접어 올린 값이라 고칠 수 없다. */}
+          {view.isLeaf && canSetProgress ? (
+            <select
+              value={task.progress}
+              disabled={progressPending}
+              aria-label="진척률 변경"
+              onChange={(event) => onChangeProgress(Number(event.target.value))}
+              className="h-5 rounded border border-border bg-panel px-1 text-[9.5px] font-extrabold text-teal outline-none focus:border-teal disabled:cursor-wait disabled:opacity-50"
+            >
+              {Array.from(new Set([task.progress, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]))
+                .sort((a, b) => a - b)
+                .map((value) => <option key={value} value={value}>{value}%</option>)}
+            </select>
+          ) : (
+            <span className="font-extrabold text-teal">{view.progress}%{view.isLeaf ? '' : ' 자동'}</span>
+          )}
         </div>
+
+        {/* 트리가 좁아지면 행의 관리 버튼이 사라지므로 여기서 전부 할 수 있어야 한다. */}
+        {(canAddChild || canEdit) && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {canAddChild && <button type="button" onClick={onAddChild} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위 추가</button>}
+            {canEdit && <button type="button" onClick={onEdit} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>}
+            {canEdit && <button type="button" onClick={onDelete} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5">삭제</button>}
+          </div>
+        )}
 
         {task.description && (
           <p className="mt-2 whitespace-pre-wrap break-words border-t border-border pt-2 text-[10.5px] leading-6 text-ink2">{task.description}</p>
