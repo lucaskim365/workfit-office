@@ -256,7 +256,16 @@ class AppwriteBackend implements DocExecBackend {
   subscribe(cb: () => void) {
     const d = APPWRITE_DATABASE_ID;
     const channels = [`databases.${d}.collections.${COLL}.documents`, `databases.${d}.tables.${COLL}.rows`];
-    return appwriteClient!.subscribe(channels, () => cb());
+    // 결재 문서와 같은 이유로 몰림을 합친다([[approvalDoc.repo.ts]]의 subscribe 참고).
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const unsub = appwriteClient!.subscribe(channels, () => {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => { pending = null; cb(); }, 150);
+    });
+    return () => {
+      if (pending) clearTimeout(pending);
+      unsub();
+    };
   }
   async claim(id: string, userId: string, userName: string, nowIso: string) {
     // 1) 원본 조회(claimVersion 포함)
