@@ -1,12 +1,14 @@
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
+import { rollupTasks, rollupTrack } from '@/domain/workProject/rollup';
 import type { WorkProject } from '@/domain/workProject/schema';
-import type { WorkPhase } from '@/domain/workPhase/schema';
 import type { WorkTask, WorkTaskDraft, WorkTaskStatus } from './schema';
 
 export type WbsDomainErrorCode =
   | 'FORBIDDEN'
   | 'INVALID_PROJECT'
   | 'INVALID_PHASE'
+  | 'INVALID_PARENT'
+  | 'INVALID_TRACK'
   | 'INVALID_ASSIGNEE'
   | 'INVALID_PROGRESS'
   | 'VERSION_CONFLICT';
@@ -22,11 +24,24 @@ export function isWbsProjectMutable(project: WorkProject): boolean {
   return project.status !== 'COMPLETED' && project.status !== 'ARCHIVED';
 }
 
+/**
+ * 관리자는 참여자·소유자 판정을 건너뛴다.
+ * ([[workProject/engine.ts]]의 `isProjectAdmin`)
+ *
+ * 다만 **완료·보관 프로젝트의 읽기 전용은 관리자도 지킨다.** 그건 권한이 아니라 상태다 —
+ * 뚫어 버리면 "완료"가 아무 뜻도 없어진다. 고치려면 상태를 되돌리고 들어와야 한다.
+ */
+function adminOverride(actor: ProjectAccessContext, project: WorkProject): boolean {
+  return isProjectAdmin(actor) && isWbsProjectMutable(project);
+}
+
 export function canManageWbsPhases(actor: ProjectAccessContext, project: WorkProject): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active && isWbsProjectMutable(project) && project.ownerUserId === actor.userId;
 }
 
 export function canCreateWbsTask(actor: ProjectAccessContext, project: WorkProject): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && project.memberUserIds.includes(actor.userId);
@@ -37,6 +52,7 @@ export function canEditWbsTask(
   project: WorkProject,
   task: WorkTask,
 ): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && (project.ownerUserId === actor.userId || task.createdBy === actor.userId);
@@ -47,6 +63,7 @@ export function canUpdateWbsTaskProgress(
   project: WorkProject,
   task: WorkTask,
 ): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && (project.ownerUserId === actor.userId
@@ -54,18 +71,36 @@ export function canUpdateWbsTaskProgress(
       || task.assigneeUserId === actor.userId);
 }
 
+/**
+ * 작업이 가리키는 것들이 실제로 맞는지 확인한다.
+ * ([[프로젝트관리_고도화_계획서.md]] §3)
+ *
+ * 옛 `phase` 인자는 트리 도입으로 `parent`(상위 과업)로 대체됐다. `parentId`가 `null`이면
+ * 대과업이라 확인할 상위가 없다.
+ *
+ * 상위와 트랙이 다르면 거부한다 — 한 트리가 두 트랙에 걸치면 트랙 진행률이 어느 쪽에도
+ * 온전히 안 잡히고 `path`의 유일성(트랙 그룹 내)도 깨진다.
+ */
 export function assertTaskReferences(
+  actor: ProjectAccessContext,
   project: WorkProject,
-  phase: WorkPhase | null,
+  parent: WorkTask | null,
   draft: WorkTaskDraft,
 ): void {
   if (draft.projectId !== project.id) {
     throw new WbsDomainError('INVALID_PROJECT', '작업의 프로젝트가 일치하지 않습니다.');
   }
-  if (!phase || phase.projectId !== project.id || draft.phaseId !== phase.id) {
-    throw new WbsDomainError('INVALID_PHASE', '현재 프로젝트의 WBS 단계를 선택하세요.');
+  if (draft.parentId !== null) {
+    if (!parent || parent.projectId !== project.id || parent.id !== draft.parentId) {
+      throw new WbsDomainError('INVALID_PARENT', '현재 프로젝트의 상위 과업을 선택하세요.');
+    }
+    if (parent.trackId !== draft.trackId) {
+      throw new WbsDomainError('INVALID_TRACK', '상위 과업과 트랙이 달라 배치할 수 없습니다.');
+    }
   }
-  if (!project.memberUserIds.includes(draft.assigneeUserId)) {
+  // 관리자는 참여자 명단 밖(자기 자신 포함)도 담당자로 지정할 수 있다.
+  // 참여자가 아닌 관리자가 과업을 만들 때 담당자를 못 골라 막히는 상황을 없앤다.
+  if (!isProjectAdmin(actor) && !project.memberUserIds.includes(draft.assigneeUserId)) {
     throw new WbsDomainError('INVALID_ASSIGNEE', '프로젝트 참여자만 작업 담당자로 지정할 수 있습니다.');
   }
 }
@@ -114,18 +149,20 @@ export function updateTaskProgress(
   };
 }
 
-function averageProgress(tasks: WorkTask[]): number {
-  if (tasks.length === 0) return 0;
-  return Math.round(tasks.reduce((sum, task) => sum + task.progress, 0) / tasks.length);
-}
-
+/**
+ * 프로젝트 전체 진행률 — 대과업들의 기간 가중 평균.
+ * ([[프로젝트관리_고도화_계획서.md]] §4)
+ *
+ * 트리 도입 전에는 전 작업의 단순 평균이었다. 트리에서 그렇게 하면 상위 과업의 저장값까지
+ * 같이 세어 **하위가 두 번 반영된다.** 리프에서 접어 올린 뒤 대과업만 모아 평균 낸다.
+ */
 export function deriveProjectWbsProgress(tasks: WorkTask[], projectId: string): number {
-  return averageProgress(tasks.filter((task) => task.projectId === projectId));
+  const scoped = tasks.filter((task) => task.projectId === projectId);
+  const rolled = rollupTasks(scoped);
+  const roots = scoped.filter((task) => task.parentId === null);
+  return rollupTrack(roots, rolled);
 }
 
-export function derivePhaseProgress(tasks: WorkTask[], phaseId: string): number {
-  return averageProgress(tasks.filter((task) => task.phaseId === phaseId));
-}
 
 function seoulDateKey(iso: string): string {
   return new Intl.DateTimeFormat('en-CA', {

@@ -27,6 +27,8 @@ function LocalProjectScreen() {
     userId: actor?.id ?? '__anonymous__',
     deptId: resolveDeptId(departments, actor?.dept),
     active: actor?.status === '사용',
+    // 관리자는 참여자·소유자 판정을 건너뛴다(자원예약·전자설문과 같은 축).
+    isAdmin: actor?.roleGroup === 'ADMIN',
   }), [actor, departments]);
   const projectsQuery = useProjects(access);
   const requestedTab = searchParams.get('tab') as ProjectTab | null;

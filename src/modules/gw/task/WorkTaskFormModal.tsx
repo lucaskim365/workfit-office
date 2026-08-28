@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
 import type { WorkProject } from '@/domain/workProject/schema';
-import type { WorkPhase } from '@/domain/workPhase/schema';
 import { isTaskOutsideProjectSchedule } from '@/domain/workTask/engine';
-import type { WorkTask, WorkTaskDraft } from '@/domain/workTask/schema';
+import { WORK_TASK_MAX_LEVEL, type WorkTask, type WorkTaskDraft } from '@/domain/workTask/schema';
+import type { WorkTrack } from '@/domain/workTrack/schema';
 import type { User } from '@/domain/user/schema';
 import { useCreateWorkTask, useUpdateWorkTask } from '@/features/project/useProjectWbs';
 import { Button } from '@/shared/ui/Button';
@@ -15,9 +15,14 @@ import { TextField } from '@/shared/ui/form/TextField';
 interface WorkTaskFormModalProps {
   actor: ProjectAccessContext;
   project: WorkProject;
-  phases: WorkPhase[];
+  /** 프로젝트의 트랙. 비어 있으면 트랙 레이어가 없는 프로젝트다. */
+  tracks: WorkTrack[];
+  /** 상위 과업 후보를 고르기 위해 프로젝트의 과업 전체를 받는다. */
+  tasks: WorkTask[];
   users: User[];
   task?: WorkTask;
+  /** 새 과업을 만들 때 미리 정해진 자리(트랙·상위). 목록의 "+ 하위 추가"에서 넘어온다. */
+  preset?: { trackId: string | null; parentId: string | null };
   onClose: () => void;
   onSaved: (task: WorkTask) => void;
 }
@@ -36,13 +41,34 @@ function isoToDate(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-export default function WorkTaskFormModal({ actor, project, phases, users, task, onClose, onSaved }: WorkTaskFormModalProps) {
-  const assignees = useMemo(
-    () => users.filter((user) => project.memberUserIds.includes(user.id)
-      && (user.status === '사용' || user.id === task?.assigneeUserId)),
-    [project.memberUserIds, task?.assigneeUserId, users],
+export default function WorkTaskFormModal({ actor, project, tracks, tasks, users, task, preset, onClose, onSaved }: WorkTaskFormModalProps) {
+  /**
+   * 담당자 후보 — 원칙은 프로젝트 참여자다.
+   * 다만 **관리자는 참여자가 아니어도 본인을 고를 수 있다.** 참여자 명단 밖의 관리자가
+   * 과업을 만들 때 담당자를 못 골라 저장이 막히는 상황을 없앤다.
+   */
+  const assignees = useMemo(() => {
+    const members = users.filter((user) => project.memberUserIds.includes(user.id)
+      && (user.status === '사용' || user.id === task?.assigneeUserId));
+    if (!isProjectAdmin(actor) || members.some((user) => user.id === actor.userId)) return members;
+    const me = users.find((user) => user.id === actor.userId);
+    return me ? [me, ...members] : members;
+  }, [actor, project.memberUserIds, task?.assigneeUserId, users]);
+
+  // 트리 위치는 **만들 때만** 정한다. 옮기기는 하위 전체를 함께 갱신해야 해서 별도
+  // 연산이다([[프로젝트관리_고도화_계획서.md]] §3) — 수정 폼에서 슬쩍 바꾸면 경로가 어긋난다.
+  const [trackId, setTrackId] = useState<string | null>(
+    task?.trackId ?? preset?.trackId ?? tracks[0]?.id ?? null,
   );
-  const [phaseId, setPhaseId] = useState(task?.phaseId ?? phases[0]?.id ?? '');
+  const [parentId, setParentId] = useState<string | null>(task?.parentId ?? preset?.parentId ?? null);
+
+  /** 같은 트랙에서 아직 한 단계 더 받을 수 있는 과업만 상위 후보다. */
+  const parentOptions = useMemo(
+    () => tasks
+      .filter((row) => row.trackId === trackId && row.level < WORK_TASK_MAX_LEVEL && row.id !== task?.id)
+      .sort((a, b) => a.path.localeCompare(b.path)),
+    [task?.id, tasks, trackId],
+  );
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [assigneeUserId, setAssigneeUserId] = useState(task?.assigneeUserId ?? assignees[0]?.id ?? '');
@@ -55,12 +81,21 @@ export default function WorkTaskFormModal({ actor, project, phases, users, task,
   const schedule = { startAt: dateToIso(startAt), dueAt: dateToIso(dueAt, true) };
   const outsideSchedule = isTaskOutsideProjectSchedule(project, schedule);
 
+  /** 수정 화면에서 "지금 어디에 있는지"만 알려 준다. 바꾸는 건 목록의 옮기기다. */
+  const positionLabel = task
+    ? [
+      tracks.find((track) => track.id === task.trackId)?.name,
+      tasks.find((row) => row.id === task.parentId)?.title ?? '대과업',
+    ].filter(Boolean).join(' › ')
+    : '';
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
     const draft: WorkTaskDraft = {
       projectId: project.id,
-      phaseId,
+      trackId: task?.trackId ?? trackId,
+      parentId: task?.parentId ?? parentId,
       title,
       description,
       assigneeUserId,
@@ -93,14 +128,41 @@ export default function WorkTaskFormModal({ actor, project, phases, users, task,
       )}
     >
       <form id="work-task-form" onSubmit={submit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="단계" required>
-            <SelectField aria-label="단계" value={phaseId} onChange={(event) => setPhaseId(event.target.value)} options={phases.map((phase) => ({ value: phase.id, label: phase.name }))} />
-          </Field>
-          <Field label="담당자" required hint="프로젝트 참여자만 선택할 수 있습니다.">
-            <SelectField aria-label="담당자" value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)} options={assignees.map((user) => ({ value: user.id, label: `${user.name} · ${user.dept}${user.status === '사용' ? '' : ' · 비활성'}` }))} />
-          </Field>
-        </div>
+        {task ? (
+          <div className="rounded-md border border-border bg-panel-alt px-3 py-2 text-[10px] font-semibold text-ink3">
+            위치 {positionLabel} · 위치를 바꾸려면 목록에서 옮기기를 쓰세요
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {tracks.length > 0 && (
+              <Field label="트랙" required>
+                <SelectField
+                  aria-label="트랙"
+                  value={trackId ?? ''}
+                  onChange={(event) => { setTrackId(event.target.value || null); setParentId(null); }}
+                  options={tracks.map((track) => ({ value: track.id, label: track.name }))}
+                />
+              </Field>
+            )}
+            <Field label="상위 과업" hint={`비우면 대과업이 됩니다. 최대 ${WORK_TASK_MAX_LEVEL}단.`}>
+              <SelectField
+                aria-label="상위 과업"
+                value={parentId ?? ''}
+                onChange={(event) => setParentId(event.target.value || null)}
+                options={[
+                  { value: '', label: '— 없음 (대과업) —' },
+                  ...parentOptions.map((row) => ({
+                    value: row.id,
+                    label: `${'　'.repeat(row.level - 1)}${row.title}`,
+                  })),
+                ]}
+              />
+            </Field>
+          </div>
+        )}
+        <Field label="담당자" required hint="프로젝트 참여자만 선택할 수 있습니다.">
+          <SelectField aria-label="담당자" value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)} options={assignees.map((user) => ({ value: user.id, label: `${user.name} · ${user.dept}${user.status === '사용' ? '' : ' · 비활성'}` }))} />
+        </Field>
         <Field label="작업명" required>
           <TextField aria-label="작업명" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={150} autoFocus className="w-full" />
         </Field>
