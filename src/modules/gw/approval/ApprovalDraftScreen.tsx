@@ -282,6 +282,9 @@ function ApprovalDraftInner({
 
     const timer = setTimeout(() => {
       localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
+        // 어느 문서를 쓰다 만 것인지 남긴다. 이게 없으면 신규 작성분과 수정 중이던
+        // 문서를 구분할 수 없어, 복구가 엉뚱한 문서에 붙을 위험 때문에 아예 막혀 있었다.
+        docId: editDoc?.id ?? null,
         code,
         title,
         values,
@@ -290,6 +293,9 @@ function ApprovalDraftInner({
         visibility,
         preservationPeriod,
         attachments,
+        // 관련문서가 저장 목록에서 빠져 있었다 — 이탈 방지 감시에는 들어 있는데
+        // 정작 보관을 안 해서, 복구해도 관련문서만 사라졌다.
+        relatedDocs,
         recipients,
         executionDepts,
         steps,
@@ -299,33 +305,38 @@ function ApprovalDraftInner({
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, recipients, executionDepts, steps, me.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, executionDepts, steps, me.id, editDoc?.id]);
 
   const hasCheckedAutosave = useRef(false);
 
   // 마운트 시 자동저장본 복구 제안
   useEffect(() => {
-    if (editDoc || hasCheckedAutosave.current) return;
+    if (hasCheckedAutosave.current) return;
     if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
     const isActive = localStorage.getItem('draft_autosave_active_' + me.id) === 'true';
     const saved = localStorage.getItem('draft_autosave_' + me.id);
+    let offered = false;
     if (isActive && saved) {
       try {
         const data = JSON.parse(saved);
-        if (data && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
+        // 보관본이 지금 열고 있는 문서의 것일 때만 제안한다. 예전에는 editDoc 이 있으면
+        // 검사 자체를 건너뛰어, **저장은 계속 하면서 꺼내지는 못하는** 상태였다.
+        const sameTarget = (data?.docId ?? null) === (editDoc?.id ?? null);
+        if (data && sameTarget && (Date.now() - data.timestamp < 24 * 60 * 60 * 1000)) {
           const formName = forms.find(f => f.code === data.code)?.name || data.code;
           setPendingAutosaveData(data);
           setAutosaveFormName(formName);
           setShowAutosaveRecoverModal(true);
+          offered = true;
         }
       } catch (e) {
         console.error('Failed to parse autosave data', e);
       }
     }
-    // 복구 여부 확인에 상관없이 진입 시 플래그 즉시 해제 (중복 복구 제안 방지)
-    localStorage.removeItem('draft_autosave_active_' + me.id);
-    // 최초 마운트 검사 완료 플래그 적용
+    // 제안을 띄웠을 때만 플래그를 내린다. 예전에는 무조건 지워서, 이 화면에 잠깐
+    // 들렀다 나가기만 해도 다음번 복구 제안이 사라졌다(내용은 남아 있는데도).
+    if (offered) localStorage.removeItem('draft_autosave_active_' + me.id);
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
@@ -1442,6 +1453,7 @@ function ApprovalDraftInner({
               if (data.attachments) setAttachments(data.attachments);
               if (data.recipients) setRecipients(data.recipients);
               if (data.executionDepts) setExecutionDepts(data.executionDepts);
+              if (data.relatedDocs) setRelatedDocs(data.relatedDocs);
               if (data.steps) setSteps(data.steps);
             }
             setShowAutosaveRecoverModal(false);
