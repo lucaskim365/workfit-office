@@ -3,12 +3,17 @@ import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
-import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName } from '@/features/chat/useChatRooms';
+import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
+import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
+import { nowLocalIso } from '@/shared/lib/datetime';
+import { CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
@@ -72,6 +77,24 @@ export default function MobileChatThread() {
 
   const [sheetMessage, setSheetMessage] = useState<ChatMessage | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [hasNewMsg, setHasNewMsg] = useState(false);
+  const prevLengthRef = useRef(messages.length);
+
+  const [showFileBox, setShowFileBox] = useState(false);
+  const filesInRoom = useMemo(() => {
+    return messages
+      .filter((m) => m.attachment)
+      .map((m) => ({
+        messageId: m.id,
+        senderName: m.senderName,
+        at: m.at,
+        attachment: m.attachment!,
+        type: m.type,
+      }))
+      .reverse();
+  }, [messages]);
 
   const copyToClipboard = async (val: string) => {
     try {
@@ -127,6 +150,24 @@ export default function MobileChatThread() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    setShowScrollBtn(!isAtBottom);
+    if (isAtBottom) {
+      setHasNewMsg(false);
+    }
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      setHasNewMsg(false);
+    }
+  };
+
   interface StagedFile {
     id: string;
     file: File;
@@ -180,14 +221,32 @@ export default function MobileChatThread() {
   const readonly = room?.type === 'notice';
   const displayName = room ? getRoomDisplayName(room, me, users) : '채팅방';
 
-  const filteredMessages = useMemo(() => {
+  // 검색 시 전체 대화를 유지하면서 위치 탐색만 하도록 변경
+  const filteredMessages = messages;
+
+  const searchMatchIds = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter((m) => {
-      if (m.type === 'system') return false;
-      return m.text?.toLowerCase().includes(q) || m.attachment?.name?.toLowerCase().includes(q);
-    });
+    if (!q) return [];
+    return messages
+      .filter((m) => {
+        if (m.type === 'system') return false;
+        return m.text?.toLowerCase().includes(q);
+      })
+      .map((m) => m.id);
   }, [messages, searchQuery]);
+
+  const [currentSearchIdx, setCurrentSearchIdx] = useState(0);
+
+  // 검색 인덱스 변경에 따른 스크롤 위치 이동
+  useEffect(() => {
+    if (searchMatchIds.length > 0 && currentSearchIdx >= 0) {
+      const activeId = searchMatchIds[currentSearchIdx];
+      const el = document.getElementById(`msg-${activeId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [searchMatchIds, currentSearchIdx]);
 
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
 
@@ -199,7 +258,20 @@ export default function MobileChatThread() {
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+
+    if (filteredMessages.length > prevLengthRef.current) {
+      if (isAtBottom) {
+        el.scrollTop = el.scrollHeight;
+        setHasNewMsg(false);
+      } else {
+        setHasNewMsg(true);
+      }
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+    prevLengthRef.current = filteredMessages.length;
   }, [filteredMessages.length]);
 
   const submit = async () => {
@@ -280,6 +352,7 @@ export default function MobileChatThread() {
 
   const menuActions: SheetAction[] = room
     ? [
+        { label: '파일함 모아보기 (📁)', onClick: () => { setMenuOpen(false); setShowFileBox(true); } },
         ...(room.type === 'group' && (room.createdBy === me || !room.createdBy) ? [{ label: '대화방 이름 변경', onClick: handleRenameRoom }] : []),
         ...(room.type === 'group' ? [{ label: '방 나가기', danger: true, onClick: onLeave }] : []),
         ...(isAdmin ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
@@ -292,7 +365,7 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
+    <div className="flex h-full flex-col relative" style={{ background: '#f2f8fc' }}>
       <header className="flex shrink-0 items-center gap-1 px-2 py-3 text-white" style={{ background: '#101830' }}>
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
@@ -326,23 +399,47 @@ export default function MobileChatThread() {
       </header>
 
       {showSearch && (
-        <div className="shrink-0 border-b border-black/10 bg-white px-4 py-2">
-          <div className="flex items-center gap-2 rounded-full bg-black/5 px-3 py-1.5">
+        <div className="shrink-0 border-b border-black/10 bg-white px-4 py-2 flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 rounded-full bg-black/5 px-3 py-1.5">
             <Search size={13} className="shrink-0 text-ink3" />
             <input
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentSearchIdx(0);
+              }}
               placeholder="메시지 또는 첨부파일명 검색…"
               className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-[10px] text-ink3">✕</button>
+              <button onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-[10px] text-ink3">✕</button>
             )}
           </div>
+          {searchMatchIds.length > 0 && (
+            <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-bold text-ink2 bg-black/5 rounded-full px-2.5 py-1 select-none">
+              <button
+                type="button"
+                onClick={() => setCurrentSearchIdx((prev) => (prev - 1 + searchMatchIds.length) % searchMatchIds.length)}
+                className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
+              >
+                ◀
+              </button>
+              <span className="tabular-nums">
+                {currentSearchIdx + 1}/{searchMatchIds.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentSearchIdx((prev) => (prev + 1) % searchMatchIds.length)}
+                className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
+              >
+                ▶
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
         {processedItems.length === 0 && (
           <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
@@ -368,7 +465,7 @@ export default function MobileChatThread() {
           const showTime = !hideTime;
 
           return (
-            <div key={m.id} className="space-y-2">
+            <div key={m.id} id={`msg-${m.id}`} className="space-y-2">
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">
@@ -399,12 +496,26 @@ export default function MobileChatThread() {
                   onCancelEdit={() => setEditingMessageId(null)}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
+                  searchQuery={searchQuery}
+                  isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
                 />
               )}
             </div>
           );
         })}
       </div>
+      {showScrollBtn && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-black/5 active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
+          style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
+        >
+          ⬇ 최근 메시지
+          {hasNewMsg && (
+            <span className="w-2 h-2 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
+          )}
+        </button>
+      )}
 
       {readonly ? (
         <div className="shrink-0 border-t border-black/10 bg-black/[0.03] px-4 py-3 text-center text-[11.5px] text-ink3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
@@ -512,6 +623,15 @@ export default function MobileChatThread() {
               </button>
               <button
                 onClick={() => {
+                  setForwardMessage(sheetMessage);
+                  setSheetMessage(null);
+                }}
+                className="w-full py-3.5 text-center text-[14px] font-semibold border-b border-black/5 text-ink active:bg-black/5"
+              >
+                전달하기
+              </button>
+              <button
+                onClick={() => {
                   copyToClipboard(sheetMessage.text || '');
                   setSheetMessage(null);
                 }}
@@ -540,6 +660,29 @@ export default function MobileChatThread() {
             취소
           </button>
         </div>,
+        document.body
+      )}
+      {forwardMessage && createPortal(
+        <MobileForwardModal
+          msg={forwardMessage}
+          me={me}
+          meName={meName}
+          rooms={rooms}
+          users={users}
+          onClose={() => setForwardMessage(null)}
+          onSuccess={() => {
+            setForwardMessage(null);
+            window.alert('성공적으로 전달되었습니다.');
+          }}
+        />,
+        document.body
+      )}
+      {showFileBox && createPortal(
+        <MobileFileBoxModal
+          files={filesInRoom}
+          onClose={() => setShowFileBox(false)}
+          onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
+        />,
         document.body
       )}
     </div>
@@ -775,6 +918,8 @@ function MessageBubble({
   onCancelEdit,
   onLongPress,
   onToggleEmoji,
+  searchQuery = '',
+  isSearchActive = false,
 }: {
   m: ChatMessage;
   me: string;
@@ -786,6 +931,8 @@ function MessageBubble({
   onCancelEdit: () => void;
   onLongPress: (msg: ChatMessage) => void;
   onToggleEmoji: (messageId: string, emoji: string) => void;
+  searchQuery?: string;
+  isSearchActive?: boolean;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -932,7 +1079,7 @@ function MessageBubble({
         className="whitespace-pre-line break-words rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
-        {m.text}
+        {renderHighlightedText(m.text, searchQuery, isSearchActive)}
       </div>
     );
   }
@@ -1196,4 +1343,417 @@ export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] 
     }
   }
   return items;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Teams 스타일 전달 모달 (PWA 모바일 전용)
+// ─────────────────────────────────────────────────────────────
+interface ForwardTarget {
+  id: string; // roomId 혹은 userId
+  name: string;
+  type: 'room' | 'user';
+  roomColor?: string;
+  position?: string;
+  dept?: string;
+  email?: string;
+}
+
+function MobileForwardModal({
+  msg,
+  me,
+  meName,
+  rooms,
+  users,
+  onClose,
+  onSuccess,
+}: {
+  msg: ChatMessage;
+  me: string;
+  meName: string;
+  rooms: ChatRoom[];
+  users: any[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [comment, setComment] = useState('');
+  const [selectedTargets, setSelectedTargets] = useState<ForwardTarget[]>([]);
+  const [sending, setSending] = useState(false);
+
+  // 검색 필터링 후보군 (방 + 직원)
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    
+    // 1:1 방의 상대방 유저 ID 수집
+    const directUserIds = new Set<string>();
+    rooms.forEach((r) => {
+      if (r.type === 'direct') {
+        const other = r.members.find((m) => m !== me);
+        if (other) directUserIds.add(other);
+      }
+    });
+
+    // 1. 방 검색 (direct 방인 경우 상대방 이름 검색 지원)
+    const filteredRooms: ForwardTarget[] = rooms
+      .filter((r) => {
+        const displayName = getRoomDisplayName(r, me, users);
+        return displayName.toLowerCase().includes(q);
+      })
+      .map((r) => ({
+        id: r.id,
+        name: getRoomDisplayName(r, me, users),
+        type: 'room',
+        roomColor: r.color,
+      }));
+
+    // 2. 직원 검색 (나 자신 및 이미 1:1 방이 개설된 사용자 제외)
+    const filteredUsers: ForwardTarget[] = users
+      .filter((u) => u.id !== me && !directUserIds.has(u.id) && (u.name.toLowerCase().includes(q) || u.dept?.toLowerCase().includes(q)))
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        type: 'user',
+        position: u.position,
+        dept: u.dept,
+        email: u.email,
+      }));
+
+    // 이미 선택된 것은 후보에서 제외
+    const selectedIds = selectedTargets.map((t) => t.id);
+    return [...filteredRooms, ...filteredUsers].filter((t) => !selectedIds.includes(t.id));
+  }, [search, rooms, users, me, selectedTargets]);
+
+  const handleAddTarget = (t: ForwardTarget) => {
+    setSelectedTargets((prev) => [...prev, t]);
+    setSearch('');
+  };
+
+  const handleRemoveTarget = (id: string) => {
+    setSelectedTargets((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleForward = async () => {
+    if (selectedTargets.length === 0) {
+      window.alert('받는 사람을 1명 이상 선택해 주세요.');
+      return;
+    }
+    setSending(true);
+    try {
+      const at = nowLocalIso();
+      for (const target of selectedTargets) {
+        let targetRoomId = '';
+        
+        if (target.type === 'room') {
+          targetRoomId = target.id;
+        } else {
+          // 유저인 경우 1:1 대화방 검색
+          const existingRoom = rooms.find(
+            (r) => r.type === 'direct' && r.members.includes(target.id) && r.members.includes(me)
+          );
+          if (existingRoom) {
+            targetRoomId = existingRoom.id;
+          } else {
+            // 방 개설
+            const newRoom = await chatRoomRepo.create({
+              name: `${meName}, ${target.name}`,
+              type: 'direct',
+              members: [me, target.id],
+              createdBy: me,
+            });
+            targetRoomId = newRoom.id;
+          }
+        }
+
+        // 메시지 추가 및 갱신
+        if (comment.trim()) {
+          const forwardPreview = msg.text || (msg.type === 'image' ? '📷 사진' : `📎 ${msg.attachment?.name ?? '파일'}`);
+          const newMsg: ChatMessage = {
+            id: `${targetRoomId}-${Date.now()}`,
+            roomId: targetRoomId,
+            senderId: me,
+            senderName: meName,
+            text: comment.trim(),
+            type: 'text',
+            attachment: null,
+            replyTo: {
+              id: msg.id,
+              senderName: msg.senderName || '알 수 없음',
+              text: forwardPreview,
+            },
+            approvalPayload: null,
+            at,
+            readBy: [me],
+            isEdited: false,
+            reactions: {},
+          };
+          await chatMessageRepo.append(newMsg);
+          await chatRoomRepo.updateLastMessage(targetRoomId, {
+            text: comment.trim(),
+            at,
+            senderId: me,
+          });
+        } else {
+          const newMsg: ChatMessage = {
+            id: `${targetRoomId}-${Date.now()}`,
+            roomId: targetRoomId,
+            senderId: me,
+            senderName: meName,
+            text: msg.text,
+            type: msg.type,
+            attachment: msg.attachment,
+            replyTo: msg.replyTo,
+            approvalPayload: msg.approvalPayload,
+            at,
+            readBy: [me],
+            isEdited: false,
+            reactions: {},
+          };
+          await chatMessageRepo.append(newMsg);
+          await chatRoomRepo.updateLastMessage(targetRoomId, {
+            text: msg.text || (msg.type === 'image' ? '📷 사진' : `📎 ${msg.attachment?.name ?? '파일'}`),
+            at,
+            senderId: me,
+          });
+        }
+      }
+      
+      // 전송 후 캐시 무효화
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+      
+      onSuccess();
+    } catch (e) {
+      window.alert('메시지 전달에 실패했습니다: ' + (e instanceof Error ? e.message : '알 수 없는 오류'));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const previewText = msg.text || (msg.type === 'image' ? '📷 사진' : `📎 ${msg.attachment?.name ?? '파일'}`);
+
+  return (
+    <div className="fixed inset-0 z-[150] flex flex-col justify-end bg-black/50 p-3" onClick={onClose}>
+      <div 
+        className="flex max-h-[85vh] flex-col rounded-2xl bg-white p-4 shadow-xl select-none" 
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
+          <span className="text-[15px] font-bold text-ink">이 메시지 전달</span>
+          <button onClick={onClose} className="text-[18px] text-ink3">✕</button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto py-3 space-y-4">
+          {/* 받는 사람 추가 */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink2 mb-1.5">받는 사람 추가 *</label>
+            <div className="flex flex-wrap gap-1.5 rounded-lg border border-black/10 bg-black/[0.02] p-1.5 focus-within:border-[#4ea8de] transition-colors relative">
+              {selectedTargets.map((t) => (
+                <div key={t.id} className="flex items-center gap-1 rounded bg-[#4ea8de]/10 border border-[#4ea8de]/20 px-2 py-0.5 text-[11px] font-semibold text-[#1d74a8]">
+                  <span>{t.name}</span>
+                  <button onClick={() => handleRemoveTarget(t.id)} className="text-[9px] hover:text-red">✕</button>
+                </div>
+              ))}
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={selectedTargets.length === 0 ? "이름, 부서 또는 대화방 입력..." : ""}
+                className="flex-1 min-w-[120px] bg-transparent text-[12px] outline-none"
+              />
+
+              {/* 검색 드롭다운 */}
+              {search.trim() && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-[160] max-h-48 overflow-y-auto rounded-lg border border-black/10 bg-white shadow-lg py-1">
+                  {suggestions.length === 0 ? (
+                    <div className="px-3 py-2 text-center text-[11px] text-ink3">검색 결과가 없습니다.</div>
+                  ) : (
+                    suggestions.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => handleAddTarget(t)}
+                        className="w-full px-3 py-2 text-left text-[12px] hover:bg-black/5 flex items-center justify-between"
+                      >
+                        <span className="font-semibold text-ink">
+                          {t.type === 'room' ? `👥 ${t.name}` : `👤 ${t.name}`}
+                        </span>
+                        {t.type === 'user' && (
+                          <span className="text-[10px] text-ink3">
+                            {t.dept ? `${t.dept} / ` : ''}{t.position || ''} {t.email ? `(${t.email})` : ''}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 메시지 추가 */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink2 mb-1.5">메시지 추가(선택 사항)</label>
+            <textarea
+              rows={2}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="전달 메시지를 추가하세요..."
+              className="w-full rounded-lg border border-black/10 bg-black/[0.02] p-2.5 text-[12px] outline-none focus:border-[#4ea8de] focus:bg-white resize-none"
+            />
+          </div>
+
+          {/* 메시지 미리보기 */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink2 mb-1.5">메시지 미리보기</label>
+            <div className="rounded-xl border border-black/5 bg-[#f2f8fc] p-3 flex flex-col gap-1 border-l-[3px] border-l-[#4ea8de]">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-ink2">
+                <span>{msg.senderName || '알 수 없음'}</span>
+                <span className="text-[8.5px] text-ink3 font-normal">{fmtBubbleTime(msg.at)}</span>
+              </div>
+              <div className="text-[11.5px] text-ink whitespace-pre-wrap line-clamp-3">
+                {previewText}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-black/5 pt-3 mt-1">
+          <button 
+            onClick={onClose} 
+            disabled={sending}
+            className="flex-1 rounded-xl bg-black/5 py-3 text-center text-[13px] font-bold text-ink2 active:bg-black/10 disabled:opacity-40"
+          >
+            취소
+          </button>
+          <button 
+            onClick={handleForward} 
+            disabled={sending || selectedTargets.length === 0}
+            className="flex-1 rounded-xl py-3 text-center text-[13px] font-bold text-white active:brightness-95 disabled:opacity-40"
+            style={{ background: '#4ea8de' }}
+          >
+            {sending ? '전달 중...' : '전달'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderHighlightedText(text: string, query: string, isActive: boolean) {
+  if (!text) return '';
+  if (!query.trim()) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const isMatch = part.toLowerCase() === query.trim().toLowerCase();
+        if (isMatch) {
+          return (
+            <mark
+              key={i}
+              className="rounded-xs px-0.5"
+              style={{
+                backgroundColor: isActive ? '#f57c00' : '#ffe082',
+                color: isActive ? '#fff' : '#1c2536',
+                fontWeight: 'bold',
+              }}
+            >
+              {part}
+            </mark>
+          );
+        }
+        return part;
+      })}
+    </>
+  );
+}
+
+function MobileFileBoxModal({
+  files,
+  onClose,
+  onOpenImage,
+}: {
+  files: any[];
+  onClose: () => void;
+  onOpenImage: (att: Attachment) => void;
+}) {
+  const handleGoToMessage = (messageId: string) => {
+    onClose();
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background-color 0.3s ease';
+        el.style.backgroundColor = '#ffd33d55';
+        setTimeout(() => {
+          el.style.backgroundColor = '';
+        }, 1500);
+      }
+    }, 150);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[150] flex flex-col bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header className="flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 bg-[#101830] text-white">
+        <span className="text-[15px] font-bold">📁 파일함 모아보기</span>
+        <button onClick={onClose} className="text-[14px] font-semibold text-white/80 hover:text-white px-2 cursor-pointer">닫기</button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
+        {files.length === 0 ? (
+          <div className="py-20 text-center text-[12px] text-ink3">공유된 파일이 없습니다.</div>
+        ) : (
+          files.map((f) => {
+            const isImg = f.type === 'image';
+            return (
+              <div key={f.messageId} className="flex items-center gap-3 rounded-xl border border-black/5 bg-black/[0.01] p-3 shadow-3xs">
+                {isImg ? (
+                  <button onClick={() => onOpenImage(f.attachment)} className="w-12 h-12 rounded-lg border border-black/10 overflow-hidden shrink-0 block bg-black/5 cursor-pointer">
+                    <img src={f.attachment.url} alt={f.attachment.name} className="w-full h-full object-cover" />
+                  </button>
+                ) : (
+                  <div className="w-12 h-12 rounded-lg border border-black/10 overflow-hidden shrink-0 flex items-center justify-center bg-black/5 text-[22px] select-none">
+                    📄
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <button 
+                    onClick={() => downloadAttachment(f.attachment)}
+                    className="block text-left text-[12.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
+                  >
+                    {f.attachment.name}
+                  </button>
+                  <div className="flex items-center gap-1.5 text-[10px] text-ink3 mt-0.5">
+                    <span>{f.senderName || '알 수 없음'}</span>
+                    <span>·</span>
+                    <span>{fmtSize(f.attachment.size)}</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{new Date(f.at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button 
+                    onClick={() => handleGoToMessage(f.messageId)}
+                    className="shrink-0 text-[15px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                    title="대화 위치로 이동"
+                  >
+                    💬
+                  </button>
+                  <button 
+                    onClick={() => downloadAttachment(f.attachment)}
+                    className="shrink-0 text-[16px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                    title="다운로드"
+                  >
+                    📥
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
 }
