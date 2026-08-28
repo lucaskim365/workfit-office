@@ -80,6 +80,10 @@ export default function AppShell() {
       if (d && d.type === 'workfit-open-chat') {
         setDockOpen('msg');
         requestOpenChatRoom(d.roomId || '');
+      } else if (d && d.type === 'workfit-open-link' && typeof d.linkUrl === 'string') {
+        // 결재·일정 알림. react-router 로 이동해야 페이지가 다시 로드되지 않는다 —
+        // SW 가 직접 navigate 하면 작성 중이던 내용이 사라진다.
+        navigate(d.linkUrl);
       }
     };
     navigator.serviceWorker.addEventListener('message', onMsg);

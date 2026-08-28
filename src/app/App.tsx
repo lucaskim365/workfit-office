@@ -183,8 +183,9 @@ export default function App() {
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
-            tag: p.roomId || p.docId || undefined,
-            requireInteraction: true,
+            // 서비스워커 쪽과 같은 규칙 — 일정 알림은 병합되고 스스로 사라진다.
+            tag: p.roomId || p.docId || p.linkUrl || undefined,
+            requireInteraction: Boolean(p.roomId || p.docId),
           });
         } else {
           new Notification(p.title, { body: p.body, icon: '/icons/icon-192.png' });
