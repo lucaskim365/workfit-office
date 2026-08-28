@@ -36,23 +36,35 @@ export default function ApprovalProcessScreen() {
 
   const handleSave = async () => {
     setIsLoading(true);
-    await approvalProcessRepo.saveOptions(options);
-    const fresh = await approvalProcessRepo.getOptions();
-    setOptions(fresh);
-    setIsLoading(false);
-    setToastMsg('결재 세부 프로세스 설정이 성공적으로 저장되었습니다.');
-    setTimeout(() => setToastMsg(null), 3000);
+    try {
+      await approvalProcessRepo.saveOptions(options);
+      const fresh = await approvalProcessRepo.getOptions();
+      setOptions(fresh);
+      setToastMsg('결재 세부 프로세스 설정이 성공적으로 저장되었습니다.');
+    } catch (e: any) {
+      console.error('Failed to save settings:', e);
+      alert(`설정 저장에 실패했습니다.\n사유: ${e?.message || e}`);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setToastMsg(null), 3000);
+    }
   };
 
   const handleReset = async () => {
     if (!confirm('정말로 모든 설정을 기본값으로 초기화하시겠습니까?')) return;
     setIsLoading(true);
-    await approvalProcessRepo.saveOptions(DEFAULT_PROCESS_OPTIONS);
-    const fresh = await approvalProcessRepo.getOptions();
-    setOptions(fresh);
-    setIsLoading(false);
-    setToastMsg('기본 설정으로 초기화되었습니다.');
-    setTimeout(() => setToastMsg(null), 3000);
+    try {
+      await approvalProcessRepo.saveOptions(DEFAULT_PROCESS_OPTIONS);
+      const fresh = await approvalProcessRepo.getOptions();
+      setOptions(fresh);
+      setToastMsg('기본 설정으로 초기화되었습니다.');
+    } catch (e: any) {
+      console.error('Failed to reset settings:', e);
+      alert(`설정 초기화에 실패했습니다.\n사유: ${e?.message || e}`);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setToastMsg(null), 3000);
+    }
   };
 
   const enabledCount = options.filter((o) => o.enabled).length;

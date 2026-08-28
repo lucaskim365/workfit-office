@@ -338,10 +338,11 @@ export function DraftRecipientSection({
         </button>
       </div>
 
-      {/* ─── 구분선 ─── */}
+      {/* ─── 구분선 ───
       <div className="mx-3 border-t border-border/60" />
+      */}
 
-      {/* ─── 시행처 설정 ─── */}
+      {/* ─── 시행처 설정 (시행처 기능 비활성화 처리) ───
       <div className="relative p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold text-teal flex items-center gap-1">
@@ -371,6 +372,7 @@ export function DraftRecipientSection({
           + 시행처 추가
         </button>
       </div>
+      */}
 
       {recipientDialog && (
         <SelectorDialog title="수신처 추가" org={org} excludeIds={excludeRecipientIds} singleSelect={false}

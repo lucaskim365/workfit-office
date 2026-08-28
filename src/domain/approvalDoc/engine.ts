@@ -134,10 +134,9 @@ export function applyDecision(
     return { ...next, currentSeq: recomputeCurrentSeq(next) };
   }
 
-  // 승인
-  const hasExecution = (next.executionDepts && next.executionDepts.length > 0) || (next.execution && next.execution.targetId);
-  const finalStatus = hasExecution ? '시행대기' : '완료';
-  const completedAtVal = hasExecution ? null : opts.at;
+  // 승인 (시행처 비활성화로 인해 hasExecution 여부에 무관하게 항상 완료 종결)
+  const finalStatus = '완료';
+  const completedAtVal = opts.at;
 
   // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
   if (step.kind === '전결') {
@@ -149,19 +148,6 @@ export function applyDecision(
       // 마지막 그룹 통과 → 완료.
       next = { ...next, status: finalStatus, completedAt: completedAtVal };
     }
-  }
-
-  // 최종 결재 완료/시행대기 시점에 시행자가 별도 지정되어 있을 경우, ApprovalExecution 데이터를 대기중 상태로 자동 활성화
-  if (next.status === '시행대기' && next.execution && next.execution.targetId) {
-    next.execution = {
-      ...next.execution,
-      docId: next.id,
-      status: '대기중',
-      executorId: null,
-      startedAt: null,
-      completedAt: null,
-      comment: '',
-    };
   }
 
   return { ...next, currentSeq: recomputeCurrentSeq(next) };
@@ -205,9 +191,10 @@ export function isTodoBoxMatch(doc: ApprovalDoc, userId: string, absentApproverI
   return false;
 }
 
-/** 상신함 판정: 내가 기안자이고 임시저장 상태가 아닌 모든 문서 */
+/** 상신함 판정: 내가 기안자이고 결재 미완료(진행중, 반려, 회수 등) 상태인 모든 문서 */
 export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
-  return doc.drafterId === userId && doc.status !== '임시저장';
+  const isPendingOrRejected = ['진행중', '반려', '긴급 조치 사후 검토 반려', '회수'].includes(doc.status);
+  return doc.drafterId === userId && isPendingOrRejected;
 }
 
 /** 반려함 판정: 반려 상태의 문서 중 내가 기안했거나 내가 반려 처리한 문서 */
@@ -260,11 +247,13 @@ export function isExecutionBoxMatch(doc: ApprovalDoc, userId: string, userDeptNa
   return false;
 }
 
+/** 완료함 판정: 최종 완료된 문서 중 내가 기안했거나 승인 결재한 문서 */
 export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
-  const isFinalStatus = doc.status === '완료' || doc.status === '시행대기' || doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
-  if (!isFinalStatus) return false;
+  if (doc.status !== '완료') return false;
   
-  return doc.steps.some((s) => s.approverId === userId && (s.decision === '승인' || s.decision === '반려'));
+  const isMyDraft = doc.drafterId === userId;
+  const isMyApproved = doc.steps.some((s) => s.approverId === userId && s.decision === '승인');
+  return isMyDraft || isMyApproved;
 }
 
 /**
