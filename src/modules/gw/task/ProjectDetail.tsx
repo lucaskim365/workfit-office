@@ -16,7 +16,6 @@ import ProjectCalendar from './ProjectCalendar';
 import ProjectFiles from './ProjectFiles';
 import ProjectSettingsModal from './ProjectSettingsModal';
 import ProjectWbs from './ProjectWbs';
-import TaskDetailModal from './TaskDetailModal';
 
 interface ProjectDetailProps {
   project: WorkProject;
@@ -67,7 +66,6 @@ export default function ProjectDetail({ project, actor, access, users, onBack }:
   const progress = rollupTrack(rootTasks, rolled);
 
   const canEdit = canManageProject(access, project) && project.status !== 'COMPLETED';
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -153,24 +151,12 @@ export default function ProjectDetail({ project, actor, access, users, onBack }:
         rolled={rolled}
         isLoading={tracksQuery.isLoading || tasksQuery.isLoading}
         error={tracksQuery.error ?? tasksQuery.error}
+        selectedTaskId={selectedTaskId}
+        onSelectTask={(task) => setSelectedTaskId(task?.id ?? null)}
         openTaskId={editingTaskId}
         onOpenTaskChange={setEditingTaskId}
-        onSelectTask={(task) => setSelectedTaskId(task.id)}
       />
 
-      {selectedTask && (
-        <TaskDetailModal
-          project={project}
-          access={access}
-          task={selectedTask}
-          tracks={tracks}
-          tasks={tasks}
-          users={users}
-          view={rolled.get(selectedTask.id) ?? { progress: selectedTask.progress, status: selectedTask.status, isLeaf: true }}
-          onClose={() => setSelectedTaskId(null)}
-          onEdit={() => { setEditingTaskId(selectedTask.id); setSelectedTaskId(null); }}
-        />
-      )}
 
       {settingsOpen && (
         <ProjectSettingsModal
