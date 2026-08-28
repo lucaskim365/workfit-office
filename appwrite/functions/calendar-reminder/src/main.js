@@ -105,6 +105,13 @@ async function recipientsOf(dbs, event) {
   return [...ids];
 }
 
+/**
+ * 알림 문서를 한 번에 몇 건까지 동시에 만들지. 전사 공개 일정은 수신자가 수백 명이라
+ * 전부 한꺼번에 만들면 Appwrite 부하도 부하지만, 접속 중인 **모든** 클라이언트가 그 수만큼
+ * 실시간 이벤트를 동시에 맞는다(구독이 컬렉션 단위다). 나눠 만들어 피크를 낮춘다.
+ */
+const CREATE_BATCH = 25;
+
 function scopeLabel(visibility) {
   if (visibility === 'TEAM') return ' · 부서 공유';
   if (visibility === 'PROJECT') return ' · 프로젝트 공유';
@@ -138,21 +145,41 @@ export default async ({ req, res, log, error }) => {
         const recipients = await recipientsOf(dbs, event);
         const text = `[${event.title}] ${event.date} ${event.startTime}~${event.endTime} 곧 시작합니다${scopeLabel(event.visibility)}`;
 
-        await Promise.all(recipients.map((userId) => dbs.createDocument(DB, 'notifications', ID.unique(), {
-          userId,
-          type: '일정',
-          title: '일정 알림',
-          text,
-          senderName: owner?.name ?? '일정 알림',
-          linkUrl: `/gw/calendar?date=${event.date}`,
-          read: false,
-          createdAt: new Date().toISOString(),
-        })));
+        let ok = 0;
+        let failed = 0;
+        for (let i = 0; i < recipients.length; i += CREATE_BATCH) {
+          const batch = recipients.slice(i, i + CREATE_BATCH);
+          const results = await Promise.allSettled(batch.map((userId) => dbs.createDocument(DB, 'notifications', ID.unique(), {
+            userId,
+            type: '일정',
+            title: '일정 알림',
+            text,
+            senderName: owner?.name ?? '일정 알림',
+            linkUrl: `/gw/calendar?date=${event.date}`,
+            read: false,
+            createdAt: new Date().toISOString(),
+          })));
+          for (const r of results) {
+            if (r.status === 'fulfilled') ok += 1;
+            else {
+              failed += 1;
+              if (failed <= 3) error(`알림 생성 실패(${event.$id}): ${r.reason?.message ?? r.reason}`);
+            }
+          }
+        }
 
         // 먼저 발송하고 나중에 플래그를 세운다 — 중간에 죽으면 다음 실행에서 또 보내는
         // 쪽(중복 가능)이, 플래그부터 세우고 발송이 실패해 영영 못 받는 쪽보다 낫다.
-        await dbs.updateDocument(DB, 'calendarEvents', event.$id, { reminded: true });
-        sent += recipients.length;
+        // 다만 그 판단을 **일부 실패**까지 넓히면 수백 명짜리 일정에서 몇 건 실패했다고
+        // 5분 뒤 전원이 또 받는다(예전 Promise.all 은 한 건만 깨져도 전체가 reject 됐다).
+        // 한 건이라도 성공했으면 플래그를 세우고, 못 받은 사람은 로그로만 남긴다.
+        if (ok > 0) {
+          await dbs.updateDocument(DB, 'calendarEvents', event.$id, { reminded: true });
+        } else {
+          error(`알림을 한 건도 만들지 못해 플래그를 세우지 않는다(${event.$id}) — 다음 실행에서 재시도`);
+        }
+        if (failed) log(`일정 ${event.$id} — 성공 ${ok}건 / 실패 ${failed}건`);
+        sent += ok;
       }
     }
     log(`완료 — 대상 일정 ${scanned}건, 알림 ${sent}건 발송`);
