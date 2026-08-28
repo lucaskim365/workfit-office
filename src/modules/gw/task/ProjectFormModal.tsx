@@ -13,6 +13,7 @@ import {
 import type { User } from '@/domain/user/schema';
 import { useSeedDefaultTracks } from '@/features/project/useProjectTracks';
 import { useCreateProject } from '@/features/project/useProjects';
+import { MemberPicker } from './MemberPicker';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { Field } from '@/shared/ui/form/Field';
@@ -56,13 +57,6 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
   const createProject = useCreateProject();
   const seedTracks = useSeedDefaultTracks();
   const isContract = projectType === 'CONTRACT';
-
-  const toggleMember = (userId: string) => {
-    if (userId === actor.id) return;
-    setMemberUserIds((current) => current.includes(userId)
-      ? current.filter((id) => id !== userId)
-      : [...current, userId]);
-  };
 
   const resetAndClose = () => {
     if (createProject.isPending) return;
@@ -189,14 +183,16 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
               { value: 'ACTIVE', label: '진행' },
             ]} />
           </Field>
-          <Field label="공개 범위">
+          {/* TEAM 은 프로젝트의 deptId(=생성자 부서)와 같은 부서다. 참여자의 부서와는 무관하므로
+              라벨에 실제 부서명을 박는다 — "같은 부서"만 쓰면 어느 부서인지 오해한다. */}
+          <Field label="공개 범위" hint="참여자는 범위와 상관없이 항상 볼 수 있습니다.">
             <SelectField value={visibility} onChange={(event) => setVisibility(event.target.value as WorkVisibility)} options={[
               { value: 'PRIVATE', label: '참여자만' },
-              { value: 'TEAM', label: '같은 부서' },
+              { value: 'TEAM', label: actor.dept ? `${actor.dept} 전체` : '내 부서 전체' },
               { value: 'COMPANY', label: '전사' },
             ]} />
           </Field>
-          <Field label="색상">
+          <Field label="색상" hint="목록·상세 상단 띠 색">
             <TextField type="color" value={color} onChange={(event) => setColor(event.target.value)} className="w-full p-1" />
           </Field>
         </div>
@@ -208,17 +204,13 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
             <TextField type="date" value={dueAt} min={startAt || undefined} onChange={(event) => setDueAt(event.target.value)} className="w-full" />
           </Field>
         </div>
-        <Field label={`참여자 ${memberUserIds.length}명`} hint="프로젝트 소유자인 본인은 항상 참여자입니다.">
-          <div className="max-h-44 overflow-y-auto rounded-lg border border-border p-2">
-            <div className="grid gap-1 sm:grid-cols-2">
-              {activeUsers.map((user) => (
-                <label key={user.id} className={`flex items-center gap-2 rounded-md px-2 py-2 text-[10.5px] ${user.id === actor.id ? 'bg-teal-soft/30' : 'hover:bg-panel-alt'}`}>
-                  <input type="checkbox" checked={memberUserIds.includes(user.id)} disabled={user.id === actor.id} onChange={() => toggleMember(user.id)} className="accent-teal" />
-                  <span className="min-w-0 truncate font-semibold text-ink2">{user.name} · {user.dept}{user.id === actor.id ? ' · 소유자' : ''}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+        <Field label={`참여자 ${memberUserIds.length}명`} hint="부서를 누르면 그 부서 전원이 선택됩니다. 소유자인 본인은 항상 참여자입니다.">
+          <MemberPicker
+            users={activeUsers}
+            selected={memberUserIds}
+            lockedUserId={actor.id}
+            onChange={(next) => setMemberUserIds(Array.from(new Set([actor.id, ...next])))}
+          />
         </Field>
         {error && <div role="alert" className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-[10.5px] font-semibold text-danger">{error}</div>}
       </form>

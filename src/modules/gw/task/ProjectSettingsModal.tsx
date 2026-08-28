@@ -12,6 +12,7 @@ import {
 } from '@/domain/workProject/schema';
 import type { User } from '@/domain/user/schema';
 import { useUpdateProject } from '@/features/project/useProjects';
+import { MemberPicker } from './MemberPicker';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { Field } from '@/shared/ui/form/Field';
@@ -63,13 +64,8 @@ export default function ProjectSettingsModal({ open, project, actor, access, use
   const [error, setError] = useState('');
   const updateProject = useUpdateProject();
   const isContract = projectType === 'CONTRACT';
-
-  const toggleMember = (userId: string) => {
-    if (userId === project.ownerUserId) return;
-    setMemberUserIds((current) => current.includes(userId)
-      ? current.filter((id) => id !== userId)
-      : [...current, userId]);
-  };
+  /** TEAM 범위가 가리키는 부서 = 프로젝트를 만든 부서. 소유자의 부서명을 그대로 보여 준다. */
+  const ownerDeptName = users.find((user) => user.id === project.ownerUserId)?.dept ?? '';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -157,28 +153,25 @@ export default function ProjectSettingsModal({ open, project, actor, access, use
               { value: 'COMPLETED', label: '완료' },
             ]} />
           </Field>
-          <Field label="공개 범위"><SelectField value={visibility} onChange={(event) => setVisibility(event.target.value as WorkVisibility)} options={[
+          {/* TEAM 은 프로젝트의 deptId(=만든 부서)와 같은 부서다. 참여자의 부서와는 무관하다. */}
+          <Field label="공개 범위" hint="참여자는 범위와 상관없이 항상 봅니다."><SelectField value={visibility} onChange={(event) => setVisibility(event.target.value as WorkVisibility)} options={[
             { value: 'PRIVATE', label: '참여자만' },
-            { value: 'TEAM', label: '같은 부서' },
+            { value: 'TEAM', label: ownerDeptName ? `${ownerDeptName} 전체` : '만든 부서 전체' },
             { value: 'COMPANY', label: '전사' },
           ]} /></Field>
-          <Field label="색상"><TextField type="color" value={color} onChange={(event) => setColor(event.target.value)} className="w-full p-1" /></Field>
+          <Field label="색상" hint="목록·상세 상단 띠 색"><TextField type="color" value={color} onChange={(event) => setColor(event.target.value)} className="w-full p-1" /></Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="시작일" hint="한국 표준시 기준"><TextField type="date" value={startAt} onChange={(event) => setStartAt(event.target.value)} className="w-full" /></Field>
           <Field label="종료일" hint="한국 표준시 기준"><TextField type="date" value={dueAt} min={startAt || undefined} onChange={(event) => setDueAt(event.target.value)} className="w-full" /></Field>
         </div>
-        <Field label={`참여자 ${memberUserIds.length}명`} hint="프로젝트 소유자는 참여자에서 제거할 수 없습니다.">
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-border p-2">
-            <div className="grid gap-1 sm:grid-cols-2">
-              {activeUsers.map((user) => (
-                <label key={user.id} className={`flex items-center gap-2 rounded-md px-2 py-2 text-[10.5px] ${user.id === project.ownerUserId ? 'bg-teal-soft/30' : 'hover:bg-panel-alt'}`}>
-                  <input type="checkbox" checked={memberUserIds.includes(user.id)} disabled={user.id === project.ownerUserId} onChange={() => toggleMember(user.id)} className="accent-teal" />
-                  <span className="min-w-0 truncate font-semibold text-ink2">{user.name} · {user.dept}{user.id === project.ownerUserId ? ' · 소유자' : user.status !== '사용' ? ' · 비활성' : ''}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+        <Field label={`참여자 ${memberUserIds.length}명`} hint="부서를 누르면 그 부서 전원이 선택됩니다. 소유자는 제거할 수 없습니다.">
+          <MemberPicker
+            users={activeUsers}
+            selected={memberUserIds}
+            lockedUserId={project.ownerUserId}
+            onChange={(next) => setMemberUserIds(Array.from(new Set([project.ownerUserId, ...next])))}
+          />
         </Field>
         <div className="rounded-lg border border-border bg-panel-alt/50 px-3 py-2 text-[9.5px] text-ink3">소유자: {actor.name}</div>
         {error && <div role="alert" className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-[10.5px] font-semibold text-danger">{error}</div>}
