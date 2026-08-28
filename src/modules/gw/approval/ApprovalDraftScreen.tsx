@@ -894,7 +894,7 @@ function ApprovalDraftInner({
             <input
               value={amount}
               onChange={(e) => {
-                const val = e.target.value;
+                const val = e.target.value.replace(/[^0-9]/g, '');
                 setAmount(val);
                 setVals({ [field.key]: val });
               }}
