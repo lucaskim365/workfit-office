@@ -11,7 +11,9 @@ const outsider: ProjectAccessContext = { userId: 'U008', deptId: 'D220', active:
 
 const draft: WorkTaskDraft = {
   projectId: 'PRJ-0001',
-  phaseId: 'PHASE-0002',
+  trackId: null,
+  parentId: null,
+  phaseId: null,
   title: 'WBS 저장소 테스트',
   description: '',
   assigneeUserId: member.userId,
@@ -21,11 +23,21 @@ const draft: WorkTaskDraft = {
   progress: 0,
 };
 
-test('접근 가능한 프로젝트의 작업만 WBS 순서로 조회한다', async () => {
+test('접근 가능한 프로젝트의 과업만 트리 순서로 조회한다', async () => {
   const rows = await workTaskRepo.list(member, 'PRJ-0001');
-  assert.equal(rows.length, 3);
-  assert.deepEqual(rows.map((row) => row.phaseId), ['PHASE-0001', 'PHASE-0002', 'PHASE-0003']);
+  // path 오름차순 하나로 부모 바로 밑에 자식이 오고 형제는 순번대로 온다.
+  assert.deepEqual(rows.map((row) => row.path), ['0000', '0001', '0001.0000', '0001.0001', '0002']);
+  assert.deepEqual(rows.map((row) => row.level), [1, 1, 2, 2, 1]);
   assert.deepEqual(await workTaskRepo.list(outsider, 'PRJ-0001'), []);
+});
+
+test('트랙이 있는 프로젝트는 트랙별로 묶여 나온다', async () => {
+  const rows = await workTaskRepo.list(member, 'PRJ-0003');
+  const tracks = rows.map((row) => row.trackId);
+  // 같은 트랙끼리 붙어 있어야 화면이 트랙 단위로 끊어 그릴 수 있다.
+  assert.deepEqual(tracks, [...tracks].sort((a, b) => (a ?? '').localeCompare(b ?? '')));
+  // path 는 트랙 그룹 안에서만 유일하다 — 트랙이 다르면 같은 경로가 나올 수 있다.
+  assert.equal(rows.filter((row) => row.path === '0000').length, 3);
 });
 
 test('프로젝트 참여자가 작업을 만들고 작성자가 수정·삭제한다', async () => {
@@ -49,6 +61,8 @@ test('담당자는 본인 작업의 진척률을 변경하되 상세는 수정�
   await assert.rejects(
     () => workTaskRepo.update(member, progressed.id, {
       projectId: progressed.projectId,
+      trackId: progressed.trackId,
+      parentId: progressed.parentId,
       phaseId: progressed.phaseId,
       title: '권한 없는 수정',
       description: progressed.description,

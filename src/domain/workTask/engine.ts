@@ -1,12 +1,14 @@
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { rollupTasks, rollupTrack } from '@/domain/workProject/rollup';
 import type { WorkProject } from '@/domain/workProject/schema';
-import type { WorkPhase } from '@/domain/workPhase/schema';
 import type { WorkTask, WorkTaskDraft, WorkTaskStatus } from './schema';
 
 export type WbsDomainErrorCode =
   | 'FORBIDDEN'
   | 'INVALID_PROJECT'
   | 'INVALID_PHASE'
+  | 'INVALID_PARENT'
+  | 'INVALID_TRACK'
   | 'INVALID_ASSIGNEE'
   | 'INVALID_PROGRESS'
   | 'VERSION_CONFLICT';
@@ -54,16 +56,31 @@ export function canUpdateWbsTaskProgress(
       || task.assigneeUserId === actor.userId);
 }
 
+/**
+ * 작업이 가리키는 것들이 실제로 맞는지 확인한다.
+ * ([[프로젝트관리_고도화_계획서.md]] §3)
+ *
+ * 옛 `phase` 인자는 트리 도입으로 `parent`(상위 과업)로 대체됐다. `parentId`가 `null`이면
+ * 대과업이라 확인할 상위가 없다.
+ *
+ * 상위와 트랙이 다르면 거부한다 — 한 트리가 두 트랙에 걸치면 트랙 진행률이 어느 쪽에도
+ * 온전히 안 잡히고 `path`의 유일성(트랙 그룹 내)도 깨진다.
+ */
 export function assertTaskReferences(
   project: WorkProject,
-  phase: WorkPhase | null,
+  parent: WorkTask | null,
   draft: WorkTaskDraft,
 ): void {
   if (draft.projectId !== project.id) {
     throw new WbsDomainError('INVALID_PROJECT', '작업의 프로젝트가 일치하지 않습니다.');
   }
-  if (!phase || phase.projectId !== project.id || draft.phaseId !== phase.id) {
-    throw new WbsDomainError('INVALID_PHASE', '현재 프로젝트의 WBS 단계를 선택하세요.');
+  if (draft.parentId !== null) {
+    if (!parent || parent.projectId !== project.id || parent.id !== draft.parentId) {
+      throw new WbsDomainError('INVALID_PARENT', '현재 프로젝트의 상위 과업을 선택하세요.');
+    }
+    if (parent.trackId !== draft.trackId) {
+      throw new WbsDomainError('INVALID_TRACK', '상위 과업과 트랙이 달라 배치할 수 없습니다.');
+    }
   }
   if (!project.memberUserIds.includes(draft.assigneeUserId)) {
     throw new WbsDomainError('INVALID_ASSIGNEE', '프로젝트 참여자만 작업 담당자로 지정할 수 있습니다.');
@@ -119,10 +136,21 @@ function averageProgress(tasks: WorkTask[]): number {
   return Math.round(tasks.reduce((sum, task) => sum + task.progress, 0) / tasks.length);
 }
 
+/**
+ * 프로젝트 전체 진행률 — 대과업들의 기간 가중 평균.
+ * ([[프로젝트관리_고도화_계획서.md]] §4)
+ *
+ * 트리 도입 전에는 전 작업의 단순 평균이었다. 트리에서 그렇게 하면 상위 과업의 저장값까지
+ * 같이 세어 **하위가 두 번 반영된다.** 리프에서 접어 올린 뒤 대과업만 모아 평균 낸다.
+ */
 export function deriveProjectWbsProgress(tasks: WorkTask[], projectId: string): number {
-  return averageProgress(tasks.filter((task) => task.projectId === projectId));
+  const scoped = tasks.filter((task) => task.projectId === projectId);
+  const rolled = rollupTasks(scoped);
+  const roots = scoped.filter((task) => task.parentId === null);
+  return rollupTrack(roots, rolled);
 }
 
+/** 옛 WBS 단계별 진행률. 이관 기간 동안만 남는다([[프로젝트관리_고도화_계획서.md]] §12). */
 export function derivePhaseProgress(tasks: WorkTask[], phaseId: string): number {
   return averageProgress(tasks.filter((task) => task.phaseId === phaseId));
 }

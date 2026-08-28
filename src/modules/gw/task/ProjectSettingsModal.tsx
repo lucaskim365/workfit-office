@@ -1,9 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import {
+  WORK_FUNDING_TYPE_LABELS,
+  WORK_PROJECT_TYPE_LABELS,
+  type WorkFundingType,
   type WorkProject,
   type WorkProjectDraft,
   type WorkProjectStatus,
+  type WorkProjectType,
   type WorkVisibility,
 } from '@/domain/workProject/schema';
 import type { User } from '@/domain/user/schema';
@@ -52,8 +56,13 @@ export default function ProjectSettingsModal({ open, project, actor, access, use
   const [startAt, setStartAt] = useState(isoToDate(project.startAt));
   const [dueAt, setDueAt] = useState(isoToDate(project.dueAt));
   const [color, setColor] = useState(project.color);
+  const [projectType, setProjectType] = useState<WorkProjectType>(project.projectType);
+  const [fundingType, setFundingType] = useState<WorkFundingType>(project.fundingType ?? 'GOVERNMENT');
+  const [clientName, setClientName] = useState(project.clientName ?? '');
+  const [contractNo, setContractNo] = useState(project.contractNo ?? '');
   const [error, setError] = useState('');
   const updateProject = useUpdateProject();
+  const isContract = projectType === 'CONTRACT';
 
   const toggleMember = (userId: string) => {
     if (userId === project.ownerUserId) return;
@@ -74,6 +83,13 @@ export default function ProjectSettingsModal({ open, project, actor, access, use
       deptId: project.deptId,
       visibility,
       status,
+      projectType,
+      // 수주 → 자체로 바꾸면 계약 정보를 함께 지운다. 남겨 두면 리포트 소계가 어긋난다.
+      fundingType: isContract ? fundingType : null,
+      clientName: isContract && clientName.trim() ? clientName.trim() : null,
+      contractNo: isContract && contractNo.trim() ? contractNo.trim() : null,
+      contractStartAt: isContract ? project.contractStartAt : null,
+      contractEndAt: isContract ? project.contractEndAt : null,
       startAt: dateToIso(startAt),
       dueAt: dateToIso(dueAt, true),
       color,
@@ -106,6 +122,32 @@ export default function ProjectSettingsModal({ open, project, actor, access, use
           <Field label="프로젝트명" required><TextField value={name} onChange={(event) => setName(event.target.value)} maxLength={100} className="w-full" /></Field>
         </div>
         <Field label="설명"><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={4} className="w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal" /></Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="사업 유형" required hint="외부 발주처·계약이 있으면 수주사업입니다.">
+            <SelectField value={projectType} onChange={(event) => setProjectType(event.target.value as WorkProjectType)} options={[
+              { value: 'INTERNAL', label: WORK_PROJECT_TYPE_LABELS.INTERNAL },
+              { value: 'CONTRACT', label: WORK_PROJECT_TYPE_LABELS.CONTRACT },
+            ]} />
+          </Field>
+          {isContract && (
+            <Field label="재원" required>
+              <SelectField value={fundingType} onChange={(event) => setFundingType(event.target.value as WorkFundingType)} options={[
+                { value: 'GOVERNMENT', label: WORK_FUNDING_TYPE_LABELS.GOVERNMENT },
+                { value: 'PRIVATE', label: WORK_FUNDING_TYPE_LABELS.PRIVATE },
+              ]} />
+            </Field>
+          )}
+        </div>
+        {isContract && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="발주처">
+              <TextField value={clientName} onChange={(event) => setClientName(event.target.value)} maxLength={100} className="w-full" />
+            </Field>
+            <Field label="계약번호">
+              <TextField value={contractNo} onChange={(event) => setContractNo(event.target.value)} maxLength={60} className="w-full" />
+            </Field>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="상태">
             <SelectField value={status} onChange={(event) => setStatus(event.target.value as typeof status)} options={[

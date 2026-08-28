@@ -1,7 +1,17 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
-import type { WorkProject, WorkProjectDraft, WorkProjectStatus, WorkVisibility } from '@/domain/workProject/schema';
+import {
+  WORK_FUNDING_TYPE_LABELS,
+  WORK_PROJECT_TYPE_LABELS,
+  type WorkFundingType,
+  type WorkProject,
+  type WorkProjectDraft,
+  type WorkProjectStatus,
+  type WorkProjectType,
+  type WorkVisibility,
+} from '@/domain/workProject/schema';
 import type { User } from '@/domain/user/schema';
+import { useSeedDefaultTracks } from '@/features/project/useProjectTracks';
 import { useCreateProject } from '@/features/project/useProjects';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
@@ -36,8 +46,16 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
   const [startAt, setStartAt] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [color, setColor] = useState('#16a394');
+  // 유형과 트랙은 직교한다 — 자체사업도 영업 트랙을 쓸 수 있다.
+  const [projectType, setProjectType] = useState<WorkProjectType>('INTERNAL');
+  const [fundingType, setFundingType] = useState<WorkFundingType>('GOVERNMENT');
+  const [clientName, setClientName] = useState('');
+  const [contractNo, setContractNo] = useState('');
+  const [withDefaultTracks, setWithDefaultTracks] = useState(true);
   const [error, setError] = useState('');
   const createProject = useCreateProject();
+  const seedTracks = useSeedDefaultTracks();
+  const isContract = projectType === 'CONTRACT';
 
   const toggleMember = (userId: string) => {
     if (userId === actor.id) return;
@@ -57,6 +75,11 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
     setStartAt('');
     setDueAt('');
     setColor('#16a394');
+    setProjectType('INTERNAL');
+    setFundingType('GOVERNMENT');
+    setClientName('');
+    setContractNo('');
+    setWithDefaultTracks(true);
     setError('');
     onClose();
   };
@@ -73,6 +96,13 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
       deptId: access.deptId,
       visibility,
       status,
+      projectType,
+      // 자체사업에 계약 정보가 남으면 리포트의 유형별 소계가 어긋난다. 여기서 잘라 낸다.
+      fundingType: isContract ? fundingType : null,
+      clientName: isContract && clientName.trim() ? clientName.trim() : null,
+      contractNo: isContract && contractNo.trim() ? contractNo.trim() : null,
+      contractStartAt: null,
+      contractEndAt: null,
       startAt: dateToIso(startAt),
       dueAt: dateToIso(dueAt, true),
       color,
@@ -80,6 +110,15 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
     };
     try {
       const created = await createProject.mutateAsync({ actor: access, draft }) as WorkProject;
+      if (withDefaultTracks) {
+        // 트랙 생성이 실패해도 프로젝트는 이미 만들어졌다 — 여기서 막으면 사용자가
+        // 프로젝트가 안 생긴 줄 알고 다시 만든다. 트랙은 나중에 손으로 추가할 수 있다.
+        try {
+          await seedTracks.mutateAsync({ actor: access, projectId: created.id });
+        } catch {
+          /* noop — 트랙은 프로젝트 설정에서 추가할 수 있다 */
+        }
+      }
       onCreated(created);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '프로젝트를 저장하지 못했습니다.');
@@ -110,6 +149,38 @@ export default function ProjectFormModal({ open, actor, access, users, onClose, 
         </div>
         <Field label="설명">
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={4} placeholder="목표와 범위를 입력하세요" className="w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal" />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="사업 유형" required hint="외부 발주처·계약이 있으면 수주사업입니다.">
+            <SelectField value={projectType} onChange={(event) => setProjectType(event.target.value as WorkProjectType)} options={[
+              { value: 'INTERNAL', label: WORK_PROJECT_TYPE_LABELS.INTERNAL },
+              { value: 'CONTRACT', label: WORK_PROJECT_TYPE_LABELS.CONTRACT },
+            ]} />
+          </Field>
+          {isContract && (
+            <Field label="재원" required>
+              <SelectField value={fundingType} onChange={(event) => setFundingType(event.target.value as WorkFundingType)} options={[
+                { value: 'GOVERNMENT', label: WORK_FUNDING_TYPE_LABELS.GOVERNMENT },
+                { value: 'PRIVATE', label: WORK_FUNDING_TYPE_LABELS.PRIVATE },
+              ]} />
+            </Field>
+          )}
+        </div>
+        {isContract && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="발주처">
+              <TextField value={clientName} onChange={(event) => setClientName(event.target.value)} maxLength={100} placeholder="한국산업기술진흥원" className="w-full" />
+            </Field>
+            <Field label="계약번호">
+              <TextField value={contractNo} onChange={(event) => setContractNo(event.target.value)} maxLength={60} placeholder="KIAT-2026-0417" className="w-full" />
+            </Field>
+          </div>
+        )}
+        <Field label="트랙" hint="영업·사업관리·개발을 미리 만들어 둡니다. 나중에 지우거나 이름을 바꿀 수 있습니다.">
+          <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-[11px] text-ink2">
+            <input type="checkbox" checked={withDefaultTracks} onChange={(event) => setWithDefaultTracks(event.target.checked)} className="accent-teal" />
+            기본 트랙 만들기
+          </label>
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="초기 상태">

@@ -715,6 +715,18 @@ const COLLECTIONS: CollectionDef[] = [
       S('deptId', 64),
       EN('visibility', ['PRIVATE', 'TEAM', 'COMPANY']),
       EN('status', ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED']),
+      /*
+        사업 유형 — 대분류는 **발주처가 있는가**로 가른다. 정산·검수·보고 의무, 매출 인식,
+        산출물 소유권이 전부 이 경계에서 갈린다. 국책/민간은 그 아래 재원 속성이다.
+        ([[프로젝트관리_고도화_계획서.md]] §1)
+        자체사업이면 fundingType·clientName·contractNo 는 비어 있어야 한다(도메인 규칙).
+      */
+      EN('projectType', ['CONTRACT', 'INTERNAL']),
+      EN('fundingType', ['GOVERNMENT', 'PRIVATE']),
+      S('clientName', 100),
+      S('contractNo', 60),
+      S('contractStartAt', 40),
+      S('contractEndAt', 40),
       S('startAt', 40),
       S('dueAt', 40),
       S('color', 16),
@@ -724,7 +736,37 @@ const COLLECTIONS: CollectionDef[] = [
       S('updatedBy', 64, true),
       S('updatedAt', 40),
     ],
-    indexes: [IX('prjOwner', ['ownerUserId']), IX('prjStatus', ['status'])],
+    indexes: [IX('prjOwner', ['ownerUserId']), IX('prjStatus', ['status']), IX('prjType', ['projectType'])],
+  },
+  {
+    id: 'workTracks',
+    name: '프로젝트 트랙',
+    /*
+      영업·사업관리·개발처럼 **동시에 도는 레인**. 이름은 코드에 박힌 enum이 아니라
+      프로젝트마다 정하는 데이터다 — 영업팀도 사업관리팀도 각자 자체 사업을 하고, 어느
+      구분에도 맞지 않는 사업도 있어서 유형(수주/자체)이 트랙 구성을 제약하지 않는다.
+      개수는 0~N개고 0개면 대과업이 최상위가 된다.
+      ([[프로젝트관리_고도화_계획서.md]] §2)
+
+      트랙은 과업이 아니다 — 담당자·기간·진행률을 받지 않고 이름·순서·색만 가진다.
+      트랙 진행률은 직속 대과업들에서 계산해 낸다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('projectId', 64, true),
+      S('name', 40, true),
+      INT('sortOrder', false, 0, 0, 9999),
+      S('color', 16),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedBy', 64, true),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('trackProject', ['projectId', 'sortOrder']),
+      /* 같은 프로젝트에 같은 이름 트랙이 둘이면 리포트에서 어느 쪽인지 구분할 수 없다. */
+      UQ('trackName', ['projectId', 'name']),
+    ],
   },
   {
     id: 'workPhases',
@@ -744,10 +786,27 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'workTasks',
     name: 'WBS 작업',
+    /*
+      대→중→소 가변 깊이 과업 트리(최대 5단). `path`는 조상 순번을 이어 붙인 값으로
+      **Appwrite에 재귀 쿼리·조인이 없어서** 둔다 — 없으면 "이 대과업 밑 전부"를 단계마다
+      쿼리해야 해서 N+1로 터진다. 하위 전체는 `trackId` 일치 + `startsWith(path, ...)` 한 번,
+      트리 정렬은 `path` 오름차순 하나로 끝난다.
+      `path`는 같은 `trackId` 그룹 안에서만 유일하다.
+      ([[프로젝트관리_고도화_계획서.md]] §3)
+
+      진행률은 **리프에만** 저장한다. 상위 값은 저장하지 않고 읽은 뒤 계산한다 —
+      저장하면 리프가 바뀔 때마다 조상 전부를 갱신해야 하는데 트랜잭션이 없어 한 번만
+      실패해도 영구히 어긋난다(§4).
+    */
     attributes: [
       S('id', 64, true),
       S('projectId', 64, true),
-      S('phaseId', 64, true),
+      S('trackId', 64),
+      S('parentId', 64),
+      INT('level', false, 1, 1, 5),
+      S('path', 120),
+      /* 옛 WBS 단계 — 트리 이관이 끝나면 이 속성과 workPhases 컬렉션을 함께 없앤다(§12). */
+      S('phaseId', 64),
       S('title', 150, true),
       S('description', 2000),
       S('assigneeUserId', 64, true),
@@ -767,6 +826,9 @@ const COLLECTIONS: CollectionDef[] = [
       IX('taskProject', ['projectId']),
       IX('taskPhase', ['phaseId']),
       IX('taskAssignee', ['assigneeUserId']),
+      IX('taskTrack', ['projectId', 'trackId']),
+      /* 하위 전체 조회(prefix)와 트리 정렬이 이 인덱스 하나로 해결된다. */
+      IX('taskPath', ['projectId', 'trackId', 'path']),
     ],
   },
   {

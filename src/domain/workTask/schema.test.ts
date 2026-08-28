@@ -17,6 +17,10 @@ const phase = {
 const task = {
   id: 'TASK-20260812-0001',
   projectId: 'PRJ-0001',
+  trackId: null,
+  parentId: null,
+  level: 1,
+  path: '0000',
   phaseId: 'PHASE-0001',
   title: '요구사항 정리',
   description: '',
@@ -37,6 +41,26 @@ const task = {
 test('프로젝트 WBS 단계와 작업 계약을 검증한다', () => {
   assert.equal(workPhaseSchema.safeParse(phase).success, true);
   assert.equal(workTaskSchema.safeParse(task).success, true);
+});
+
+test('트리 불변식 — level·parentId·path 가 서로 맞아야 한다', () => {
+  // 셋 중 하나만 어긋나도 트리 조회가 조용히 틀린다. 저장 전에 막는다.
+  assert.equal(workTaskSchema.safeParse({ ...task, level: 2 }).success, false, 'level 2인데 상위가 없다');
+  assert.equal(
+    workTaskSchema.safeParse({ ...task, parentId: 'TASK-20260812-0002' }).success,
+    false,
+    'level 1인데 상위가 있다',
+  );
+  assert.equal(
+    workTaskSchema.safeParse({ ...task, parentId: 'TASK-20260812-0002', level: 2, path: '0000' }).success,
+    false,
+    '경로 마디 수가 level과 다르다',
+  );
+  assert.equal(
+    workTaskSchema.safeParse({ ...task, parentId: 'TASK-20260812-0002', level: 2, path: '0000.0001' }).success,
+    true,
+  );
+  assert.equal(workTaskSchema.safeParse({ ...task, path: '1' }).success, false, '마디는 4자리다');
 });
 
 test('작업 시작일보다 빠른 마감일을 거절한다', () => {
