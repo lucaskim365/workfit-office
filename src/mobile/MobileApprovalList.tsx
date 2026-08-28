@@ -34,10 +34,13 @@ const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
 ];
 
 const EXTRA_BOX_OPTIONS: { key: ApprovalBox | '문서함'; label: string }[] = [
-  { key: '참조', label: '참조함' },
   { key: '수신', label: '수신함' },
+  { key: '참조', label: '참조함' },
   { key: '시행', label: '시행함' },
   { key: '후열', label: '후열함' },
+  { key: '반려', label: '반려함' },
+  { key: '임시', label: '임시 저장함' },
+  { key: '삭제', label: '휴지통' },
   { key: '문서함', label: '부서 문서함' },
 ];
 
@@ -75,6 +78,7 @@ export default function MobileApprovalList() {
   const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
+  const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
   const org = useOrgTree();
 
   // 로컬스토리지 키 설정
@@ -209,8 +213,17 @@ export default function MobileApprovalList() {
       });
     }
 
+    // 4.5 반려함 필터링
+    if (box === '반려') {
+      if (rejectFilter === 'draft') return rawDocs.filter((d) => d.drafterId === me);
+      if (rejectFilter === 'rejected') {
+        return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      }
+      return rawDocs;
+    }
+
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, execFilter, docBoxFilter, me, org, user?.dept]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, execFilter, docBoxFilter, rejectFilter, me, org, user?.dept]);
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
@@ -338,6 +351,26 @@ export default function MobileApprovalList() {
               <button
                 key={f}
                 onClick={() => setExecFilter(f)}
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {box === '반려' && (
+        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
+          {(['draft', 'rejected'] as const).map((f) => {
+            const label = f === 'draft' ? '내가 기안한 문서' : '내가 반려한 문서';
+            const active = rejectFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setRejectFilter(f)}
                 className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
                   active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
