@@ -36,7 +36,8 @@ import { Upload, X, Paperclip } from 'lucide-react';
  * 이건 이 브라우저에만 있다.
  *
  * **경과 초를 계속 세지 않는다.** 숫자가 1초마다 올라가면 시선을 계속 끌어 작성에
- * 방해가 된다. 보관 직후 잠깐만 알리고, 그 뒤에는 조용한 상시 문구로 가라앉힌다.
+ * 방해가 된다. 대신 보관될 때마다 **시각을 찍어** 잠깐 보여 준다 — 값이 실제로 바뀌는
+ * 것이 보여야 "돌고는 있나" 하는 의심이 안 생긴다.
  */
 function AutosaveIndicator({ at }: { at: number | null }) {
   const [justSaved, setJustSaved] = useState(false);
@@ -44,7 +45,7 @@ function AutosaveIndicator({ at }: { at: number | null }) {
   useEffect(() => {
     if (at === null) return;
     setJustSaved(true);
-    const id = setTimeout(() => setJustSaved(false), 1600);
+    const id = setTimeout(() => setJustSaved(false), 2500);
     return () => clearTimeout(id);
   }, [at]);
 
@@ -56,11 +57,13 @@ function AutosaveIndicator({ at }: { at: number | null }) {
 
   return (
     <span
-      className="flex items-center gap-1.5 px-1 text-[11px] font-semibold text-ink3"
-      title={`마지막 보관 ${stamp} · 작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침해도 복구할 수 있습니다.`}
+      className="flex items-center gap-1.5 px-1 text-[11px] font-semibold tabular-nums"
+      title={`마지막 보관 ${stamp} · 작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침하거나 탭을 닫아도 복구할 수 있습니다.`}
     >
       <span className={`h-1.5 w-1.5 rounded-full transition-colors ${justSaved ? 'bg-ok' : 'bg-ink3/40'}`} />
-      {justSaved ? '보관됨' : '자동 보관 중'}
+      <span className={justSaved ? 'text-ok' : 'text-ink3'}>
+        {justSaved ? `보관됨 ${stamp}` : '자동 보관 중'}
+      </span>
     </span>
   );
 }
@@ -371,15 +374,30 @@ function ApprovalDraftInner({
     };
 
     const timer = setTimeout(snapshot, 1000);
-    // 탭을 옮기거나 창을 벗어나면 디바운스를 기다리지 않고 바로 보관한다.
-    const flush = () => { if (document.visibilityState === 'hidden') snapshot(); };
+
+    /**
+     * 창을 떠날 때는 디바운스를 기다리지 않고 즉시 보관한다.
+     *
+     * **탭 종료가 특히 위험하다.** 정리(cleanup)에서 `clearTimeout` 이 돌기 때문에,
+     * 마지막으로 친 글자가 1초 안에 있었다면 그대로 사라진다. 실제로 "탭 닫았는데
+     * 저장이 안 된다"는 증상이 여기서 나왔다.
+     *
+     * `blur` 하나로는 부족하다 — 탭을 닫을 때 창 blur 는 보장되지 않는다.
+     * 브라우저가 페이지를 접는 순간 확실히 오는 것은 `pagehide` 와
+     * `visibilitychange`(hidden) 다. `localStorage` 쓰기는 동기라 이 시점에도 완료된다.
+     */
+    const flushIfHidden = () => { if (document.visibilityState === 'hidden') snapshot(); };
     window.addEventListener('blur', snapshot);
-    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', snapshot);
+    window.addEventListener('beforeunload', snapshot);
+    document.addEventListener('visibilitychange', flushIfHidden);
 
     return () => {
       clearTimeout(timer);
       window.removeEventListener('blur', snapshot);
-      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', snapshot);
+      window.removeEventListener('beforeunload', snapshot);
+      document.removeEventListener('visibilitychange', flushIfHidden);
     };
   }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, executionDepts, steps, me.id, editDoc?.id]);
 
