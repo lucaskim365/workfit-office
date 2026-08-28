@@ -35,16 +35,17 @@ import { Upload, X, Paperclip } from 'lucide-react';
  * 사용자가 안심한다. 서버 임시저장과 헷갈리지 않게 "보관"이라고 부른다 —
  * 이건 이 브라우저에만 있다.
  *
- * **경과 초를 계속 세지 않는다.** 숫자가 1초마다 올라가면 시선을 계속 끌어 작성에
- * 방해가 된다. 보관 직후 잠깐만 알리고, 그 뒤에는 조용한 상시 문구로 가라앉힌다.
+ * **마지막으로 보관된 시각을 그대로 붙박아 둔다.** 경과 초를 세면 숫자가 계속 움직여
+ * 시선을 뺏고, "자동 보관 중"처럼 상태만 쓰면 지금 저장 중이라는 건지 끝났다는 건지
+ * 알 수 없다. 시각은 저장될 때만 바뀌므로 조용하면서도 갱신이 눈에 띈다.
  */
 function AutosaveIndicator({ at }: { at: number | null }) {
-  const [justSaved, setJustSaved] = useState(false);
+  const [flash, setFlash] = useState(false);
 
   useEffect(() => {
     if (at === null) return;
-    setJustSaved(true);
-    const id = setTimeout(() => setJustSaved(false), 1600);
+    setFlash(true);
+    const id = setTimeout(() => setFlash(false), 900);
     return () => clearTimeout(id);
   }, [at]);
 
@@ -56,11 +57,11 @@ function AutosaveIndicator({ at }: { at: number | null }) {
 
   return (
     <span
-      className="flex items-center gap-1.5 px-1 text-[11px] font-semibold text-ink3"
-      title={`마지막 보관 ${stamp} · 작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침해도 복구할 수 있습니다.`}
+      className="flex items-center gap-1.5 px-1 text-[11px] font-semibold tabular-nums text-ink3"
+      title="작성 중인 내용이 이 브라우저에 보관됩니다. 새로고침하거나 탭을 닫아도 복구할 수 있습니다."
     >
-      <span className={`h-1.5 w-1.5 rounded-full transition-colors ${justSaved ? 'bg-ok' : 'bg-ink3/40'}`} />
-      {justSaved ? '보관됨' : '자동 보관 중'}
+      <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${flash ? 'bg-ok' : 'bg-ink3/40'}`} />
+      마지막 보관 {stamp}
     </span>
   );
 }
@@ -82,7 +83,33 @@ export default function ApprovalDraftScreen() {
     );
   }
 
-  return <ApprovalDraftInner me={user} editDoc={fetchedDoc ?? null} fixedType={params.get('type') ?? undefined} navigate={navigate} />;
+  /**
+   * **수정할 문서를 다 받은 뒤에 본문을 마운트한다.**
+   *
+   * 예전에는 `fetchedDoc` 이 아직 없을 때도 `editDoc={null}` 로 먼저 그렸다. 그러면
+   * 복구 검사가 "새 기안"으로 판단해 헛돌고, 문서가 도착해 다시 돌 때는 이미 검사를
+   * 마쳤다고 표시돼 **두 번째 기회가 없었다.** "임시저장 문서를 편집하다 탭을 닫으면
+   * 아무것도 안 남는다"가 여기서 나왔다.
+   *
+   * `key` 로 대상을 고정해, 다른 문서로 옮겨갈 때 이전 상태가 섞이지 않게 한다.
+   */
+  if (editDocId && !fetchedDoc) {
+    return (
+      <div className="flex h-full items-center justify-center py-20 text-[13px] text-ink3">
+        문서를 불러오는 중…
+      </div>
+    );
+  }
+
+  return (
+    <ApprovalDraftInner
+      key={editDocId ?? 'new'}
+      me={user}
+      editDoc={fetchedDoc ?? null}
+      fixedType={params.get('type') ?? undefined}
+      navigate={navigate}
+    />
+  );
 }
 
 function ApprovalDraftInner({
@@ -306,12 +333,48 @@ function ApprovalDraftInner({
     setAmount('');
   };
 
-  /** 마지막으로 브라우저에 보관한 시각. 화면에 "n초 전 보관됨"으로 보여 준다. */
+  /** 마지막으로 브라우저에 보관한 시각. 화면에 "마지막 보관 HH:MM:SS"로 보여 준다. */
   const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
 
+  /**
+   * **화면이 뜨는 순간의 보관본을 먼저 읽어 둔다.**
+   *
+   * 자동저장 effect 는 아직 아무것도 입력되지 않은 상태를 "작성한 게 없다"로 보고
+   * `clearAutosave()` 를 부른다. 그게 복구 검사보다 먼저 돌면 **지난 세션 보관본이
+   * 지워진 뒤에 복구를 시도**하게 된다. 실제로 "탭 닫았다 열면 아무것도 없다"는
+   * 증상이 여기서 나왔다.
+   *
+   * 그래서 렌더 전에 한 번 읽어 ref 에 담는다. 이후 누가 지우든 복구는 이 값을 쓴다.
+   */
+  /** 마지막으로 실제 쓰기가 일어난 시각. 스로틀 간격 판정에 쓴다. */
+  const lastSnapshotAtRef = useRef(0);
+
+  /**
+   * **보관 칸을 대상별로 나눈다.**
+   *
+   * 예전에는 사용자당 한 칸(`draft_autosave_{userId}`)이라 **새 기안과 문서 편집이 같은
+   * 칸을 썼다.** 편집 중 보관한 내용이 새 기안 칸을 덮어쓰고 그 반대도 일어났다.
+   * "새 상신을 눌렀는데 엉뚱한 내용이 뜬다", "편집하던 게 사라진다"가 모두 여기서 나왔다.
+   */
+  const draftKey = `draft_autosave_${me.id}_${editDoc?.id ?? 'new'}`;
+  const activeKey = `draft_autosave_active_${me.id}_${editDoc?.id ?? 'new'}`;
+
+  const bootDraftRef = useRef<{ data: unknown; active: boolean } | null>(null);
+  if (bootDraftRef.current === null) {
+    let data: unknown = null;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      data = raw ? JSON.parse(raw) : null;
+    } catch { /* 형식이 깨졌으면 없는 것으로 본다 */ }
+    bootDraftRef.current = {
+      data,
+      active: localStorage.getItem(activeKey) === 'true',
+    };
+  }
+
   const clearAutosave = () => {
-    localStorage.removeItem('draft_autosave_' + me.id);
-    localStorage.removeItem('draft_autosave_active_' + me.id);
+    localStorage.removeItem(draftKey);
+    localStorage.removeItem(activeKey);
     setAutosavedAt(null);
   };
 
@@ -340,13 +403,17 @@ function ApprovalDraftInner({
     }
 
     /**
-     * **시간 기준(디바운스)으로 보관한다. 포커스 아웃 기준이 아니다.**
+     * **디바운스가 아니라 스로틀이다.**
      *
-     * 기안내용처럼 한 칸에 오래 머무는 경우가 정확히 가장 잃기 쉬운 상황인데,
-     * blur 기준이면 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
+     * 디바운스는 "입력이 멈춘 뒤" 저장한다. 그래서 긴 글을 쉬지 않고 쓰면 타이머가
+     * 계속 밀려 **한 번도 저장되지 않는다** — 정확히 가장 많이 잃는 상황이다.
+     * 스로틀은 쓰는 도중에도 최소 주기마다 반드시 한 번 저장한다.
+     *
+     * 포커스 아웃(blur) 기준도 같은 이유로 쓰지 않는다. 한 칸에 오래 머무르면
+     * 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
      */
     const snapshot = () => {
-      localStorage.setItem('draft_autosave_' + me.id, JSON.stringify({
+      localStorage.setItem(draftKey, JSON.stringify({
         // 어느 문서를 쓰다 만 것인지 남긴다. 이게 없으면 신규 작성분과 수정 중이던
         // 문서를 구분할 수 없어, 복구가 엉뚱한 문서에 붙을 위험 때문에 아예 막혀 있었다.
         docId: editDoc?.id ?? null,
@@ -366,20 +433,47 @@ function ApprovalDraftInner({
         steps,
         timestamp: Date.now()
       }));
-      localStorage.setItem('draft_autosave_active_' + me.id, 'true');
-      setAutosavedAt(Date.now());
+      localStorage.setItem(activeKey, 'true');
+      lastSnapshotAtRef.current = Date.now();
+      setAutosavedAt(lastSnapshotAtRef.current);
     };
 
-    const timer = setTimeout(snapshot, 1000);
-    // 탭을 옮기거나 창을 벗어나면 디바운스를 기다리지 않고 바로 보관한다.
-    const flush = () => { if (document.visibilityState === 'hidden') snapshot(); };
+    /**
+     * 첫 변경은 즉시 저장하고, 그 뒤로는 최소 `SAVE_INTERVAL_MS` 간격을 지킨다.
+     * `localStorage` 쓰기는 동기이고 이 폼 크기면 밀리초 단위라 부담이 없다.
+     */
+    const SAVE_INTERVAL_MS = 1000;
+    const sinceLast = Date.now() - lastSnapshotAtRef.current;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (sinceLast >= SAVE_INTERVAL_MS) {
+      snapshot();
+    } else {
+      timer = setTimeout(snapshot, SAVE_INTERVAL_MS - sinceLast);
+    }
+
+    /**
+     * 창을 떠날 때는 디바운스를 기다리지 않고 즉시 보관한다.
+     *
+     * **탭 종료가 특히 위험하다.** 정리(cleanup)에서 `clearTimeout` 이 돌기 때문에,
+     * 마지막으로 친 글자가 1초 안에 있었다면 그대로 사라진다. 실제로 "탭 닫았는데
+     * 저장이 안 된다"는 증상이 여기서 나왔다.
+     *
+     * `blur` 하나로는 부족하다 — 탭을 닫을 때 창 blur 는 보장되지 않는다.
+     * 브라우저가 페이지를 접는 순간 확실히 오는 것은 `pagehide` 와
+     * `visibilitychange`(hidden) 다. `localStorage` 쓰기는 동기라 이 시점에도 완료된다.
+     */
+    const flushIfHidden = () => { if (document.visibilityState === 'hidden') snapshot(); };
     window.addEventListener('blur', snapshot);
-    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', snapshot);
+    window.addEventListener('beforeunload', snapshot);
+    document.addEventListener('visibilitychange', flushIfHidden);
 
     return () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       window.removeEventListener('blur', snapshot);
-      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', snapshot);
+      window.removeEventListener('beforeunload', snapshot);
+      document.removeEventListener('visibilitychange', flushIfHidden);
     };
   }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, executionDepts, steps, me.id, editDoc?.id]);
 
@@ -390,12 +484,14 @@ function ApprovalDraftInner({
     if (hasCheckedAutosave.current) return;
     if (forms.length === 0) return; // 서식 정보가 로드될 때까지 대기
 
-    const isActive = localStorage.getItem('draft_autosave_active_' + me.id) === 'true';
-    const saved = localStorage.getItem('draft_autosave_' + me.id);
+    // localStorage 를 다시 읽지 않는다 — 그 사이 clearAutosave() 가 지웠을 수 있다.
+    const boot = bootDraftRef.current;
     let offered = false;
-    if (isActive && saved) {
-      try {
-        const data = JSON.parse(saved);
+    if (boot?.active && boot.data) {
+      {
+        const data = boot.data as {
+          docId?: string | null; code: string; timestamp: number;
+        } & Record<string, unknown>;
         // 보관본이 지금 열고 있는 문서의 것일 때만 제안한다. 예전에는 editDoc 이 있으면
         // 검사 자체를 건너뛰어, **저장은 계속 하면서 꺼내지는 못하는** 상태였다.
         const sameTarget = (data?.docId ?? null) === (editDoc?.id ?? null);
@@ -406,13 +502,11 @@ function ApprovalDraftInner({
           setShowAutosaveRecoverModal(true);
           offered = true;
         }
-      } catch (e) {
-        console.error('Failed to parse autosave data', e);
       }
     }
     // 제안을 띄웠을 때만 플래그를 내린다. 예전에는 무조건 지워서, 이 화면에 잠깐
     // 들렀다 나가기만 해도 다음번 복구 제안이 사라졌다(내용은 남아 있는데도).
-    if (offered) localStorage.removeItem('draft_autosave_active_' + me.id);
+    if (offered) localStorage.removeItem(activeKey);
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
@@ -1478,9 +1572,29 @@ function ApprovalDraftInner({
           description={<>입력한 내용이 있습니다.<br />작성 중인 내용을 저장하고 이동하시겠습니까?</>}
           confirmLabel="저장 후 이동"
           onConfirm={async () => {
-            await persistDraft();
-            clearAutosave();
-            navigate('/gw/approval');
+            /**
+             * **저장 조건을 먼저 확인한다.**
+             *
+             * 임시저장 버튼은 `validate(false)` 를 거쳐 "제목을 입력하세요"를 띄우는데,
+             * 이 경로는 그걸 건너뛰고 곧장 저장을 시도했다. 제목이 없으면 저장이 실패하고
+             * 아무 안내도 없이 화면만 그대로 있어 **"눌러도 아무 일이 없다"** 로 보였다.
+             */
+            const err = validate(false);
+            if (err) {
+              setShowConfirmClose(false);
+              setError(err);
+              return;
+            }
+            try {
+              await persistDraft();
+              clearAutosave();
+              setShowConfirmClose(false);
+              navigate('/gw/approval');
+            } catch (e) {
+              // 저장이 실패하면 이동하지 않는다. 원인을 화면에 남긴다.
+              setShowConfirmClose(false);
+              setError(e instanceof Error ? e.message : String(e));
+            }
           }}
           onDiscard={() => {
             clearAutosave();
