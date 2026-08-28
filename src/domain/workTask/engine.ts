@@ -1,4 +1,4 @@
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
 import { rollupTasks, rollupTrack } from '@/domain/workProject/rollup';
 import type { WorkProject } from '@/domain/workProject/schema';
 import type { WorkTask, WorkTaskDraft, WorkTaskStatus } from './schema';
@@ -24,11 +24,24 @@ export function isWbsProjectMutable(project: WorkProject): boolean {
   return project.status !== 'COMPLETED' && project.status !== 'ARCHIVED';
 }
 
+/**
+ * 관리자는 참여자·소유자 판정을 건너뛴다.
+ * ([[workProject/engine.ts]]의 `isProjectAdmin`)
+ *
+ * 다만 **완료·보관 프로젝트의 읽기 전용은 관리자도 지킨다.** 그건 권한이 아니라 상태다 —
+ * 뚫어 버리면 "완료"가 아무 뜻도 없어진다. 고치려면 상태를 되돌리고 들어와야 한다.
+ */
+function adminOverride(actor: ProjectAccessContext, project: WorkProject): boolean {
+  return isProjectAdmin(actor) && isWbsProjectMutable(project);
+}
+
 export function canManageWbsPhases(actor: ProjectAccessContext, project: WorkProject): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active && isWbsProjectMutable(project) && project.ownerUserId === actor.userId;
 }
 
 export function canCreateWbsTask(actor: ProjectAccessContext, project: WorkProject): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && project.memberUserIds.includes(actor.userId);
@@ -39,6 +52,7 @@ export function canEditWbsTask(
   project: WorkProject,
   task: WorkTask,
 ): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && (project.ownerUserId === actor.userId || task.createdBy === actor.userId);
@@ -49,6 +63,7 @@ export function canUpdateWbsTaskProgress(
   project: WorkProject,
   task: WorkTask,
 ): boolean {
+  if (adminOverride(actor, project)) return true;
   return actor.active
     && isWbsProjectMutable(project)
     && (project.ownerUserId === actor.userId

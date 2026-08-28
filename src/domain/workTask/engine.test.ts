@@ -62,6 +62,28 @@ test('프로젝트 소유자와 참여자의 WBS 권한을 구분한다', () => 
   assert.equal(canUpdateWbsTaskProgress(assignee, project, task), true);
 });
 
+test('관리자는 참여자·소유자 판정을 건너뛴다', () => {
+  // 담당자 퇴사·잘못 만든 트리 정리처럼 남의 프로젝트를 손봐야 하는 상황에서
+  // 소유자를 찾아다니게 두면 도구가 멈춘다.
+  const admin: ProjectAccessContext = { userId: 'U999', deptId: 'D999', active: true, isAdmin: true };
+  assert.equal(canCreateWbsTask(outsider, project), false, '참여자가 아니면 못 만든다');
+  assert.equal(canCreateWbsTask(admin, project), true);
+  assert.equal(canEditWbsTask(admin, project, task), true);
+  assert.equal(canManageWbsPhases(admin, project), true);
+  assert.equal(canUpdateWbsTaskProgress(admin, project, task), true);
+});
+
+test('관리자여도 잠긴 계정과 완료 프로젝트는 뚫지 못한다', () => {
+  // 완료·보관은 권한이 아니라 상태다. 뚫으면 '완료'가 아무 뜻도 없어진다.
+  const lockedAdmin: ProjectAccessContext = { userId: 'U999', deptId: null, active: false, isAdmin: true };
+  assert.equal(canCreateWbsTask(lockedAdmin, project), false);
+
+  const admin: ProjectAccessContext = { userId: 'U999', deptId: null, active: true, isAdmin: true };
+  const completed = { ...project, status: 'COMPLETED' as const };
+  assert.equal(canCreateWbsTask(admin, completed), false);
+  assert.equal(canEditWbsTask(admin, completed, task), false);
+});
+
 test('완료 프로젝트의 WBS를 읽기 전용으로 잠근다', () => {
   const completed = { ...project, status: 'COMPLETED' as const };
   assert.equal(canManageWbsPhases(owner, completed), false);

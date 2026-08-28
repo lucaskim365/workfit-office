@@ -92,7 +92,7 @@ export default function ProjectWbs({
     if (!isWbsProjectMutable(project)) {
       return `${WORK_PROJECT_STATUS_LABELS[project.status]} 상태의 프로젝트는 읽기 전용입니다.`;
     }
-    return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가해야 과업을 만들 수 있습니다.';
+    return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가하거나 관리자 권한이 있어야 과업을 만들 수 있습니다.';
   }, [access.active, canCreateTask, project]);
 
   /** 트랙이 없는 프로젝트는 `null` 그룹 하나로 그린다 — 대과업이 최상위. */

@@ -2,7 +2,7 @@ import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { exclusiveWorkMutation } from '@/data/workManagement/mutation';
 import { workProjectRepo } from '@/data/workProject/workProject.repo';
 import { loadWorkWbs, readWorkTasks } from '@/data/workWbs/workWbs.store';
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
+import { isProjectAdmin, type ProjectAccessContext } from '@/domain/workProject/engine';
 import { WbsDomainError } from '@/domain/workTask/engine';
 import { descendantPrefix } from '@/domain/workTask/path';
 import {
@@ -125,7 +125,7 @@ export const workTaskNoteRepo = {
     return exclusiveWorkMutation(async () => {
       await load();
       const project = await requireProject(actor, draft.projectId);
-      if (!project.memberUserIds.includes(actor.userId)) {
+      if (!isProjectAdmin(actor) && !project.memberUserIds.includes(actor.userId)) {
         throw new WbsDomainError('FORBIDDEN', '프로젝트 참여자만 댓글을 남길 수 있습니다.');
       }
       const now = new Date();
@@ -199,7 +199,7 @@ export const workTaskNoteRepo = {
     return exclusiveWorkMutation(async () => {
       await load();
       const project = await requireProject(actor, scope.projectId);
-      if (!project.memberUserIds.includes(actor.userId)) {
+      if (!isProjectAdmin(actor) && !project.memberUserIds.includes(actor.userId)) {
         throw new WbsDomainError('FORBIDDEN', '프로젝트 참여자만 파일을 올릴 수 있습니다.');
       }
       const now = new Date();
@@ -234,7 +234,7 @@ export const workTaskNoteRepo = {
       const current = files.find((row) => row.id === id);
       if (!current) throw new WbsDomainError('INVALID_PROJECT', '파일을 찾을 수 없습니다.');
       const project = await requireProject(actor, current.projectId);
-      if (current.uploadedBy !== actor.userId && project.ownerUserId !== actor.userId) {
+      if (!isProjectAdmin(actor) && current.uploadedBy !== actor.userId && project.ownerUserId !== actor.userId) {
         throw new WbsDomainError('FORBIDDEN', '올린 사람 또는 프로젝트 소유자만 파일을 지울 수 있습니다.');
       }
       if (dbDriver !== 'memory') await fileBackend.remove(id);
