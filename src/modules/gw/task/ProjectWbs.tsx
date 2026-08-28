@@ -103,7 +103,6 @@ export default function ProjectWbs({
     return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가해야 합니다. (현재 계정의 권한그룹이 ADMIN이면 자동으로 열립니다)';
   }, [access.active, canCreateTask, project]);
 
-  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const childCount = useMemo(() => {
     const map = new Map<string, number>();
     for (const task of tasks) {
@@ -112,15 +111,6 @@ export default function ProjectWbs({
     }
     return map;
   }, [tasks]);
-
-  /** 조상 중 하나라도 접혀 있으면 감춘다. */
-  const isHidden = (task: WorkTask): boolean => {
-    for (let cursor = task.parentId; cursor; ) {
-      if (collapsed.has(cursor)) return true;
-      cursor = taskById.get(cursor)?.parentId ?? null;
-    }
-    return false;
-  };
 
   const toggleCollapse = (id: string) => setCollapsed((current) => {
     const next = new Set(current);
@@ -146,10 +136,17 @@ export default function ProjectWbs({
     return orphans.length > 0 ? [...grouped, { track: null, roots: orphans }] : grouped;
   }, [rootTasks, tracks]);
 
-  /** 한 대과업 아래를 `path` 순으로 펼친다. 정렬은 저장소가 이미 해 뒀다. */
-  const subtreeOf = (root: WorkTask): WorkTask[] => tasks.filter(
-    (task) => task.trackId === root.trackId && (task.id === root.id || task.path.startsWith(`${root.path}.`)),
-  );
+  /** 부모 → 직속 자식. 저장소가 `path` 순으로 정렬해 줬으므로 순서는 그대로 쓴다. */
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, WorkTask[]>();
+    for (const task of tasks) {
+      if (!task.parentId) continue;
+      const list = map.get(task.parentId);
+      if (list) list.push(task);
+      else map.set(task.parentId, [task]);
+    }
+    return map;
+  }, [tasks]);
 
   const deleteTask = async (task: WorkTask) => {
     if (!window.confirm(`‘${task.title}’ 과업을 삭제하시겠습니까?`)) return;
@@ -184,9 +181,128 @@ export default function ProjectWbs({
     }
   };
 
+  /** 상세가 열리면 트리를 좁힌다 — 설명·진행률 조절기를 접어 폭을 양보한다. */
+  const compact = selectedTask !== null;
+
   const openNewTask = (trackId: string | null, parentId: string | null) => {
     setPreset({ trackId, parentId });
     setCreating(true);
+  };
+
+  /**
+   * 과업 한 마디를 그린다 — 자기 행 + (자식이 있으면) 자식 묶음.
+   *
+   * **평면 목록이 아니라 중첩으로 그리는 이유**: 자식을 부모 안에 넣어야 접기·펼치기를
+   * 높이 전환으로 애니메이션할 수 있다. 평면 목록에서는 행이 통째로 사라졌다 나타나서
+   * 무엇이 늘고 줄었는지 눈이 못 따라간다.
+   *
+   * 높이는 `grid-template-rows: 0fr ↔ 1fr` 로 전환한다. 내용 높이를 미리 재지 않아도
+   * 되므로 하위가 몇 개든, 깊이가 얼마든 같은 코드로 부드럽게 접힌다.
+   */
+  const renderNode = (task: WorkTask): React.ReactNode => {
+    const view = rolled.get(task.id) ?? { progress: task.progress, status: task.status, isLeaf: true };
+    const kids = childrenOf.get(task.id) ?? [];
+    const isCollapsed = collapsed.has(task.id);
+    const isSelected = task.id === selectedTaskId;
+
+    return (
+      <div key={task.id}>
+        <div
+          // 카드(행) 어디를 눌러도 상세가 열린다. 제목만 눌러야 하면 표적이 너무 작다.
+          // 안쪽 버튼·선택기는 각자 stopPropagation 으로 이 클릭을 막는다.
+          onClick={() => onSelectTask(task)}
+          className={`cursor-pointer border-b border-border py-2.5 pr-3 transition-colors ${isSelected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/60'}`}
+          style={{ paddingLeft: `${10 + (task.level - 1) * 18}px` }}
+        >
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-start gap-1">
+              {/* 접기 손잡이는 자리를 항상 차지한다 — 없으면 들여쓰기가 들쭉날쭉해진다. */}
+              {kids.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={(event) => { event.stopPropagation(); toggleCollapse(task.id); }}
+                  aria-label={`${task.title} ${isCollapsed ? '펼치기' : '접기'}`}
+                  aria-expanded={!isCollapsed}
+                  className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded text-[8px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
+                >
+                  {/* 같은 글리프를 돌린다 — 모양이 바뀌면 회전이 안 보인다. */}
+                  <span className={`transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>▼</span>
+                </button>
+              ) : (
+                <span className="h-4 w-4 shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="shrink-0 rounded bg-panel-alt px-1.5 py-0.5 text-[8.5px] font-extrabold text-ink3">
+                    {LEVEL_LABELS[task.level - 1] ?? task.level}
+                  </span>
+                  <span className={`min-w-0 break-words text-[11px] font-extrabold ${isSelected ? 'text-teal' : 'text-ink'}`}>
+                    {task.title}
+                  </span>
+                  {isCollapsed && kids.length > 0 && (
+                    <span className="shrink-0 rounded-full bg-panel-alt px-1.5 py-px text-[8px] font-bold text-ink3">+{kids.length}</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-[9.5px] font-semibold text-ink3">
+                  {userById.get(task.assigneeUserId)?.name ?? task.assigneeUserId} · {formatDate(task.startAt)} ~ {formatDate(task.dueAt)}
+                </div>
+                {!compact && task.description && (
+                  <p className="mt-1.5 line-clamp-2 break-words text-[10px] leading-5 text-ink2">{task.description}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1">
+              <Pill tone={STATUS_TONES[view.status]}>{WORK_TASK_STATUS_LABELS[view.status]}</Pill>
+              {!compact && canCreateTask && task.level < WORK_TASK_MAX_LEVEL && (
+                <button type="button" onClick={(event) => { event.stopPropagation(); openNewTask(task.trackId, task.id); }} aria-label={`${task.title} 하위 추가`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위</button>
+              )}
+              {!compact && canEditWbsTask(access, project, task) && (
+                <>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); deleteTask(task); }} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-[minmax(0,1fr)_64px] items-center gap-2 pl-5">
+            <ProgressBar value={view.progress} label={`${task.title} 진척률`} />
+            {/* 진행률은 리프에서만 입력한다. 상위는 하위에서 접어 올린 값이라 고칠 수 없다. */}
+            {!compact && view.isLeaf && canUpdateWbsTaskProgress(access, project, task) ? (
+              <select
+                value={task.progress}
+                disabled={progressTaskId !== null}
+                aria-label={`${task.title} 진척률 변경`}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => changeProgress(task, Number(event.target.value))}
+                className="h-6 rounded border border-border bg-panel px-1 text-[9.5px] font-bold text-ink2 outline-none focus:border-teal disabled:cursor-wait disabled:opacity-50"
+              >
+                {Array.from(new Set([task.progress, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]))
+                  .sort((a, b) => a - b)
+                  .map((value) => <option key={value} value={value}>{value}%</option>)}
+              </select>
+            ) : (
+              <span className="text-right text-[9.5px] font-bold text-ink3" title={view.isLeaf ? undefined : '하위 과업에서 자동 집계됩니다'}>
+                {view.progress}%{view.isLeaf ? '' : ' 자동'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {kids.length > 0 && (
+          <div
+            className={`tree-branch grid transition-[grid-template-rows] duration-200 ease-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}
+            aria-hidden={isCollapsed}
+          >
+            {/* 높이 0으로 접힐 때 내용이 삐져나오지 않게 잘라 낸다. */}
+            <div className="overflow-hidden">
+              {kids.map((child) => renderNode(child))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -196,9 +312,6 @@ export default function ProjectWbs({
   if (error) {
     return <Card title="세부 항목"><div role="alert" className="py-8 text-center text-[11px] font-semibold text-danger">과업을 불러오지 못했습니다.<br />{error instanceof Error ? error.message : ''}</div></Card>;
   }
-
-  /** 상세가 열리면 트리를 좁힌다 — 설명·진행률 조절기를 접어 폭을 양보한다. */
-  const compact = selectedTask !== null;
 
   return (
     <section aria-labelledby="project-wbs-title" className="space-y-3">
@@ -268,99 +381,7 @@ export default function ProjectWbs({
                 {group.roots.length === 0 ? (
                   <div className="px-4 py-6 text-center text-[10.5px] text-ink3">이 트랙에 등록된 과업이 없습니다.</div>
                 ) : (
-                  <ul className="divide-y divide-border">
-                    {group.roots.flatMap(subtreeOf).filter((task) => !isHidden(task)).map((task) => {
-                      const view = rolled.get(task.id) ?? { progress: task.progress, status: task.status, isLeaf: true };
-                      const kids = childCount.get(task.id) ?? 0;
-                      const isCollapsed = collapsed.has(task.id);
-                      const isSelected = task.id === selectedTaskId;
-                      return (
-                        <li
-                          key={task.id}
-                          // 카드(행) 어디를 눌러도 상세가 열린다. 제목만 눌러야 하면 표적이 너무 작다.
-                          // 안쪽 버튼·선택기는 각자 stopPropagation 으로 이 클릭을 막는다.
-                          onClick={() => onSelectTask(task)}
-                          className={`tree-row-in cursor-pointer py-2.5 pr-3 transition-colors ${isSelected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/60'}`}
-                          style={{ paddingLeft: `${10 + (task.level - 1) * 18}px` }}
-                        >
-                          <div className="flex min-w-0 items-start justify-between gap-2">
-                            <div className="flex min-w-0 flex-1 items-start gap-1">
-                              {/* 접기 손잡이는 자리를 항상 차지한다 — 없으면 들여쓰기가 들쭉날쭉해진다. */}
-                              {kids > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => { event.stopPropagation(); toggleCollapse(task.id); }}
-                                  aria-label={`${task.title} ${isCollapsed ? '펼치기' : '접기'}`}
-                                  aria-expanded={!isCollapsed}
-                                  className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded text-[8px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
-                                >
-                                  {/* 같은 글리프를 돌린다 — 모양이 바뀌면 회전이 안 보인다. */}
-                                  <span className={`transition-transform duration-150 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>▼</span>
-                                </button>
-                              ) : (
-                                <span className="h-4 w-4 shrink-0" />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex min-w-0 items-center gap-1.5">
-                                  <span className="shrink-0 rounded bg-panel-alt px-1.5 py-0.5 text-[8.5px] font-extrabold text-ink3">
-                                    {LEVEL_LABELS[task.level - 1] ?? task.level}
-                                  </span>
-                                  <span className={`min-w-0 break-words text-[11px] font-extrabold ${isSelected ? 'text-teal' : 'text-ink'}`}>
-                                    {task.title}
-                                  </span>
-                                  {isCollapsed && kids > 0 && (
-                                    <span className="shrink-0 rounded-full bg-panel-alt px-1.5 py-px text-[8px] font-bold text-ink3">+{kids}</span>
-                                  )}
-                                </div>
-                                <div className="mt-0.5 text-[9.5px] font-semibold text-ink3">
-                                  {userById.get(task.assigneeUserId)?.name ?? task.assigneeUserId} · {formatDate(task.startAt)} ~ {formatDate(task.dueAt)}
-                                </div>
-                                {!compact && task.description && (
-                                  <p className="mt-1.5 line-clamp-2 break-words text-[10px] leading-5 text-ink2">{task.description}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex shrink-0 items-center gap-1">
-                              <Pill tone={STATUS_TONES[view.status]}>{WORK_TASK_STATUS_LABELS[view.status]}</Pill>
-                              {!compact && canCreateTask && task.level < WORK_TASK_MAX_LEVEL && (
-                                <button type="button" onClick={(event) => { event.stopPropagation(); openNewTask(task.trackId, task.id); }} aria-label={`${task.title} 하위 추가`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위</button>
-                              )}
-                              {!compact && canEditWbsTask(access, project, task) && (
-                                <>
-                                  <button type="button" onClick={(event) => { event.stopPropagation(); setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
-                                  <button type="button" onClick={(event) => { event.stopPropagation(); deleteTask(task); }} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="mt-2 grid grid-cols-[minmax(0,1fr)_64px] items-center gap-2 pl-5">
-                            <ProgressBar value={view.progress} label={`${task.title} 진척률`} />
-                            {/* 진행률은 리프에서만 입력한다. 상위는 하위에서 접어 올린 값이라 고칠 수 없다. */}
-                            {!compact && view.isLeaf && canUpdateWbsTaskProgress(access, project, task) ? (
-                              <select
-                                value={task.progress}
-                                disabled={progressTaskId !== null}
-                                aria-label={`${task.title} 진척률 변경`}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => changeProgress(task, Number(event.target.value))}
-                                className="h-6 rounded border border-border bg-panel px-1 text-[9.5px] font-bold text-ink2 outline-none focus:border-teal disabled:cursor-wait disabled:opacity-50"
-                              >
-                                {Array.from(new Set([task.progress, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]))
-                                  .sort((a, b) => a - b)
-                                  .map((value) => <option key={value} value={value}>{value}%</option>)}
-                              </select>
-                            ) : (
-                              <span className="text-right text-[9.5px] font-bold text-ink3" title={view.isLeaf ? undefined : '하위 과업에서 자동 집계됩니다'}>
-                                {view.progress}%{view.isLeaf ? '' : ' 자동'}
-                              </span>
-                            )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div>{group.roots.map((root) => renderNode(root))}</div>
                 )}
               </Card>
             );
