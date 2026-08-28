@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import { rollupTrack, type RollupResult } from '@/domain/workProject/rollup';
-import type { WorkProject } from '@/domain/workProject/schema';
-import { canCreateWbsTask, canEditWbsTask, canUpdateWbsTaskProgress } from '@/domain/workTask/engine';
+import { WORK_PROJECT_STATUS_LABELS, type WorkProject } from '@/domain/workProject/schema';
+import { canCreateWbsTask, canEditWbsTask, canUpdateWbsTaskProgress, isWbsProjectMutable } from '@/domain/workTask/engine';
 import { WORK_TASK_MAX_LEVEL, WORK_TASK_STATUS_LABELS, type WorkTask, type WorkTaskStatus } from '@/domain/workTask/schema';
 import type { WorkTrack } from '@/domain/workTrack/schema';
 import type { User } from '@/domain/user/schema';
@@ -81,6 +81,19 @@ export default function ProjectWbs({
   const editingTask = openTaskId ? tasks.find((task) => task.id === openTaskId) ?? null : null;
 
   const canCreateTask = canCreateWbsTask(access, project);
+
+  /**
+   * 편집이 막힌 이유 — **버튼만 조용히 사라지면 기능이 없는 것처럼 보인다.**
+   * 실제로 "하위 추가가 안 된다"는 오해가 여기서 나왔다. 왜 못 하는지 말해 준다.
+   */
+  const readOnlyReason = useMemo(() => {
+    if (canCreateTask) return null;
+    if (!access.active) return '비활성 계정이라 과업을 편집할 수 없습니다.';
+    if (!isWbsProjectMutable(project)) {
+      return `${WORK_PROJECT_STATUS_LABELS[project.status]} 상태의 프로젝트는 읽기 전용입니다.`;
+    }
+    return '이 프로젝트의 참여자가 아니라 읽기 전용입니다. 소유자가 참여자로 추가해야 과업을 만들 수 있습니다.';
+  }, [access.active, canCreateTask, project]);
 
   /** 트랙이 없는 프로젝트는 `null` 그룹 하나로 그린다 — 대과업이 최상위. */
   const groups: Array<{ track: WorkTrack | null; roots: WorkTask[] }> = useMemo(() => {
@@ -168,6 +181,11 @@ export default function ProjectWbs({
             )}
           </div>
         </div>
+        {readOnlyReason && (
+          <div className="mt-3 rounded-md border border-border bg-panel-alt px-3 py-2 text-[10px] font-semibold text-ink3">
+            🔒 {readOnlyReason}
+          </div>
+        )}
         {notice && <div aria-live="polite" className="mt-3 rounded-md bg-teal-soft/30 px-3 py-2 text-[10px] font-semibold text-teal">{notice}</div>}
         {actionError && <div role="alert" className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-[10px] font-semibold text-danger">{actionError}</div>}
       </Card>
