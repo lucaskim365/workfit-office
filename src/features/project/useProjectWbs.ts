@@ -74,3 +74,19 @@ export function useRemoveWorkTask() {
     expectedVersion: number;
   }) => workTaskRepo.remove(actor, id, expectedVersion));
 }
+
+/**
+ * 과업 옮기기 — 하위 전체가 따라온다.
+ * 수정과 분리한 이유는 [[workTask.repo.ts]]의 `move` 주석 참고.
+ */
+export function useMoveWorkTask() {
+  return useWbsMutation(({
+    actor,
+    id,
+    target,
+  }: {
+    actor: ProjectAccessContext;
+    id: string;
+    target: { trackId: string | null; parentId: string | null };
+  }) => workTaskRepo.move(actor, id, target));
+}

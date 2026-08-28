@@ -54,3 +54,12 @@ export function useSeedDefaultTracks() {
     workTrackRepo.seedDefaults(actor, projectId)
   ));
 }
+
+/** 트랙 순서 변경 — 화면에 보이는 차례가 곧 보고 순서라 손으로 정할 수 있어야 한다. */
+export function useReorderTracks() {
+  return useTrackMutation(({ actor, projectId, orderedIds }: {
+    actor: ProjectAccessContext;
+    projectId: string;
+    orderedIds: string[];
+  }) => workTrackRepo.reorder(actor, projectId, orderedIds));
+}

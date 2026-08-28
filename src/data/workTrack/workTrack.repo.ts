@@ -146,6 +146,33 @@ export const workTrackRepo = {
   },
 
   /**
+   * 트랙 순서 재배치 — 넘어온 id 차례대로 `sortOrder` 를 0부터 다시 매긴다.
+   *
+   * 목록에 없는 트랙은 건드리지 않고 뒤에 남긴다. 화면이 일부만 보내도 나머지가
+   * 사라지지 않게 하려는 것이다.
+   */
+  reorder(actor: ProjectAccessContext, projectId: string, orderedIds: string[]): Promise<WorkTrack[]> {
+    return exclusiveWorkMutation(async () => {
+      await load();
+      const project = await requireProject(actor, projectId);
+      if (!canManageWbsPhases(actor, project)) {
+        throw new WbsDomainError('FORBIDDEN', '프로젝트 소유자만 트랙을 관리할 수 있습니다.');
+      }
+      const timestamp = new Date().toISOString();
+      const current = sorted(project.id);
+      const ordered = [
+        ...orderedIds.map((id) => current.find((row) => row.id === id)).filter((row): row is WorkTrack => Boolean(row)),
+        ...current.filter((row) => !orderedIds.includes(row.id)),
+      ];
+      for (const [index, row] of ordered.entries()) {
+        if (row.sortOrder === index) continue;
+        await persist(workTrackSchema.parse({ ...row, sortOrder: index, updatedBy: actor.userId, updatedAt: timestamp }));
+      }
+      return sorted(project.id);
+    });
+  },
+
+  /**
    * 프로젝트를 만들 때 기본 트랙을 채운다. **편의일 뿐 강제가 아니다** —
    * 사용자가 지우거나 이름을 바꾸거나 0개로 만들어도 된다.
    */

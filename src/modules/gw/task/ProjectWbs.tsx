@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { type ProjectAccessContext } from '@/domain/workProject/engine';
 import { rollupTrack, type RollupResult } from '@/domain/workProject/rollup';
 import { WORK_PROJECT_STATUS_LABELS, type WorkProject } from '@/domain/workProject/schema';
-import { canCreateWbsTask, canEditWbsTask, canUpdateWbsTaskProgress, isWbsProjectMutable } from '@/domain/workTask/engine';
+import { canCreateWbsTask, canEditWbsTask, canManageWbsPhases, canUpdateWbsTaskProgress, isWbsProjectMutable } from '@/domain/workTask/engine';
 import { WORK_TASK_MAX_LEVEL, WORK_TASK_STATUS_LABELS, type WorkTask, type WorkTaskStatus } from '@/domain/workTask/schema';
 import type { WorkTrack } from '@/domain/workTrack/schema';
 import type { User } from '@/domain/user/schema';
@@ -11,6 +11,8 @@ import { Button } from '@/shared/ui/Button';
 import { Card } from '@/shared/ui/Card';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import TaskDetailPanel from './TaskDetailPanel';
+import TaskMoveModal from './TaskMoveModal';
+import TrackManagerModal from './TrackManagerModal';
 import WorkTaskFormModal from './WorkTaskFormModal';
 
 interface ProjectWbsProps {
@@ -77,6 +79,8 @@ export default function ProjectWbs({
   const [progressTaskId, setProgressTaskId] = useState<string | null>(null);
   /** 접힌 과업 id. **기본은 전부 펼침** — 처음 열었을 때 전체가 보여야 구조가 읽힌다. */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [tracksOpen, setTracksOpen] = useState(false);
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const removeTask = useRemoveWorkTask();
   const setTaskProgress = useSetWorkTaskProgress();
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
@@ -85,8 +89,10 @@ export default function ProjectWbs({
   const progress = rollupTrack(rootTasks, rolled);
   const editingTask = openTaskId ? tasks.find((task) => task.id === openTaskId) ?? null : null;
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) ?? null : null;
+  const movingTask = movingTaskId ? tasks.find((task) => task.id === movingTaskId) ?? null : null;
 
   const canCreateTask = canCreateWbsTask(access, project);
+  const canManageTracks = canManageWbsPhases(access, project);
 
   /**
    * 편집이 막힌 이유 — **버튼만 조용히 사라지면 기능이 없는 것처럼 보인다.**
@@ -259,6 +265,7 @@ export default function ProjectWbs({
               )}
               {!compact && canEditWbsTask(access, project, task) && (
                 <>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); setMovingTaskId(task.id); }} aria-label={`${task.title} 옮기기`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">옮기기</button>
                   <button type="button" onClick={(event) => { event.stopPropagation(); setPreset(undefined); onOpenTaskChange(task.id); }} aria-label={`${task.title} 과업 수정`} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>
                   <button type="button" onClick={(event) => { event.stopPropagation(); deleteTask(task); }} disabled={removeTask.isPending} aria-label={`${task.title} 과업 삭제`} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5 disabled:opacity-50">삭제</button>
                 </>
@@ -334,6 +341,11 @@ export default function ProjectWbs({
                 <Button size="sm" onClick={collapseAll}>모두 접기</Button>
               </span>
             )}
+            {canManageTracks && (
+              <span className="shrink-0">
+                <Button size="sm" onClick={() => setTracksOpen(true)}>트랙 관리</Button>
+              </span>
+            )}
             {canCreateTask && (
               <span className="shrink-0">
                 <Button size="sm" variant="primary" onClick={() => openNewTask(tracks[0]?.id ?? null, null)}>+ 대과업 추가</Button>
@@ -406,11 +418,38 @@ export default function ProjectWbs({
             onClose={() => onSelectTask(null)}
             onEdit={() => onOpenTaskChange(selectedTask.id)}
             onAddChild={() => openNewTask(selectedTask.trackId, selectedTask.id)}
+            onMove={() => setMovingTaskId(selectedTask.id)}
             onDelete={() => deleteTask(selectedTask)}
             onChangeProgress={(next) => changeProgress(selectedTask, next)}
           />
         )}
       </div>
+
+      {tracksOpen && (
+        <TrackManagerModal
+          project={project}
+          access={access}
+          tracks={tracks}
+          tasks={tasks}
+          onClose={() => setTracksOpen(false)}
+        />
+      )}
+
+      {movingTask && (
+        <TaskMoveModal
+          key={`${movingTask.id}-${movingTask.version}`}
+          access={access}
+          task={movingTask}
+          tracks={tracks}
+          tasks={tasks}
+          onClose={() => setMovingTaskId(null)}
+          onMoved={(saved) => {
+            setMovingTaskId(null);
+            setActionError('');
+            setNotice(`‘${saved.title}’ 과업을 옮겼습니다.`);
+          }}
+        />
+      )}
 
       {(creating || editingTask) && (
         <WorkTaskFormModal

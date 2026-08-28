@@ -34,6 +34,7 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   onEdit: () => void;
   onAddChild: () => void;
+  onMove: () => void;
   onDelete: () => void;
   onChangeProgress: (next: number) => void;
 }
@@ -68,7 +69,7 @@ function formatStamp(iso: string): string {
 export default function TaskDetailPanel({
   project, access, task, tracks, tasks, users, rolled,
   canEdit, canAddChild, canSetProgress, progressPending,
-  onSelectTask, onClose, onEdit, onAddChild, onDelete, onChangeProgress,
+  onSelectTask, onClose, onEdit, onAddChild, onMove, onDelete, onChangeProgress,
 }: TaskDetailPanelProps) {
   const [tab, setTab] = useState<'comments' | 'files'>('comments');
   const [includeSubtree, setIncludeSubtree] = useState(false);
@@ -180,6 +181,7 @@ export default function TaskDetailPanel({
         {(canAddChild || canEdit) && (
           <div className="mt-2 flex flex-wrap gap-1">
             {canAddChild && <button type="button" onClick={onAddChild} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">+ 하위 추가</button>}
+            {canEdit && <button type="button" onClick={onMove} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">옮기기</button>}
             {canEdit && <button type="button" onClick={onEdit} className="rounded border border-border px-2 py-1 text-[9px] font-bold text-ink3 hover:bg-panel-alt">수정</button>}
             {canEdit && <button type="button" onClick={onDelete} className="rounded border border-danger/20 px-2 py-1 text-[9px] font-bold text-danger hover:bg-danger/5">삭제</button>}
           </div>
