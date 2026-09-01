@@ -1,4 +1,4 @@
-import { C } from '../report/_report';
+import { C } from './_report';
 
 /**
  * 경영자 대시보드 데이터 소스 — 데모 샘플.

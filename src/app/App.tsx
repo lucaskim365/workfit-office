@@ -35,7 +35,6 @@ const HOME = '/exec';
 const GwOrgChart = lazy(() => import('@/modules/gw/orgchart/OrgChartScreen'));
 const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwApprovalDraft = lazy(() => import('@/modules/gw/approval/ApprovalDraftScreen'));
-const GwExcelTestLab = lazy(() => import('@/modules/gw/approval/ExcelTestLabScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
 const GwDocument = lazy(() => import('@/modules/gw/document/DocumentScreen'));
@@ -81,47 +80,6 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/sales/quote': lazy(() => import('@/modules/sales/quote/SalesQuoteScreen')),
   '/sales/order': lazy(() => import('@/modules/sales/order/SalesOrderScreen')),
   '/sales/order-status': lazy(() => import('@/modules/sales/order-status/SalesOrderStatusScreen')),
-  '/sales/shipment': lazy(() => import('@/modules/sales/shipment/SalesShipmentScreen')),
-  '/sales/revenue': lazy(() => import('@/modules/sales/revenue/SalesRevenueScreen')),
-  '/sales/tax-invoice': lazy(() => import('@/modules/sales/tax-invoice/SalesTaxInvoiceScreen')),
-  '/sales/collection': lazy(() => import('@/modules/sales/collection/SalesCollectionScreen')),
-  '/sales/ar': lazy(() => import('@/modules/sales/ar/SalesArScreen')),
-  '/sales/credit': lazy(() => import('@/modules/sales/credit/SalesCreditScreen')),
-  '/sales/rev-period': lazy(() => import('@/modules/sales/rev-period/SalesRevPeriodScreen')),
-  '/sales/item-rank': lazy(() => import('@/modules/sales/item-rank/SalesItemRankScreen')),
-  '/sales/kpi': lazy(() => import('@/modules/sales/kpi/SalesKpiScreen')),
-
-  '/report/catalog': lazy(() => import('@/modules/report/catalog/ReportCatalogScreen')),
-  '/report/prod-daily': lazy(() => import('@/modules/report/prod-daily/ReportProdDailyScreen')),
-  '/report/prod-pva': lazy(() => import('@/modules/report/prod-pva/ReportProdPvaScreen')),
-  '/report/wo-progress': lazy(() => import('@/modules/report/wo-progress/ReportWoProgressScreen')),
-  '/report/line-output': lazy(() => import('@/modules/report/line-output/ReportLineOutputScreen')),
-  '/report/prod-trend': lazy(() => import('@/modules/report/prod-trend/ReportProdTrendScreen')),
-  '/report/insp-pass': lazy(() => import('@/modules/report/insp-pass/ReportInspPassScreen')),
-  '/report/defect-pareto': lazy(() => import('@/modules/report/defect-pareto/ReportDefectParetoScreen')),
-  '/report/cpk': lazy(() => import('@/modules/report/cpk/ReportCpkScreen')),
-  '/report/vendor-score': lazy(() => import('@/modules/report/vendor-score/ReportVendorScoreScreen')),
-  '/report/coa': lazy(() => import('@/modules/report/coa/ReportCoaScreen')),
-  '/report/oee': lazy(() => import('@/modules/report/oee/ReportOeeScreen')),
-  '/report/util': lazy(() => import('@/modules/report/util/ReportUtilScreen')),
-  '/report/mtbf': lazy(() => import('@/modules/report/mtbf/ReportMtbfScreen')),
-  '/report/maint-cost': lazy(() => import('@/modules/report/maint-cost/ReportMaintCostScreen')),
-  '/report/stock-ledger': lazy(() => import('@/modules/report/stock-ledger/ReportStockLedgerScreen')),
-  '/report/stock-value': lazy(() => import('@/modules/report/stock-value/ReportStockValueScreen')),
-  '/report/turnover': lazy(() => import('@/modules/report/turnover/ReportTurnoverScreen')),
-  '/report/safety-order': lazy(() => import('@/modules/report/safety-order/ReportSafetyOrderScreen')),
-  '/report/subcon-ledger': lazy(() => import('@/modules/report/subcon-ledger/ReportSubconLedgerScreen')),
-  '/report/cost': lazy(() => import('@/modules/report/cost/ReportCostScreen')),
-  '/report/yield': lazy(() => import('@/modules/report/yield/ReportYieldScreen')),
-  '/report/leadtime': lazy(() => import('@/modules/report/leadtime/ReportLeadtimeScreen')),
-  '/report/energy': lazy(() => import('@/modules/report/energy/ReportEnergyScreen')),
-  '/report/trace': lazy(() => import('@/modules/report/trace/ReportTraceScreen')),
-  '/report/dhr': lazy(() => import('@/modules/report/dhr/ReportDhrScreen')),
-  '/report/audit': lazy(() => import('@/modules/report/audit/ReportAuditScreen')),
-  '/report/voc': lazy(() => import('@/modules/report/voc/ReportVocScreen')),
-  '/report/kpi': lazy(() => import('@/modules/report/kpi/ReportKpiScreen')),
-  '/report/period': lazy(() => import('@/modules/report/period/ReportPeriodScreen')),
-  '/report/scorecard': lazy(() => import('@/modules/report/scorecard/ReportScorecardScreen')),
 };
 
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -213,7 +171,6 @@ export default function App() {
         <Route path="/gw/approval/new" element={<GwApprovalDraft />} />
         <Route path="/gw/approval/edit/:id" element={<GwApprovalDraft />} />
         <Route path="/gw/approval" element={<GwApproval />} />
-        <Route path="/gw/excel-test" element={<GwExcelTestLab />} />
         <Route path="/gw/leave" element={<GwLeave />} />
         <Route path="/gw/board" element={<GwBoard />} />
         <Route path="/gw/document" element={<GwDocument />} />

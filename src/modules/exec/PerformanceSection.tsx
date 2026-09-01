@@ -3,7 +3,7 @@ import { Gauge } from '@/shared/ui/charts/Gauge';
 import { Donut, type DonutDatum } from '@/shared/ui/charts/Donut';
 import { LineChart } from '@/shared/ui/charts/LineChart';
 import { DivergingBars } from '@/shared/ui/charts/DivergingBars';
-import { C, RLegend } from '../report/_report';
+import { C, RLegend } from './_report';
 import { getExecPerformanceData } from './performance.mock';
 
 const won = (n: number) => n.toLocaleString('ko-KR');

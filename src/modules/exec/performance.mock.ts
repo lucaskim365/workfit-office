@@ -1,4 +1,4 @@
-import { C } from '../report/_report';
+import { C } from './_report';
 import type { DonutDatum } from '@/shared/ui/charts/Donut';
 
 /**

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/shared/ui/Card';
 import { Sparkline } from '@/shared/ui/charts/Sparkline';
 import { LineChart } from '@/shared/ui/charts/LineChart';
-import { C, RHead, RParam, RLegend, ProgBar, FField, FSel } from '../report/_report';
+import { C, RHead, RParam, RLegend, ProgBar, FField, FSel } from './_report';
 import { getExecDashboardData, type ExecAlert } from './mock';
 import { PerformanceSection } from './PerformanceSection';
 import factoryOverview from '@/assets/exec-factory-overview.jpg';

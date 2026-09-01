@@ -352,16 +352,6 @@ export const approvalDocRepo = {
   },
 
   /**
-   * 시행(documentExecution) 결과에 따른 부모 문서 상태 반영 — driver 무관(어댑터 경유).
-   * 전체 문서를 읽어 status(+completedAt)만 바꿔 저장하므로 웹 전용 필드는 보존된다.
-   */
-  async applyExecutionStatus(id: string, status: ApprovalDoc['status'], completedAt?: string): Promise<void> {
-    const cur = await this.get(id);
-    if (!cur) return;
-    await persist({ ...cur, status, ...(completedAt ? { completedAt } : {}) });
-  },
-
-  /**
    * 결재함별 조회(§7.2). userId 관점의 5개 탭.
    * - 대기: 진행중 + 내가 현재 활성 결재자
    * - 상신: 내가 기안(임시 제외, 진행/완료/반려/회수)
