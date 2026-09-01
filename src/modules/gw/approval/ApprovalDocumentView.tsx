@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
-import { getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { getPredecessorsOf, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
@@ -152,11 +152,12 @@ export function ApprovalDocumentView({
     const isApprover = doc.steps.some((s) => s.approverId === currentUser.id);
 
     // 수신 부서 ID 혹은 부서명 교차 비교 지원
-    const isRecipient = doc.recipients?.some((r) => {
+    const effectiveRecipients = getEffectiveRecipients(doc);
+    const isRecipient = effectiveRecipients.some((r) => {
       if (r.id === currentUser.id) return true;
       if (r.id === userObj?.dept) return true;
       const userDeptObj = org.depts.find(d => d.name === userObj?.dept);
-      if (userDeptObj && r.id === userDeptObj.id) return true;
+      if (userDeptObj && (r.id === userDeptObj.id || r.name === userDeptObj.name)) return true;
       return false;
     });
 
@@ -907,42 +908,46 @@ export function ApprovalDocumentView({
         )}
 
         {/* 수신처 영역 */}
-        {doc.recipients && doc.recipients.length > 0 && (
-          <table className="mt-2 w-full border-collapse text-[12px]">
-            <tbody>
-              <tr>
-                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                  수 신 처
-                </th>
-                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                  <div className="flex flex-wrap gap-x-2 gap-y-1">
-                    {doc.recipients.map((r, idx) => {
-                      let displayName = r.name;
-                      if (r.type === 'user') {
-                        const u = org.users.find((x) => x.id === r.id);
-                        if (u && u.position) {
-                          if (r.name.includes(' · ')) {
-                            const parts = r.name.split(' · ');
-                            const namePart = parts[0];
-                            const deptPart = parts.slice(1).join(' · ');
-                            displayName = `${namePart} ${u.position} · ${deptPart}`;
-                          } else {
-                            displayName = `${r.name} ${u.position}`;
+        {(() => {
+          const effectiveRecipients = getEffectiveRecipients(doc);
+          if (effectiveRecipients.length === 0) return null;
+          return (
+            <table className="mt-2 w-full border-collapse text-[12px]">
+              <tbody>
+                <tr>
+                  <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                    수 신 처
+                  </th>
+                  <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                    <div className="flex flex-wrap gap-x-2 gap-y-1">
+                      {effectiveRecipients.map((r, idx) => {
+                        let displayName = r.name;
+                        if (r.type === 'user') {
+                          const u = org.users.find((x) => x.id === r.id);
+                          if (u && u.position) {
+                            if (r.name.includes(' · ')) {
+                              const parts = r.name.split(' · ');
+                              const namePart = parts[0];
+                              const deptPart = parts.slice(1).join(' · ');
+                              displayName = `${namePart} ${u.position} · ${deptPart}`;
+                            } else {
+                              displayName = `${r.name} ${u.position}`;
+                            }
                           }
                         }
-                      }
-                      return (
-                        <span key={r.id} className="font-semibold">
-                          {displayName}{idx < doc.recipients.length - 1 ? ',' : ''}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        )}
+                        return (
+                          <span key={r.id} className="font-semibold">
+                            {displayName}{idx < effectiveRecipients.length - 1 ? ',' : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          );
+        })()}
 
 
 

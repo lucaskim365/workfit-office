@@ -53,10 +53,7 @@ export function ApprovalDocMetaTable({
           {doc.completedAt && (
             <MetaRow
               cells={[
-                [
-                  doc.execution ? '시 행 일' : '결재 완료일',
-                  doc.execution ? (doc.execution.startedAt ? korDate(doc.execution.startedAt) : '—') : korDate(doc.completedAt)
-                ],
+                ['결재 완료일', korDate(doc.completedAt)],
                 ['보존연한', doc.preservationPeriod || form?.preservationPeriod || '3년']
               ]}
             />

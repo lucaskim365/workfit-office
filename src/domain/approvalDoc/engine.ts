@@ -1,4 +1,4 @@
-import type { ApprovalBox, ApprovalDoc, ApprovalStep, StepDecision } from './schema';
+import type { ApprovalBox, ApprovalDoc, ApprovalRecipient, ApprovalStep, StepDecision } from './schema';
 
 /**
  * 전자결재 상태전이 엔진 — **순수함수**. UI·DB 를 전혀 모른다.
@@ -197,7 +197,7 @@ export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   return doc.drafterId === userId && isPendingOrRejected;
 }
 
-/** 반려함 판정: 반려 상태의 문서 중 내가 기안했거나 내가 반려 처리한 문서 */
+/** 반려함 판정: 반려 상태의 문서 중 내가 기안했거나 내가 반려 처리한 문서 (레거시 '시행반송' 포괄) */
 export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
   if (!isRejectedStatus) return false;
@@ -206,11 +206,40 @@ export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   return isMyDraft || isMyRejectedDecision;
 }
 
-/** 수신함 판정: 완료된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 */
+/** 레거시 시행처(executionDepts, execution)까지 포함한 수신처(recipients) 유효 목록 도출 */
+export function getEffectiveRecipients(doc: ApprovalDoc): ApprovalRecipient[] {
+  const list: ApprovalRecipient[] = [...(doc.recipients || [])];
+  const seenIds = new Set(list.map((r) => r.id));
+
+  // 1. 레거시 executionDepts 수신처로 정규화
+  if (doc.executionDepts && doc.executionDepts.length > 0) {
+    for (const d of doc.executionDepts) {
+      if (d.id && !seenIds.has(d.id)) {
+        seenIds.add(d.id);
+        list.push({ id: d.id, name: d.name, type: 'dept' });
+      }
+    }
+  }
+
+  // 2. 레거시 단일 execution 수신처로 정규화
+  if (doc.execution && doc.execution.targetId) {
+    const tid = doc.execution.targetId;
+    if (!seenIds.has(tid)) {
+      seenIds.add(tid);
+      const type = doc.execution.targetType === 'USER' ? 'user' : 'dept';
+      list.push({ id: tid, name: tid, type });
+    }
+  }
+
+  return list;
+}
+
+/** 수신함 판정: 완료(및 레거시 시행대기)된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 (레거시 시행처 포함) */
 export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
-  if (doc.status !== '완료') return false;
+  if (doc.status !== '완료' && doc.status !== '시행대기') return false;
   const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
-  const isCustomRecipient = doc.recipients?.some((r) => {
+  const effectiveRecipients = getEffectiveRecipients(doc);
+  const isCustomRecipient = effectiveRecipients.some((r) => {
     if (r.type === 'user') return r.id === userId;
     if (r.type === 'dept' && userDeptName) {
       const parts = userDeptName.split('||');
@@ -218,38 +247,13 @@ export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptNam
     }
     if (r.type === 'drafter') return doc.drafterId === userId;
     return false;
-  }) ?? false;
+  });
   return isExecutorDrafter || isCustomRecipient;
 }
 
-/** 시행함 판정: 시행 조치 대상(완료, 시행대기)이면서 시행처 부서 스케일이 매칭되는 문서 */
-export function isExecutionBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
-  if (!['완료', '시행대기'].includes(doc.status)) return false;
-  
-  if (doc.executionsSnapshot && doc.executionsSnapshot.length > 0) {
-    if (!userDeptName) return false;
-    const parts = userDeptName.split('||');
-    return doc.executionsSnapshot.some((snapshot) => 
-      parts.includes(snapshot.deptId) || parts.includes(snapshot.deptName)
-    );
-  }
-
-  if (!doc.execution) return false;
-  const targetId = doc.execution.targetId;
-  const targetType = doc.execution.targetType;
-  if (targetType === 'USER') {
-    return targetId === userId;
-  } else if (targetType === 'DEPT') {
-    if (!userDeptName) return false;
-    const parts = userDeptName.split('||');
-    return parts.includes(targetId);
-  }
-  return false;
-}
-
-/** 완료함 판정: 최종 완료된 문서 중 내가 기안했거나 승인 결재한 문서 */
+/** 완료함 판정: 최종 완료된 문서(및 레거시 시행대기 문서) 중 내가 기안했거나 승인 결재한 문서 */
 export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
-  if (doc.status !== '완료') return false;
+  if (doc.status !== '완료' && doc.status !== '시행대기') return false;
   
   const isMyDraft = doc.drafterId === userId;
   const isMyApproved = doc.steps.some((s) => s.approverId === userId && s.decision === '승인');
@@ -277,8 +281,7 @@ export function matchesBox(
     case '임시':   return doc.drafterId === userId && doc.status === '임시저장';
     case '수신':   return isReceivedBoxMatch(doc, userId, userDeptName);
     case '참조':   return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
-    case '시행':   return isExecutionBoxMatch(doc, userId, userDeptName);
-    case '후열':   return doc.status === '완료' && doc.steps.some((s) => s.delegatedFromId === userId);
+    case '후열':   return (doc.status === '완료' || doc.status === '시행대기') && doc.steps.some((s) => s.delegatedFromId === userId);
     case '완료':   return isCompletedBoxMatch(doc, userId);
     case '삭제':   return false;
   }

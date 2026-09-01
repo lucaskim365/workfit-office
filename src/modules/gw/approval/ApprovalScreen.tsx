@@ -16,9 +16,8 @@ import {
   useBatchRestoreFromTrash,
   useBatchPermanentlyDelete,
   useAllApprovals,
-  useAllExecutions,
 } from '@/features/gw/useApprovals';
-import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent } from '@/domain/approvalDoc/engine';
+import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 
@@ -33,7 +32,6 @@ import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
-import { ApprovalExecutionPanel } from '@/modules/gw/approval/ApprovalExecutionPanel';
 
 
 /**
@@ -48,7 +46,6 @@ const BOX_LABEL: Record<ApprovalBox, string> = {
   임시: '임시 저장함',
   수신: '수신함',
   참조: '참조함',
-  시행: '시행함',
   후열: '후열함',
   완료: '기결재 완료함',
   삭제: '휴지통',
@@ -66,7 +63,6 @@ export default function ApprovalScreen() {
 
   const { byBox, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
-  const { data: deptExecutions = [] } = useAllExecutions();
 
   const [params, setParams] = useSearchParams();
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
@@ -80,7 +76,6 @@ export default function ApprovalScreen() {
   const [selId, setSelId] = useState<string | null>(null);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
-  const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
 
@@ -131,9 +126,9 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, execFilter, docBoxFilter, rejectFilter, draftFilter]);
+  }, [box, doneFilter, todoFilter, docBoxFilter, rejectFilter, draftFilter]);
 
-  // 완료함, 결재함, 시행함 필터링 적용
+  // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
     if (box === '문서함') {
       if (docBoxFilter === 'dept') {
@@ -169,29 +164,7 @@ export default function ApprovalScreen() {
     }
 
 
-    if (box === '시행') {
-      const myDeptId = userObj?.dept ? (org.depts.find(d => d.name === userObj.dept)?.id ?? '') : '';
-      return list.filter((d: ApprovalDoc) => {
-        const execs = deptExecutions.filter(e => e.documentId === d.id && (e.targetDeptId === myDeptId || e.targetDeptId === me));
-        const hasLegacyMatch = d.execution && (
-          d.execution.targetId === myDeptId || d.execution.targetId === userObj?.dept
-        );
 
-        if (execFilter === 'pending') {
-          if (execs.length > 0) {
-            return execs.some(e => e.status === 'UNASSIGNED' || e.status === 'IN_PROGRESS' || e.status === 'RETURNED');
-          }
-          return hasLegacyMatch && (d.execution!.status === '대기중' || d.execution!.status === '처리중');
-        }
-        if (execFilter === 'completed') {
-          if (execs.length > 0) {
-            return execs.every(e => e.status === 'COMPLETED');
-          }
-          return hasLegacyMatch && d.execution!.status === '시행완료';
-        }
-        return execs.length > 0 || hasLegacyMatch;
-      });
-    }
     if (box === '완료') {
       if (doneFilter === 'draft') {
         return list.filter((d: ApprovalDoc) => d.drafterId === me);
@@ -237,7 +210,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, execFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org]);
+  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org]);
 
 
   // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
@@ -611,25 +584,7 @@ export default function ApprovalScreen() {
                     })}
                   </div>
                 )}
-                {box === '시행' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'pending', 'completed'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'pending' ? '미처리·진행중' : '시행완료';
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setExecFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${execFilter === f
-                            ? 'bg-amber-500 text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+
                 {box === '완료' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
                     {(['all', 'draft', 'approved'] as const).map((f) => {
@@ -1200,11 +1155,14 @@ function DocDetail({
       {/* 헤더 아래 본문 영역 */}
       <div className="px-5 py-4">
         {/* 수신/참조자 목록 (슬림 인라인 배치 & 수신/참조 태그 명시) */}
-        {((doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조')) && (
-          <div className="mb-2.5 flex items-center gap-2 text-[11px] leading-none">
-            <span className="text-ink3 font-semibold shrink-0 select-none">└─ 📨 공유처:</span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {doc.recipients?.map((r) => {
+        {(() => {
+          const effectiveRecipients = getEffectiveRecipients(doc);
+          if (effectiveRecipients.length === 0 && !doc.steps.some((s) => s.kind === '참조')) return null;
+          return (
+            <div className="mb-2.5 flex items-center gap-2 text-[11px] leading-none">
+              <span className="text-ink3 font-semibold shrink-0 select-none">└─ 📨 공유처:</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {effectiveRecipients.map((r) => {
                 let detailInfo = '';
                 let isRetired = false;
                 if (r.type === 'user') {
@@ -1244,7 +1202,8 @@ function DocDetail({
 
             </div>
           </div>
-        )}
+        );
+      })()}
         {doc.status === '반려' && (() => {
           const rejectStep = doc.steps.find((s) => s.decision === '반려');
           const rejectUser = rejectStep ? org.userById(rejectStep.approverId) : null;
@@ -1267,10 +1226,7 @@ function DocDetail({
           );
         })()}
 
-        {/* 시행 정보 및 제어 영역 */}
-        {(doc.execution || (doc.executionDepts && doc.executionDepts.length > 0) || (doc.executionsSnapshot && doc.executionsSnapshot.length > 0)) && (
-          <ApprovalExecutionPanel doc={doc} userId={me} />
-        )}
+
 
         {/* 하단: 결재 문서 */}
         <div className="border-t border-border pt-4">

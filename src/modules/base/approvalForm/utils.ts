@@ -66,8 +66,6 @@ export const blankForm = (folderId: string | null = null): ApprovalForm => ({
   recipientDeptId: null,
   recipientUserId: null,
   recipientDrafter: false,
-  executionDeptId: null,
-  executionUserId: null,
   preservationPeriod: '5년',
   allowedPositionFromRank: null,
   allowedPositionToRank: null,

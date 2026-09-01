@@ -497,18 +497,6 @@ export function ApprovalFormEditor({
             org={org}
             onChange={(patch) => set({ recipientDeptId: patch.deptId ?? null, recipientUserId: patch.userId ?? null })}
           />
-
-          {/* 📢 4. 기본 시행처 설정 */}
-          <FormTargetSelector
-            title="📢 4. 기본 시행 대상 설정"
-            desc="결재 완료 후 문서의 구체적인 업무 협조 및 실행/시행 임무가 할당되는 대상 부서 또는 담당자를 지정합니다."
-            deptId={form.executionDeptId}
-            userId={form.executionUserId}
-            depts={depts}
-            users={users}
-            org={org}
-            onChange={(patch) => set({ executionDeptId: patch.deptId ?? null, executionUserId: patch.userId ?? null })}
-          />
         </div>
       )}
 

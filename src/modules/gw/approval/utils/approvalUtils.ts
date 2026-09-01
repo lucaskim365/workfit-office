@@ -55,8 +55,8 @@ export const STATUS_BADGE: Record<string, { label: string; toneClass: string }> 
   '긴급 조치 사후 검토 반려': { label: '🚨 사후 검토 반려', toneClass: 'bg-rose-600 text-white border-rose-700 font-extrabold shadow-xs' },
   회수: { label: '회수', toneClass: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
   삭제: { label: '삭제됨', toneClass: 'bg-rose-500/10 text-rose-500 border-rose-500/20' },
-  시행대기: { label: '시행대기', toneClass: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/30 font-bold' },
-  시행반송: { label: '시행반송', toneClass: 'bg-rose-500/10 text-rose-600 border-rose-500/30 font-bold' },
+  시행대기: { label: '완료', toneClass: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold' },
+  시행반송: { label: '반려', toneClass: 'bg-red-500/10 text-red-600 border-red-500/30 font-bold' },
 };
 
 /** 결재 단계 구분(종류)별 텍스트 색상 매핑 */
@@ -64,5 +64,4 @@ export const KIND_TONE: Record<string, string> = {
   결재: 'text-teal',
   합의: 'text-purple-600',
   참조: 'text-ink3',
-  시행: 'text-blue-600',
 };

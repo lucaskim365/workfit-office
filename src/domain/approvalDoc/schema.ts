@@ -227,6 +227,6 @@ export const approvalDocSchema = z.object({
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;
 
-/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·시행함·임시저장·후열함. */
-export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '시행', '후열', '완료', '삭제'] as const;
+/** 결재함 탭(§7.2). 받은결재(대기)·상신함·완료함·수신함·참조함·임시저장·후열함. */
+export const APPROVAL_BOXES = ['대기', '상신', '반려', '임시', '수신', '참조', '후열', '완료', '삭제'] as const;
 export type ApprovalBox = (typeof APPROVAL_BOXES)[number];

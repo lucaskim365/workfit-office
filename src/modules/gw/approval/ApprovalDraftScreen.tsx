@@ -93,7 +93,6 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
-  const [executionDepts, setExecutionDepts] = useState<{ id: string; name: string }[]>(editDoc?.executionDepts ?? []);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [isWideScreen, setIsWideScreen] = useState(true);
   const [isAgreementEnabled, setIsAgreementEnabled] = useState(false);
@@ -175,7 +174,6 @@ function ApprovalDraftInner({
     relatedDocs: RelatedDoc[];
     steps: ApprovalStep[];
     recipients: ApprovalRecipient[];
-    executionDepts: { id: string; name: string }[];
   } | null>(null);
 
   const prevCodeRef = useRef<string>('');
@@ -199,7 +197,6 @@ function ApprovalDraftInner({
         relatedDocs: JSON.parse(JSON.stringify(relatedDocs)),
         steps: JSON.parse(JSON.stringify(steps)),
         recipients: JSON.parse(JSON.stringify(recipients)),
-        executionDepts: JSON.parse(JSON.stringify(executionDepts)),
       };
     }, 150);
 
@@ -221,7 +218,6 @@ function ApprovalDraftInner({
     const relatedDocsChanged = JSON.stringify(relatedDocs) !== JSON.stringify(initialState.relatedDocs);
     const stepsChanged = JSON.stringify(steps) !== JSON.stringify(initialState.steps);
     const recipientsChanged = JSON.stringify(recipients) !== JSON.stringify(initialState.recipients);
-    const executionDeptsChanged = JSON.stringify(executionDepts) !== JSON.stringify(initialState.executionDepts);
 
     return (
       titleChanged ||
@@ -230,8 +226,7 @@ function ApprovalDraftInner({
       filesChanged ||
       relatedDocsChanged ||
       stepsChanged ||
-      recipientsChanged ||
-      executionDeptsChanged
+      recipientsChanged
     );
   };
 
@@ -266,7 +261,7 @@ function ApprovalDraftInner({
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [code, title, values, amount, attachments, relatedDocs, steps, recipients, executionDepts]);
+  }, [code, title, values, amount, attachments, relatedDocs, steps, recipients]);
 
   // 실시간 자동저장 및 비었을 때의 클리너 연동 (1.5초 디바운스)
   useEffect(() => {
@@ -291,7 +286,6 @@ function ApprovalDraftInner({
         preservationPeriod,
         attachments,
         recipients,
-        executionDepts,
         steps,
         timestamp: Date.now()
       }));
@@ -299,7 +293,7 @@ function ApprovalDraftInner({
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, recipients, executionDepts, steps, me.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, recipients, steps, me.id]);
 
   const hasCheckedAutosave = useRef(false);
 
@@ -436,31 +430,7 @@ function ApprovalDraftInner({
       }
     }
 
-    // 2. 시행처 빌드
-    const autoExecs: { id: string; name: string }[] = [];
-    // (A) 기본 시행 사용자
-    if (currentForm.executionUserId) {
-      const u = org.users.find((x: any) => x.id === currentForm.executionUserId);
-      if (u) {
-        autoExecs.push({
-          id: u.id,
-          name: `${u.name} · ${u.dept}`
-        });
-      }
-    }
-    // (B) 기본 시행 부서
-    if (currentForm.executionDeptId) {
-      const d = org.depts.find((x: any) => x.id === currentForm.executionDeptId);
-      if (d) {
-        autoExecs.push({
-          id: d.id,
-          name: d.name
-        });
-      }
-    }
-
     setRecipients(autoRecipients);
-    setExecutionDepts(autoExecs);
 
   }, [code, forms, org.users, org.depts, me, editDoc]);
 
@@ -486,7 +456,6 @@ function ApprovalDraftInner({
       setAttachments(editDoc.attachments ?? []);
       setRelatedDocs(editDoc.relatedDocs ?? []);
       setRecipients(editDoc.recipients ?? []);
-      setExecutionDepts(editDoc.executionDepts ?? []);
       setIsPostApproval(editDoc.isPostApproval ?? false);
       setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
       setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
@@ -552,9 +521,6 @@ function ApprovalDraftInner({
       const lType = String(values['leaveType'] || '연차') as LeaveType;
       leave = { leaveType: lType, startDate: pStart, endDate: pEnd, days: pDays };
     }
-    const execution = executionTarget
-      ? { docId: editDoc?.id ?? '', targetType: executionTarget.type, targetId: executionTarget.id, status: '대기중' as const, comment: '' }
-      : null;
 
     const postApprovedUser = org.userById(postApprovedById);
     const combinedReason = [
@@ -580,8 +546,6 @@ function ApprovalDraftInner({
       fieldValues: values,
       attachments,
       recipients,
-      executionDepts,
-      execution,
       relatedDocs,
       securityLevel,
       visibility,
@@ -889,7 +853,7 @@ function ApprovalDraftInner({
       fieldValues: values,
       attachments,
       recipients,
-      executionDepts,
+      executionDepts: [],
       relatedDocs,
       steps,
       form:
@@ -1349,8 +1313,6 @@ function ApprovalDraftInner({
                   <DraftRecipientSection
                     recipients={recipients}
                     setRecipients={setRecipients}
-                    executionDepts={executionDepts}
-                    setExecutionDepts={setExecutionDepts}
                     org={org}
                   />
                 }
@@ -1441,7 +1403,6 @@ function ApprovalDraftInner({
               if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
               if (data.attachments) setAttachments(data.attachments);
               if (data.recipients) setRecipients(data.recipients);
-              if (data.executionDepts) setExecutionDepts(data.executionDepts);
               if (data.steps) setSteps(data.steps);
             }
             setShowAutosaveRecoverModal(false);

@@ -571,22 +571,9 @@ export const approvalDocRepo = {
       const users = await userRepo.list();
       const approverUser = users.find((u) => u.id === userId);
 
-      if (next.status === '완료') {
-        // 복수 시행처용 documentExecutions 레코드 생성 및 Snapshot 매핑
-        try {
-          const { documentExecutionRepo } = await import('@/data/documentExecution/documentExecution.repo');
-          await documentExecutionRepo.dispatchExecutions(next);
-          const execs = await documentExecutionRepo.getByDocumentId(next.id);
-          next.executionsSnapshot = execs.map(e => ({
-            executionId: e.id,
-            deptId: e.targetDeptId,
-            deptName: e.targetDeptNameSnapshot
-          }));
-          await persist(next);
-        } catch (e) {
-          console.error('시행처 이관 처리 실패:', e);
-        }
 
+
+      if (next.status === '완료') {
         // 기안자에게 완료 알림
         await notificationRepo.create({
           userId: next.drafterId,
@@ -607,47 +594,29 @@ export const approvalDocRepo = {
           linkUrl: `/gw/approval?doc=${next.id}`,
         });
 
-        // 수신처 알림 (시행처가 없을 때만 즉시 발송)
-        const hasExecution = (next.executionDepts && next.executionDepts.length > 0) || (next.execution && next.execution.targetId);
-        if (!hasExecution) {
-          for (const rec of next.recipients || []) {
-            if (rec.type === 'user') {
-              await notificationRepo.create({
-                userId: rec.id,
-                type: '결재',
-                title: '수신 문서 알림',
-                text: `[${next.title}] 수신 문서가 배달되었습니다.`,
-                senderName: '시스템',
-                linkUrl: `/gw/approval?doc=${next.id}`,
-              });
-            } else if (rec.type === 'dept') {
-              const deptUsers = users.filter((u) => u.dept === rec.name);
-              for (const du of deptUsers) {
-                await notificationRepo.create({
-                  userId: du.id,
-                  type: '결재',
-                  title: '수신 문서 알림',
-                  text: `[${next.title}] 부서 수신 문서가 배달되었습니다.`,
-                  senderName: '시스템',
-                  linkUrl: `/gw/approval?doc=${next.id}`,
-                });
-              }
-            }
-          }
-        }
-
-        // 시행처 알림
-        for (const execDept of next.executionDepts || []) {
-          const deptUsers = users.filter((u) => u.dept === execDept.name);
-          for (const du of deptUsers) {
+        // 수신처 알림
+        for (const rec of next.recipients || []) {
+          if (rec.type === 'user') {
             await notificationRepo.create({
-              userId: du.id,
+              userId: rec.id,
               type: '결재',
-              title: '시행 업무 알림',
-              text: `[${next.title}] 부서 시행 업무(실무 집행)가 이관되었습니다.`,
+              title: '수신 문서 알림',
+              text: `[${next.title}] 수신 문서가 배달되었습니다.`,
               senderName: '시스템',
               linkUrl: `/gw/approval?doc=${next.id}`,
             });
+          } else if (rec.type === 'dept') {
+            const deptUsers = users.filter((u) => u.dept === rec.name);
+            for (const du of deptUsers) {
+              await notificationRepo.create({
+                userId: du.id,
+                type: '결재',
+                title: '수신 문서 알림',
+                text: `[${next.title}] 부서 수신 문서가 배달되었습니다.`,
+                senderName: '시스템',
+                linkUrl: `/gw/approval?doc=${next.id}`,
+              });
+            }
           }
         }
       } else if (next.status === '진행중') {
@@ -791,20 +760,7 @@ export const approvalDocRepo = {
       return s;
     });
 
-    if (next.status === '완료') {
-      try {
-        const { documentExecutionRepo } = await import('@/data/documentExecution/documentExecution.repo');
-        await documentExecutionRepo.dispatchExecutions(next);
-        const execs = await documentExecutionRepo.getByDocumentId(next.id);
-        next.executionsSnapshot = execs.map(e => ({
-          executionId: e.id,
-          deptId: e.targetDeptId,
-          deptName: e.targetDeptNameSnapshot
-        }));
-      } catch (e) {
-        console.error('대결 결재 완료 후 시행처 이관 실패:', e);
-      }
-    }
+
 
     await persist(next);
     return next;
@@ -835,135 +791,7 @@ export const approvalDocRepo = {
     await backend.remove(id);
   },
 
-  async listExecutions(userId: string, status?: '대기중' | '처리중' | '시행완료'): Promise<ApprovalDoc[]> {
-    const rows = await loadAll();
-    const users = await userRepo.list();
-    const currentUser = users.find((u) => u.id === userId);
-    if (!currentUser) return [];
 
-    const depts = await departmentRepo.list();
-    const currentUserDept = depts.find((d) => d.name === currentUser.dept);
-
-    return rows.filter((d) => {
-      if (!d.execution) return false;
-      if (status && d.execution.status !== status) return false;
-
-      const targetId = d.execution.targetId;
-      const targetType = d.execution.targetType;
-
-      if (targetType === 'USER') {
-        return targetId === userId;
-      } else if (targetType === 'DEPT') {
-        const isDeptIdMatch = currentUserDept && currentUserDept.id === targetId;
-        const isDeptNameMatch = currentUser.dept === targetId;
-        return !!(isDeptIdMatch || isDeptNameMatch);
-      }
-      return false;
-    }).sort(byRecent);
-  },
-
-  async assignExecutor(docId: string, executorId: string, assignerId: string): Promise<ApprovalDoc> {
-    const cur = await getOrThrow(docId);
-    if (!cur.execution) throw new Error('시행 대상 문서가 아닙니다');
-
-    if (cur.execution.targetType === 'DEPT') {
-      const depts = await departmentRepo.list();
-      const targetDept = depts.find((d) => d.id === cur.execution!.targetId || d.name === cur.execution!.targetId);
-      if (!targetDept) throw new Error('시행 부서를 찾을 수 없습니다');
-      if (targetDept.headUserId !== assignerId) {
-        throw new Error('시행 담당자를 지정/변경할 권한이 없습니다 (부서장만 가능)');
-      }
-    } else {
-      throw new Error('개인 시행 문서는 담당자를 임의로 지정/변경할 수 없습니다');
-    }
-
-    const users = await userRepo.list();
-    const executor = users.find((u) => u.id === executorId);
-    if (!executor) throw new Error('지정된 담당자 정보를 찾을 수 없습니다');
-    
-    const targetDept = cur.execution.targetId;
-    const depts = await departmentRepo.list();
-    const deptObj = depts.find((d) => d.id === targetDept || d.name === targetDept);
-    
-    if (deptObj && executor.dept !== deptObj.name) {
-      throw new Error('담당자는 해당 시행 부서의 소속 부서원이어야 합니다');
-    }
-
-    const next: ApprovalDoc = {
-      ...cur,
-      execution: {
-        ...cur.execution,
-        executorId,
-        status: '처리중',
-        startedAt: cur.execution.startedAt || now(),
-      },
-    };
-    await persist(next);
-    return next;
-  },
-
-  async selfAssignExecutor(docId: string, userId: string): Promise<ApprovalDoc> {
-    const cur = await getOrThrow(docId);
-    if (cur.status !== '완료') throw new Error('결재가 완료된 문서만 시행을 처리할 수 있습니다');
-    if (!cur.execution) throw new Error('시행 대상 문서가 아닙니다');
-    if (cur.execution.executorId) throw new Error('이미 담당자가 지정되어 있습니다');
-
-    if (cur.execution.targetType === 'DEPT') {
-      const users = await userRepo.list();
-      const currentUser = users.find((u) => u.id === userId);
-      if (!currentUser) throw new Error('사용자 정보를 찾을 수 없습니다');
-      
-      const targetDept = cur.execution.targetId;
-      const depts = await departmentRepo.list();
-      const deptObj = depts.find((d) => d.id === targetDept || d.name === targetDept);
-      
-      if (deptObj && currentUser.dept !== deptObj.name) {
-        throw new Error('본인의 소속 부서 업무만 담당할 수 있습니다');
-      }
-    } else {
-      if (cur.execution.targetId !== userId) {
-        throw new Error('본인 앞으로 온 시행 문서만 담당할 수 있습니다');
-      }
-    }
-
-    const next: ApprovalDoc = {
-      ...cur,
-      execution: {
-        ...cur.execution,
-        executorId: userId,
-        status: '처리중',
-        startedAt: now(),
-      },
-    };
-    await persist(next);
-    return next;
-  },
-
-  async completeExecution(docId: string, userId: string, completedAt: string, comment = ''): Promise<ApprovalDoc> {
-    const cur = await getOrThrow(docId);
-    if (cur.status !== '완료') throw new Error('결재가 완료된 문서만 시행을 처리할 수 있습니다');
-    if (!cur.execution) throw new Error('시행 대상 문서가 아닙니다');
-    
-    const depts = await departmentRepo.list();
-    const isDeptHead = cur.execution.targetType === 'DEPT' && depts.some((d) => (d.id === cur.execution!.targetId || d.name === cur.execution!.targetId) && d.headUserId === userId);
-
-    if (cur.execution.executorId && cur.execution.executorId !== userId && !isDeptHead) {
-      throw new Error('지정된 담당자 또는 부서장만 시행을 완료할 수 있습니다');
-    }
-
-    const next: ApprovalDoc = {
-      ...cur,
-      execution: {
-        ...cur.execution,
-        status: '시행완료',
-        completedAt,
-        comment,
-        executorId: cur.execution.executorId || userId,
-      },
-    };
-    await persist(next);
-    return next;
-  },
 
   async searchCompletedDocs(params: {
     userId: string;
@@ -993,16 +821,6 @@ export const approvalDocRepo = {
         })
       ) {
         return true;
-      }
-      // 시행자/시행부서(execution)
-      if (doc.execution) {
-        if (doc.execution.targetType === 'USER' && doc.execution.targetId === userId) return true;
-        if (
-          doc.execution.targetType === 'DEPT' &&
-          (doc.execution.targetId === userDeptId || doc.execution.targetId === userDept)
-        ) {
-          return true;
-        }
       }
       return false;
     });

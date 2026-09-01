@@ -19,12 +19,11 @@ const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
   '완료': 3,    // 기결재 완료함
   '참조': 4,    // 참조함
   '수신': 5,    // 수신함
-  '시행': 6,    // 시행함
-  '후열': 7,    // 후열함
-  '문서함': 8,  // 부서 문서함
-  '임시': 9,
-  '반려': 10,
-  '삭제': 11
+  '후열': 6,    // 후열함
+  '문서함': 7,  // 부서 문서함
+  '임시': 8,
+  '반려': 9,
+  '삭제': 10
 };
 
 const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
@@ -36,7 +35,6 @@ const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
 const EXTRA_BOX_OPTIONS: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '수신', label: '수신함' },
   { key: '참조', label: '참조함' },
-  { key: '시행', label: '시행함' },
   { key: '후열', label: '후열함' },
   { key: '반려', label: '반려함' },
   { key: '임시', label: '임시 저장함' },
@@ -76,7 +74,6 @@ export default function MobileApprovalList() {
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
-  const [execFilter, setExecFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
   const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
   const org = useOrgTree();
@@ -201,17 +198,7 @@ export default function MobileApprovalList() {
       return rawDocs;
     }
 
-    // 4. 시행함 필터링
-    if (box === '시행') {
-      const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
-      const myDeptId = myDeptObj?.id ?? '';
-      return rawDocs.filter((d) => {
-        const hasLegacyMatch = d.execution && (d.execution.targetId === myDeptId || d.execution.targetId === user?.dept);
-        if (execFilter === 'pending') return hasLegacyMatch && (d.execution!.status === '대기중' || d.execution!.status === '처리중');
-        if (execFilter === 'completed') return hasLegacyMatch && d.execution!.status === '시행완료';
-        return hasLegacyMatch;
-      });
-    }
+
 
     // 4.5 반려함 필터링
     if (box === '반려') {
@@ -223,7 +210,7 @@ export default function MobileApprovalList() {
     }
 
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, execFilter, docBoxFilter, rejectFilter, me, org, user?.dept]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, docBoxFilter, rejectFilter, me, org, user?.dept]);
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
@@ -260,7 +247,6 @@ export default function MobileApprovalList() {
                 setTodoFilter('all');
                 setDraftFilter('all');
                 setDoneFilter('all');
-                setExecFilter('all');
                 setDocBoxFilter('dept');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
@@ -342,25 +328,7 @@ export default function MobileApprovalList() {
         </div>
       )}
 
-      {box === '시행' && (
-        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['all', 'pending', 'completed'] as const).map((f) => {
-            const label = f === 'all' ? '전체' : f === 'pending' ? '시행대기' : '시행완료';
-            const active = execFilter === f;
-            return (
-              <button
-                key={f}
-                onClick={() => setExecFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
-                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+
 
       {box === '반려' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
@@ -486,27 +454,8 @@ export default function MobileApprovalList() {
 function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) {
   const drafter = doc.drafterName || doc.drafterId;
   
-  let statusText: string = doc.status;
-  let sColor = statusColor(doc.status);
-
-  if (doc.status === '시행대기' || doc.status === '완료') {
-    if (doc.execution) {
-      const execStatus = doc.execution.status;
-      if (execStatus === '시행완료') {
-        statusText = '시행완료';
-        sColor = '#10b981';
-      } else if (execStatus === '처리중' || execStatus === '대기중') {
-        statusText = execStatus === '처리중' ? '시행중' : '시행대기';
-        sColor = execStatus === '처리중' ? '#f59e0b' : '#3b82f6';
-      }
-    } else if (doc.status === '완료') {
-      statusText = '완료';
-      sColor = '#14b8a6';
-    } else {
-      statusText = '시행대기';
-      sColor = '#3b82f6';
-    }
-  }
+  let statusText: string = doc.status === '시행대기' ? '완료' : doc.status === '시행반송' ? '반려' : doc.status;
+  let sColor = statusColor(statusText);
 
   return (
     <button

@@ -117,8 +117,8 @@ const STATUS_TONE: Record<DocStatus, string> = {
   '긴급 조치 사후 검토 반려': 'bg-rose-600 text-white font-extrabold',
   회수: 'bg-amber/15 text-amber',
   삭제: 'bg-red-500/12 text-red-500',
-  시행대기: 'bg-indigo-500/12 text-indigo-500',
-  시행반송: 'bg-rose-500/12 text-rose-500',
+  시행대기: 'bg-teal/15 text-teal',
+  시행반송: 'bg-red-500/12 text-red-500',
 };
 
 export function StatusBadge({ status, label, className }: { status: DocStatus; label?: string; className?: string }) {

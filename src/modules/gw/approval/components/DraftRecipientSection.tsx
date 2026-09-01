@@ -285,19 +285,14 @@ export function SelectorDialog({
 }
 
 export function DraftRecipientSection({
-  recipients = [], setRecipients, executionDepts = [], setExecutionDepts, org,
+  recipients = [], setRecipients, org,
 }: {
   recipients: ApprovalRecipient[];
   setRecipients: React.Dispatch<React.SetStateAction<ApprovalRecipient[]>>;
-  executionDepts: { id: string; name: string }[];
-  setExecutionDepts: React.Dispatch<React.SetStateAction<{ id: string; name: string }[]>>;
   org: any;
 }) {
   const [recipientDialog, setRecipientDialog] = useState(false);
-  const [execDialog, setExecDialog] = useState(false);
-
   const excludeRecipientIds = new Set((recipients || []).map((r) => r.id));
-  const excludeExecDeptIds = new Set((executionDepts || []).map((d) => d.id));
 
   return (
     <div className="rounded-xl border border-border bg-panel-alt/30 overflow-hidden">
@@ -305,7 +300,7 @@ export function DraftRecipientSection({
       <div className="px-3 pt-2.5 pb-2 border-b border-border/60 flex items-center justify-between">
         <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1.5">
           <span>📬</span>
-          <span>수신처 및 시행부서 설정</span>
+          <span>수신처 설정</span>
         </span>
         <span className="text-[10px] text-ink3">결재 완료 후 자동 공유/전달</span>
       </div>
@@ -338,42 +333,6 @@ export function DraftRecipientSection({
         </button>
       </div>
 
-      {/* ─── 구분선 ───
-      <div className="mx-3 border-t border-border/60" />
-      */}
-
-      {/* ─── 시행처 설정 (시행처 기능 비활성화 처리) ───
-      <div className="relative p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="text-[11px] font-bold text-teal flex items-center gap-1">
-            <span>📦</span><span>시행처 (집행 의무 대상)</span>
-          </div>
-          <InfoTooltip text="문서 완료 후 실무 집행 및 처리를 전담하여 수행할 시행처(부서 또는 사원)를 지정합니다. 지정된 각 대상 단위로 독립적인 시행 임무(시행 관리)가 자동 이관됩니다." />
-        </div>
-
-        {executionDepts.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {executionDepts.map((d) => {
-              const isDept = org.depts.some((dept: any) => dept.id === d.id);
-              return (
-                <span key={d.id} className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs">
-                  {isDept ? '📁' : '👤'} {d.name}
-                  <button type="button" onClick={() => setExecutionDepts((p) => p.filter((x) => x.id !== d.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
-                </span>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-[10.5px] text-ink3">지정된 시행처가 없습니다.</p>
-        )}
-
-        <button type="button" onClick={() => setExecDialog(true)}
-          className="w-full rounded-lg border border-dashed border-teal/40 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors">
-          + 시행처 추가
-        </button>
-      </div>
-      */}
-
       {recipientDialog && (
         <SelectorDialog title="수신처 추가" org={org} excludeIds={excludeRecipientIds} singleSelect={false}
           onConfirm={(items) => {
@@ -385,20 +344,6 @@ export function DraftRecipientSection({
             setRecipientDialog(false);
           }}
           onClose={() => setRecipientDialog(false)}
-        />
-      )}
-
-      {execDialog && (
-        <SelectorDialog title="시행처 추가" org={org} excludeIds={excludeExecDeptIds} singleSelect={false}
-          onConfirm={(items) => {
-            setExecutionDepts((prev) => [
-              ...prev,
-              ...items.filter((item) => !prev.some((d) => d.id === item.id))
-                .map((item) => ({ id: item.id, name: item.name })),
-            ]);
-            setExecDialog(false);
-          }}
-          onClose={() => setExecDialog(false)}
         />
       )}
     </div>
