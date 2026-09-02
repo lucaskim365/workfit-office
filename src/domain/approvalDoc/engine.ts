@@ -191,19 +191,19 @@ export function isTodoBoxMatch(doc: ApprovalDoc, userId: string, absentApproverI
   return false;
 }
 
-/** 상신함 판정: 내가 기안자이고 결재 미완료(진행중, 반려, 회수 등) 상태인 모든 문서 */
+/** 상신함 판정: 내가 기안자이고 상신된 모든 문서(진행중, 반려, 완료, 회수 등 / 임시저장·삭제 제외) */
 export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
-  const isPendingOrRejected = ['진행중', '반려', '긴급 조치 사후 검토 반려', '회수'].includes(doc.status);
-  return doc.drafterId === userId && isPendingOrRejected;
+  if (doc.drafterId !== userId) return false;
+  return doc.status !== '임시저장' && doc.status !== '삭제';
 }
 
-/** 반려함 판정: 반려 상태의 문서 중 내가 기안했거나 내가 반려 처리한 문서 (레거시 '시행반송' 포괄) */
+/** 반려함 판정: 결재권자 관점에서 본인이 직접 반려 처리했거나, 결재선(검토/승인/전결)에 참여했던 반려 문서 */
 export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
   if (!isRejectedStatus) return false;
-  const isMyDraft = doc.drafterId === userId;
   const isMyRejectedDecision = doc.steps.some((s) => s.approverId === userId && s.decision === '반려');
-  return isMyDraft || isMyRejectedDecision;
+  const isInApprovalChain = doc.steps.some((s) => s.approverId === userId || s.delegatedFromId === userId);
+  return isMyRejectedDecision || isInApprovalChain;
 }
 
 /** 레거시 시행처(executionDepts, execution)까지 포함한 수신처(recipients) 유효 목록 도출 */

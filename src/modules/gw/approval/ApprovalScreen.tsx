@@ -76,8 +76,8 @@ export default function ApprovalScreen() {
   const [selId, setSelId] = useState<string | null>(null);
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
-  const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
-  const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
+  const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
+  const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
 
 
@@ -187,9 +187,11 @@ export default function ApprovalScreen() {
       return list;
     }
     if (box === '반려') {
-      if (rejectFilter === 'draft') return list.filter((d: ApprovalDoc) => d.drafterId === me);
       if (rejectFilter === 'rejected') {
         return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      }
+      if (rejectFilter === 'chain') {
+        return list.filter((d: ApprovalDoc) => !d.steps.some((s) => s.approverId === me && s.decision === '반려'));
       }
       return list;
     }
@@ -381,6 +383,7 @@ export default function ApprovalScreen() {
               title: '결재함',
               boxes: [
                 { key: '대기', label: '결재 대기함' },
+                { key: '반려', label: '반려함' },
                 { key: '후열', label: '후열함' },
               ] as const,
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
@@ -471,6 +474,10 @@ export default function ApprovalScreen() {
                       ? (badgeCount > 0
                         ? 'bg-red-500 text-white animate-pulse'
                         : 'bg-ink3/15 text-ink2')
+                      : b === '반려'
+                        ? (badgeCount > 0
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-ink3/15 text-ink2')
                       : b === '후열'
                         ? (unconfirmedPostReadCount > 0
                           ? 'bg-amber-500 text-white animate-pulse'
@@ -547,8 +554,8 @@ export default function ApprovalScreen() {
 
                 {box === '상신' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'progress', 'rejected'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : '반려';
+                    {(['all', 'progress', 'rejected', 'completed'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'rejected' ? '반려' : '완료';
                       return (
                         <button
                           key={f}
@@ -606,8 +613,8 @@ export default function ApprovalScreen() {
                 )}
                 {box === '반려' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['draft', 'rejected'] as const).map((f) => {
-                      const label = f === 'draft' ? '반려받은 문서' : '내가 반려한 문서';
+                    {(['all', 'rejected', 'chain'] as const).map((f) => {
+                      const label = f === 'all' ? '전체' : f === 'rejected' ? '내가 직접 반려' : '결재참여 반려';
                       return (
                         <button
                           key={f}

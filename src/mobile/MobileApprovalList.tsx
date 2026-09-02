@@ -15,19 +15,20 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
  */
 const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
   '대기': 1,    // 결재 대기함
-  '상신': 2,    // 상신함
-  '완료': 3,    // 기결재 완료함
-  '참조': 4,    // 참조함
-  '수신': 5,    // 수신함
-  '후열': 6,    // 후열함
-  '문서함': 7,  // 부서 문서함
-  '임시': 8,
-  '반려': 9,
+  '반려': 2,    // 반려함
+  '상신': 3,    // 상신함
+  '완료': 4,    // 기결재 완료함
+  '참조': 5,    // 참조함
+  '수신': 6,    // 수신함
+  '후열': 7,    // 후열함
+  '문서함': 8,  // 부서 문서함
+  '임시': 9,
   '삭제': 10
 };
 
 const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '대기', label: '결재 대기함' },
+  { key: '반려', label: '반려함' },
   { key: '상신', label: '상신함' },
   { key: '완료', label: '기결재 완료함' },
 ];
@@ -36,7 +37,6 @@ const EXTRA_BOX_OPTIONS: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '수신', label: '수신함' },
   { key: '참조', label: '참조함' },
   { key: '후열', label: '후열함' },
-  { key: '반려', label: '반려함' },
   { key: '임시', label: '임시 저장함' },
   { key: '삭제', label: '휴지통' },
   { key: '문서함', label: '부서 문서함' },
@@ -75,7 +75,7 @@ export default function MobileApprovalList() {
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
-  const [rejectFilter, setRejectFilter] = useState<'draft' | 'rejected'>('draft');
+  const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const org = useOrgTree();
 
   // 로컬스토리지 키 설정
@@ -202,9 +202,11 @@ export default function MobileApprovalList() {
 
     // 4.5 반려함 필터링
     if (box === '반려') {
-      if (rejectFilter === 'draft') return rawDocs.filter((d) => d.drafterId === me);
       if (rejectFilter === 'rejected') {
         return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+      }
+      if (rejectFilter === 'chain') {
+        return rawDocs.filter((d) => !d.steps.some((s) => s.approverId === me && s.decision === '반려'));
       }
       return rawDocs;
     }
@@ -248,6 +250,7 @@ export default function MobileApprovalList() {
                 setDraftFilter('all');
                 setDoneFilter('all');
                 setDocBoxFilter('dept');
+                setRejectFilter('all');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
             >
@@ -332,15 +335,15 @@ export default function MobileApprovalList() {
 
       {box === '반려' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['draft', 'rejected'] as const).map((f) => {
-            const label = f === 'draft' ? '내가 기안한 문서' : '내가 반려한 문서';
+          {(['all', 'rejected', 'chain'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'rejected' ? '내가 직접 반려' : '결재참여 반려';
             const active = rejectFilter === f;
             return (
               <button
                 key={f}
                 onClick={() => setRejectFilter(f)}
                 className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
-                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                  active ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
                 {label}
