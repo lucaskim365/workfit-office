@@ -65,6 +65,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
     { l: '근태', icon: '⏱️', to: 'commute' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },
+    { l: '사진첩', icon: '🖼️', to: 'gallery' },
   ];
   const notices: [string, string][] = [
     ['[필독] 2분기 안전점검 일정 안내', '06.18'],

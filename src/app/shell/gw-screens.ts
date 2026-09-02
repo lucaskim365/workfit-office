@@ -25,6 +25,7 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   employee: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
   task: { name: '업무관리', icon: '📗', desc: '프로젝트·업무 보고·TO-DO를 등록하고 진행을 트래킹합니다.' },
   commute: { name: '근태', icon: '⏱️', desc: 'CAPS 출퇴근 기록을 직원·월별로 조회합니다.' },
+  gallery: { name: '사진첩', icon: '🖼️', desc: '사내 행사, 활동 사진 및 일상을 공유하는 사진첩입니다.' },
 };
 
 /**
@@ -43,6 +44,7 @@ export const GW_READY_APPS = new Set([
   'resource',
   'task',
   'survey',
+  'gallery',
   // 메일 — Appwrite Function(mail)으로 동작(2026-08-19 이식 완료). Appwrite 설정이
   // 없으면 화면이 "서버 없음"으로 뜬다 — 타일은 켜져 있다.
   'mail',
