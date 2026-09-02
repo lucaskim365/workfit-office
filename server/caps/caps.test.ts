@@ -62,6 +62,56 @@ test('결정적 문서 ID — 계약 §4', () => {
   assert.equal(holidayDocId({ recurring: false, monthDay: null, date: '2026-10-06' }), '20261006');
 });
 
+test('handler — delta 전송과 하트비트 (계약 §1·§4)', async () => {
+  // 실시간 에이전트는 창 전체가 아니라 **바뀐 행만** 보낸다. 그러다 보니 두 가지가 계약이 된다.
+  //   1) 요청에 없는 문서를 지우면 안 된다(매 요청마다 DB가 비워진다).
+  //   2) 세 배열이 모두 빈 요청(하트비트)도 200으로 받아 lastRunAt을 갱신해야 한다
+  //      — 웹이 "에이전트가 살아있는지" 판단하는 유일한 신호다.
+  const dir = mkdtempSync(join(tmpdir(), 'caps-'));
+  try {
+    const store = new CapsFileStore(dir);
+    const send = async (body: string, now: Date) => {
+      const ts = String(Math.floor(now.getTime() / 1000));
+      return handleCapsIngest({
+        rawBody: body, timestamp: ts, signature: signCapsRequest(SECRET, ts, body),
+        secret: SECRET, store, now,
+      });
+    };
+
+    // 최초 1회: 창 전체
+    await send(JSON.stringify(payload()), new Date('2026-08-14T05:00:00.000Z'));
+
+    // 퇴근이 찍혀 그 1건만 다시 온다 — employees·holidays 는 빈 배열
+    const delta = payload();
+    delta.attendance[0].outAt = '2026-08-11T19:30:00+09:00';
+    delta.employees = [];
+    delta.holidays = [];
+    delta.windowStart = '2026-08-11'; // 이벤트 동기화는 창이 짧다
+    const second = await send(JSON.stringify(delta), new Date('2026-08-14T05:01:00.000Z'));
+
+    assert.equal(second.status, 200);
+    assert.deepEqual(second.body.upserted, { attendance: 1, employees: 0, holidays: 0 });
+    // 바뀐 행은 갱신되고
+    assert.equal(store.read('attendance')['1_20260811'].outAt, '2026-08-11T10:30:00.000Z');
+    // 이번 요청에 없던 문서는 그대로 남아 있어야 한다
+    assert.ok(store.read('employees')['1']);
+    assert.ok(store.read('holidays').md_0815);
+
+    // 하트비트: 셋 다 비어 있어도 200 + lastRunAt 갱신
+    const heartbeat = { ...payload(), attendance: [], employees: [], holidays: [] };
+    const third = await send(JSON.stringify(heartbeat), new Date('2026-08-14T05:31:00.000Z'));
+
+    assert.equal(third.status, 200);
+    assert.deepEqual(third.body.upserted, { attendance: 0, employees: 0, holidays: 0 });
+    assert.equal(store.read('syncMeta').caps.lastRunAt, '2026-08-14T05:31:00.000Z');
+    assert.equal(store.read('syncMeta').caps.lastError, null);
+    // 하트비트가 기존 데이터를 지우지 않는다
+    assert.equal(Object.keys(store.read('attendance')).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('handler — 200 저장·멱등, 401, 400', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'caps-'));
   try {

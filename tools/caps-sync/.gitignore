@@ -1,0 +1,31 @@
+# CapsSync — 저장소에 절대 들어가면 안 되는 것들.
+#
+# 이 에이전트는 실제 근태 개인정보(직원 실명 + 출퇴근 시각)와 두 개의 비밀
+# (mdb 비밀번호, 서버와 공유하는 HMAC 시크릿)을 다룬다. 아래 목록은 사고 방지용이다.
+# 한 번 커밋되면 히스토리에 영구히 남으므로, 새 산출물을 만들면 여기에 먼저 추가할 것.
+
+# 빌드 산출물
+bin/
+obj/
+.vs/
+*.user
+
+# 실제 설정 — mdb 비밀번호가 들어간다. 템플릿은 config.example.json 을 쓸 것
+config.json
+
+# HMAC 시크릿 (서버 CAPS_INGEST_SECRET 과 같은 값)
+secret.txt
+
+# 근태 원본 DB — 개인정보
+*.mdb
+*.ldb
+*.accdb
+*.laccdb
+
+# 런타임 산출물 — 전부 실데이터가 담긴다
+state.json
+state.dryrun.json
+last_payload.json
+last_run_summary.txt
+log.txt
+log.1.txt

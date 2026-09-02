@@ -1,0 +1,42 @@
+{
+  "// 설명": "이 파일을 config.json 으로 복사해서 값 채우기. config.json 과 secret.txt 는 NTFS 권한으로 잠글 것(작업 실행 계정만 읽기).",
+  "// 확인방법": "값을 채운 뒤 'CapsSync.exe --check' 를 실행하면 지금 어느 DB를 보고 있는지·열리는지·어디로 보내는지 다 찍어준다.",
+
+  "// ───── 1. 실제 CAPS DB 위치 (배포 PC에서 여기만 바꾸면 된다) ─────": "",
+  "// MdbPath": "CAPS가 쓰는 살아있는 .mdb 경로. CAPS PC에서 찾는 법: Get-ChildItem C:\\ -Recurse -Filter *.mdb",
+  "MdbPath": "C:\\CAPS\\ACCESS.mdb",
+  "MdbPassword": "********",
+  "// OleDbProvider": "x64 빌드면 Microsoft.ACE.OLEDB.16.0. x86 폴백이면 Microsoft.Jet.OLEDB.4.0",
+  "OleDbProvider": "Microsoft.ACE.OLEDB.16.0",
+
+  "// ───── 2. 실행 모드 ─────": "",
+  "// Mode": "watch = 상주하며 DB를 실시간 폴링(기본) | once = 한 번 훑고 종료 | check = 점검만",
+  "Mode": "watch",
+
+  "// ───── 3. 전송 대상 ─────": "",
+  "IngestUrl": "https://caps-ingest.<region>.appwrite.run/",
+  "// 경로들": "비우면 전부 exe 폴더 기준(한 폴더에 모임). 절대경로 지정도 가능",
+  "SecretFilePath": "",
+  "SendEnabled": true,
+
+  "// ───── 4. 실시간 폴링 (기본값이면 출퇴근 펀치 후 ~5초 내 전송) ─────": "",
+  "// PollSeconds": "DB를 다시 읽는 주기(초). 출퇴근이 찍히고 최대 이만큼 뒤에 전송된다 = 실시간성",
+  "PollSeconds": 5,
+  "// FullSyncMinutes": "변경이 없어도 이 주기로 창 전체를 재확인(누락 복구 + 서버에 '살아있음' 알림)",
+  "FullSyncMinutes": 30,
+  "// WatchWindowDays": "폴링이 훑는 최근 일수. 펀치는 오늘 행이라 짧아도 되고 짧을수록 가볍다",
+  "WatchWindowDays": 3,
+  "// WindowDays": "전수 동기화가 훑는 일수",
+  "WindowDays": 45,
+  "// StatePath": "마지막으로 전송 성공한 행들의 지문 캐시. 지우면 다음 실행이 창 전체를 재전송",
+  "StatePath": "",
+
+  "// ───── 5. 로그·산출물 ─────": "",
+  "TempDir": "",
+  "LogPath": "",
+  "SummaryPath": "",
+  "LastPayloadPath": "",
+
+  "HttpTimeoutSeconds": 60,
+  "MaxRetries": 3
+}
