@@ -24,9 +24,19 @@ messaging.onBackgroundMessage((payload) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     data,
-    tag: data.roomId || data.docId || undefined,
-    // 사용자가 닫기 전까지 유지(데스크톱). 기본은 몇 초 후 자동 소멸.
-    requireInteraction: true,
+    /**
+     * 같은 대상의 알림은 겹쳐 쌓지 않고 하나로 합친다.
+     *
+     * 일정 알림은 roomId·docId 가 없어 tag 가 안 붙었고, 그래서 5분 주기 리마인더가
+     * 배너를 계속 쌓았다. linkUrl 을 마지막 수단으로 써서 일정 알림도 병합되게 한다.
+     */
+    tag: data.roomId || data.docId || data.linkUrl || undefined,
+    /**
+     * 채팅·결재는 사용자가 닫을 때까지 남긴다(놓치면 안 되는 것).
+     * 일정 리마인더는 자동으로 사라지게 둔다 — 치우려고 클릭하게 만들면 알림 클릭이
+     * 곧 화면 이동이라 하던 일이 끊긴다. 알림센터에는 그대로 남는다.
+     */
+    requireInteraction: Boolean(data.roomId || data.docId),
     renotify: Boolean(data.roomId || data.docId),
   });
 });
@@ -64,17 +74,26 @@ self.addEventListener('notificationclick', (event) => {
       const desktop = focusable.find((c) => !c.url.includes('/m'));
       const pwa = focusable.find((c) => c.url.includes('/m'));
 
-      // 1) 데스크톱 창이 열려 있으면: 라우트 이동 없이 그 창에서 처리.
+      /**
+       * 1) 데스크톱 창이 열려 있으면: **앱에 넘겨 SPA 라우팅으로 이동한다.**
+       *
+       * 예전에는 채팅만 postMessage 로 넘기고 나머지(결재·일정)는 `client.navigate()` 를
+       * 불렀다. 그건 라우트 이동이 아니라 **페이지 전체를 다시 여는 하드 내비게이션**이라,
+       * 알림을 누른 순간 작성 중이던 내용이 사라졌다. 주석은 "라우트 이동 없이"라고
+       * 적혀 있었지만 코드가 그 반대였다.
+       *
+       * 목적지로 가는 건 앱이 한다(AppShell 의 workfit-open-link 처리).
+       */
       if (desktop) {
         if (data.roomId) {
           desktop.postMessage({ type: 'workfit-open-chat', roomId: data.roomId });
         } else if (data.linkUrl) {
-          desktop.navigate(data.linkUrl);
+          desktop.postMessage({ type: 'workfit-open-link', linkUrl: data.linkUrl });
         }
         return desktop.focus();
       }
 
-      // 2) PWA 창이 열려 있으면: /m 딥링크로 이동.
+      // 2) PWA 창이 열려 있으면: 같은 이유로 앱에 넘긴다.
       if (pwa) {
         let target = '/m';
         if (data.roomId) {
@@ -84,7 +103,7 @@ self.addEventListener('notificationclick', (event) => {
         } else if (data.linkUrl) {
           target = data.linkUrl.replace(/^\/gw/, '/m');
         }
-        pwa.navigate(target);
+        pwa.postMessage({ type: 'workfit-open-link', linkUrl: target });
         return pwa.focus();
       }
 

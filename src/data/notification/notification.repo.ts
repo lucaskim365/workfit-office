@@ -236,7 +236,23 @@ class AppwriteBackend implements NotificationBackend {
     // 초기 1회 로드
     void this.list(userId).then(callback);
     // 이벤트 발생 시 최신 목록 재조회(userId 필터는 재조회 쿼리에서 처리)
-    const unsub = appwriteClient!.subscribe(this.channels(), () => {
+    const unsub = appwriteClient!.subscribe(this.channels(), (event: unknown) => {
+      /**
+       * **남의 알림에는 반응하지 않는다.**
+       *
+       * Appwrite Realtime 은 채널에 쿼리 필터를 걸 수 없어 구독이 컬렉션 전체다.
+       * 그래서 누구의 알림이 생기든 접속 중인 **모든** 클라이언트가 이벤트를 받는데,
+       * 예전에는 payload 를 보지 않고 무조건 목록 전체를 다시 읽었다.
+       * 전 사원 대상 발송(일정 리마인더)이 생기면서 클라이언트 1대당 수신자 수만큼
+       * 재조회가 터져 브라우저가 멎는 수준이 됐다.
+       *
+       * Firestore 시절에는 서버측 `where('userId','==',userId)` 가 이 역할을 했다.
+       * Appwrite 로 옮기며 그 필터가 사라진 자리를 여기서 메운다.
+       */
+      const payload = (event as { payload?: { userId?: unknown } } | null)?.payload;
+      const target = payload?.userId;
+      // userId 를 못 읽는 형태(스키마 변화·삭제 이벤트 등)면 안전하게 재조회한다.
+      if (typeof target === 'string' && target !== userId) return;
       void this.list(userId).then(callback);
     });
     return unsub;

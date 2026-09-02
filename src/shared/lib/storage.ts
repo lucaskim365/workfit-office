@@ -5,6 +5,8 @@ import {
   deleteObject,
   type FirebaseStorage,
 } from 'firebase/storage';
+import { Storage as AppwriteStorage } from 'appwrite';
+import { client as appwriteClient, isAppwriteConfigured, safeDocId } from '@/shared/lib/appwrite';
 import { storage as firebaseStorage, isFirebaseConfigured } from '@/shared/lib/firebase';
 
 /**
@@ -182,7 +184,62 @@ class S3StorageAdapter implements StorageAdapter {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 3) data URL 폴백 어댑터 — 백엔드 미설정(데모/오프라인)
+// 3) Appwrite Storage 어댑터
+//
+//    DB가 Appwrite면 파일도 같은 곳에 두는 게 맞다. 별도 인프라가 필요 없고 URL 수명이
+//    프로젝트와 함께 간다.
+//
+//    ⚠ 브라우저는 프로젝트 ID만 가진 익명 클라이언트라 **버킷 권한이 열려 있어야** 올릴 수
+//      있다(`scripts/appwrite-storage.ts` 가 그렇게 만든다). 컬렉션의 `Any` 권한과 같은
+//      부채이고, Appwrite Auth 도입 때 함께 좁힌다.
+// ─────────────────────────────────────────────────────────────
+class AppwriteStorageAdapter implements StorageAdapter {
+  private readonly storage: AppwriteStorage;
+
+  constructor(private readonly bucketId: string, client: NonNullable<typeof appwriteClient>) {
+    this.storage = new AppwriteStorage(client);
+  }
+
+  /**
+   * 경로를 파일 ID로 쓴다. Appwrite 파일 ID는 36자 이내 영숫자·`_`·`-` 만 되고 `/` 를
+   * 못 쓰므로 경로를 안전한 키로 접어 넣는다(`safeDocId` 와 같은 규칙).
+   */
+  private fileId(path: string): string {
+    return safeDocId(path);
+  }
+
+  async put(path: string, data: Blob, opts?: PutOptions): Promise<string> {
+    const id = this.fileId(path);
+    const name = opts?.filename || 'file';
+    const file = data instanceof File ? data : new File([data], name, { type: opts?.contentType || data.type });
+    // 같은 경로로 다시 올리면 기존 파일을 지우고 새로 넣는다(덮어쓰기 API가 없다).
+    try {
+      await this.storage.deleteFile(this.bucketId, id);
+    } catch {
+      /* 없으면 그만 */
+    }
+    await this.storage.createFile(this.bucketId, id, file);
+    return this.storage.getFileView(this.bucketId, id).toString();
+  }
+
+  async remove(path: string): Promise<void> {
+    try {
+      await this.storage.deleteFile(this.bucketId, this.fileId(path));
+    } catch {
+      /* 이미 없음 등 무시 */
+    }
+  }
+
+  async getSignUrl(path: string, disposition?: 'inline' | 'attachment'): Promise<string> {
+    const id = this.fileId(path);
+    return disposition === 'attachment'
+      ? this.storage.getFileDownload(this.bucketId, id).toString()
+      : this.storage.getFileView(this.bucketId, id).toString();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 4) data URL 폴백 어댑터 — 백엔드 미설정(데모/오프라인)
 //    저장하지 않고 base64 data URL을 반환(세션 한정 미리보기).
 // ─────────────────────────────────────────────────────────────
 class DataUrlAdapter implements StorageAdapter {
@@ -200,13 +257,26 @@ class DataUrlAdapter implements StorageAdapter {
 // ─────────────────────────────────────────────────────────────
 // 활성 어댑터 선택
 // ─────────────────────────────────────────────────────────────
-type Driver = 's3' | 'firebase' | 'dataurl';
+type Driver = 's3' | 'firebase' | 'appwrite' | 'dataurl';
 
+const APPWRITE_BUCKET = (import.meta.env.VITE_APPWRITE_BUCKET_ID as string | undefined) ?? 'workfiles';
+
+/**
+ * 기본 드라이버 선택 순서: Firebase → Appwrite → data URL.
+ *
+ * **data URL 폴백은 저장이 아니다.** base64 문자열을 그대로 돌려주는데, 그걸 URL 칸에
+ * 넣으면 문서 크기 제한(예: `workTaskFiles.url` 512자)을 그냥 넘겨 저장이 거부된다.
+ * Appwrite가 붙어 있으면 반드시 그쪽을 쓴다.
+ */
 function selectAdapter(): StorageAdapter {
   const driver = (import.meta.env.VITE_STORAGE_DRIVER as Driver | undefined)
-    ?? (isFirebaseConfigured ? 'firebase' : 'dataurl');
+    ?? (isFirebaseConfigured ? 'firebase' : isAppwriteConfigured ? 'appwrite' : 'dataurl');
 
   switch (driver) {
+    case 'appwrite':
+      if (isAppwriteConfigured && appwriteClient) return new AppwriteStorageAdapter(APPWRITE_BUCKET, appwriteClient);
+      console.warn('[storage] VITE_STORAGE_DRIVER=appwrite 이지만 Appwrite 미설정 → data URL 폴백');
+      return new DataUrlAdapter();
     case 's3': {
       const signUrl = import.meta.env.VITE_STORAGE_SIGN_URL as string | undefined;
       const signToken = import.meta.env.VITE_STORAGE_SIGN_TOKEN as string | undefined;

@@ -6,19 +6,45 @@ import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
 
 /**
- * Custom lazy loading wrapper that catches chunk loading failures
- * (usually caused by file hash mismatch after a new Vercel deployment)
- * and automatically triggers a window reload to fetch the latest assets.
+ * 화면 청크 로딩 실패 대응.
+ *
+ * ## 왜 실패하는가
+ * 빌드하면 청크 파일명에 내용 해시가 박힌다(`ApprovalScreen-DT0pnIjN.js`). 배포하면
+ * 옛 이름의 파일이 서버에서 사라지는데, **이미 페이지를 연 브라우저는 옛 파일명을 계속
+ * 들고 있다.** 그 사람이 아직 안 열어본 화면으로 이동하면 없는 파일을 요청해 404가 난다.
+ *
+ * ## 왜 곧바로 새로고침하지 않는가
+ * 예전에는 실패 즉시 `location.reload()` 했다. 그러면 **작성 중이던 내용이 예고 없이
+ * 사라진다** — 실제로 배포 중 계약보고서를 쓰던 사람이 겪었다.
+ *
+ * 그래서 두 단계를 둔다.
+ * 1. **한 번 재시도.** CDN 전파가 덜 됐거나 일시적 네트워크 오류면 여기서 끝난다.
+ * 2. 그래도 안 되면 **사용자에게 묻는다.** 저장할 기회를 주고 본인이 새로고침을 누르게 한다.
  */
 function lazy<T extends ComponentType<any>>(factory: () => Promise<{ default: T }>) {
   return reactLazy(async () => {
     try {
       return await factory();
-    } catch (error) {
-      console.error('Failed to load component chunk, reloading page...', error);
-      window.location.reload();
-      // Return a pending promise to prevent rendering broken components during reload
-      return new Promise<{ default: T }>(() => { });
+    } catch (first) {
+      // 1) 일시적 실패일 수 있다. 잠깐 뒤 한 번만 다시.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      try {
+        return await factory();
+      } catch (error) {
+        console.error('화면 청크 로딩 실패 — 새 버전이 배포된 것으로 보입니다.', error);
+        // 2) 묻는다. 확인을 누르면 새로고침, 취소면 지금 화면에 그대로 머문다.
+        const reload = window.confirm(
+          [
+            '새 버전이 배포되어 이 화면을 열 수 없습니다.',
+            '',
+            '작성 중인 내용이 있다면 먼저 저장해 주세요.',
+            '지금 새로고침하시겠습니까?',
+          ].join('\n'),
+        );
+        if (reload) window.location.reload();
+        // 새로고침하지 않으면 이 화면은 못 그린다. 사용자는 뒤로 가서 하던 일을 이어간다.
+        return new Promise<{ default: T }>(() => { });
+      }
     }
   });
 }
@@ -115,8 +141,9 @@ export default function App() {
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
-            tag: p.roomId || p.docId || undefined,
-            requireInteraction: true,
+            // 서비스워커 쪽과 같은 규칙 — 일정 알림은 병합되고 스스로 사라진다.
+            tag: p.roomId || p.docId || p.linkUrl || undefined,
+            requireInteraction: Boolean(p.roomId || p.docId),
           });
         } else {
           new Notification(p.title, { body: p.body, icon: '/icons/icon-192.png' });

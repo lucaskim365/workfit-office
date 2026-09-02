@@ -213,9 +213,25 @@ class AppwriteBackend implements ApprovalDocBackend {
     void this.loadAll().then(cb); // 초기 1회
     const dbId = APPWRITE_DATABASE_ID;
     const channels = [`databases.${dbId}.collections.${COLL}.documents`, `databases.${dbId}.tables.${COLL}.rows`];
-    return appwriteClient!.subscribe(channels, () => {
-      void this.loadAll().then(cb);
+    /**
+     * 몰려 오는 이벤트를 한 번으로 합친다.
+     *
+     * 알림과 달리 결재 문서는 사용자별로 가를 수 없다 — 상태가 바뀌면 관련자 모두가
+     * 최신 목록을 봐야 한다. 그래서 필터 대신 **합치기**로 부하를 줄인다.
+     * 일괄 결재처럼 한꺼번에 수십 건이 바뀌면 예전에는 그 수만큼 전체 재조회가 돌았다.
+     */
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const unsub = appwriteClient!.subscribe(channels, () => {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        void this.loadAll().then(cb);
+      }, 150);
     });
+    return () => {
+      if (pending) clearTimeout(pending);
+      unsub();
+    };
   }
 }
 
