@@ -10,6 +10,20 @@ const WIDDY_ACCEPT = '.txt,.pdf,.xlsx,.xls,.hwp,.jpg,.jpeg,.png,.bmp,.tif,.tiff,
 /** 첨부 최대 크기 100MB. */
 const WIDDY_MAX_BYTES = 100 * 1024 * 1024;
 
+/** 데모 생산일보가 항상 존재하는 최근 일자(어제, KST 기준). 날짜를 고정하지 않아 오래되지 않는다. */
+const RECENT_DAY = (() => {
+  const d = new Date(Date.now() - 86_400_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
+
+/** 시작 화면 샘플 질문(클릭 시 바로 전송). 날짜를 포함해 바로 답변되게 한다(사내 생산일보 데이터). */
+const SAMPLE_QUESTIONS = [
+  `${RECENT_DAY} 생산 실적을 요약해줘`,
+  `${RECENT_DAY} 본딩 15호기의 불량률은?`,
+  `${RECENT_DAY} 가장 불량률이 높은 설비는?`,
+];
+
 /** 응답 대기 중 타이핑 인디케이터(점 3개). */
 function TypingDots() {
   return (
@@ -95,7 +109,8 @@ export function ChatbotPanel() {
                     style={bubbleStyle}
                     className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${me ? '' : 'border border-border bg-panel text-ink'}`}
                   >
-                    {m.status === 'pending' ? (
+                    {m.status === 'pending' && !m.content ? (
+                      // 첫 토큰 도착 전: 타이핑 점 + 안내. 스트리밍으로 content 가 차기 시작하면 아래로 전환.
                       <div className="flex flex-col gap-1.5">
                         <TypingDots />
                         {m.hint && <span className="text-[11px] leading-snug text-ink3">{m.hint}</span>}
@@ -127,6 +142,24 @@ export function ChatbotPanel() {
             </div>
           );
         })}
+        {/* 시작 화면(인사말만): 샘플 질문 칩 — 클릭 시 바로 전송 */}
+        {messages.length <= 1 && !isSending && (
+          <div className="mt-1 flex flex-col gap-1.5">
+            <span className="px-1 text-[10.5px] font-medium text-ink3">💡 이렇게 물어보세요</span>
+            <div className="flex flex-col items-start gap-1.5">
+              {SAMPLE_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => send(q)}
+                  className="rounded-full border border-border bg-panel px-3 py-1.5 text-left text-[11.5px] text-ink hover:border-teal hover:bg-teal-soft hover:text-teal"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <div className="shrink-0 border-t border-border bg-panel p-3">

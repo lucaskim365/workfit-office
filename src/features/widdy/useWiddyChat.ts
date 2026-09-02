@@ -40,16 +40,21 @@ export function useWiddyChat() {
       query: string;
       history: { role: 'user' | 'assistant'; content: string }[];
       attachment?: WiddyAttachment;
+      onToken: (delta: string) => void;
     }) =>
       // 서명 토큰을 게이트웨이로 전달 → 서버가 검증해 신뢰된 uid 로 ACL 판정.
       // (토큰 없음/만료 시 익명 — public 문서+일반질문만) [[widdyAuth]]
-      widdyChatRepo.ask({
-        query: vars.query,
-        token: getWiddyToken() ?? undefined,
-        sessionId: sessionRef.current,
-        history: vars.history,
-        attachment: vars.attachment,
-      }),
+      // askStream: http 드라이버는 SSE(토큰 스트리밍), function/stub 은 한 번에 폴백(동일 인터페이스).
+      widdyChatRepo.askStream(
+        {
+          query: vars.query,
+          token: getWiddyToken() ?? undefined,
+          sessionId: sessionRef.current,
+          history: vars.history,
+          attachment: vars.attachment,
+        },
+        vars.onToken,
+      ),
   });
 
   const send = useCallback(
@@ -92,11 +97,21 @@ export function useWiddyChat() {
       }
       const clearHintTimer = () => { if (hintTimer) clearTimeout(hintTimer); };
 
+      // 스트리밍 델타 → pending 메시지 content 에 누적. 첫 토큰에 안내 타이머 해제.
+      // (status 는 'pending' 유지 → onSuccess 에서 최종 답변·출처로 확정하며 'done')
+      const onToken = (delta: string) => {
+        clearHintTimer();
+        setMessages((prev) =>
+          prev.map((m) => (m.id === pendingId ? { ...m, content: (m.content || '') + delta, hint: undefined } : m)),
+        );
+      };
+
       mutation.mutate(
-        { query, history, attachment },
+        { query, history, attachment, onToken },
         {
           onSuccess: (res) => {
             clearHintTimer();
+            // 최종 확정: 서버가 준 authoritative answer·citations 로 덮어써 스트림 누적과 일치 보장.
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === pendingId ? { ...m, content: res.answer, citations: res.citations, status: 'done', hint: undefined } : m,
