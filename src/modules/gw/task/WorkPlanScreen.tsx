@@ -4,6 +4,7 @@ import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/c
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
 import { useUsers } from '@/features/user/useUsers';
+import { useOrgTree } from '@/features/gw/useOrgTree';
 import {
   useAllWorkPlans,
   useCreateWorkPlan,
@@ -29,12 +30,11 @@ const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
 
 /**
- * 로스터 제외 대상 — 대표(대표이사)·위원회 소속·테스트 계정만 뺀다(2026-08-27 지시로 범위 축소).
- * 상무이사·이사급은 이제 포함된다 — 실무 인원 현황판에 임원도 넣어달라는 요청.
+ * 로스터 제외 대상 — 대표(대표이사)·테스트 계정만 뺀다.
+ * 기술경영전략위원회 및 상무이사·이사급은 로스터에 정상 포함된다.
  */
 const isExcludedFromRoster = (user: User) =>
   user.position.includes('대표') ||
-  user.dept.includes('위원회') ||
   user.dept.includes('테스트') ||
   user.name.includes('테스터') ||
   user.name.includes('테스트');
@@ -52,6 +52,7 @@ function dayTitle(date: string): string {
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
+  const org = useOrgTree();
   const usersQuery = useUsers();
   const users = usersQuery.data ?? [];
   const [demoUserId, setDemoUserId] = useState('U009');
@@ -67,6 +68,11 @@ export default function WorkPlanScreen() {
   const [draftText, setDraftText] = useState<string | null>(null);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [notice, setNotice] = useState('');
+
+  // ── 다차원 필터 상태 ──
+  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'written' | 'unwritten'>('all');
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
@@ -87,15 +93,47 @@ export default function WorkPlanScreen() {
     return rows;
   }, [mineQuery.data]);
 
-  /** 로스터 대상 — 재직 + 대표/위원회 제외, 부서순(부서 안에서는 이름순). */
-  const roster = useMemo(
-    () =>
-      users
-        .filter((user) => user.status === '사용' && !isExcludedFromRoster(user))
-        .sort((a, b) => a.dept.localeCompare(b.dept, 'ko') || a.name.localeCompare(b.name, 'ko')),
-    [users],
-  );
-  /** 부서별로 묶어서 보여준다 — roster가 이미 부서순 정렬이라 등장 순서 그대로 묶으면 된다. */
+  /** 부서별 조직도 정렬 순서 맵 */
+  const deptOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    org.depts.forEach((d, idx) => {
+      map.set(d.name, d.order ?? (1000 + idx));
+    });
+    return map;
+  }, [org.depts]);
+
+  /** 로스터 대상 — 재직 + 대표/테스트 제외, 부서(조직도순) ➔ 인원(직급순 ➔ 이름순). */
+  const roster = useMemo(() => {
+    return users
+      .filter((user) => user.status === '사용' && !isExcludedFromRoster(user))
+      .sort((a, b) => {
+        // 1. 부서 조직도 순 정렬
+        const orderA = deptOrderMap.get(a.dept) ?? 9999;
+        const orderB = deptOrderMap.get(b.dept) ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        if (a.dept !== b.dept) return a.dept.localeCompare(b.dept, 'ko');
+
+        // 2. 인원 직급 서열 순 정렬 (rank 낮을수록 고위직)
+        const rankA = org.rankOf(a.position);
+        const rankB = org.rankOf(b.position);
+        if (rankA !== rankB) return rankA - rankB;
+
+        // 3. 동일 직급 시 이름 가나다순
+        return a.name.localeCompare(b.name, 'ko');
+      });
+  }, [users, deptOrderMap, org]);
+
+  /** 고유 부서 목록 (조직도 순서 유지 동적 추출) */
+  const departments = useMemo(() => {
+    const list = Array.from(new Set(roster.map((u) => u.dept))).filter(Boolean);
+    return list.sort((a, b) => {
+      const orderA = deptOrderMap.get(a) ?? 9999;
+      const orderB = deptOrderMap.get(b) ?? 9999;
+      return orderA - orderB || a.localeCompare(b, 'ko');
+    });
+  }, [roster, deptOrderMap]);
+
+  /** 부서별로 묶어서 보여준다 — roster가 이미 부서(조직도순)+인원(직급순) 정렬이라 등장 순서 그대로 묶으면 된다. */
   const rosterGroups = useMemo(() => {
     const groups: Array<{ dept: string; members: User[] }> = [];
     for (const user of roster) {
@@ -105,11 +143,70 @@ export default function WorkPlanScreen() {
     }
     return groups;
   }, [roster]);
+
   const dayPlanByOwner = useMemo(() => {
     const rows = new Map<string, WorkPlan>();
     (allDayQuery.data ?? []).forEach((plan) => rows.set(plan.ownerUserId, plan));
     return rows;
   }, [allDayQuery.data]);
+
+  /** 현재 부서 및 검색어 필터가 적용된 스코프 내 인원 (상태 뱃지 카운트용) */
+  const scopedMembers = useMemo(() => {
+    const kw = searchKeyword.trim().toLowerCase();
+    return roster.filter((user) => {
+      const matchesDept = deptFilter === 'all' || user.dept === deptFilter;
+      const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
+      return matchesDept && matchesName;
+    });
+  }, [roster, deptFilter, searchKeyword]);
+
+  /** 필터 칩에 표시될 실시간 인원수 집계 */
+  const statusCounts = useMemo(() => {
+    let written = 0;
+    let unwritten = 0;
+    for (const user of scopedMembers) {
+      const hasPlan = Boolean(dayPlanByOwner.get(user.id)?.content?.trim());
+      if (hasPlan) written++;
+      else unwritten++;
+    }
+    return {
+      all: scopedMembers.length,
+      written,
+      unwritten,
+    };
+  }, [scopedMembers, dayPlanByOwner]);
+
+  /** 필터가 적용된 최종 로스터 그룹 */
+  const filteredRosterGroups = useMemo(() => {
+    const kw = searchKeyword.trim().toLowerCase();
+    const groups: Array<{ dept: string; members: User[] }> = [];
+
+    for (const group of rosterGroups) {
+      if (deptFilter !== 'all' && group.dept !== deptFilter) continue;
+
+      const matchedMembers = group.members.filter((user) => {
+        const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
+        if (!matchesName) return false;
+
+        const hasPlan = Boolean(dayPlanByOwner.get(user.id)?.content?.trim());
+        if (statusFilter === 'written' && !hasPlan) return false;
+        if (statusFilter === 'unwritten' && hasPlan) return false;
+
+        return true;
+      });
+
+      if (matchedMembers.length > 0) {
+        groups.push({ dept: group.dept, members: matchedMembers });
+      }
+    }
+    return groups;
+  }, [rosterGroups, deptFilter, searchKeyword, statusFilter, dayPlanByOwner]);
+
+  const totalVisibleCount = useMemo(
+    () => filteredRosterGroups.reduce((acc, g) => acc + g.members.length, 0),
+    [filteredRosterGroups],
+  );
+
   const myDayPlan = actor ? dayPlanByOwner.get(actor.id) : undefined;
 
   const save = async () => {
@@ -242,43 +339,148 @@ export default function WorkPlanScreen() {
         <p className="whitespace-pre-wrap text-[11.5px] text-ink">{viewingUser && dayPlanByOwner.get(viewingUser.id)?.content}</p>
       </Modal>
 
-      {/* 로스터 — 재직 전원(경영진 제외), 부서별로 묶어서. 본인 행도 포함하되 수정은 위 팝업에서만.
-          내용은 길이에 관계없이 2줄로 잘라 행 높이를 맞춘다 — 안 그러면 긴 계획 하나가 목록 전체를
-          들쭉날쭉하게 만든다(2026-08-27 실사용 피드백). 전체 내용은 클릭해서 팝업으로 본다. */}
-      <section className="mt-4 rounded-xl border border-border bg-panel shadow-sm">
-        <div className="border-b border-border px-4 py-2.5">
-          <h3 className="text-[12.5px] font-extrabold text-ink">전체 현황 · {roster.length}명</h3>
+      {/* ── 다차원 필터링 툴바 ── */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-border bg-panel px-3.5 py-2.5 shadow-xs">
+        {/* 좌측: 부서 선택 & 상태 필터 칩 */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 부서 필터 드롭다운 */}
+          <select
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+            className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
+          >
+            <option value="all">전체 부서 ({roster.length}명)</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d} ({roster.filter((u) => u.dept === d).length}명)
+              </option>
+            ))}
+          </select>
+
+          {/* 작성 상태 칩 필터 (선택 부서/검색어 기준 동적 카운트) */}
+          <div className="flex rounded-lg border border-border bg-panel-alt/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className={`rounded-md px-2.5 py-1 text-[10.5px] font-bold transition-colors ${
+                statusFilter === 'all'
+                  ? 'bg-panel text-teal shadow-xs'
+                  : 'text-ink3 hover:text-ink2'
+              }`}
+            >
+              전체 ({statusCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('written')}
+              className={`rounded-md px-2.5 py-1 text-[10.5px] font-bold transition-colors ${
+                statusFilter === 'written'
+                  ? 'bg-panel text-teal shadow-xs'
+                  : 'text-ink3 hover:text-ink2'
+              }`}
+            >
+              작성완료 ({statusCounts.written})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('unwritten')}
+              className={`rounded-md px-2.5 py-1 text-[10.5px] font-bold transition-colors ${
+                statusFilter === 'unwritten'
+                  ? 'bg-panel text-danger shadow-xs'
+                  : 'text-ink3 hover:text-ink2'
+              }`}
+            >
+              미작성 ({statusCounts.unwritten})
+            </button>
+          </div>
         </div>
-        <div className="divide-y divide-border">
-          {rosterGroups.map((group) => (
-            <div key={group.dept}>
-              <div className="bg-panel-alt/60 px-4 py-1.5 text-[10px] font-bold text-ink3">{group.dept}</div>
-              {group.members.map((user) => {
-                const isSelf = user.id === actor.id;
-                const plan = dayPlanByOwner.get(user.id);
-                const onOpen = isSelf ? () => setDraftText(myDayPlan?.content ?? '') : plan ? () => setViewingUser(user) : undefined;
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    disabled={!onOpen}
-                    onClick={onOpen}
-                    className={`flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors ${isSelf ? 'bg-teal-soft/10' : ''} ${onOpen ? 'cursor-pointer hover:bg-panel-alt/45' : 'cursor-default'}`}
-                  >
-                    <div className="w-20 shrink-0 pt-0.5 text-[11px] font-bold text-ink2">{user.name}{isSelf && <span className="ml-1 font-normal text-teal">(나)</span>}</div>
-                    <div className="min-w-0 flex-1 text-[11px] text-ink">
-                      {plan ? (
-                        <p className="line-clamp-2 whitespace-pre-wrap">{plan.content}</p>
-                      ) : (
-                        <span className="text-ink3">작성 없음</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+
+        {/* 우측: 이름/부서 실시간 검색창 */}
+        <div className="relative min-w-[160px] flex-1 sm:max-w-[220px]">
+          <input
+            type="text"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            placeholder="이름 또는 부서 검색..."
+            className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
+          />
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
+          {searchKeyword && (
+            <button
+              type="button"
+              onClick={() => setSearchKeyword('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
+            >
+              ✕
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* 로스터 — 재직 전원(경영진 제외), 부서별로 묶어서. 본인 행도 포함하되 수정은 위 팝업에서만. */}
+      <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h3 className="text-[12.5px] font-extrabold text-ink">
+            전체 현황 <span className="text-[11px] font-normal text-ink3">({totalVisibleCount}명 표시 중)</span>
+          </h3>
+          {(deptFilter !== 'all' || searchKeyword || statusFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeptFilter('all');
+                setSearchKeyword('');
+                setStatusFilter('all');
+              }}
+              className="text-[10px] font-semibold text-teal hover:underline"
+            >
+              필터 초기화
+            </button>
+          )}
+        </div>
+
+        {filteredRosterGroups.length === 0 ? (
+          <div className="grid min-h-40 place-items-center text-[11.5px] text-ink3">
+            조건에 일치하는 직원이 없습니다.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredRosterGroups.map((group) => (
+              <div key={group.dept}>
+                <div className="flex items-center justify-between bg-panel-alt/60 px-4 py-1.5 text-[10px] font-bold text-ink3">
+                  <span>{group.dept}</span>
+                  <span>{group.members.length}명</span>
+                </div>
+                {group.members.map((user) => {
+                  const isSelf = user.id === actor.id;
+                  const plan = dayPlanByOwner.get(user.id);
+                  const onOpen = isSelf ? () => setDraftText(myDayPlan?.content ?? '') : plan ? () => setViewingUser(user) : undefined;
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      disabled={!onOpen}
+                      onClick={onOpen}
+                      className={`flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors ${isSelf ? 'bg-teal-soft/10' : ''} ${onOpen ? 'cursor-pointer hover:bg-panel-alt/45' : 'cursor-default'}`}
+                    >
+                      <div className="w-24 shrink-0 pt-0.5 text-[11px] font-bold text-ink2">
+                        {user.name}
+                        {user.position && <span className="ml-1 text-[9.5px] font-normal text-ink3">{user.position}</span>}
+                        {isSelf && <span className="ml-1 font-semibold text-teal">(나)</span>}
+                      </div>
+                      <div className="min-w-0 flex-1 text-[11px] text-ink">
+                        {plan ? (
+                          <p className="line-clamp-2 whitespace-pre-wrap">{plan.content}</p>
+                        ) : (
+                          <span className="text-ink3 italic">작성 없음</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
