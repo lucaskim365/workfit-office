@@ -10,6 +10,13 @@ const WIDDY_ACCEPT = '.txt,.pdf,.xlsx,.xls,.hwp,.jpg,.jpeg,.png,.bmp,.tif,.tiff,
 /** 첨부 최대 크기 100MB. */
 const WIDDY_MAX_BYTES = 100 * 1024 * 1024;
 
+/** 시작 화면 샘플 질문(클릭 시 바로 전송). 사내 생산일보 데이터로 답변된다. */
+const SAMPLE_QUESTIONS = [
+  '가장 불량률이 높은 설비는 어디인가요?',
+  '본딩 15호기의 생산 실적을 알려줘',
+  '생산 불량 개선을 위한 익일 작업지시는?',
+];
+
 /** 응답 대기 중 타이핑 인디케이터(점 3개). */
 function TypingDots() {
   return (
@@ -128,6 +135,24 @@ export function ChatbotPanel() {
             </div>
           );
         })}
+        {/* 시작 화면(인사말만): 샘플 질문 칩 — 클릭 시 바로 전송 */}
+        {messages.length <= 1 && !isSending && (
+          <div className="mt-1 flex flex-col gap-1.5">
+            <span className="px-1 text-[10.5px] font-medium text-ink3">💡 이렇게 물어보세요</span>
+            <div className="flex flex-col items-start gap-1.5">
+              {SAMPLE_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => send(q)}
+                  className="rounded-full border border-border bg-panel px-3 py-1.5 text-left text-[11.5px] text-ink hover:border-teal hover:bg-teal-soft hover:text-teal"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       <div className="shrink-0 border-t border-border bg-panel p-3">
