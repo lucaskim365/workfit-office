@@ -201,7 +201,7 @@ export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
 export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
   if (!isRejectedStatus) return false;
-  const isMyRejectedDecision = doc.steps.some((s) => s.approverId === userId && s.decision === '반려');
+  const isMyRejectedDecision = doc.steps.some((s) => (s.approverId === userId || s.delegatedFromId === userId) && s.decision === '반려');
   const isInApprovalChain = doc.steps.some((s) => s.approverId === userId || s.delegatedFromId === userId);
   return isMyRejectedDecision || isInApprovalChain;
 }

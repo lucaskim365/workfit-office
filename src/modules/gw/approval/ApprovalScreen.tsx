@@ -202,11 +202,18 @@ export default function ApprovalScreen() {
       return list;
     }
     if (box === '반려') {
+      const preds = getPredecessorsOf(me);
+      const isMyReject = (d: ApprovalDoc) =>
+        d.steps.some(
+          (s) =>
+            (s.approverId === me || s.delegatedFromId === me || preds.includes(s.approverId)) &&
+            s.decision === '반려'
+        );
       if (rejectFilter === 'rejected') {
-        return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+        return list.filter(isMyReject);
       }
       if (rejectFilter === 'chain') {
-        return list.filter((d: ApprovalDoc) => !d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+        return list.filter((d: ApprovalDoc) => !isMyReject(d));
       }
       return list;
     }

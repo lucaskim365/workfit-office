@@ -203,11 +203,18 @@ export default function MobileApprovalList() {
 
     // 4.5 반려함 필터링
     if (box === '반려') {
+      const preds = getPredecessorsOf(me);
+      const isMyReject = (d: ApprovalDoc) =>
+        d.steps.some(
+          (s) =>
+            (s.approverId === me || s.delegatedFromId === me || preds.includes(s.approverId)) &&
+            s.decision === '반려'
+        );
       if (rejectFilter === 'rejected') {
-        return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+        return rawDocs.filter(isMyReject);
       }
       if (rejectFilter === 'chain') {
-        return rawDocs.filter((d) => !d.steps.some((s) => s.approverId === me && s.decision === '반려'));
+        return rawDocs.filter((d: ApprovalDoc) => !isMyReject(d));
       }
       return rawDocs;
     }
