@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
+import { useMemo, useState } from 'react';
+import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { User } from '@/domain/user/schema';
 import { Button } from '@/shared/ui/Button';
 
@@ -16,79 +16,31 @@ const isExcludedDept = (deptName: string) =>
 
 /**
  * 조직도 (그룹웨어)
- * - [📊 비주얼 차트]: 워크핏 공식 엑셀 조직도 스타일(피치/그린/블루 3열 격자 다이어그램)을 실제 DB 데이터 기반으로 렌더링
- * - [📁 부서 트리]: 기존 계층형 트리 + 부서별 사원 카드 그리드
- * - [📞 비상연락망]: 전사 임직원 비상연락처·내선·이메일 일괄 조회 및 검색 테이블
+ * - [📊 비주얼 차트]: 워크핏 공식 엑셀 조직도 스타일(피치/그린/블루 3열 격자 다이어그램)
+ * - [📋 리스트로 보기]: 전사 임직원 직급·직책·부서·상급자·연락처 일괄 조회 및 검색 리스트
  */
 export default function OrgChartScreen() {
   const org = useOrgTree();
-  const [viewMode, setViewMode] = useState<'visual' | 'tree' | 'contact'>('visual');
-
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
-  const [selId, setSelId] = useState<string | null>(null);
-  const [q, setQ] = useState('');
+  const [viewMode, setViewMode] = useState<'visual' | 'list'>('visual');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selectedUser = org.users.find((u) => u.id === selectedUserId);
 
-  // 비상연락망 전용 필터
-  const [contactDeptFilter, setContactDeptFilter] = useState('all');
-  const [contactKeyword, setContactKeyword] = useState('');
+  // 리스트 뷰 필터 상태
+  const [listDeptFilter, setListDeptFilter] = useState('all');
+  const [listKeyword, setListKeyword] = useState('');
 
-  // 유효 부서 및 유효 루트 필터링
+  // 유효 부서 및 유효 사용자 목록
   const validDepts = useMemo(() => org.depts.filter((d) => !isExcludedDept(d.name)), [org.depts]);
-  const validRoots = useMemo(() => org.roots.filter((r) => !isExcludedDept(r.dept.name)), [org.roots]);
   const validUsers = useMemo(
     () => org.users.filter((u) => u.status === '사용' && !isExcludedUser(u) && !isExcludedDept(u.dept)),
     [org.users],
   );
 
-  // 최초 로드 시 모든 부서 전체 펼침 + 첫 팀 선택.
-  useEffect(() => {
-    if (validDepts.length > 0) {
-      setOpenIds(new Set(validDepts.map((d) => d.id)));
-    }
-    if (validRoots.length > 0 && !selId) {
-      const firstTeam = validRoots[0]?.children[0]?.dept.id ?? validRoots[0]?.dept.id ?? null;
-      setSelId(firstTeam);
-    }
-  }, [validDepts, validRoots, selId]);
-
-  const expandAll = () => setOpenIds(new Set(validDepts.map((d) => d.id)));
-  const collapseAll = () => setOpenIds(new Set());
-
-  const selNode = useMemo(() => {
-    if (!selId) return null;
-    const find = (nodes: OrgNode[]): OrgNode | null => {
-      for (const n of nodes) {
-        if (n.dept.id === selId) return n;
-        const c = find(n.children);
-        if (c) return c;
-      }
-      return null;
-    };
-    return find(validRoots);
-  }, [selId, validRoots]);
-
-  const kw = q.trim().toLowerCase();
-  const members = useMemo(() => {
-    const list = (selNode?.members ?? []).filter((m) => !isExcludedUser(m) && m.status === '사용');
-    if (!kw) return list;
-    return list.filter((m) => [m.name, m.position, m.jobTitle].some((v) => v.toLowerCase().includes(kw)));
-  }, [selNode, kw]);
-
-  const toggle = (id: string) =>
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-
-  /** 비상연락망 필터링된 사원 목록 (대표이사 및 기술경영전략위원회는 비상연락망에서 비공개 제외) */
-  const contactMembers = useMemo(() => {
-    const text = contactKeyword.trim().toLowerCase();
+  /** 리스트로 보기 필터링된 사원 목록 (대표이사 및 기술경영전략위원회는 연락처 비공개) */
+  const listMembers = useMemo(() => {
+    const text = listKeyword.trim().toLowerCase();
     return validUsers
-      .filter((u) => !u.position.includes('대표') && u.dept !== '대표이사' && !u.dept.includes('위원회'))
-      .filter((u) => (contactDeptFilter === 'all' ? true : u.dept === contactDeptFilter))
+      .filter((u) => (listDeptFilter === 'all' ? true : u.dept === listDeptFilter))
       .filter((u) => {
         if (!text) return true;
         return (
@@ -102,7 +54,7 @@ export default function OrgChartScreen() {
         const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
         return rankDiff || a.name.localeCompare(b.name, 'ko');
       });
-  }, [validUsers, org, contactDeptFilter, contactKeyword]);
+  }, [validUsers, org, listDeptFilter, listKeyword]);
 
   return (
     <div className="mx-auto max-w-6xl pb-12">
@@ -113,18 +65,18 @@ export default function OrgChartScreen() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">🏢</span>
-          <h1 className="text-xl font-bold text-ink">조직도 및 비상연락망</h1>
+          <h1 className="text-xl font-bold text-ink">조직도</h1>
           <span className="ml-2 text-[12px] text-ink3">
             {validDepts.length}개 부서 · {validUsers.length}명
           </span>
         </div>
 
-        {/* 3단 뷰 모드 전환 버튼 */}
+        {/* 2단 뷰 모드 전환 버튼 (비주얼 차트 / 리스트로 보기) */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-panel-alt/60 p-1 shadow-xs">
           <button
             type="button"
             onClick={() => setViewMode('visual')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[11.5px] font-bold transition-all ${
               viewMode === 'visual'
                 ? 'bg-panel text-teal shadow-xs'
                 : 'text-ink3 hover:text-ink'
@@ -134,140 +86,57 @@ export default function OrgChartScreen() {
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('tree')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${
-              viewMode === 'tree'
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[11.5px] font-bold transition-all ${
+              viewMode === 'list'
                 ? 'bg-panel text-teal shadow-xs'
                 : 'text-ink3 hover:text-ink'
             }`}
           >
-            <span>📁</span> 부서 트리
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('contact')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${
-              viewMode === 'contact'
-                ? 'bg-panel text-teal shadow-xs'
-                : 'text-ink3 hover:text-ink'
-            }`}
-          >
-            <span>📞</span> 전사 비상연락망
+            <span>📋</span> 리스트로 보기
           </button>
         </div>
       </div>
 
-      {/* ── 1. 비주얼 차트 뷰 (엑셀 원본 스타일을 실제 DB 데이터로 렌더링) ── */}
+      {/* ── 1. 비주얼 차트 뷰 (엑셀 원본 스타일 다이어그램) ── */}
       {viewMode === 'visual' && (
         <div className="mt-5">
           <VisualDiagramOrgChart org={org} validUsers={validUsers} validDepts={validDepts} onSelectUserId={setSelectedUserId} />
         </div>
       )}
 
-      {/* ── 2. 기존 부서 트리 뷰 ── */}
-      {viewMode === 'tree' && (
-        <div className="mt-5 grid grid-cols-[300px_1fr] gap-4">
-          {/* 좌: 부서 트리 */}
-          <div className="rounded-xl border border-border bg-panel p-2 shadow-xs">
-            <div className="mb-2 flex items-center justify-between border-b border-border pb-1.5 px-1 pt-0.5">
-              <span className="text-[11px] font-bold text-ink2">부서 목록</span>
-              <div className="flex items-center gap-1.5 text-[10.5px]">
-                <button
-                  type="button"
-                  onClick={expandAll}
-                  className="rounded px-1.5 py-0.5 font-semibold text-teal hover:bg-teal-soft transition-colors"
-                >
-                  전체 펼치기
-                </button>
-                <span className="text-ink3">·</span>
-                <button
-                  type="button"
-                  onClick={collapseAll}
-                  className="rounded px-1.5 py-0.5 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
-                >
-                  전체 접기
-                </button>
-              </div>
-            </div>
-            {validRoots.map((n) => (
-              <DeptRow key={n.dept.id} node={n} depth={0} openIds={openIds} selId={selId} onToggle={toggle} onSelect={setSelId} />
-            ))}
-            {validRoots.length === 0 && <div className="p-6 text-center text-[12px] text-ink3">부서 데이터가 없습니다.</div>}
-          </div>
-
-          {/* 우: 선택 부서 사원 */}
-          <div className="rounded-xl border border-border bg-panel shadow-xs">
-            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div className="min-w-0">
-                <div className="text-[14px] font-bold text-ink">{selNode?.dept.name ?? '부서를 선택하세요'}</div>
-                {selNode && (
-                  <div className="mt-0.5 text-[11px] text-ink3">
-                    부서장: {org.userById(selNode.dept.headUserId)?.name ?? '미지정'} · 인원 {members.length}명
-                  </div>
-                )}
-              </div>
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="이름·직책 검색"
-                className="w-44 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] text-ink outline-none focus:border-teal"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 p-4 lg:grid-cols-3">
-              {members.map((m) => (
-                <MemberCard
-                  key={m.id}
-                  user={m}
-                  manager={org.directManagerOf(m.id) ?? undefined}
-                  isHead={selNode?.dept.headUserId === m.id}
-                  onClick={() => setSelectedUserId(m.id)}
-                />
-              ))}
-              {members.length === 0 && (
-                <div className="col-span-full py-10 text-center text-[12px] text-ink3">
-                  {selNode ? '해당 부서에 표시할 사원이 없습니다.' : '왼쪽에서 부서를 선택하세요.'}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. 전사 비상연락망 테이블 뷰 ── */}
-      {viewMode === 'contact' && (
+      {/* ── 2. 리스트로 보기 뷰 ── */}
+      {viewMode === 'list' && (
         <div className="mt-5 space-y-3">
           {/* 필터 툴바 */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-xs">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-ink3">부서:</span>
               <select
-                value={contactDeptFilter}
-                onChange={(e) => setContactDeptFilter(e.target.value)}
+                value={listDeptFilter}
+                onChange={(e) => setListDeptFilter(e.target.value)}
                 className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
               >
                 <option value="all">전체 부서</option>
-                {validDepts
-                  .filter((d) => d.name !== '대표이사' && !d.name.includes('위원회'))
-                  .map((d) => (
-                    <option key={d.id} value={d.name}>
-                      {d.name}
-                    </option>
-                  ))}
+                {validDepts.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="flex items-center gap-2">
               <input
-                value={contactKeyword}
-                onChange={(e) => setContactKeyword(e.target.value)}
+                value={listKeyword}
+                onChange={(e) => setListKeyword(e.target.value)}
                 placeholder="이름, 직급, 부서, 이메일 검색..."
                 className="h-8 w-60 rounded-lg border border-border bg-panel-alt/50 px-3 text-[11.5px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50"
               />
-              {contactKeyword && (
+              {listKeyword && (
                 <button
                   type="button"
-                  onClick={() => setContactKeyword('')}
+                  onClick={() => setListKeyword('')}
                   className="rounded px-2 py-1 text-[11px] font-semibold text-ink3 hover:text-ink"
                 >
                   초기화
@@ -276,7 +145,7 @@ export default function OrgChartScreen() {
             </div>
           </div>
 
-          {/* 연락망 테이블 */}
+          {/* 사원 리스트 테이블 */}
           <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-[11.5px]">
@@ -287,12 +156,13 @@ export default function OrgChartScreen() {
                     <th className="p-3">직급 / 직책</th>
                     <th className="p-3">업무 이메일</th>
                     <th className="p-3">직속 상급자</th>
-                    <th className="p-3 text-center">비상연락</th>
+                    <th className="p-3 text-center">상세</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {contactMembers.map((u) => {
+                  {listMembers.map((u) => {
                     const manager = org.directManagerOf(u.id);
+                    const isPrivate = u.position.includes('대표') || u.dept === '대표이사' || u.dept.includes('위원회');
                     return (
                       <tr
                         key={u.id}
@@ -310,13 +180,17 @@ export default function OrgChartScreen() {
                           {u.position} {u.jobTitle && <span className="text-ink3">({u.jobTitle})</span>}
                         </td>
                         <td className="p-3 font-mono text-ink2">
-                          <a
-                            href={`mailto:${u.email}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="hover:text-teal hover:underline"
-                          >
-                            ✉ {u.email}
-                          </a>
+                          {isPrivate ? (
+                            <span className="italic text-ink3 text-[10.5px]">비공개</span>
+                          ) : (
+                            <a
+                              href={`mailto:${u.email}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-teal hover:underline"
+                            >
+                              ✉ {u.email}
+                            </a>
+                          )}
                         </td>
                         <td className="p-3 text-ink3">{manager?.name ? `↑ ${manager.name} (${manager.position || manager.jobTitle || '부서장'})` : '—'}</td>
                         <td className="p-3 text-center">
@@ -334,7 +208,7 @@ export default function OrgChartScreen() {
                       </tr>
                     );
                   })}
-                  {contactMembers.length === 0 && (
+                  {listMembers.length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-ink3">
                         검색 조건에 일치하는 임직원이 없습니다.
@@ -368,7 +242,7 @@ export default function OrgChartScreen() {
                   {selectedUser.name}
                 </div>
                 <div className="mt-1 rounded border border-border bg-panel-alt px-2 py-0.5 font-mono text-[10px] font-bold text-ink2">
-                  사번: {selectedUser.empNo || '-'}
+                  사번: {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? '비공개' : (selectedUser.empNo || '-')}
                 </div>
 
                 <div className="mt-4 space-y-1 text-center">
@@ -422,12 +296,16 @@ export default function OrgChartScreen() {
 
                   <div>
                     <span className="block text-[11px] text-ink3">업무 이메일</span>
-                    <a
-                      href={`mailto:${selectedUser.email}`}
-                      className="mt-1 block font-mono font-semibold text-teal hover:underline break-all"
-                    >
-                      ✉ {selectedUser.email || '-'}
-                    </a>
+                    {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? (
+                      <span className="mt-1 block font-mono text-[11px] text-ink3 italic">비공개</span>
+                    ) : (
+                      <a
+                        href={`mailto:${selectedUser.email}`}
+                        className="mt-1 block font-mono font-semibold text-teal hover:underline break-all"
+                      >
+                        ✉ {selectedUser.email || '-'}
+                      </a>
+                    )}
                   </div>
 
                   <div>
@@ -740,78 +618,6 @@ function VisualDiagramOrgChart({
             })}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** 부서 트리 행(재귀). */
-function DeptRow({
-  node, depth, openIds, selId, onToggle, onSelect,
-}: {
-  node: OrgNode; depth: number; openIds: Set<string>; selId: string | null;
-  onToggle: (id: string) => void; onSelect: (id: string) => void;
-}) {
-  if (isExcludedDept(node.dept.name)) return null;
-
-  const validChildren = node.children.filter((c) => !isExcludedDept(c.dept.name));
-  const hasChildren = validChildren.length > 0;
-  const open = openIds.has(node.dept.id);
-  const selected = selId === node.dept.id;
-  const count = node.members.filter((m) => !isExcludedUser(m) && m.status === '사용').length;
-
-  return (
-    <div>
-      <div
-        className={`flex cursor-pointer items-center gap-1.5 rounded-lg py-1.5 pr-2 text-[12.5px] ${selected ? 'bg-teal-soft font-bold text-teal' : 'text-ink hover:bg-panel-alt'}`}
-        style={{ paddingLeft: 6 + depth * 16 }}
-        onClick={() => onSelect(node.dept.id)}
-      >
-        {hasChildren ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onToggle(node.dept.id); }}
-            className="grid h-4 w-4 shrink-0 place-items-center text-[10px] text-ink3"
-          >
-            {open ? '▾' : '▸'}
-          </button>
-        ) : (
-          <span className="inline-block h-4 w-4 shrink-0" />
-        )}
-        <span className="truncate">{node.dept.name}</span>
-        {count > 0 && <span className="ml-auto shrink-0 text-[10px] text-ink3">{count}</span>}
-      </div>
-      {hasChildren && open && validChildren.map((c) => (
-        <DeptRow key={c.dept.id} node={c} depth={depth + 1} openIds={openIds} selId={selId} onToggle={onToggle} onSelect={onSelect} />
-      ))}
-    </div>
-  );
-}
-
-/** 사원 카드. */
-function MemberCard({
-  user, manager, isHead, onClick,
-}: {
-  user: User; manager: User | undefined; isHead: boolean; onClick?: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      className="rounded-xl border border-border bg-panel-alt px-3 py-2.5 cursor-pointer hover:border-teal/30 hover:shadow-xs transition-all select-none"
-    >
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-soft text-[13px] font-bold text-teal">{user.name[0]}</span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[12.5px] font-bold text-ink">{user.name}</span>
-            {isHead && <span className="shrink-0 rounded bg-teal/15 px-1.5 py-px text-[9px] font-bold text-teal">부서장</span>}
-          </div>
-          <div className="text-[11px] text-ink3">{user.jobTitle ? `${user.jobTitle} · ${user.position}` : user.position}</div>
-        </div>
-      </div>
-      <div className="mt-2 space-y-0.5 text-[10.5px] text-ink3">
-        <div className="truncate">✉ {user.email}</div>
-        <div>↑ 상급자: {manager?.name ?? '—'}</div>
       </div>
     </div>
   );
