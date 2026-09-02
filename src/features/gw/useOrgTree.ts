@@ -42,6 +42,7 @@ export interface OrgTree {
   rankOf: (position: string) => number;
   managerChain: (userId: string, depth?: number) => User[];
   deptHeadOf: (userId: string) => User | null;
+  directManagerOf: (userId: string) => User | null;
 }
 
 export function useOrgTree() {
@@ -70,11 +71,20 @@ export function useOrgTree() {
       membersByDept.set(u.dept, arr);
     }
 
-    /** 부서의 부서장 — 마스터 headUserId(유효 시) 우선, 없으면 소속원 중 최상위 직급. */
+    /** 부서의 부서장 — 1) 직책(팀장/본부장/소장) 2) 마스터 headUserId 3) 소속원 중 최상위 직급 */
     const seniorHeadId = (members: User[]): string | null => {
       if (members.length === 0) return null;
+      const leader = members.find(
+        (m) =>
+          m.jobTitle?.includes('팀장') ||
+          m.jobTitle?.includes('본부장') ||
+          m.jobTitle?.includes('소장') ||
+          m.jobTitle?.includes('대표'),
+      );
+      if (leader) return leader.id;
       return members.slice().sort((a, b) => rankOf(a.position) - rankOf(b.position))[0].id;
     };
+
     const headIdOfDept = (name: string): string | null => {
       const m = masterByName.get(name);
       if (m?.headUserId && usersById.has(m.headUserId)) return m.headUserId;
@@ -109,32 +119,55 @@ export function useOrgTree() {
 
     const userById = (id: string | null | undefined) => (id ? usersById.get(id) : undefined);
 
-    const deptHeadOf = (userId: string): User | null => {
+    /**
+     * 직속 상급자 도출:
+     * - 일반 팀원: 소속 부서의 부서장(팀장)
+     * - 부서장/팀장: 상위 부서(parentId)의 부서장(본부장/대표이사)
+     */
+    const directManagerOf = (userId: string): User | null => {
       const u = usersById.get(userId);
       if (!u) return null;
-      const headId = headIdOfDept(u.dept);
-      if (headId && headId !== userId) return usersById.get(headId) ?? null;
-      // 자신이 부서장이면 상위 부서장(마스터 계층)으로.
-      let m = masterByName.get(u.dept);
-      while (m?.parentId) {
-        const parent = masters.find((d) => d.id === m!.parentId);
-        if (!parent) break;
-        if (parent.headUserId && parent.headUserId !== userId) return usersById.get(parent.headUserId) ?? null;
-        m = parent;
+
+      // 대표이사는 상급자 없음
+      if (u.position.includes('대표') || u.dept === '대표이사') return null;
+
+      const deptHeadId = headIdOfDept(u.dept);
+
+      // 1. 본인이 부서장이 아닌 경우 ➔ 해당 부서의 부서장
+      if (deptHeadId && deptHeadId !== userId) {
+        return usersById.get(deptHeadId) ?? null;
       }
+
+      // 2. 본인이 부서장(팀장)인 경우 ➔ 상위 부서(parentId)의 부서장
+      let curDept = masterByName.get(u.dept) ?? [...nodeByName.values()].find((n) => n.dept.name === u.dept)?.dept;
+      while (curDept?.parentId) {
+        const parent =
+          masters.find((d) => d.id === curDept!.parentId) ??
+          [...nodeByName.values()].find((n) => n.dept.id === curDept!.parentId)?.dept;
+        if (!parent) break;
+        const parentHeadId = headIdOfDept(parent.name);
+        if (parentHeadId && parentHeadId !== userId) {
+          return usersById.get(parentHeadId) ?? null;
+        }
+        curDept = parent;
+      }
+
+      // 3. 최상위 대표이사로 폴백
+      const ceo = users.find((user) => user.position.includes('대표') || user.dept === '대표이사');
+      if (ceo && ceo.id !== userId) return ceo;
+
       return null;
     };
+
+    const deptHeadOf = (userId: string): User | null => directManagerOf(userId);
 
     const managerChain = (userId: string, depth = 5): User[] => {
       const chain: User[] = [];
       const seen = new Set<string>([userId]);
       let cur = usersById.get(userId);
       while (cur && chain.length < depth) {
-        // managerId 우선, 없으면 부서장 폴백(자동 도출).
-        const mgrId = cur.managerId ?? deptHeadOf(cur.id)?.id ?? null;
-        if (!mgrId || seen.has(mgrId)) break;
-        const mgr = usersById.get(mgrId);
-        if (!mgr) break;
+        const mgr = directManagerOf(cur.id);
+        if (!mgr || seen.has(mgr.id)) break;
         chain.push(mgr);
         seen.add(mgr.id);
         cur = mgr;
@@ -143,7 +176,7 @@ export function useOrgTree() {
     };
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
-    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf };
+    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
   }, [deptsQ.data, usersQ.data, positionsQ.data]);
 
   return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || positionsQ.isLoading };
