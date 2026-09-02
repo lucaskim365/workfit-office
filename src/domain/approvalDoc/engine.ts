@@ -158,7 +158,7 @@ export function applyDecision(
  * 재상신 시 이전 라운드의 결정을 초기화(대기)해 새 결재 라운드를 시작한다.
  */
 export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
-  if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수'].includes(doc.status)) {
+  if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수', '시행반송'].includes(doc.status)) {
     throw new ApprovalError('임시저장·반려·회수 상태에서만 상신할 수 있습니다');
   }
   if (!doc.steps.some(isBlocking)) throw new ApprovalError('결재자를 1명 이상 지정하세요');

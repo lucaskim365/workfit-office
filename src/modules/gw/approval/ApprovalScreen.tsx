@@ -786,6 +786,7 @@ export default function ApprovalScreen() {
             <div className="overflow-hidden rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
               {selDoc ? (
                 <DocDetail
+                  key={selDoc.id}
                   doc={selDoc}
                   me={me}
                   users={users}
