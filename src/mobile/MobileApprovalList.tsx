@@ -5,7 +5,7 @@ import { ClipboardCheck, Bell, Settings } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
-import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { currentApproverIds, getPredecessorsOf, getReadRejectedDocIds, markRejectedDocAsRead } from '@/domain/approvalDoc/engine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
@@ -76,6 +76,7 @@ export default function MobileApprovalList() {
   const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
+  const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
   const org = useOrgTree();
 
   // 로컬스토리지 키 설정
@@ -240,7 +241,10 @@ export default function MobileApprovalList() {
       >
         {activeBoxes.map((b) => {
           const active = b.key === box;
-          const cnt = counts[b.key as ApprovalBox] ?? 0;
+          const rawCnt = counts[b.key as ApprovalBox] ?? 0;
+          const cnt = b.key === '반려'
+            ? (byBox['반려'] ?? []).filter((d) => !readRejectedIds.has(d.id)).length
+            : rawCnt;
           return (
             <button
               key={b.key}
@@ -258,8 +262,8 @@ export default function MobileApprovalList() {
                 {b.label}
                 {cnt > 0 && (
                   <span
-                    className="grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white"
-                    style={{ background: b.key === '대기' ? '#3b82f6' : '#94a3b8' }}
+                    className="grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white animate-pulse"
+                    style={{ background: b.key === '대기' ? '#3b82f6' : b.key === '반려' ? '#f43f5e' : '#94a3b8' }}
                   >
                     {cnt}
                   </span>
@@ -382,7 +386,20 @@ export default function MobileApprovalList() {
             {box === '대기' ? '결재할 문서가 없습니다.' : '문서가 없습니다.'}
           </div>
         ) : (
-          docs.map((d) => <ApprovalRow key={d.id} doc={d} onOpen={() => nav(`/m/approval/${d.id}`)} />)
+          docs.map((d) => (
+            <ApprovalRow
+              key={d.id}
+              doc={d}
+              isUnread={box === '반려' && !readRejectedIds.has(d.id)}
+              onOpen={() => {
+                if (box === '반려' && me) {
+                  markRejectedDocAsRead(me, d.id);
+                  setReadRejectedIds((prev) => new Set(prev).add(d.id));
+                }
+                nav(`/m/approval/${d.id}`);
+              }}
+            />
+          ))
         )}
       </div>
 
@@ -454,7 +471,7 @@ export default function MobileApprovalList() {
   );
 }
 
-function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) {
+function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () => void; isUnread?: boolean }) {
   const drafter = doc.drafterName || doc.drafterId;
   
   let statusText: string = doc.status === '시행대기' ? '완료' : doc.status === '시행반송' ? '반려' : doc.status;
@@ -475,6 +492,11 @@ function ApprovalRow({ doc, onOpen }: { doc: ApprovalDoc; onOpen: () => void }) 
         >
           {statusText}
         </span>
+        {isUnread && (
+          <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 animate-pulse">
+            미열람
+          </span>
+        )}
         <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{doc.docNo}</span>
       </div>
       <div className="truncate text-[14px] font-bold text-ink">{doc.title}</div>

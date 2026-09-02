@@ -17,7 +17,7 @@ import {
   useBatchPermanentlyDelete,
   useAllApprovals,
 } from '@/features/gw/useApprovals';
-import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
+import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent, getEffectiveRecipients, getReadRejectedDocIds, markRejectedDocAsRead } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 
@@ -78,6 +78,21 @@ export default function ApprovalScreen() {
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
+
+  // 반려함 문서 읽음(열람) 관리
+  const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
+  useEffect(() => {
+    setReadRejectedIds(getReadRejectedDocIds(me));
+  }, [me]);
+
+  useEffect(() => {
+    if (selId && box === '반려' && me) {
+      if (!readRejectedIds.has(selId)) {
+        markRejectedDocAsRead(me, selId);
+        setReadRejectedIds((prev) => new Set(prev).add(selId));
+      }
+    }
+  }, [selId, box, me, readRejectedIds]);
 
 
 
@@ -458,6 +473,11 @@ export default function ApprovalScreen() {
                         .map(id => combined.find(d => d.id === id)!)
                         .filter((d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송')
                         .length;
+                    } else if (b === '반려') {
+                      badgeCount = Array.from(uniqueIds)
+                        .map(id => combined.find(d => d.id === id)!)
+                        .filter((d) => !readRejectedIds.has(d.id))
+                        .length;
                     } else {
                       badgeCount = uniqueIds.size;
                     }
@@ -476,7 +496,7 @@ export default function ApprovalScreen() {
                         : 'bg-ink3/15 text-ink2')
                       : b === '반려'
                         ? (badgeCount > 0
-                          ? 'bg-rose-500 text-white'
+                          ? 'bg-rose-500 text-white animate-pulse'
                           : 'bg-ink3/15 text-ink2')
                       : b === '후열'
                         ? (unconfirmedPostReadCount > 0
@@ -664,7 +684,13 @@ export default function ApprovalScreen() {
                     return (
                       <button
                         key={d.id}
-                        onClick={() => setSelId(d.id)}
+                        onClick={() => {
+                          setSelId(d.id);
+                          if (box === '반려' && me) {
+                            markRejectedDocAsRead(me, d.id);
+                            setReadRejectedIds((prev) => new Set(prev).add(d.id));
+                          }
+                        }}
                         className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-3 text-left transition-all ${isActive
                           ? 'bg-teal-soft/50 border-l-4 border-l-teal shadow-2xs font-semibold'
                           : isRecentCompleted
@@ -690,6 +716,12 @@ export default function ApprovalScreen() {
                               <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
                                 <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
                                 최근 완료
+                              </span>
+                            )}
+                            {box === '반려' && !readRejectedIds.has(d.id) && (
+                              <span className="flex items-center gap-1 bg-rose-500/10 text-rose-600 text-[9.5px] px-1.5 py-0.5 rounded-full font-bold shrink-0">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                미열람
                               </span>
                             )}
                             <DocStatusBadge doc={d} me={me} />
