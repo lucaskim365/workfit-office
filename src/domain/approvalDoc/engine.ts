@@ -178,14 +178,19 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
  * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */
-/** 대기함 판정: 진행중이고 현재 결재 순번(차례)이 나 또는 내 대결 위임 대상자인 경우 (To-Do) */
+/** 대기함 판정: 진행중이고 내가 결재선에 포함되어 있는 모든 문서 (내 차례 대기중 + 이전/다음 단계 진행중) */
 export function isTodoBoxMatch(doc: ApprovalDoc, userId: string, absentApproverIds?: string[]): boolean {
   if (doc.status !== '진행중') return false;
   
-  const activeIds = currentApproverIds(doc);
-  if (activeIds.includes(userId)) return true;
+  // 1. 내가 결재선에 포함되어 있는가 (결재자 또는 대결자, 참조 제외)
+  const isInChain = doc.steps.some(
+    (s) => s.kind !== '참조' && (s.approverId === userId || s.delegatedFromId === userId)
+  );
+  if (isInChain) return true;
   
+  // 2. 부재자 대결 위임으로 내게 차례가 온 경우
   if (absentApproverIds && absentApproverIds.length > 0) {
+    const activeIds = currentApproverIds(doc);
     return activeIds.some((id) => absentApproverIds.includes(id));
   }
   return false;
