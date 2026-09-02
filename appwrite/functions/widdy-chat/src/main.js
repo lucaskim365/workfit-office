@@ -65,7 +65,8 @@ export default async ({ req, res, log, error }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
-        uid,
+        uid, // (전환기 호환) RAG 가 token 을 우선 검증하고, token 없을 때만 이 uid 를 신뢰한다.
+        token: body.token || '', // ★서명 토큰 포워딩 — RAG(server3)가 직접 검증(ALLOW_UID_FALLBACK=0 대비).
         history: body.history || [],
         sessionId: body.sessionId || '',
         attachment: body.attachment || null, // 첨부파일(Garage 임시키). RAG 가 다운로드·추출해 근거로 사용.

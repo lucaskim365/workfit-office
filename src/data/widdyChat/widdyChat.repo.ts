@@ -2,9 +2,13 @@ import { Functions } from 'appwrite';
 import { client } from '@/shared/lib/appwrite';
 import {
   widdyAskResultSchema,
+  type Citation,
   type WiddyAskParams,
   type WiddyAskResult,
 } from '@/domain/widdyChat/schema';
+
+/** 스트리밍 토큰 콜백 — 조각(delta)이 도착할 때마다 호출된다. */
+export type OnToken = (delta: string) => void;
 
 /**
  * Widdy 챗봇 Repository — RAG 게이트웨이 접근을 캡슐화하는 유일한 계층.
@@ -64,6 +68,86 @@ async function askHttp(params: WiddyAskParams): Promise<WiddyAskResult> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 1-S) HTTP 게이트웨이 스트리밍(SSE) — /chat/stream
+//    server3 chat_service 가 event: meta|token|done 프레임을 흘려보낸다.
+//    체감 지연(첫 토큰) 대폭↓. Appwrite Function 은 스트리밍 불가 → http 드라이버 전용.
+// ─────────────────────────────────────────────────────────────
+/** VITE_WIDDY_CHAT_URL(…/chat) 로부터 스트림 URL(…/chat/stream) 도출. 명시 override: VITE_WIDDY_STREAM_URL. */
+function streamUrl(): string {
+  const explicit = import.meta.env.VITE_WIDDY_STREAM_URL as string | undefined;
+  if (explicit) return explicit;
+  const base = import.meta.env.VITE_WIDDY_CHAT_URL as string;
+  return base.endsWith('/chat') ? `${base}/stream` : base.replace(/\/?$/, '/stream');
+}
+
+async function askHttpStream(params: WiddyAskParams, onToken: OnToken): Promise<WiddyAskResult> {
+  const token = import.meta.env.VITE_WIDDY_CHAT_TOKEN as string | undefined;
+  const res = await fetch(streamUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+    body: JSON.stringify(params),
+  });
+  if (!res.ok || !res.body) throw new Error(`Widdy 스트림 실패 (${res.status})`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let answer = '';
+  let citations: Citation[] = [];
+  let sessionId = params.sessionId;
+
+  const dispatch = (event: string, dataStr: string) => {
+    let data: { t?: unknown; citations?: unknown; sessionId?: unknown };
+    try {
+      data = JSON.parse(dataStr);
+    } catch {
+      return;
+    }
+    if (event === 'meta') {
+      if (Array.isArray(data.citations)) citations = data.citations as Citation[];
+      if (typeof data.sessionId === 'string' && data.sessionId) sessionId = data.sessionId;
+    } else if (event === 'token') {
+      const t = typeof data.t === 'string' ? data.t : '';
+      if (t) {
+        answer += t;
+        onToken(t);
+      }
+    }
+  };
+
+  // SSE 프레임 파서: 프레임 구분 "\n\n", 프레임 내 event:/data: 라인.
+  const drain = () => {
+    let idx: number;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let event = 'message';
+      const dataLines: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      if (dataLines.length) dispatch(event, dataLines.join('\n'));
+    }
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    drain();
+  }
+  buf += decoder.decode();
+  drain();
+
+  return { answer, citations, sessionId };
+}
+
+// ─────────────────────────────────────────────────────────────
 // 2) Appwrite Function 게이트웨이 — 계획서 옵션 A (세션 인증 자동)
 // ─────────────────────────────────────────────────────────────
 async function askFunction(params: WiddyAskParams): Promise<WiddyAskResult> {
@@ -107,5 +191,17 @@ export const widdyChatRepo = {
       default:
         return askStub(params);
     }
+  },
+
+  /**
+   * 질의 → 스트리밍 답변. http 드라이버에서만 실제 SSE(체감 첫토큰↓).
+   * function/stub 드라이버는 스트리밍을 지원하지 않으므로 비스트리밍 ask() 결과를
+   * 한 번에 onToken 으로 흘려 동일 인터페이스를 유지(호출부 무분기). 최종 결과는 반환값으로 확정.
+   */
+  async askStream(params: WiddyAskParams, onToken: OnToken): Promise<WiddyAskResult> {
+    if (selectDriver() === 'http') return askHttpStream(params, onToken);
+    const r = await this.ask(params);
+    if (r.answer) onToken(r.answer);
+    return r;
   },
 };

@@ -95,7 +95,8 @@ export function ChatbotPanel() {
                     style={bubbleStyle}
                     className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${me ? '' : 'border border-border bg-panel text-ink'}`}
                   >
-                    {m.status === 'pending' ? (
+                    {m.status === 'pending' && !m.content ? (
+                      // 첫 토큰 도착 전: 타이핑 점 + 안내. 스트리밍으로 content 가 차기 시작하면 아래로 전환.
                       <div className="flex flex-col gap-1.5">
                         <TypingDots />
                         {m.hint && <span className="text-[11px] leading-snug text-ink3">{m.hint}</span>}
