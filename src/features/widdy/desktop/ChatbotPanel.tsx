@@ -10,11 +10,18 @@ const WIDDY_ACCEPT = '.txt,.pdf,.xlsx,.xls,.hwp,.jpg,.jpeg,.png,.bmp,.tif,.tiff,
 /** 첨부 최대 크기 100MB. */
 const WIDDY_MAX_BYTES = 100 * 1024 * 1024;
 
-/** 시작 화면 샘플 질문(클릭 시 바로 전송). 사내 생산일보 데이터로 답변된다. */
+/** 데모 생산일보가 항상 존재하는 최근 일자(어제, KST 기준). 날짜를 고정하지 않아 오래되지 않는다. */
+const RECENT_DAY = (() => {
+  const d = new Date(Date.now() - 86_400_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
+
+/** 시작 화면 샘플 질문(클릭 시 바로 전송). 날짜를 포함해 바로 답변되게 한다(사내 생산일보 데이터). */
 const SAMPLE_QUESTIONS = [
-  '가장 불량률이 높은 설비는 어디인가요?',
-  '본딩 15호기의 생산 실적을 알려줘',
-  '생산 불량 개선을 위한 익일 작업지시는?',
+  `${RECENT_DAY} 생산 실적을 요약해줘`,
+  `${RECENT_DAY} 본딩 15호기의 불량률은?`,
+  `${RECENT_DAY} 가장 불량률이 높은 설비는?`,
 ];
 
 /** 응답 대기 중 타이핑 인디케이터(점 3개). */
