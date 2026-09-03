@@ -45,12 +45,17 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
     register,
     handleSubmit,
     reset,
-    setError,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
     defaultValues: EMPTY,
   });
+
+  const selectedDeptName = watch('dept');
+  const selectedDeptObj = departments.find((d) => d.name === selectedDeptName);
+  const headUser = selectedDeptObj?.headUserId ? users.find((u) => u.id === selectedDeptObj.headUserId) : null;
+  const isSelfHead = Boolean(initial?.id && selectedDeptObj?.headUserId === initial.id);
 
   useEffect(() => {
     if (!open) return;
@@ -72,22 +77,6 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
   }, [open, initial, reset]);
 
   const submit = handleSubmit((values) => {
-    if (values.jobTitle === '본부장') {
-      const existingDivHead = users.find((u) => u.jobTitle === '본부장' && u.id !== initial?.id);
-      if (existingDivHead) {
-        setError('jobTitle', { type: 'manual', message: `본부장은 시스템에 1명만 지정할 수 있습니다. (현재: ${existingDivHead.name})` });
-        return;
-      }
-    }
-
-    if (values.jobTitle === '팀장') {
-      const existingTeamHead = users.find((u) => u.dept === values.dept && u.jobTitle === '팀장' && u.id !== initial?.id);
-      if (existingTeamHead) {
-        setError('jobTitle', { type: 'manual', message: `해당 부서에 이미 팀장이 존재합니다. (현재: ${existingTeamHead.name})` });
-        return;
-      }
-    }
-
     onSubmit(values, initial?.id);
     onClose();
   });
@@ -112,16 +101,33 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
         <Field label="이름" required error={errors.name?.message}>
           <TextField {...register('name')} invalid={!!errors.name} placeholder="홍길동" />
         </Field>
-        <Field label="부서" required error={errors.dept?.message}>
-          <SelectField
-            {...register('dept')}
-            invalid={!!errors.dept}
-            options={[
-              { value: '', label: '부서 선택' },
-              ...departments.map((d) => ({ value: d.name, label: d.name }))
-            ]}
-          />
-        </Field>
+        <div className="col-span-2">
+          <Field label="부서" required error={errors.dept?.message}>
+            <SelectField
+              {...register('dept')}
+              invalid={!!errors.dept}
+              options={[
+                { value: '', label: '부서 선택' },
+                ...departments.map((d) => ({ value: d.name, label: d.name }))
+              ]}
+            />
+            {selectedDeptName && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px]">
+                {isSelfHead ? (
+                  <span className="rounded bg-teal-soft/30 px-1.5 py-0.5 font-bold text-teal">
+                    해당 부서의 부서장으로 임명되어 있습니다 (부서 관리 연동)
+                  </span>
+                ) : headUser ? (
+                  <span className="text-ink3">
+                    소속 부서장: <strong className="text-ink2">{headUser.name}</strong> ({headUser.position || '팀장'})
+                  </span>
+                ) : (
+                  <span className="text-ink3">소속 부서장: 미지정 (부서 관리에서 임명 가능)</span>
+                )}
+              </div>
+            )}
+          </Field>
+        </div>
 
         <Field label="직급" required error={errors.position?.message}>
           <SelectField

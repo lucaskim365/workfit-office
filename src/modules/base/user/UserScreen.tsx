@@ -7,6 +7,7 @@ import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
 import { type User } from '@/domain/user/schema';
 import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
+import { useDepartments } from '@/features/department/useDepartments';
 import { usePermission } from '@/features/auth/usePermission';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 import ResignModal from './ResignModal';
@@ -30,6 +31,8 @@ export default function UserScreen() {
   const canCreate = canAction('S_BASE_USER', 'create');
   const canDelete = canAction('S_BASE_USER', 'delete');
   const canUpdate = canAction('S_BASE_USER', 'update');
+
+  const { data: departments = [] } = useDepartments();
 
   // 사용여부 필터 기본값 '' (전체) — 미사용(퇴사 등) 계정도 기본 화면에서 함께 확인 가능.
   const [draft, setDraft] = useState({ dept: '', status: '', q: '' });
@@ -94,7 +97,25 @@ export default function UserScreen() {
 
   const columns: Column<User>[] = [
     { key: 'empNo', header: '사번', mono: true, sortable: true, width: 100 },
-    { key: 'name', header: '이름', sortable: true, width: 90 },
+    {
+      key: 'name',
+      header: '이름',
+      sortable: true,
+      width: 110,
+      render: (u) => {
+        const isHead = departments.some((d) => d.headUserId === u.id);
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-ink">{u.name}</span>
+            {isHead && (
+              <span className="rounded bg-teal-soft/35 px-1.5 py-0.5 text-[9.5px] font-bold text-teal">
+                부서장
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
     { key: 'dept', header: '부서', sortable: true },
     { key: 'position', header: '직급', sortable: true, width: 84 },
     {
