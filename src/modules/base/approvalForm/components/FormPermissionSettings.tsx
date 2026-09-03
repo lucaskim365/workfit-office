@@ -69,7 +69,7 @@ export function FormPermissionSettings({
   return (
     <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
       <div>
-        <div className="text-[13px] font-bold text-ink">📢 2. 기안 권한 설정</div>
+        <div className="text-[13px] font-bold text-ink">2. 기안 권한 설정</div>
         <div className="text-[10.5px] text-ink3 mt-0.5">이 서식을 사용할 수 있는 기안자의 범위(직급, 부서 등)를 정의합니다.</div>
       </div>
 

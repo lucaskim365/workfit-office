@@ -85,20 +85,23 @@ export function ApprovalLineBuilder({
   // 피커 상태
   const [picker, setPicker] = useState<
     | { mode: 'add' }
+    | { mode: 'add-ref' }
     | { mode: 'replace'; index: number }
     | { mode: 'add-to-group'; groupIndex: number; targetGroupId?: string }
     | null
   >(null);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
+  const approverEdits = useMemo(() => edits.filter((e) => e.kind !== '참조'), [edits]);
+  const refEdits = useMemo(() => edits.filter((e) => e.kind === '참조'), [edits]);
 
   const allowedKinds = useMemo(() => {
-    return STEP_KINDS.filter((k) => k !== '합의' || isAgreementEnabled);
+    return STEP_KINDS.filter((k) => k !== '참조' && (k !== '합의' || isAgreementEnabled));
   }, [isAgreementEnabled]);
 
   const allowedParallelKinds = useMemo(() => {
-    return STEP_KINDS.filter((k) => k !== '전결' && (k !== '합의' || isAgreementEnabled));
-  }, [isAgreementEnabled]);
+    return allowedKinds.filter((k) => k !== '전결');
+  }, [allowedKinds]);
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const deptPosOf = (id: string) => {
@@ -108,33 +111,42 @@ export function ApprovalLineBuilder({
 
   const emit = (next: EditStep[]) => onChange(toSteps(next));
 
-  const setKind = (i: number, kind: StepKind) => emit(edits.map((e, idx) => (idx === i ? { ...e, kind } : e)));
-  
-  /** 특정 결재자 삭제 처리 (그룹 구조 붕괴 방지) */
-  const remove = (i: number) => {
-    const target = edits[i];
-    const next = edits.filter((_, idx) => idx !== i);
-    
-    // 만약 삭제 대상이 그룹의 첫 멤버(linkedPrev: false이고 groupId가 있음)였고, 뒤에 연달아 같은 groupId를 가진 멤버가 있다면
-    if (!target.linkedPrev && target.groupId && next.length > i && next[i].groupId === target.groupId) {
-      // 뒤 멤버가 그룹의 리더 역할을 이어받음
-      next[i] = { ...next[i], linkedPrev: false };
-    }
-    
-    if (next.length > 0) {
-      next[0] = { ...next[0], linkedPrev: false };
-    }
-    emit(next);
+  const setKind = (approverIdx: number, kind: StepKind) => {
+    const nextApprovers = approverEdits.map((e, idx) => (idx === approverIdx ? { ...e, kind } : e));
+    emit([...nextApprovers, ...refEdits]);
   };
   
-  /** 단독 노드 단위 이동 */
-  const move = (i: number, dir: -1 | 1) => {
+  /** 결재자 삭제 처리 (그룹 구조 붕괴 방지) */
+  const removeApprover = (approverIdx: number) => {
+    const target = approverEdits[approverIdx];
+    const nextApprovers = approverEdits.filter((_, idx) => idx !== approverIdx);
+    
+    // 만약 삭제 대상이 그룹의 첫 멤버(linkedPrev: false이고 groupId가 있음)였고, 뒤에 연달아 같은 groupId를 가진 멤버가 있다면
+    if (!target.linkedPrev && target.groupId && nextApprovers.length > approverIdx && nextApprovers[approverIdx].groupId === target.groupId) {
+      // 뒤 멤버가 그룹의 리더 역할을 이어받음
+      nextApprovers[approverIdx] = { ...nextApprovers[approverIdx], linkedPrev: false };
+    }
+    
+    if (nextApprovers.length > 0) {
+      nextApprovers[0] = { ...nextApprovers[0], linkedPrev: false };
+    }
+    emit([...nextApprovers, ...refEdits]);
+  };
+
+  /** 참조자 삭제 */
+  const removeRef = (refIdx: number) => {
+    const nextRefs = refEdits.filter((_, idx) => idx !== refIdx);
+    emit([...approverEdits, ...nextRefs]);
+  };
+  
+  /** 단독 결재 노드 단위 이동 */
+  const moveApprover = (i: number, dir: -1 | 1) => {
     const j = i + dir;
-    if (j < 0 || j >= edits.length) return;
-    const next = [...edits];
-    [next[i], next[j]] = [next[j], next[i]];
-    next[0] = { ...next[0], linkedPrev: false };
-    emit(next);
+    if (j < 0 || j >= approverEdits.length) return;
+    const nextApprovers = [...approverEdits];
+    [nextApprovers[i], nextApprovers[j]] = [nextApprovers[j], nextApprovers[i]];
+    if (nextApprovers.length > 0) nextApprovers[0].linkedPrev = false;
+    emit([...nextApprovers, ...refEdits]);
   };
 
   /** 병렬 그룹 전체 위치 이동 (위/아래, 빈 그룹 포함) */
@@ -147,14 +159,14 @@ export function ApprovalLineBuilder({
 
     // 1) emptyGroupIds 배열의 순서도 새로운 renderGroups 순서대로 재정렬
     const newEmptyGroupIds: string[] = [];
-    const nextEdits: EditStep[] = [];
+    const nextApprovers: EditStep[] = [];
 
     newRenderGroups.forEach((g) => {
       if (g.items.length === 0) {
         newEmptyGroupIds.push(g.id);
       } else {
         g.items.forEach((item: any, idx: number) => {
-          nextEdits.push({
+          nextApprovers.push({
             ...item.edit,
             linkedPrev: idx > 0,
             groupId: g.isParallel ? (g.id.startsWith('empty-') ? `G${Date.now()}` : g.id) : null,
@@ -163,11 +175,11 @@ export function ApprovalLineBuilder({
       }
     });
 
-    if (nextEdits.length > 0) {
-      nextEdits[0].linkedPrev = false;
+    if (nextApprovers.length > 0) {
+      nextApprovers[0].linkedPrev = false;
     }
     setEmptyGroupIds(newEmptyGroupIds);
-    emit(nextEdits);
+    emit([...nextApprovers, ...refEdits]);
   };
 
   /** 결재 피커에서 인원 단일 또는 다중 선택 시 처리 */
@@ -179,10 +191,17 @@ export function ApprovalLineBuilder({
     if (picker.mode === 'add') {
       // 일반 결재자(순차) 추가
       const newItems = selectedIds.map((id) => ({ approverId: id, kind: '결재' as StepKind, linkedPrev: false, groupId: null }));
-      emit([...edits, ...newItems]);
+      emit([...approverEdits, ...newItems, ...refEdits]);
+    } else if (picker.mode === 'add-ref') {
+      // 참조자 추가 (중복 방지)
+      const existingRefIds = new Set(refEdits.map((r) => r.approverId));
+      const targetIds = selectedIds.filter((id) => !existingRefIds.has(id));
+      const newRefs = targetIds.map((id) => ({ approverId: id, kind: '참조' as StepKind, linkedPrev: false, groupId: null }));
+      emit([...approverEdits, ...refEdits, ...newRefs]);
     } else if (picker.mode === 'replace') {
       // 특정 노드 교체
-      emit(edits.map((e, idx) => (idx === picker.index ? { ...e, approverId: selectedIds[0] } : e)));
+      const nextApprovers = approverEdits.map((e, idx) => (idx === picker.index ? { ...e, approverId: selectedIds[0] } : e));
+      emit([...nextApprovers, ...refEdits]);
     } else if (picker.mode === 'add-to-group') {
       const targetIdx = picker.groupIndex;
       if (targetIdx === -1 && picker.targetGroupId) {
@@ -194,13 +213,13 @@ export function ApprovalLineBuilder({
           linkedPrev: idx > 0,
           groupId: generatedPgId, // 독립 병렬그룹 ID 부여 (1명이어도 보존)
         }));
-        emit([...edits, ...newItems]);
+        emit([...approverEdits, ...newItems, ...refEdits]);
         setEmptyGroupIds((prev) => prev.filter((id) => id !== picker.targetGroupId));
       } else {
         // 기존 병렬 그룹에 멤버 추가
         let lastGroupIdx = targetIdx;
-        const targetGroupId = edits[targetIdx]?.groupId || `G_${Date.now()}`;
-        while (lastGroupIdx + 1 < edits.length && edits[lastGroupIdx + 1].linkedPrev) {
+        const targetGroupId = approverEdits[targetIdx]?.groupId || `G_${Date.now()}`;
+        while (lastGroupIdx + 1 < approverEdits.length && approverEdits[lastGroupIdx + 1].linkedPrev) {
           lastGroupIdx++;
         }
         const newItems = selectedIds.map((id) => ({
@@ -209,9 +228,9 @@ export function ApprovalLineBuilder({
           linkedPrev: true,
           groupId: targetGroupId,
         }));
-        const next = [...edits];
+        const next = [...approverEdits];
         next.splice(lastGroupIdx + 1, 0, ...newItems);
-        emit(next);
+        emit([...next, ...refEdits]);
       }
     }
     setPicker(null);
@@ -238,10 +257,10 @@ export function ApprovalLineBuilder({
     return ids.includes(drafterId) || new Set(ids).size !== ids.length;
   }, [edits, drafterId]);
 
-  // edits를 그룹 단위로 묶어서 UI 렌더링용 구조 생성 (독립 groupId 및 linkedPrev 기재 방식)
+  // approverEdits를 그룹 단위로 묶어서 UI 렌더링용 구조 생성
   const renderGroups = useMemo(() => {
     const groups: { id: string; isParallel: boolean; items: { edit: EditStep; originalIndex: number }[] }[] = [];
-    edits.forEach((edit, index) => {
+    approverEdits.forEach((edit, index) => {
       // 명시적인 groupId가 존재하는 병렬 노드이거나 이전과 연결된 경우
       if (edit.groupId) {
         const existingGroup = groups.find((g) => g.id === edit.groupId);
@@ -277,7 +296,7 @@ export function ApprovalLineBuilder({
     });
 
     return groups;
-  }, [edits, emptyGroupIds]);
+  }, [approverEdits, emptyGroupIds]);
 
   return (
     <div>
@@ -302,16 +321,18 @@ export function ApprovalLineBuilder({
         >
           비우기
         </button>
-        <span className="ml-auto text-[10.5px] text-ink3">{edits.length}명 ({renderGroups.length}단계)</span>
+        <span className="ml-auto text-[10.5px] text-ink3 font-medium">
+          결재 {approverEdits.length}명 ({renderGroups.length}단계){refEdits.length > 0 ? ` · 참조 ${refEdits.length}명` : ''}
+        </span>
       </div>
 
-      {/* 결재선 노드 리스트 (그룹 단위 렌더링) — Timeline Stepper 구조 */}
+      {/* [1] 결재선 노드 리스트 (그룹 단위 렌더링) — 매끄러운 1->2->3 타임라인 */}
       <div>
         {renderGroups.map((group, groupIdx) => {
           const firstItemIdx = group.items.length > 0 ? group.items[0].originalIndex : -1;
           const isLast = groupIdx === renderGroups.length - 1;
 
-                    // 병렬 그룹 박스 UI (2명 이상이거나, 처음부터 병렬그룹으로 지정된 경우)
+          // 병렬 그룹 박스 UI
           if (group.isParallel) {
             const memberCount = group.items.length;
             return (
@@ -322,7 +343,7 @@ export function ApprovalLineBuilder({
                       {groupIdx + 1}
                     </span>
 
-                    {/* 병렬 결재자 목록 (세로 디렉토리 구조) */}
+                    {/* 병렬 결재자 목록 */}
                     <div className="flex flex-col flex-1 min-w-0 gap-1.5">
                       {memberCount === 0 ? (
                         <div className="flex flex-1 items-center justify-center py-2 text-center text-[11px] font-semibold text-ink3">
@@ -361,7 +382,7 @@ export function ApprovalLineBuilder({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  remove(originalIndex);
+                                  removeApprover(originalIndex);
                                 }}
                                 title="결재자 삭제"
                                 className="text-ink3 hover:text-rose-500 text-[13px] p-0.5 transition-colors shrink-0"
@@ -414,9 +435,9 @@ export function ApprovalLineBuilder({
                         } else {
                           // 그룹 내 모든 멤버 일괄 삭제
                           const indicesToRemove = group.items.map((it) => it.originalIndex);
-                          const nextEdits = edits.filter((_, idx) => !indicesToRemove.includes(idx));
-                          if (nextEdits.length > 0) nextEdits[0].linkedPrev = false;
-                          emit(nextEdits);
+                          const next = approverEdits.filter((_, idx) => !indicesToRemove.includes(idx));
+                          if (next.length > 0) next[0].linkedPrev = false;
+                          emit([...next, ...refEdits]);
                         }
                       }}
                       title="병렬 그룹 삭제"
@@ -426,7 +447,7 @@ export function ApprovalLineBuilder({
                     </button>
                   </div>
                 </div>
-                {/* Timeline 커넥터 - 노드 사이 세로 실선 */}
+                {/* Timeline 커넥터 - 결재 순차 연결선 */}
                 {!isLast && (
                   <div className="flex" style={{ paddingLeft: '11px' }}>
                     <div className="w-0.5 h-2.5 bg-border-hi" />
@@ -436,49 +457,47 @@ export function ApprovalLineBuilder({
             );
           }
 
-          // 순차 결재자 단독 바 레이아웃 (원래 WorkFit 기존 디자인 톤 및 삭제/이동 버튼 원복)
+          // 순차 결재자 단독 바 레이아웃
           const { edit, originalIndex } = group.items[0];
           return (
             <Fragment key={originalIndex}>
-            <div
-              className="rounded-lg border border-border bg-panel-alt px-2.5 py-2 hover:border-teal/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">
-                  {groupIdx + 1}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="truncate text-[12px] font-semibold text-ink">{nameOf(edit.approverId)}</span>
-                  <span className="ml-1 text-[10px] text-ink3">{deptPosOf(edit.approverId)}</span>
-                </button>
-                <select
-                  value={edit.kind}
-                  onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
-                  className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
-                >
-                  {allowedKinds.map((k) => (
-                    <option key={k} value={k}>{k}</option>
-                  ))}
-                </select>
-                <div className="flex shrink-0 flex-col">
-                  <button type="button" onClick={() => move(originalIndex, -1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
-                  <button type="button" onClick={() => move(originalIndex, 1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
+              <div className="rounded-lg border border-border bg-panel-alt px-2.5 py-2 hover:border-teal/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal select-none">
+                    {groupIdx + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPicker({ mode: 'replace', index: originalIndex })}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="truncate text-[12px] font-semibold text-ink">{nameOf(edit.approverId)}</span>
+                    <span className="ml-1 text-[10px] text-ink3">{deptPosOf(edit.approverId)}</span>
+                  </button>
+                  <select
+                    value={edit.kind}
+                    onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
+                    className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
+                  >
+                    {allowedKinds.map((k) => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                  <div className="flex shrink-0 flex-col">
+                    <button type="button" onClick={() => moveApprover(originalIndex, -1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
+                    <button type="button" onClick={() => moveApprover(originalIndex, 1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeApprover(originalIndex)}
+                    title="결재자 삭제"
+                    className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(originalIndex)}
-                  title="결재자 삭제"
-                  className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
-                >
-                  ✕
-                </button>
               </div>
-            </div>
-              {/* Timeline 커넥터: 노드 사이 세로 실선 */}
+              {/* Timeline 커넥터: 결재 순차 연결선 */}
               {!isLast && (
                 <div className="flex" style={{ paddingLeft: '11px' }}>
                   <div className="w-0.5 h-2.5 bg-border-hi" />
@@ -488,14 +507,14 @@ export function ApprovalLineBuilder({
           );
         })}
 
-        {edits.length === 0 && (
+        {approverEdits.length === 0 && (
           <div className="rounded-lg border border-dashed border-border py-6 text-center text-[11px] text-ink3">
             결재선이 비어 있습니다. 결재자 추가 또는 병렬 그룹 추가로 구성하세요.
           </div>
         )}
       </div>
 
-      {/* 하단 버튼 2개: 일반 결재자 추가 / 병렬 그룹 추가 */}
+      {/* 결재선 하단 버튼 2개: 일반 결재자 추가 / 병렬 그룹 추가 */}
       <div className="mt-2.5 flex items-center gap-2">
         <button
           type="button"
@@ -513,11 +532,69 @@ export function ApprovalLineBuilder({
         </button>
       </div>
 
+      {/* [2] 참조자 전용 분리 섹션 */}
+      <div className="mt-4 rounded-xl border border-border bg-panel-alt/30 p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] font-bold text-ink">참조자</span>
+            <span className="text-[11px] font-semibold text-ink3">
+              {refEdits.length > 0 ? `${refEdits.length}명` : '0명'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPicker({ mode: 'add-ref' })}
+            className="flex items-center gap-1 rounded border border-teal/40 bg-teal-soft/30 px-2 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft hover:border-teal/60 transition-colors"
+          >
+            <span className="text-[12px] font-bold">+</span>
+            <span>참조자 추가</span>
+          </button>
+        </div>
+        <p className="text-[10px] text-ink3 mb-2.5">
+          기안 상신 즉시 실시간으로 문서를 열람할 수 있습니다. (결재 순서와 무관)
+        </p>
+
+        {refEdits.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border py-3 text-center text-[11px] text-ink3 bg-panel/40">
+            지정된 참조자가 없습니다.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {refEdits.map((item, rIdx) => (
+              <div
+                key={item.approverId + '-' + rIdx}
+                className="flex items-center justify-between rounded-lg border border-border-hi bg-panel px-3 py-1.5 shadow-2xs hover:border-teal/50 transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="grid h-5 px-1.5 place-items-center rounded bg-slate-100 text-[9.5px] font-bold text-ink3 border border-border/70 select-none dark:bg-slate-800">
+                    참조
+                  </span>
+                  <span className="truncate text-[12px] font-semibold text-ink">
+                    {nameOf(item.approverId)}
+                  </span>
+                  <span className="truncate text-[10px] text-ink3">
+                    {deptPosOf(item.approverId)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeRef(rIdx)}
+                  title="참조자 삭제"
+                  className="shrink-0 p-0.5 text-[12px] text-ink3 hover:text-red-500 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {dupWarn && (
-        <p className="mt-1.5 text-[10.5px] text-amber">⚠ 기안자 본인 또는 중복 결재자가 포함돼 있습니다.</p>
+        <p className="mt-2 text-[10.5px] text-amber">⚠ 기안자 본인 또는 중복 결재자가 포함돼 있습니다.</p>
       )}
 
-      {/* 결재자 추가 버튼 바로 하단: 수신/시행 등 외부 slot */}
+      {/* [3] 수신처 등 외부 slot */}
       {bottomSlot && <div className="mt-3">{bottomSlot}</div>}
 
       {/* 결재자 피커 팝오버 (Portal 적용하여 부모 쌓임 맥락 탈출) */}
@@ -528,6 +605,8 @@ export function ApprovalLineBuilder({
               <span>
                 {picker.mode === 'add'
                   ? '결재자 추가'
+                  : picker.mode === 'add-ref'
+                  ? '참조자 추가 (다중 선택 가능)'
                   : picker.mode === 'replace'
                   ? '결재자 변경'
                   : picker.groupIndex === -1
@@ -540,7 +619,7 @@ export function ApprovalLineBuilder({
               users={users.filter((u) => u.status === '사용')}
               org={org}
               onPick={pick}
-              isMultiSelect={picker.mode === 'add-to-group' && picker.groupIndex === -1}
+              isMultiSelect={picker.mode === 'add-ref' || (picker.mode === 'add-to-group' && picker.groupIndex === -1)}
               minSelectCount={picker.mode === 'add-to-group' && picker.groupIndex === -1 ? 2 : 1}
             />
           </div>

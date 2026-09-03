@@ -26,7 +26,7 @@ export function FormTargetSelector({
           onClick={() => setModalOpen(true)}
           className="px-2.5 py-1 rounded bg-teal text-white text-[11px] font-bold hover:bg-teal-dark transition-colors cursor-pointer shadow-xs"
         >
-          🎯 대상 선택
+          대상 선택
         </button>
       </div>
 
@@ -34,9 +34,15 @@ export function FormTargetSelector({
         {deptId || userId ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-soft text-teal text-[11.5px] font-bold border border-teal/15 shadow-2xs">
             {deptId ? (
-              <>📁 {depts.find((d) => d.id === deptId)?.name || '알 수 없는 부서'}</>
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] font-extrabold text-teal/70">[부서]</span>
+                <span>{depts.find((d) => d.id === deptId)?.name || '알 수 없는 부서'}</span>
+              </span>
             ) : (
-              <>👤 {users.find((u) => u.id === userId)?.name || '알 수 없는 사원'}</>
+              <span className="flex items-center gap-1">
+                <span className="text-[10px] font-extrabold text-teal/70">[사용자]</span>
+                <span>{users.find((u) => u.id === userId)?.name || '알 수 없는 사원'}</span>
+              </span>
             )}
             <button
               type="button"

@@ -88,7 +88,7 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
     <div className="rounded-xl border border-border bg-panel p-4 space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
-          <div className="text-[13px] font-bold text-ink">⚖️ 해당 서식 전용 결재 규칙 설정 ({formRules.length}개)</div>
+          <div className="text-[13px] font-bold text-ink">해당 서식 전용 결재 규칙 설정 ({formRules.length}개)</div>
           <div className="text-[10.5px] text-ink3 mt-0.5">이 서식 기안 시 기안자의 부서·직급 및 결재 조건에 매칭되어 작동할 결재선 규칙 목록입니다.</div>
         </div>
         <button

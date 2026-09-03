@@ -64,6 +64,21 @@ export function ApprovalRouteRuleEditor({
     return selectedForm?.fields.filter((f) => f.type === '선택') ?? [];
   }, [selectedForm]);
 
+  // 실제 결재 단계(결재/합의/전결/검토) 수 및 각 인덱스별 단계 번호 매핑 (참조는 단계 번호 제외)
+  const stageNumberMap = useMemo(() => {
+    let stageCount = 0;
+    const map = new Map<number, number | null>();
+    rule.steps.forEach((s, idx) => {
+      if (s.kind === '참조') {
+        map.set(idx, null);
+      } else {
+        stageCount++;
+        map.set(idx, stageCount);
+      }
+    });
+    return map;
+  }, [rule.steps]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -236,10 +251,16 @@ export function ApprovalRouteRuleEditor({
         <div className="mb-1.5 text-[11px] font-bold text-ink2">결재 단계(관계형)</div>
         <div className="space-y-1.5">
           {rule.steps.map((s, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-2 py-1.5">
-              <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal">
-                {i + 1}
-              </span>
+            <div key={i} className={`flex flex-wrap items-center gap-1.5 rounded-lg border px-2 py-1.5 ${s.kind === '참조' ? 'border-dashed border-border bg-panel-alt/50' : 'border-border bg-panel-alt'}`}>
+              {s.kind === '참조' ? (
+                <span className="grid h-5 px-1.5 place-items-center rounded-full bg-slate-100 text-[9.5px] font-bold text-ink3 border border-border select-none dark:bg-slate-800">
+                  참조
+                </span>
+              ) : (
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-teal-soft text-[10px] font-bold text-teal select-none">
+                  {stageNumberMap.get(i)}
+                </span>
+              )}
               <select
                 value={s.resolver}
                 onChange={(e) => setStep(i, { resolver: e.target.value as Resolver, arg: null })}

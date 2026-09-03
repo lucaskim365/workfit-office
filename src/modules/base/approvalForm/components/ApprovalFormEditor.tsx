@@ -104,7 +104,7 @@ export function ApprovalFormEditor({
               onClick={onDuplicate}
               className="rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[11.5px] font-semibold text-ink2 hover:bg-border/30 transition-colors cursor-pointer"
             >
-              📋 서식 복사
+              서식 복사
             </button>
           )}
           <label className="flex items-center gap-1.5 text-[11.5px] text-ink2">
@@ -130,7 +130,7 @@ export function ApprovalFormEditor({
               : 'border-transparent text-ink3 hover:text-ink hover:border-border'
           }`}
         >
-          📝 서식 편집
+          서식 편집
         </button>
         <button
           type="button"
@@ -141,7 +141,7 @@ export function ApprovalFormEditor({
               : 'border-transparent text-ink3 hover:text-ink hover:border-border'
           }`}
         >
-          ⚙️ 서식 설정 (보안·수신처)
+          서식 설정 (보안·수신·참조)
         </button>
         {form.id && (
           <button
@@ -153,7 +153,7 @@ export function ApprovalFormEditor({
                 : 'border-transparent text-ink3 hover:text-ink hover:border-border'
             }`}
           >
-            ⚖️ 결재규칙 설정 ({formRulesCount})
+            결재규칙 설정 ({formRulesCount})
           </button>
         )}
       </div>
@@ -229,7 +229,7 @@ export function ApprovalFormEditor({
           {/* 입력 필드 설정 */}
           <div className="mt-4 border-t border-border pt-4">
             <div className="mb-2 text-[12px] font-bold text-ink select-none">
-              📋 입력 필드 설정 ({form.fields.length}개)
+              입력 필드 설정 ({form.fields.length}개)
             </div>
 
             <div className="mt-3 space-y-3">
@@ -430,27 +430,21 @@ export function ApprovalFormEditor({
       {/* 탭 2: 서식 설정 */}
       {activeMenuTab === 'settings' && (
         <div className="space-y-6">
-          {/* 🔒 1. 서식 기본 보안정책 설정 */}
+          {/* 1. 기본 보안 및 보존 설정 */}
           <div className="rounded-xl border border-border bg-panel p-5 space-y-4">
             <div className="text-[13px] font-bold text-ink flex items-center gap-1.5 border-b border-border pb-2.5">
-              <span>🔒 1. 서식 기본 보안정책 설정</span>
+              <span>1. 기본 보안 및 보존 설정</span>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <F label="기본 보안 등급">
                 <select
                   value={form.securityLevel || '일반'}
                   onChange={(e) => set({ securityLevel: e.target.value as any })}
-                  className={`${inp} font-semibold ${
-                    form.securityLevel === '극비'
-                      ? 'text-red-600 bg-red-500/5'
-                      : form.securityLevel === '대외비'
-                      ? 'text-amber-600 bg-amber-500/5'
-                      : 'text-ink'
-                  }`}
+                  className={`${inp} font-semibold text-ink`}
                 >
                   <option value="일반">일반 문서</option>
-                  <option value="대외비">🔒 대외비</option>
-                  <option value="극비">⛔ 극비</option>
+                  <option value="대외비">대외비</option>
+                  <option value="극비">극비</option>
                 </select>
               </F>
               <F label="기본 공개 범위">
@@ -483,12 +477,12 @@ export function ApprovalFormEditor({
             </div>
           </div>
 
-          {/* 👥 2. 기안 권한 설정 */}
+          {/* 2. 기안 권한 설정 */}
           <FormPermissionSettings form={form} org={org} users={users} jobTitles={jobTitles} onChange={set} />
 
-          {/* 📨 3. 기본 수신처 설정 */}
+          {/* 3. 기본 수신처 설정 */}
           <FormTargetSelector
-            title="📨 3. 기본 수신 대상 설정"
+            title="3. 기본 수신 대상 설정"
             desc="문서 결재가 완료된 후 본 문서가 기본적으로 수신 공유되는 대상을 정합니다."
             deptId={form.recipientDeptId}
             userId={form.recipientUserId}
@@ -496,6 +490,18 @@ export function ApprovalFormEditor({
             users={users}
             org={org}
             onChange={(patch) => set({ recipientDeptId: patch.deptId ?? null, recipientUserId: patch.userId ?? null })}
+          />
+
+          {/* 👀 4. 기본 참조 대상 설정 */}
+          <FormTargetSelector
+            title="👀 4. 기본 참조 대상 설정"
+            desc="문서 기안 상신 즉시 실시간으로 본 문서를 참조 열람할 기본 대상(부서 또는 사용자)을 정합니다."
+            deptId={form.referenceDeptId}
+            userId={form.referenceUserId}
+            depts={depts}
+            users={users}
+            org={org}
+            onChange={(patch) => set({ referenceDeptId: patch.deptId ?? null, referenceUserId: patch.userId ?? null })}
           />
         </div>
       )}

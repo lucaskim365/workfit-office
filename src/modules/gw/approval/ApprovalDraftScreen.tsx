@@ -675,11 +675,33 @@ function ApprovalDraftInner({
     return isNaN(n) || !amount ? null : n;
   }, [amount, amountField, values]);
 
-  // 실시간 결재선 규칙 엔진 연동
+  // 실시간 결재선 규칙 엔진 연동 + 서식 기본 참조자 연동
   const lastAutoSteps = useRef<string>('');
   useEffect(() => {
     if (route.isLoading || !code || editDoc) return;
-    const line = route.build({ drafterId: me.id, docType: code, amount: amountNum, docData: values });
+    let line = route.build({ drafterId: me.id, docType: code, amount: amountNum, docData: values });
+
+    // 서식 기본 참조자(사용자)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
+    if (form?.referenceUserId && form.referenceUserId !== me.id) {
+      const alreadyHasRef = line.some((s) => s.approverId === form.referenceUserId);
+      if (!alreadyHasRef) {
+        line = [
+          ...line,
+          {
+            seq: line.length + 1,
+            parallelGroup: null,
+            executionType: 'sequential' as const,
+            kind: '참조' as const,
+            approverId: form.referenceUserId,
+            delegatedFromId: null,
+            decision: '대기' as const,
+            decidedAt: null,
+            comment: '',
+          },
+        ];
+      }
+    }
+
     const lineStr = JSON.stringify(line);
     const currentStr = JSON.stringify(steps);
 
@@ -689,7 +711,32 @@ function ApprovalDraftInner({
         lastAutoSteps.current = lineStr;
       }
     }
-  }, [code, amountNum, values, route, me.id, steps, editDoc]);
+  }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId]);
+
+  // 서식 기본 수신처/참조부서 초기값 연동
+  useEffect(() => {
+    if (editDoc || !form) return;
+    if (recipients.length === 0) {
+      const initialRecipients: ApprovalRecipient[] = [];
+      if (form.recipientDeptId) {
+        const dept = org.depts.find((d) => d.id === form.recipientDeptId);
+        if (dept) initialRecipients.push({ id: dept.id, name: dept.name, type: 'dept' });
+      }
+      if (form.recipientUserId) {
+        const u = org.userById(form.recipientUserId);
+        if (u) initialRecipients.push({ id: u.id, name: u.name, type: 'user' });
+      }
+      if (form.referenceDeptId) {
+        const dept = org.depts.find((d) => d.id === form.referenceDeptId);
+        if (dept && !initialRecipients.some((r) => r.id === dept.id)) {
+          initialRecipients.push({ id: dept.id, name: dept.name, type: 'dept' });
+        }
+      }
+      if (initialRecipients.length > 0) {
+        setRecipients(initialRecipients);
+      }
+    }
+  }, [form, editDoc, org]);
 
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
@@ -1521,6 +1568,13 @@ function ApprovalDraftInner({
               amount={amountNum}
               docData={values}
               isAgreementEnabled={isAgreementEnabled}
+              bottomSlot={
+                <DraftRecipientSection
+                  recipients={recipients}
+                  setRecipients={setRecipients}
+                  org={org}
+                />
+              }
             />
           </div>
         </div>
