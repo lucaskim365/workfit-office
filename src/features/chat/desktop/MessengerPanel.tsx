@@ -74,14 +74,10 @@ function msgPreview(m: ChatMessage): string {
   return m.text;
 }
 
+import { downloadFile } from '@/shared/lib/download';
+
 function downloadAttachment(att: Attachment) {
-  const a = document.createElement('a');
-  a.href = att.url;
-  a.download = att.name;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  void downloadFile(att.url, att.name);
 }
 
 import { usePermission } from '@/features/auth/usePermission';

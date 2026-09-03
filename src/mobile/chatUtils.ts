@@ -54,16 +54,11 @@ export function msgPreview(m: ChatMessage): string {
   return m.text;
 }
 
+import { downloadFile } from '@/shared/lib/download';
+
 /**
- * 첨부 다운로드 — 원본 파일명 보존. Storage 객체에 Content-Disposition 이 심겨 있어
- * 앵커 클릭만으로 원본명 다운로드가 강제된다. (QuickDock.downloadAttachment 와 동일)
+ * 첨부 다운로드 — 원본 파일명 보존.
  */
 export function downloadAttachment(att: Attachment) {
-  const a = document.createElement('a');
-  a.href = att.url;
-  a.download = att.name;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  void downloadFile(att.url, att.name);
 }

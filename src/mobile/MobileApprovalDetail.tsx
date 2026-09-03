@@ -12,6 +12,7 @@ import { RESERVED_BODY_KEY } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge, type OrgLite } from '@/modules/gw/approval/formFields';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { downloadFile } from '@/shared/lib/download';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -320,17 +321,15 @@ export default function MobileApprovalDetail() {
                   <Card>
                     <div className="flex flex-col gap-2">
                       {doc.attachments.map((file, idx) => (
-                        <a
+                        <button
                           key={idx}
-                          href={file.url}
-                          download={file.name}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-between rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2 text-[12.5px] hover:bg-black/[0.04] active:scale-[0.99] transition-all"
+                          type="button"
+                          onClick={() => void downloadFile(file.url, file.name)}
+                          className="flex items-center justify-between rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2 text-[12.5px] hover:bg-black/[0.04] active:scale-[0.99] transition-all text-left w-full cursor-pointer"
                         >
                           <span className="font-semibold text-ink truncate mr-2">📎 {file.name}</span>
                           <span className="shrink-0 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">다운로드</span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </Card>

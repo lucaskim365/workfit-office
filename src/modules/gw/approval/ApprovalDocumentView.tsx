@@ -12,6 +12,7 @@ import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
 import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { RelatedDocDetailModal } from './RelatedDocDetailModal';
+import { downloadFile } from '@/shared/lib/download';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -309,29 +310,7 @@ export function ApprovalDocumentView({
 
   const handleDownload = async (e: any, fileUrl: string, originalFileName: string) => {
     e.preventDefault();
-    console.log('DEBUG: handleDownload execution start!', { fileUrl, originalFileName });
-    try {
-      // 백엔드 API(api/sign)가 op: 'get'을 지원하지 않아 400(unknown op) 오류를 뱉으므로,
-      // 이미 권한이 유효한 원래의 fileUrl을 활용하여 클라이언트에서 직접 fetch를 수행합니다.
-      const response = await fetch(fileUrl);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = originalFileName;
-      document.body.appendChild(link);
-      link.click();
-
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (err) {
-      console.error('Failed to download file via Blob fetch:', err);
-      // CORS 혹은 네트워크 장애로 fetch 실패 시 기존 window.open 폴백 처리
-      window.open(fileUrl, '_blank');
-    }
+    await downloadFile(fileUrl, originalFileName);
   };
 
 
