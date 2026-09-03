@@ -101,6 +101,9 @@ export default function MobileChatList() {
         ...(sheetRoom.type === 'group'
           ? [{ label: '방 나가기', danger: true, onClick: () => handleLeaveRoom(sheetRoom.id) }]
           : []),
+        ...(sheetRoom.type === 'dept'
+          ? [{ label: '🏢 부서방은 인사이동 시 자동 관리됩니다', onClick: () => setSheetRoom(null) }]
+          : []),
       ]
     : [];
 
@@ -159,7 +162,7 @@ export default function MobileChatList() {
                   style={{ background: (r.color || '#101830') + '22', color: r.color || '#101830' }}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[15px] font-bold"
                 >
-                  {r.type === 'direct' ? r.displayName[0] : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
+                  {r.type === 'direct' ? r.displayName[0] : r.type === 'dept' ? '🏢' : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">

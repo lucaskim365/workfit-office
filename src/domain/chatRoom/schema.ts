@@ -9,7 +9,7 @@ import { z } from 'zod';
  * members: 참여자 users.id 배열(FK). 그룹초대 = members 에 append.
  * lastMessage: 목록 표시·정렬용 비정규화(매번 메시지를 훑지 않도록).
  */
-export const CHAT_ROOM_TYPES = ['group', 'direct', 'notice'] as const;
+export const CHAT_ROOM_TYPES = ['group', 'direct', 'notice', 'dept'] as const;
 export type ChatRoomType = (typeof CHAT_ROOM_TYPES)[number];
 
 /** 방 목록 표시용 마지막 메시지 요약(비정규화). */
@@ -24,6 +24,7 @@ export const chatRoomSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1, '방 이름은 필수입니다'),
   type: z.enum(CHAT_ROOM_TYPES),
+  deptId: z.string().nullable().default(null),
   members: z.array(z.string()).default([]),
   color: z.string().default('#e6960c'),
   lastMessage: lastMessageSchema.nullable().default(null),

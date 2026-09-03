@@ -357,7 +357,8 @@ export default function MobileChatThread() {
         { label: '파일함 모아보기 (📁)', onClick: () => { setMenuOpen(false); setShowFileBox(true); } },
         ...(room.type === 'group' && (room.createdBy === me || !room.createdBy) ? [{ label: '대화방 이름 변경', onClick: handleRenameRoom }] : []),
         ...(room.type === 'group' ? [{ label: '방 나가기', danger: true, onClick: onLeave }] : []),
-        ...(isAdmin ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
+        ...(room.type === 'dept' ? [{ label: '🏢 부서방은 인사이동 시 자동 관리됩니다', onClick: () => setMenuOpen(false) }] : []),
+        ...(isAdmin && room.type !== 'dept' ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
         ...(room.type === 'direct' ? [{ label: '채팅방 삭제', danger: true, onClick: onDeleteDirect }] : []),
       ]
     : [];
