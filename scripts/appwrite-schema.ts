@@ -270,7 +270,27 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'roleGroups',
     name: '역할그룹',
-    attributes: [S('code', 64, true), S('name', 128, true), S('desc', 256), BOOL('use', true), J('members'), J('permissions')],
+    attributes: [
+      S('code', 64, true),
+      S('name', 128, true),
+      S('desc', 512),
+      BOOL('use', true),
+      BOOL('isSystem', false),
+      J('menuPermissions'),
+      J('members'),
+      J('permissions'),
+    ],
+    indexes: [],
+  },
+  {
+    id: 'roleMappings',
+    name: '역할그룹 매핑',
+    attributes: [
+      S('roleCode', 64, true),
+      S('targetType', 32, true),
+      S('targetId', 64, true),
+      S('targetName', 128, false),
+    ],
     indexes: [],
   },
   {

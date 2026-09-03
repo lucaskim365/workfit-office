@@ -49,8 +49,14 @@ export const roleGroupRepo = {
   /** 역할 그룹 목록 조회 (관계 컬렉션 roleMappings가 대상자 바인딩의 Single Source of Truth) */
   async list(): Promise<RoleGroup[]> {
     const [dbGroups, dbMappings] = await Promise.all([
-      groupBackend.loadAll(),
-      mappingBackend.loadAll(),
+      groupBackend.loadAll().catch((err) => {
+        console.warn('Failed to load roleGroups from DB, using fallback:', err);
+        return [];
+      }),
+      mappingBackend.loadAll().catch((err) => {
+        console.warn('Failed to load roleMappings from DB, using fallback:', err);
+        return [];
+      }),
     ]);
 
     const sourceList = (dbGroups && dbGroups.length > 0)
