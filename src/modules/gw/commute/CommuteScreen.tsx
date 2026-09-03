@@ -20,6 +20,11 @@ import { usePermission } from '@/features/auth/usePermission';
 import { resolveUserScope } from '@/features/auth/scopeHelper';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
+import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
+import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
+import { evaluateCommuteRecord } from '@/domain/commute/engine';
+import { CommutePolicyModal } from './components/CommutePolicyModal';
+import { Settings, Clock } from 'lucide-react';
 
 /**
  * 근태 조회 — CAPS 연동 데이터의 읽기 화면.
@@ -122,7 +127,14 @@ const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[1
 export default function CommuteScreen() {
   const { user } = useAuth();
   const { userRoles } = usePermission();
+  const { isAdmin } = usePermission();
+  const { policy = DEFAULT_COMMUTE_POLICY, savePolicy } = useCommutePolicy();
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+
   const userScope = useMemo(() => resolveUserScope(user, userRoles), [user, userRoles]);
+
+  /** 관리자 또는 인사총무 권한 보유 시 근무정책 설정 가능 */
+  const canManagePolicy = isAdmin || userScope === 'COMPANY';
 
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
@@ -167,7 +179,12 @@ export default function CommuteScreen() {
   const dayQuery = useCommuteDay(isTeam && view === DAY_VIEW ? date : null);
   const monthAllQuery = useCommuteMonthAll(isTeam && view === MONTH_VIEW ? month : null);
 
-  const monthRows = useMemo(() => monthQuery.data ?? [], [monthQuery.data]);
+  // 정책 기반 동적 재계산 적용
+  const monthRows = useMemo(() => {
+    const raw = monthQuery.data ?? [];
+    return raw.map((r) => evaluateCommuteRecord(r, policy));
+  }, [monthQuery.data, policy]);
+
   const summary = useMemo(() => summarizeCommuteMonth(monthRows), [monthRows]);
   const selected = employees.find((row) => row.empId === teamEmpId);
 
@@ -182,12 +199,14 @@ export default function CommuteScreen() {
     [employees, keyword, showRetired],
   );
 
-  /** 일별 표 — 기록 없는 직원도 한 줄로 남긴다. 빠진 사람이 안 보이면 쓸모가 없다. */
+  /** 일별 표 — 정책 기반 동적 재계산 적용 */
   const dayRows = useMemo(() => {
     const byEmp = new Map<number, CommuteRecord>();
-    for (const row of dayQuery.data ?? []) byEmp.set(row.empId, row);
+    for (const row of dayQuery.data ?? []) {
+      byEmp.set(row.empId, evaluateCommuteRecord(row, policy));
+    }
     return visible.map((employee) => ({ employee, record: byEmp.get(employee.empId) ?? null }));
-  }, [dayQuery.data, visible]);
+  }, [dayQuery.data, visible, policy]);
 
   const dayStats = useMemo(() => ({
     present: dayRows.filter((row) => row.record?.inAt).length,
@@ -195,18 +214,19 @@ export default function CommuteScreen() {
     missing: dayRows.filter((row) => !row.record || (!row.record.inAt && !row.record.outAt)).length,
   }), [dayRows]);
 
-  /** 월별 집계 — 사람별로 묶어 도메인 요약을 그대로 쓴다. */
+  /** 월별 집계 — 정책 기반 동적 재계산 적용 */
   const monthAllRows = useMemo(() => {
     const byEmp = new Map<number, CommuteRecord[]>();
     for (const row of monthAllQuery.data ?? []) {
+      const evaluated = evaluateCommuteRecord(row, policy);
       const list = byEmp.get(row.empId);
-      if (list) list.push(row); else byEmp.set(row.empId, [row]);
+      if (list) list.push(evaluated); else byEmp.set(row.empId, [evaluated]);
     }
     return visible.map((employee) => ({
       employee,
       summary: summarizeCommuteMonth(byEmp.get(employee.empId) ?? []),
     }));
-  }, [monthAllQuery.data, visible]);
+  }, [monthAllQuery.data, visible, policy]);
 
   const monthTotals = useMemo(() => ({
     workDays: monthAllRows.reduce((sum, row) => sum + row.summary.workDays, 0),
@@ -505,7 +525,27 @@ export default function CommuteScreen() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
-      <GwHead icon="⏱️" name="근태" right={tabToggle} />
+      <GwHead
+        icon="⏱️"
+        name="근태"
+        right={
+          <div className="flex items-center gap-2">
+            {canManagePolicy && (
+              <button
+                type="button"
+                onClick={() => setIsPolicyModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs"
+                title="출/퇴근 시간 및 근무정책 설정"
+              >
+                <Clock size={13} className="text-amber-500" />
+                <span>{policy.workStartTime}~{policy.workEndTime}</span>
+                <Settings size={12} className="text-ink3" />
+              </button>
+            )}
+            {tabToggle}
+          </div>
+        }
+      />
 
       {isTeam ? (
         <>
@@ -517,6 +557,17 @@ export default function CommuteScreen() {
         </>
       ) : (
         <div className="mt-5">{mePanel}</div>
+      )}
+
+      {isPolicyModalOpen && (
+        <CommutePolicyModal
+          policy={policy}
+          isOpen={isPolicyModalOpen}
+          onClose={() => setIsPolicyModalOpen(false)}
+          onSave={async (updated) => {
+            await savePolicy(updated);
+          }}
+        />
       )}
     </div>
   );
