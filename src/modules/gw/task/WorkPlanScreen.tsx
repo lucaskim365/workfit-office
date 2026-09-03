@@ -32,14 +32,29 @@ const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
 
 /**
- * 로스터 제외 대상 — 대표(대표이사)·테스트 계정만 뺀다.
- * 기술경영전략위원회 및 상무이사·이사급은 로스터에 정상 포함된다.
+ * 로스터 제외 대상 — 대표(대표이사) 및 일반 운영 모드에서의 테스트 계정 처리.
+ * - 본인 계정은 테스터라도 항상 표시됩니다.
+ * - 테스트 계정/부서로 로그인하여 시연 중일 때는 테스트 부서 인원들이 정상 표시됩니다.
  */
-const isExcludedFromRoster = (user: User) =>
-  user.position.includes('대표') ||
-  user.dept.includes('테스트') ||
-  user.name.includes('테스터') ||
-  user.name.includes('테스트');
+const isExcludedFromRoster = (user: User, actor?: User | null) => {
+  if (actor && user.id === actor.id) return false;
+
+  const isActorTest = Boolean(
+    actor?.dept?.includes('테스트') ||
+    actor?.name?.includes('테스트') ||
+    actor?.name?.includes('테스터')
+  );
+  const isUserTest = Boolean(
+    user.dept?.includes('테스트') ||
+    user.name?.includes('테스트') ||
+    user.name?.includes('테스터')
+  );
+
+  // 테스트 시연 모드: 테스트 부서 계정들 상호 노출
+  if (isActorTest && isUserTest) return false;
+
+  return user.position.includes('대표') || isUserTest;
+};
 
 function monthLabel(month: string): string {
   const [year, m] = month.split('-').map(Number);
@@ -111,7 +126,7 @@ export default function WorkPlanScreen() {
   const roster = useMemo(() => {
     if (!actor) return [];
     return users
-      .filter((user) => user.status === '사용' && !isExcludedFromRoster(user))
+      .filter((user) => user.status === '사용' && !isExcludedFromRoster(user, actor))
       .filter((user) => canViewWorkPlan(actor, user, actorScope))
       .sort((a, b) => {
         // 1. 부서 조직도 순 정렬
