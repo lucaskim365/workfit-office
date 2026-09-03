@@ -52,13 +52,34 @@ function nextId(rows: User[]): string {
   return `U${String(max + 1).padStart(3, '0')}`;
 }
 
+import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
+import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
+
 export const userRepo = {
   async list(filter?: UserFilter): Promise<User[]> {
-    return applyFilter(await backend.loadAll(), filter);
+    const rawUsers = await backend.loadAll();
+    let profiles: EmployeeProfile[] = [];
+    try {
+      profiles = await employeeProfileRepo.list();
+    } catch {
+      // ignore
+    }
+    const profileMap = new Map(profiles.map((p) => [p.userId || p.id, p]));
+    const joined = rawUsers.map((u) => {
+      const p = profileMap.get(u.id);
+      return {
+        ...u,
+        dept: p?.dept || u.dept || '미지정',
+        position: p?.position || u.position || '사원',
+        jobTitle: p?.jobTitle || u.jobTitle || '',
+        phone: p?.phone || (u as any).phone || '',
+      };
+    });
+    return applyFilter(joined, filter);
   },
 
   async get(id: string): Promise<User | null> {
-    const all = await backend.loadAll();
+    const all = await this.list();
     return all.find((u) => u.id === id) ?? null;
   },
 
