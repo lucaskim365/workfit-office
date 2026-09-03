@@ -7,7 +7,6 @@ import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
 import { type User } from '@/domain/user/schema';
 import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
-import { useDepartments } from '@/features/department/useDepartments';
 import { usePermission } from '@/features/auth/usePermission';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 import ResignModal from './ResignModal';
@@ -31,8 +30,6 @@ export default function UserScreen() {
   const canCreate = canAction('S_BASE_USER', 'create');
   const canDelete = canAction('S_BASE_USER', 'delete');
   const canUpdate = canAction('S_BASE_USER', 'update');
-
-  const { data: departments = [] } = useDepartments();
 
   // 사용여부 필터 기본값 '' (전체) — 미사용(퇴사 등) 계정도 기본 화면에서 함께 확인 가능.
   const [draft, setDraft] = useState({ dept: '', status: '', q: '' });
@@ -96,41 +93,26 @@ export default function UserScreen() {
   );
 
   const columns: Column<User>[] = [
-    { key: 'empNo', header: '사번', mono: true, sortable: true, width: 100 },
+    { key: 'empNo', header: '사번 (ID)', mono: true, sortable: true, width: 110 },
+    { key: 'name', header: '이름', sortable: true, width: 100 },
+    { key: 'email', header: '이메일', sortable: true },
     {
-      key: 'name',
-      header: '이름',
+      key: 'dept',
+      header: '소속 부서',
       sortable: true,
-      width: 110,
-      render: (u) => {
-        const isHead = departments.some((d) => d.headUserId === u.id);
-        return (
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-ink">{u.name}</span>
-            {isHead && (
-              <span className="rounded bg-teal-soft/35 px-1.5 py-0.5 text-[9.5px] font-bold text-teal">
-                부서장
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    { key: 'dept', header: '부서', sortable: true },
-    { key: 'position', header: '직급', sortable: true, width: 84 },
-    {
-      key: 'jobTitle',
-      header: '직책',
-      sortable: true,
-      width: 84,
-      render: (u) => (u.jobTitle ? u.jobTitle : <span className="text-ink3">—</span>),
+      width: 140,
+      render: (u) => (
+        <span className={u.dept && u.dept !== '미지정' ? 'text-ink2' : 'text-ink3 italic'}>
+          {u.dept || '미지정'}
+        </span>
+      ),
     },
     {
       key: 'status',
-      header: '상태',
+      header: '계정 상태',
       align: 'center',
       sortable: true,
-      width: 80,
+      width: 90,
       render: (u) => (
         <Pill tone={STATUS_TONE[u.status]} solid={u.status === '잠금'}>
           {u.status}

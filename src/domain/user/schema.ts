@@ -17,13 +17,8 @@ export const userSchema = z.object({
   id: z.string().min(1),
   empNo: z.string().min(1, '사번을 입력하세요').max(20),
   name: z.string().min(1, '이름을 입력하세요').max(30),
-  dept: z.string().min(1, '부서를 입력하세요').max(30),
-  position: z.string().min(1, '직급을 입력하세요').max(20),
-  /**
-   * 직책 — 조직 내 역할(팀장·본부장·부팀장·팀원·위원장 등). 직급(position)과 별개 축.
-   * 팀장/본부장은 부서장(department.headUserId)과도 연동되나, 화면 표기·부팀장/팀원 구분용.
-   * 선택 항목(미지정 허용).
-   */
+  dept: z.string().default('미지정'),
+  position: z.string().default('사원'),
   jobTitle: z.string().max(20).default(''),
   roleGroup: z.preprocess((val) => {
     const s = String(val);
@@ -72,23 +67,18 @@ export type User = z.infer<typeof userSchema>;
 export const userFormSchema = z.object({
   empNo: z.string().min(1, '사번을 입력하세요').max(20),
   name: z.string().min(1, '이름을 입력하세요').max(30),
-  dept: z.string().min(1, '부서를 입력하세요').max(30),
-  position: z.string().min(1, '직급을 입력하세요').max(20),
-  /** 직책 — 선택(미지정 허용, 빈 문자열 가능). 직급(position)과 별개. */
-  jobTitle: z.string().max(20),
+  dept: z.string().default('미지정'),
+  position: z.string().default('사원'),
+  jobTitle: z.string().default(''),
   roleGroup: z.preprocess((val) => {
     if (!val) return 'USER';
     const s = String(val);
     if (s === 'QC_USER' || s === 'MT_USER') return 'USER';
     if (s === 'FIELD_ADMIN' || s === 'MT_ADMIN') return 'OPERATOR';
     return s;
-  }, z.enum(ROLE_GROUPS)).optional().default('USER') as any,
+  }, z.enum(ROLE_GROUPS)).default('USER') as any,
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),
-  /**
-   * 초기/변경 비밀번호(선택). 신규 등록 시 비우면 기본값(mes1234) 부여,
-   * 수정 시 비우면 기존 비밀번호 보존. repo.create/update 에서 처리.
-   */
   password: z.string().max(50).optional(),
   photoUrl: z.string().optional(),
 });
