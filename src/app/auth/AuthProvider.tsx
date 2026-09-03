@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { authRepo } from '@/data/auth/auth.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
 import { mintWiddyToken, clearWiddyToken } from '@/data/widdyChat/widdyAuth';
 import type { User } from '@/domain/user/schema';
 
@@ -23,7 +24,7 @@ interface AuthState {
   /** 자체 로그인은 항상 동작하므로 데모 통과 개념은 없음(하위호환용, 항상 false). */
   demoMode: boolean;
   /** 사번(empNo) 또는 이메일 + 비밀번호로 로그인. 실패 시 AuthError throw. */
-  signIn: (loginId: string, password: string) => Promise<void>;
+  signIn: (loginId: string, password: string, platform?: 'Web' | 'Mobile') => Promise<void>;
   /** 로그아웃 — 세션 클리어. */
   signOutUser: () => Promise<void>;
   /** 로그인 사용자의 비밀번호 변경(현재 비번 검증 후 DB 영구화). 실패 시 AuthError throw. */
@@ -66,11 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function signIn(loginId: string, password: string) {
+  async function signIn(loginId: string, password: string, platform: 'Web' | 'Mobile' = 'Web') {
     const u = await authRepo.authenticate(loginId, password);
     localStorage.setItem(SESSION_KEY, u.id);
     setUser(u);
     void authRepo.touchLastLogin(u.id);
+    void systemLogRepo.recordLogin(u, platform);
     // Widdy ACL 용 서명 토큰 발급(best-effort — 비밀번호가 있는 이 시점에만 가능).
     void mintWiddyToken(loginId, password);
   }
