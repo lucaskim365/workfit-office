@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles, useUpsertEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useDepartments } from '@/features/department/useDepartments';
@@ -15,24 +15,13 @@ interface OrgNode {
 }
 
 export default function EmployeeScreen() {
-  const { user } = useAuth();
+  const { isAdmin } = usePermission();
   const { data: users = [], isLoading: isUsersLoading } = useUsers();
   const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const { data: departments = [] } = useDepartments();
   const { data: positions = [] } = usePositions();
   const { data: jobTitles = [] } = useJobTitles();
   const upsertEmployeeProfile = useUpsertEmployeeProfile();
-
-  // 로그인 사용자 세션 가공 및 권한 식별
-  const CURRENT_USER = useMemo(() => {
-    return {
-      id: user?.id || 'guest',
-      name: user?.name ? `${user.name}`.trim() : '게스트',
-      roleGroup: user?.roleGroup || 'USER',
-    };
-  }, [user]);
-
-  const isAdmin = CURRENT_USER.roleGroup === 'ADMIN' || CURRENT_USER.roleGroup === 'OPERATOR';
 
   // 대분류 탭: 'list' (임직원 관리) | 'org' (조직도)
   const [activeTab, setActiveTab] = useState<'list' | 'org'>('list');

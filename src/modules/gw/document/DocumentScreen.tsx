@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
 
 export default function DocumentScreen() {
   const { user } = useAuth();
+  const { isAdmin, canAction } = usePermission();
   const {
     boxes,
     documents,
@@ -28,10 +30,8 @@ export default function DocumentScreen() {
     };
   }, [user]);
 
-  // 권한 요약
-  const isAdmin = CURRENT_USER.roleGroup === 'ADMIN';
-  const isOperator = CURRENT_USER.roleGroup === 'OPERATOR';
-  const hasWriteAccess = isAdmin || isOperator;
+  // 권한 요약 (기준정보 > 권한그룹관리 연동)
+  const hasWriteAccess = isAdmin || canAction('S_GW_DOCUMENT', 'create') || canAction('S_GW_DOCUMENT', 'update');
 
   // 사이드바 카테고리 필터
   const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all'>('all');

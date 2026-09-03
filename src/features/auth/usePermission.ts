@@ -31,20 +31,23 @@ export function usePermission() {
 
   /** 최고 관리자 여부 판정 (오직 DB roleGroups 및 roleMappings 대상자 바인딩 기반) */
   const isSuperAdmin = useMemo(() => {
-    if (!user) return false;
+    if (!user || user.status === '미사용') return false;
+    // 1) roleGroups 컬렉션에서 ADMIN 그룹 조회
     const adminGroup = groups.find((g) => (g.code === 'ADMIN' || g.code === 'ROLE_ADMIN') && g.use);
     if (adminGroup) {
-      if (adminGroup.userIds?.includes(user.id)) return true;
+      if (adminGroup.userIds?.includes(user.id) || (user.empNo && adminGroup.userIds?.includes(user.empNo))) return true;
       if (userDeptId && adminGroup.deptIds?.includes(userDeptId)) return true;
       if (userPosRank != null && adminGroup.positionRanks?.includes(userPosRank)) return true;
-      if (adminGroup.members?.some((m) => m.code === user.id || m.name === user.name)) return true;
+      if (adminGroup.members?.some((m) => m.code === user.id || (user.empNo && m.code === user.empNo) || m.name === user.name)) return true;
     }
+    // 2) 사용자 문서의 roleGroup 이 ADMIN 인 경우도 호환 지원
+    if (user.roleGroup === 'ADMIN') return true;
     return false;
   }, [user, groups, userDeptId, userPosRank]);
 
   /** 현재 사용자가 속한 모든 활성 권한 그룹 (다중 소속 합산 - SSOT: roleGroups) */
   const myGroups = useMemo(() => {
-    if (!user) return [];
+    if (!user || user.status === '미사용') return [];
     return groups.filter((g) => {
       if (!g.use) return false;
       const normCode = g.code.replace(/^ROLE_/, '').toUpperCase();
@@ -52,14 +55,14 @@ export function usePermission() {
       if (normCode === 'USER') return true;
       // 1) 최고 관리자일 경우
       if (normCode === 'ADMIN' && isSuperAdmin) return true;
-      // 2) 개별 사원 ID 바인딩
-      if (g.userIds && g.userIds.includes(user.id)) return true;
+      // 2) 개별 사원 ID / 사번 바인딩
+      if (g.userIds && (g.userIds.includes(user.id) || (user.empNo && g.userIds.includes(user.empNo)))) return true;
       // 3) 부서 단위 바인딩
       if (userDeptId && g.deptIds && g.deptIds.includes(userDeptId)) return true;
       // 4) 직급 단위 바인딩
       if (userPosRank != null && g.positionRanks && g.positionRanks.includes(userPosRank)) return true;
       // 5) 레거시 members 배열 지원
-      if (g.members && g.members.some((m) => m.code === user.id || m.name === user.name)) return true;
+      if (g.members && g.members.some((m) => m.code === user.id || (user.empNo && m.code === user.empNo) || m.name === user.name)) return true;
       return false;
     });
   }, [user, groups, userDeptId, userPosRank, isSuperAdmin]);
@@ -124,6 +127,7 @@ export function usePermission() {
     myGroups,
     userRoles: myGroups.map((g) => g.code.replace(/^ROLE_/, '').toUpperCase()),
     isSuperAdmin,
+    isAdmin: isSuperAdmin,
     isExecutive,
     canAccess,
     canAction,

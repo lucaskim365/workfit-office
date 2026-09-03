@@ -2,16 +2,17 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import { positionRepo } from '@/data/position/position.repo';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
 
 /**
- * 조직 데이터 훅 — 부서(departments) + 사용자(users) 를 조합해
+ * 조직 데이터 훅 — 부서(departments) + 사용자(users) + 인사마스터(employeeProfiles) 를 조합해
  * ① 부서 트리 ② 상급자 체인(자동 상신선 원천) ③ 부서장 을 도출한다.
  *
- * **자동 도출 원칙**: 부서 노드 집합은 실제 `user.dept` 값에서 도출하므로,
+ * **자동 도출 원칙**: 부서 노드 집합은 실제 `employeeProfiles.dept` (및 user.dept) 값에서 도출하므로,
  * departments 마스터가 없거나 어긋나도 사용자가 있는 부서는 항상 표시된다.
  * 마스터가 있으면 계층(parentId)·부서장(headUserId)·정렬(order)을 덧씌우고,
  * 없으면 부서장은 직급 seniority(관리자>파트장>반장>담당>사원)로, 계층은 평면으로 도출한다.
@@ -20,6 +21,7 @@ import type { Position } from '@/domain/position/schema';
  */
 const DEPTS_KEY = 'departments';
 const USERS_KEY = 'users';
+const PROFILES_KEY = 'employeeProfiles';
 const POSITIONS_KEY = 'positions';
 
 /** 직급 서열(작을수록 상위) — positions 마스터 미로드 시 폴백. */
@@ -48,12 +50,28 @@ export interface OrgTree {
 export function useOrgTree() {
   const deptsQ = useQuery({ queryKey: [DEPTS_KEY, null], queryFn: () => departmentRepo.list() });
   const usersQ = useQuery({ queryKey: [USERS_KEY, null], queryFn: () => userRepo.list() });
+  const profilesQ = useQuery({ queryKey: [PROFILES_KEY], queryFn: () => employeeProfileRepo.list() });
   const positionsQ = useQuery({ queryKey: [POSITIONS_KEY, null], queryFn: () => positionRepo.list() });
 
   const data = useMemo<OrgTree>(() => {
     const masters = deptsQ.data ?? [];
     const rawUsers = usersQ.data ?? [];
-    const users = rawUsers.filter((u) => u.status !== '미사용');
+    const profiles = profilesQ.data ?? [];
+    const profileMap = new Map(profiles.map((p) => [p.userId || p.id, p]));
+
+    // 인사 마스터(employeeProfiles)를 기준으로 사용자 부서/직급/직책 실시간 조인
+    const users: User[] = rawUsers
+      .filter((u) => u.status !== '미사용')
+      .map((u) => {
+        const p = profileMap.get(u.id);
+        return {
+          ...u,
+          dept: p?.dept || u.dept || '미지정',
+          position: p?.position || u.position || '사원',
+          jobTitle: p?.jobTitle || u.jobTitle || '',
+          phone: p?.phone || (u as any).phone || '',
+        };
+      });
     const positions = positionsQ.data ?? [];
 
     // 직급 서열 — 마스터 우선, 없으면 폴백 상수.
@@ -177,7 +195,7 @@ export function useOrgTree() {
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
     return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
-  }, [deptsQ.data, usersQ.data, positionsQ.data]);
+  }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data]);
 
-  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || positionsQ.isLoading };
+  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading };
 }

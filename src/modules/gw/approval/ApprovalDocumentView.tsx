@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { usePermission } from '@/features/auth/usePermission';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { getPredecessorsOf, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
@@ -137,10 +138,13 @@ export function ApprovalDocumentView({
 
 
 
+  const { isAdmin, isExecutive: hasExecRole } = usePermission();
   // 사용자 정보 조회
   const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
   const userPos = userObj?.position ?? '';
   const isExecutive =
+    isAdmin ||
+    hasExecRole ||
     userObj?.roleGroup === 'ADMIN' ||
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';

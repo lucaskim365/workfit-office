@@ -43,7 +43,7 @@ const OVERVIEW_DETAIL_STATUSES = new Set<Reservation['status']>(['PENDING', 'CON
 
 function LocalResourceScreen() {
   const { user: authenticatedUser } = useAuth();
-  const { canAction } = usePermission();
+  const { isAdmin, canAction } = usePermission();
   const canCreate = canAction('S_GW_RESOURCE', 'create');
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U011');
@@ -70,8 +70,8 @@ function LocalResourceScreen() {
   const requestedTab = searchParams.get('tab') as TabId | null;
   const tab: TabId = requestedTab && requestedTab in TAB_LABELS ? requestedTab : 'overview';
 
-  const canApprove = useMemo(() => actor ? resources.some((resource) => canApproveResource(actor, resource)) : false, [actor, resources]);
-  const canManage = actor ? canManageResources(actor) : false;
+  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update') || (actor ? canManageResources(actor) : false);
+  const canApprove = useMemo(() => isAdmin || (actor ? resources.some((resource) => canApproveResource(actor, resource)) : false), [isAdmin, actor, resources]);
   const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove).filter((item) => item !== 'admin' || canManage);
   const loading = resourcesQuery.isLoading || reservationsQuery.isLoading || usersQuery.isLoading || departmentsQuery.isLoading;
   const queryError = resourcesQuery.error ?? reservationsQuery.error ?? usersQuery.error ?? departmentsQuery.error;

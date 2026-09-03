@@ -6,6 +6,7 @@ import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useProject, useProjects } from '@/features/project/useProjects';
 import { useUsers } from '@/features/user/useUsers';
+import { usePermission } from '@/features/auth/usePermission';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import ProjectDetail from './ProjectDetail';
 import ProjectList, { PROJECT_TABS, type ProjectTab } from './ProjectList';
@@ -13,6 +14,7 @@ import { Button } from '@/shared/ui/Button';
 
 function LocalProjectScreen() {
   const { user: authenticatedUser, loading: authLoading } = useAuth();
+  const { isAdmin } = usePermission();
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U009');
   const usersQuery = useUsers();
@@ -27,9 +29,9 @@ function LocalProjectScreen() {
     userId: actor?.id ?? '__anonymous__',
     deptId: resolveDeptId(departments, actor?.dept),
     active: actor?.status === '사용',
-    // 관리자는 참여자·소유자 판정을 건너뛴다(자원예약·전자설문과 같은 축).
-    isAdmin: actor?.roleGroup === 'ADMIN',
-  }), [actor, departments]);
+    // 관리자는 참여자·소유자 판정을 건너뛴다 (기준정보 > 권한그룹관리 연동)
+    isAdmin: Boolean(isAdmin || actor?.roleGroup === 'ADMIN'),
+  }), [actor, departments, isAdmin]);
   const projectsQuery = useProjects(access);
   const requestedTab = searchParams.get('tab') as ProjectTab | null;
   const tab: ProjectTab = requestedTab && PROJECT_TABS.some((item) => item.id === requestedTab) ? requestedTab : 'available';

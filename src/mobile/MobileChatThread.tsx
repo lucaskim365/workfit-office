@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -56,9 +57,10 @@ export default function MobileChatThread() {
   const { roomId = '' } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
+  const { isAdmin: isSuperAdmin } = usePermission();
   const me = user!.id;
   const meName = user!.name;
-  const isAdmin = user!.roleGroup === 'ADMIN';
+  const isAdmin = Boolean(isSuperAdmin || user?.roleGroup === 'ADMIN');
 
   const { data: messages = [] } = useChatThread(roomId);
   const { data: rooms = [] } = useChatRooms(me);

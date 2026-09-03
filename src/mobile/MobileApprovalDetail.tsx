@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -80,9 +81,12 @@ export default function MobileApprovalDetail() {
 
   const myTurn = !!doc && isActiveApprover(doc, me);
 
+  const { isAdmin, isExecutive: hasExecRole } = usePermission();
   const userObj = users.find((u) => u.id === me);
   const userPos = userObj?.position ?? '';
   const isExecutive =
+    isAdmin ||
+    hasExecRole ||
     userObj?.roleGroup === 'ADMIN' ||
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';

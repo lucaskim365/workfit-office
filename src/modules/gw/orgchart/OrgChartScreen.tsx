@@ -263,7 +263,7 @@ export default function OrgChartScreen() {
               </div>
 
               <div className="w-full rounded-xl border border-border/40 bg-panel-alt/20 py-2 text-center text-[10.5px] text-ink3">
-                🏢 {selectedUser.roleGroup === 'ADMIN' ? '시스템 관리자' : selectedUser.roleGroup === 'OPERATOR' ? '운영 담당자' : '일반 사용자'}
+                🏢 {selectedUser.dept} · {selectedUser.position}
               </div>
             </div>
 

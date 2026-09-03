@@ -1,10 +1,12 @@
 import { useState, useMemo, useRef } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useCommunity } from '@/features/community/useCommunity';
 import type { Club, JoinPolicy } from '@/domain/community/schema';
 
 export default function CommunityScreen() {
   const { user } = useAuth();
+  const { isAdmin } = usePermission();
   const {
     clubs,
     createClub,
@@ -26,9 +28,9 @@ export default function CommunityScreen() {
       name: user?.name ? `${user.name}`.trim() : '게스트',
       dept: user?.dept || '-',
       position: user?.position || '',
-      isAdmin: user?.roleGroup === 'ADMIN'
+      isAdmin: Boolean(isAdmin || user?.roleGroup === 'ADMIN')
     };
-  }, [user]);
+  }, [user, isAdmin]);
 
   // 내가 가입한 소모임 목록
   const myClubs = useMemo(() => {

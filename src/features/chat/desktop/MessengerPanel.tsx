@@ -84,12 +84,15 @@ function downloadAttachment(att: Attachment) {
   a.remove();
 }
 
+import { usePermission } from '@/features/auth/usePermission';
+
 /** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
 export function MessengerPanel() {
   const { user } = useAuth();
+  const { isAdmin: isSuperAdmin } = usePermission();
   const me = user?.id ?? 'U001';
   const meName = user?.name ?? '김승기';
-  const isAdmin = user?.roleGroup === 'ADMIN';
+  const isAdmin = Boolean(isSuperAdmin || user?.roleGroup === 'ADMIN');
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);

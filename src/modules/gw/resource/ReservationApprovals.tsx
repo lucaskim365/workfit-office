@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { usePermission } from '@/features/auth/usePermission';
 import type { Reservation } from '@/domain/reservation/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
@@ -17,6 +18,7 @@ interface ReservationApprovalsProps {
 }
 
 export default function ReservationApprovals({ actor, reservations, resources, users, onSelectReservation }: ReservationApprovalsProps) {
+  const { isAdmin } = usePermission();
   const [error, setError] = useState('');
   const [rejectTarget, setRejectTarget] = useState<Reservation | null>(null);
   const approveReservation = useApproveReservation();
@@ -24,8 +26,8 @@ export default function ReservationApprovals({ actor, reservations, resources, u
   const pending = useMemo(() => reservations.filter((row) => {
     if (row.status !== 'PENDING') return false;
     const resource = resources.find((item) => item.id === row.resourceId);
-    return resource ? canApproveResource(actor, resource) : false;
-  }).sort((a, b) => a.startAt.localeCompare(b.startAt)), [actor, reservations, resources]);
+    return Boolean(resource && (isAdmin || canApproveResource(actor, resource)));
+  }).sort((a, b) => a.startAt.localeCompare(b.startAt)), [actor, reservations, resources, isAdmin]);
 
   const approve = async (row: Reservation) => {
     setError('');
@@ -40,8 +42,8 @@ export default function ReservationApprovals({ actor, reservations, resources, u
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-panel p-4 shadow-sm"><div className="text-[10px] font-bold text-ink3">승인 대기</div><div className="mt-1 text-2xl font-extrabold text-amber">{pending.length}</div></div>
-        <div className="rounded-xl border border-border bg-panel p-4 shadow-sm"><div className="text-[10px] font-bold text-ink3">담당 자원</div><div className="mt-1 text-2xl font-extrabold text-teal">{resources.filter((item) => canApproveResource(actor, item)).length}</div></div>
-        <div className="rounded-xl border border-border bg-panel p-4 shadow-sm"><div className="text-[10px] font-bold text-ink3">권한 범위</div><div className="mt-2 text-[12px] font-bold text-ink">{actor.roleGroup === 'ADMIN' ? '전체 자원' : '내 담당 자원'}</div></div>
+        <div className="rounded-xl border border-border bg-panel p-4 shadow-sm"><div className="text-[10px] font-bold text-ink3">담당 자원</div><div className="mt-1 text-2xl font-extrabold text-teal">{resources.filter((item) => isAdmin || canApproveResource(actor, item)).length}</div></div>
+        <div className="rounded-xl border border-border bg-panel p-4 shadow-sm"><div className="text-[10px] font-bold text-ink3">권한 범위</div><div className="mt-2 text-[12px] font-bold text-ink">{isAdmin ? '전체 자원' : '내 담당 자원'}</div></div>
       </div>
 
       {error && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
