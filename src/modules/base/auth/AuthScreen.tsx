@@ -66,34 +66,46 @@ export default function AuthScreen() {
   const [activeTab, setActiveTab] = useState<'members' | 'matrix'>('matrix');
   const [selectedCat, setSelectedCat] = useState<PermCategoryId | 'ALL'>('ALL');
   const [msg, setMsg] = useState('');
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  // 로컬 편집 상태 캐시 (그룹별 draft)
-  const [groupDrafts, setGroupDrafts] = useState<Record<string, RoleGroup>>({});
+  // 현재 편집 중인 단일 draft 상태
+  const [currentDraft, setCurrentDraft] = useState<RoleGroup | null>(null);
 
   // 팝업 선택기 상태
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const selectedGroup: RoleGroup | undefined = useMemo(() => {
-    const raw = groupDrafts[selectedCode] || effectiveGroups.find((g) => g.code === selectedCode) || effectiveGroups[0];
-    if (!raw) return undefined;
-    const hasPerms = raw.menuPermissions && Object.keys(raw.menuPermissions).length > 0;
-    if (!hasPerms) {
-      return {
-        ...raw,
-        menuPermissions: getDefaultPermissionsForGroup(raw.code, raw.name),
-      };
+  // 선택된 그룹이 변경되거나 최초 로드 시 draft 동기화
+  const selectedGroup: RoleGroup = useMemo(() => {
+    if (currentDraft && (isCreatingNew || currentDraft.code === selectedCode)) {
+      return currentDraft;
     }
-    return raw;
-  }, [groupDrafts, selectedCode, effectiveGroups]);
+    const found = effectiveGroups.find((g) => g.code === selectedCode) || effectiveGroups[0];
+    const hasPerms = found?.menuPermissions && Object.keys(found.menuPermissions).length > 0;
+    const base = found ? {
+      ...found,
+      menuPermissions: hasPerms ? found.menuPermissions : getDefaultPermissionsForGroup(found.code, found.name),
+    } : {
+      id: 'ADMIN',
+      code: 'ADMIN',
+      name: '관리자',
+      desc: '',
+      use: true,
+      isSystem: true,
+      userIds: [],
+      deptIds: ['D240'],
+      positionRanks: [],
+      menuPermissions: getDefaultPermissionsForGroup('ADMIN', '관리자'),
+      members: [],
+      permissions: [],
+    };
+    return base;
+  }, [currentDraft, selectedCode, effectiveGroups, isCreatingNew]);
 
   const updateSelectedGroup = (patch: Partial<RoleGroup>) => {
-    if (!selectedGroup) return;
-    const next: RoleGroup = { ...selectedGroup, ...patch };
-    setGroupDrafts((prev) => ({ ...prev, [selectedGroup.code]: next }));
+    setCurrentDraft((prev) => ({ ...(prev || selectedGroup), ...patch }));
   };
 
   const updatePermission = (urlOrId: string, patch: Partial<ActionPermission>) => {
-    if (!selectedGroup) return;
     const currentMap = selectedGroup.menuPermissions || {};
     const existing = currentMap[urlOrId] || { ...DEFAULT_ACTIONS };
     const nextAction: ActionPermission = { ...existing, ...patch };
@@ -102,7 +114,6 @@ export default function AuthScreen() {
   };
 
   const setCategoryAll = (catId: PermCategoryId, checked: boolean) => {
-    if (!selectedGroup) return;
     const currentMap = { ...(selectedGroup.menuPermissions || {}) };
     SYSTEM_SCREENS.filter((s) => s.category === catId).forEach((s) => {
       const supported = s.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
@@ -121,7 +132,6 @@ export default function AuthScreen() {
   };
 
   const setRowAll = (url: string, id: string, checked: boolean) => {
-    if (!selectedGroup) return;
     const s = SYSTEM_SCREENS.find((sc) => sc.url === url || sc.id === id);
     const supported = s?.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
     const currentMap = { ...(selectedGroup.menuPermissions || {}) };
@@ -139,30 +149,38 @@ export default function AuthScreen() {
   };
 
   const handleCreateNewGroup = () => {
-    const newCode = `CUSTOM_${Date.now().toString().slice(-4)}`;
+    const newCode = `FINANCE`;
     const newGroup: RoleGroup = {
       id: newCode,
       code: newCode,
-      name: '새 권한 그룹',
-      desc: '',
+      name: '재무담당자',
+      desc: '견적·수주 관리, 거래처 및 결재 모니터링 담당',
       use: true,
       isSystem: false,
       userIds: [],
       deptIds: [],
       positionRanks: [],
-      menuPermissions: {},
+      menuPermissions: getDefaultPermissionsForGroup('FINANCE', '재무담당자'),
       members: [],
       permissions: [],
     };
-    setGroupDrafts((prev) => ({ ...prev, [newCode]: newGroup }));
+    setIsCreatingNew(true);
+    setCurrentDraft(newGroup);
     setSelectedCode(newCode);
-    setMsg('새 권한 그룹이 생성되었습니다. 설정 후 저장하세요.');
+    setMsg('새 권한 그룹 생성 모드입니다. 정보를 입력한 후 [변경사항 저장]을 누르세요.');
   };
 
   const handleSave = () => {
     if (!selectedGroup) return;
+    if (!selectedGroup.code.trim() || !selectedGroup.name.trim()) {
+      alert('그룹 코드와 그룹명을 입력해주세요.');
+      return;
+    }
     saveGroup.mutate(selectedGroup, {
       onSuccess: () => {
+        setIsCreatingNew(false);
+        setCurrentDraft(null);
+        setSelectedCode(selectedGroup.code);
         setMsg(`[${selectedGroup.name}] 그룹 권한이 안전하게 저장되었습니다.`);
         setTimeout(() => setMsg(''), 3000);
       },
@@ -183,11 +201,8 @@ export default function AuthScreen() {
     }
     deleteGroup.mutate(selectedGroup.code, {
       onSuccess: () => {
-        setGroupDrafts((prev) => {
-          const next = { ...prev };
-          delete next[selectedGroup.code];
-          return next;
-        });
+        setIsCreatingNew(false);
+        setCurrentDraft(null);
         setSelectedCode('ADMIN');
         setMsg(`[${selectedGroup.name}] 그룹이 성공적으로 삭제되었습니다.`);
         setTimeout(() => setMsg(''), 3000);
@@ -199,14 +214,14 @@ export default function AuthScreen() {
   };
 
   const filteredGroups: RoleGroup[] = useMemo(() => {
-    const list: RoleGroup[] = Object.values({
-      ...effectiveGroups.reduce((acc: Record<string, RoleGroup>, g: RoleGroup) => ({ ...acc, [g.code]: g }), {}),
-      ...groupDrafts,
-    });
+    const list = [...effectiveGroups];
+    if (isCreatingNew && currentDraft && !list.some((g) => g.code === currentDraft.code)) {
+      list.push(currentDraft);
+    }
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter((g: RoleGroup) => g.code.toLowerCase().includes(q) || g.name.toLowerCase().includes(q));
-  }, [effectiveGroups, groupDrafts, search]);
+  }, [effectiveGroups, isCreatingNew, currentDraft, search]);
 
   const visibleScreens = useMemo(() => {
     if (selectedCat === 'ALL') return SYSTEM_SCREENS;
@@ -273,6 +288,8 @@ export default function AuthScreen() {
                   key={g.code}
                   type="button"
                   onClick={() => {
+                    setIsCreatingNew(false);
+                    setCurrentDraft(null);
                     setSelectedCode(g.code);
                     setMsg('');
                   }}
