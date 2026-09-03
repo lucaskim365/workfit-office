@@ -49,16 +49,19 @@ export default function AuthScreen() {
 
   const effectiveGroups = useMemo(() => {
     const list = (rawGroups && rawGroups.length > 0) ? rawGroups : ROLE_GROUP_SEED;
-    return list.map((g) => {
+    const map = new Map<string, RoleGroup>();
+    list.forEach((g) => {
+      const codeKey = g.code.toUpperCase();
       const hasPerms = g.menuPermissions && Object.keys(g.menuPermissions).length > 0;
-      if (!hasPerms) {
-        return {
-          ...g,
-          menuPermissions: getDefaultPermissionsForGroup(g.code, g.name),
-        };
+      const formatted: RoleGroup = {
+        ...g,
+        menuPermissions: hasPerms ? g.menuPermissions : getDefaultPermissionsForGroup(g.code, g.name),
+      };
+      if (!map.has(codeKey)) {
+        map.set(codeKey, formatted);
       }
-      return g;
     });
+    return Array.from(map.values());
   }, [rawGroups]);
 
   const [selectedCode, setSelectedCode] = useState('ADMIN');
@@ -76,7 +79,10 @@ export default function AuthScreen() {
 
   // 선택된 그룹이 변경되거나 최초 로드 시 draft 동기화
   const selectedGroup: RoleGroup = useMemo(() => {
-    if (currentDraft && (isCreatingNew || currentDraft.code === selectedCode)) {
+    if (isCreatingNew && currentDraft) {
+      return currentDraft;
+    }
+    if (currentDraft && currentDraft.code === selectedCode) {
       return currentDraft;
     }
     const found = effectiveGroups.find((g) => g.code === selectedCode) || effectiveGroups[0];
@@ -149,39 +155,63 @@ export default function AuthScreen() {
   };
 
   const handleCreateNewGroup = () => {
-    const newCode = `FINANCE`;
     const newGroup: RoleGroup = {
-      id: newCode,
-      code: newCode,
-      name: '재무담당자',
-      desc: '견적·수주 관리, 거래처 및 결재 모니터링 담당',
+      id: '',
+      code: '',
+      name: '',
+      desc: '',
       use: true,
       isSystem: false,
       userIds: [],
       deptIds: [],
       positionRanks: [],
-      menuPermissions: getDefaultPermissionsForGroup('FINANCE', '재무담당자'),
+      menuPermissions: {},
       members: [],
       permissions: [],
     };
     setIsCreatingNew(true);
     setCurrentDraft(newGroup);
-    setSelectedCode(newCode);
-    setMsg('새 권한 그룹 생성 모드입니다. 정보를 입력한 후 [변경사항 저장]을 누르세요.');
+    setSelectedCode('');
+    setMsg('새 권한 그룹 생성 모드입니다. 그룹명과 고유 영문 코드를 입력한 후 저장하세요.');
   };
 
   const handleSave = () => {
     if (!selectedGroup) return;
-    if (!selectedGroup.code.trim() || !selectedGroup.name.trim()) {
-      alert('그룹 코드와 그룹명을 입력해주세요.');
+    const trimmedCode = selectedGroup.code.trim().toUpperCase();
+    const trimmedName = selectedGroup.name.trim();
+
+    if (!trimmedCode) {
+      alert('역할 그룹 코드를 입력해주세요. (예: FINANCE, HR_LEAD)');
       return;
     }
-    saveGroup.mutate(selectedGroup, {
+    if (!trimmedName) {
+      alert('역할 그룹명을 입력해주세요.');
+      return;
+    }
+
+    if (isCreatingNew) {
+      const isDuplicate = effectiveGroups.some(
+        (g) => g.code.toUpperCase() === trimmedCode
+      );
+      if (isDuplicate) {
+        alert(`이미 존재하는 그룹 코드(${trimmedCode})입니다. 다른 코드를 입력해주세요.`);
+        return;
+      }
+    }
+
+    const payloadToSave: RoleGroup = {
+      ...selectedGroup,
+      id: trimmedCode,
+      code: trimmedCode,
+      name: trimmedName,
+    };
+
+    saveGroup.mutate(payloadToSave, {
       onSuccess: () => {
         setIsCreatingNew(false);
         setCurrentDraft(null);
-        setSelectedCode(selectedGroup.code);
-        setMsg(`[${selectedGroup.name}] 그룹 권한이 안전하게 저장되었습니다.`);
+        setSelectedCode(trimmedCode);
+        setMsg(`[${trimmedName}] 그룹 권한이 안전하게 저장되었습니다.`);
         setTimeout(() => setMsg(''), 3000);
       },
       onError: (err) => {
@@ -214,10 +244,18 @@ export default function AuthScreen() {
   };
 
   const filteredGroups: RoleGroup[] = useMemo(() => {
-    const list = [...effectiveGroups];
-    if (isCreatingNew && currentDraft && !list.some((g) => g.code === currentDraft.code)) {
-      list.push(currentDraft);
+    const map = new Map<string, RoleGroup>();
+    effectiveGroups.forEach((g) => {
+      map.set(g.code.toUpperCase(), g);
+    });
+    if (isCreatingNew && currentDraft) {
+      map.set('__CREATING_NEW__', {
+        ...currentDraft,
+        code: currentDraft.code || 'NEW',
+        name: currentDraft.name || '(새 그룹 작성 중)',
+      });
     }
+    const list = Array.from(map.values());
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter((g: RoleGroup) => g.code.toLowerCase().includes(q) || g.name.toLowerCase().includes(q));
@@ -240,7 +278,7 @@ export default function AuthScreen() {
         </div>
         <div className="flex items-center gap-2">
           {msg && <span className="text-[12px] font-bold text-teal">{msg}</span>}
-          {selectedGroup && !selectedGroup.isSystem && selectedGroup.code !== 'ADMIN' && selectedGroup.code !== 'USER' && (
+          {!isCreatingNew && selectedGroup && !selectedGroup.isSystem && selectedGroup.code !== 'ADMIN' && selectedGroup.code !== 'USER' && (
             <button
               type="button"
               onClick={handleDeleteGroup}
@@ -282,16 +320,19 @@ export default function AuthScreen() {
           </div>
           <div className="max-h-[650px] overflow-y-auto divide-y divide-border">
             {filteredGroups.map((g) => {
-              const active = g.code === selectedCode;
+              const isTempItem = isCreatingNew && (g.code === 'NEW' || g.name === '(새 그룹 작성 중)' || g === currentDraft);
+              const active = isTempItem || (!isCreatingNew && g.code === selectedCode);
               return (
                 <button
-                  key={g.code}
+                  key={isTempItem ? '__CREATING_NEW__' : g.code}
                   type="button"
                   onClick={() => {
-                    setIsCreatingNew(false);
-                    setCurrentDraft(null);
-                    setSelectedCode(g.code);
-                    setMsg('');
+                    if (!isTempItem) {
+                      setIsCreatingNew(false);
+                      setCurrentDraft(null);
+                      setSelectedCode(g.code);
+                      setMsg('');
+                    }
                   }}
                   className={`flex w-full items-start justify-between p-3 text-left transition-colors cursor-pointer ${
                     active ? 'bg-teal-soft/40 border-l-4 border-l-teal' : 'hover:bg-panel-alt'
@@ -393,20 +434,36 @@ export default function AuthScreen() {
                     <div>
                       <label className="block text-[11px] font-bold text-ink3 mb-1">역할 그룹명</label>
                       <input
-                        disabled={selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
+                        disabled={!isCreatingNew && (selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER')}
                         value={selectedGroup.name}
                         onChange={(e) => updateSelectedGroup({ name: e.target.value })}
+                        placeholder="예: 재무담당자"
                         className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-60"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-ink3 mb-1">역할 그룹 코드</label>
+                      <label className="block text-[11px] font-bold text-ink3 mb-1">
+                        역할 그룹 코드 {isCreatingNew ? (
+                          <span className="text-[10px] font-normal text-teal">(영문 대문자/숫자/_ 만 가능)</span>
+                        ) : (
+                          <span className="text-[10px] font-normal text-ink3">(고유 식별자 · 변경 불가)</span>
+                        )}
+                      </label>
                       <input
-                        disabled={selectedGroup.isSystem || selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
+                        disabled={!isCreatingNew}
                         value={selectedGroup.code}
-                        onChange={(e) => updateSelectedGroup({ code: e.target.value.toUpperCase() })}
-                        placeholder="예: FINANCE, EXEC"
-                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-teal disabled:opacity-50"
+                        onChange={(e) => {
+                          if (isCreatingNew) {
+                            const upper = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+                            updateSelectedGroup({ code: upper, id: upper });
+                          }
+                        }}
+                        placeholder="예: FINANCE, HR_LEAD"
+                        className={`w-full rounded-lg border border-border-hi px-3 py-1.5 text-[12px] font-mono font-semibold outline-none ${
+                          isCreatingNew
+                            ? 'bg-panel text-ink focus:border-teal'
+                            : 'bg-panel-alt/60 text-ink2 cursor-not-allowed opacity-80'
+                        }`}
                       />
                     </div>
                     <div className="col-span-2">

@@ -63,7 +63,7 @@ export const roleGroupRepo = {
       ? dbGroups
       : ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g));
 
-    return sourceList.map((g) => {
+    const mapped = sourceList.map((g) => {
       // 1. 관계 테이블(roleMappings)에서 해당 그룹의 매핑 항목들 추출 (SSOT, ROLE_ 접두사 유연 매칭)
       const normGroupCode = g.code.replace(/^ROLE_/, '').toUpperCase();
       const groupMappings = dbMappings.filter(
@@ -101,14 +101,26 @@ export const roleGroupRepo = {
         menuPermissions = getDefaultPermissionsForGroup(g.code, g.name);
       }
 
-      return {
-        ...g,
-        userIds,
-        deptIds,
-        positionRanks,
-        menuPermissions,
-      };
-    });
+        return {
+          ...g,
+          userIds,
+          deptIds,
+          positionRanks,
+          menuPermissions,
+        };
+      });
+
+    // 중복 그룹 코드 제거 (DB에 동일 코드 다중 문서가 있더라도 단 1개로 정규화)
+    const seen = new Set<string>();
+    const uniqueGroups: RoleGroup[] = [];
+    for (const item of mapped) {
+      const norm = item.code.toUpperCase();
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        uniqueGroups.push(item);
+      }
+    }
+    return uniqueGroups;
   },
 
   /** 매핑 관계 목록 전체 조회 */
