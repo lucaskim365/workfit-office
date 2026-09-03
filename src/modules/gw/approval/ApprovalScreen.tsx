@@ -790,7 +790,7 @@ export default function ApprovalScreen() {
             )}
 
             {/* 우: 상세 */}
-            <div className="overflow-hidden rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
+            <div className="rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm overflow-x-auto overflow-y-visible">
               {selDoc ? (
                 <DocDetail
                   key={selDoc.id}
@@ -972,10 +972,10 @@ function DocDetail({
   const activeIds = currentApproverIds(doc);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col min-w-0">
       {/* 상세 헤더 & 미니 결재선 */}
-      <div className="border-b border-border px-5 py-3.5">
-        <div className="flex items-center justify-between gap-4">
+      <div className="border-b border-border px-4 sm:px-5 py-3.5 min-w-0">
+        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-4 min-w-0">
           {/* 좌측: 문서 기본 정보 */}
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
@@ -1200,7 +1200,7 @@ function DocDetail({
       </div>
 
       {/* 헤더 아래 본문 영역 */}
-      <div className="px-5 py-4">
+      <div className="px-3 sm:px-5 py-4 min-w-0 flex-1 overflow-x-auto">
         {/* 수신/참조자 목록 (슬림 인라인 배치 & 수신/참조 태그 명시) */}
         {(() => {
           const effectiveRecipients = getEffectiveRecipients(doc);
