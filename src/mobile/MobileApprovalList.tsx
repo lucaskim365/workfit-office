@@ -14,32 +14,32 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
  * 웹 데스크톱과 동일한 useApprovalBoxes 훅/엔진을 재사용하므로 데이터가 실시간 공유된다.
  */
 const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
-  '대기': 1,    // 결재 대기함
-  '반려': 2,    // 반려함
-  '상신': 3,    // 상신함
-  '완료': 4,    // 기결재 완료함
-  '참조': 5,    // 참조함
-  '수신': 6,    // 수신함
+  '상신': 1,    // 상신함
+  '참조': 2,    // 참조함
+  '대기': 3,    // 결재대기함
+  '반려': 4,    // 반려함
+  '수신': 5,    // 수신함
+  '완료': 6,    // 완료함
   '후열': 7,    // 후열함
-  '문서함': 8,  // 부서 문서함
-  '임시': 9,
-  '삭제': 10
+  '문서함': 8,  // 부서문서함
+  '임시': 9,    // 임시저장함
+  '삭제': 10,   // 휴지통
 };
 
 const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
-  { key: '대기', label: '결재 대기함' },
-  { key: '반려', label: '반려함' },
   { key: '상신', label: '상신함' },
-  { key: '완료', label: '기결재 완료함' },
+  { key: '참조', label: '참조함' },
+  { key: '대기', label: '결재대기함' },
+  { key: '반려', label: '반려함' },
+  { key: '수신', label: '수신함' },
+  { key: '완료', label: '완료함' },
 ];
 
 const EXTRA_BOX_OPTIONS: { key: ApprovalBox | '문서함'; label: string }[] = [
-  { key: '수신', label: '수신함' },
-  { key: '참조', label: '참조함' },
   { key: '후열', label: '후열함' },
-  { key: '임시', label: '임시 저장함' },
+  { key: '문서함', label: '부서문서함' },
+  { key: '임시', label: '임시저장함' },
   { key: '삭제', label: '휴지통' },
-  { key: '문서함', label: '부서 문서함' },
 ];
 
 /** 문서 일시(상신/생성) 포맷 — YYYY.MM.DD HH:mm. */
@@ -80,7 +80,7 @@ export default function MobileApprovalList() {
   const org = useOrgTree();
 
   // 로컬스토리지 키 설정
-  const STORAGE_KEY = 'workfit-approval-extra-tabs-v2';
+  const STORAGE_KEY = 'workfit-approval-extra-tabs-v3';
 
   // 로컬스토리지에서 추가 활성화 탭 읽기
   const [extraTabs, setExtraTabs] = useState<(ApprovalBox | '문서함')[]>(() => {
