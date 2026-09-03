@@ -152,15 +152,21 @@ export function assertReservationTransition(from: ReservationStatus, to: Reserva
 }
 
 export function canManageResources(actor: User): boolean {
-  return actor.status === '사용' && actor.roleGroup === 'ADMIN';
+  return actor.status === '사용' && (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR');
 }
 
 export function canApproveResource(actor: User, resource: Resource): boolean {
-  return actor.status === '사용' && (actor.roleGroup === 'ADMIN' || resource.managerUserId === actor.id);
+  return (
+    actor.status === '사용' &&
+    (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR' || resource.managerUserId === actor.id)
+  );
 }
 
 export function canCancelReservation(actor: User, row: Reservation): boolean {
-  return actor.status === '사용' && (actor.roleGroup === 'ADMIN' || row.requesterUserId === actor.id);
+  return (
+    actor.status === '사용' &&
+    (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR' || row.requesterUserId === actor.id)
+  );
 }
 
 export function assertCancellationAllowed(actor: User, resource: Resource, row: Reservation, now = new Date()): void {
