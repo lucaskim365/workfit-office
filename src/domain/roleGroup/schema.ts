@@ -137,7 +137,7 @@ export const roleGroupSchema = z.object({
 
   // 레거시 하위호환용 필드
   members: jsonArray(memberSchema),
-  permissions: z.any().nullish().transform(() => []),
+  permissions: z.any().optional(),
 });
 
 export const roleMappingSchema = z.object({
