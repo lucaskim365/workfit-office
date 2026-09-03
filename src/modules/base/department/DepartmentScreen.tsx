@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
 import { useUsers, useUpdateUserJobTitle, useUpdateUserDept } from '@/features/user/useUsers';
 import { usePositions } from '@/features/position/usePositions';
+import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
 
 /**
@@ -14,6 +15,11 @@ const BLANK: Department = { id: '', name: '', parentId: null, headUserId: null, 
 const TYPE_TONE: Record<string, string> = { 본사: 'text-blue', 본부: 'text-teal', 위원회: 'text-purple', 연구소: 'text-ink2', 기타: 'text-ink3' };
 
 export default function DepartmentScreen() {
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_BASE_DEPT', 'create');
+  const canUpdate = canAction('S_BASE_DEPT', 'update');
+  const canDelete = canAction('S_BASE_DEPT', 'delete');
+
   const { data: rows = [], isLoading } = useDepartments();
   const { data: users = [] } = useUsers();
   const { data: positions = [] } = usePositions();
@@ -144,7 +150,13 @@ export default function DepartmentScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">부서/조직관리</h1>
           <p className="mt-0.5 text-xs text-ink3">기준 정보 / 부서·조직관리</p>
         </div>
-        <button onClick={() => { setSel({ ...BLANK }); setMsg(''); }} className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90">+ 부서 추가</button>
+        <button
+          onClick={() => { setSel({ ...BLANK }); setMsg(''); }}
+          disabled={!canCreate}
+          className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          + 부서 추가
+        </button>
       </div>
 
       <div className="grid grid-cols-[1.5fr_1fr] items-start gap-3.5">
@@ -159,7 +171,11 @@ export default function DepartmentScreen() {
               <span className="truncate font-semibold text-ink" style={{ paddingLeft: depth * 16 }}>{depth > 0 && <span className="text-ink3">└ </span>}{d.name}</span>
               <span className={`text-[11px] font-bold ${TYPE_TONE[d.deptType] ?? 'text-ink3'}`}>{d.deptType}</span>
               <span className="truncate text-[11.5px] text-ink2">{nameOf(d.headUserId)}</span>
-              <span className="text-right"><button onClick={(e) => { e.stopPropagation(); del(d.id); }} className="text-[11.5px] text-ink3 hover:text-red-500">삭제</button></span>
+              <span className="text-right">
+                {canDelete && (
+                  <button onClick={(e) => { e.stopPropagation(); del(d.id); }} className="text-[11.5px] text-ink3 hover:text-red-500">삭제</button>
+                )}
+              </span>
             </div>
           ))}
         </div>
@@ -191,7 +207,7 @@ export default function DepartmentScreen() {
               {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setSel(null)} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
-                <button onClick={save} disabled={upsert.isPending} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">저장</button>
+                <button onClick={save} disabled={upsert.isPending || (sel.id ? !canUpdate : !canCreate)} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">저장</button>
               </div>
             </div>
           ) : (

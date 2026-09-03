@@ -23,7 +23,7 @@ export default function I18nScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">다국어 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 다국어 관리</p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: '키 추가' }, 'save', 'upload', 'download']} />
+        <ActionBar screenId="S_SYS_I18N" actions={[{ preset: 'add', label: '키 추가' }, 'save', 'refresh']} />
       </div>
 
       <div className="flex items-center gap-3 rounded-[10px] border border-border bg-panel px-3.5 py-2.5">

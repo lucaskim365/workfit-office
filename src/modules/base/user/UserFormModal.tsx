@@ -6,7 +6,7 @@ import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
-import { ROLE_GROUPS, USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import { USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
@@ -135,13 +135,6 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             {...register('jobTitle')}
             invalid={!!errors.jobTitle}
             options={[{ value: '', label: '직책 선택 (미지정)' }, ...jobTitles.map((j) => ({ value: j.name, label: j.name }))]}
-          />
-        </Field>
-        <Field label="권한그룹" required error={errors.roleGroup?.message ? String(errors.roleGroup.message) : undefined}>
-          <SelectField
-            {...register('roleGroup')}
-            invalid={!!errors.roleGroup}
-            options={ROLE_GROUPS.map((r) => ({ value: r, label: r }))}
           />
         </Field>
         <Field label="상태" required error={errors.status?.message}>

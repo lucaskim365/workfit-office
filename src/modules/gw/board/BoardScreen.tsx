@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { boardRepo } from '@/data/board/board.repo';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
@@ -11,6 +12,10 @@ const BOARDS = BOARDS_SEED;
 export default function BoardScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_GW_BOARD', 'create');
+  const canDelete = canAction('S_GW_BOARD', 'delete');
+  const canUpdate = canAction('S_GW_BOARD', 'update');
   
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -340,15 +345,17 @@ export default function BoardScreen() {
                   <span>{activeBoardMeta.icon}</span>
                   <span>{activeBoardMeta.name}</span>
                 </h1>
-                <button
-                  onClick={() => {
-                    setNewPost({ ...newPost, boardId: activeBoard });
-                    setViewMode('write');
-                  }}
-                  className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
-                >
-                  ✍️ 새 글 쓰기
-                </button>
+                {canCreate && (
+                  <button
+                    onClick={() => {
+                      setNewPost({ ...newPost, boardId: activeBoard });
+                      setViewMode('write');
+                    }}
+                    className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
+                  >
+                    ✍️ 새 글 쓰기
+                  </button>
+                )}
               </div>
               <p className="text-[11.5px] text-ink3">{activeBoardMeta.desc}</p>
             </div>
@@ -439,20 +446,24 @@ export default function BoardScreen() {
               </button>
               {user && selectedPost.author === `${user.name} ${user.position}` ? (
                 <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleStartEdit(selectedPost)}
-                    className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
-                  >
-                    ✍️ 수정
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePost(selectedPost.id)}
-                    className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
-                  >
-                    🗑️ 삭제
-                  </button>
+                  {canUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(selectedPost)}
+                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                    >
+                      ✍️ 수정
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePost(selectedPost.id)}
+                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                    >
+                      🗑️ 삭제
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div />

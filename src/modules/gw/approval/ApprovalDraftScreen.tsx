@@ -25,6 +25,7 @@ import { DraftConfirmDialog } from './components/DraftConfirmDialog';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { DraftFormSidebar } from './components/DraftFormSidebar';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
+import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
 import { Upload, X, Paperclip } from 'lucide-react';
 
@@ -123,6 +124,9 @@ function ApprovalDraftInner({
   fixedType?: string;
   navigate: (url: string) => void;
 }) {
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_GW_APPROVAL', 'create');
+
   const { data: forms = [] } = useActiveApprovalForms();
   const org = useOrgTree();
   const bal = useLeave(me.id);
@@ -1163,8 +1167,8 @@ function ApprovalDraftInner({
             <button
               type="button"
               onClick={onSaveDraft}
-              disabled={busy}
-              className="rounded-lg border border-border px-3.5 py-1.5 text-[12px] font-bold text-ink2 hover:bg-panel-alt transition-colors disabled:opacity-50"
+              disabled={busy || !canCreate}
+              className="rounded-lg border border-border px-3.5 py-1.5 text-[12px] font-bold text-ink2 hover:bg-panel-alt transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               임시저장
             </button>
@@ -1172,8 +1176,8 @@ function ApprovalDraftInner({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={busy}
-            className="rounded-lg bg-teal px-4 py-1.5 text-[12.5px] font-bold text-white hover:bg-teal-dark transition-colors shadow-xs disabled:opacity-50"
+            disabled={busy || !canCreate}
+            className="rounded-lg bg-teal px-4 py-1.5 text-[12.5px] font-bold text-white hover:bg-teal-dark transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy ? '상신 중...' : isResubmit ? '재상신' : '상신 발송'}
           </button>

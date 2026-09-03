@@ -19,7 +19,7 @@ export default function SalesOrderScreen() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <MHead title="수주/주문서 입력" sub="영업수주 관리 / 수주 등록 (Sales Order)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
+      <MHead title="수주/주문서 입력" sub="영업수주 관리 / 수주 등록 (Sales Order)" actions={<ActionBar screenId="S_SALES_SO" actions={['add', 'save', 'refresh']} />} />
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1.7fr]">
         <Card title="주문 헤더">
           <div className="flex flex-col gap-3">

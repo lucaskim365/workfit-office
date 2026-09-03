@@ -19,6 +19,7 @@ import ReservationDetailModal from './ReservationDetailModal';
 import ReservationReasonDialog from './ReservationReasonDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
+import { usePermission } from '@/features/auth/usePermission';
 
 type TabId = 'overview' | 'request' | 'my' | 'approvals' | 'admin';
 
@@ -42,6 +43,8 @@ const OVERVIEW_DETAIL_STATUSES = new Set<Reservation['status']>(['PENDING', 'CON
 
 function LocalResourceScreen() {
   const { user: authenticatedUser } = useAuth();
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_GW_RESOURCE', 'create');
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U011');
   const [modalTarget, setModalTarget] = useState<{ resource: Resource; date?: string } | null>(null);
@@ -144,7 +147,7 @@ function LocalResourceScreen() {
                 {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name} · {user.roleGroup}</option>)}
               </select>
             )}
-            <Button onClick={() => changeTab('request')} variant="primary">+ 예약 신청</Button>
+            {canCreate && <Button onClick={() => changeTab('request')} variant="primary">+ 예약 신청</Button>}
           </div>
         }
       />

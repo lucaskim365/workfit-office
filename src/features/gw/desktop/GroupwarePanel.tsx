@@ -67,7 +67,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '휴가관리', icon: '🏖️', to: 'leave' },
     { l: '근태', icon: '⏱️', to: 'commute' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },
-    { l: '사진첩', icon: '🖼️', to: 'gallery' },
+    { l: '회사 갤러리', icon: '🖼️', to: 'gallery' },
   ];
   const apps = useMemo(() => rawApps.filter((a) => canAccess('/gw/' + a.to)), [rawApps, canAccess]);
   const notices: [string, string][] = [

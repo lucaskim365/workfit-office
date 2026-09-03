@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { usePositions, useRemovePosition, useUpsertPosition } from '@/features/position/usePositions';
 import { useJobTitles, useRemoveJobTitle, useUpsertJobTitle } from '@/features/jobTitle/useJobTitles';
+import { usePermission } from '@/features/auth/usePermission';
 import type { Position } from '@/domain/position/schema';
 import type { JobTitle } from '@/domain/jobTitle/schema';
 
@@ -12,6 +13,11 @@ const BLANK_POS: Position = { id: '', name: '', rank: 5, isDeptHead: false };
 const BLANK_JOB: JobTitle = { id: '', name: '' };
 
 export default function PositionScreen() {
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_BASE_POSITION', 'create');
+  const canUpdate = canAction('S_BASE_POSITION', 'update');
+  const canDelete = canAction('S_BASE_POSITION', 'delete');
+
   const [tab, setTab] = useState<'position' | 'jobTitle'>('position');
   const [msg, setMsg] = useState('');
 
@@ -81,7 +87,8 @@ export default function PositionScreen() {
               setSelPos({ ...BLANK_POS });
               setMsg('');
             }}
-            className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90"
+            disabled={!canCreate}
+            className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + 직급 추가
           </button>
@@ -91,7 +98,8 @@ export default function PositionScreen() {
               setSelJob({ ...BLANK_JOB });
               setMsg('');
             }}
-            className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90"
+            disabled={!canCreate}
+            className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + 직책 추가
           </button>
@@ -176,15 +184,17 @@ export default function PositionScreen() {
                       )}
                     </td>
                     <td className="border-b border-border px-3.5 py-2.5 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          delPos(p.id);
-                        }}
-                        className="text-[12px] text-ink3 hover:text-red-500"
-                      >
-                        삭제
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            delPos(p.id);
+                          }}
+                          className="text-[12px] text-ink3 hover:text-red-500"
+                        >
+                          삭제
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -226,15 +236,17 @@ export default function PositionScreen() {
                     <td className="border-b border-border px-3.5 py-2.5 tabular-nums text-ink2">{j.id}</td>
                     <td className="border-b border-border px-3.5 py-2.5 font-semibold text-ink">{j.name}</td>
                     <td className="border-b border-border px-3.5 py-2.5 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          delJob(j.id);
-                        }}
-                        className="text-[12px] text-ink3 hover:text-red-500"
-                      >
-                        삭제
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            delJob(j.id);
+                          }}
+                          className="text-[12px] text-ink3 hover:text-red-500"
+                        >
+                          삭제
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -284,8 +296,8 @@ export default function PositionScreen() {
                   </button>
                   <button
                     onClick={savePos}
-                    disabled={upsertPos.isPending}
-                    className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+                    disabled={upsertPos.isPending || (selPos.id ? !canUpdate : !canCreate)}
+                    className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     저장
                   </button>
@@ -317,8 +329,8 @@ export default function PositionScreen() {
                 </button>
                 <button
                   onClick={saveJob}
-                  disabled={upsertJob.isPending}
-                  className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  disabled={upsertJob.isPending || (selJob.id ? !canUpdate : !canCreate)}
+                  className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   저장
                 </button>

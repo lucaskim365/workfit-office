@@ -127,7 +127,18 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       <div className="flex shrink-0 items-center gap-7">
         <Brand logoUrl={logoUrl} onLogoClick={() => navigate('/exec')} />
         <nav className="flex gap-0.5">
-          {MENU_TREE.filter((m) => m.use !== false).map((m) => {
+          {MENU_TREE.filter((m) => {
+            if (m.use === false) return false;
+            if (m.id === 'M_MSG' || m.id === 'M_WIDDY') return true;
+            if (m.id === 'M_GW') {
+              const gwScreens = ['/gw/approval', '/gw/leave', '/gw/calendar', '/gw/mail', '/gw/resource', '/gw/survey', '/gw/board', '/gw/community', '/gw/document', '/gw/employee', '/gw/task', '/gw/work-plan', '/gw/orgchart', '/gw/commute', '/gw/gallery'];
+              return gwScreens.some((url) => canAccess(url));
+            }
+            const accessibleCount = (m.children ?? [])
+              .flatMap((g) => g.children ?? [])
+              .filter((s) => s.use !== false && s.url && canAccess(s.url)).length;
+            return accessibleCount > 0;
+          }).map((m) => {
             const active = m.id === activeModuleId;
             const isSpecial = m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
             const isOpen = isSpecial
@@ -136,8 +147,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
               (m.id === 'M_MSG' && dockOpen === 'msg')
               : openModule === m.id;
             const groups = (m.children ?? []).filter((g) => g.use !== false);
-            const screenCount = groups.reduce((s, g) => s + (g.children?.filter((x) => x.use !== false).length ?? 0), 0);
-            const cols = groups.length > 3 ? 3 : groups.length > 1 ? 2 : 1;
+            const accessibleGroups = groups.filter((g) => (g.children ?? []).some((s) => s.use !== false && s.url && canAccess(s.url)));
+            const screenCount = accessibleGroups.reduce((s, g) => s + (g.children?.filter((x) => x.use !== false && x.url && canAccess(x.url)).length ?? 0), 0);
+            const cols = accessibleGroups.length > 3 ? 3 : accessibleGroups.length > 1 ? 2 : 1;
             return (
               <div key={m.id} className="relative">
                 <button

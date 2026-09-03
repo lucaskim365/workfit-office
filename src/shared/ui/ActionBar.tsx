@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { usePermission } from '@/features/auth/usePermission';
 
 export type IconName =
   | 'plus'
@@ -46,8 +47,6 @@ export interface ActionButtonProps {
   icon: IconName;
   label: string;
   variant?: 'default' | 'primary';
-  /** 엑셀 계열 강조(아이콘 녹색). */
-  accent?: 'excel';
   onClick?: () => void;
   disabled?: boolean;
 }
@@ -57,16 +56,13 @@ export function ActionButton({
   icon,
   label,
   variant = 'default',
-  accent,
   onClick,
   disabled,
 }: ActionButtonProps) {
   const primary = variant === 'primary';
   const iconColor = primary
     ? 'text-white/85'
-    : accent === 'excel'
-      ? 'text-[#1f8a5b]'
-      : 'text-ink3';
+    : 'text-ink3';
   return (
     <button
       onClick={onClick}
@@ -85,13 +81,11 @@ export function ActionButton({
   );
 }
 
-type Preset = 'add' | 'save' | 'upload' | 'download' | 'refresh' | 'compare' | 'search' | 'delete';
+type Preset = 'add' | 'save' | 'refresh' | 'compare' | 'search' | 'delete';
 
 const PRESET: Record<Preset, ActionButtonProps> = {
   add: { icon: 'plus', label: '추가' },
   save: { icon: 'save', label: '저장', variant: 'primary' },
-  upload: { icon: 'upload', label: '엑셀업로드', accent: 'excel' },
-  download: { icon: 'download', label: '엑셀다운로드', accent: 'excel' },
   refresh: { icon: 'refresh', label: '새로고침' },
   compare: { icon: 'compare', label: '기간 비교' },
   search: { icon: 'search', label: '조회', variant: 'primary' },
@@ -110,24 +104,42 @@ function resolve(a: ActionInput): ActionButtonProps {
   return { ...base, ...a } as ActionButtonProps;
 }
 
+export interface ActionBarProps {
+  actions?: ActionInput[];
+  /** 권한 검증 대상 Screen ID 또는 URL (선택 시 작성/수정/삭제 권한 자동 연동) */
+  screenId?: string;
+}
+
 /**
  * 액션 버튼 그룹 — 와이어프레임 shared.jsx ActionBar 정본 이관.
- * 프리셋 문자열('add', 'download'…) 또는 커스텀 객체(onClick 포함) 혼용 가능.
- * 엑셀 계열 버튼 앞에는 자동으로 구분선을 넣는다.
+ * 프리셋 문자열('add', 'save'…) 또는 커스텀 객체(onClick 포함) 혼용 가능.
+ * screenId 지정 시 그룹 권한 매트릭스의 create/update/delete 권한에 따라 자동 비활성화.
  */
-export function ActionBar({ actions = [] }: { actions?: ActionInput[] }) {
-  let prevExcel = false;
+export function ActionBar({ actions = [], screenId }: ActionBarProps) {
+  const { canAction } = usePermission();
+
   return (
     <div className="flex items-center gap-1.5">
       {actions.map((a, i) => {
         const p = resolve(a);
-        const isExcel = p.accent === 'excel';
-        const divider = isExcel && !prevExcel && i > 0;
-        prevExcel = isExcel;
+        let permDisabled = false;
+
+        if (screenId) {
+          const presetName = typeof a === 'string' ? a : a.preset;
+          if (presetName === 'add') {
+            permDisabled = !canAction(screenId, 'create');
+          } else if (presetName === 'save') {
+            permDisabled = !canAction(screenId, 'update') && !canAction(screenId, 'create');
+          } else if (presetName === 'delete') {
+            permDisabled = !canAction(screenId, 'delete');
+          }
+        }
+
+        const isFinalDisabled = p.disabled || permDisabled;
+
         return (
           <Fragment key={i}>
-            {divider && <span className="mx-0.5 h-[18px] w-px bg-border" />}
-            <ActionButton {...p} />
+            <ActionButton {...p} disabled={isFinalDisabled} />
           </Fragment>
         );
       })}

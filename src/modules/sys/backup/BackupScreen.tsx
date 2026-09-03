@@ -48,7 +48,7 @@ export default function BackupScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">데이터 백업</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 데이터 백업</p>
         </div>
-        <ActionBar actions={['save', 'download']} />
+        <ActionBar screenId="S_SYS_BACKUP" actions={['save', 'refresh']} />
       </div>
 
       {/* 요약 */}

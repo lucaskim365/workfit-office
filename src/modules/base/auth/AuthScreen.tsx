@@ -17,8 +17,6 @@ const DEFAULT_ACTIONS: ActionPermission = {
   create: false,
   update: false,
   delete: false,
-  excel: false,
-  admin: false,
 };
 
 function Checkbox({
@@ -111,46 +109,40 @@ export default function AuthScreen() {
     setCurrentDraft((prev) => ({ ...(prev || selectedGroup), ...patch }));
   };
 
-  const updatePermission = (urlOrId: string, patch: Partial<ActionPermission>) => {
-    const currentMap = selectedGroup.menuPermissions || {};
-    const existing = currentMap[urlOrId] || { ...DEFAULT_ACTIONS };
-    const nextAction: ActionPermission = { ...existing, ...patch };
-    const nextMap = { ...currentMap, [urlOrId]: nextAction };
-    updateSelectedGroup({ menuPermissions: nextMap });
+  const updatePermission = (screenId: string, patch: Partial<ActionPermission>) => {
+    const s = SYSTEM_SCREENS.find((sc) => sc.id === screenId || sc.url === screenId);
+    const key = s?.id || screenId;
+    const currentMap = { ...(selectedGroup.menuPermissions || {}) };
+    const existing = currentMap[key] || { ...DEFAULT_ACTIONS };
+    currentMap[key] = { ...existing, ...patch };
+    updateSelectedGroup({ menuPermissions: currentMap });
   };
 
   const setCategoryAll = (catId: PermCategoryId, checked: boolean) => {
     const currentMap = { ...(selectedGroup.menuPermissions || {}) };
     SYSTEM_SCREENS.filter((s) => s.category === catId).forEach((s) => {
-      const supported = s.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
-      const act: ActionPermission = {
+      const supported = s.supportedActions || ['access', 'create', 'update', 'delete'];
+      currentMap[s.id] = {
         access: supported.includes('access') ? checked : false,
         create: supported.includes('create') ? checked : false,
         update: supported.includes('update') ? checked : false,
         delete: supported.includes('delete') ? checked : false,
-        excel: supported.includes('excel') ? checked : false,
-        admin: supported.includes('admin') ? checked : false,
       };
-      currentMap[s.url] = act;
-      currentMap[s.id] = act;
     });
     updateSelectedGroup({ menuPermissions: currentMap });
   };
 
-  const setRowAll = (url: string, id: string, checked: boolean) => {
-    const s = SYSTEM_SCREENS.find((sc) => sc.url === url || sc.id === id);
-    const supported = s?.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
+  const setRowAll = (screenId: string, checked: boolean) => {
+    const s = SYSTEM_SCREENS.find((sc) => sc.id === screenId || sc.url === screenId);
+    const key = s?.id || screenId;
+    const supported = s?.supportedActions || ['access', 'create', 'update', 'delete'];
     const currentMap = { ...(selectedGroup.menuPermissions || {}) };
-    const act: ActionPermission = {
+    currentMap[key] = {
       access: supported.includes('access') ? checked : false,
       create: supported.includes('create') ? checked : false,
       update: supported.includes('update') ? checked : false,
       delete: supported.includes('delete') ? checked : false,
-      excel: supported.includes('excel') ? checked : false,
-      admin: supported.includes('admin') ? checked : false,
     };
-    currentMap[url] = act;
-    currentMap[id] = act;
     updateSelectedGroup({ menuPermissions: currentMap });
   };
 
@@ -647,16 +639,12 @@ export default function AuthScreen() {
                         onClick={() => {
                           const nextMap = { ...(selectedGroup.menuPermissions || {}) };
                           SYSTEM_SCREENS.forEach((s) => {
-                            const act: ActionPermission = {
+                            nextMap[s.id] = {
                               access: true,
                               create: true,
                               update: true,
                               delete: true,
-                              excel: true,
-                              admin: true,
                             };
-                            nextMap[s.url] = act;
-                            nextMap[s.id] = act;
                           });
                           updateSelectedGroup({ menuPermissions: nextMap });
                         }}
@@ -724,18 +712,16 @@ export default function AuthScreen() {
                         <th className="px-2 py-2 text-center w-16">접근</th>
                         <th className="px-2 py-2 text-center w-20">작성/수정</th>
                         <th className="px-2 py-2 text-center w-16">삭제</th>
-                        <th className="px-2 py-2 text-center w-16">엑셀</th>
-                        <th className="px-2 py-2 text-center w-16">관리기능</th>
                         <th className="px-3 py-2 text-center w-20">행 일괄</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {visibleScreens.map((s) => {
-                        const supported = s.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
+                        const supported = s.supportedActions || ['access', 'create', 'update', 'delete'];
                         const perm = selectedGroup.code === 'ADMIN'
-                          ? { access: true, create: true, update: true, delete: true, excel: true, admin: true }
-                          : (selectedGroup.menuPermissions?.[s.url] ||
-                             selectedGroup.menuPermissions?.[s.id] || { ...DEFAULT_ACTIONS });
+                          ? { access: true, create: true, update: true, delete: true }
+                          : (selectedGroup.menuPermissions?.[s.id] ||
+                             selectedGroup.menuPermissions?.[s.url] || { ...DEFAULT_ACTIONS });
                         const isAllChecked = supported.every((act) => perm[act]);
                         const catLabel = PERM_CATEGORIES.find((c) => c.id === s.category)?.name || s.category;
                         const isAdmin = selectedGroup.code === 'ADMIN';
@@ -754,7 +740,7 @@ export default function AuthScreen() {
                                 <Checkbox
                                   disabled={isAdmin}
                                   checked={perm.access}
-                                  onChange={(c) => updatePermission(s.url, { access: c })}
+                                  onChange={(c) => updatePermission(s.id, { access: c })}
                                 />
                               ) : (
                                 <span className="text-ink4 font-mono text-[11px] select-none">-</span>
@@ -765,7 +751,7 @@ export default function AuthScreen() {
                                 <Checkbox
                                   disabled={isAdmin}
                                   checked={isWriteChecked}
-                                  onChange={(c) => updatePermission(s.url, { create: c, update: c })}
+                                  onChange={(c) => updatePermission(s.id, { create: c, update: c })}
                                 />
                               ) : (
                                 <span className="text-ink4 font-mono text-[11px] select-none">-</span>
@@ -776,29 +762,7 @@ export default function AuthScreen() {
                                 <Checkbox
                                   disabled={isAdmin}
                                   checked={perm.delete}
-                                  onChange={(c) => updatePermission(s.url, { delete: c })}
-                                />
-                              ) : (
-                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              {supported.includes('excel') ? (
-                                <Checkbox
-                                  disabled={isAdmin}
-                                  checked={perm.excel}
-                                  onChange={(c) => updatePermission(s.url, { excel: c })}
-                                />
-                              ) : (
-                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              {supported.includes('admin') ? (
-                                <Checkbox
-                                  disabled={isAdmin}
-                                  checked={perm.admin}
-                                  onChange={(c) => updatePermission(s.url, { admin: c })}
+                                  onChange={(c) => updatePermission(s.id, { delete: c })}
                                 />
                               ) : (
                                 <span className="text-ink4 font-mono text-[11px] select-none">-</span>
@@ -808,7 +772,7 @@ export default function AuthScreen() {
                               <button
                                 type="button"
                                 disabled={isAdmin}
-                                onClick={() => setRowAll(s.url, s.id, !isAllChecked)}
+                                onClick={() => setRowAll(s.id, !isAllChecked)}
                                 className={`rounded px-2 py-0.5 text-[10.5px] font-bold transition-colors ${
                                   isAdmin
                                     ? 'opacity-40 cursor-not-allowed text-ink3'
@@ -817,7 +781,7 @@ export default function AuthScreen() {
                                     : 'border border-border text-ink3 hover:bg-panel-alt'
                                 }`}
                               >
-                                {isAllChecked ? '해제' : '전체'}
+                                {isAllChecked ? '전체 해제' : '전체 선택'}
                               </button>
                             </td>
                           </tr>

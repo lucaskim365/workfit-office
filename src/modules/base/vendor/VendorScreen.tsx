@@ -27,7 +27,7 @@ export default function VendorScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">거래처관리</h1>
           <p className="mt-0.5 text-xs text-ink3">기준 정보 / 거래처관리</p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: '거래처 추가' }, 'save', 'upload', 'download']} />
+        <ActionBar screenId="S_BASE_VENDOR" actions={[{ preset: 'add', label: '거래처 추가' }, 'save', 'refresh']} />
       </div>
 
       <FilterBar onSearch={() => setApplied(draft)}>
@@ -80,7 +80,7 @@ export default function VendorScreen() {
           </div>
         </Card>
 
-        <Card title="거래처 상세정보" action={<ActionBar actions={[{ preset: 'save', label: '저장' }]} />}>
+        <Card title="거래처 상세정보" action={<ActionBar screenId="S_BASE_VENDOR" actions={[{ preset: 'save', label: '저장' }]} />}>
           {cur ? (
             <div className="flex flex-col gap-3">
               <DetailField label="거래처코드" required value={cur.code} />

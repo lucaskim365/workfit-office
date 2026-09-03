@@ -5,8 +5,9 @@ import { Pill, type Tone } from '@/shared/ui/Pill';
 import { DataTable, type Column } from '@/shared/ui/DataTable';
 import { ActionBar } from '@/shared/ui/ActionBar';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
-import { ROLE_GROUPS, type User } from '@/domain/user/schema';
+import { type User } from '@/domain/user/schema';
 import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
+import { usePermission } from '@/features/auth/usePermission';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 import ResignModal from './ResignModal';
 import { successionRepo } from '@/data/succession/succession.repo';
@@ -22,12 +23,16 @@ const STATUS_OPTIONS: Option[] = [
   { value: '잠금', label: '잠금' },
   { value: '미사용', label: '미사용' },
 ];
-const ROLE_OPTIONS: Option[] = [{ value: '', label: '전체' }, ...ROLE_GROUPS.map((r) => ({ value: r, label: r }))];
 
-/** 사용자관리 — 필터 + KPI 요약 + 목록(직급·직책·권한그룹) + CRUD. 와이어프레임 admin-screens.UserMgmtContent 정본. */
+/** 사용자관리 — 필터 + KPI 요약 + 목록(사번·이름·부서·직급·직책·상태·최근접속) + CRUD. */
 export default function UserScreen() {
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_BASE_USER', 'create');
+  const canDelete = canAction('S_BASE_USER', 'delete');
+  const canUpdate = canAction('S_BASE_USER', 'update');
+
   // 사용여부 필터 기본값 '' (전체) — 미사용(퇴사 등) 계정도 기본 화면에서 함께 확인 가능.
-  const [draft, setDraft] = useState({ dept: '', roleGroup: '', status: '', q: '' });
+  const [draft, setDraft] = useState({ dept: '', status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
@@ -67,7 +72,6 @@ export default function UserScreen() {
     }
   };
 
-
   const { data: all = [] } = useUsers();
   const { data: rows = [] } = useUsers(applied);
   const upsert = useUpsertUser();
@@ -99,17 +103,6 @@ export default function UserScreen() {
       sortable: true,
       width: 84,
       render: (u) => (u.jobTitle ? u.jobTitle : <span className="text-ink3">—</span>),
-    },
-    {
-      key: 'roleGroup',
-      header: '권한그룹',
-      sortable: true,
-      width: 130,
-      render: (u) => (
-        <span className="rounded-md bg-blue-soft px-2 py-1 text-[10.5px] font-bold text-navy">
-          {u.roleGroup}
-        </span>
-      ),
     },
     {
       key: 'status',
@@ -150,7 +143,7 @@ export default function UserScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자관리</h1>
           <p className="mt-0.5 text-xs text-ink3">기준 정보 / 사용자관리</p>
         </div>
-        <ActionBar actions={['refresh', 'upload', 'download']} />
+        <ActionBar actions={['refresh']} />
       </div>
 
       {/* 퇴사 처리 결과 알림 */}
@@ -167,9 +160,6 @@ export default function UserScreen() {
       <FilterBar onSearch={() => setApplied(draft)}>
         <FilterField label="부서">
           <Select value={draft.dept} onChange={(v) => setDraft({ ...draft, dept: v })} options={deptOptions} width={130} />
-        </FilterField>
-        <FilterField label="권한그룹">
-          <Select value={draft.roleGroup} onChange={(v) => setDraft({ ...draft, roleGroup: v })} options={ROLE_OPTIONS} width={130} />
         </FilterField>
         <FilterField label="사용여부">
           <Select value={draft.status} onChange={(v) => setDraft({ ...draft, status: v })} options={STATUS_OPTIONS} width={100} />
@@ -240,10 +230,11 @@ export default function UserScreen() {
         title="사용자 목록"
         action={
           <ActionBar
+            screenId="S_BASE_USER"
             actions={[
-              { icon: 'logout', label: '퇴사 처리', onClick: handleResign, disabled: !canResign },
-              { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 },
-              { preset: 'add', label: '사용자 추가', variant: 'primary', onClick: () => setEditing(null) },
+              { icon: 'logout', label: '퇴사 처리', onClick: handleResign, disabled: !canResign || !canDelete },
+              { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 || !canDelete },
+              { preset: 'add', label: '사용자 추가', variant: 'primary', onClick: () => setEditing(null), disabled: !canCreate },
             ]}
           />
         }
@@ -265,7 +256,7 @@ export default function UserScreen() {
           selectable
           selectedKeys={selected}
           onSelectionChange={setSelected}
-          onRowClick={(u) => setEditing(u)}
+          onRowClick={(u) => (canUpdate ? setEditing(u) : undefined)}
         />
       </Card>
 
@@ -277,10 +268,10 @@ export default function UserScreen() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
           {/* 좌측: 신규 매핑 등록 폼 */}
           <div className="md:col-span-2 space-y-3.5 border-r border-border pr-5">
-            <h3 className="text-[12px] font-bold text-ink2">새 권한 승계 관계 등록</h3>
-            <div className="space-y-3">
+            <div className="rounded-lg bg-panel-alt/60 p-3 space-y-3">
+              <h3 className="text-[12px] font-bold text-ink2">새 권한 승계 관계 등록</h3>
               <div>
-                <label className="block text-[11px] font-bold text-ink2 mb-1">인계자 (전임자)</label>
+                <label className="block text-[11px] font-bold text-ink2 mb-1">인계자 (전임자 / 퇴사자)</label>
                 <select
                   value={predSelectId}
                   onChange={(e) => setPredSelectId(e.target.value)}
@@ -289,7 +280,7 @@ export default function UserScreen() {
                   <option value="">-- 임직원 선택 --</option>
                   {all.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name} ({u.dept} / {u.position})
+                      {u.name} ({u.dept} / {u.position} · {u.status})
                     </option>
                   ))}
                 </select>
@@ -337,7 +328,8 @@ export default function UserScreen() {
             <button
               type="button"
               onClick={handleAddSuccession}
-              className="w-full py-2 bg-teal hover:bg-teal-dark text-white rounded-lg text-[12px] font-bold shadow-xs hover:shadow transition-all"
+              disabled={!canUpdate}
+              className="w-full py-2 bg-teal hover:bg-teal-dark text-white rounded-lg text-[12px] font-bold shadow-xs hover:shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               🔗 승계 관계 등록
             </button>

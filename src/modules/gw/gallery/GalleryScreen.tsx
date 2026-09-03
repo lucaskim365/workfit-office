@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { Button } from '@/shared/ui/Button';
+import { usePermission } from '@/features/auth/usePermission';
 import { INITIAL_GALLERY_POSTS, type GalleryPost } from '@/data/seeds/gallery.seed';
 
 const STORAGE_KEY = 'workfit_gallery_posts_v2';
@@ -76,13 +77,17 @@ export default function GalleryScreen() {
     [posts, activePostId],
   );
 
+  const { isSuperAdmin, canAction } = usePermission();
+  const canCreate = canAction('S_GW_GALLERY', 'create');
+  const canUpdate = canAction('S_GW_GALLERY', 'update');
+  const canDelete = canAction('S_GW_GALLERY', 'delete');
+
   // 작성자 또는 관리자 본인 확인
   const canManagePost = (post: GalleryPost) => {
     if (!user) return false;
-    if (user.roleGroup === 'ADMIN') return true;
-    if (post.authorId && post.authorId === user.id) return true;
-    if (post.authorName === user.name) return true;
-    return false;
+    if (isSuperAdmin) return true;
+    const isOwner = (post.authorId && post.authorId === user.id) || (post.authorName === user.name);
+    return isOwner && (canUpdate || canDelete);
   };
 
   // 신규 등록 모달 열기
@@ -208,7 +213,7 @@ export default function GalleryScreen() {
   const handleDeletePost = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenMenuPostId(null);
-    if (!confirm('정말 이 사진첩을 삭제하시겠습니까?')) return;
+    if (!confirm('정말 이 갤러리 게시물을 삭제하시겠습니까?')) return;
     setPosts((prev) => prev.filter((p) => p.id !== id));
     if (activePostId === id) setActivePostId(null);
   };
@@ -242,7 +247,7 @@ export default function GalleryScreen() {
     <div className="mx-auto max-w-6xl pb-16">
       {/* 브레드크럼 */}
       <div className="mb-1 text-xs font-medium text-ink3">
-        그룹웨어 <span className="px-1">/</span> 사진첩
+        그룹웨어 <span className="px-1">/</span> 회사 갤러리
       </div>
 
       {/* 헤더 & 상단 툴바 */}
@@ -252,8 +257,8 @@ export default function GalleryScreen() {
             🖼️
           </span>
           <div>
-            <h1 className="text-xl font-bold text-ink">사내 사진첩</h1>
-            <p className="text-[11.5px] text-ink3 mt-0.5">사내 행사 등 각종 활동 사진을 공유하고 감상하는 갤러리입니다.</p>
+            <h1 className="text-xl font-bold text-ink">회사 갤러리</h1>
+            <p className="text-[11.5px] text-ink3 mt-0.5">사내 행사, 전사 이벤트 및 프로젝트 활동 기록을 공유하고 열람하는 전사 미디어 갤러리입니다.</p>
           </div>
         </div>
 
@@ -276,13 +281,15 @@ export default function GalleryScreen() {
             )}
           </div>
 
-          <Button
-            size="md"
-            variant="primary"
-            onClick={handleOpenUploadModal}
-          >
-            ➕ 사진 올리기
-          </Button>
+          {canCreate && (
+            <Button
+              size="md"
+              variant="primary"
+              onClick={handleOpenUploadModal}
+            >
+              ➕ 사진 올리기
+            </Button>
+          )}
         </div>
       </div>
 
@@ -315,7 +322,7 @@ export default function GalleryScreen() {
           <p className="mt-1 text-[12px] text-ink3 max-w-sm">
             {keyword
               ? '다른 검색어로 다시 시도해보시거나 검색어를 초기화해보세요.'
-              : '선포식 사진들을 여러 장 선택하여 사진첩에 올려보세요.'}
+              : '사내 행사 및 활동 사진들을 여러 장 선택하여 갤러리에 올려보세요.'}
           </p>
           {!keyword && (
             <div className="mt-5">
@@ -324,7 +331,7 @@ export default function GalleryScreen() {
                 variant="primary"
                 onClick={handleOpenUploadModal}
               >
-                첫 번째 사진첩 올리기
+                첫 번째 갤러리 사진 올리기
               </Button>
             </div>
           )}
@@ -480,7 +487,7 @@ export default function GalleryScreen() {
           >
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>{editingPostId ? '✏️ 사진첩 편집' : '📸 사진 올리기'}</span>
+                <span>{editingPostId ? '✏️ 갤러리 게시물 편집' : '📸 갤러리 사진 올리기'}</span>
               </h2>
               <button
                 type="button"

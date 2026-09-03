@@ -10,13 +10,12 @@ const matrix = (fn: (mi: number, ci: number) => boolean): boolean[][] =>
 const adminPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
-    map[s.url] = { access: true, create: true, update: true, delete: true, excel: true, admin: true };
-    map[s.id] = map[s.url];
+    map[s.id] = { access: true, create: true, update: true, delete: true };
   });
   return map;
 };
 
-/** 2. 임원 (경영진) 권한 (그룹웨어 + 경영/운영 + 영업현황 + 결재모니터링 조회/엑셀) */
+/** 2. 임원 (경영진) 권한 (그룹웨어 + 경영/운영 + 영업현황 + 결재모니터링 조회) */
 const execPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
@@ -26,20 +25,17 @@ const execPermissions = () => {
     const isMon = ['/base/approval-monitor', '/base/user', '/base/department', '/base/position'].includes(s.url);
     const canView = isGw || isExec || isSales || isMon;
 
-    map[s.url] = {
+    map[s.id] = {
       access: canView,
       create: isGw,
       update: isGw,
       delete: false,
-      excel: canView,
-      admin: false,
     };
-    map[s.id] = map[s.url];
   });
   return map;
 };
 
-/** 3. 재무관리자 권한 (그룹웨어 + 영업/수주 전권 + 거래처/코드 + 결재모니터링 + 엑셀) */
+/** 3. 재무관리자 권한 (그룹웨어 + 영업/수주 전권 + 거래처/코드 + 결재모니터링) */
 const financeAdminPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
@@ -48,15 +44,12 @@ const financeAdminPermissions = () => {
     const isFinanceTarget = ['/base/vendor', '/base/code', '/base/approval-monitor', '/exec'].includes(s.url);
     const canAccess = isGw || isSales || isFinanceTarget;
 
-    map[s.url] = {
+    map[s.id] = {
       access: canAccess,
       create: isGw || isSales || ['/base/vendor', '/base/code'].includes(s.url),
       update: isGw || isSales || ['/base/vendor', '/base/code'].includes(s.url),
       delete: isSales,
-      excel: canAccess,
-      admin: isSales || s.url === '/base/vendor',
     };
-    map[s.id] = map[s.url];
   });
   return map;
 };
@@ -66,15 +59,12 @@ const userPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
     const isGw = s.category === 'GW';
-    map[s.url] = {
+    map[s.id] = {
       access: isGw,
       create: isGw,
       update: isGw,
       delete: false,
-      excel: false,
-      admin: false,
     };
-    map[s.id] = map[s.url];
   });
   return map;
 };

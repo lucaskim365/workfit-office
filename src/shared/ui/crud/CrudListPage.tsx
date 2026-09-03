@@ -18,6 +18,7 @@ export interface SelectFilter {
 export interface CrudListConfig<T, S extends z.ZodType> {
   title: string;
   breadcrumb: string;
+  screenId?: string;
   seed: T[];
   rowKey: (row: T) => string;
   columns: Column<T>[];
@@ -47,6 +48,7 @@ export function CrudListPage<T, S extends z.ZodType>(config: CrudListConfig<T, S
   const {
     title,
     breadcrumb,
+    screenId,
     seed,
     rowKey,
     columns,
@@ -112,7 +114,7 @@ export function CrudListPage<T, S extends z.ZodType>(config: CrudListConfig<T, S
           <h1 className="text-xl font-extrabold tracking-tight text-ink">{title}</h1>
           <p className="mt-0.5 text-xs text-ink3">{breadcrumb}</p>
         </div>
-        <ActionBar actions={['refresh', 'upload', 'download']} />
+        <ActionBar screenId={screenId} actions={['refresh']} />
       </div>
 
       {(filters.length > 0 || searchKeys.length > 0) && (
@@ -145,6 +147,7 @@ export function CrudListPage<T, S extends z.ZodType>(config: CrudListConfig<T, S
         title="목록"
         action={
           <ActionBar
+            screenId={screenId}
             actions={[
               { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 },
               { preset: 'add', label: '추가', variant: 'primary', onClick: () => setEditing(null) },

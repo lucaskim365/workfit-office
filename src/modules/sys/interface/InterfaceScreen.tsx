@@ -28,7 +28,7 @@ export default function InterfaceScreen() {
           <h1 className="text-xl font-extrabold tracking-tight text-ink">인터페이스 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 인터페이스 관리</p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: 'I/F 추가' }, 'save', 'refresh', 'download']} />
+        <ActionBar screenId="S_SYS_IF" actions={[{ preset: 'add', label: 'I/F 추가' }, 'save', 'refresh']} />
       </div>
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">

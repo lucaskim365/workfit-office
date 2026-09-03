@@ -17,7 +17,7 @@ export default function SalesOrderStatusScreen() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <MHead title="주문서 현황" sub="영업수주 관리 / 주문 현황·미납 집계 (라인 도출)" actions={<ActionBar actions={['refresh', 'download']} />} />
+      <MHead title="주문서 현황" sub="영업수주 관리 / 주문 현황·미납 집계 (라인 도출)" actions={<ActionBar actions={['refresh']} />} />
       <FBar>
         <FField label="기간"><FSel value="2026-06" w={120} /></FField>
         <FField label="거래처"><FSel /></FField>

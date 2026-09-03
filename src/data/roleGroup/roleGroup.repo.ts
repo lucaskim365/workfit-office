@@ -1,5 +1,5 @@
 import { decodeFromFirestore, encodeForFirestore } from '@/shared/lib/firestore-codec';
-import { roleGroupSchema, roleMappingSchema, type RoleGroup, type RoleMapping } from '@/domain/roleGroup/schema';
+import { SYSTEM_SCREENS, roleGroupSchema, roleMappingSchema, type RoleGroup, type RoleMapping } from '@/domain/roleGroup/schema';
 import { ROLE_GROUP_SEED, getDefaultPermissionsForGroup } from '@/data/seeds/roleGroup.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
@@ -22,7 +22,7 @@ const groupBackend = createCrudBackend<RoleGroup>({
   },
   idOf: (x) => x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
-  jsonFields: ['members', 'permissions'],
+  jsonFields: ['members', 'permissions', 'menuPermissions'],
   firestoreEncode: encodeForFirestore,
   firestoreDecode: decodeFromFirestore,
 });
@@ -86,29 +86,36 @@ export const roleGroupRepo = {
         }
       }
 
-      // 2. 권한 매트릭스 기본값 주입 (menuPermissions 속성이 없더라도 permissions 문자열 JSON에서 복원)
-      let menuPermissions = (g.menuPermissions && Object.keys(g.menuPermissions).length > 0)
-        ? g.menuPermissions
-        : null;
-
-      if (!menuPermissions && typeof (g as any).permissions === 'string' && (g as any).permissions.startsWith('{')) {
-        try {
-          menuPermissions = JSON.parse((g as any).permissions);
-        } catch {}
+      // 2. 권한 매트릭스 복원 및 단일 표준 Screen ID 키로 정규화
+      let rawPermMap: Record<string, any> | null = null;
+      if (g.menuPermissions && typeof g.menuPermissions === 'object' && Object.keys(g.menuPermissions).length > 0) {
+        rawPermMap = g.menuPermissions;
+      } else if ((g as any).permissions) {
+        if (typeof (g as any).permissions === 'object' && Object.keys((g as any).permissions).length > 0) {
+          rawPermMap = (g as any).permissions;
+        } else if (typeof (g as any).permissions === 'string' && (g as any).permissions.startsWith('{')) {
+          try {
+            rawPermMap = JSON.parse((g as any).permissions);
+          } catch {}
+        }
       }
 
-      if (!menuPermissions) {
-        menuPermissions = getDefaultPermissionsForGroup(g.code, g.name);
-      }
+      const defaultPerms = getDefaultPermissionsForGroup(g.code, g.name);
+      const menuPermissions: Record<string, any> = {};
 
-        return {
-          ...g,
-          userIds,
-          deptIds,
-          positionRanks,
-          menuPermissions,
-        };
+      SYSTEM_SCREENS.forEach((s) => {
+        const foundPerm = rawPermMap?.[s.id] ?? rawPermMap?.[s.url] ?? defaultPerms[s.id];
+        menuPermissions[s.id] = foundPerm;
       });
+
+      return {
+        ...g,
+        userIds,
+        deptIds,
+        positionRanks,
+        menuPermissions,
+      };
+    });
 
     // 중복 그룹 코드 제거 (DB에 동일 코드 다중 문서가 있더라도 단 1개로 정규화)
     const seen = new Set<string>();
@@ -132,8 +139,13 @@ export const roleGroupRepo = {
   async save(group: RoleGroup): Promise<void> {
     const parsed = roleGroupSchema.parse(group);
     
-    // 1. roleGroups 마스터 도큐먼트 저장 (menuPermissions 속성이 DB에 없더라도 permissions 필드에 JSON 백업)
-    const menuPermJson = JSON.stringify(parsed.menuPermissions ?? {});
+    // 1. 35개 단일 표준 Screen ID 키로만 정규화하여 저장
+    const normalizedPerms: Record<string, any> = {};
+    const inputPerms = parsed.menuPermissions ?? {};
+    SYSTEM_SCREENS.forEach((s) => {
+      normalizedPerms[s.id] = inputPerms[s.id] ?? inputPerms[s.url] ?? { access: false, create: false, update: false, delete: false };
+    });
+    const menuPermJson = JSON.stringify(normalizedPerms);
     const basePayload: any = {
       code: parsed.code,
       name: parsed.name,
@@ -142,18 +154,10 @@ export const roleGroupRepo = {
       isSystem: parsed.isSystem ?? false,
       members: [],
       permissions: menuPermJson,
+      menuPermissions: normalizedPerms,
     };
 
-    try {
-      await groupBackend.save({ ...basePayload, menuPermissions: parsed.menuPermissions ?? {} });
-    } catch (e: any) {
-      if (String(e?.message || '').includes('menuPermissions')) {
-        // Appwrite 컬렉션에 menuPermissions 속성이 없으면 기존 permissions 필드에만 저장
-        await groupBackend.save(basePayload);
-      } else {
-        throw e;
-      }
-    }
+    await groupBackend.save(basePayload);
 
     // 2. 대상자 관계(USER/DEPT/POSITION)는 roleMappings 컬렉션에만 단독 저장/관리 (SSOT)
     try {

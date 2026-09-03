@@ -11,13 +11,13 @@ export default function SalesQuoteScreen() {
   const { data: rows = [], isLoading } = useQuotes();
   return (
     <div className="flex flex-col gap-3.5">
-      <MHead title="견적서 입력/관리" sub="영업수주 관리 / 견적서 입력·발송 (Quotation)" actions={<ActionBar actions={['add', 'save', 'download']} />} />
+      <MHead title="견적서 입력/관리" sub="영업수주 관리 / 견적서 입력·발송 (Quotation)" actions={<ActionBar screenId="S_SALES_QUOTE" actions={['add', 'save', 'refresh']} />} />
       <FBar>
         <FField label="견적일자"><FSel value="2026-06" w={120} /></FField>
         <FField label="거래처"><FSel /></FField>
         <FField label="상태"><FSel /></FField>
         <FField label="검색"><FInput ph="견적번호 / 품목" w={170} /></FField>
-        <span className="ml-auto flex gap-2"><ActionButton icon="download" label="견적서 발송" accent="excel" /><ActionButton icon="search" label="조회" variant="primary" /></span>
+        <span className="ml-auto flex gap-2"><ActionButton icon="search" label="조회" variant="primary" /></span>
       </FBar>
       <MKpis items={[['금월 견적', '24', '건'], ['수주 전환', '9', '건', 'teal'], ['전환율', '37.5', '%'], ['견적 금액', '4.8', '억원']]} />
       <Card title="견적 내역" bodyClassName="p-0" action={<span className="text-[10.5px] text-ink3">견적 → 수주 전환 추적</span>}>

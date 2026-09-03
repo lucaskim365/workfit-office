@@ -11,6 +11,7 @@ import { FilterBar, FilterField, Select, TextInput } from '@/shared/ui/FilterBar
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import ProjectFormModal from './ProjectFormModal';
 import { Button } from '@/shared/ui/Button';
+import { usePermission } from '@/features/auth/usePermission';
 
 export type ProjectTab = 'available' | 'owned' | 'completed' | 'archived';
 
@@ -58,6 +59,9 @@ function inTab(project: WorkProject, tab: ProjectTab, userId: string): boolean {
 }
 
 export default function ProjectList({ actor, access, projects, users, tab, onTabChange, onSelectProject }: ProjectListProps) {
+  const { canAction } = usePermission();
+  const canCreate = canAction('S_GW_TASK', 'create');
+
   const [status, setStatus] = useState<WorkProjectStatus | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -85,7 +89,7 @@ export default function ProjectList({ actor, access, projects, users, tab, onTab
         </FilterField>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-[10px] font-semibold text-ink3">{rows.length}개 프로젝트</span>
-          <Button variant="primary" onClick={() => setFormOpen(true)}>+ 프로젝트 생성</Button>
+          {canCreate && <Button variant="primary" onClick={() => setFormOpen(true)}>+ 프로젝트 생성</Button>}
         </div>
       </FilterBar>
 
