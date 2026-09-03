@@ -1248,34 +1248,12 @@ function DocDetail({
           </div>
         );
       })()}
-        {doc.status === '반려' && (() => {
-          const rejectStep = doc.steps.find((s) => s.decision === '반려');
-          const rejectUser = rejectStep ? org.userById(rejectStep.approverId) : null;
-          const rejectUserName = rejectUser ? `${rejectUser.name} ${rejectUser.position}` : rejectStep?.approverId ?? '알 수 없음';
-          return (
-            <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-3.5 text-[12px] text-ink animate-fade-in">
-              <div className="flex items-center gap-1.5 font-bold text-danger mb-1.5">
-                <span>⚠</span>
-                <span>반려 정보</span>
-              </div>
-              <div className="grid grid-cols-2 gap-y-1.5 text-ink2">
-                <div>• 반려자: <span className="font-semibold text-ink">{rejectUserName}</span></div>
-                <div>• 반려일시: <span className="font-semibold text-ink">{rejectStep?.decidedAt ? fmtDateTime(rejectStep.decidedAt) : '—'}</span></div>
-                <div className="col-span-2 mt-1 bg-white/60 dark:bg-black/10 rounded-lg p-2.5 border border-border/40">
-                  <div className="text-[11px] text-ink3 font-semibold mb-1">반려 사유</div>
-                  <div className="italic text-ink leading-relaxed">“{rejectStep?.comment || '반려 사유 없음'}”</div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* 결재 진행 및 결재자 승인의견 / 코멘트 이력 카드 (기안자 및 모든 열람자 확인 가능) */}
+        {/* 결재 진행 및 결재자 심사의견 / 코멘트 이력 카드 (기안자 및 모든 열람자 확인 가능, 인쇄 시에는 문서에 미표시) */}
         {(() => {
           const stepsWithComments = doc.steps.filter((s) => s.comment && s.comment.trim() && s.decision !== '대기');
           if (stepsWithComments.length === 0) return null;
           return (
-            <div className="mb-4 rounded-xl border border-teal/30 bg-teal/5 p-3.5 text-[12px] text-ink animate-fade-in">
+            <div className="mb-4 rounded-xl border border-teal/30 bg-teal/5 p-3.5 text-[12px] text-ink animate-fade-in print:hidden">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 font-bold text-teal">
                   <span>💬</span>

@@ -987,57 +987,6 @@ export function ApprovalDocumentView({
           </table>
         )}
 
-        {/* 결재 진행 및 결재자 심사/승인의견 (의견이 있는 경우 본문 하단에 공식 표기) */}
-        {(() => {
-          const stepsWithOpinions = (doc.steps || []).filter(
-            (s) => s.comment && s.comment.trim() && s.decision !== '대기' && s.kind !== '참조'
-          );
-          if (stepsWithOpinions.length === 0) return null;
-          return (
-            <div className="mt-6 border-t border-[#ddd] pt-3.5 print-avoid-break">
-              <div className="mb-1.5 text-[11px] font-bold text-[#444] flex items-center gap-1">
-                <span>💬</span>
-                <span>결재자 심사 및 승인의견</span>
-              </div>
-              <table className="w-full border-collapse text-[11.5px]">
-                <thead>
-                  <tr className="bg-[#f2f2f2]">
-                    <th className="w-[110px] border border-[#bbb] px-2 py-1 text-center font-bold text-[#444]">구분 / 결재자</th>
-                    <th className="w-[120px] border border-[#bbb] px-2 py-1 text-center font-bold text-[#444]">처리일시</th>
-                    <th className="border border-[#bbb] px-2.5 py-1 text-left font-bold text-[#444]">심사의견</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stepsWithOpinions.map((s, idx) => {
-                    const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
-                    const name = s.approverName || u?.name || s.approverId;
-                    const pos = s.approverPos || u?.position || '';
-                    const dept = s.approverDept || u?.dept || '';
-                    const isReject = s.decision === '반려';
-                    return (
-                      <tr key={idx}>
-                        <td className="border border-[#bbb] px-2 py-1.5 text-center text-[#222]">
-                          <span className={`inline-block px-1 py-0.5 rounded text-[10px] font-bold ${isReject ? 'text-red-600' : 'text-teal'}`}>
-                            [{s.decision || s.kind}]
-                          </span>{' '}
-                          <span className="font-semibold">{name}</span> {pos && <span className="text-[10.5px] text-[#666]">{pos}</span>}
-                          {dept && <div className="text-[10px] text-[#888]">{dept}</div>}
-                        </td>
-                        <td className="border border-[#bbb] px-2 py-1.5 text-center text-[10.5px] text-[#666]">
-                          {s.decidedAt ? korDate(s.decidedAt) : '—'}
-                        </td>
-                        <td className="border border-[#bbb] px-2.5 py-1.5 text-left text-[#222] whitespace-pre-wrap leading-relaxed">
-                          {s.comment}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          );
-        })()}
-
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
           {closing.trim() && <div>{closing}</div>}
           <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
