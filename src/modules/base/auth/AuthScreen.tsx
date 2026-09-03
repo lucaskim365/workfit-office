@@ -1,219 +1,746 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card } from '@/shared/ui/Card';
-import { ActionBar } from '@/shared/ui/ActionBar';
-import { Select, type Option } from '@/shared/ui/FilterBar';
-import { PERM_MENUS, PERM_COLS, type RoleGroup } from '@/domain/roleGroup/schema';
+import {
+  SYSTEM_SCREENS,
+  PERM_CATEGORIES,
+  type RoleGroup,
+  type PermCategoryId,
+  type ActionPermission,
+} from '@/domain/roleGroup/schema';
 import { useRoleGroups, useSaveRoleGroup } from '@/features/roleGroup/useRoleGroups';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { SelectorDialog } from '@/modules/gw/approval/components/DraftRecipientSection';
+import { ROLE_GROUP_SEED, getDefaultPermissionsForGroup } from '@/data/seeds/roleGroup.seed';
 
-const MENUS = PERM_MENUS;
-const USE_OPTIONS: Option[] = [
-  { value: '사용', label: '사용' },
-  { value: '미사용', label: '미사용' },
-];
+const DEFAULT_ACTIONS: ActionPermission = {
+  access: false,
+  create: false,
+  update: false,
+  delete: false,
+  excel: false,
+  admin: false,
+};
 
-function Check({ on, onClick }: { on: boolean; onClick?: () => void }) {
+function Checkbox({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`grid h-[18px] w-[18px] place-items-center rounded border transition-colors ${
-        on ? 'border-teal bg-teal' : 'border-border-hi bg-panel hover:border-teal'
-      }`}
-    >
-      {on && (
-        <svg width="11" height="11" viewBox="0 0 12 12">
-          <path d="M2 6.2l2.6 2.6L10 3" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-    </button>
+    <input
+      type="checkbox"
+      disabled={disabled}
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      className="h-4 w-4 rounded border-border text-teal focus:ring-teal cursor-pointer disabled:opacity-40"
+    />
   );
 }
 
-/** 그룹권한관리 — 역할그룹 목록 + 상세 + 메뉴권한 매트릭스. 와이어프레임 sub-auth.jsx 정본. */
 export default function AuthScreen() {
-  const [selected, setSelected] = useState('ADMIN');
-  const [search, setSearch] = useState('');
-  /** 그룹별 권한 매트릭스 로컬 편집 오버라이드(저장 전). */
-  const [edits, setEdits] = useState<Record<string, boolean[][]>>({});
-
-  const { data: groups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
+  const org = useOrgTree();
+  const { data: rawGroups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
   const saveGroup = useSaveRoleGroup();
 
-  const group = groups.find((g) => g.code === selected) ?? groups[0];
-  const grid = (group && (edits[group.code] ?? group.permissions)) ?? [];
-  const filteredGroups = groups.filter(
-    (g) => !search || g.code.toLowerCase().includes(search.toLowerCase()) || g.name.includes(search),
-  );
+  const effectiveGroups = useMemo(() => {
+    const list = (rawGroups && rawGroups.length > 0) ? rawGroups : ROLE_GROUP_SEED;
+    return list.map((g) => {
+      const hasPerms = g.menuPermissions && Object.keys(g.menuPermissions).length > 0;
+      if (!hasPerms) {
+        return {
+          ...g,
+          menuPermissions: getDefaultPermissionsForGroup(g.code, g.name),
+        };
+      }
+      return g;
+    });
+  }, [rawGroups]);
 
-  const toggleCell = (mi: number, ci: number) => {
-    if (!group) return;
-    const next = grid.map((row) => [...row]);
-    next[mi][ci] = !next[mi][ci];
-    setEdits((prev) => ({ ...prev, [group.code]: next }));
+  const [selectedCode, setSelectedCode] = useState('ADMIN');
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'members' | 'matrix'>('matrix');
+  const [selectedCat, setSelectedCat] = useState<PermCategoryId | 'ALL'>('ALL');
+  const [msg, setMsg] = useState('');
+
+  // 로컬 편집 상태 캐시 (그룹별 draft)
+  const [groupDrafts, setGroupDrafts] = useState<Record<string, RoleGroup>>({});
+
+  // 팝업 선택기 상태
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const selectedGroup: RoleGroup | undefined = useMemo(() => {
+    const raw = groupDrafts[selectedCode] || effectiveGroups.find((g) => g.code === selectedCode) || effectiveGroups[0];
+    if (!raw) return undefined;
+    const hasPerms = raw.menuPermissions && Object.keys(raw.menuPermissions).length > 0;
+    if (!hasPerms) {
+      return {
+        ...raw,
+        menuPermissions: getDefaultPermissionsForGroup(raw.code, raw.name),
+      };
+    }
+    return raw;
+  }, [groupDrafts, selectedCode, effectiveGroups]);
+
+  const updateSelectedGroup = (patch: Partial<RoleGroup>) => {
+    if (!selectedGroup) return;
+    const next: RoleGroup = { ...selectedGroup, ...patch };
+    setGroupDrafts((prev) => ({ ...prev, [selectedGroup.code]: next }));
   };
-  const toggleRow = (mi: number) => {
-    if (!group) return;
-    const allOn = grid[mi].every(Boolean);
-    const next = grid.map((row) => [...row]);
-    next[mi] = next[mi].map(() => !allOn);
-    setEdits((prev) => ({ ...prev, [group.code]: next }));
+
+  const updatePermission = (urlOrId: string, patch: Partial<ActionPermission>) => {
+    if (!selectedGroup) return;
+    const currentMap = selectedGroup.menuPermissions || {};
+    const existing = currentMap[urlOrId] || { ...DEFAULT_ACTIONS };
+    const nextAction: ActionPermission = { ...existing, ...patch };
+    const nextMap = { ...currentMap, [urlOrId]: nextAction };
+    updateSelectedGroup({ menuPermissions: nextMap });
   };
-  const savePermissions = () => {
-    if (group) saveGroup.mutate({ ...group, permissions: grid });
+
+  const setCategoryAll = (catId: PermCategoryId, checked: boolean) => {
+    if (!selectedGroup) return;
+    const currentMap = { ...(selectedGroup.menuPermissions || {}) };
+    SYSTEM_SCREENS.filter((s) => s.category === catId).forEach((s) => {
+      const supported = s.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
+      const act: ActionPermission = {
+        access: supported.includes('access') ? checked : false,
+        create: supported.includes('create') ? checked : false,
+        update: supported.includes('update') ? checked : false,
+        delete: supported.includes('delete') ? checked : false,
+        excel: supported.includes('excel') ? checked : false,
+        admin: supported.includes('admin') ? checked : false,
+      };
+      currentMap[s.url] = act;
+      currentMap[s.id] = act;
+    });
+    updateSelectedGroup({ menuPermissions: currentMap });
   };
+
+  const setRowAll = (url: string, id: string, checked: boolean) => {
+    if (!selectedGroup) return;
+    const s = SYSTEM_SCREENS.find((sc) => sc.url === url || sc.id === id);
+    const supported = s?.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
+    const currentMap = { ...(selectedGroup.menuPermissions || {}) };
+    const act: ActionPermission = {
+      access: supported.includes('access') ? checked : false,
+      create: supported.includes('create') ? checked : false,
+      update: supported.includes('update') ? checked : false,
+      delete: supported.includes('delete') ? checked : false,
+      excel: supported.includes('excel') ? checked : false,
+      admin: supported.includes('admin') ? checked : false,
+    };
+    currentMap[url] = act;
+    currentMap[id] = act;
+    updateSelectedGroup({ menuPermissions: currentMap });
+  };
+
+  const handleCreateNewGroup = () => {
+    const newCode = `CUSTOM_${Date.now().toString().slice(-4)}`;
+    const newGroup: RoleGroup = {
+      id: newCode,
+      code: newCode,
+      name: '새 권한 그룹',
+      desc: '',
+      use: true,
+      isSystem: false,
+      userIds: [],
+      deptIds: [],
+      positionRanks: [],
+      menuPermissions: {},
+      members: [],
+      permissions: [],
+    };
+    setGroupDrafts((prev) => ({ ...prev, [newCode]: newGroup }));
+    setSelectedCode(newCode);
+    setMsg('새 권한 그룹이 생성되었습니다. 설정 후 저장하세요.');
+  };
+
+  const handleSave = () => {
+    if (!selectedGroup) return;
+    saveGroup.mutate(selectedGroup, {
+      onSuccess: () => {
+        setMsg(`[${selectedGroup.name}] 그룹 권한이 안전하게 저장되었습니다.`);
+        setTimeout(() => setMsg(''), 3000);
+      },
+      onError: (err) => {
+        setMsg(`저장 실패: ${String(err)}`);
+      },
+    });
+  };
+
+  const filteredGroups: RoleGroup[] = useMemo(() => {
+    const list: RoleGroup[] = Object.values({
+      ...effectiveGroups.reduce((acc: Record<string, RoleGroup>, g: RoleGroup) => ({ ...acc, [g.code]: g }), {}),
+      ...groupDrafts,
+    });
+    if (!search) return list;
+    const q = search.toLowerCase();
+    return list.filter((g: RoleGroup) => g.code.toLowerCase().includes(q) || g.name.toLowerCase().includes(q));
+  }, [effectiveGroups, groupDrafts, search]);
+
+  const visibleScreens = useMemo(() => {
+    if (selectedCat === 'ALL') return SYSTEM_SCREENS;
+    return SYSTEM_SCREENS.filter((s) => s.category === selectedCat);
+  }, [selectedCat]);
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex items-end justify-between">
+      {/* 상단 타이틀 바 */}
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">그룹권한관리</h1>
-          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 사용자·거래처</p>
+          <p className="mt-0.5 text-xs text-ink3">
+            역할 그룹별로 전체 35개 화면의 접근 권한 및 세부 액션(작성·수정·삭제·엑셀·관리)을 설정합니다.
+          </p>
         </div>
-        <ActionBar actions={[{ preset: 'add', label: '그룹 추가' }, 'save', 'download']} />
+        <div className="flex items-center gap-2">
+          {msg && <span className="text-[12px] font-bold text-teal">{msg}</span>}
+          <button
+            type="button"
+            onClick={handleCreateNewGroup}
+            className="rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-semibold text-ink hover:bg-panel-alt transition-colors cursor-pointer"
+          >
+            + 새 권한 그룹
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveGroup.isPending}
+            className="rounded-lg bg-teal px-4 py-1.5 text-[12px] font-bold text-white hover:bg-teal-dark transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            {saveGroup.isPending ? '저장 중…' : '변경사항 저장'}
+          </button>
+        </div>
       </div>
 
-      {/* 상단: 그룹 목록 + 상세 */}
-      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[360px_1fr]">
-        <Card title="역할그룹 목록" bodyClassName="p-0">
-          <div className="flex items-center gap-2 border-b border-border p-3">
+      {/* 2-Panel 레이아웃 */}
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[320px_1fr]">
+        {/* [좌측 패널] 권한 그룹 목록 */}
+        <Card title="역할 그룹 목록" bodyClassName="p-0">
+          <div className="border-b border-border p-2.5">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="역할그룹명·코드 검색"
-              className="h-8 flex-1 rounded-md border border-border-hi bg-panel px-3 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal"
+              placeholder="그룹명 또는 코드 검색"
+              className="h-8 w-full rounded-md border border-border-hi bg-panel px-3 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal"
             />
           </div>
-          <div>
+          <div className="max-h-[650px] overflow-y-auto divide-y divide-border">
             {filteredGroups.map((g) => {
-              const on = g.code === selected;
+              const active = g.code === selectedCode;
               return (
                 <button
                   key={g.code}
-                  onClick={() => setSelected(g.code)}
-                  style={on ? { boxShadow: 'inset 3px 0 0 0 var(--color-teal)' } : undefined}
-                  className={`flex w-full items-center gap-2 border-b border-border px-4 py-3 text-left text-[12.5px] transition-colors ${
-                    on ? 'bg-teal-soft' : 'hover:bg-panel-alt'
+                  type="button"
+                  onClick={() => {
+                    setSelectedCode(g.code);
+                    setMsg('');
+                  }}
+                  className={`flex w-full items-start justify-between p-3 text-left transition-colors cursor-pointer ${
+                    active ? 'bg-teal-soft/40 border-l-4 border-l-teal' : 'hover:bg-panel-alt'
                   }`}
                 >
-                  <span className={`font-mono font-bold ${on ? 'text-teal' : 'text-ink'}`}>{g.code}</span>
-                  <span className="text-[11.5px] text-ink3">({g.name})</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[12.5px] font-bold truncate ${active ? 'text-teal' : 'text-ink'}`}>
+                        {g.name}
+                      </span>
+                      {g.isSystem ? (
+                        <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9.5px] font-bold text-ink3 border border-border">
+                          시스템
+                        </span>
+                      ) : (
+                        <span className="rounded bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 text-[9.5px] font-bold text-blue-600 border border-blue-200 dark:border-blue-800">
+                          커스텀
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] font-mono text-ink3 mt-0.5">{g.code}</div>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      g.use ? 'bg-teal-soft text-teal' : 'bg-slate-100 text-ink3'
+                    }`}
+                  >
+                    {g.use ? '사용' : '미사용'}
+                  </span>
                 </button>
               );
             })}
           </div>
         </Card>
 
-        <Card
-          title="상세정보"
-          action={<ActionBar actions={[{ preset: 'save', label: '저장' }]} />}
-        >
-          <div className="flex flex-col gap-3">
-            <FieldRow label="역할그룹명" required>
-              <div className="flex h-9 items-center rounded-md border border-border-hi bg-panel px-3.5 text-[12.5px] font-bold text-ink">
-                {group?.code}
+        {/* [우측 패널] 그룹 상세 및 권한 매트릭스 */}
+        {selectedGroup ? (
+          <div className="space-y-3.5">
+            {/* 서브 탭 헤더 */}
+            <div className="flex items-center justify-between border-b border-border bg-panel px-4 pt-3 rounded-t-xl">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('matrix')}
+                  className={`pb-2.5 px-3 text-[13px] font-bold border-b-2 transition-all cursor-pointer ${
+                    activeTab === 'matrix'
+                      ? 'border-teal text-teal font-extrabold'
+                      : 'border-transparent text-ink3 hover:text-ink'
+                  }`}
+                >
+                  화면 및 기능 권한 매트릭스
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('members')}
+                  className={`pb-2.5 px-3 text-[13px] font-bold border-b-2 transition-all cursor-pointer ${
+                    activeTab === 'members'
+                      ? 'border-teal text-teal font-extrabold'
+                      : 'border-transparent text-ink3 hover:text-ink'
+                  }`}
+                >
+                  기본 정보 & 대상자 설정 ({selectedGroup.userIds?.length ?? 0}명 / {selectedGroup.deptIds?.length ?? 0}개 부서)
+                </button>
               </div>
-            </FieldRow>
-            <FieldRow label="사용여부">
-              <Select value="사용" onChange={() => {}} options={USE_OPTIONS} width={140} />
-            </FieldRow>
-            <FieldRow label="구성원">
-              <div className="flex flex-wrap gap-2">
-                {(group?.members ?? []).map((m) => (
-                  <span
-                    key={m.code}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#cfe0fb] bg-blue-soft py-1.5 pl-3 pr-2 text-[11.5px] font-semibold text-navy"
-                  >
-                    {m.name}
-                    <span className="font-normal text-ink3">({m.code})</span>
-                    <span className="grid h-4 w-4 place-items-center rounded-full border border-[#f3c6c1] bg-panel text-[10px] font-bold text-danger">
-                      ×
+
+              <label className="flex items-center gap-1.5 text-[11.5px] font-bold text-ink2 pb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedGroup.use}
+                  onChange={(e) => updateSelectedGroup({ use: e.target.checked })}
+                  className="rounded border-border text-teal focus:ring-teal"
+                />
+                그룹 활성화(사용)
+              </label>
+            </div>
+
+            {/* 탭 1: 기본 정보 & 대상자 설정 */}
+            {activeTab === 'members' && (
+              <div className="space-y-4">
+                {selectedGroup.code === 'ADMIN' && (
+                  <div className="rounded-lg bg-teal-soft/50 border border-teal/20 p-3 text-[12px] text-teal-dark font-medium flex items-center justify-between">
+                    <div>
+                      <span className="font-bold mr-1.5">[시스템 고정]</span>
+                      최고 관리자 권한은 <strong>데이터플랫폼 개발팀(D240)</strong> 부서에 시스템 기본으로 고정 배정되어 있습니다.
+                    </div>
+                  </div>
+                )}
+                {selectedGroup.code === 'USER' && (
+                  <div className="rounded-lg bg-panel-alt border border-border p-3 text-[12px] text-ink2 font-medium flex items-center justify-between">
+                    <div>
+                      <span className="font-bold mr-1.5">[시스템 기본]</span>
+                      전사 모든 임직원이 기본 포함되는 그룹입니다. 대상자는 고정되어 있으며, 권한 매트릭스를 통해 기본 권한 범위를 조정할 수 있습니다.
+                    </div>
+                  </div>
+                )}
+
+                <Card title="1. 그룹 기본 정보">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-ink3 mb-1">역할 그룹명</label>
+                      <input
+                        disabled={selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
+                        value={selectedGroup.name}
+                        onChange={(e) => updateSelectedGroup({ name: e.target.value })}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-ink3 mb-1">역할 그룹 코드</label>
+                      <input
+                        disabled={true}
+                        value={selectedGroup.code}
+                        className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-teal disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-bold text-ink3 mb-1">설명</label>
+                      <textarea
+                        rows={2}
+                        disabled={selectedGroup.code === 'ADMIN'}
+                        value={selectedGroup.desc}
+                        onChange={(e) => updateSelectedGroup({ desc: e.target.value })}
+                        placeholder="해당 권한 그룹의 용도 및 담당 역할을 입력하세요."
+                        className="w-full rounded-lg border border-border-hi bg-panel p-2.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-60"
+                      />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card
+                  title="2. 대상자 바인딩 (소속 사원 / 부서 / 직급)"
+                  action={
+                    selectedGroup.code !== 'ADMIN' && selectedGroup.code !== 'USER' ? (
+                      <button
+                        type="button"
+                        onClick={() => setPickerOpen(true)}
+                        className="rounded bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:bg-teal-dark transition-colors cursor-pointer"
+                      >
+                        + 사원/부서 추가
+                      </button>
+                    ) : undefined
+                  }
+                >
+                  <div className="space-y-4">
+                    {/* 지정 사원 */}
+                    <div>
+                      <div className="text-[11.5px] font-bold text-ink mb-1.5">
+                        지정 사원 ({selectedGroup.userIds?.length ?? 0}명)
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 rounded-lg border border-dashed border-border bg-panel-alt/30">
+                        {selectedGroup.code === 'ADMIN' ? (
+                          <span className="text-[11px] text-ink3 my-auto">지정 부서(데이터플랫폼 개발팀) 소속 임직원 전체에게 자동 상속됩니다.</span>
+                        ) : selectedGroup.code === 'USER' ? (
+                          <span className="text-[11px] text-ink3 my-auto">전사 모든 임직원이 기본 포함됩니다.</span>
+                        ) : (selectedGroup.userIds ?? []).length === 0 ? (
+                          <span className="text-[11px] text-ink3 my-auto">지정된 개별 사원이 없습니다.</span>
+                        ) : (
+                          selectedGroup.userIds?.map((uid) => {
+                            const u = org.userById(uid);
+                            return (
+                              <span
+                                key={uid}
+                                className="inline-flex items-center gap-1 rounded-md bg-teal-soft px-2 py-1 text-[11px] font-bold text-teal border border-teal/20"
+                              >
+                                <span>[사원]</span>
+                                <span>{u ? `${u.name} (${u.dept}, ${u.position})` : uid}</span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateSelectedGroup({
+                                      userIds: selectedGroup.userIds?.filter((id) => id !== uid),
+                                    })
+                                  }
+                                  className="ml-1 hover:text-red-500 font-bold cursor-pointer text-[11px]"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 지정 부서 */}
+                    <div>
+                      <div className="text-[11.5px] font-bold text-ink mb-1.5">
+                        지정 부서 ({selectedGroup.deptIds?.length ?? 0}개 부서)
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 rounded-lg border border-dashed border-border bg-panel-alt/30">
+                        {(selectedGroup.deptIds ?? []).length === 0 ? (
+                          <span className="text-[11px] text-ink3 my-auto">지정된 부서가 없습니다.</span>
+                        ) : (
+                          selectedGroup.deptIds?.map((did) => {
+                            // 부서 ID(did)를 기준으로 org.depts에서 이름 동적 조회
+                            const d = org.depts.find((dept) => dept.id === did);
+                            const deptName = d?.name || (did === 'D240' ? '데이터플랫폼 개발팀' : did);
+                            const isLockedDept = selectedGroup.code === 'ADMIN' && did === 'D240';
+
+                            return (
+                              <span
+                                key={did}
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-soft px-2 py-1 text-[11px] font-bold text-navy border border-blue-200"
+                              >
+                                <span>[부서]</span>
+                                <span>{deptName}</span>
+                                {!isLockedDept && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateSelectedGroup({
+                                        deptIds: selectedGroup.deptIds?.filter((id) => id !== did),
+                                      })
+                                    }
+                                    className="ml-1 hover:text-red-500 font-bold cursor-pointer text-[11px]"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 직급 서열 바인딩 */}
+                    <div>
+                      <div className="text-[11.5px] font-bold text-ink mb-1.5">직급 서열 범위 자동 포함</div>
+                      <div className="flex flex-wrap gap-2 p-2.5 rounded-lg border border-border bg-panel">
+                        {org.positions
+                          .slice()
+                          .sort((a: any, b: any) => a.rank - b.rank)
+                          .map((p: any) => {
+                            const checked = selectedGroup.code === 'ADMIN'
+                              ? false
+                              : (selectedGroup.positionRanks?.includes(p.rank) ?? false);
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-1.5 text-[11.5px] font-medium text-ink2 mr-2 ${
+                                  selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : 'cursor-pointer'
+                                }`}
+                              >
+                                <Checkbox
+                                  disabled={selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
+                                  checked={checked}
+                                  onChange={(c) => {
+                                    const current = selectedGroup.positionRanks ?? [];
+                                    const next = c ? [...current, p.rank] : current.filter((r) => r !== p.rank);
+                                    updateSelectedGroup({ positionRanks: next });
+                                  }}
+                                />
+                                <span>{p.name}</span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* 탭 2: 메뉴 & 기능 권한 매트릭스 */}
+            {activeTab === 'matrix' && (
+              <Card
+                title={`전체 화면 권한 매트릭스 (${visibleScreens.length}개 화면)`}
+                action={
+                  selectedGroup.code !== 'ADMIN' ? (
+                    <div className="flex items-center gap-1">
+                      {selectedCat !== 'ALL' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setCategoryAll(selectedCat, true)}
+                            className="rounded border border-border px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors cursor-pointer"
+                          >
+                            카테고리 허용
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCategoryAll(selectedCat, false)}
+                            className="rounded border border-border px-2 py-1 text-[11px] font-bold text-ink3 hover:bg-panel-alt transition-colors cursor-pointer"
+                          >
+                            카테고리 해제
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextMap = { ...(selectedGroup.menuPermissions || {}) };
+                          SYSTEM_SCREENS.forEach((s) => {
+                            const act: ActionPermission = {
+                              access: true,
+                              create: true,
+                              update: true,
+                              delete: true,
+                              excel: true,
+                              admin: true,
+                            };
+                            nextMap[s.url] = act;
+                            nextMap[s.id] = act;
+                          });
+                          updateSelectedGroup({ menuPermissions: nextMap });
+                        }}
+                        className="rounded border border-border px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors cursor-pointer"
+                      >
+                        전체 허용
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedGroup({ menuPermissions: {} })}
+                        className="rounded border border-border px-2 py-1 text-[11px] font-bold text-ink3 hover:bg-panel-alt transition-colors cursor-pointer"
+                      >
+                        전체 초기화
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-bold text-teal bg-teal-soft px-2 py-0.5 rounded">
+                      상시 전체 허용 (고정)
                     </span>
-                  </span>
-                ))}
-              </div>
-            </FieldRow>
-            <FieldRow label="비고" top>
-              <div className="min-h-[56px] rounded-md border border-border-hi bg-panel px-3.5 py-2.5 text-[12px] leading-relaxed text-ink2">
-                {group?.desc}
-              </div>
-            </FieldRow>
+                  )
+                }
+                bodyClassName="p-0"
+              >
+                {selectedGroup.code === 'ADMIN' && (
+                  <div className="bg-teal-soft/40 border-b border-teal/20 px-3 py-2 text-[11.5px] text-teal-dark font-medium">
+                    최고 관리자 그룹은 시스템 전역의 모든 메뉴 및 기능에 대한 전체 접근 권한이 상시 보장됩니다.
+                  </div>
+                )}
+
+                {/* 카테고리 필터 탭 */}
+                <div className="flex flex-wrap items-center gap-1 border-b border-border bg-panel-alt/40 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCat('ALL')}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                      selectedCat === 'ALL' ? 'bg-teal text-white' : 'text-ink3 hover:bg-panel'
+                    }`}
+                  >
+                    전체 모듈 ({SYSTEM_SCREENS.length})
+                  </button>
+                  {PERM_CATEGORIES.map((cat) => {
+                    const count = SYSTEM_SCREENS.filter((s) => s.category === cat.id).length;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCat(cat.id)}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                          selectedCat === cat.id ? 'bg-teal text-white' : 'text-ink3 hover:bg-panel'
+                        }`}
+                      >
+                        {cat.name} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 매트릭스 테이블 */}
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-[11.5px]">
+                    <thead>
+                      <tr className="border-b border-border bg-panel-alt/70 text-ink2 font-bold text-[11px]">
+                        <th className="px-3 py-2 w-32">모듈 구분</th>
+                        <th className="px-3 py-2">화면명 (URL)</th>
+                        <th className="px-2 py-2 text-center w-16">접근</th>
+                        <th className="px-2 py-2 text-center w-20">작성/수정</th>
+                        <th className="px-2 py-2 text-center w-16">삭제</th>
+                        <th className="px-2 py-2 text-center w-16">엑셀</th>
+                        <th className="px-2 py-2 text-center w-16">관리기능</th>
+                        <th className="px-3 py-2 text-center w-20">행 일괄</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {visibleScreens.map((s) => {
+                        const supported = s.supportedActions || ['access', 'create', 'update', 'delete', 'excel', 'admin'];
+                        const perm = selectedGroup.code === 'ADMIN'
+                          ? { access: true, create: true, update: true, delete: true, excel: true, admin: true }
+                          : (selectedGroup.menuPermissions?.[s.url] ||
+                             selectedGroup.menuPermissions?.[s.id] || { ...DEFAULT_ACTIONS });
+                        const isAllChecked = supported.every((act) => perm[act]);
+                        const catLabel = PERM_CATEGORIES.find((c) => c.id === s.category)?.name || s.category;
+                        const isAdmin = selectedGroup.code === 'ADMIN';
+                        const isWriteSupported = supported.includes('create') || supported.includes('update');
+                        const isWriteChecked = perm.create || perm.update;
+
+                        return (
+                          <tr key={s.id} className="hover:bg-panel-alt/50 transition-colors">
+                            <td className="px-3 py-2 font-semibold text-ink3">{catLabel}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-bold text-ink">{s.name}</div>
+                              <div className="text-[10px] font-mono text-ink3">{s.url}</div>
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {supported.includes('access') ? (
+                                <Checkbox
+                                  disabled={isAdmin}
+                                  checked={perm.access}
+                                  onChange={(c) => updatePermission(s.url, { access: c })}
+                                />
+                              ) : (
+                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {isWriteSupported ? (
+                                <Checkbox
+                                  disabled={isAdmin}
+                                  checked={isWriteChecked}
+                                  onChange={(c) => updatePermission(s.url, { create: c, update: c })}
+                                />
+                              ) : (
+                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {supported.includes('delete') ? (
+                                <Checkbox
+                                  disabled={isAdmin}
+                                  checked={perm.delete}
+                                  onChange={(c) => updatePermission(s.url, { delete: c })}
+                                />
+                              ) : (
+                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {supported.includes('excel') ? (
+                                <Checkbox
+                                  disabled={isAdmin}
+                                  checked={perm.excel}
+                                  onChange={(c) => updatePermission(s.url, { excel: c })}
+                                />
+                              ) : (
+                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              {supported.includes('admin') ? (
+                                <Checkbox
+                                  disabled={isAdmin}
+                                  checked={perm.admin}
+                                  onChange={(c) => updatePermission(s.url, { admin: c })}
+                                />
+                              ) : (
+                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                type="button"
+                                disabled={isAdmin}
+                                onClick={() => setRowAll(s.url, s.id, !isAllChecked)}
+                                className={`rounded px-2 py-0.5 text-[10.5px] font-bold transition-colors ${
+                                  isAdmin
+                                    ? 'opacity-40 cursor-not-allowed text-ink3'
+                                    : isAllChecked
+                                    ? 'bg-teal-soft text-teal hover:bg-teal-soft/80'
+                                    : 'border border-border text-ink3 hover:bg-panel-alt'
+                                }`}
+                              >
+                                {isAllChecked ? '해제' : '전체'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </div>
-        </Card>
+        ) : null}
       </div>
 
-      {/* 하단: 메뉴권한 매트릭스 */}
-      <Card
-        title="메뉴권한 목록"
-        action={<ActionBar actions={[{ preset: 'save', label: '권한 저장', variant: 'primary', onClick: savePermissions }]} />}
-        bodyClassName="p-0"
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[11.5px]">
-            <thead>
-              <tr>
-                <th className="w-11 border-r border-white/10 bg-navy px-2.5 py-2.5 text-center text-[10.5px] font-bold text-[#dfe6f2]">
-                  전체
-                </th>
-                <th className="border-r border-white/10 bg-navy px-2.5 py-2.5 text-left text-[10.5px] font-bold text-[#dfe6f2]">
-                  메뉴명
-                </th>
-                {PERM_COLS.map((c) => (
-                  <th
-                    key={c}
-                    className="w-16 border-r border-white/10 bg-navy px-2.5 py-2.5 text-center text-[10.5px] font-bold text-[#dfe6f2]"
-                  >
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {MENUS.map((menu, mi) => {
-                const row = grid[mi] ?? PERM_COLS.map(() => false);
-                return (
-                <tr key={menu} className={mi % 2 ? 'bg-panel-alt' : 'bg-panel'}>
-                  <td className="border-b border-r border-border px-2.5 py-2 text-center">
-                    <div className="flex justify-center">
-                      <Check on={row.every(Boolean)} onClick={() => toggleRow(mi)} />
-                    </div>
-                  </td>
-                  <td className="border-b border-r border-border px-2.5 py-2 font-bold text-ink">{menu}</td>
-                  {row.map((on, ci) => (
-                    <td key={ci} className="border-b border-r border-border px-2.5 py-2 text-center">
-                      <div className="flex justify-center">
-                        <Check on={on} onClick={() => toggleCell(mi, ci)} />
-                      </div>
-                    </td>
-                  ))}
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
+      {/* 사원/부서 선택 모달 다이얼로그 */}
+      {pickerOpen && (
+        <SelectorDialog
+          title="권한 그룹 대상자 추가"
+          org={org}
+          singleSelect={false}
+          onConfirm={(items: any[]) => {
+            const addedUserIds = items.filter((x) => x.type === 'user').map((x) => x.id);
+            const addedDeptIds = items.filter((x) => x.type === 'dept').map((x) => x.id);
 
-function FieldRow({
-  label,
-  required,
-  top,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  top?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`grid grid-cols-[92px_1fr] gap-3.5 ${top ? 'items-start' : 'items-center'}`}>
-      <span className={`text-[12.5px] font-bold text-ink2 ${top ? 'pt-2' : ''}`}>
-        {label}
-        {required && <span className="ml-0.5 text-danger">*</span>}
-      </span>
-      {children}
+            const currentUserIds = selectedGroup?.userIds ?? [];
+            const currentDeptIds = selectedGroup?.deptIds ?? [];
+
+            const nextUsers = Array.from(new Set([...currentUserIds, ...addedUserIds]));
+            const nextDepts = Array.from(new Set([...currentDeptIds, ...addedDeptIds]));
+
+            updateSelectedGroup({ userIds: nextUsers, deptIds: nextDepts });
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

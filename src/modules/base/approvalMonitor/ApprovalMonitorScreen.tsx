@@ -3,7 +3,7 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 
 type MonitorTab = 'ALL' | '진행중' | '완료' | '반려' | '임시저장' | '회수';
 
@@ -37,15 +37,14 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export default function ApprovalMonitorScreen() {
-  const { user } = useAuth();
-  if (user?.id !== 'U012') {
+  const { canAccess } = usePermission();
+  if (!canAccess('/base/approval-monitor')) {
     return (
       <div className="flex h-[calc(100vh-130px)] items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
-          <span className="text-4xl">🔒</span>
-          <h2 className="text-lg font-bold text-ink">접근 권한 제한</h2>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
+          <h2 className="text-base font-bold text-ink">접근 권한 제한</h2>
           <p className="text-xs leading-relaxed text-ink2">
-            죄송합니다. 이 화면은 <b>홍채원</b> 사원 전용 모니터링 관리 화면입니다. 다른 사용자는 접근할 수 없습니다.
+            해당 화면에 접근할 수 있는 권한이 부여되지 않았습니다. 관리자에게 권한 그룹 배정을 문의하세요.
           </p>
         </div>
       </div>

@@ -140,7 +140,10 @@ export function ApprovalDocumentView({
   // 사용자 정보 조회
   const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
   const userPos = userObj?.position ?? '';
-  const isExecutive = currentUser?.id === 'U001' || userPos === '대표이사' || userPos === '상무' || userPos === '상무이사' || userObj?.dept === '대표이사';
+  const isExecutive =
+    userObj?.roleGroup === 'ADMIN' ||
+    ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
+    userObj?.dept === '대표이사';
 
   // 1단계: 문서 자체의 보안 등급(securityLevel) 및 공개 범위(visibility)에 따른 물리적 접근 차단 판별
   const canAccessDocument = (() => {

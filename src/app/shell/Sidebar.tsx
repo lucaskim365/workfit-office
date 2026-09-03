@@ -1,7 +1,7 @@
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { SCREENS, SCREEN_BY_NAME } from './screens';
-import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 
 interface SidebarProps {
   module: MenuNode;
@@ -19,21 +19,20 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const { module, activeUrl, collapsed, setCollapsed, query, setQuery, railOpen, setRailOpen, favs, toggleFav, openTab } = props;
-  const { user } = useAuth();
-  const isCwhong = user?.id === 'U012';
+  const { canAccess } = usePermission();
 
   const railW = collapsed ? 64 : 210;
   const q = query.trim().toLowerCase();
   
   const searchResults = q
     ? SCREENS.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q))
-        .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong)
+        .filter((x) => canAccess(x.url))
     : [];
     
   const favScreens = favs
     .map((n) => SCREEN_BY_NAME[n])
     .filter(Boolean)
-    .filter((x) => x.id !== 'S_BASE_APMON' || isCwhong) as FlatScreen[];
+    .filter((x) => canAccess(x.url)) as FlatScreen[];
 
   const FavStar = ({ name, white }: { name: string; white?: boolean }) => {
     const on = favs.includes(name);
@@ -129,7 +128,7 @@ export function Sidebar(props: SidebarProps) {
           (module.children ?? [])
             .flatMap((g) =>
               (g.children ?? [])
-                .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
+                .filter((s) => s.use !== false && s.url && canAccess(s.url))
                 .map((s) => ({ s, g }))
             )
             .map(({ s, g }) => {
@@ -172,7 +171,9 @@ export function Sidebar(props: SidebarProps) {
           )
         ) : (
           (module.children ?? []).map((g) => {
-            const containsActive = (g.children ?? []).some((s) => s.url === activeUrl);
+            const accessibleChildren = (g.children ?? []).filter((s) => s.use !== false && s.url && canAccess(s.url));
+            if (accessibleChildren.length === 0) return null;
+            const containsActive = accessibleChildren.some((s) => s.url === activeUrl);
             const open = containsActive || railOpen[g.id] !== false;
             return (
               <div key={g.id} className="mb-0.5">
@@ -187,24 +188,22 @@ export function Sidebar(props: SidebarProps) {
                   <span className="text-[8px] text-ink3">{open ? '▾' : '▸'}</span>
                 </button>
                 {open &&
-                  (g.children ?? [])
-                    .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
-                    .map((s) => {
-                      const a = s.url === activeUrl;
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() => openTab(screenOf(s, module, g))}
-                          className={`flex w-full items-center gap-2.5 rounded-lg py-2 pl-[30px] pr-1.5 text-left transition-colors ${a ? 'bg-teal' : 'hover:bg-panel-alt'}`}
-                        >
-                          <span className={`flex w-4 shrink-0 justify-center ${a ? '' : 'opacity-60'}`}>
-                            <MenuGlyph glyph={s.icon} size={15} color={a ? '#fff' : 'var(--color-ink2)'} />
-                          </span>
-                          <span className={`flex-1 truncate text-[11.5px] ${a ? 'font-bold text-white' : 'font-medium text-ink2'}`}>{s.name}</span>
-                          <FavStar name={s.name} white={a} />
-                        </button>
-                      );
-                    })}
+                  accessibleChildren.map((s) => {
+                    const a = s.url === activeUrl;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => openTab(screenOf(s, module, g))}
+                        className={`flex w-full items-center gap-2.5 rounded-lg py-2 pl-[30px] pr-1.5 text-left transition-colors ${a ? 'bg-teal' : 'hover:bg-panel-alt'}`}
+                      >
+                        <span className={`flex w-4 shrink-0 justify-center ${a ? '' : 'opacity-60'}`}>
+                          <MenuGlyph glyph={s.icon} size={15} color={a ? '#fff' : 'var(--color-ink2)'} />
+                        </span>
+                        <span className={`flex-1 truncate text-[11.5px] ${a ? 'font-bold text-white' : 'font-medium text-ink2'}`}>{s.name}</span>
+                        <FavStar name={s.name} white={a} />
+                      </button>
+                    );
+                  })}
               </div>
             );
           })

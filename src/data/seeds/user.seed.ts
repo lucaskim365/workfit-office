@@ -28,7 +28,7 @@ export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signTyp
   { id: 'U010', empNo: '500002', name: '박광래', dept: 'AX PMO팀', position: '차장', jobTitle: '부팀장', roleGroup: 'OPERATOR', email: 'grpark@workfit.kr', status: '사용', lastLogin: '2026-07-06 18:20', managerId: 'U009', password: DEMO_PW },
   // 데이터플랫폼 개발팀 — 팀장 김승기(부장)
   { id: 'U011', empNo: '600001', name: '김승기', dept: '데이터플랫폼 개발팀', position: '부장', jobTitle: '팀장', roleGroup: 'ADMIN', email: 'sgkim@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:41', managerId: 'U003', password: DEMO_PW },
-  { id: 'U012', empNo: '600002', name: '홍채원', dept: '데이터플랫폼 개발팀', position: '사원', jobTitle: '팀원', roleGroup: 'OPERATOR', email: 'cwhong@workfit.kr', status: '사용', lastLogin: '2026-07-07 06:48', managerId: 'U011', password: DEMO_PW },
+  { id: 'U012', empNo: '600002', name: '홍채원', dept: '데이터플랫폼 개발팀', position: '사원', jobTitle: '팀원', roleGroup: 'ADMIN', email: 'cwhong@workfit.kr', status: '사용', lastLogin: '2026-07-07 06:48', managerId: 'U011', password: DEMO_PW },
   // 테스트 전용 계정 (홍테스터, 김테스터)
   { id: 'A001', empNo: 'A001', name: '홍테스터', dept: '테스트', position: '선임연구원', jobTitle: '테스터', roleGroup: 'OPERATOR', email: 'tester1@workfit.kr', status: '사용', lastLogin: '2026-07-28 09:00', managerId: 'U011', password: DEMO_PW },
   { id: 'A002', empNo: 'A002', name: '김테스터', dept: '테스트', position: '선임연구원', jobTitle: '테스터', roleGroup: 'OPERATOR', email: 'tester2@workfit.kr', status: '사용', lastLogin: '2026-07-28 09:00', managerId: 'U011', password: DEMO_PW },

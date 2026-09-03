@@ -82,7 +82,10 @@ export default function MobileApprovalDetail() {
 
   const userObj = users.find((u) => u.id === me);
   const userPos = userObj?.position ?? '';
-  const isExecutive = me === 'U001' || userPos === '대표이사' || userPos === '상무' || userPos === '상무이사' || userObj?.dept === '대표이사';
+  const isExecutive =
+    userObj?.roleGroup === 'ADMIN' ||
+    ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
+    userObj?.dept === '대표이사';
 
   const canAccessDocument = (() => {
     if (!doc) return true;

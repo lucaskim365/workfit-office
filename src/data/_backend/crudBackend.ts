@@ -44,6 +44,16 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
   // ── Appwrite 직렬화(중첩 → JSON 문자열) ──
   const toRow = (item: T): Record<string, unknown> => {
     const row: Record<string, unknown> = { ...(item as Record<string, unknown>) };
+    // Appwrite 시스템 메타데이터 및 클라이언트 임시 ID 제거
+    delete row.$id;
+    delete row.$createdAt;
+    delete row.$updatedAt;
+    delete row.$permissions;
+    delete row.$databaseId;
+    delete row.$collectionId;
+    delete row.$sequence;
+    delete row.id;
+
     for (const f of jsonFields) {
       const v = (item as Record<string, unknown>)[f];
       row[f] = v == null ? null : JSON.stringify(v);

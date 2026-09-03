@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useGwSummary } from '@/features/gw/useGwSummary';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
 import { useUnseenCount } from '@/features/mail/useMailbox';
@@ -28,6 +29,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const CYAN = '#a2d8a0';
   const nav = useNavigate();
   const { user } = useAuth();
+  const { canAccess } = usePermission();
   const summary = useGwSummary(user?.id);
   const notis = useNotifications(user?.id);
   const unreadCount = notis.filter((n) => !n.read).length;
@@ -52,7 +54,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
   const goDoc = (id: string) => { nav(`/gw/approval?doc=${id}`); onClose(); };
-  const apps = [
+  const rawApps = [
     { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
     { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
     { l: '메일', icon: '✉️', to: 'mail', badge: mailUnseen > 0 ? (mailUnseen > 99 ? '99+' : String(mailUnseen)) : undefined, hot: true },
@@ -67,6 +69,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '조직도', icon: '🏢', to: 'orgchart' },
     { l: '사진첩', icon: '🖼️', to: 'gallery' },
   ];
+  const apps = useMemo(() => rawApps.filter((a) => canAccess('/gw/' + a.to)), [rawApps, canAccess]);
   const notices: [string, string][] = [
     ['[필독] 2분기 안전점검 일정 안내', '06.18'],
     ['하계 휴가 신청 마감 안내', '06.16'],

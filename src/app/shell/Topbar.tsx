@@ -5,6 +5,7 @@ import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
@@ -65,7 +66,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
-  const isCwhong = user?.id === 'U012';
+  const { canAccess } = usePermission();
   const { data: companyInfo } = useCompanyInfo();
   const logoUrl = companyInfo?.logoUrl;
   const navigate = useNavigate();
@@ -177,15 +178,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                       <span className="ml-auto font-semibold opacity-80">{screenCount}</span>
                     </div>
                     <div className="content-scroll min-h-0 flex-1 overflow-y-auto p-0.5" style={{ columns: cols, columnGap: '12px' }}>
-                      {groups.map((g: MenuNode) => (
-                        <div key={g.id} className="mb-2 [break-inside:avoid]">
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-extrabold text-navy">
-                            <MenuGlyph glyph={g.icon} size={14} color="var(--color-teal)" />
-                            {g.name}
-                          </div>
-                          {(g.children ?? [])
-                            .filter((s) => s.use !== false && s.url && (s.id !== 'S_BASE_APMON' || isCwhong))
-                            .map((s) => {
+                      {groups.map((g: MenuNode) => {
+                        const accessibleChildren = (g.children ?? []).filter((s) => s.use !== false && s.url && canAccess(s.url));
+                        if (accessibleChildren.length === 0) return null;
+                        return (
+                          <div key={g.id} className="mb-2 [break-inside:avoid]">
+                            <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-extrabold text-navy">
+                              <MenuGlyph glyph={g.icon} size={14} color="var(--color-teal)" />
+                              {g.name}
+                            </div>
+                            {accessibleChildren.map((s) => {
                               const cur = s.url === activeUrl;
                               return (
                                 <button
@@ -201,8 +203,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                                 </button>
                               );
                             })}
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
