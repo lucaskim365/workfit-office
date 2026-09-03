@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
+import { resolveUserScope, canViewWorkPlan, isLeaderPosition } from '@/features/auth/scopeHelper';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
@@ -52,6 +54,7 @@ function dayTitle(date: string): string {
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
+  const { userRoles } = usePermission();
   const org = useOrgTree();
   const usersQuery = useUsers();
   const users = usersQuery.data ?? [];
@@ -60,6 +63,8 @@ export default function WorkPlanScreen() {
     ?? users.find((user) => user.id === demoUserId)
     ?? users.find((user) => user.status === '사용')
     ?? null;
+
+  const actorScope = useMemo(() => resolveUserScope(actor, userRoles), [actor, userRoles]);
 
   const today = calendarToday();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -102,10 +107,12 @@ export default function WorkPlanScreen() {
     return map;
   }, [org.depts]);
 
-  /** 로스터 대상 — 재직 + 대표/테스트 제외, 부서(조직도순) ➔ 인원(직급순 ➔ 이름순). */
+  /** 로스터 대상 — 권한 스코프(개인/팀장/전사) 적용 + 재직 + 대표/테스트 제외, 부서(조직도순) ➔ 인원(직급순 ➔ 이름순). */
   const roster = useMemo(() => {
+    if (!actor) return [];
     return users
       .filter((user) => user.status === '사용' && !isExcludedFromRoster(user))
+      .filter((user) => canViewWorkPlan(actor, user, actorScope))
       .sort((a, b) => {
         // 1. 부서 조직도 순 정렬
         const orderA = deptOrderMap.get(a.dept) ?? 9999;
@@ -121,7 +128,7 @@ export default function WorkPlanScreen() {
         // 3. 동일 직급 시 이름 가나다순
         return a.name.localeCompare(b.name, 'ko');
       });
-  }, [users, deptOrderMap, org]);
+  }, [users, actor, actorScope, deptOrderMap, org]);
 
   /** 고유 부서 목록 (조직도 순서 유지 동적 추출) */
   const departments = useMemo(() => {
@@ -154,11 +161,18 @@ export default function WorkPlanScreen() {
   const scopedMembers = useMemo(() => {
     const kw = searchKeyword.trim().toLowerCase();
     return roster.filter((user) => {
-      const matchesDept = deptFilter === 'all' || user.dept === deptFilter;
+      let matchesDept = true;
+      if (deptFilter === 'all') {
+        matchesDept = true;
+      } else if (deptFilter === 'leaders') {
+        matchesDept = user.dept !== actor?.dept && isLeaderPosition(user.position, user.jobTitle);
+      } else {
+        matchesDept = user.dept === deptFilter;
+      }
       const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
       return matchesDept && matchesName;
     });
-  }, [roster, deptFilter, searchKeyword]);
+  }, [roster, deptFilter, searchKeyword, actor?.dept]);
 
   /** 필터 칩에 표시될 실시간 인원수 집계 */
   const statusCounts = useMemo(() => {
@@ -182,9 +196,12 @@ export default function WorkPlanScreen() {
     const groups: Array<{ dept: string; members: User[] }> = [];
 
     for (const group of rosterGroups) {
-      if (deptFilter !== 'all' && group.dept !== deptFilter) continue;
+      if (deptFilter !== 'all' && deptFilter !== 'leaders' && group.dept !== deptFilter) continue;
 
       const matchedMembers = group.members.filter((user) => {
+        if (deptFilter === 'leaders' && (user.dept === actor?.dept || !isLeaderPosition(user.position, user.jobTitle))) {
+          return false;
+        }
         const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
         if (!matchesName) return false;
 
@@ -200,7 +217,7 @@ export default function WorkPlanScreen() {
       }
     }
     return groups;
-  }, [rosterGroups, deptFilter, searchKeyword, statusFilter, dayPlanByOwner]);
+  }, [rosterGroups, deptFilter, searchKeyword, statusFilter, dayPlanByOwner, actor?.dept]);
 
   const totalVisibleCount = useMemo(
     () => filteredRosterGroups.reduce((acc, g) => acc + g.members.length, 0),
@@ -349,12 +366,35 @@ export default function WorkPlanScreen() {
             onChange={(e) => setDeptFilter(e.target.value)}
             className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
           >
-            <option value="all">전체 부서 ({roster.length}명)</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d} ({roster.filter((u) => u.dept === d).length}명)
-              </option>
-            ))}
+            {actorScope === 'PERSONAL' ? (
+              <option value="all">내 업무계획 (1명)</option>
+            ) : actorScope === 'LEADER' ? (
+              <>
+                <option value="all">전체 ({roster.length}명)</option>
+                {actor?.dept && (
+                  <option value={actor.dept}>
+                    우리 팀 · {actor.dept} ({roster.filter((u) => u.dept === actor.dept).length}명)
+                  </option>
+                )}
+                <option value="leaders">
+                  타 부서 팀장 모아보기 ({roster.filter((u) => u.dept !== actor?.dept && isLeaderPosition(u.position, u.jobTitle)).length}명)
+                </option>
+                {departments.filter((d) => d !== actor?.dept).map((d) => (
+                  <option key={d} value={d}>
+                    {d} ({roster.filter((u) => u.dept === d).length}명)
+                  </option>
+                ))}
+              </>
+            ) : (
+              <>
+                <option value="all">전체 부서 ({roster.length}명)</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d} ({roster.filter((u) => u.dept === d).length}명)
+                  </option>
+                ))}
+              </>
+            )}
           </select>
 
           {/* 작성 상태 칩 필터 (선택 부서/검색어 기준 동적 카운트) */}

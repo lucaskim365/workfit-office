@@ -15,6 +15,9 @@ import {
   useCommuteMonthAll,
   useCommuteViewer,
 } from '@/features/commute/useCommute';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
+import { resolveUserScope } from '@/features/auth/scopeHelper';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 
@@ -117,10 +120,14 @@ const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-bord
 const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] text-ink outline-none placeholder:text-ink3';
 
 export default function CommuteScreen() {
+  const { user } = useAuth();
+  const { userRoles } = usePermission();
+  const userScope = useMemo(() => resolveUserScope(user, userRoles), [user, userRoles]);
+
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
-  /** 부서원 탭을 열 수 있는 자리인지. 실제 걸러내기는 서버가 하고 이건 노출 판단이다. */
-  const canTeam = canSeeOthers(viewer);
+  /** 부서원/전사 탭을 열 수 있는 자리인지. EXEC(임원) 및 팀장급 이상 또는 viewer 권한 보유자. */
+  const canTeam = userScope === 'COMPANY' || userScope === 'LEADER' || canSeeOthers(viewer);
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
   // 근태 대상이 아닌 등록명은 어느 화면에서도 세지 않는다. 집계까지 흔들린다.
@@ -223,11 +230,11 @@ export default function CommuteScreen() {
 
   const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5';
 
-  /** 1차 전환. 부서원 탭은 볼 수 있는 사람에게만 보인다 — 없는 권한을 눌러 보게 두지 않는다. */
+  /** 1차 전환. 부서원/전사 탭은 볼 수 있는 사람에게만 보인다 — 없는 권한을 눌러 보게 두지 않는다. */
   const tabToggle = (
     <div className={toggleShell}>
       {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => setTab(ME_TAB))}
-      {canTeam && toggleButton(TEAM_TAB, '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
+      {canTeam && toggleButton(TEAM_TAB, userScope === 'COMPANY' ? '전사 근태' : '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
     </div>
   );
 
@@ -240,8 +247,8 @@ export default function CommuteScreen() {
     </div>
   );
 
-  /** 부서원 탭이 지금 덮는 범위. 관리자는 전 직원, 부서장은 맡은 부서다. */
-  const scopeLabel = viewer?.kind === 'admin' ? '전 직원' : (viewer?.deptNames.join(' · ') || '내 부서');
+  /** 부서원 탭이 지금 덮는 범위. 임원은 전 직원, 팀장/부서장은 본인 부서다. */
+  const scopeLabel = userScope === 'COMPANY' ? '전사 전 임직원' : (user?.dept ? `${user.dept} 소속` : (viewer?.deptNames.join(' · ') || '내 부서'));
 
   const searchBox = (
     <input

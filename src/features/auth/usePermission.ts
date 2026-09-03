@@ -122,6 +122,7 @@ export function usePermission() {
   return {
     user,
     myGroups,
+    userRoles: myGroups.map((g) => g.code.replace(/^ROLE_/, '').toUpperCase()),
     isSuperAdmin,
     isExecutive,
     canAccess,
