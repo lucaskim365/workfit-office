@@ -6,7 +6,7 @@ import { z } from 'zod';
  * 정규화한다(Firestore Timestamp 변환은 repo 몫).
  */
 export const COMMUTE_STATUS = [
-  'normal', 'late', 'holiday_work', 'off', 'absent', 'missing_out', 'missing_in', 'unknown',
+  'normal', 'late', 'holiday_work', 'off', 'absent', 'leave', 'missing_out', 'missing_in', 'unknown',
 ] as const;
 
 export type CommuteStatus = (typeof COMMUTE_STATUS)[number];
@@ -15,11 +15,12 @@ export const COMMUTE_STATUS_LABELS: Record<CommuteStatus, string> = {
   normal: '정상',
   late: '지각',
   holiday_work: '휴일근무',
-  off: '휴무',
+  off: '휴무/공휴일',
   absent: '결근',
+  leave: '휴가',
   missing_out: '퇴근 미기록',
   missing_in: '출근 미기록',
-  unknown: '미정',
+  unknown: '—',
 };
 
 export const commuteEmployeeSchema = z.object({
@@ -67,6 +68,8 @@ export const commuteRecordSchema = z.object({
   lateMin: z.number().int(),
   totalMin: z.number().int(),
   status: z.enum(COMMUTE_STATUS),
+  leaveName: z.string().optional(),
+  holidayName: z.string().optional(),
 });
 
 export type CommuteRecord = z.infer<typeof commuteRecordSchema>;
@@ -76,6 +79,7 @@ export interface CommuteMonthSummary {
   workDays: number;
   lateDays: number;
   absentDays: number;
+  leaveDays: number;
   overMinTotal: number;
 }
 
@@ -84,6 +88,7 @@ export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummar
     workDays: rows.filter((row) => row.inAt !== null || row.outAt !== null).length,
     lateDays: rows.filter((row) => row.status === 'late').length,
     absentDays: rows.filter((row) => row.status === 'absent').length,
+    leaveDays: rows.filter((row) => row.status === 'leave').length,
     overMinTotal: rows.reduce((sum, row) => sum + row.overMin, 0),
   };
 }

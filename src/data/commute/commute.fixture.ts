@@ -64,6 +64,7 @@ export const COMMUTE_STATUS_TONES: Record<CommuteStatus, string> = {
   holiday_work: 'bg-blue/12 text-blue',
   off: 'bg-ink3/12 text-ink2',
   absent: 'bg-red-500/12 text-red-500',
+  leave: 'bg-emerald-500/15 text-emerald-600 font-bold',
   missing_out: 'bg-amber/15 text-amber',
   missing_in: 'bg-amber/15 text-amber',
   unknown: 'bg-ink3/12 text-ink2',
