@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useUsers, useUpsertUser } from '@/features/user/useUsers';
+import { useUsers } from '@/features/user/useUsers';
+import { useEmployeeProfiles, useUpsertEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useDepartments } from '@/features/department/useDepartments';
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
@@ -16,10 +17,11 @@ interface OrgNode {
 export default function EmployeeScreen() {
   const { user } = useAuth();
   const { data: users = [], isLoading: isUsersLoading } = useUsers();
+  const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const { data: departments = [] } = useDepartments();
   const { data: positions = [] } = usePositions();
   const { data: jobTitles = [] } = useJobTitles();
-  const upsertUser = useUpsertUser();
+  const upsertEmployeeProfile = useUpsertEmployeeProfile();
 
   // 로그인 사용자 세션 가공 및 권한 식별
   const CURRENT_USER = useMemo(() => {
@@ -115,34 +117,37 @@ export default function EmployeeScreen() {
   // 조직도 노드 접힘 상태 관리
   const [collapsedDepts, setCollapsedDepts] = useState<Record<string, boolean>>({});
 
-  // DB 사용자 목록을 임직원 인터페이스로 어댑팅
+  // DB employeeProfiles 목록을 임직원 인터페이스로 어댑팅 (users 컬렉션과 매핑 및 폴백)
   const employees = useMemo(() => {
+    const profileMap = new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
+
     return users.map((u) => {
+      const p = profileMap.get(u.id);
       const employmentStatus: EmploymentStatus =
-        u.status === '사용' ? 'ACTIVE' : u.status === '잠금' ? 'LEAVE' : 'RETIRED';
+        p?.status || (u.status === '사용' ? 'ACTIVE' : u.status === '잠금' ? 'LEAVE' : 'RETIRED');
       return {
-        id: u.id,
-        employeeNo: u.empNo || u.id,
-        name: u.name,
+        id: p?.id || u.id,
+        employeeNo: p?.empNo || u.empNo || u.id,
+        name: p?.name || u.name,
         userId: u.id,
-        dept: u.dept || '미지정',
-        position: u.position || '사원',
-        duty: u.jobTitle || '팀원',
+        dept: p?.dept || u.dept || '미지정',
+        position: p?.position || u.position || '사원',
+        duty: p?.jobTitle || u.jobTitle || '팀원',
         email: u.email || '',
-        phone: (u as any).phone || '',
+        phone: p?.phone || (u as any).phone || '',
         profileImage: u.photoUrl || '',
-        hireDate: (u as any).hireDate || '',
+        hireDate: p?.hireDate || (u as any).hireDate || '',
         employmentStatus,
-        rrn: (u as any).rrn || '',
-        address: (u as any).address || '',
-        personalEmail: (u as any).personalEmail || '',
-        emergencyPhone: (u as any).emergencyPhone || '',
-        education: (u as any).education || '',
-        gender: (u as any).gender || '',
-        birthDate: (u as any).birthDate || '',
+        rrn: p?.rrn || (u as any).rrn || '',
+        address: p?.address || (u as any).address || '',
+        personalEmail: p?.personalEmail || (u as any).personalEmail || '',
+        emergencyPhone: p?.emergencyPhone || (u as any).emergencyPhone || '',
+        education: p?.education || (u as any).education || '',
+        gender: p?.gender || (u as any).gender || '',
+        birthDate: p?.birthDate || (u as any).birthDate || '',
       };
     });
-  }, [users]);
+  }, [employeeProfiles, users]);
 
   // 고유 소속 부서 목록 추출 (실제 부서 마스터 + 유저 부서)
   const allDepts = useMemo(() => {
@@ -178,7 +183,7 @@ export default function EmployeeScreen() {
 
   // 선택된 상세 사원 객체
   const selectedEmp = useMemo(() => {
-    return employees.find((e) => e.id === selectedUserId) || null;
+    return employees.find((e) => e.id === selectedUserId || e.userId === selectedUserId) || null;
   }, [employees, selectedUserId]);
 
   // 필터링된 임직원 리스트
@@ -256,7 +261,7 @@ export default function EmployeeScreen() {
     return { gender, birthDate };
   };
 
-  // 1. 임직원 인사 발령 제출 (사용자 관리 등록 계정 대상)
+  // 1. 임직원 인사 발령 제출 (신규 employeeProfiles 연동)
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCreateUserId) {
@@ -276,17 +281,16 @@ export default function EmployeeScreen() {
     }
 
     try {
-      await upsertUser.mutateAsync({
+      await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
         values: {
+          userId: targetUser.id,
           empNo: targetUser.empNo,
           name: targetUser.name,
           dept: newEmpDept || departments[0]?.name || '인사지원팀',
           position: newEmpPos || positions[0]?.name || '사원',
           jobTitle: newEmpDuty || '팀원',
-          roleGroup: targetUser.roleGroup,
-          email: targetUser.email,
-          status: targetUser.status,
+          status: 'ACTIVE',
           phone: newEmpPhone.trim(),
           hireDate: newEmpHireDate,
           rrn: newEmpRrn.trim(),
@@ -338,15 +342,13 @@ export default function EmployeeScreen() {
     setIsEditModalOpen(true);
   };
 
-  // 3. 임직원 정보 편집 저장 제출 (DB users 연동)
+  // 3. 임직원 정보 편집 저장 제출 (신규 employeeProfiles 연동)
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserId || !editEmpName.trim()) return;
 
     const targetUser = users.find((u) => u.id === selectedUserId);
     if (!targetUser) return;
-
-    const statusVal = editEmpStatus === 'ACTIVE' ? '사용' : editEmpStatus === 'LEAVE' ? '잠금' : '미사용';
 
     let gender = editEmpGender;
     let birthDate = editEmpBirthDate;
@@ -357,17 +359,16 @@ export default function EmployeeScreen() {
     }
 
     try {
-      await upsertUser.mutateAsync({
+      await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
         values: {
+          userId: targetUser.id,
           empNo: targetUser.empNo,
           name: editEmpName.trim(),
           dept: editEmpDept || '미지정',
           position: editEmpPos || '사원',
           jobTitle: editEmpDuty || '',
-          roleGroup: targetUser.roleGroup,
-          email: editEmpEmail.trim() || targetUser.email,
-          status: statusVal,
+          status: editEmpStatus,
           phone: editEmpPhone.trim(),
           hireDate: editEmpHireDate,
           rrn: editEmpRrn.trim(),
@@ -393,17 +394,10 @@ export default function EmployeeScreen() {
       const targetUser = users.find((u) => u.id === id);
       if (!targetUser) return;
 
-      await upsertUser.mutateAsync({
+      await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
         values: {
-          empNo: targetUser.empNo,
-          name: targetUser.name,
-          dept: targetUser.dept,
-          position: targetUser.position,
-          jobTitle: targetUser.jobTitle,
-          roleGroup: targetUser.roleGroup,
-          email: targetUser.email,
-          status: '미사용',
+          status: 'RETIRED',
         },
       });
       alert('퇴직 처리가 완료되어 재직 목록 및 조직도 검색에서 제외됩니다.');

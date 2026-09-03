@@ -57,6 +57,11 @@ export const userRepo = {
     return applyFilter(await backend.loadAll(), filter);
   },
 
+  async get(id: string): Promise<User | null> {
+    const all = await backend.loadAll();
+    return all.find((u) => u.id === id) ?? null;
+  },
+
   /** 신규 등록 — id 채번 후 저장. */
   async create(values: UserFormValues): Promise<User> {
     const all = await this.list();
