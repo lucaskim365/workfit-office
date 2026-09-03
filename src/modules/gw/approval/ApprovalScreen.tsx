@@ -363,7 +363,7 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className="w-full px-6 pt-2">
+    <div className="w-full min-w-[1080px] px-6 pt-2 pb-6">
       <div className="flex gap-4 items-start w-full">
         {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
         <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
@@ -790,7 +790,7 @@ export default function ApprovalScreen() {
             )}
 
             {/* 우: 상세 */}
-            <div className="rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm overflow-x-auto overflow-y-visible">
+            <div className="rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
               {selDoc ? (
                 <DocDetail
                   key={selDoc.id}
@@ -973,15 +973,15 @@ function DocDetail({
 
   return (
     <div className="flex h-full flex-col min-w-0">
-      {/* 상세 헤더 & 미니 결재선 */}
-      <div className="border-b border-border px-4 sm:px-5 py-3.5 min-w-0">
-        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-4 min-w-0">
+      {/* 상세 헤더 & 미니 결재선 (너비 충분 시 우측 배치, 좁아지면 자연스럽게 아래로 래핑) */}
+      <div className="border-b border-border px-4 sm:px-5 py-3 min-w-0">
+        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 min-w-0">
           {/* 좌측: 문서 기본 정보 */}
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
               <DocStatusBadge doc={doc} me={me} />
               <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
-              <h2 className="truncate text-[16px] font-bold text-ink">{doc.title}</h2>
+              <h2 className="text-[16px] font-bold text-ink truncate">{doc.title}</h2>
             </div>
             <div className="text-[11.5px] text-ink3">
               {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
@@ -998,7 +998,8 @@ function DocDetail({
             )}
           </div>
 
-          {/* 우측: 결재 단계 수에 따른 동적 크기 결재선 플로우차트 (스크롤바 없이 한눈에 맞춤) */}
+          {/* 우측: 결재선 플로우차트 (우측 정렬 & 자연스러운 래핑) */}
+          <div className="shrink-0 flex items-center justify-end select-none">
           {(() => {
             const approvalSteps = doc.steps.filter((s) => s.kind !== '참조').sort((a, b) => a.seq - b.seq);
 
@@ -1027,30 +1028,30 @@ function DocDetail({
 
             const totalCount = 1 + flowGroups.length; // 기안자 + 결재 단계 수
 
-            // 일반 카드 크기 정의 (기존 세로 3단 카드 비율 복구)
-            let cardWidthClass = 'w-[92px] h-[80px]';
-            let nameFontClass = 'text-[11.5px]';
+            // 일반 카드 크기 정의
+            let cardWidthClass = 'w-[90px] h-[76px]';
+            let nameFontClass = 'text-[11px]';
             let subFontClass = 'text-[9px]';
             let arrowFontClass = 'text-[11px]';
             let gapClass = 'gap-1.5';
             let paddingClass = 'p-2';
 
             if (totalCount >= 6) {
-              cardWidthClass = 'w-[64px] h-[64px]';
+              cardWidthClass = 'w-[68px] h-[64px]';
               nameFontClass = 'text-[9.5px]';
               subFontClass = 'text-[7.5px]';
               arrowFontClass = 'text-[8.5px]';
-              gapClass = 'gap-0.5';
+              gapClass = 'gap-1';
               paddingClass = 'p-1';
             } else if (totalCount >= 5) {
-              cardWidthClass = 'w-[74px] h-[70px]';
+              cardWidthClass = 'w-[76px] h-[68px]';
               nameFontClass = 'text-[10px]';
               subFontClass = 'text-[8px]';
               arrowFontClass = 'text-[9px]';
               gapClass = 'gap-1';
               paddingClass = 'p-1.5';
             } else if (totalCount >= 4) {
-              cardWidthClass = 'w-[84px] h-[74px]';
+              cardWidthClass = 'w-[82px] h-[72px]';
               nameFontClass = 'text-[10.5px]';
               subFontClass = 'text-[8.5px]';
               arrowFontClass = 'text-[10px]';
@@ -1058,32 +1059,27 @@ function DocDetail({
               paddingClass = 'p-1.5';
             }
 
-            // 병렬 카드 전용 크기 정의 (가로로 넓고 슬림한 비율)
-            let parallelCardWidthClass = 'w-[135px] h-[48px]';
-            let parallelPaddingClass = 'px-2.5 py-1.5';
-            let parallelNameFontClass = 'text-[11.5px]';
-            let parallelSubFontClass = 'text-[9.5px]';
+            // 병렬 카드 전용 크기 정의
+            let parallelCardWidthClass = 'w-[130px] h-[46px]';
+            let parallelPaddingClass = 'px-2 py-1.2';
+            let parallelNameFontClass = 'text-[11px]';
+            let parallelSubFontClass = 'text-[9px]';
 
             if (totalCount >= 6) {
-              parallelCardWidthClass = 'w-[110px] h-[42px]';
+              parallelCardWidthClass = 'w-[110px] h-[40px]';
               parallelPaddingClass = 'px-1.5 py-1';
               parallelNameFontClass = 'text-[9.5px]';
               parallelSubFontClass = 'text-[7.5px]';
             } else if (totalCount >= 5) {
-              parallelCardWidthClass = 'w-[120px] h-[44px]';
+              parallelCardWidthClass = 'w-[118px] h-[42px]';
               parallelPaddingClass = 'px-2 py-1';
               parallelNameFontClass = 'text-[10px]';
               parallelSubFontClass = 'text-[8px]';
-            } else if (totalCount >= 4) {
-              parallelCardWidthClass = 'w-[125px] h-[46px]';
-              parallelPaddingClass = 'px-2 py-1.2';
-              parallelNameFontClass = 'text-[10.5px]';
-              parallelSubFontClass = 'text-[8.5px]';
             }
 
             return (
-              <div className={'flex shrink-0 items-center ' + gapClass + ' max-w-[65%] py-0.5 select-none'}>
-                {/* 기안자 카드 (기존 세로 3단 카드 그대로 유지) */}
+              <div className={'flex flex-wrap items-center ' + gapClass}>
+                {/* 기안자 카드 */}
                 <div className={cardWidthClass + ' ' + paddingClass + ' shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 text-center shadow-xs'}>
                   <div className={subFontClass + ' font-bold text-teal'}>기안</div>
                   <div className="flex flex-col items-center justify-center flex-1 min-w-0">
@@ -1198,9 +1194,10 @@ function DocDetail({
           })()}
         </div>
       </div>
+    </div>
 
       {/* 헤더 아래 본문 영역 */}
-      <div className="px-3 sm:px-5 py-4 min-w-0 flex-1 overflow-x-auto">
+      <div className="px-4 sm:px-5 py-4 min-w-0 flex-1">
         {/* 수신/참조자 목록 (슬림 인라인 배치 & 수신/참조 태그 명시) */}
         {(() => {
           const effectiveRecipients = getEffectiveRecipients(doc);
@@ -1340,7 +1337,7 @@ function DocDetail({
               🖨 인쇄
             </button>
           </div>
-          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-x-auto overflow-y-visible shadow-sm p-3 sm:p-4">
+          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
             <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>

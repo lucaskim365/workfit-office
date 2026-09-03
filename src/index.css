@@ -67,7 +67,7 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
   zoom: var(--font-scale, 1.1875);
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 
 /* 상단 공지 마퀴 */
