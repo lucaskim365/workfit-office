@@ -22,7 +22,7 @@ const groupBackend = createCrudBackend<RoleGroup>({
   },
   idOf: (x) => x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
-  jsonFields: ['members', 'permissions', 'menuPermissions'],
+  jsonFields: ['members', 'permissions'],
   firestoreEncode: encodeForFirestore,
   firestoreDecode: decodeFromFirestore,
 });
@@ -66,18 +66,37 @@ export const roleGroupRepo = {
     return sourceList.map((g) => {
       // 1. 관계 테이블(roleMappings)에서 해당 그룹의 매핑 항목들 추출 (SSOT)
       const groupMappings = dbMappings.filter((m) => m.roleCode === g.code);
-      const userIds = groupMappings.filter((m) => m.targetType === 'USER').map((m) => m.targetId);
-      const deptIds = groupMappings.filter((m) => m.targetType === 'DEPT').map((m) => m.targetId);
-      const positionRanks = groupMappings
+      let userIds = groupMappings.filter((m) => m.targetType === 'USER').map((m) => m.targetId);
+      let deptIds = groupMappings.filter((m) => m.targetType === 'DEPT').map((m) => m.targetId);
+      let positionRanks = groupMappings
         .filter((m) => m.targetType === 'POSITION')
         .map((m) => Number(m.targetId))
         .filter((n) => !Number.isNaN(n));
 
-      // 2. 권한 매트릭스 기본값 주입
-      const hasPerms = g.menuPermissions && Object.keys(g.menuPermissions).length > 0;
-      const menuPermissions = hasPerms
+      // DB의 roleMappings에 아직 매핑이 없는 경우(초기 상태), 시드의 기본 대상자(ADMIN: D240 등)를 기본값으로 자동 주입
+      if (groupMappings.length === 0) {
+        const seedGroup = ROLE_GROUP_SEED.find((s) => s.code === g.code);
+        if (seedGroup) {
+          userIds = seedGroup.userIds || [];
+          deptIds = seedGroup.deptIds || [];
+          positionRanks = seedGroup.positionRanks || [];
+        }
+      }
+
+      // 2. 권한 매트릭스 기본값 주입 (menuPermissions 속성이 없더라도 permissions 문자열 JSON에서 복원)
+      let menuPermissions = (g.menuPermissions && Object.keys(g.menuPermissions).length > 0)
         ? g.menuPermissions
-        : getDefaultPermissionsForGroup(g.code, g.name);
+        : null;
+
+      if (!menuPermissions && typeof (g as any).permissions === 'string' && (g as any).permissions.startsWith('{')) {
+        try {
+          menuPermissions = JSON.parse((g as any).permissions);
+        } catch {}
+      }
+
+      if (!menuPermissions) {
+        menuPermissions = getDefaultPermissionsForGroup(g.code, g.name);
+      }
 
       return {
         ...g,
@@ -98,19 +117,28 @@ export const roleGroupRepo = {
   async save(group: RoleGroup): Promise<void> {
     const parsed = roleGroupSchema.parse(group);
     
-    // 1. roleGroups 마스터 도큐먼트에는 순수 그룹 메타데이터만 저장 (대상자는 roleMappings에서 단독 관리)
-    // Appwrite collection 스키마에 없는 userIds/deptIds/positionRanks는 페이로드에서 완전 제외하여 스키마 에러 방지
-    const payload: any = {
+    // 1. roleGroups 마스터 도큐먼트 저장 (menuPermissions 속성이 DB에 없더라도 permissions 필드에 JSON 백업)
+    const menuPermJson = JSON.stringify(parsed.menuPermissions ?? {});
+    const basePayload: any = {
       code: parsed.code,
       name: parsed.name,
       desc: parsed.desc ?? '',
       use: parsed.use ?? true,
       isSystem: parsed.isSystem ?? false,
-      menuPermissions: parsed.menuPermissions ?? {},
       members: [],
-      permissions: [],
+      permissions: menuPermJson,
     };
-    await groupBackend.save(payload);
+
+    try {
+      await groupBackend.save({ ...basePayload, menuPermissions: parsed.menuPermissions ?? {} });
+    } catch (e: any) {
+      if (String(e?.message || '').includes('menuPermissions')) {
+        // Appwrite 컬렉션에 menuPermissions 속성이 없으면 기존 permissions 필드에만 저장
+        await groupBackend.save(basePayload);
+      } else {
+        throw e;
+      }
+    }
 
     // 2. 대상자 관계(USER/DEPT/POSITION)는 roleMappings 컬렉션에만 단독 저장/관리 (SSOT)
     try {

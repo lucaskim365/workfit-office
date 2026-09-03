@@ -47,6 +47,8 @@ export function usePermission() {
     if (!user) return [];
     return groups.filter((g) => {
       if (!g.use) return false;
+      // 0) 일반사원(USER) 그룹은 활성화된 모든 로그인 임직원에게 기본 상시 부여 (전사 기본 권한 베이스라인)
+      if (g.code === 'USER') return true;
       // 1) 최고 관리자일 경우
       if (g.code === 'ADMIN' && isSuperAdmin) return true;
       // 2) 레거시 기본 roleGroup 매핑 (ADMIN, OPERATOR, USER)
