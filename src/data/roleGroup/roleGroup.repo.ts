@@ -22,7 +22,7 @@ const groupBackend = createCrudBackend<RoleGroup>({
   },
   idOf: (x) => x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
-  jsonFields: ['members', 'permissions', 'menuPermissions'],
+  jsonFields: ['members', 'menuPermissions'],
   firestoreEncode: encodeForFirestore,
   firestoreDecode: decodeFromFirestore,
 });
@@ -96,7 +96,7 @@ export const roleGroupRepo = {
         } else if (typeof (g as any).permissions === 'string' && (g as any).permissions.startsWith('{')) {
           try {
             rawPermMap = JSON.parse((g as any).permissions);
-          } catch {}
+          } catch { }
         }
       }
 
@@ -138,7 +138,7 @@ export const roleGroupRepo = {
   /** 등록/수정(upsert) - 그룹 마스터(메타) 및 관계 매핑(SSOT) 원자적 분리 저장 */
   async save(group: RoleGroup): Promise<void> {
     const parsed = roleGroupSchema.parse(group);
-    
+
     // 1. 35개 단일 표준 Screen ID 키로만 정규화하여 저장
     const normalizedPerms: Record<string, any> = {};
     const inputPerms = parsed.menuPermissions ?? {};
@@ -153,8 +153,7 @@ export const roleGroupRepo = {
       use: parsed.use ?? true,
       isSystem: parsed.isSystem ?? false,
       members: [],
-      permissions: menuPermJson,
-      menuPermissions: normalizedPerms,
+      menuPermissions: menuPermJson,
     };
 
     await groupBackend.save(basePayload);
@@ -169,7 +168,7 @@ export const roleGroupRepo = {
       ]);
 
       const currentGroupMappings = allMappings.filter((m) => m.roleCode === parsed.code);
-      
+
       // 1) 기존 그룹 매핑 항목 정리
       for (const m of currentGroupMappings) {
         const id = m.id || (m as any).$id;
