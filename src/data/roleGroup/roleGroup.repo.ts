@@ -22,7 +22,7 @@ const groupBackend = createCrudBackend<RoleGroup>({
   },
   idOf: (x) => x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
-  jsonFields: ['members', 'permissions', 'userIds', 'deptIds', 'positionRanks', 'menuPermissions'],
+  jsonFields: ['members', 'permissions', 'menuPermissions'],
   firestoreEncode: encodeForFirestore,
   firestoreDecode: decodeFromFirestore,
 });
@@ -99,18 +99,16 @@ export const roleGroupRepo = {
     const parsed = roleGroupSchema.parse(group);
     
     // 1. roleGroups 마스터 도큐먼트에는 순수 그룹 메타데이터만 저장 (대상자는 roleMappings에서 단독 관리)
-    const payload: RoleGroup = {
+    // Appwrite collection 스키마에 없는 userIds/deptIds/positionRanks는 페이로드에서 완전 제외하여 스키마 에러 방지
+    const payload: any = {
       code: parsed.code,
       name: parsed.name,
       desc: parsed.desc ?? '',
       use: parsed.use ?? true,
       isSystem: parsed.isSystem ?? false,
-      userIds: [],
-      deptIds: [],
-      positionRanks: [],
+      menuPermissions: parsed.menuPermissions ?? {},
       members: [],
       permissions: [],
-      menuPermissions: parsed.menuPermissions ?? {},
     };
     await groupBackend.save(payload);
 

@@ -153,9 +153,12 @@ export const roleMappingSchema = z.object({
   id: z.string().optional(),
   $id: z.string().optional(),
   roleCode: z.string().min(1, '역할그룹코드는 필수입니다'),
-  targetType: z.enum(['USER', 'DEPT', 'POSITION']),
+  targetType: z.preprocess(
+    (v) => (typeof v === 'string' ? v.toUpperCase() : v),
+    z.enum(['USER', 'DEPT', 'POSITION'])
+  ),
   targetId: z.string().min(1, '대상 식별자는 필수입니다'),
-  targetName: z.string().default(''),
+  targetName: z.string().nullish().transform((v) => v ?? ''),
 });
 
 export type Member = z.infer<typeof memberSchema>;
