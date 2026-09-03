@@ -18,7 +18,7 @@ export default function LeaveScreen() {
 
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
-  const goDoc = (d: ApprovalDoc) => nav(`/gw/approval?box=완료&doc=${d.docNo || d.id}`);
+  const goDoc = (d: ApprovalDoc) => nav(`/gw/approval?doc=${d.docNo || d.id}`);
 
   // 다가오는 일정 계산
   const upcomingDoc = useMemo(() => {

@@ -87,7 +87,7 @@ export default function ApprovalScreen() {
     return list.filter((d) => currentApproverIds(d).includes(me)).length;
   }, [byBox, me]);
 
-  const [selId, setSelId] = useState<string | null>(null);
+  const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
@@ -296,69 +296,70 @@ export default function ApprovalScreen() {
       setSelId(targetDoc.id);
     }
 
-    // 2. URL에 이미 box가 명시되어 있다면 해당 결재함을 존중 (임의 이동 방지)
-    if (urlBox) {
-      if (box !== urlBox) {
-        setBox(urlBox);
-      }
-      return;
-    }
-
-    // 3. 외부 링크 등으로 box 파라미터 없이 진입한 경우에만 1회 최적 결재함 자동 판정
-    let determinedBox: ApprovalBox | '문서함' = '문서함';
-    if (targetDoc.status === '완료' || targetDoc.status === '시행대기') {
-      if (isCompletedBoxMatch(targetDoc, me)) {
-        determinedBox = '완료';
-        setDoneFilter('all');
+    // 2. 최적 결재함 자동 판정 (urlBox가 없거나 해당 함에 targetDoc이 없을 때)
+    let determinedBox: ApprovalBox | '문서함' = urlBox || '문서함';
+    if (!urlBox) {
+      if (targetDoc.status === '완료' || targetDoc.status === '시행대기') {
+        if (isCompletedBoxMatch(targetDoc, me)) {
+          determinedBox = '완료';
+          setDoneFilter('all');
+        } else if (isDrafterBoxMatch(targetDoc, me)) {
+          determinedBox = '상신';
+          setDraftFilter('completed');
+        } else {
+          determinedBox = '문서함';
+          setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
+        }
+      } else if (targetDoc.status === '반려' || targetDoc.status === '긴급 조치 사후 검토 반려' || targetDoc.status === '시행반송') {
+        if (isRejectedBoxMatch(targetDoc, me)) {
+          determinedBox = '반려';
+          setRejectFilter('all');
+        } else if (isDrafterBoxMatch(targetDoc, me)) {
+          determinedBox = '상신';
+          setDraftFilter('rejected');
+        } else {
+          determinedBox = '문서함';
+          setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
+        }
+      } else if (targetDoc.status === '임시저장') {
+        determinedBox = '임시';
+      } else if (isTodoBoxMatch(targetDoc, me)) {
+        determinedBox = '대기';
+        setTodoFilter('all');
       } else if (isDrafterBoxMatch(targetDoc, me)) {
         determinedBox = '상신';
-        setDraftFilter('completed');
+        setDraftFilter(targetDoc.status === '진행중' ? 'progress' : 'all');
+      } else if (isReceivedBoxMatch(targetDoc, me, userObj?.dept)) {
+        determinedBox = '수신';
       } else {
         determinedBox = '문서함';
         setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
       }
-    } else if (targetDoc.status === '반려' || targetDoc.status === '긴급 조치 사후 검토 반려' || targetDoc.status === '시행반송') {
-      if (isRejectedBoxMatch(targetDoc, me)) {
-        determinedBox = '반려';
-        setRejectFilter('all');
-      } else if (isDrafterBoxMatch(targetDoc, me)) {
-        determinedBox = '상신';
-        setDraftFilter('rejected');
-      } else {
-        determinedBox = '문서함';
-        setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
-      }
-    } else if (targetDoc.status === '임시저장') {
-      determinedBox = '임시';
-    } else if (isTodoBoxMatch(targetDoc, me)) {
-      determinedBox = '대기';
-      setTodoFilter('all');
-    } else if (isDrafterBoxMatch(targetDoc, me)) {
-      determinedBox = '상신';
-      setDraftFilter(targetDoc.status === '진행중' ? 'progress' : 'all');
-    } else if (isReceivedBoxMatch(targetDoc, me, userObj?.dept)) {
-      determinedBox = '수신';
-    } else {
-      determinedBox = '문서함';
-      setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
     }
 
-    setBox(determinedBox);
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set('box', determinedBox);
-    nextUrl.searchParams.set('doc', targetDoc.docNo || targetDoc.id);
-    window.history.replaceState(null, '', nextUrl.toString());
+    if (box !== determinedBox) {
+      setBox(determinedBox);
+    }
   }, [params, allDocs, me, userObj?.dept]);
 
-  // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
+  // 함 전환/목록/필터 변화 시 선택 보정(문서가 allDocs에서 완전히 사라진 경우에만 첫 항목으로 보정).
   useEffect(() => {
     if (filteredList.length === 0) {
-      if (selId !== null) setSelId(null);
+      if (selId !== null && allDocs.length > 0 && !allDocs.some((d) => d.id === selId || d.docNo === selId)) {
+        setSelId(null);
+      }
     } else {
-      const exists = filteredList.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
-      if (!exists) {
-        const firstId = filteredList[0].id;
-        if (selId !== firstId) setSelId(firstId);
+      if (!selId) {
+        setSelId(filteredList[0].id);
+      } else {
+        const existsInFiltered = filteredList.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
+        if (!existsInFiltered) {
+          // allDocs에도 전혀 존재하지 않을 때만 첫 번째 항목으로 보정
+          const existsInAll = allDocs.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
+          if (!existsInAll && allDocs.length > 0) {
+            setSelId(filteredList[0].id);
+          }
+        }
       }
     }
 
@@ -367,7 +368,7 @@ export default function ApprovalScreen() {
       if (JSON.stringify(prev) === JSON.stringify(next)) return prev; // 참조 비교 우회 방어
       return next;
     });
-  }, [filteredList, selId]);
+  }, [filteredList, selId, allDocs]);
 
 
   const isDocSelectable = (d: ApprovalDoc) => {
