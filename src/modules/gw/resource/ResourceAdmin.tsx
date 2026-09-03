@@ -4,7 +4,7 @@ import type { Resource, ResourceDraft, ResourceType, ResourceBookingMode, Resour
 import { RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
 import { canManageResources } from '@/domain/reservation/engine';
-import { useSaveResource } from '@/features/resource/useResources';
+import { useSaveResource, useDeleteResource } from '@/features/resource/useResources';
 import { Modal } from '@/shared/ui/Modal';
 import { ResourceStatusBadge } from './ResourceBadges';
 import { Button } from '@/shared/ui/Button';
@@ -40,6 +40,7 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
   const [draft, setDraft] = useState<ResourceDraft>(() => draftFrom(resource));
   const [error, setError] = useState('');
   const saveResource = useSaveResource();
+  const deleteResource = useDeleteResource();
   const set = <K extends keyof ResourceDraft>(key: K, value: ResourceDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const inputClass = 'h-9 w-full rounded-lg border border-border bg-panel px-3 text-[11px] text-ink outline-none focus:border-teal';
   const labelClass = 'mb-1.5 block text-[10px] font-bold text-ink2';
@@ -52,6 +53,19 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '자원 저장에 실패했습니다.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!resource) return;
+    if (confirm(`정말 [${resource.name}] 자원을 완전히 삭제하시겠습니까?`)) {
+      setError('');
+      try {
+        await deleteResource.mutateAsync({ actor, id: resource.id });
+        onClose();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : '자원 삭제에 실패했습니다.');
+      }
     }
   };
 
@@ -89,20 +103,94 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
       </div>
 
       {error && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
-      <div className="flex justify-end gap-2 border-t border-border pt-4"><Button onClick={onClose}>취소</Button><Button type="submit" disabled={saveResource.isPending} variant="primary">{saveResource.isPending ? '저장 중…' : '저장'}</Button></div>
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <div>
+          {resource && (
+            <Button
+              type="button"
+              variant="danger"
+              disabled={deleteResource.isPending}
+              onClick={handleDelete}
+            >
+              {deleteResource.isPending ? '삭제 중…' : '자원 삭제'}
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={onClose}>취소</Button>
+          <Button type="submit" disabled={saveResource.isPending} variant="primary">
+            {saveResource.isPending ? '저장 중…' : '저장'}
+          </Button>
+        </div>
+      </div>
     </form>
   );
 }
 
 export default function ResourceAdmin({ actor, resources, users, departments }: ResourceAdminProps) {
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
+  const deleteResource = useDeleteResource();
   if (!canManageResources(actor)) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between"><div><div className="text-[13px] font-bold text-ink">자원 기준정보</div><div className="mt-1 text-[10px] text-ink3">삭제 대신 유지보수 또는 미사용 상태로 전환합니다.</div></div><Button onClick={() => setEditing('new')} variant="primary">+ 자원 추가</Button></div>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[13px] font-bold text-ink">자원 기준정보</div>
+          <div className="mt-1 text-[10px] text-ink3">회의실, 차량, 공용장비 마스터 정보를 등록, 수정 또는 삭제합니다.</div>
+        </div>
+        <Button onClick={() => setEditing('new')} variant="primary">+ 자원 추가</Button>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
-        <table className="min-w-[900px] w-full border-collapse text-left text-[11px]"><thead><tr className="border-b border-border bg-panel-alt/60 text-[10px] font-bold text-ink3"><th className="px-4 py-3">코드·자원명</th><th className="px-4 py-3">분류</th><th className="px-4 py-3">위치</th><th className="px-4 py-3">방식</th><th className="px-4 py-3">담당자</th><th className="px-4 py-3">상태</th><th className="px-4 py-3 text-right">관리</th></tr></thead><tbody className="divide-y divide-border">{resources.map((resource) => <tr key={resource.id} className="hover:bg-panel-alt/30"><td className="px-4 py-3"><div className="font-bold text-ink">{resource.name}</div><div className="mt-0.5 font-mono text-[9px] text-ink3">{resource.code}</div></td><td className="px-4 py-3 text-ink2">{RESOURCE_TYPE_LABELS[resource.typeCode]}</td><td className="px-4 py-3 text-ink2">{resource.location}</td><td className="px-4 py-3"><div className="font-semibold text-ink2">{resource.bookingMode === 'TIME_SLOT' ? '시간형' : `수량형 · ${resource.totalQuantity}${resource.unitCode}`}</div><div className="mt-0.5 text-[9px] text-ink3">{resource.approvalMode === 'INSTANT' ? '즉시 확정' : '승인 필요'}</div></td><td className="px-4 py-3 text-ink2">{users.find((user) => user.id === resource.managerUserId)?.name ?? '미지정'}</td><td className="px-4 py-3"><ResourceStatusBadge status={resource.status} /></td><td className="px-4 py-3 text-right"><Button onClick={() => setEditing(resource)} size="sm">수정</Button></td></tr>)}</tbody></table>
+        <table className="min-w-[900px] w-full border-collapse text-left text-[11px]">
+          <thead>
+            <tr className="border-b border-border bg-panel-alt/60 text-[10px] font-bold text-ink3">
+              <th className="px-4 py-3">코드·자원명</th>
+              <th className="px-4 py-3">분류</th>
+              <th className="px-4 py-3">위치</th>
+              <th className="px-4 py-3">방식</th>
+              <th className="px-4 py-3">담당자</th>
+              <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3 text-right">관리</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {resources.map((resource) => (
+              <tr key={resource.id} className="hover:bg-panel-alt/30">
+                <td className="px-4 py-3">
+                  <div className="font-bold text-ink">{resource.name}</div>
+                  <div className="mt-0.5 font-mono text-[9px] text-ink3">{resource.code}</div>
+                </td>
+                <td className="px-4 py-3 text-ink2">{RESOURCE_TYPE_LABELS[resource.typeCode]}</td>
+                <td className="px-4 py-3 text-ink2">{resource.location}</td>
+                <td className="px-4 py-3">
+                  <div className="font-semibold text-ink2">
+                    {resource.bookingMode === 'TIME_SLOT' ? '시간형' : `수량형 · ${resource.totalQuantity}${resource.unitCode}`}
+                  </div>
+                  <div className="mt-0.5 text-[9px] text-ink3">
+                    {resource.approvalMode === 'INSTANT' ? '즉시 확정' : '승인 필요'}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-ink2">{users.find((user) => user.id === resource.managerUserId)?.name ?? '미지정'}</td>
+                <td className="px-4 py-3"><ResourceStatusBadge status={resource.status} /></td>
+                <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                  <Button onClick={() => setEditing(resource)} size="sm">수정</Button>
+                  <Button
+                    onClick={async () => {
+                      if (confirm(`정말 [${resource.name}] 자원을 완전히 삭제하시겠습니까?`)) {
+                        await deleteResource.mutateAsync({ actor, id: resource.id });
+                      }
+                    }}
+                    size="sm"
+                    variant="danger"
+                  >
+                    삭제
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? '자원 추가' : '자원 수정'} width={Math.min(720, window.innerWidth - 32)}>
         {editing && <ResourceEditor key={editing === 'new' ? 'new' : editing.id} actor={actor} resource={editing === 'new' ? undefined : editing} users={users} departments={departments} onClose={() => setEditing(null)} />}

@@ -97,4 +97,11 @@ export const resourceRepo = {
     await persist(valid);
     return clone(valid);
   },
+
+  async delete(actor: User, id: string): Promise<void> {
+    if (!canManageResources(actor)) {
+      throw new ReservationError('FORBIDDEN', '관리자만 자원을 삭제할 수 있습니다.');
+    }
+    await backend.remove(id);
+  },
 };

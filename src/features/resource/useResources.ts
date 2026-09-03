@@ -16,3 +16,11 @@ export function useSaveResource() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+export function useDeleteResource() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actor, id }: { actor: User; id: string }) => resourceRepo.delete(actor, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }),
+  });
+}
