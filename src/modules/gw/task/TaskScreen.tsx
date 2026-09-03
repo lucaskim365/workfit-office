@@ -30,7 +30,7 @@ function LocalProjectScreen() {
     deptId: resolveDeptId(departments, actor?.dept),
     active: actor?.status === '사용',
     // 관리자는 참여자·소유자 판정을 건너뛴다 (기준정보 > 권한그룹관리 연동)
-    isAdmin: Boolean(isAdmin || actor?.roleGroup === 'ADMIN'),
+    isAdmin: Boolean(isAdmin),
   }), [actor, departments, isAdmin]);
   const projectsQuery = useProjects(access);
   const requestedTab = searchParams.get('tab') as ProjectTab | null;
@@ -74,7 +74,7 @@ function LocalProjectScreen() {
             className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none"
           >
             {users.filter((user) => user.status === '사용').map((user) => (
-              <option key={user.id} value={user.id}>{user.name} · {user.roleGroup}</option>
+              <option key={user.id} value={user.id}>{user.name} · {user.position || user.dept || '사원'}</option>
             ))}
           </select>
         ) : undefined}

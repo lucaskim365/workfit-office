@@ -28,7 +28,7 @@ export default function CommunityScreen() {
       name: user?.name ? `${user.name}`.trim() : '게스트',
       dept: user?.dept || '-',
       position: user?.position || '',
-      isAdmin: Boolean(isAdmin || user?.roleGroup === 'ADMIN')
+      isAdmin: Boolean(isAdmin)
     };
   }, [user, isAdmin]);
 

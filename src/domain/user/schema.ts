@@ -20,12 +20,7 @@ export const userSchema = z.object({
   dept: z.string().default('미지정'),
   position: z.string().default('사원'),
   jobTitle: z.string().max(20).default(''),
-  roleGroup: z.preprocess((val) => {
-    const s = String(val);
-    if (s === 'QC_USER' || s === 'MT_USER') return 'USER';
-    if (s === 'FIELD_ADMIN' || s === 'MT_ADMIN') return 'OPERATOR';
-    return s;
-  }, z.enum(ROLE_GROUPS)) as any,
+  roleGroup: z.string().optional().default('USER'),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS).default('사용'),
   lastLogin: z.string().default('-'),
@@ -80,13 +75,7 @@ export const userFormSchema = z.object({
   dept: z.string().default('미지정'),
   position: z.string().default('사원'),
   jobTitle: z.string().default(''),
-  roleGroup: z.preprocess((val) => {
-    if (!val) return 'USER';
-    const s = String(val);
-    if (s === 'QC_USER' || s === 'MT_USER') return 'USER';
-    if (s === 'FIELD_ADMIN' || s === 'MT_ADMIN') return 'OPERATOR';
-    return s;
-  }, z.enum(ROLE_GROUPS)).default('USER') as any,
+  roleGroup: z.string().optional(),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),
   password: z.string().max(50).optional(),

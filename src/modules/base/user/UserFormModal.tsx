@@ -16,7 +16,6 @@ const EMPTY: UserFormValues = {
   dept: '미지정',
   position: '사원',
   jobTitle: '',
-  roleGroup: 'USER',
   email: '',
   status: '사용',
   password: '',
@@ -50,7 +49,6 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             dept: initial.dept || '미지정',
             position: initial.position || '사원',
             jobTitle: initial.jobTitle ?? '',
-            roleGroup: initial.roleGroup as UserFormValues['roleGroup'],
             email: initial.email,
             status: initial.status,
             password: '', // 수정 시 항상 빈칸(비우면 기존 비번 보존)
@@ -70,7 +68,6 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
       dept: initial?.dept || values.dept || '미지정',
       position: initial?.position || values.position || '사원',
       jobTitle: initial?.jobTitle || values.jobTitle || '',
-      roleGroup: initial?.roleGroup || values.roleGroup || 'USER',
     };
     onSubmit(finalPayload, initial?.id);
     onClose();

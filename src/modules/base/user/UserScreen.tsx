@@ -8,6 +8,9 @@ import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared
 import { type User } from '@/domain/user/schema';
 import { useUsers, useUpsertUser, useRemoveUsers } from '@/features/user/useUsers';
 import { usePermission } from '@/features/auth/usePermission';
+import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { resolveUserRoleNames } from '@/domain/roleGroup/roleResolver';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 import ResignModal from './ResignModal';
 import { successionRepo } from '@/data/succession/succession.repo';
@@ -74,6 +77,8 @@ export default function UserScreen() {
 
   const { data: all = [] } = useUsers();
   const { data: rows = [] } = useUsers(applied);
+  const { data: roleGroups = [] } = useRoleGroups();
+  const org = useOrgTree();
   const upsert = useUpsertUser();
   const removeUsers = useRemoveUsers();
 
@@ -106,6 +111,32 @@ export default function UserScreen() {
           {u.dept || '미지정'}
         </span>
       ),
+    },
+    {
+      key: 'roles' as any,
+      header: '부여된 역할 (권한그룹)',
+      width: 180,
+      render: (u) => {
+        const roleNames = resolveUserRoleNames(u, roleGroups, org);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {roleNames.map((rn) => (
+              <span
+                key={rn}
+                className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                  rn.includes('관리자')
+                    ? 'bg-amber-100 text-amber-800'
+                    : rn.includes('일반')
+                    ? 'bg-slate-100 text-slate-700'
+                    : 'bg-teal-100 text-teal-800'
+                }`}
+              >
+                {rn}
+              </span>
+            ))}
+          </div>
+        );
+      },
     },
     {
       key: 'status',

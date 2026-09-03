@@ -24,7 +24,7 @@ export function isLeaderPosition(position?: string | null, jobTitle?: string | n
 export function resolveUserScope(user?: User | null, userRoles: string[] = []): UserDataScope {
   if (!user) return 'PERSONAL';
 
-  const isExec = userRoles.includes('EXEC') || user.roleGroup === 'EXEC';
+  const isExec = userRoles.includes('EXEC');
   if (isExec) {
     return 'COMPANY';
   }

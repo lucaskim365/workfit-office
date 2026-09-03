@@ -151,32 +151,32 @@ export function assertReservationTransition(from: ReservationStatus, to: Reserva
   }
 }
 
-export function canManageResources(actor: User): boolean {
-  return actor.status === '사용' && (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR');
+export function canManageResources(actor: User, isAdmin = false): boolean {
+  return actor.status === '사용' && isAdmin;
 }
 
-export function canApproveResource(actor: User, resource: Resource): boolean {
+export function canApproveResource(actor: User, resource: Resource, isAdmin = false): boolean {
   return (
     actor.status === '사용' &&
-    (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR' || resource.managerUserId === actor.id)
+    (isAdmin || resource.managerUserId === actor.id)
   );
 }
 
-export function canCancelReservation(actor: User, row: Reservation): boolean {
+export function canCancelReservation(actor: User, row: Reservation, isAdmin = false): boolean {
   return (
     actor.status === '사용' &&
-    (actor.roleGroup === 'ADMIN' || actor.roleGroup === 'OPERATOR' || row.requesterUserId === actor.id)
+    (isAdmin || row.requesterUserId === actor.id)
   );
 }
 
-export function assertCancellationAllowed(actor: User, resource: Resource, row: Reservation, now = new Date()): void {
-  if (!canCancelReservation(actor, row)) {
+export function assertCancellationAllowed(actor: User, resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
+  if (!canCancelReservation(actor, row, isAdmin)) {
     throw new ReservationError('FORBIDDEN', '본인 예약만 취소할 수 있습니다.');
   }
   if (row.status !== 'PENDING' && row.status !== 'CONFIRMED') {
     throw new ReservationError('INVALID_STATUS', '현재 상태에서는 예약을 취소할 수 없습니다.');
   }
-  if (actor.roleGroup !== 'ADMIN' && new Date(row.startAt).getTime() - now.getTime() < resource.cancelDeadlineMinutes * 60_000) {
+  if (!isAdmin && new Date(row.startAt).getTime() - now.getTime() < resource.cancelDeadlineMinutes * 60_000) {
     throw new ReservationError('CANCEL_DEADLINE', `예약 시작 ${resource.cancelDeadlineMinutes}분 전까지만 취소할 수 있습니다.`);
   }
 }

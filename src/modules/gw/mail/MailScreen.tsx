@@ -428,7 +428,7 @@ function LocalMailScreen() {
                 className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none"
               >
                 {users.filter((user) => user.status === '사용').map((user) => (
-                  <option key={user.id} value={user.id}>{user.name} · {user.roleGroup}</option>
+                  <option key={user.id} value={user.id}>{user.name} · {user.position || user.dept || '사원'}</option>
                 ))}
               </select>
             )}

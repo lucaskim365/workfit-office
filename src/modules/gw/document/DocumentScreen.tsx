@@ -26,7 +26,6 @@ export default function DocumentScreen() {
       name: user?.name ? `${user.name}`.trim() : '게스트',
       dept: user?.dept || '-',
       position: user?.position || '',
-      roleGroup: user?.roleGroup || 'USER'
     };
   }, [user]);
 

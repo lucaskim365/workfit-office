@@ -146,7 +146,6 @@ export function ApprovalDocumentView({
   const isExecutive =
     isAdmin ||
     hasExecRole ||
-    userObj?.roleGroup === 'ADMIN' ||
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';
 

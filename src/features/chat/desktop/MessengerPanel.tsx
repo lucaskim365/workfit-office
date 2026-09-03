@@ -88,7 +88,7 @@ export function MessengerPanel() {
   const { isAdmin: isSuperAdmin } = usePermission();
   const me = user?.id ?? 'U001';
   const meName = user?.name ?? '김승기';
-  const isAdmin = Boolean(isSuperAdmin || user?.roleGroup === 'ADMIN');
+  const isAdmin = Boolean(isSuperAdmin);
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);

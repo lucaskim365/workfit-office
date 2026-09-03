@@ -91,13 +91,13 @@ export function canCreateSurvey(actor: User): boolean {
 }
 
 /** 설문 편집·배포·마감 권한 — 작성자 본인과 ADMIN(장애 대응·상태 보정). */
-export function canManageSurvey(actor: User, row: Survey): boolean {
-  return actor.status === '사용' && (actor.roleGroup === 'ADMIN' || row.ownerUserId === actor.id);
+export function canManageSurvey(actor: User, row: Survey, isAdmin = false): boolean {
+  return actor.status === '사용' && (isAdmin || row.ownerUserId === actor.id);
 }
 
 /** 결과 조회 권한. 익명 설문이어도 응답자를 식별할 수 있는 값 자체가 저장되지 않는다. */
-export function canViewSurveyResult(actor: User, row: Survey): boolean {
-  return canManageSurvey(actor, row);
+export function canViewSurveyResult(actor: User, row: Survey, isAdmin = false): boolean {
+  return canManageSurvey(actor, row, isAdmin);
 }
 
 /**
