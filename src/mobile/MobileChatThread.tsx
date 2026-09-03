@@ -60,7 +60,7 @@ export default function MobileChatThread() {
   const { isAdmin: isSuperAdmin } = usePermission();
   const me = user!.id;
   const meName = user!.name;
-  const isAdmin = Boolean(isSuperAdmin || user?.roleGroup === 'ADMIN');
+  const isAdmin = Boolean(isSuperAdmin);
 
   const { data: messages = [] } = useChatThread(roomId);
   const { data: rooms = [] } = useChatRooms(me);
