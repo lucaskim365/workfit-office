@@ -7,7 +7,7 @@ import {
   type PermCategoryId,
   type ActionPermission,
 } from '@/domain/roleGroup/schema';
-import { useRoleGroups, useSaveRoleGroup } from '@/features/roleGroup/useRoleGroups';
+import { useRoleGroups, useSaveRoleGroup, useDeleteRoleGroup } from '@/features/roleGroup/useRoleGroups';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { SelectorDialog } from '@/modules/gw/approval/components/DraftRecipientSection';
 import { ROLE_GROUP_SEED, getDefaultPermissionsForGroup } from '@/data/seeds/roleGroup.seed';
@@ -45,6 +45,7 @@ export default function AuthScreen() {
   const org = useOrgTree();
   const { data: rawGroups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
   const saveGroup = useSaveRoleGroup();
+  const deleteGroup = useDeleteRoleGroup();
 
   const effectiveGroups = useMemo(() => {
     const list = (rawGroups && rawGroups.length > 0) ? rawGroups : ROLE_GROUP_SEED;
@@ -171,6 +172,32 @@ export default function AuthScreen() {
     });
   };
 
+  const handleDeleteGroup = () => {
+    if (!selectedGroup) return;
+    if (selectedGroup.isSystem || selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER') {
+      alert('시스템 기본 그룹은 삭제할 수 없습니다.');
+      return;
+    }
+    if (!confirm(`[${selectedGroup.name} (${selectedGroup.code})] 그룹을 완전히 삭제하시겠습니까?`)) {
+      return;
+    }
+    deleteGroup.mutate(selectedGroup.code, {
+      onSuccess: () => {
+        setGroupDrafts((prev) => {
+          const next = { ...prev };
+          delete next[selectedGroup.code];
+          return next;
+        });
+        setSelectedCode('ADMIN');
+        setMsg(`[${selectedGroup.name}] 그룹이 성공적으로 삭제되었습니다.`);
+        setTimeout(() => setMsg(''), 3000);
+      },
+      onError: (err) => {
+        setMsg(`삭제 실패: ${String(err)}`);
+      },
+    });
+  };
+
   const filteredGroups: RoleGroup[] = useMemo(() => {
     const list: RoleGroup[] = Object.values({
       ...effectiveGroups.reduce((acc: Record<string, RoleGroup>, g: RoleGroup) => ({ ...acc, [g.code]: g }), {}),
@@ -198,6 +225,16 @@ export default function AuthScreen() {
         </div>
         <div className="flex items-center gap-2">
           {msg && <span className="text-[12px] font-bold text-teal">{msg}</span>}
+          {selectedGroup && !selectedGroup.isSystem && selectedGroup.code !== 'ADMIN' && selectedGroup.code !== 'USER' && (
+            <button
+              type="button"
+              onClick={handleDeleteGroup}
+              disabled={deleteGroup.isPending}
+              className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/40 px-3 py-1.5 text-[12px] font-bold text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors cursor-pointer"
+            >
+              {deleteGroup.isPending ? '삭제 중…' : '그룹 삭제'}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCreateNewGroup}
@@ -348,8 +385,10 @@ export default function AuthScreen() {
                     <div>
                       <label className="block text-[11px] font-bold text-ink3 mb-1">역할 그룹 코드</label>
                       <input
-                        disabled={true}
+                        disabled={selectedGroup.isSystem || selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
                         value={selectedGroup.code}
+                        onChange={(e) => updateSelectedGroup({ code: e.target.value.toUpperCase() })}
+                        placeholder="예: FINANCE, EXEC"
                         className="w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-teal disabled:opacity-50"
                       />
                     </div>

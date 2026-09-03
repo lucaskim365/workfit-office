@@ -64,8 +64,11 @@ export const roleGroupRepo = {
       : ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g));
 
     return sourceList.map((g) => {
-      // 1. 관계 테이블(roleMappings)에서 해당 그룹의 매핑 항목들 추출 (SSOT)
-      const groupMappings = dbMappings.filter((m) => m.roleCode === g.code);
+      // 1. 관계 테이블(roleMappings)에서 해당 그룹의 매핑 항목들 추출 (SSOT, ROLE_ 접두사 유연 매칭)
+      const normGroupCode = g.code.replace(/^ROLE_/, '').toUpperCase();
+      const groupMappings = dbMappings.filter(
+        (m) => m.roleCode.replace(/^ROLE_/, '').toUpperCase() === normGroupCode
+      );
       let userIds = groupMappings.filter((m) => m.targetType === 'USER').map((m) => m.targetId);
       let deptIds = groupMappings.filter((m) => m.targetType === 'DEPT').map((m) => m.targetId);
       let positionRanks = groupMappings

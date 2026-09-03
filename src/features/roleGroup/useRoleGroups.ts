@@ -19,3 +19,11 @@ export function useSaveRoleGroup() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
+
+export function useDeleteRoleGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => roleGroupRepo.remove(code),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  });
+}

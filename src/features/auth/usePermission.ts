@@ -32,8 +32,8 @@ export function usePermission() {
   /** 최고 관리자 여부 판정 (순수 DB roleMappings 및 그룹 설정 기반) */
   const isSuperAdmin = useMemo(() => {
     if (!user) return false;
-    if (user.roleGroup === 'ADMIN') return true;
-    const adminGroup = groups.find((g) => g.code === 'ADMIN' && g.use);
+    if (user.roleGroup === 'ADMIN' || user.roleGroup === 'ROLE_ADMIN') return true;
+    const adminGroup = groups.find((g) => (g.code === 'ADMIN' || g.code === 'ROLE_ADMIN') && g.use);
     if (adminGroup) {
       if (adminGroup.userIds?.includes(user.id)) return true;
       if (userDeptId && adminGroup.deptIds?.includes(userDeptId)) return true;
@@ -47,12 +47,13 @@ export function usePermission() {
     if (!user) return [];
     return groups.filter((g) => {
       if (!g.use) return false;
+      const normCode = g.code.replace(/^ROLE_/, '').toUpperCase();
       // 0) 일반사원(USER) 그룹은 활성화된 모든 로그인 임직원에게 기본 상시 부여 (전사 기본 권한 베이스라인)
-      if (g.code === 'USER') return true;
+      if (normCode === 'USER') return true;
       // 1) 최고 관리자일 경우
-      if (g.code === 'ADMIN' && isSuperAdmin) return true;
+      if (normCode === 'ADMIN' && isSuperAdmin) return true;
       // 2) 레거시 기본 roleGroup 매핑 (ADMIN, OPERATOR, USER)
-      if (g.code === user.roleGroup) return true;
+      if (user.roleGroup && normCode === user.roleGroup.replace(/^ROLE_/, '').toUpperCase()) return true;
       // 3) 개별 사원 ID 바인딩
       if (g.userIds && g.userIds.includes(user.id)) return true;
       // 4) 부서 단위 바인딩
