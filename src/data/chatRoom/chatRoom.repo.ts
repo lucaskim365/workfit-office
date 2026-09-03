@@ -175,6 +175,10 @@ export interface CreateRoomInput {
   createdBy?: string;
 }
 
+// 부서방 동기화 마지막 실행 시각 (최소 60초 간격으로 쓰기 제한하여 429 Rate Limit 원천 방지)
+let lastDeptSyncAt = 0;
+const DEPT_SYNC_THROTTLE_MS = 60 * 1000;
+
 export const chatRoomRepo = {
   /**
    * 방 목록. memberId 지정 시 그 사용자가 참여한 방만.
@@ -183,78 +187,75 @@ export const chatRoomRepo = {
   async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
     let rows = await backend.loadAll();
 
-    // 부서별 단톡방 동적 개설, 부서명 변경 동기화 및 인사이동(사일런트 퇴사/퇴직) 자동 반영
-    try {
-      const depts = await departmentRepo.list();
-      const users = await userRepo.list();
+    // 부서별 단톡방 동적 개설 및 인사이동(사일런트 퇴사/퇴직) 자동 반영 (60초 쓰로틀 적용)
+    const now = Date.now();
+    if (now - lastDeptSyncAt > DEPT_SYNC_THROTTLE_MS) {
+      lastDeptSyncAt = now;
+      try {
+        const depts = await departmentRepo.list();
+        const users = await userRepo.list();
 
-      for (const dept of depts) {
-        // 부서 재직자만 추출 (퇴사/미사용자 제외)
-        const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);
-        if (deptMembers.length === 0) continue;
+        for (const dept of depts) {
+          const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);
+          if (deptMembers.length === 0) continue;
 
-        // 1. deptId 가 매핑된 기존 방 우선 검색
-        // 2. 없으면 ID 가 RM-DEPT-${dept.id} 인 방 검색
-        // 3. 없으면 과거 부서명으로 생성된 레거시 방 검색
-        let existing = rows.find((r) => r.deptId === dept.id);
-        if (!existing) {
-          existing = rows.find((r) => r.id === `RM-DEPT-${dept.id}` || r.id === `ROOM-DEPT-${dept.id}`);
-        }
-        if (!existing) {
-          existing = rows.find((r) => (r.type === 'dept' || r.type === 'group') && (r.name.includes(dept.name) || r.name === `[${dept.name}]` || r.name === `${dept.name} 단체방`));
-        }
-
-        const standardRoomName = `[${dept.name}] 부서 단체방`;
-
-        if (!existing) {
-          const roomId = `RM-DEPT-${dept.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-          const newRoom = chatRoomSchema.parse({
-            id: roomId,
-            name: standardRoomName,
-            type: 'dept',
-            deptId: dept.id,
-            members: deptMembers,
-            color: ROOM_COLORS[Math.abs(roomId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
-            lastMessage: { text: `${dept.name} 부서 단체방이 개설되었습니다.`, at: nowLocalIso(), senderId: 'system' },
-            createdAt: nowLocalIso(),
-            createdBy: 'system',
-          });
-          await backend.save(newRoom);
-          rows.push(newRoom);
-        } else {
-          // 기존 방 보존(id, 기존 대화내역 100% 보존) + deptId 바인딩 + 부서명 변경 동기화 + 멤버 사일런트 갱신
-          let changed = false;
-          let updated = { ...existing };
-
-          if (updated.type !== 'dept') {
-            updated.type = 'dept';
-            changed = true;
+          let existing = rows.find((r) => r.deptId === dept.id);
+          if (!existing) {
+            existing = rows.find((r) => r.id === `RM-DEPT-${dept.id}` || r.id === `ROOM-DEPT-${dept.id}`);
           }
-          if (updated.deptId !== dept.id) {
-            updated.deptId = dept.id;
-            changed = true;
-          }
-          if (updated.name !== standardRoomName) {
-            // 부서명 변경 시 방 제목 자동 동기화
-            updated.name = standardRoomName;
-            changed = true;
+          if (!existing) {
+            existing = rows.find((r) => (r.type === 'dept' || r.type === 'group') && (r.name.includes(dept.name) || r.name === `[${dept.name}]` || r.name === `${dept.name} 단체방`));
           }
 
-          // 멤버 변경 감지 (퇴사/타부서 이동 시 조용히 제외, 신규 입사/전입 시 자동 추가)
-          if (!sameMembers(existing.members, deptMembers)) {
-            updated.members = deptMembers;
-            changed = true;
-          }
+          const standardRoomName = `[${dept.name}] 부서 단체방`;
 
-          if (changed) {
-            await backend.save(updated);
-            const idx = rows.findIndex((r) => r.id === existing.id);
-            if (idx >= 0) rows[idx] = updated;
+          if (!existing) {
+            const roomId = `RM-DEPT-${dept.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+            const newRoom = chatRoomSchema.parse({
+              id: roomId,
+              name: standardRoomName,
+              type: 'dept',
+              deptId: dept.id,
+              members: deptMembers,
+              color: ROOM_COLORS[Math.abs(roomId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
+              lastMessage: { text: `${dept.name} 부서 단체방이 개설되었습니다.`, at: nowLocalIso(), senderId: 'system' },
+              createdAt: nowLocalIso(),
+              createdBy: 'system',
+            });
+            await backend.save(newRoom);
+            rows.push(newRoom);
+          } else {
+            let changed = false;
+            let updated = { ...existing };
+
+            if (updated.type !== 'dept') {
+              updated.type = 'dept';
+              changed = true;
+            }
+            if (updated.deptId !== dept.id) {
+              updated.deptId = dept.id;
+              changed = true;
+            }
+            if (updated.name !== standardRoomName) {
+              updated.name = standardRoomName;
+              changed = true;
+            }
+            if (!sameMembers(existing.members, deptMembers)) {
+              updated.members = deptMembers;
+              changed = true;
+            }
+
+            if (changed) {
+              await backend.save(updated);
+              const idx = rows.findIndex((r) => r.id === existing.id);
+              if (idx >= 0) rows[idx] = updated;
+            }
           }
         }
+      } catch (e) {
+        // Appwrite 일시적 지연이나 한도 초과 시에도 조회 목록 표시 자체는 정상 유지
+        console.warn('Background dept room sync skipped:', (e as Error)?.message || e);
       }
-    } catch (e) {
-      console.error('Failed to sync department rooms:', e);
     }
 
     if (!opts?.includeDeleted) rows = rows.filter((r) => !r.deletedAt);
