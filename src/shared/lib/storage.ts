@@ -122,7 +122,11 @@ class S3StorageAdapter implements StorageAdapter {
         op: 'put',
         path: safePath,
         contentType,
-        filename: opts?.filename ? encodeURIComponent(opts.filename) : undefined,
+        // ⚠️ 파일명은 원본 그대로 보낸다. 서명 API가 Content-Disposition의
+        //   RFC 5987(`filename*=UTF-8''…`) 인코딩을 담당하므로 여기서 미리
+        //   encodeURIComponent 하면 `%` → `%25` 이중 인코딩되어 한글 파일명이
+        //   `%EA%B2%B0…` 리터럴로 저장·다운로드된다.
+        filename: opts?.filename,
       }),
     });
     if (!signRes.ok) {
