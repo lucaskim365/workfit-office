@@ -49,7 +49,8 @@ export default function EmployeeScreen() {
   // 조직도 선택 부서 상태
   const [selectedDept, setSelectedDept] = useState<string>('all');
 
-  // 신규 등록 폼 상태
+  // 신규 등록 폼 상태 (사용자 관리 연동)
+  const [selectedCreateUserId, setSelectedCreateUserId] = useState('');
   const [newEmpNo, setNewEmpNo] = useState('');
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpDept, setNewEmpDept] = useState('');
@@ -63,6 +64,31 @@ export default function EmployeeScreen() {
   const [newEmpPersonalEmail, setNewEmpPersonalEmail] = useState('');
   const [newEmpEmergencyPhone, setNewEmpEmergencyPhone] = useState('');
   const [newEmpEducation, setNewEmpEducation] = useState('');
+
+  // 발령 대상 계정 선택 핸들러
+  const handleSelectCreateUser = (userId: string) => {
+    setSelectedCreateUserId(userId);
+    const u = users.find((user) => user.id === userId);
+    if (!u) {
+      setNewEmpNo('');
+      setNewEmpName('');
+      setNewEmpEmail('');
+      return;
+    }
+    setNewEmpNo(u.empNo);
+    setNewEmpName(u.name);
+    setNewEmpEmail(u.email);
+    setNewEmpDept(u.dept && u.dept !== '미지정' ? u.dept : departments[0]?.name || '인사지원팀');
+    setNewEmpPos(u.position && u.position !== '사원' ? u.position : positions[0]?.name || '사원');
+    setNewEmpDuty(u.jobTitle || '팀원');
+    setNewEmpPhone((u as any).phone || '');
+    setNewEmpHireDate((u as any).hireDate || '');
+    setNewEmpRrn((u as any).rrn || '');
+    setNewEmpAddress((u as any).address || '');
+    setNewEmpPersonalEmail((u as any).personalEmail || '');
+    setNewEmpEmergencyPhone((u as any).emergencyPhone || '');
+    setNewEmpEducation((u as any).education || '');
+  };
 
   // 정보 수정 폼 상태
   const [editModalTab, setEditModalTab] = useState<'work' | 'personal'>('work');
@@ -145,6 +171,11 @@ export default function EmployeeScreen() {
     return Array.from(set);
   }, [jobTitles]);
 
+  // 발령 대기 중인 계정 (부서 미지정 등)
+  const unassignedUsers = useMemo(() => {
+    return users.filter((u) => !u.dept || u.dept === '미지정');
+  }, [users]);
+
   // 선택된 상세 사원 객체
   const selectedEmp = useMemo(() => {
     return employees.find((e) => e.id === selectedUserId) || null;
@@ -225,30 +256,37 @@ export default function EmployeeScreen() {
     return { gender, birthDate };
   };
 
-  // 1. 임직원 등록 제출 (DB users 연동)
+  // 1. 임직원 인사 발령 제출 (사용자 관리 등록 계정 대상)
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmpNo.trim() || !newEmpName.trim()) return;
-
-    const duplicate = users.some((u) => u.empNo === newEmpNo.trim());
-    if (duplicate) {
-      alert(`이미 등록된 사번(${newEmpNo.trim()})입니다. 다시 확인해 주세요.`);
+    if (!selectedCreateUserId) {
+      alert('사용자 관리에서 등록된 계정을 먼저 선택해 주세요.');
       return;
     }
 
-    const { gender, birthDate } = parseRrnInfo(newEmpRrn);
+    const targetUser = users.find((u) => u.id === selectedCreateUserId);
+    if (!targetUser) return;
+
+    let gender = '';
+    let birthDate = '';
+    if (newEmpRrn) {
+      const parsed = parseRrnInfo(newEmpRrn);
+      gender = parsed.gender;
+      birthDate = parsed.birthDate;
+    }
 
     try {
       await upsertUser.mutateAsync({
+        id: targetUser.id,
         values: {
-          empNo: newEmpNo.trim(),
-          name: newEmpName.trim(),
-          dept: newEmpDept || departments[0]?.name || '미지정',
+          empNo: targetUser.empNo,
+          name: targetUser.name,
+          dept: newEmpDept || departments[0]?.name || '인사지원팀',
           position: newEmpPos || positions[0]?.name || '사원',
-          jobTitle: newEmpDuty || '',
-          roleGroup: 'USER',
-          email: newEmpEmail.trim() || `${newEmpNo.trim().toLowerCase()}@workfit.co.kr`,
-          status: '사용',
+          jobTitle: newEmpDuty || '팀원',
+          roleGroup: targetUser.roleGroup,
+          email: targetUser.email,
+          status: targetUser.status,
           phone: newEmpPhone.trim(),
           hireDate: newEmpHireDate,
           rrn: newEmpRrn.trim(),
@@ -261,6 +299,7 @@ export default function EmployeeScreen() {
         },
       });
 
+      setSelectedCreateUserId('');
       setNewEmpNo('');
       setNewEmpName('');
       setNewEmpEmail('');
@@ -272,9 +311,9 @@ export default function EmployeeScreen() {
       setNewEmpEmergencyPhone('');
       setNewEmpEducation('');
       setIsCreateModalOpen(false);
-      alert('신규 임직원 등록이 완료되었습니다.');
+      alert('임직원 인사 발령이 성공적으로 완료되었습니다.');
     } catch (err: any) {
-      alert(err.message || '등록 중 오류가 발생했습니다.');
+      alert(err.message || '인사 발령 처리 중 오류가 발생했습니다.');
     }
   };
 
@@ -903,46 +942,78 @@ export default function EmployeeScreen() {
         </>
       )}
 
-      {/* ==================== D. 관리자 전용 신규 임직원 등록 모달 ==================== */}
+      {/* ==================== D. 관리자 전용 신규 임직원 등록 모달 (사용자 관리 계정 연동) ==================== */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="flex max-h-[90vh] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-border pb-2">
-              <span className="text-[13px] font-extrabold text-navy">👤 신규 임직원 등록 (인사 발령)</span>
+              <span className="text-[13px] font-extrabold text-navy">👤 임직원 인사 발령 (등록)</span>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-sm font-bold text-ink3 hover:text-ink">
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleCreateEmployee} className="space-y-3.5">
+              {/* 계정 선택 필드 */}
+              <div className="flex flex-col gap-1.5 rounded-lg border border-teal/30 bg-teal-soft/10 p-3">
+                <label className="text-[11.5px] font-extrabold text-teal">
+                  1. 발령 대상 계정 선택 (사용자 관리 등록 계정) <span className="text-red">*</span>
+                </label>
+                <select
+                  value={selectedCreateUserId}
+                  onChange={(e) => handleSelectCreateUser(e.target.value)}
+                  required
+                  className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] font-semibold text-ink outline-none focus:border-teal"
+                >
+                  <option value="">계정을 선택하세요 (사용자 관리 등록 대상)</option>
+                  {unassignedUsers.length > 0 && (
+                    <optgroup label="── ⏳ 발령 대기 계정 (부서 미지정) ──">
+                      {unassignedUsers.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.empNo}) - 발령 대기
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="── 👥 전체 등록 계정 ──">
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.empNo}) {u.dept && u.dept !== '미지정' ? `[${u.dept}]` : '[미지정]'}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <span className="text-[10.5px] text-ink3">
+                  💡 신규 사원은 먼저 <strong>[기본설정 &gt; 사용자 관리]</strong>에서 계정을 생성한 후 여기서 부서 및 직급을 발령합니다.
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-ink2">사번 (필수)</label>
+                  <label className="font-bold text-ink2">사번 (계정 연동)</label>
                   <input
                     type="text"
                     value={newEmpNo}
-                    onChange={(e) => setNewEmpNo(e.target.value)}
-                    placeholder="예: A00001"
-                    required
-                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 font-mono text-[12px] outline-none focus:border-teal"
+                    disabled
+                    placeholder="계정 선택 시 자동 입력"
+                    className="h-9 w-full rounded-lg border border-border bg-panel-alt/50 px-3 font-mono text-[12px] text-ink3 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-ink2">이름 (필수)</label>
+                  <label className="font-bold text-ink2">이름 (계정 연동)</label>
                   <input
                     type="text"
                     value={newEmpName}
-                    onChange={(e) => setNewEmpName(e.target.value)}
-                    placeholder="직원 이름"
-                    required
-                    className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"
+                    disabled
+                    placeholder="계정 선택 시 자동 입력"
+                    className="h-9 w-full rounded-lg border border-border bg-panel-alt/50 px-3 text-[12px] font-bold text-ink3 outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-ink2">소속 부서</label>
+                  <label className="font-bold text-ink2">소속 부서 (발령)</label>
                   <select
                     value={newEmpDept}
                     onChange={(e) => setNewEmpDept(e.target.value)}
