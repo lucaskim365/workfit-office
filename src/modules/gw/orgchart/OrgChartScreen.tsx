@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
 import { Button } from '@/shared/ui/Button';
 
@@ -21,9 +22,15 @@ const isExcludedDept = (deptName: string) =>
  */
 export default function OrgChartScreen() {
   const org = useOrgTree();
+  const { data: employeeProfiles = [] } = useEmployeeProfiles();
+  const profileMap = useMemo(() => {
+    return new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
+  }, [employeeProfiles]);
+
   const [viewMode, setViewMode] = useState<'visual' | 'list'>('visual');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selectedUser = org.users.find((u) => u.id === selectedUserId);
+  const selectedProfile = selectedUserId ? profileMap.get(selectedUserId) : null;
 
   // 리스트 뷰 필터 상태
   const [listDeptFilter, setListDeptFilter] = useState('all');
@@ -43,18 +50,20 @@ export default function OrgChartScreen() {
       .filter((u) => (listDeptFilter === 'all' ? true : u.dept === listDeptFilter))
       .filter((u) => {
         if (!text) return true;
+        const prof = profileMap.get(u.id);
         return (
           u.name.toLowerCase().includes(text) ||
           u.dept.toLowerCase().includes(text) ||
           u.position.toLowerCase().includes(text) ||
-          u.email.toLowerCase().includes(text)
+          u.email.toLowerCase().includes(text) ||
+          (prof?.phone && prof.phone.toLowerCase().includes(text))
         );
       })
       .sort((a, b) => {
         const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
         return rankDiff || a.name.localeCompare(b.name, 'ko');
       });
-  }, [validUsers, org, listDeptFilter, listKeyword]);
+  }, [validUsers, org, listDeptFilter, listKeyword, profileMap]);
 
   return (
     <div className="mx-auto max-w-6xl pb-12">
@@ -305,6 +314,17 @@ export default function OrgChartScreen() {
                       >
                         ✉ {selectedUser.email || '-'}
                       </a>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] text-ink3">업무 연락처</span>
+                    {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? (
+                      <span className="mt-1 block font-mono text-[11px] text-ink3 italic">비공개</span>
+                    ) : (
+                      <span className="mt-1 block font-mono font-semibold text-ink">
+                        {selectedProfile?.phone ? `📞 ${selectedProfile.phone}` : '—'}
+                      </span>
                     )}
                   </div>
 
