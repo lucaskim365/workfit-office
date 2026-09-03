@@ -965,27 +965,26 @@ export default function EmployeeScreen() {
                   required
                   className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] font-semibold text-ink outline-none focus:border-teal"
                 >
-                  <option value="">계정을 선택하세요 (사용자 관리 등록 대상)</option>
-                  {unassignedUsers.length > 0 && (
-                    <optgroup label="── ⏳ 발령 대기 계정 (부서 미지정) ──">
-                      {unassignedUsers.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.empNo}) - 발령 대기
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="── 👥 전체 등록 계정 ──">
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.empNo}) {u.dept && u.dept !== '미지정' ? `[${u.dept}]` : '[미지정]'}
-                      </option>
-                    ))}
-                  </optgroup>
+                  <option value="">
+                    {unassignedUsers.length > 0
+                      ? '발령 대기 계정을 선택하세요'
+                      : '현재 발령 대기 중인 신규 계정이 없습니다 (전원 발령 완료)'}
+                  </option>
+                  {unassignedUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.empNo}) - 발령 대기
+                    </option>
+                  ))}
                 </select>
-                <span className="text-[10.5px] text-ink3">
-                  💡 신규 사원은 먼저 <strong>[기본설정 &gt; 사용자 관리]</strong>에서 계정을 생성한 후 여기서 부서 및 직급을 발령합니다.
-                </span>
+                {unassignedUsers.length === 0 ? (
+                  <span className="text-[10.5px] font-semibold text-teal">
+                    ✨ 모든 계정이 이미 부서 발령을 마쳤습니다. 신규 직원은 <strong>[사용자 관리]</strong>에서 먼저 계정을 추가해 주세요.
+                  </span>
+                ) : (
+                  <span className="text-[10.5px] text-ink3">
+                    💡 <strong>[사용자 관리]</strong>에서 생성된 후 아직 부서가 지정되지 않은 계정만 표시됩니다.
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
