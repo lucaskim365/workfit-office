@@ -126,9 +126,21 @@ export const userRepo = {
     await this.save(updated);
   },
 
-  /** 등록/수정(upsert). */
+  /** 등록/수정(upsert) — HR 마스터(employeeProfiles) 속성이 users 컬렉션 저장 시 유입되지 않도록 정제. */
   async save(user: User): Promise<void> {
-    await backend.save(userSchema.parse(user));
+    const raw = { ...userSchema.parse(user) } as Record<string, unknown>;
+    // Appwrite users 컬렉션에 정의되지 않은 HR 전용 속성 제거
+    delete raw.phone;
+    delete raw.hireDate;
+    delete raw.rrn;
+    delete raw.birthDate;
+    delete raw.gender;
+    delete raw.address;
+    delete raw.personalEmail;
+    delete raw.emergencyPhone;
+    delete raw.education;
+
+    await backend.save(raw as User);
   },
 
   /**
