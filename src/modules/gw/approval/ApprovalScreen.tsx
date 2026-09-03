@@ -4,7 +4,6 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import {
   useApprovalBoxes,
-  useApprovalDoc,
   useDecideStep,
   useRecallApproval,
   useSubmitApproval,
@@ -17,8 +16,22 @@ import {
   useBatchPermanentlyDelete,
   useAllApprovals,
 } from '@/features/gw/useApprovals';
-import { activeSteps, currentApproverIds, getPredecessorsOf, matchesBox, byRecent, getEffectiveRecipients, getReadRejectedDocIds, markRejectedDocAsRead } from '@/domain/approvalDoc/engine';
-import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
+import {
+  activeSteps,
+  currentApproverIds,
+  getPredecessorsOf,
+  matchesBox,
+  byRecent,
+  getEffectiveRecipients,
+  getReadRejectedDocIds,
+  markRejectedDocAsRead,
+  isCompletedBoxMatch,
+  isDrafterBoxMatch,
+  isRejectedBoxMatch,
+  isTodoBoxMatch,
+  isReceivedBoxMatch,
+} from '@/domain/approvalDoc/engine';
+import { type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 
 
@@ -63,9 +76,10 @@ export default function ApprovalScreen() {
 
   const { byBox, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
+  const [params] = useSearchParams();
+  const boxParam = params.get('box') as ApprovalBox | '문서함' | null;
 
-  const [params, setParams] = useSearchParams();
-  const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
+  const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
 
   const myActivePendingCount = useMemo(() => {
@@ -78,6 +92,27 @@ export default function ApprovalScreen() {
   const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
+
+  const handleSelectBox = (newBox: ApprovalBox | '문서함') => {
+    setBox(newBox);
+    setSelId(null);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('box', newBox);
+    nextUrl.searchParams.delete('doc');
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
+
+  const handleSelectDoc = (d: ApprovalDoc) => {
+    setSelId(d.id);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('box', box);
+    nextUrl.searchParams.set('doc', d.docNo || d.id);
+    window.history.replaceState(null, '', nextUrl.toString());
+    if (box === '반려' && me) {
+      markRejectedDocAsRead(me, d.id);
+      setReadRejectedIds((prev) => new Set(prev).add(d.id));
+    }
+  };
 
   // 반려함 문서 읽음(열람) 관리
   const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
@@ -134,15 +169,6 @@ export default function ApprovalScreen() {
     return Array.from(uniqueMap.values()).sort(byRecent);
   }, [box, allDocs, me, preds, org, userObj, users]);
 
-
-  const selDoc = useApprovalDoc(selId);
-
-
-  // 함이나 필터가 바뀌면 다중 선택 초기화
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, docBoxFilter, rejectFilter, draftFilter]);
-
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
     if (box === '문서함') {
@@ -177,8 +203,6 @@ export default function ApprovalScreen() {
           });
       }
     }
-
-
 
     if (box === '완료') {
       if (doneFilter === 'draft') {
@@ -234,48 +258,104 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org]);
+  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org, draftFilter]);
 
+  // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
+  const selDoc = useMemo(() => {
+    if (selId) {
+      const match = filteredList.find((d) => d.id === selId || d.docNo === selId) || allDocs.find((d) => d.id === selId || d.docNo === selId);
+      if (match) return match;
+    }
+    return filteredList[0] ?? null;
+  }, [selId, filteredList, allDocs]);
 
-  // 딥링크(?doc=ID) → 해당 문서를 품은 함으로 이동 + 선택.
+  // 함이나 필터가 바뀌면 다중 선택 초기화
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [box, doneFilter, todoFilter, docBoxFilter, rejectFilter, draftFilter]);
+
+  // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화
   useEffect(() => {
     const docId = params.get('doc');
-    if (!docId) return;
+    const urlBox = params.get('box') as ApprovalBox | '문서함' | null;
 
-    const targetDoc = allDocs.find((d) => d.id === docId);
-    if (targetDoc) {
-      let found = false;
-      // 1. 개인 결재함(대기, 상신, 완료 등)에서 먼저 조회
-      for (const b of APPROVAL_BOXES) {
-        if ((byBox[b] ?? []).some((d) => d.id === docId)) {
-          setBox(b);
-          setSelId(docId);
-          found = true;
-          break;
-        }
+    // 1. URL에 box만 변경된 경우
+    if (!docId) {
+      if (urlBox && urlBox !== box) {
+        setBox(urlBox);
       }
-      // 2. 개인 결재함에 없는 경우, 부서/전사 공개 문서함에서 매칭 처리
-      if (!found) {
-        setBox('문서함');
-        if (targetDoc.visibility === '전사') {
-          setDocBoxFilter('all');
-        } else {
-          setDocBoxFilter('dept');
-        }
-        setSelId(docId);
-      }
+      return;
     }
 
-    params.delete('doc');
-    setParams(params, { replace: true });
-  }, [params, byBox, allDocs, setParams]);
+    if (allDocs.length === 0) return;
+
+    const targetDoc = allDocs.find((d) => d.id === docId || d.docNo === docId);
+    if (!targetDoc) return;
+
+    if (selId !== targetDoc.id) {
+      setSelId(targetDoc.id);
+    }
+
+    // 2. URL에 이미 box가 명시되어 있다면 해당 결재함을 존중 (임의 이동 방지)
+    if (urlBox) {
+      if (box !== urlBox) {
+        setBox(urlBox);
+      }
+      return;
+    }
+
+    // 3. 외부 링크 등으로 box 파라미터 없이 진입한 경우에만 1회 최적 결재함 자동 판정
+    let determinedBox: ApprovalBox | '문서함' = '문서함';
+    if (targetDoc.status === '완료' || targetDoc.status === '시행대기') {
+      if (isCompletedBoxMatch(targetDoc, me)) {
+        determinedBox = '완료';
+        setDoneFilter('all');
+      } else if (isDrafterBoxMatch(targetDoc, me)) {
+        determinedBox = '상신';
+        setDraftFilter('completed');
+      } else {
+        determinedBox = '문서함';
+        setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
+      }
+    } else if (targetDoc.status === '반려' || targetDoc.status === '긴급 조치 사후 검토 반려' || targetDoc.status === '시행반송') {
+      if (isRejectedBoxMatch(targetDoc, me)) {
+        determinedBox = '반려';
+        setRejectFilter('all');
+      } else if (isDrafterBoxMatch(targetDoc, me)) {
+        determinedBox = '상신';
+        setDraftFilter('rejected');
+      } else {
+        determinedBox = '문서함';
+        setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
+      }
+    } else if (targetDoc.status === '임시저장') {
+      determinedBox = '임시';
+    } else if (isTodoBoxMatch(targetDoc, me)) {
+      determinedBox = '대기';
+      setTodoFilter('all');
+    } else if (isDrafterBoxMatch(targetDoc, me)) {
+      determinedBox = '상신';
+      setDraftFilter(targetDoc.status === '진행중' ? 'progress' : 'all');
+    } else if (isReceivedBoxMatch(targetDoc, me, userObj?.dept)) {
+      determinedBox = '수신';
+    } else {
+      determinedBox = '문서함';
+      setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
+    }
+
+    setBox(determinedBox);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('box', determinedBox);
+    nextUrl.searchParams.set('doc', targetDoc.docNo || targetDoc.id);
+    window.history.replaceState(null, '', nextUrl.toString());
+  }, [params, allDocs, me, userObj?.dept]);
 
   // 함 전환/목록/필터 변화 시 선택 보정(현재 필터링된 목록에 없으면 첫 항목).
   useEffect(() => {
     if (filteredList.length === 0) {
       if (selId !== null) setSelId(null);
     } else {
-      const exists = filteredList.some((d: ApprovalDoc) => d.id === selId);
+      const exists = filteredList.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
       if (!exists) {
         const firstId = filteredList[0].id;
         if (selId !== firstId) setSelId(firstId);
@@ -377,7 +457,7 @@ export default function ApprovalScreen() {
 
           {/* 임시 저장함 단독 버튼 (새 상신 바로 밑 배치) */}
           <button
-            onClick={() => setBox('임시')}
+            onClick={() => handleSelectBox('임시')}
             className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors mb-1 ${box === '임시' ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'
               }`}
           >
@@ -514,7 +594,7 @@ export default function ApprovalScreen() {
                   return (
                     <button
                       key={b}
-                      onClick={() => setBox(b)}
+                      onClick={() => handleSelectBox(b)}
                       className={`flex w-full items-center justify-between rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
@@ -687,17 +767,11 @@ export default function ApprovalScreen() {
                     const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
                     const isChecked = selectedIds.includes(d.id);
 
-                    const isActive = selId === d.id;
+                    const isActive = selDoc?.id === d.id || selDoc?.docNo === d.docNo;
                     return (
                       <button
                         key={d.id}
-                        onClick={() => {
-                          setSelId(d.id);
-                          if (box === '반려' && me) {
-                            markRejectedDocAsRead(me, d.id);
-                            setReadRejectedIds((prev) => new Set(prev).add(d.id));
-                          }
-                        }}
+                        onClick={() => handleSelectDoc(d)}
                         className={`relative flex w-full items-start gap-2 border-b border-border px-3.5 py-3 text-left transition-all ${isActive
                           ? 'bg-teal-soft/50 border-l-4 border-l-teal shadow-2xs font-semibold'
                           : isRecentCompleted
