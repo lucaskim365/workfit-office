@@ -1273,7 +1273,59 @@ function DocDetail({
           );
         })()}
 
-
+        {/* 결재 진행 및 결재자 승인의견 / 코멘트 이력 카드 (기안자 및 모든 열람자 확인 가능) */}
+        {(() => {
+          const stepsWithComments = doc.steps.filter((s) => s.comment && s.comment.trim() && s.decision !== '대기');
+          if (stepsWithComments.length === 0) return null;
+          return (
+            <div className="mb-4 rounded-xl border border-teal/30 bg-teal/5 p-3.5 text-[12px] text-ink animate-fade-in">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 font-bold text-teal">
+                  <span>💬</span>
+                  <span>결재자 심사의견 / 코멘트 ({stepsWithComments.length}건)</span>
+                </div>
+                <span className="text-[10.5px] text-ink3 font-medium">결재자가 남긴 처리 의견입니다</span>
+              </div>
+              <div className="space-y-2">
+                {stepsWithComments.map((s, idx) => {
+                  const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
+                  const approverName = s.approverName || u?.name || s.approverId;
+                  const approverPos = s.approverPos || u?.position || '';
+                  const approverDept = s.approverDept || u?.dept || '';
+                  const isReject = s.decision === '반려';
+                  return (
+                    <div
+                      key={idx}
+                      className={`rounded-lg p-2.5 border ${
+                        isReject
+                          ? 'border-danger/30 bg-danger/5'
+                          : 'border-border/60 bg-white dark:bg-zinc-800 shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[11px] mb-1">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                              isReject ? 'bg-danger text-white' : 'bg-teal/15 text-teal'
+                            }`}
+                          >
+                            {s.decision || s.kind}
+                          </span>
+                          <span className="text-ink">{approverName} {approverPos}</span>
+                          {approverDept && <span className="text-ink3 font-normal">({approverDept})</span>}
+                        </div>
+                        <span className="text-ink3">{s.decidedAt ? fmtDateTime(s.decidedAt) : ''}</span>
+                      </div>
+                      <div className="text-[11.5px] text-ink leading-relaxed whitespace-pre-wrap pl-2 border-l-2 border-teal/40 ml-1">
+                        “{s.comment}”
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 하단: 결재 문서 */}
         <div className="border-t border-border pt-4">
@@ -1288,7 +1340,7 @@ function DocDetail({
               🖨 인쇄
             </button>
           </div>
-          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-hidden shadow-sm p-4">
+          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 overflow-x-auto overflow-y-visible shadow-sm p-3 sm:p-4">
             <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>
