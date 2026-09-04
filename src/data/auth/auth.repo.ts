@@ -29,16 +29,20 @@ function nowStamp(): string {
 
 export const authRepo = {
   /**
-   * 사번(empNo) 또는 이메일 + 비밀번호로 인증. 성공 시 User 반환.
+   * 사번(empNo/id), 전체 이메일, 또는 이메일 아이디(@ 앞부분) + 비밀번호로 인증. 성공 시 User 반환.
    * 실패 시 AuthError(code) throw.
    */
   async authenticate(loginId: string, password: string): Promise<User> {
     const id = loginId.trim();
     const key = id.toLowerCase();
     const users = await userRepo.list();
-    const user = users.find(
-      (u) => u.empNo.toLowerCase() === key || u.email.toLowerCase() === key,
-    );
+    const user = users.find((u) => {
+      const empNoMatch = u.empNo ? u.empNo.toLowerCase() === key : false;
+      const idMatch = u.id ? u.id.toLowerCase() === key : false;
+      const emailMatch = u.email ? u.email.toLowerCase() === key : false;
+      const emailIdMatch = u.email ? u.email.split('@')[0].toLowerCase() === key : false;
+      return empNoMatch || idMatch || emailMatch || emailIdMatch;
+    });
 
     if (!user) throw new AuthError('NOT_FOUND');
     if (user.status === '잠금') throw new AuthError('LOCKED');

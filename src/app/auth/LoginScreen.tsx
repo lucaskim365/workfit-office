@@ -8,7 +8,7 @@ import defaultLogo from '@/assets/logo.png';
 function authErrorMessage(err: unknown): string {
   if (err instanceof AuthError) {
     const map: Record<AuthErrorCode, string> = {
-      NOT_FOUND: '사번 또는 이메일이 올바르지 않습니다.',
+      NOT_FOUND: '사번, 이메일 또는 아이디가 올바르지 않습니다.',
       WRONG_PASSWORD: '비밀번호가 올바르지 않습니다.',
       LOCKED: '잠긴 계정입니다. 관리자에게 문의하세요.',
       DISABLED: '사용할 수 없는 계정입니다. 관리자에게 문의하세요.',
@@ -88,7 +88,7 @@ export default function LoginScreen() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-6 py-6">
           <label className="flex flex-col gap-1">
-            <span className="text-[11.5px] font-semibold text-ink2">사번 또는 이메일</span>
+            <span className="text-[11.5px] font-semibold text-ink2">사번, 이메일 또는 아이디</span>
             <input
               type="text"
               autoComplete="username"
@@ -96,7 +96,7 @@ export default function LoginScreen() {
               onChange={(e) => setLoginId(e.target.value)}
               required
               className="rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal"
-              placeholder="A12345 또는 you@company.co.kr"
+              placeholder="사번, 이메일 또는 아이디(@ 앞부분) 입력"
             />
           </label>
           <label className="flex flex-col gap-1">
