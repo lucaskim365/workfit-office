@@ -151,7 +151,7 @@ export function assertReservationTransition(from: ReservationStatus, to: Reserva
   }
 }
 
-export function canManageResources(actor: User, isAdmin = false): boolean {
+export function canManageResources(actor: User, isAdmin = true): boolean {
   return actor.status === '사용' && isAdmin;
 }
 

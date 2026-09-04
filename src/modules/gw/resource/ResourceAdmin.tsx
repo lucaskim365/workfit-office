@@ -5,6 +5,7 @@ import { RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '@/domain/resource/
 import type { User } from '@/domain/user/schema';
 import { canManageResources } from '@/domain/reservation/engine';
 import { useSaveResource, useDeleteResource } from '@/features/resource/useResources';
+import { usePermission } from '@/features/auth/usePermission';
 import { Modal } from '@/shared/ui/Modal';
 import { ResourceStatusBadge } from './ResourceBadges';
 import { Button } from '@/shared/ui/Button';
@@ -128,9 +129,12 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
 }
 
 export default function ResourceAdmin({ actor, resources, users, departments }: ResourceAdminProps) {
+  const { isAdmin, canAction } = usePermission();
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
   const deleteResource = useDeleteResource();
-  if (!canManageResources(actor)) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
+  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update') || (actor ? canManageResources(actor, isAdmin) : false);
+
+  if (!canManage) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
 
   return (
     <div className="space-y-4">
