@@ -22,12 +22,15 @@ export function useCommuteEmployees() {
   });
 }
 
+const COMMUTE_REFETCH_INTERVAL_MS = 5 * 60_000; // 5분 주기 자동 갱신
+
 export function useCommuteMonth(empId: number | null, month: string) {
   return useQuery({
     queryKey: ['commute', 'month', empId, month],
     queryFn: () => commuteRepo.listMonth(empId as number, month),
     enabled: empId !== null,
-    staleTime: 60_000,
+    staleTime: COMMUTE_REFETCH_INTERVAL_MS,
+    refetchInterval: COMMUTE_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -37,7 +40,8 @@ export function useCommuteDay(date: string | null) {
     queryKey: ['commute', 'day', date],
     queryFn: () => commuteRepo.listDay(date as string),
     enabled: date !== null,
-    staleTime: 60_000,
+    staleTime: COMMUTE_REFETCH_INTERVAL_MS,
+    refetchInterval: COMMUTE_REFETCH_INTERVAL_MS,
   });
 }
 
@@ -47,6 +51,7 @@ export function useCommuteMonthAll(month: string | null) {
     queryKey: ['commute', 'month-all', month],
     queryFn: () => commuteRepo.listMonthAll(month as string),
     enabled: month !== null,
-    staleTime: 60_000,
+    staleTime: COMMUTE_REFETCH_INTERVAL_MS,
+    refetchInterval: COMMUTE_REFETCH_INTERVAL_MS,
   });
 }

@@ -277,15 +277,20 @@ export const chatRoomRepo = {
 
   /** 신규 방 생성. 1:1(direct)은 동일 참여자 조합이 이미 있으면 그 방을 재사용(중복 방지). */
   async create(input: CreateRoomInput): Promise<ChatRoom> {
-    // ⚠ 채번은 삭제방 포함 전체 기준 — 소프트삭제된 방 ID 재사용으로 보존 대화를 덮어쓰면 안 됨.
     const all = await this.list(undefined, { includeDeleted: true });
-    if (input.type === 'direct') {
-      // 재사용은 살아있는 방만. 삭제된 1:1 은 무시하고 새 방을 만든다.
+    if (input.type === 'direct' && input.members.length === 2) {
+      // 재사용은 살아있는 방만.
       const existing = all.find((r) => !r.deletedAt && r.type === 'direct' && sameMembers(r.members, input.members));
       if (existing) return existing;
     }
+
+    const roomId =
+      input.type === 'direct' && input.members.length === 2
+        ? `RM-DIR-${[...input.members].sort().join('-')}`
+        : nextId(all);
+
     const room = chatRoomSchema.parse({
-      id: nextId(all),
+      id: roomId,
       name: input.name,
       type: input.type,
       members: input.members,

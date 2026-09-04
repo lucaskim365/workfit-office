@@ -18,5 +18,5 @@ export const DEPARTMENT_SEED: Department[] = [
   { id: 'D220', name: 'AX 솔루션컨설팅팀', parentId: 'D200', headUserId: 'U008', deptType: '본사', order: 2 },
   { id: 'D230', name: 'AX PMO팀', parentId: 'D200', headUserId: 'U009', deptType: '본사', order: 3 },
   { id: 'D240', name: '데이터플랫폼 개발팀', parentId: 'D200', headUserId: 'U011', deptType: '본사', order: 4 },
-  { id: 'D250', name: '부설기술연구소', parentId: 'D200', headUserId: null, deptType: '본사', order: 5 },
+  { id: 'D250', name: '부설기술연구소', parentId: 'D200', headUserId: 'U003', deptType: '본사', order: 5 },
 ];

@@ -71,12 +71,10 @@ async function handleChatMessage(msg, dbs, DB, log) {
   );
   if (tokens.length === 0) return { skipped: 'no-tokens', room: roomId };
 
-  let preview = msg.text || '';
-  if (msg.type === 'image') preview = '📷 사진';
-  else if (msg.type === 'file') preview = '📎 파일';
   const senderName = msg.senderName || '';
   const title = room.name;
-  const body = senderName ? `${senderName}: ${preview}` : preview;
+  // 개인정보 보호: 메시지 알림 본문 미리보기 숨김 처리
+  const body = '새로운 메시지가 도착했습니다.';
 
   const res = await ensureAdmin()
     .messaging()

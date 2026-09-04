@@ -71,6 +71,23 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
   const logoUrl = companyInfo?.logoUrl;
   const navigate = useNavigate();
 
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = (moduleId: string) => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setOpenModule(moduleId);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setOpenModule(null);
+    }, 200);
+  };
+
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
   const [notiOpen, setNotiOpen] = useState(false);
@@ -151,7 +168,16 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             const screenCount = accessibleGroups.reduce((s, g) => s + (g.children?.filter((x) => x.use !== false && x.url && canAccess(x.url)).length ?? 0), 0);
             const cols = accessibleGroups.length > 3 ? 3 : accessibleGroups.length > 1 ? 2 : 1;
             return (
-              <div key={m.id} className="relative">
+              <div
+                key={m.id}
+                className="relative"
+                onMouseEnter={() => {
+                  if (!isSpecial) handleMouseEnter(m.id);
+                }}
+                onMouseLeave={() => {
+                  if (!isSpecial) handleMouseLeave();
+                }}
+              >
                 <button
                   onClick={() => {
                     if (m.id === 'M_GW') {
@@ -180,7 +206,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                 {isOpen && !isSpecial && (
                   <div
                     ref={panelRef}
-                    className="absolute left-1/2 top-[calc(100%+10px)] z-[60] flex max-h-[calc(100vh-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)]"
+                    onMouseEnter={() => handleMouseEnter(m.id)}
+                    onMouseLeave={handleMouseLeave}
+                    className="absolute left-1/2 top-[calc(100%+6px)] z-[60] flex max-h-[calc(100vh-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 before:content-['']"
                     style={{ width: cols === 3 ? 624 : cols === 2 ? 432 : 248, transform: `translateX(calc(-50% + ${shift}px))` }}
                   >
                     <div className="absolute -top-1.5 -ml-1.5 h-3 w-3 rotate-45 border-l border-t border-border bg-panel" style={{ left: `calc(50% - ${shift}px)` }} />

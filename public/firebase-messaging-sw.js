@@ -19,8 +19,10 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const n = payload.notification || {};
   const data = payload.data || {};
+  const isChat = Boolean(data.roomId);
+  const bodyText = isChat ? '새로운 메시지가 도착했습니다.' : (n.body || data.body || '');
   self.registration.showNotification(n.title || data.title || '새 알림', {
-    body: n.body || data.body || '',
+    body: bodyText,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     data,
