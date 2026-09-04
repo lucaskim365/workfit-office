@@ -32,6 +32,8 @@ export interface CrudOpts<T> {
   seed: T[];
   /** Appwrite: JSON 직렬화할 중첩 필드명. */
   jsonFields?: string[];
+  /** Appwrite: 저장 전 페이로드에서 제외할 클라이언트 전용 필드명. */
+  stripFields?: string[];
   /** Firestore write 인코더(중첩 배열 코덱). */
   firestoreEncode?: (item: T) => unknown;
   /** Firestore read 디코더(파싱 전 적용). */
@@ -39,7 +41,7 @@ export interface CrudOpts<T> {
 }
 
 export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
-  const { coll, parse, idOf, seed, jsonFields = [], firestoreEncode, firestoreDecode } = opts;
+  const { coll, parse, idOf, seed, jsonFields = [], stripFields = [], firestoreEncode, firestoreDecode } = opts;
 
   // ── Appwrite 직렬화(중첩 → JSON 문자열) ──
   const toRow = (item: T): Record<string, unknown> => {
@@ -52,6 +54,10 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
     delete row.$databaseId;
     delete row.$collectionId;
     delete row.$sequence;
+
+    for (const f of stripFields) {
+      delete row[f];
+    }
 
     for (const f of jsonFields) {
       const v = (item as Record<string, unknown>)[f];

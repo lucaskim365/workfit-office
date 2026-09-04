@@ -43,6 +43,7 @@ const mappingBackend = createCrudBackend<RoleMapping>({
   idOf: (x) => x.id || (x as any).$id || `map_${x.roleCode}_${x.targetType}_${x.targetId}`,
   seed: [],
   jsonFields: [],
+  stripFields: ['id'],
 });
 
 export const roleGroupRepo = {
