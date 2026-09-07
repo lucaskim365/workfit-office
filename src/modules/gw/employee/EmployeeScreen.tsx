@@ -112,8 +112,12 @@ export default function EmployeeScreen() {
 
     return users.map((u) => {
       const p = profileMap.get(u.id);
-      const employmentStatus: EmploymentStatus =
-        p?.status || (u.status === '사용' ? 'ACTIVE' : u.status === '잠금' ? 'LEAVE' : 'RETIRED');
+      const isRetired = u.status === '미사용' || Boolean(u.resignedAt) || p?.status === 'RETIRED';
+      const isPending = !isRetired && (!u.dept || u.dept === '미지정' || u.dept === '발령대기');
+      const employmentStatus: EmploymentStatus = isRetired
+        ? 'RETIRED'
+        : p?.status || (u.status === '사용' ? 'ACTIVE' : u.status === '잠금' ? 'LEAVE' : 'RETIRED');
+
       return {
         id: p?.id || u.id,
         employeeNo: p?.empNo || u.empNo || u.id,
@@ -127,6 +131,7 @@ export default function EmployeeScreen() {
         profileImage: u.photoUrl || '',
         hireDate: p?.hireDate || (u as any).hireDate || '',
         employmentStatus,
+        isPending,
         rrn: p?.rrn || (u as any).rrn || '',
         address: p?.address || (u as any).address || '',
         personalEmail: p?.personalEmail || (u as any).personalEmail || '',
@@ -175,12 +180,42 @@ export default function EmployeeScreen() {
     return employees.find((e) => e.id === selectedUserId || e.userId === selectedUserId) || null;
   }, [employees, selectedUserId]);
 
+  // 재직 상태별 카운트 계산
+  const statusCounts = useMemo(() => {
+    let total = employees.length;
+    let active = 0;
+    let retired = 0;
+    let pending = 0;
+    let leave = 0;
+
+    for (const e of employees) {
+      if (e.employmentStatus === 'RETIRED') retired++;
+      else if (e.isPending) pending++;
+      else if (e.employmentStatus === 'LEAVE') leave++;
+      else active++;
+    }
+
+    return { total, active, retired, pending, leave };
+  }, [employees]);
+
   // 필터링된 임직원 리스트
   const filteredEmployees = useMemo(() => {
     return employees.filter((e) => {
       const matchDept = deptFilter === 'all' || e.dept === deptFilter;
       const matchPos = posFilter === 'all' || e.position === posFilter;
-      const matchStatus = statusFilter === 'all' || e.employmentStatus === statusFilter;
+
+      let matchStatus = true;
+      if (statusFilter === 'ACTIVE') {
+        matchStatus = e.employmentStatus === 'ACTIVE' && !e.isPending;
+      } else if (statusFilter === 'RETIRED') {
+        matchStatus = e.employmentStatus === 'RETIRED';
+      } else if (statusFilter === 'PENDING') {
+        matchStatus = Boolean(e.isPending);
+      } else if (statusFilter === 'LEAVE') {
+        matchStatus = e.employmentStatus === 'LEAVE';
+      } else if (statusFilter === 'all') {
+        matchStatus = true;
+      }
 
       const q = searchQuery.trim().toLowerCase();
       const matchQuery =
@@ -487,51 +522,68 @@ export default function EmployeeScreen() {
             </div>
 
             {/* 필터 툴바 */}
-            <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-panel-alt/20 p-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-ink2">소속 부서:</span>
-                <select
-                  value={deptFilter}
-                  onChange={(e) => setDeptFilter(e.target.value)}
-                  className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
-                >
-                  <option value="all">전체</option>
-                  {allDepts.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-panel-alt/20 p-2.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { key: 'all', label: '전체', count: statusCounts.total },
+                  { key: 'ACTIVE', label: '재직', count: statusCounts.active },
+                  { key: 'PENDING', label: '발령대기', count: statusCounts.pending },
+                  { key: 'RETIRED', label: '퇴사자', count: statusCounts.retired },
+                  { key: 'LEAVE', label: '휴직', count: statusCounts.leave },
+                ].map((st) => (
+                  <button
+                    key={st.key}
+                    onClick={() => setStatusFilter(st.key)}
+                    className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold transition-all ${
+                      statusFilter === st.key
+                        ? 'bg-teal text-white shadow-2xs'
+                        : 'border border-border/60 bg-panel text-ink2 hover:border-teal/50 hover:text-ink'
+                    }`}
+                  >
+                    <span>{st.label}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[9.5px] ${
+                        statusFilter === st.key ? 'bg-white/25 text-white' : 'bg-panel-alt text-ink3'
+                      }`}
+                    >
+                      {st.count}
+                    </span>
+                  </button>
+                ))}
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-ink2">직급:</span>
-                <select
-                  value={posFilter}
-                  onChange={(e) => setPosFilter(e.target.value)}
-                  className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
-                >
-                  <option value="all">전체</option>
-                  {allPositions.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-ink2">소속 부서:</span>
+                  <select
+                    value={deptFilter}
+                    onChange={(e) => setDeptFilter(e.target.value)}
+                    className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
+                  >
+                    <option value="all">전체</option>
+                    {allDepts.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-ink2">재직 구분:</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
-                >
-                  <option value="all">전체</option>
-                  <option value="ACTIVE">재직</option>
-                  <option value="LEAVE">휴직</option>
-                  <option value="RETIRED">퇴직</option>
-                </select>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-ink2">직급:</span>
+                  <select
+                    value={posFilter}
+                    onChange={(e) => setPosFilter(e.target.value)}
+                    className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
+                  >
+                    <option value="all">전체</option>
+                    {allPositions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -570,7 +622,13 @@ export default function EmployeeScreen() {
                           </td>
                           <td className="p-3 font-mono text-ink2">{e.employeeNo}</td>
                           <td className="p-3 font-semibold text-ink">{e.name}</td>
-                          <td className="p-3 text-ink2">{e.dept}</td>
+                          <td className="p-3 text-ink2">
+                            {e.isPending ? (
+                              <span className="text-amber-600 font-medium">발령대기 (미지정)</span>
+                            ) : (
+                              e.dept
+                            )}
+                          </td>
                           <td className="p-3 text-ink2">{e.position}</td>
                           <td className="p-3 text-ink3">{e.duty}</td>
                           <td className="p-3 truncate font-mono text-ink2">{e.email || '-'}</td>
@@ -578,14 +636,22 @@ export default function EmployeeScreen() {
                           <td className="p-3 text-center">
                             <span
                               className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${
-                                e.employmentStatus === 'ACTIVE'
-                                  ? 'border-teal/20 bg-teal-soft/20 text-teal'
+                                e.employmentStatus === 'RETIRED'
+                                  ? 'border-border bg-panel-alt text-ink3'
+                                  : e.isPending
+                                  ? 'border-indigo-500/30 bg-indigo-50 text-indigo-600'
                                   : e.employmentStatus === 'LEAVE'
                                   ? 'border-amber/20 bg-amber-soft text-amber'
-                                  : 'border-border bg-panel-alt text-ink3'
+                                  : 'border-teal/20 bg-teal-soft/20 text-teal'
                               }`}
                             >
-                              {e.employmentStatus === 'ACTIVE' ? '재직' : e.employmentStatus === 'LEAVE' ? '휴직' : '퇴직'}
+                              {e.employmentStatus === 'RETIRED'
+                                ? '퇴직'
+                                : e.isPending
+                                ? '발령대기'
+                                : e.employmentStatus === 'LEAVE'
+                                ? '휴직'
+                                : '재직'}
                             </span>
                           </td>
                         </tr>
