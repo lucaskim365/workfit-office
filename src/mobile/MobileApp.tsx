@@ -23,11 +23,13 @@ export default function MobileApp() {
     void onForegroundMessage(async (p) => {
       try {
         if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        const isChat = Boolean(p.roomId || p.type === '메신저');
+        const body = isChat ? '새로운 메시지가 도착했습니다.' : p.body;
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
           await reg.showNotification(p.title, {
-            body: p.body,
+            body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
@@ -35,7 +37,7 @@ export default function MobileApp() {
           });
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
-          new Notification(p.title, { body: p.body, icon: '/icons/icon-192.png' });
+          new Notification(p.title, { body, icon: '/icons/icon-192.png' });
         }
       } catch {
         /* iOS 등 미지원 환경 무시 */

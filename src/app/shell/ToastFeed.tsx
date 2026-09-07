@@ -64,7 +64,9 @@ export function ToastFeed() {
               </span>
               <span className="truncate text-[11.5px] font-bold text-ink">{it.data.who}</span>
             </div>
-            <div className="text-[11.5px] leading-snug text-ink2">{it.data.text}</div>
+            <div className="text-[11.5px] leading-snug text-ink2">
+              {it.data.type === '메신저' ? '새로운 메시지가 도착했습니다.' : it.data.text}
+            </div>
           </div>
           <button onClick={() => close(it.id)} className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-[13px] text-ink3 hover:text-ink">
             ×

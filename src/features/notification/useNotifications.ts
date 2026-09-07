@@ -93,7 +93,8 @@ export function useToastNotificationsTrigger(userId: string | undefined) {
         const newest = unread[0];
         if (newest) {
           const meta = NOTIFICATION_TYPE_META[newest.type] || { icon: '📢', color: '#16b8cf' };
-          triggerToast(newest.type, newest.senderName, newest.text, meta.icon, meta.color);
+          const displayText = newest.type === '메신저' ? '새로운 메시지가 도착했습니다.' : newest.text;
+          triggerToast(newest.type, newest.senderName, displayText, meta.icon, meta.color);
         }
       }
       lastCount.current = unread.length;

@@ -98,7 +98,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
                               <span className="shrink-0 text-[10px] text-ink3">{n.at}</span>
                             </div>
                             <div className="text-[10.5px] text-ink3">{n.roomName}</div>
-                            <div className="mt-0.5 truncate text-[11.5px] text-ink2">{n.text}</div>
+                            <div className="mt-0.5 truncate text-[11.5px] text-ink2">새로운 메시지가 도착했습니다.</div>
                           </div>
                           {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-danger" />}
                         </div>

@@ -146,7 +146,9 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
                       <span className="text-[11.5px] font-bold text-ink">{n.title}</span>
                       <span className="text-[9.5px] text-ink3">{n.senderName}</span>
                     </div>
-                    <p className="mt-0.5 text-[11px] leading-normal text-ink2">{n.text}</p>
+                    <p className="mt-0.5 text-[11px] leading-normal text-ink2">
+                      {n.type === '메신저' ? '새로운 메시지가 도착했습니다.' : n.text}
+                    </p>
                   </div>
                 </button>
               ))

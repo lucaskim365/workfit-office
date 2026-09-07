@@ -334,7 +334,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                           <span className="text-[9px] text-ink3">{n.createdAt.split('T')[0]}</span>
                         </div>
                         <p className="text-[11.5px] font-semibold text-ink2 truncate mt-0.5">{n.title}</p>
-                        <p className="text-[10.5px] text-ink3 line-clamp-2 mt-0.5">{n.text}</p>
+                        <p className="text-[10.5px] text-ink3 line-clamp-2 mt-0.5">
+                          {n.type === '메신저' ? '새로운 메시지가 도착했습니다.' : n.text}
+                        </p>
                       </div>
                     </div>
                   ))
