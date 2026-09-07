@@ -3,7 +3,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
 import { Button } from '@/shared/ui/Button';
-import { EMERGENCY_CONTACTS } from '@/data/emergencyContacts';
+import { EMERGENCY_CONTACTS, type EmergencyContact } from '@/data/emergencyContacts';
 
 
 /** 테스트 부서 및 테스트 계정 예외처리 */
@@ -30,14 +30,10 @@ export default function OrgChartScreen() {
     return new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
   }, [employeeProfiles]);
 
-  const [viewMode, setViewMode] = useState<'visual' | 'list' | 'emergency'>('visual');
+  const [viewMode, setViewMode] = useState<'visual' | 'emergency'>('visual');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selectedUser = org.users.find((u) => u.id === selectedUserId);
   const selectedProfile = selectedUserId ? profileMap.get(selectedUserId) : null;
-
-  // 리스트 뷰 필터 상태
-  const [listDeptFilter, setListDeptFilter] = useState('all');
-  const [listKeyword, setListKeyword] = useState('');
 
   // 유효 부서 및 유효 사용자 목록
   const validDepts = useMemo(() => org.depts.filter((d) => !isExcludedDept(d.name)), [org.depts]);
@@ -45,28 +41,6 @@ export default function OrgChartScreen() {
     () => org.users.filter((u) => u.status === '사용' && !isExcludedUser(u) && !isExcludedDept(u.dept)),
     [org.users],
   );
-
-  /** 리스트로 보기 필터링된 사원 목록 (대표이사 및 기술경영전략위원회는 연락처 비공개) */
-  const listMembers = useMemo(() => {
-    const text = listKeyword.trim().toLowerCase();
-    return validUsers
-      .filter((u) => (listDeptFilter === 'all' ? true : u.dept === listDeptFilter))
-      .filter((u) => {
-        if (!text) return true;
-        const prof = profileMap.get(u.id);
-        return (
-          u.name.toLowerCase().includes(text) ||
-          u.dept.toLowerCase().includes(text) ||
-          u.position.toLowerCase().includes(text) ||
-          u.email.toLowerCase().includes(text) ||
-          (prof?.phone && prof.phone.toLowerCase().includes(text))
-        );
-      })
-      .sort((a, b) => {
-        const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
-        return rankDiff || a.name.localeCompare(b.name, 'ko');
-      });
-  }, [validUsers, org, listDeptFilter, listKeyword, profileMap]);
 
   return (
     <div className="mx-auto max-w-6xl pb-12">
@@ -83,7 +57,7 @@ export default function OrgChartScreen() {
           </span>
         </div>
 
-        {/* 3단 뷰 모드 전환 버튼 (비주얼 차트 / 리스트로 보기 / 비상연락망) */}
+        {/* 2단 뷰 모드 전환 버튼 (비주얼 차트 / 비상연락망) */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-panel-alt/60 p-1 shadow-xs">
           <button
             type="button"
@@ -95,17 +69,6 @@ export default function OrgChartScreen() {
             }`}
           >
             <span>📊</span> 비주얼 차트
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[11.5px] font-bold transition-all ${
-              viewMode === 'list'
-                ? 'bg-panel text-teal shadow-xs'
-                : 'text-ink3 hover:text-ink'
-            }`}
-          >
-            <span>📋</span> 리스트로 보기
           </button>
           <button
             type="button"
@@ -129,124 +92,7 @@ export default function OrgChartScreen() {
       )}
 
 
-      {/* ── 2. 리스트로 보기 뷰 ── */}
-      {viewMode === 'list' && (
-        <div className="mt-5 space-y-3">
-          {/* 필터 툴바 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-ink3">부서:</span>
-              <select
-                value={listDeptFilter}
-                onChange={(e) => setListDeptFilter(e.target.value)}
-                className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
-              >
-                <option value="all">전체 부서</option>
-                {validDepts.map((d) => (
-                  <option key={d.id} value={d.name}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                value={listKeyword}
-                onChange={(e) => setListKeyword(e.target.value)}
-                placeholder="이름, 직급, 부서, 이메일 검색..."
-                className="h-8 w-60 rounded-lg border border-border bg-panel-alt/50 px-3 text-[11.5px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50"
-              />
-              {listKeyword && (
-                <button
-                  type="button"
-                  onClick={() => setListKeyword('')}
-                  className="rounded px-2 py-1 text-[11px] font-semibold text-ink3 hover:text-ink"
-                >
-                  초기화
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 사원 리스트 테이블 */}
-          <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-[11.5px]">
-                <thead>
-                  <tr className="border-b border-border bg-panel-alt/60 text-[10.5px] font-extrabold text-ink2">
-                    <th className="p-3">성명</th>
-                    <th className="p-3">부서</th>
-                    <th className="p-3">직급 / 직책</th>
-                    <th className="p-3">업무 이메일</th>
-                    <th className="p-3">직속 상급자</th>
-                    <th className="p-3 text-center">상세</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {listMembers.map((u) => {
-                    const manager = org.directManagerOf(u.id);
-                    const isPrivate = u.position.includes('대표') || u.dept === '대표이사' || u.dept.includes('위원회');
-                    return (
-                      <tr
-                        key={u.id}
-                        className="hover:bg-panel-alt/30 transition-colors cursor-pointer"
-                        onClick={() => setSelectedUserId(u.id)}
-                      >
-                        <td className="p-3 font-bold text-ink flex items-center gap-2">
-                          <span className="grid h-6 w-6 place-items-center rounded-full bg-teal-soft text-[10px] font-extrabold text-teal">
-                            {u.name[0]}
-                          </span>
-                          <span>{u.name}</span>
-                        </td>
-                        <td className="p-3 font-semibold text-teal">{u.dept}</td>
-                        <td className="p-3 text-ink2">
-                          {u.position} {u.jobTitle && <span className="text-ink3">({u.jobTitle})</span>}
-                        </td>
-                        <td className="p-3 font-mono text-ink2">
-                          {isPrivate ? (
-                            <span className="italic text-ink3 text-[10.5px]">비공개</span>
-                          ) : (
-                            <a
-                              href={`mailto:${u.email}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-teal hover:underline"
-                            >
-                              ✉ {u.email}
-                            </a>
-                          )}
-                        </td>
-                        <td className="p-3 text-ink3">{manager?.name ? `↑ ${manager.name} (${manager.position || manager.jobTitle || '부서장'})` : '—'}</td>
-                        <td className="p-3 text-center">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedUserId(u.id);
-                            }}
-                          >
-                            상세 정보
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {listMembers.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-ink3">
-                        검색 조건에 일치하는 임직원이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. 비상연락망 뷰 (공식 명단 16명 표출) ── */}
+      {/* ── 2. 비상연락망 뷰 (공식 명단 16명 표출) ── */}
       {viewMode === 'emergency' && (
         <div className="mt-5">
           <EmergencyContactView />
@@ -669,6 +515,7 @@ function VisualDiagramOrgChart({
 function EmergencyContactView() {
   const [keyword, setKeyword] = useState('');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<EmergencyContact | null>(null);
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -686,7 +533,8 @@ function EmergencyContactView() {
     );
   }, [keyword]);
 
-  const handleCopy = (text: string, label: string) => {
+  const handleCopy = (text: string, label: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     navigator.clipboard.writeText(text);
     setCopiedText(`${label} 복사됨!`);
     setTimeout(() => setCopiedText(null), 1800);
@@ -731,7 +579,7 @@ function EmergencyContactView() {
               </span>
             </div>
             <p className="text-[11.5px] text-ink3 mt-0.5">
-              비상 상황 및 업무 연락 시 신속한 소통을 위한 부서별 임직원 공식 연락처 명단입니다.
+              임직원의 프로필을 클릭하면 상세 비상연락 카드가 표시됩니다.
             </p>
           </div>
         </div>
@@ -773,7 +621,7 @@ function EmergencyContactView() {
         </div>
       </div>
 
-      {/* ── 비상연락망 정통 표 (원문 엑셀 서식 100% 반영) ── */}
+      {/* ── 비상연락망 정통 표 ── */}
       <div className="overflow-hidden rounded-2xl border border-border bg-panel shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12px]">
@@ -781,12 +629,13 @@ function EmergencyContactView() {
               <tr className="border-b-2 border-slate-300 bg-panel-alt/80 text-[11.5px] font-extrabold text-ink">
                 <th className="py-3 px-3 text-center w-14">번호</th>
                 <th className="py-3 px-3 text-center w-24">마스터코드</th>
-                <th className="py-3 px-3 w-28">이름</th>
-                <th className="py-3 px-3 w-36">영문이름</th>
+                <th className="py-3 px-3 w-36">이름 (프로필)</th>
+                <th className="py-3 px-3 w-32">영문이름</th>
                 <th className="py-3 px-4 min-w-[220px]">소속</th>
                 <th className="py-3 px-3 w-28">직급</th>
                 <th className="py-3 px-4 w-40">연락처</th>
                 <th className="py-3 px-4 w-52">전자메일</th>
+                <th className="py-3 px-3 text-center w-20">카드</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border font-medium">
@@ -797,10 +646,15 @@ function EmergencyContactView() {
                 return (
                   <tr
                     key={item.no}
+                    onClick={() => {
+                      if (!isVacant) setSelectedContact(item);
+                    }}
                     className={`transition-colors ${
-                      isTopLeader
-                        ? 'bg-panel-alt/30 hover:bg-teal-soft/20'
-                        : 'hover:bg-teal-soft/15'
+                      isVacant
+                        ? 'bg-panel-alt/10'
+                        : isTopLeader
+                        ? 'bg-panel-alt/30 hover:bg-teal-soft/20 cursor-pointer'
+                        : 'hover:bg-teal-soft/15 cursor-pointer'
                     }`}
                   >
                     {/* 번호 */}
@@ -813,15 +667,33 @@ function EmergencyContactView() {
                       {item.masterCode || '—'}
                     </td>
 
-                    {/* 이름 */}
+                    {/* 이름 (프로필 아바타 클릭 지원) */}
                     <td className="py-3 px-3">
-                      <div className="flex items-center gap-1.5 font-bold text-ink">
-                        {isVacant ? (
-                          <span className="italic text-ink3">{item.name}</span>
-                        ) : (
-                          <span>{item.name}</span>
-                        )}
-                      </div>
+                      {isVacant ? (
+                        <div className="flex items-center gap-2 text-ink3">
+                          <span className="grid h-7 w-7 place-items-center rounded-full bg-panel-alt border border-border text-xs">
+                            👤
+                          </span>
+                          <span className="italic">{item.name}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group">
+                          <div
+                            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-xs transition-transform group-hover:scale-110 ${
+                              isTopLeader
+                                ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                                : 'bg-gradient-to-br from-teal to-teal-dark'
+                            }`}
+                          >
+                            {item.name[0]}
+                          </div>
+                          <div>
+                            <span className="font-bold text-ink group-hover:text-teal group-hover:underline flex items-center gap-1">
+                              {item.name}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* 영문이름 */}
@@ -863,6 +735,7 @@ function EmergencyContactView() {
                         <div className="flex items-center gap-1.5 group">
                           <a
                             href={`tel:${item.phone}`}
+                            onClick={(e) => e.stopPropagation()}
                             className="text-teal font-bold hover:underline"
                             title="전화 걸기"
                           >
@@ -870,7 +743,7 @@ function EmergencyContactView() {
                           </a>
                           <button
                             type="button"
-                            onClick={() => handleCopy(item.phone!, '전화번호')}
+                            onClick={(e) => handleCopy(item.phone!, '전화번호', e)}
                             title="전화번호 복사"
                             className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
                           >
@@ -888,6 +761,7 @@ function EmergencyContactView() {
                         <div className="flex items-center gap-1.5 group">
                           <a
                             href={`mailto:${item.email}`}
+                            onClick={(e) => e.stopPropagation()}
                             className="text-ink2 hover:text-teal hover:underline"
                             title="이메일 작성"
                           >
@@ -895,7 +769,7 @@ function EmergencyContactView() {
                           </a>
                           <button
                             type="button"
-                            onClick={() => handleCopy(item.email!, '이메일')}
+                            onClick={(e) => handleCopy(item.email!, '이메일', e)}
                             title="이메일 복사"
                             className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
                           >
@@ -906,12 +780,28 @@ function EmergencyContactView() {
                         <span className="text-ink3 text-[11px] italic">비공개</span>
                       )}
                     </td>
+
+                    {/* 카드 열기 버튼 */}
+                    <td className="py-3 px-3 text-center">
+                      {!isVacant && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedContact(item);
+                          }}
+                          className="rounded-lg border border-border bg-panel-alt/60 px-2 py-1 text-[11px] font-bold text-ink2 hover:bg-teal hover:text-white hover:border-teal transition-all"
+                        >
+                          🪪 카드
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-ink3">
+                  <td colSpan={9} className="py-12 text-center text-ink3">
                     검색 조건과 일치하는 연락처 정보가 없습니다.
                   </td>
                 </tr>
@@ -920,6 +810,167 @@ function EmergencyContactView() {
           </table>
         </div>
       </div>
+
+      {/* ── 비상연락망 상세 프로필 카드 모달 ── */}
+      {selectedContact && (
+        <div
+          onClick={() => setSelectedContact(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border bg-panel text-left shadow-2xl animate-in zoom-in-95 duration-200"
+          >
+            {/* 카드 상단 배너 */}
+            <div className="relative h-28 bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 p-4">
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-[11px] font-mono tracking-wider font-semibold uppercase flex items-center gap-1.5">
+                  <span>🏢</span>
+                  <span>WORKFIT EMERGENCY CONTACT</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedContact(null)}
+                  className="grid h-7 w-7 place-items-center rounded-full bg-black/30 text-xs font-bold text-white hover:bg-black/60 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 중앙 원형 프로필 아바타 */}
+              <div className="absolute -bottom-10 left-6">
+                <div className="grid h-20 w-20 place-items-center rounded-full border-4 border-panel bg-gradient-to-br from-teal to-teal-dark text-3xl font-black text-white shadow-lg">
+                  {selectedContact.name[0]}
+                </div>
+              </div>
+            </div>
+
+            {/* 카드 본문 영역 */}
+            <div className="pt-12 px-6 pb-6 space-y-4">
+              {/* 성명 & 직급 & 마스터코드 */}
+              <div className="flex items-start justify-between gap-2 border-b border-border pb-3.5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-black text-ink">{selectedContact.name}</h3>
+                    {selectedContact.engName && (
+                      <span className="text-xs text-ink3 font-sans">({selectedContact.engName})</span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="rounded-md bg-teal-soft px-2 py-0.5 text-xs font-bold text-teal">
+                      {selectedContact.position}
+                    </span>
+                    {selectedContact.duty && selectedContact.duty !== selectedContact.position && (
+                      <span className="rounded-md bg-panel-alt border border-border px-2 py-0.5 text-xs font-semibold text-ink2">
+                        {selectedContact.duty}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {selectedContact.masterCode && (
+                  <div className="text-right shrink-0">
+                    <span className="block text-[10px] text-ink3 font-mono">마스터코드</span>
+                    <span className="rounded bg-panel-alt border border-border px-2 py-0.5 font-mono text-xs font-bold text-ink2">
+                      #{selectedContact.masterCode}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* 소속 부서 목록 */}
+              <div>
+                <span className="block text-[11px] font-bold text-ink3 mb-1.5">소속 부서</span>
+                <div className="space-y-1">
+                  {selectedContact.department.split(' / ').map((dept: string, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-xl bg-panel-alt/50 border border-border/60 px-3 py-1.5 text-[12px] font-semibold text-ink"
+                    >
+                      <span className="text-teal text-xs">▪</span>
+                      <span>{dept}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 주요 비상 연락처 */}
+              <div className="space-y-2.5 rounded-2xl bg-teal-soft/20 border border-teal/20 p-4">
+                {/* 전화번호 */}
+                <div>
+                  <span className="block text-[10.5px] font-bold text-teal-dark mb-1">
+                    📱 휴대전화 (비상연락처)
+                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-base font-extrabold text-ink tracking-wide">
+                      {selectedContact.phone || '연락처 비공개'}
+                    </span>
+                    {selectedContact.phone && (
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={`tel:${selectedContact.phone}`}
+                          className="flex items-center gap-1 rounded-xl bg-teal px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-teal-dark transition-colors"
+                        >
+                          <span>📞 통화</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopy(selectedContact.phone!, '전화번호', e)}
+                          className="rounded-xl border border-border bg-panel px-2.5 py-1.5 text-xs font-bold text-ink2 hover:text-ink transition-colors"
+                        >
+                          복사
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 이메일 */}
+                <div className="border-t border-teal/10 pt-2.5">
+                  <span className="block text-[10.5px] font-bold text-teal-dark mb-1">
+                    ✉️ 공식 업무 이메일
+                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[12.5px] font-semibold text-ink truncate">
+                      {selectedContact.email || '이메일 비공개'}
+                    </span>
+                    {selectedContact.email && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <a
+                          href={`mailto:${selectedContact.email}`}
+                          className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1 text-xs font-bold text-ink hover:text-teal transition-colors"
+                        >
+                          <span>✉️ 작성</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopy(selectedContact.email!, '이메일', e)}
+                          className="rounded-xl border border-border bg-panel px-2.5 py-1 text-xs font-bold text-ink2 hover:text-ink transition-colors"
+                        >
+                          복사
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 하단 안내 및 닫기 */}
+              <div className="flex items-center justify-between pt-2 text-[11px] text-ink3">
+                <span>※ 비상 상황 시 신속 보고 체계 준수</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedContact(null)}
+                >
+                  닫기
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
