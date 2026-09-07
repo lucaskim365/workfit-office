@@ -18,6 +18,7 @@ import { resolveCommuteScope } from '@/features/auth/scopeHelper';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
@@ -211,6 +212,16 @@ export default function CommuteScreen() {
   const org = useOrgTree();
   const { policy = DEFAULT_COMMUTE_POLICY, savePolicy } = useCommutePolicy();
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+
+  // DB 연동 공휴일 목록 및 빠른 조회를 위한 Date -> Name 맵
+  const { data: holidays = [] } = useHolidays();
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, string>();
+    holidays.forEach((h) => {
+      map.set(h.date, h.name);
+    });
+    return map;
+  }, [holidays]);
 
   const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
   const canManagePolicy = isAdmin || commuteScope === 'ALL';
@@ -436,10 +447,10 @@ export default function CommuteScreen() {
           inAt: null,
           outAt: null,
         };
-      records.push(evaluateCommuteRecord(raw, policy, myLeaveMap, myHireDate));
+      records.push(evaluateCommuteRecord(raw, policy, myLeaveMap, myHireDate, holidayMap));
     }
     return records;
-  }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate]);
+  }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate, holidayMap]);
 
   const mySummary = useMemo(() => summarizeCommuteMonth(myMonthRows), [myMonthRows]);
 
@@ -515,7 +526,7 @@ export default function CommuteScreen() {
             inAt: null,
             outAt: null,
           };
-        const evaluated = evaluateCommuteRecord(raw, policy, personLeaveMap, hireDate);
+        const evaluated = evaluateCommuteRecord(raw, policy, personLeaveMap, hireDate, holidayMap);
         records.push(evaluated);
         recordsMap.set(dateStr, evaluated);
       }
@@ -556,7 +567,7 @@ export default function CommuteScreen() {
     }
 
     return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [scopedEmployees, monthAllQuery.data, month, policy, globalLeaveMap, getHireDateForEmp, userByEmpMap]);
+  }, [scopedEmployees, monthAllQuery.data, month, policy, globalLeaveMap, getHireDateForEmp, userByEmpMap, holidayMap]);
 
   // 글로벌 필터 적용된 PersonRows
   const filteredPersonRows = useMemo(() => {
@@ -778,7 +789,7 @@ export default function CommuteScreen() {
 
           {rows.map((row) => {
             const dayNum = Number(row.date.slice(8));
-            const holiday = getKoreanHoliday(row.date);
+            const holiday = getKoreanHoliday(row.date, holidayMap);
             const isSun = new Date(row.date).getDay() === 0;
             const isSat = new Date(row.date).getDay() === 6;
             const isToday = row.date === todayStr;
@@ -903,7 +914,7 @@ export default function CommuteScreen() {
                 {myMonthRows.map((row) => {
                   const isSun = isWeekend(row.date) && new Date(row.date).getDay() === 0;
                   const isSat = isWeekend(row.date) && new Date(row.date).getDay() === 6;
-                  const holiday = getKoreanHoliday(row.date);
+                  const holiday = getKoreanHoliday(row.date, holidayMap);
 
                   return (
                     <tr key={row.date} className="border-b border-border/60 text-ink">
@@ -1149,6 +1160,7 @@ export default function CommuteScreen() {
               month={month}
               rows={filteredPersonRows}
               onSelectPerson={(person) => setSelectedPersonDetail(person)}
+              holidayMap={holidayMap}
             />
           )}
 
@@ -1183,6 +1195,7 @@ export default function CommuteScreen() {
         person={selectedPersonDetail}
         onClose={() => setSelectedPersonDetail(null)}
         month={month}
+        holidayMap={holidayMap}
       />
     </div>
   );

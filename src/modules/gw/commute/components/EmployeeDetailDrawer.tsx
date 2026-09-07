@@ -9,6 +9,7 @@ interface EmployeeDetailDrawerProps {
   person: CommutePersonRow | null;
   onClose: () => void;
   month: string;
+  holidayMap?: Map<string, string>;
 }
 
 const pad = (v: number) => String(v).padStart(2, '0');
@@ -19,7 +20,7 @@ const timeOf = (iso: string | null): string => {
 };
 const hourText = (min: number): string => (min === 0 ? '—' : `${Math.floor(min / 60)}h ${min % 60}m`);
 
-export function EmployeeDetailDrawer({ person, onClose, month }: EmployeeDetailDrawerProps) {
+export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: EmployeeDetailDrawerProps) {
   const [filterType, setFilterType] = useState<'all' | 'work' | 'anomaly' | 'leave'>('all');
 
   const filteredRecords = useMemo(() => {
@@ -167,7 +168,7 @@ export function EmployeeDetailDrawer({ person, onClose, month }: EmployeeDetailD
             </div>
           ) : (
             filteredRecords.map((rec) => {
-              const holiday = getKoreanHoliday(rec.date);
+              const holiday = getKoreanHoliday(rec.date, holidayMap);
               const weekend = isWeekend(rec.date);
 
               return (

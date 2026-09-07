@@ -6,6 +6,7 @@ interface CommuteMatrixViewProps {
   month: string;
   rows: CommutePersonRow[];
   onSelectPerson: (person: CommutePersonRow) => void;
+  holidayMap?: Map<string, string>;
 }
 
 const pad = (v: number) => String(v).padStart(2, '0');
@@ -69,7 +70,7 @@ function CellStatusBadge({ status, leaveName, holidayName }: { status: string; l
   return <span className="text-[9px] text-ink3/50 font-mono">—</span>;
 }
 
-export function CommuteMatrixView({ month, rows, onSelectPerson }: CommuteMatrixViewProps) {
+export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: CommuteMatrixViewProps) {
   const [year, mm] = month.split('-').map(Number);
   const daysInMonth = useMemo(() => {
     if (!year || !mm) return [];
@@ -83,11 +84,11 @@ export function CommuteMatrixView({ month, rows, onSelectPerson }: CommuteMatrix
         dayNum: d,
         isSun: dayOfWeek === 0,
         isSat: dayOfWeek === 6,
-        holiday: getKoreanHoliday(dateStr),
+        holiday: getKoreanHoliday(dateStr, holidayMap),
       });
     }
     return days;
-  }, [year, mm, month]);
+  }, [year, mm, month, holidayMap]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs">

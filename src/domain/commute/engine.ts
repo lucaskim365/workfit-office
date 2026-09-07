@@ -84,8 +84,15 @@ const RECURRING_HOLIDAYS: Record<string, string> = {
 
 /**
  * 주어진 날짜(YYYY-MM-DD)의 대한민국 공휴일 명칭 반환 (공휴일이 아니면 null)
+ * - 1순위: 주입된 DB 실시간 공휴일 맵 (customMap)
+ * - 2순위: 브라우저 캐시 (workfit_holidays_v1)
+ * - 3순위: 하드코딩된 법정공휴일/대체공휴일 (KOREAN_HOLIDAYS)
+ * - 4순위: 매년 반복 양력 공휴일 (RECURRING_HOLIDAYS)
  */
-export function getKoreanHoliday(dateStr: string): string | null {
+export function getKoreanHoliday(dateStr: string, customMap?: Map<string, string>): string | null {
+  if (customMap && customMap.has(dateStr)) {
+    return customMap.get(dateStr) ?? null;
+  }
   try {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('workfit_holidays_v1') : null;
     if (saved) {
@@ -143,10 +150,11 @@ export function evaluateCommuteRecord(
   },
   policy: CommutePolicy,
   leaveMap?: Map<string, ApprovedLeaveInfo>,
-  hireDate?: string | null
+  hireDate?: string | null,
+  customHolidayMap?: Map<string, string>
 ): CommuteRecord {
   const { inAt, outAt, empId, date } = raw;
-  const holiday = getKoreanHoliday(date);
+  const holiday = getKoreanHoliday(date, customHolidayMap);
   const weekend = isWeekend(date);
   const approvedLeave = leaveMap?.get(date);
 
