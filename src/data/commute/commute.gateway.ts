@@ -36,7 +36,7 @@ export class CommuteGatewayError extends Error {
 
 function getCurrentUserId(): string | null {
   try {
-    return localStorage.getItem('workfit.auth.session');
+    return localStorage.getItem('mes.auth.uid') || localStorage.getItem('workfit.auth.session');
   } catch {
     return null;
   }
