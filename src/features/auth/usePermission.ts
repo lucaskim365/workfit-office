@@ -84,6 +84,17 @@ export function usePermission() {
     return isExecPos || hasRole('EXEC');
   }, [user, isSuperAdmin, hasRole]);
 
+  /** 시스템 관리자(운영자/OPERATOR) 여부 판정 */
+  const isOperator = useMemo(() => {
+    if (!user) return false;
+    return (
+      isSuperAdmin ||
+      myGroups.some((g) => g.code === 'OPERATOR' || g.code === 'ROLE_OPERATOR') ||
+      (user as any).role === 'operator' ||
+      (user as any).role === 'admin'
+    );
+  }, [user, isSuperAdmin, myGroups]);
+
   return {
     user,
     myGroups,
@@ -91,6 +102,7 @@ export function usePermission() {
     roleNames: myGroups.map((g) => g.name || g.code),
     isSuperAdmin,
     isAdmin: isSuperAdmin,
+    isOperator,
     isExecutive,
     canAccess,
     canAction,

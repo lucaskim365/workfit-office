@@ -11,11 +11,7 @@ const isExcludedUser = (user: User) =>
   user.name.includes('테스터') ||
   user.name.includes('테스트') ||
   user.name.includes('허진욱2') ||
-  user.name === 'ㅎ테스터' ||
-  user.empNo === 'chlee' ||
-  user.id === 'chlee' ||
-  user.id === 'U024' ||
-  (user.name === '이철희' && (user.empNo === 'chlee' || user.id === 'chlee' || user.id === 'U024'));
+  user.name === 'ㅎ테스터';
 
 const isExcludedDept = (deptName: string) =>
   deptName.includes('테스트');

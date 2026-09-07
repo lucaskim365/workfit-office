@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import {
   useApprovalBoxes,
@@ -932,6 +933,8 @@ function DocDetail({
 }) {
 
   const org = useOrgTree();
+  const { isOperator, isAdmin } = usePermission();
+  const canForwardPostRead = isOperator || isAdmin;
   const decide = useDecideStep();
   const submitM = useSubmitApproval();
   const recallM = useRecallApproval();
@@ -1022,6 +1025,10 @@ function DocDetail({
   );
 
   const handleSendPostRead = () => {
+    if (!canForwardPostRead) {
+      alert('후열 전달 기능은 시스템관리자(operator)만 사용할 수 있습니다.');
+      return;
+    }
     if (!forwardTargetUserId) {
       alert('후열로 전달할 임직원을 선택해주세요.');
       return;
@@ -1559,11 +1566,12 @@ function DocDetail({
             </button>
           )
         )}
-        {doc.status === '완료' && (
+        {canForwardPostRead && doc.status === '완료' && (
           <button
             type="button"
             onClick={() => setShowForwardPostReadModal(true)}
             className="rounded-lg bg-teal-soft text-teal border border-teal/40 px-3.5 py-2 text-[12.5px] font-bold hover:bg-teal hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="시스템관리자(operator) 전용: 기결재 문서 후열(공람) 전달"
           >
             <span>📨</span>
             <span>후열 전달 (공람)</span>
@@ -1576,8 +1584,8 @@ function DocDetail({
         )}
       </div>
 
-      {/* 기결재 문서 후열(공람) 전달 모달 */}
-      {showForwardPostReadModal && (
+      {/* 기결재 문서 후열(공람) 전달 모달 (시스템관리자/operator 전용) */}
+      {canForwardPostRead && showForwardPostReadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1586,6 +1594,9 @@ function DocDetail({
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
                 <span>📨 기결재 문서 후열(공람) 전달</span>
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10.5px] font-bold text-amber-600 border border-amber-500/20">
+                  관리자 전용
+                </span>
               </h2>
               <button
                 type="button"
