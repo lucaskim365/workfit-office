@@ -66,24 +66,65 @@ export default function GalleryScreen() {
       const saved = localStorage.getItem(STORAGE_ITEMS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          // 기존 묶여있던 다중 사진들도 개별 낱장 카드로 자동 분리
+          const flattened: GalleryItem[] = [];
+          parsed.forEach((it: any) => {
+            if (Array.isArray(it.images) && it.images.length > 1) {
+              it.images.forEach((img: string, idx: number) => {
+                flattened.push({
+                  ...it,
+                  id: `${it.id}-p${idx + 1}`,
+                  title: `${it.title} (${idx + 1})`,
+                  images: [img],
+                });
+              });
+            } else {
+              flattened.push(it);
+            }
+          });
+          return flattened;
+        }
       }
       const oldSaved = localStorage.getItem('workfit_gallery_posts_v2');
       if (oldSaved) {
         const oldParsed = JSON.parse(oldSaved);
         if (Array.isArray(oldParsed)) {
-          return oldParsed.map((p: any) => ({
-            id: p.id || `gal-${Date.now()}`,
-            title: p.title || '무제 사진',
-            description: p.description || '',
-            images: Array.isArray(p.images) ? p.images : p.imageUrl ? [p.imageUrl] : [],
-            albumId: p.folderId && p.folderId.startsWith('alb_') ? p.folderId : 'alb_event',
-            date: p.createdAt || new Date().toISOString().split('T')[0],
-            authorId: p.authorId,
-            authorName: p.authorName || '익명',
-            authorDept: p.authorDept || '전사',
-            createdAt: p.createdAt || new Date().toISOString().split('T')[0],
-          }));
+          const list: GalleryItem[] = [];
+          oldParsed.forEach((p: any) => {
+            const imgs = Array.isArray(p.images) ? p.images : p.imageUrl ? [p.imageUrl] : [];
+            const baseTitle = p.title || '무제 사진';
+            if (imgs.length > 1) {
+              imgs.forEach((img: string, idx: number) => {
+                list.push({
+                  id: `${p.id || Date.now()}-p${idx + 1}`,
+                  title: `${baseTitle} (${idx + 1})`,
+                  description: p.description || '',
+                  images: [img],
+                  albumId: p.folderId && p.folderId.startsWith('alb_') ? p.folderId : 'alb_event',
+                  date: p.createdAt || new Date().toISOString().split('T')[0],
+                  authorId: p.authorId,
+                  authorName: p.authorName || '익명',
+                  authorDept: p.authorDept || '전사',
+                  createdAt: p.createdAt || new Date().toISOString().split('T')[0],
+                });
+              });
+            } else {
+              list.push({
+                id: p.id || `gal-${Date.now()}`,
+                title: baseTitle,
+                description: p.description || '',
+                images: imgs,
+                albumId: p.folderId && p.folderId.startsWith('alb_') ? p.folderId : 'alb_event',
+                date: p.createdAt || new Date().toISOString().split('T')[0],
+                authorId: p.authorId,
+                authorName: p.authorName || '익명',
+                authorDept: p.authorDept || '전사',
+                createdAt: p.createdAt || new Date().toISOString().split('T')[0],
+              });
+            }
+          });
+          return list;
         }
       }
     } catch {
@@ -348,25 +389,30 @@ export default function GalleryScreen() {
                 description: formDescription.trim(),
                 date: formDate,
                 albumId: formAlbumId,
-                images: formImages,
+                images: formImages.slice(0, 1),
               }
             : it,
         ),
       );
     } else {
-      const newItem: GalleryItem = {
-        id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        title: formTitle.trim(),
-        description: formDescription.trim(),
-        images: formImages,
+      const baseTitle = formTitle.trim();
+      const baseDesc = formDescription.trim();
+      const nowStr = new Date().toISOString().split('T')[0];
+
+      // 사진을 한번에 여러장 올릴 때 슬라이드로 묶지 않고 각각 개별 사진으로 등록
+      const newItems: GalleryItem[] = formImages.map((img, idx) => ({
+        id: `img-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        title: formImages.length > 1 ? `${baseTitle} (${idx + 1})` : baseTitle,
+        description: baseDesc,
+        images: [img],
         albumId: formAlbumId,
         date: formDate,
         authorId: user?.id,
         authorName: user?.name ?? '익명',
         authorDept: user?.dept ?? '전사',
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setItems((prev) => [newItem, ...prev]);
+        createdAt: nowStr,
+      }));
+      setItems((prev) => [...newItems, ...prev]);
     }
 
     setIsUploadModalOpen(false);
@@ -430,17 +476,53 @@ export default function GalleryScreen() {
     if (selectedAlbumId === albumId) setSelectedAlbumId('recent');
   };
 
+  const currentActiveIndex = useMemo(() => {
+    if (!activeItemId) return -1;
+    return filteredItems.findIndex((it) => it.id === activeItemId);
+  }, [activeItemId, filteredItems]);
+
   const handlePrevPhoto = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeItem || activeItem.images.length <= 1) return;
-    setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeItem.images.length - 1));
+    if (!activeItem) return;
+    if (activeItem.images.length > 1 && activeImageIndex > 0) {
+      setActiveImageIndex((prev) => prev - 1);
+      return;
+    }
+    if (filteredItems.length > 1 && currentActiveIndex !== -1) {
+      const prevIdx = currentActiveIndex > 0 ? currentActiveIndex - 1 : filteredItems.length - 1;
+      setActiveItemId(filteredItems[prevIdx].id);
+      setActiveImageIndex(0);
+    }
   };
 
   const handleNextPhoto = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeItem || activeItem.images.length <= 1) return;
-    setActiveImageIndex((prev) => (prev < activeItem.images.length - 1 ? prev + 1 : 0));
+    if (!activeItem) return;
+    if (activeItem.images.length > 1 && activeImageIndex < activeItem.images.length - 1) {
+      setActiveImageIndex((prev) => prev + 1);
+      return;
+    }
+    if (filteredItems.length > 1 && currentActiveIndex !== -1) {
+      const nextIdx = currentActiveIndex < filteredItems.length - 1 ? currentActiveIndex + 1 : 0;
+      setActiveItemId(filteredItems[nextIdx].id);
+      setActiveImageIndex(0);
+    }
   };
+
+  useEffect(() => {
+    if (!activeItemId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        handlePrevPhoto();
+      } else if (e.key === 'ArrowRight') {
+        handleNextPhoto();
+      } else if (e.key === 'Escape') {
+        setActiveItemId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeItemId, currentActiveIndex, filteredItems, activeImageIndex]);
 
   // ── 3-2. 다중 선택 및 앨범 일괄 이동 핸들러 ──
   const toggleSelectItem = (id: string) => {
@@ -974,19 +1056,21 @@ export default function GalleryScreen() {
             ✕
           </button>
 
-          {activeItem.images.length > 1 && (
+          {(filteredItems.length > 1 || activeItem.images.length > 1) && (
             <>
               <button
                 type="button"
                 onClick={handlePrevPhoto}
-                className="absolute left-5 top-1/2 z-20 -translate-y-1/2 grid h-12 w-12 place-items-center rounded-full bg-white/15 text-2xl font-bold text-white hover:bg-white/30 transition-all"
+                title="이전 사진 (좌측 화살표키)"
+                className="absolute left-5 top-1/2 z-20 -translate-y-1/2 grid h-12 w-12 place-items-center rounded-full bg-white/15 text-2xl font-bold text-white hover:bg-white/30 transition-all cursor-pointer"
               >
                 ‹
               </button>
               <button
                 type="button"
                 onClick={handleNextPhoto}
-                className="absolute right-5 top-1/2 z-20 -translate-y-1/2 grid h-12 w-12 place-items-center rounded-full bg-white/15 text-2xl font-bold text-white hover:bg-white/30 transition-all"
+                title="다음 사진 (우측 화살표키)"
+                className="absolute right-5 top-1/2 z-20 -translate-y-1/2 grid h-12 w-12 place-items-center rounded-full bg-white/15 text-2xl font-bold text-white hover:bg-white/30 transition-all cursor-pointer"
               >
                 ›
               </button>
@@ -1004,11 +1088,14 @@ export default function GalleryScreen() {
                 className="max-h-[65vh] w-auto max-w-full object-contain select-none"
               />
 
-              {activeItem.images.length > 1 && (
-                <div className="absolute top-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-[11px] font-mono font-bold text-white backdrop-blur-xs">
-                  {activeImageIndex + 1} / {activeItem.images.length}
-                </div>
-              )}
+              {/* 전체 목록 기준 사진 순번 배지 (예: 3 / 15) */}
+              <div className="absolute top-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-[11px] font-mono font-bold text-white backdrop-blur-xs">
+                {currentActiveIndex !== -1 && filteredItems.length > 1
+                  ? `${currentActiveIndex + 1} / ${filteredItems.length}`
+                  : activeItem.images.length > 1
+                  ? `${activeImageIndex + 1} / ${activeItem.images.length}`
+                  : '1 / 1'}
+              </div>
             </div>
 
             {activeItem.images.length > 1 && (
@@ -1204,8 +1291,8 @@ export default function GalleryScreen() {
                     <span className="mt-2 text-[12px] font-bold text-ink">
                       클릭하여 사진 선택 (다중 선택 가능)
                     </span>
-                    <span className="mt-0.5 text-[10.5px] text-ink3">
-                      한 번에 최대 50장까지 추가 가능
+                    <span className="mt-0.5 text-[10.5px] text-teal font-medium">
+                      ✓ 여러 장을 한 번에 올려도 겹치지 않고 각각 개별 사진 카드로 등록됩니다.
                     </span>
                   </div>
                 )}
