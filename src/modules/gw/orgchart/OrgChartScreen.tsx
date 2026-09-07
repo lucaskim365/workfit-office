@@ -3,7 +3,6 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
 import { Button } from '@/shared/ui/Button';
-import { EMERGENCY_CONTACTS, type EmergencyContact } from '@/data/emergencyContacts';
 
 
 /** 테스트 부서 및 테스트 계정 예외처리 */
@@ -12,7 +11,11 @@ const isExcludedUser = (user: User) =>
   user.name.includes('테스터') ||
   user.name.includes('테스트') ||
   user.name.includes('허진욱2') ||
-  user.name === 'ㅎ테스터';
+  user.name === 'ㅎ테스터' ||
+  user.empNo === 'chlee' ||
+  user.id === 'chlee' ||
+  user.id === 'U024' ||
+  (user.name === '이철희' && (user.empNo === 'chlee' || user.id === 'chlee' || user.id === 'U024'));
 
 const isExcludedDept = (deptName: string) =>
   deptName.includes('테스트');
@@ -21,7 +24,7 @@ const isExcludedDept = (deptName: string) =>
  * 조직도 (그룹웨어)
  * - [📊 비주얼 차트]: 워크핏 공식 엑셀 조직도 스타일(피치/그린/블루 3열 격자 다이어그램)
  * - [📋 리스트로 보기]: 전사 임직원 직급·직책·부서·상급자·연락처 일괄 조회 및 검색 리스트
- * - [📞 비상연락망]: 공식 비상연락망 마스터코드·소속·직급·연락처·이메일 표
+ * - [📞 비상연락망]: 공식 비상연락망 사번·소속·직급·연락처·이메일 표
  */
 export default function OrgChartScreen() {
   const org = useOrgTree();
@@ -92,10 +95,14 @@ export default function OrgChartScreen() {
       )}
 
 
-      {/* ── 2. 비상연락망 뷰 (공식 명단 16명 표출) ── */}
+      {/* ── 2. 비상연락망 뷰 (실제 데이터베이스 기반 표출) ── */}
       {viewMode === 'emergency' && (
         <div className="mt-5">
-          <EmergencyContactView />
+          <EmergencyContactView
+            validUsers={validUsers}
+            profileMap={profileMap}
+            onSelectUserId={setSelectedUserId}
+          />
         </div>
       )}
 
@@ -115,11 +122,16 @@ export default function OrgChartScreen() {
                   {selectedUser.name[0]}
                 </div>
 
-                <div className="mt-3.5 text-center text-base font-extrabold text-ink">
-                  {selectedUser.name}
+                <div className="mt-3.5 text-center text-base font-extrabold text-ink flex items-center justify-center gap-1.5 flex-wrap">
+                  <span>{selectedUser.name}</span>
+                  {(selectedProfile as any)?.engName && (
+                    <span className="text-xs text-ink3 font-normal">
+                      ({(selectedProfile as any).engName})
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 rounded border border-border bg-panel-alt px-2 py-0.5 font-mono text-[10px] font-bold text-ink2">
-                  사번: {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? '비공개' : (selectedUser.empNo || '-')}
+                  사번: {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? '비공개' : (selectedUser.empNo ? `#${selectedUser.empNo}` : '-')}
                 </div>
 
                 <div className="mt-4 space-y-1 text-center">
@@ -511,42 +523,140 @@ function VisualDiagramOrgChart({
   );
 }
 
-/** ── 비상연락망 컴포넌트 ── */
-function EmergencyContactView() {
+/** ── 비상연락망 컴포넌트 (실제 Appwrite 데이터베이스 100% 기반) ── */
+function EmergencyContactView({
+  validUsers,
+  profileMap,
+  onSelectUserId,
+}: {
+  validUsers: User[];
+  profileMap: Map<string, any>;
+  onSelectUserId: (userId: string) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [selectedContact, setSelectedContact] = useState<EmergencyContact | null>(null);
+
+  // 실제 Appwrite 데이터베이스의 임직원만을 부서 편제 및 직급 순서로 정렬
+  const contactList = useMemo(() => {
+    const deptRank = (dept: string) => {
+      if (dept.includes('대표이사')) return 1;
+      if (dept.includes('위원회')) return 2;
+      if (dept.includes('경영기획')) return 3;
+      if (dept.includes('본부')) return 4;
+      if (dept.includes('연구소')) return 5;
+      if (dept.includes('컨설팅')) return 6;
+      if (dept.includes('PMO')) return 7;
+      if (dept.includes('품질')) return 8;
+      if (dept.includes('데이터') || dept.includes('개발')) return 9;
+      return 50;
+    };
+
+    const isHead = (u: User) =>
+      u.jobTitle?.includes('대표') ||
+      u.jobTitle?.includes('본부장') ||
+      u.jobTitle?.includes('위원장') ||
+      u.jobTitle?.includes('소장') ||
+      u.jobTitle?.includes('팀장') ||
+      u.jobTitle?.includes('실장');
+
+    const posRank = (position: string) => {
+      if (position.includes('대표')) return 1;
+      if (position.includes('부대표')) return 2;
+      if (position.includes('총괄부사장')) return 3;
+      if (position.includes('전무')) return 4;
+      if (position.includes('상무')) return 5;
+      if (position.includes('이사')) return 6;
+      if (position.includes('소장')) return 7;
+      if (position.includes('실장')) return 7;
+      if (position.includes('부장')) return 8;
+      if (position.includes('차장')) return 9;
+      if (position.includes('과장')) return 10;
+      if (position.includes('대리')) return 11;
+      if (position.includes('주임')) return 12;
+      if (position.includes('사원') || position.includes('연구원')) return 13;
+      return 99;
+    };
+
+    const sorted = [...validUsers].sort((a, b) => {
+      // 1. 부서 위계 순서
+      const dA = deptRank(a.dept);
+      const dB = deptRank(b.dept);
+      if (dA !== dB) return dA - dB;
+
+      // 2. 부서장(대표/팀장/본부장 등) 우선
+      const hA = isHead(a) ? 0 : 1;
+      const hB = isHead(b) ? 0 : 1;
+      if (hA !== hB) return hA - hB;
+
+      // 3. 직급 서열
+      const pA = posRank(a.position);
+      const pB = posRank(b.position);
+      if (pA !== pB) return pA - pB;
+
+      // 4. 사번 순
+      if (a.empNo && b.empNo) return a.empNo.localeCompare(b.empNo);
+      return a.name.localeCompare(b.name, 'ko');
+    });
+
+    return sorted.map((u, idx) => {
+      const profile = profileMap.get(u.id);
+      const isPrivate =
+        u.position.includes('대표') ||
+        u.dept === '대표이사' ||
+        u.dept.includes('위원회') ||
+        u.name === '대표이사';
+
+      const phone = profile?.phone || (u as any).phone || '';
+      const email = u.email || '';
+      const engName = (profile as any)?.engName || (u as any).engName || '';
+
+      return {
+        userId: u.id,
+        no: idx + 1,
+        empNo: u.empNo || '—',
+        name: u.name,
+        engName: engName || '—',
+        department: u.dept,
+        position: u.position,
+        duty: u.jobTitle || '',
+        phone: isPrivate ? '' : phone,
+        email: isPrivate ? '' : email,
+        isTopLeader: idx === 0 || u.position.includes('대표') || u.dept === '대표이사',
+      };
+    });
+  }, [validUsers, profileMap]);
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    if (!q) return EMERGENCY_CONTACTS;
-    return EMERGENCY_CONTACTS.filter(
+    if (!q) return contactList;
+    return contactList.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        (c.engName && c.engName.toLowerCase().includes(q)) ||
-        (c.masterCode && c.masterCode.toLowerCase().includes(q)) ||
+        c.engName.toLowerCase().includes(q) ||
+        c.empNo.toLowerCase().includes(q) ||
         c.department.toLowerCase().includes(q) ||
         c.position.toLowerCase().includes(q) ||
-        (c.duty && c.duty.toLowerCase().includes(q)) ||
+        c.duty.toLowerCase().includes(q) ||
         (c.phone && c.phone.includes(q)) ||
         (c.email && c.email.toLowerCase().includes(q)),
     );
-  }, [keyword]);
+  }, [contactList, keyword]);
 
   const handleCopy = (text: string, label: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedText(`${label} 복사됨!`);
     setTimeout(() => setCopiedText(null), 1800);
   };
 
   const handleExportCsv = () => {
-    const headers = ['번호', '마스터코드', '이름', '영문이름', '소속', '직급', '연락처', '전자메일'];
+    const headers = ['번호', '사번', '이름', '영문이름', '소속', '직급', '연락처', '전자메일'];
     const rows = filtered.map((c) => [
       c.no,
-      c.masterCode || '',
+      `"${c.empNo}"`,
       c.name,
-      c.engName || '',
+      c.engName,
       `"${c.department.replace(/"/g, '""')}"`,
       `"${c.position.replace(/"/g, '""')}"`,
       c.phone || '',
@@ -575,11 +685,11 @@ function EmergencyContactView() {
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-ink">전사 공식 비상연락망</h2>
               <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal font-mono">
-                총 {EMERGENCY_CONTACTS.length}명
+                실제 등록 임직원 {contactList.length}명
               </span>
             </div>
             <p className="text-[11.5px] text-ink3 mt-0.5">
-              임직원의 프로필을 클릭하면 상세 비상연락 카드가 표시됩니다.
+              임직원을 클릭하면 상세 프로필 카드가 표시됩니다.
             </p>
           </div>
         </div>
@@ -621,91 +731,62 @@ function EmergencyContactView() {
         </div>
       </div>
 
-      {/* ── 비상연락망 정통 표 ── */}
+      {/* ── 비상연락망 정통 표 (실제 Appwrite 데이터베이스 100% 반영) ── */}
       <div className="overflow-hidden rounded-2xl border border-border bg-panel shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12px]">
             <thead>
               <tr className="border-b-2 border-slate-300 bg-panel-alt/80 text-[11.5px] font-extrabold text-ink">
                 <th className="py-3 px-3 text-center w-14">번호</th>
-                <th className="py-3 px-3 text-center w-24">마스터코드</th>
-                <th className="py-3 px-3 w-36">이름 (프로필)</th>
+                <th className="py-3 px-3 text-center w-24">사번</th>
+                <th className="py-3 px-3 w-36">이름</th>
                 <th className="py-3 px-3 w-32">영문이름</th>
                 <th className="py-3 px-4 min-w-[220px]">소속</th>
                 <th className="py-3 px-3 w-28">직급</th>
                 <th className="py-3 px-4 w-40">연락처</th>
                 <th className="py-3 px-4 w-52">전자메일</th>
-                <th className="py-3 px-3 text-center w-20">카드</th>
+                <th className="py-3 px-3 text-center w-24">상세</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border font-medium">
               {filtered.map((item) => {
-                const isVacant = item.name === '(공석)';
-                const isTopLeader = item.no <= 3;
-
                 return (
                   <tr
-                    key={item.no}
-                    onClick={() => {
-                      if (!isVacant) setSelectedContact(item);
-                    }}
-                    className={`transition-colors ${
-                      isVacant
-                        ? 'bg-panel-alt/10'
-                        : isTopLeader
-                        ? 'bg-panel-alt/30 hover:bg-teal-soft/20 cursor-pointer'
-                        : 'hover:bg-teal-soft/15 cursor-pointer'
+                    key={item.userId}
+                    onClick={() => onSelectUserId(item.userId)}
+                    className={`transition-colors cursor-pointer ${
+                      item.isTopLeader
+                        ? 'bg-panel-alt/30 hover:bg-teal-soft/25'
+                        : 'hover:bg-teal-soft/15'
                     }`}
                   >
-                    {/* 번호 */}
+                    {/* 번호 (1번부터 순차 부여) */}
                     <td className="py-3 px-3 text-center font-mono text-[11.5px] text-ink3">
                       {item.no}
                     </td>
 
-                    {/* 마스터코드 */}
+                    {/* 사번 */}
                     <td className="py-3 px-3 text-center font-mono text-[11.5px] font-semibold text-ink2">
-                      {item.masterCode || '—'}
+                      {item.empNo}
                     </td>
 
-                    {/* 이름 (프로필 아바타 클릭 지원) */}
+                    {/* 이름 (프로필 아바타 없이 텍스트만 깔끔하게) */}
                     <td className="py-3 px-3">
-                      {isVacant ? (
-                        <div className="flex items-center gap-2 text-ink3">
-                          <span className="grid h-7 w-7 place-items-center rounded-full bg-panel-alt border border-border text-xs">
-                            👤
-                          </span>
-                          <span className="italic">{item.name}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 group">
-                          <div
-                            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-xs transition-transform group-hover:scale-110 ${
-                              isTopLeader
-                                ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                                : 'bg-gradient-to-br from-teal to-teal-dark'
-                            }`}
-                          >
-                            {item.name[0]}
-                          </div>
-                          <div>
-                            <span className="font-bold text-ink group-hover:text-teal group-hover:underline flex items-center gap-1">
-                              {item.name}
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                      <span className="font-bold text-ink group-hover:text-teal group-hover:underline">
+                        {item.name}
+                      </span>
                     </td>
 
                     {/* 영문이름 */}
                     <td className="py-3 px-3 font-sans text-ink3 text-[11px]">
-                      {item.engName || '—'}
+                      {item.engName}
                     </td>
 
-                    {/* 소속 */}
+                    {/* 소속 부서 */}
                     <td className="py-3 px-4 text-ink">
                       {item.department.includes(' / ') ? (
                         <div className="space-y-0.5 leading-snug">
-                          {item.department.split(' / ').map((dept, idx) => (
+                          {item.department.split(' / ').map((dept: string, idx: number) => (
                             <div key={idx} className="flex items-center gap-1">
                               <span className="text-[10px] text-teal">▪</span>
                               <span className="font-semibold text-ink2">{dept}</span>
@@ -743,7 +824,7 @@ function EmergencyContactView() {
                           </a>
                           <button
                             type="button"
-                            onClick={(e) => handleCopy(item.phone!, '전화번호', e)}
+                            onClick={(e) => handleCopy(item.phone, '전화번호', e)}
                             title="전화번호 복사"
                             className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
                           >
@@ -769,7 +850,7 @@ function EmergencyContactView() {
                           </a>
                           <button
                             type="button"
-                            onClick={(e) => handleCopy(item.email!, '이메일', e)}
+                            onClick={(e) => handleCopy(item.email, '이메일', e)}
                             title="이메일 복사"
                             className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
                           >
@@ -781,20 +862,18 @@ function EmergencyContactView() {
                       )}
                     </td>
 
-                    {/* 카드 열기 버튼 */}
+                    {/* 카드 상세 버튼 */}
                     <td className="py-3 px-3 text-center">
-                      {!isVacant && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedContact(item);
-                          }}
-                          className="rounded-lg border border-border bg-panel-alt/60 px-2 py-1 text-[11px] font-bold text-ink2 hover:bg-teal hover:text-white hover:border-teal transition-all"
-                        >
-                          🪪 카드
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectUserId(item.userId);
+                        }}
+                        className="rounded-lg border border-border bg-panel-alt/60 px-2 py-1 text-[11px] font-bold text-ink2 hover:bg-teal hover:text-white hover:border-teal transition-all shadow-2xs"
+                      >
+                        상세 정보
+                      </button>
                     </td>
                   </tr>
                 );
@@ -802,7 +881,7 @@ function EmergencyContactView() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-ink3">
-                    검색 조건과 일치하는 연락처 정보가 없습니다.
+                    등록된 실제 임직원 데이터가 없습니다.
                   </td>
                 </tr>
               )}
@@ -810,167 +889,6 @@ function EmergencyContactView() {
           </table>
         </div>
       </div>
-
-      {/* ── 비상연락망 상세 프로필 카드 모달 ── */}
-      {selectedContact && (
-        <div
-          onClick={() => setSelectedContact(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border bg-panel text-left shadow-2xl animate-in zoom-in-95 duration-200"
-          >
-            {/* 카드 상단 배너 */}
-            <div className="relative h-28 bg-gradient-to-r from-teal-600 via-teal-700 to-slate-800 p-4">
-              <div className="flex items-center justify-between text-white/90">
-                <span className="text-[11px] font-mono tracking-wider font-semibold uppercase flex items-center gap-1.5">
-                  <span>🏢</span>
-                  <span>WORKFIT EMERGENCY CONTACT</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedContact(null)}
-                  className="grid h-7 w-7 place-items-center rounded-full bg-black/30 text-xs font-bold text-white hover:bg-black/60 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 중앙 원형 프로필 아바타 */}
-              <div className="absolute -bottom-10 left-6">
-                <div className="grid h-20 w-20 place-items-center rounded-full border-4 border-panel bg-gradient-to-br from-teal to-teal-dark text-3xl font-black text-white shadow-lg">
-                  {selectedContact.name[0]}
-                </div>
-              </div>
-            </div>
-
-            {/* 카드 본문 영역 */}
-            <div className="pt-12 px-6 pb-6 space-y-4">
-              {/* 성명 & 직급 & 마스터코드 */}
-              <div className="flex items-start justify-between gap-2 border-b border-border pb-3.5">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-black text-ink">{selectedContact.name}</h3>
-                    {selectedContact.engName && (
-                      <span className="text-xs text-ink3 font-sans">({selectedContact.engName})</span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                    <span className="rounded-md bg-teal-soft px-2 py-0.5 text-xs font-bold text-teal">
-                      {selectedContact.position}
-                    </span>
-                    {selectedContact.duty && selectedContact.duty !== selectedContact.position && (
-                      <span className="rounded-md bg-panel-alt border border-border px-2 py-0.5 text-xs font-semibold text-ink2">
-                        {selectedContact.duty}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {selectedContact.masterCode && (
-                  <div className="text-right shrink-0">
-                    <span className="block text-[10px] text-ink3 font-mono">마스터코드</span>
-                    <span className="rounded bg-panel-alt border border-border px-2 py-0.5 font-mono text-xs font-bold text-ink2">
-                      #{selectedContact.masterCode}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* 소속 부서 목록 */}
-              <div>
-                <span className="block text-[11px] font-bold text-ink3 mb-1.5">소속 부서</span>
-                <div className="space-y-1">
-                  {selectedContact.department.split(' / ').map((dept: string, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2 rounded-xl bg-panel-alt/50 border border-border/60 px-3 py-1.5 text-[12px] font-semibold text-ink"
-                    >
-                      <span className="text-teal text-xs">▪</span>
-                      <span>{dept}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 주요 비상 연락처 */}
-              <div className="space-y-2.5 rounded-2xl bg-teal-soft/20 border border-teal/20 p-4">
-                {/* 전화번호 */}
-                <div>
-                  <span className="block text-[10.5px] font-bold text-teal-dark mb-1">
-                    📱 휴대전화 (비상연락처)
-                  </span>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-base font-extrabold text-ink tracking-wide">
-                      {selectedContact.phone || '연락처 비공개'}
-                    </span>
-                    {selectedContact.phone && (
-                      <div className="flex items-center gap-1.5">
-                        <a
-                          href={`tel:${selectedContact.phone}`}
-                          className="flex items-center gap-1 rounded-xl bg-teal px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-teal-dark transition-colors"
-                        >
-                          <span>📞 통화</span>
-                        </a>
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopy(selectedContact.phone!, '전화번호', e)}
-                          className="rounded-xl border border-border bg-panel px-2.5 py-1.5 text-xs font-bold text-ink2 hover:text-ink transition-colors"
-                        >
-                          복사
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 이메일 */}
-                <div className="border-t border-teal/10 pt-2.5">
-                  <span className="block text-[10.5px] font-bold text-teal-dark mb-1">
-                    ✉️ 공식 업무 이메일
-                  </span>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[12.5px] font-semibold text-ink truncate">
-                      {selectedContact.email || '이메일 비공개'}
-                    </span>
-                    {selectedContact.email && (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <a
-                          href={`mailto:${selectedContact.email}`}
-                          className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1 text-xs font-bold text-ink hover:text-teal transition-colors"
-                        >
-                          <span>✉️ 작성</span>
-                        </a>
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopy(selectedContact.email!, '이메일', e)}
-                          className="rounded-xl border border-border bg-panel px-2.5 py-1 text-xs font-bold text-ink2 hover:text-ink transition-colors"
-                        >
-                          복사
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 하단 안내 및 닫기 */}
-              <div className="flex items-center justify-between pt-2 text-[11px] text-ink3">
-                <span>※ 비상 상황 시 신속 보고 체계 준수</span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSelectedContact(null)}
-                >
-                  닫기
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

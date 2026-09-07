@@ -14,8 +14,9 @@ export interface GalleryAlbum {
 
 export interface GalleryItem {
   id: string;
-  title: string;
-  description: string;
+  title?: string; // (제목은 아예 없애달라는 요구에 따라 caption으로 일원화)
+  caption?: string;
+  description: string; // 캡션 내용 보관
   images: string[];
   albumId: string;
   date: string; // YYYY-MM-DD (촬영/등록 일자)
@@ -23,6 +24,12 @@ export interface GalleryItem {
   authorName: string;
   authorDept: string;
   createdAt: string;
+}
+
+export interface UploadImageItem {
+  id: string;
+  url: string;
+  caption: string;
 }
 
 const STORAGE_ALBUMS_KEY = 'workfit_phone_gallery_albums_v3';
@@ -140,8 +147,8 @@ export default function GalleryScreen() {
   // ── 3. 기본 탭: 앨범이 먼저 표시되도록 'albums' 기본값 ──
   const [activeTab, setActiveTab] = useState<'albums' | 'timeline'>('albums');
 
-  // 앨범 탭에서 선택된 앨범 ID (기본: 'recent')
-  const [selectedAlbumId, setSelectedAlbumId] = useState<string>('recent');
+  // 앨범 탭에서 선택된 앨범 ID (기본: 'all_albums' 전체 앨범 보관함 모아보기)
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string>('all_albums');
 
   // 날짜별 탭에서 선택된 년도-월 필터 ('all' 또는 '2026-09', '2026' 등)
   const [selectedYearMonth, setSelectedYearMonth] = useState<string>('all');
@@ -166,13 +173,26 @@ export default function GalleryScreen() {
   const [albumFormName, setAlbumFormName] = useState('');
   const [albumFormDesc, setAlbumFormDesc] = useState('');
 
-  // 사진 업로드 폼
-  const [formTitle, setFormTitle] = useState('');
-  const [formDescription, setFormDescription] = useState('');
+  // 사진 업로드 폼 (제목 삭제 및 각 이미지별 캡션 지원)
   const [formDate, setFormDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [formAlbumId, setFormAlbumId] = useState('recent');
-  const [formImages, setFormImages] = useState<string[]>([]);
+  const [uploadImages, setUploadImages] = useState<UploadImageItem[]>([]);
+  const [editCaption, setEditCaption] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 우클릭 컨텍스트 메뉴 상태 (최근항목 제외 앨범 대표이미지 지정)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: GalleryItem;
+  } | null>(null);
+
+  // 컨텍스트 메뉴 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleCloseMenu = () => setContextMenu(null);
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, []);
 
   // ── 3-1. 다중 선택 모드 & 일괄 앨범 이동 상태 ──
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -244,7 +264,7 @@ export default function GalleryScreen() {
 
     // 1. 앨범 모드일 때
     if (activeTab === 'albums') {
-      if (selectedAlbumId !== 'recent') {
+      if (selectedAlbumId !== 'recent' && selectedAlbumId !== 'all_albums') {
         list = list.filter((it) => it.albumId === selectedAlbumId);
       }
     }
@@ -261,10 +281,11 @@ export default function GalleryScreen() {
     if (q) {
       list = list.filter(
         (it) =>
-          it.title.toLowerCase().includes(q) ||
-          it.description.toLowerCase().includes(q) ||
-          it.authorName.toLowerCase().includes(q) ||
-          it.date.includes(q),
+          (it.caption || '').toLowerCase().includes(q) ||
+          (it.description || '').toLowerCase().includes(q) ||
+          (it.title || '').toLowerCase().includes(q) ||
+          (it.authorName || '').toLowerCase().includes(q) ||
+          (it.date || '').includes(q),
       );
     }
 
@@ -319,22 +340,20 @@ export default function GalleryScreen() {
   // 모달 제어
   const handleOpenUploadModal = () => {
     setEditingItemId(null);
-    setFormTitle('');
-    setFormDescription('');
+    setEditCaption('');
     setFormDate(new Date().toISOString().split('T')[0]);
     setFormAlbumId(selectedAlbumId !== 'recent' ? selectedAlbumId : 'alb_event');
-    setFormImages([]);
+    setUploadImages([]);
     setIsUploadModalOpen(true);
   };
 
   const handleOpenEditModal = (item: GalleryItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingItemId(item.id);
-    setFormTitle(item.title);
-    setFormDescription(item.description);
+    setEditCaption(item.description || item.caption || '');
     setFormDate(item.date);
     setFormAlbumId(item.albumId);
-    setFormImages([...item.images]);
+    setUploadImages([{ id: item.id, url: item.images[0] || '', caption: item.description || '' }]);
     setIsUploadModalOpen(true);
   };
 
@@ -342,7 +361,7 @@ export default function GalleryScreen() {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
 
-    if (formImages.length + files.length > 50) {
+    if (uploadImages.length + files.length > 50) {
       alert('한 번에 최대 50장의 사진까지 등록할 수 있습니다.');
       return;
     }
@@ -362,19 +381,30 @@ export default function GalleryScreen() {
       );
     }
 
-    Promise.all(readers).then((newImages) => {
-      setFormImages((prev) => [...prev, ...newImages]);
+    Promise.all(readers).then((newUrls) => {
+      const newItems: UploadImageItem[] = newUrls.map((url, i) => ({
+        id: `up-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+        url,
+        caption: '',
+      }));
+      setUploadImages((prev) => [...prev, ...newItems]);
       if (fileInputRef.current) fileInputRef.current.value = '';
     });
   };
 
+  const handleUpdateImageCaption = (id: string, caption: string) => {
+    setUploadImages((prev) =>
+      prev.map((img) => (img.id === id ? { ...img, caption } : img)),
+    );
+  };
+
+  const handleRemoveUploadImage = (id: string) => {
+    setUploadImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
   const handleSubmitForm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) {
-      alert('사진 제목을 입력해주세요.');
-      return;
-    }
-    if (formImages.length === 0) {
+    if (uploadImages.length === 0) {
       alert('사진을 1장 이상 등록해주세요.');
       return;
     }
@@ -385,26 +415,24 @@ export default function GalleryScreen() {
           it.id === editingItemId
             ? {
                 ...it,
-                title: formTitle.trim(),
-                description: formDescription.trim(),
+                description: editCaption.trim(),
+                caption: editCaption.trim(),
                 date: formDate,
                 albumId: formAlbumId,
-                images: formImages.slice(0, 1),
               }
             : it,
         ),
       );
     } else {
-      const baseTitle = formTitle.trim();
-      const baseDesc = formDescription.trim();
       const nowStr = new Date().toISOString().split('T')[0];
 
-      // 사진을 한번에 여러장 올릴 때 슬라이드로 묶지 않고 각각 개별 사진으로 등록
-      const newItems: GalleryItem[] = formImages.map((img, idx) => ({
+      // 각 이미지별로 캡션을 보관하며 개별 사진 카드로 등록 (제목 없음)
+      const newItems: GalleryItem[] = uploadImages.map((uImg, idx) => ({
         id: `img-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-        title: formImages.length > 1 ? `${baseTitle} (${idx + 1})` : baseTitle,
-        description: baseDesc,
-        images: [img],
+        title: '',
+        caption: uImg.caption.trim(),
+        description: uImg.caption.trim(),
+        images: [uImg.url],
         albumId: formAlbumId,
         date: formDate,
         authorId: user?.id,
@@ -424,6 +452,34 @@ export default function GalleryScreen() {
     if (!confirm('이 사진을 갤러리에서 삭제하시겠습니까?')) return;
     setItems((prev) => prev.filter((it) => it.id !== id));
     if (activeItemId === id) setActiveItemId(null);
+  };
+
+  // ── 우클릭 앨범 대표 이미지 지정 핸들러 ──
+  const handlePhotoContextMenu = (e: React.MouseEvent, item: GalleryItem) => {
+    // 최근항목을 제외한 앨범에서만 대표 이미지 지정 허용
+    const targetAlbumId = selectedAlbumId !== 'recent' ? selectedAlbumId : item.albumId;
+    if (!targetAlbumId || targetAlbumId === 'recent') {
+      return; // 최근항목 자체에는 대표이미지 불가
+    }
+    e.preventDefault();
+    e.stopPropagation();
+
+    const x = Math.min(e.clientX, window.innerWidth - 240);
+    const y = Math.min(e.clientY, window.innerHeight - 180);
+    setContextMenu({ x, y, item });
+  };
+
+  const handleSetCoverImage = (albumId: string, imageUrl: string) => {
+    if (!albumId || albumId === 'recent') {
+      alert('최근 항목(전체)에는 대표 이미지를 지정할 수 없습니다. 특정 앨범을 선택해주세요.');
+      return;
+    }
+    setAlbums((prev) =>
+      prev.map((a) => (a.id === albumId ? { ...a, coverImage: imageUrl } : a)),
+    );
+    const targetAlbum = albums.find((a) => a.id === albumId);
+    alert(`'${targetAlbum?.name || '앨범'}'의 대표 이미지로 지정되었습니다.`);
+    setContextMenu(null);
   };
 
   // 앨범 생성 / 수정 / 삭제
@@ -579,7 +635,36 @@ export default function GalleryScreen() {
     setIsSelectionMode(false);
   };
 
-  const currentAlbum = albums.find((a) => a.id === selectedAlbumId);
+  // 앨범별 커버 이미지 매핑 (커버 미설정 시 첫 번째 사진 자동 썸네일)
+  const albumCoverMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    albums.forEach((alb) => {
+      if (alb.coverImage) {
+        map[alb.id] = alb.coverImage;
+      } else {
+        const match = items.find(
+          (it) => (alb.id === 'recent' ? true : it.albumId === alb.id) && it.images?.length > 0,
+        );
+        if (match) {
+          map[alb.id] = match.images[0];
+        }
+      }
+    });
+    return map;
+  }, [albums, items]);
+
+  const currentAlbum = useMemo(() => {
+    if (selectedAlbumId === 'all_albums') {
+      return {
+        id: 'all_albums',
+        name: '전체 앨범 보관함',
+        description: '등록된 모든 앨범을 한눈에 둘러보고 정리하세요.',
+        createdAt: '',
+        isSystem: true,
+      };
+    }
+    return albums.find((a) => a.id === selectedAlbumId);
+  }, [albums, selectedAlbumId]);
 
   return (
     <div className="mx-auto max-w-7xl pb-16">
@@ -777,6 +862,31 @@ export default function GalleryScreen() {
               </div>
 
               <div className="space-y-1 max-h-[600px] overflow-y-auto">
+                {/* 앨범 전체 모아보기 항목 */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedAlbumId('all_albums')}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-[12.5px] font-bold transition-all mb-1 ${
+                    selectedAlbumId === 'all_albums'
+                      ? 'bg-teal text-white shadow-xs'
+                      : 'text-ink2 hover:bg-panel-alt hover:text-ink border border-dashed border-border/80'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate min-w-0">
+                    <span className="text-base">🗂️</span>
+                    <span className="truncate">앨범 전체 모아보기</span>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.2 text-[10px] font-mono ${
+                      selectedAlbumId === 'all_albums'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-panel-alt text-ink3 border border-border/50'
+                    }`}
+                  >
+                    {albums.length}개
+                  </span>
+                </button>
+
                 {albums.map((album) => {
                   const count = albumCounts[album.id] || 0;
                   const isSelected = selectedAlbumId === album.id;
@@ -791,7 +901,15 @@ export default function GalleryScreen() {
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate min-w-0">
-                        <span className="text-base">{album.id === 'recent' ? '🗂️' : '📁'}</span>
+                        {album.coverImage ? (
+                          <img
+                            src={album.coverImage}
+                            alt={album.name}
+                            className="h-6 w-6 rounded-md object-cover border border-white/20 shrink-0 shadow-xs"
+                          />
+                        ) : (
+                          <span className="text-base">{album.id === 'recent' ? '🗂️' : '📁'}</span>
+                        )}
                         <span className="truncate">{album.name}</span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -923,16 +1041,39 @@ export default function GalleryScreen() {
         <main className="flex-1 min-w-0 w-full">
           {/* 상단 뷰어 안내 바 */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4 rounded-2xl border border-border bg-panel p-4 shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">
-                {activeTab === 'albums'
-                  ? selectedAlbumId === 'recent'
-                    ? '🗂️'
-                    : '📁'
-                  : '📅'}
-              </span>
+            <div className="flex items-center gap-3">
+              {/* 특정 앨범 진입 시 전체 앨범 보관함으로 나가는 뒤로가기 버튼 */}
+              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedAlbumId('all_albums')}
+                  title="전체 앨범 보관함으로 돌아가기"
+                  className="flex items-center gap-1.5 rounded-xl border border-border bg-panel-alt/70 px-2.5 py-1.5 text-xs font-bold text-ink2 hover:bg-panel hover:text-teal hover:border-teal/50 transition-all shadow-2xs mr-0.5 shrink-0"
+                >
+                  <span className="text-base leading-none">‹</span>
+                  <span>모든 앨범</span>
+                </button>
+              )}
+
+              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && currentAlbum?.coverImage ? (
+                <img
+                  src={currentAlbum.coverImage}
+                  alt={currentAlbum.name}
+                  className="h-11 w-11 rounded-xl object-cover border border-border shadow-xs shrink-0"
+                />
+              ) : (
+                <span className="text-2xl">
+                  {activeTab === 'albums'
+                    ? selectedAlbumId === 'all_albums'
+                      ? '🗂️'
+                      : selectedAlbumId === 'recent'
+                      ? '🕒'
+                      : '📁'
+                    : '📅'}
+                </span>
+              )}
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-bold text-ink">
                     {activeTab === 'albums'
                       ? currentAlbum?.name
@@ -941,22 +1082,38 @@ export default function GalleryScreen() {
                       : `${selectedYearMonth.replace('-', '년 ')}월 사진`}
                   </h2>
                   <span className="rounded-full bg-teal-soft px-2.5 py-0.5 text-[11px] font-bold text-teal font-mono">
-                    {filteredItems.length}장의 사진
+                    {activeTab === 'albums' && selectedAlbumId === 'all_albums'
+                      ? `총 ${albums.length}개 앨범`
+                      : `${filteredItems.length}장의 사진`}
                   </span>
                 </div>
-                {activeTab === 'albums' && currentAlbum?.description && (
-                  <p className="text-[11.5px] text-ink3 mt-0.5">{currentAlbum.description}</p>
-                )}
+                {activeTab === 'albums' ? (
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {currentAlbum?.description && (
+                      <p className="text-[11.5px] text-ink3">{currentAlbum.description}</p>
+                    )}
+                    {selectedAlbumId !== 'recent' && selectedAlbumId !== 'all_albums' && (
+                      <span className="text-[10.5px] text-teal font-medium">
+                        💡 팁: 사진을 우클릭하여 이 앨범의 대표 이미지로 지정할 수 있습니다.
+                      </span>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {canCreate && (
                 <Button size="sm" variant="primary" onClick={handleOpenUploadModal}>
-                  <span>➕ 이 위치에 사진 올리기</span>
+                  <span>➕ {selectedAlbumId === 'all_albums' ? '사진 올리기' : '이 위치에 사진 올리기'}</span>
                 </Button>
               )}
-              {activeTab === 'albums' && !currentAlbum?.isSystem && (
+              {activeTab === 'albums' && selectedAlbumId === 'all_albums' && canCreate && (
+                <Button size="sm" variant="secondary" onClick={() => handleOpenAlbumModal()}>
+                  <span>📁 새 앨범 만들기</span>
+                </Button>
+              )}
+              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && !currentAlbum?.isSystem && (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -968,7 +1125,7 @@ export default function GalleryScreen() {
             </div>
           </div>
 
-          {/* 사진 그리드 출력 (날짜별 탭일 때는 날짜 헤더와 함께 그룹화) */}
+          {/* 1. 타임라인 탭일 때: 날짜별 그룹 그리드 */}
           {activeTab === 'timeline' ? (
             groupedByDate.length > 0 ? (
               <div className="space-y-6">
@@ -992,6 +1149,7 @@ export default function GalleryScreen() {
                           isSelectionMode={isSelectionMode}
                           isSelected={selectedItemIds.has(item.id)}
                           onToggleSelect={() => toggleSelectItem(item.id)}
+                          onContextMenu={(e) => handlePhotoContextMenu(e, item)}
                           onOpenEdit={(e) => handleOpenEditModal(item, e)}
                           onDelete={(e) => handleDeleteItem(item.id, e)}
                           onClick={() => {
@@ -1011,8 +1169,114 @@ export default function GalleryScreen() {
             ) : (
               <EmptyState keyword={keyword} onUpload={handleOpenUploadModal} canCreate={canCreate} />
             )
+          ) : selectedAlbumId === 'all_albums' ? (
+            /* 2. 앨범 탭에서 전체 앨범 보관함(모아보기) 모드일 때: 앨범 카드 그리드 출력 */
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {albums.map((album) => {
+                const count = albumCounts[album.id] || 0;
+                const cover = albumCoverMap[album.id];
+
+                return (
+                  <div
+                    key={album.id}
+                    onClick={() => setSelectedAlbumId(album.id)}
+                    className="group flex flex-col overflow-hidden rounded-3xl border border-border bg-panel hover:border-teal/50 hover:shadow-xl transition-all duration-200 cursor-pointer text-left select-none"
+                  >
+                    {/* 정방형 앨범 커버 썸네일 */}
+                    <div className="relative aspect-square w-full bg-panel-alt overflow-hidden">
+                      {cover ? (
+                        <img
+                          src={cover}
+                          alt={album.name}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-4xl text-ink3/40 bg-gradient-to-br from-panel-alt/60 to-panel">
+                          {album.id === 'recent' ? '🗂️' : '📁'}
+                        </div>
+                      )}
+
+                      {/* 사진 매수 배지 */}
+                      <div className="absolute top-3 right-3 rounded-full bg-black/60 px-2.5 py-0.5 text-[11px] font-mono font-bold text-white backdrop-blur-xs shadow-xs">
+                        {count}장
+                      </div>
+
+                      {/* 대표 커버 뱃지 */}
+                      {album.coverImage && (
+                        <div className="absolute bottom-3 left-3 rounded-md bg-teal/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs backdrop-blur-xs">
+                          대표 커버 설정됨
+                        </div>
+                      )}
+
+                      {/* 앨범 관리 빠른 버튼 (수정, 삭제) */}
+                      {!album.isSystem && (
+                        <div
+                          className="absolute top-3 left-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenAlbumModal(album, e)}
+                            title="앨범명 수정"
+                            className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-teal transition-colors shadow-xs"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteAlbum(album.id, album.name, e)}
+                            title="앨범 삭제"
+                            className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-danger transition-colors shadow-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 앨범 메타 정보 */}
+                    <div className="p-4 flex flex-col justify-between flex-1">
+                      <div>
+                        <h4 className="text-sm font-extrabold text-ink group-hover:text-teal transition-colors truncate">
+                          {album.name}
+                        </h4>
+                        <p className="text-[11.5px] text-ink3 line-clamp-1 mt-1">
+                          {album.description || (album.id === 'recent' ? '전체 사진 상시 보존' : '등록된 설명 없음')}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/50 text-[11px] text-ink3">
+                        <span className="font-mono text-[10px]">{album.createdAt || '시스템'}</span>
+                        <span className="font-bold text-teal flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+                          사진 보기 ›
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* 새 앨범 만들기 카드 */}
+              {canCreate && (
+                <div
+                  onClick={() => handleOpenAlbumModal()}
+                  className="flex aspect-square flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border hover:border-teal bg-panel-alt/20 hover:bg-teal-soft/20 text-ink3 hover:text-teal transition-all cursor-pointer p-6 text-center group"
+                >
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-panel border border-border group-hover:border-teal text-2xl shadow-xs transition-colors">
+                    ➕
+                  </div>
+                  <span className="mt-3.5 text-sm font-bold text-ink group-hover:text-teal transition-colors">
+                    새 앨범 만들기
+                  </span>
+                  <span className="mt-1 text-[11.5px] text-ink3 max-w-[160px]">
+                    기념일, 프로젝트별 사진을 테마로 분류해보세요
+                  </span>
+                </div>
+              )}
+            </div>
           ) : filteredItems.length > 0 ? (
-            /* 앨범 탭의 사진 그리드 */
+            /* 3. 특정 앨범 진입 시 사진 그리드 */
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
               {filteredItems.map((item) => (
                 <PhonePhotoCard
@@ -1023,6 +1287,7 @@ export default function GalleryScreen() {
                   isSelectionMode={isSelectionMode}
                   isSelected={selectedItemIds.has(item.id)}
                   onToggleSelect={() => toggleSelectItem(item.id)}
+                  onContextMenu={(e) => handlePhotoContextMenu(e, item)}
                   onOpenEdit={(e) => handleOpenEditModal(item, e)}
                   onDelete={(e) => handleDeleteItem(item.id, e)}
                   onClick={() => {
@@ -1084,7 +1349,7 @@ export default function GalleryScreen() {
             <div className="relative flex max-h-[65vh] min-h-[350px] w-full items-center justify-center bg-black/95 overflow-hidden">
               <img
                 src={activeItem.images[activeImageIndex] || activeItem.images[0]}
-                alt={activeItem.title}
+                alt={activeItem.caption || activeItem.description || '갤러리 사진'}
                 className="max-h-[65vh] w-auto max-w-full object-contain select-none"
               />
 
@@ -1121,20 +1386,33 @@ export default function GalleryScreen() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-bold text-ink">{activeItem.title}</h2>
-                    <span className="rounded bg-teal-soft px-2 py-0.5 text-[10.5px] font-bold text-teal">
+                    <span className="rounded-md bg-teal-soft px-2.5 py-1 text-xs font-bold text-teal">
                       {albums.find((a) => a.id === activeItem.albumId)?.name || '기본 앨범'}
                     </span>
-                    <span className="text-[11px] font-mono text-ink3">{activeItem.date}</span>
+                    <span className="text-xs font-mono text-ink3">{activeItem.date}</span>
+                    {activeItem.authorName && (
+                      <span className="text-xs text-ink3 font-medium">· {activeItem.authorName}</span>
+                    )}
                   </div>
-                  {activeItem.description && (
-                    <p className="mt-1.5 text-[12.5px] text-ink2 leading-relaxed whitespace-pre-wrap">
+                  {activeItem.description ? (
+                    <p className="mt-2 text-sm text-ink font-semibold leading-relaxed whitespace-pre-wrap">
                       {activeItem.description}
                     </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-ink3 italic">등록된 캡션이 없습니다.</p>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {activeItem.albumId !== 'recent' && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleSetCoverImage(activeItem.albumId, activeItem.images[0])}
+                    >
+                      <span>🖼️ 대표이미지 지정</span>
+                    </Button>
+                  )}
                   {canManageItem(activeItem) && (
                     <>
                       <Button
@@ -1145,7 +1423,7 @@ export default function GalleryScreen() {
                           setActiveItemId(null);
                         }}
                       >
-                        ✏️ 편집
+                        ✏️ 캡션 수정
                       </Button>
                       <Button
                         size="sm"
@@ -1158,7 +1436,7 @@ export default function GalleryScreen() {
                   )}
                   <a
                     href={activeItem.images[activeImageIndex] || activeItem.images[0]}
-                    download={`${activeItem.title}_${activeImageIndex + 1}`}
+                    download={`${activeItem.caption || activeItem.description || 'photo'}_${activeImageIndex + 1}`}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-1.5 rounded-xl border border-border bg-panel-alt px-3 py-1.5 text-[11px] font-bold text-ink hover:bg-teal-soft hover:text-teal transition-all"
@@ -1232,15 +1510,16 @@ export default function GalleryScreen() {
                 </div>
               </div>
 
+              {/* 사진 첨부 및 개별 이미지별 캡션 작성 영역 */}
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11.5px] font-bold text-ink2">
-                    사진 파일 * ({formImages.length}장 선택됨)
+                    사진 및 캡션 * ({uploadImages.length}장 선택됨)
                   </label>
-                  {formImages.length > 0 && (
+                  {uploadImages.length > 0 && !editingItemId && (
                     <button
                       type="button"
-                      onClick={() => setFormImages([])}
+                      onClick={() => setUploadImages([])}
                       className="text-[10.5px] font-semibold text-danger hover:underline"
                     >
                       전체 비우기
@@ -1257,30 +1536,68 @@ export default function GalleryScreen() {
                   className="hidden"
                 />
 
-                {formImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-2.5 max-h-52 overflow-y-auto rounded-2xl border border-border bg-panel-alt/30 p-2.5">
-                    {formImages.map((img, idx) => (
+                {uploadImages.length > 0 ? (
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                    {uploadImages.map((imgItem, idx) => (
                       <div
-                        key={idx}
-                        className="relative aspect-square overflow-hidden rounded-xl border border-border group bg-panel"
+                        key={imgItem.id}
+                        className="flex items-center gap-3 rounded-2xl border border-border bg-panel-alt/40 p-3"
                       >
-                        <img src={img} alt="선택 사진" className="h-full w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setFormImages((prev) => prev.filter((_, i) => i !== idx))}
-                          className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-[9px] text-white opacity-0 group-hover:opacity-100 hover:bg-danger transition-all"
-                        >
-                          ✕
-                        </button>
+                        {/* 썸네일 */}
+                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-border bg-panel">
+                          <img
+                            src={imgItem.url}
+                            alt="미리보기"
+                            className="h-full w-full object-cover"
+                          />
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 py-0.2 font-mono text-[9px] text-white">
+                            #{idx + 1}
+                          </span>
+                        </div>
+
+                        {/* 개별 캡션 입력창 */}
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-[11px] font-bold text-ink2 mb-1">
+                            {uploadImages.length > 1 ? `사진 #${idx + 1} 캡션 (설명)` : '사진 캡션 (설명)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={editingItemId ? editCaption : imgItem.caption}
+                            onChange={(e) => {
+                              if (editingItemId) {
+                                setEditCaption(e.target.value);
+                              } else {
+                                handleUpdateImageCaption(imgItem.id, e.target.value);
+                              }
+                            }}
+                            placeholder="이 사진의 이야기, 장소, 설명을 적어주세요..."
+                            className="h-9 w-full rounded-xl border border-border bg-panel px-3 text-[12px] text-ink outline-none focus:border-teal transition-all placeholder:text-ink3"
+                          />
+                        </div>
+
+                        {/* 삭제 버튼 (수정 모드가 아닐 때) */}
+                        {!editingItemId && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveUploadImage(imgItem.id)}
+                            title="이 사진 제외"
+                            className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-danger/10 hover:text-danger transition-colors shrink-0"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     ))}
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-border hover:border-teal/50 bg-panel cursor-pointer transition-all"
-                    >
-                      <span className="text-xl">➕</span>
-                      <span className="text-[9.5px] font-bold text-ink3 mt-0.5">추가</span>
-                    </div>
+
+                    {!editingItemId && (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border hover:border-teal/50 bg-panel-alt/20 py-3.5 cursor-pointer transition-all text-xs font-bold text-ink2 hover:text-teal"
+                      >
+                        <span>➕ 사진 더 추가하기</span>
+                        <span className="text-[11px] text-ink3 font-normal">(최대 50장)</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div
@@ -1288,38 +1605,14 @@ export default function GalleryScreen() {
                     className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border hover:border-teal/50 bg-panel-alt/30 hover:bg-panel-alt/60 cursor-pointer transition-all"
                   >
                     <span className="text-3xl">📁</span>
-                    <span className="mt-2 text-[12px] font-bold text-ink">
+                    <span className="mt-2 text-[12.5px] font-bold text-ink">
                       클릭하여 사진 선택 (다중 선택 가능)
                     </span>
-                    <span className="mt-0.5 text-[10.5px] text-teal font-medium">
-                      ✓ 여러 장을 한 번에 올려도 겹치지 않고 각각 개별 사진 카드로 등록됩니다.
+                    <span className="mt-0.5 text-[11px] text-teal font-medium">
+                      ✓ 각 사진별로 개별 캡션을 자유롭게 입력할 수 있습니다.
                     </span>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-[11.5px] font-bold text-ink2 mb-1">제목 *</label>
-                <input
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="예: 2026 하반기 전사 워크숍 기념사진"
-                  className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12px] text-ink outline-none focus:border-teal"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11.5px] font-bold text-ink2 mb-1">
-                  메모 / 설명 (선택)
-                </label>
-                <textarea
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="사진에 대한 이야기나 장소를 적어주세요..."
-                  rows={2}
-                  className="w-full rounded-xl border border-border bg-panel-alt/50 p-3 text-[12px] text-ink outline-none focus:border-teal resize-none"
-                />
               </div>
 
               <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -1331,8 +1624,15 @@ export default function GalleryScreen() {
                 >
                   취소
                 </Button>
-                <Button type="submit" variant="primary" size="md">
-                  {editingItemId ? '수정 완료' : `${formImages.length}장 추가 완료`}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  disabled={uploadImages.length === 0}
+                >
+                  {editingItemId
+                    ? '캡션 수정 완료'
+                    : `${uploadImages.length}장의 사진 올리기`}
                 </Button>
               </div>
             </form>
@@ -1517,6 +1817,32 @@ export default function GalleryScreen() {
           </div>
         </div>
       )}
+
+      {/* ── 우클릭 컨텍스트 메뉴 (최근항목 제외 앨범 대표이미지 지정) ── */}
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-50 min-w-[220px] overflow-hidden rounded-2xl border border-border bg-panel p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 border-b border-border/50">
+            <span className="text-[10.5px] font-bold text-ink3">앨범 대표 이미지 옵션</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const targetAlb = selectedAlbumId !== 'recent' ? selectedAlbumId : contextMenu.item.albumId;
+              if (targetAlb && targetAlb !== 'recent') {
+                handleSetCoverImage(targetAlb, contextMenu.item.images[0]);
+              }
+            }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink hover:bg-teal-soft hover:text-teal transition-all cursor-pointer"
+          >
+            <span>🖼️</span>
+            <span>이 사진을 앨범 대표이미지로 지정</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1529,6 +1855,7 @@ function PhonePhotoCard({
   isSelectionMode,
   isSelected,
   onToggleSelect,
+  onContextMenu,
   onOpenEdit,
   onDelete,
   onClick,
@@ -1539,12 +1866,14 @@ function PhonePhotoCard({
   isSelectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   onOpenEdit: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
   onClick: () => void;
 }) {
   const count = item.images.length;
   const currentImg = item.images[0] || '';
+  const captionText = item.caption || item.description || '';
 
   return (
     <div
@@ -1555,6 +1884,7 @@ function PhonePhotoCard({
           onClick();
         }
       }}
+      onContextMenu={onContextMenu}
       className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-panel shadow-xs transition-all cursor-pointer select-none ${
         isSelected
           ? 'border-teal ring-2 ring-teal ring-offset-2 scale-[0.98]'
@@ -1565,7 +1895,7 @@ function PhonePhotoCard({
         {currentImg ? (
           <img
             src={currentImg}
-            alt={item.title}
+            alt={captionText || '갤러리 사진'}
             className={`h-full w-full object-cover transition-transform duration-300 ${
               isSelected ? 'scale-100 brightness-95' : 'group-hover:scale-105'
             }`}
@@ -1597,7 +1927,7 @@ function PhonePhotoCard({
               <button
                 type="button"
                 onClick={onOpenEdit}
-                title="사진 수정"
+                title="캡션 수정"
                 className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-[10px] text-white hover:bg-teal transition-colors"
               >
                 ✏️
@@ -1621,8 +1951,10 @@ function PhonePhotoCard({
           </div>
         )}
 
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 text-white">
-          <h4 className="text-xs font-bold truncate leading-tight drop-shadow-xs">{item.title}</h4>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2.5 text-white">
+          {captionText ? (
+            <p className="text-xs font-semibold truncate leading-tight drop-shadow-xs">{captionText}</p>
+          ) : null}
           <div className="flex items-center justify-between text-[9.5px] text-white/80 mt-0.5 font-mono">
             <span>{item.date}</span>
             {albumName && <span className="truncate max-w-[80px]">{albumName}</span>}
