@@ -175,7 +175,6 @@ const COLLECTIONS: CollectionDef[] = [
       S('dept', 30, true),
       S('position', 20, true),
       S('jobTitle', 20),
-      S('roleGroup', 32), // enum-무default → false
       S('email', 128, true),
       S('status', 16),
       S('lastLogin', 40),
@@ -189,7 +188,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('resignedAt', 40),
       S('fcmToken', 256),
     ],
-    indexes: [IX('empNo', ['empNo']), IX('dept', ['dept']), IX('roleGroup', ['roleGroup'])],
+    indexes: [IX('empNo', ['empNo']), IX('dept', ['dept'])],
   },
   {
     id: 'departments',

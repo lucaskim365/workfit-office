@@ -7,6 +7,8 @@ import { z } from 'zod';
 export const EMPLOYMENT_STATUS = ['ACTIVE', 'LEAVE', 'RETIRED'] as const;
 export type EmploymentStatus = (typeof EMPLOYMENT_STATUS)[number];
 
+const nullableString = z.preprocess((v) => (v == null ? '' : String(v)), z.string().default(''));
+
 export const employeeProfileSchema = z.object({
   /** 프로필 고유 ID (PK, 보통 userId와 동일) */
   id: z.string().min(1),
@@ -25,25 +27,25 @@ export const employeeProfileSchema = z.object({
   /** 재직 상태 */
   status: z.enum(EMPLOYMENT_STATUS).default('ACTIVE'),
   /** 업무/개인 연락처 */
-  phone: z.string().optional().default(''),
+  phone: nullableString,
   /** 입사일 (YYYY-MM-DD) */
-  hireDate: z.string().optional().default(''),
+  hireDate: nullableString,
   /** 주민등록번호 */
-  rrn: z.string().optional().default(''),
+  rrn: nullableString,
   /** 생년월일 */
-  birthDate: z.string().optional().default(''),
+  birthDate: nullableString,
   /** 성별 (남성 / 여성) */
-  gender: z.string().optional().default(''),
+  gender: nullableString,
   /** 자택 주소 */
-  address: z.string().optional().default(''),
+  address: nullableString,
   /** 개인 이메일 */
-  personalEmail: z.string().optional().default(''),
+  personalEmail: nullableString,
   /** 비상 연락처 */
-  emergencyPhone: z.string().optional().default(''),
+  emergencyPhone: nullableString,
   /** 최종 학력 */
-  education: z.string().optional().default(''),
+  education: nullableString,
   /** 최종 수정일시 (ISO) */
-  updatedAt: z.string().optional().default(''),
+  updatedAt: nullableString,
 });
 
 export type EmployeeProfile = z.infer<typeof employeeProfileSchema>;

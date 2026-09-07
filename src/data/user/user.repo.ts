@@ -26,7 +26,6 @@ const backend = createCrudBackend<User>({
 
 export interface UserFilter {
   dept?: string;
-  roleGroup?: string;
   status?: string;
   q?: string;
 }
@@ -37,7 +36,6 @@ function applyFilter(rows: User[], f?: UserFilter): User[] {
   return rows.filter(
     (u) =>
       (!f.dept || u.dept === f.dept) &&
-      (!f.roleGroup || u.roleGroup === f.roleGroup) &&
       (!f.status || u.status === f.status) &&
       (!kw || [u.empNo, u.name].some((v) => v.toLowerCase().includes(kw))),
   );
@@ -127,20 +125,8 @@ export const userRepo = {
   },
 
   async save(user: User): Promise<void> {
-    const raw = { ...userSchema.parse(user) } as Record<string, unknown>;
-    // Appwrite users 컬렉션에 정의되지 않은 속성(역할그룹 분리 및 HR 전용 속성) 제거
-    delete raw.roleGroup;
-    delete raw.phone;
-    delete raw.hireDate;
-    delete raw.rrn;
-    delete raw.birthDate;
-    delete raw.gender;
-    delete raw.address;
-    delete raw.personalEmail;
-    delete raw.emergencyPhone;
-    delete raw.education;
-
-    await backend.save(raw as User);
+    const raw = userSchema.parse(user);
+    await backend.save(raw);
   },
 
   /**

@@ -4,7 +4,6 @@ import { z } from 'zod';
  * 사용자(User) 도메인 스키마 — 단일 진실 공급원(SSOT).
  * roleGroup 은 roleGroups.code 참조(FK). ([[데이터_모델_설계서.md]] users)
  */
-export const ROLE_GROUPS = ['ADMIN', 'OPERATOR', 'USER'] as const;
 export const USER_STATUS = ['사용', '잠금', '미사용'] as const;
 
 /**
@@ -20,7 +19,6 @@ export const userSchema = z.object({
   dept: z.string().default('미지정'),
   position: z.string().default('사원'),
   jobTitle: z.string().max(20).default(''),
-  roleGroup: z.string().optional().default('USER'),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS).default('사용'),
   lastLogin: z.string().default('-'),
@@ -44,16 +42,6 @@ export const userSchema = z.object({
   signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
   activeChatRoomId: z.string().nullable().optional(),
-  /** 임직원 인사 및 신상 정보 */
-  phone: z.string().optional(),
-  hireDate: z.string().optional(),
-  rrn: z.string().optional(),
-  birthDate: z.string().optional(),
-  gender: z.string().optional(),
-  address: z.string().optional(),
-  personalEmail: z.string().optional(),
-  emergencyPhone: z.string().optional(),
-  education: z.string().optional(),
   /**
    * 퇴사 처리 일시(ISO). 빈 문자열 = 재직/해당없음. Phase1 퇴사 처리에서 기록.
    * 로그인 차단은 기존 status='미사용'과 연동(퇴사 처리 시 자동 세팅).
@@ -75,19 +63,9 @@ export const userFormSchema = z.object({
   dept: z.string().default('미지정'),
   position: z.string().default('사원'),
   jobTitle: z.string().default(''),
-  roleGroup: z.string().optional(),
   email: z.string().min(1, '이메일을 입력하세요').email('올바른 이메일 형식이 아닙니다'),
   status: z.enum(USER_STATUS),
   password: z.string().max(50).optional(),
   photoUrl: z.string().optional(),
-  phone: z.string().optional(),
-  hireDate: z.string().optional(),
-  rrn: z.string().optional(),
-  birthDate: z.string().optional(),
-  gender: z.string().optional(),
-  address: z.string().optional(),
-  personalEmail: z.string().optional(),
-  emergencyPhone: z.string().optional(),
-  education: z.string().optional(),
 });
 export type UserFormValues = z.infer<typeof userFormSchema>;
