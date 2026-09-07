@@ -336,6 +336,13 @@ export default function CommuteScreen() {
   const [keyword, setKeyword] = useState('');
   const [showRetired, setShowRetired] = useState(false);
 
+  // 테스트 계정일 때: 테스트 부서/계정 제외 토글 상태
+  const isViewerTester = useMemo(
+    () => (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test'),
+    [user?.dept, user?.name],
+  );
+  const [excludeTestDept, setExcludeTestDept] = useState(false);
+
   // 상세 슬라이드오버 상태
   const [selectedPersonDetail, setSelectedPersonDetail] = useState<CommutePersonRow | null>(null);
 
@@ -446,6 +453,15 @@ export default function CommuteScreen() {
         return false;
       }
 
+      // 테스트 부서 제외 옵션 활성화 시 테스트 계정 및 테스트 부서 제외
+      if (excludeTestDept) {
+        const isTester =
+          (matchedUser?.dept ?? '').includes('테스트') ||
+          (matchedUser?.name ?? '').toLowerCase().includes('test') ||
+          emp.name.toLowerCase().includes('test');
+        if (isTester) return false;
+      }
+
       if (commuteScope === 'ALL') return true;
 
       if (commuteScope === 'TEAM') {
@@ -456,7 +472,7 @@ export default function CommuteScreen() {
 
       return false;
     });
-  }, [employees, commuteScope, user?.dept, userByEmpMap, normName]);
+  }, [employees, commuteScope, user?.dept, userByEmpMap, normName, excludeTestDept]);
 
   // 부서 목록 추출
   const deptList = useMemo(() => {
@@ -504,10 +520,12 @@ export default function CommuteScreen() {
         recordsMap.set(dateStr, evaluated);
       }
 
-      // 입사일 이전 달이라 출퇴근 기록 및 유효 근태가 전무한 사원은 해당 월 명단에서 제외
-      const hasActivity = records.some((r) => r.inAt != null || r.outAt != null || r.status === 'leave');
+      // 입사일 이전 달이라 유효 출퇴근 기록이 없는 사원은 해당 월 명단에서 제외
+      const hasValidWork = records.some(
+        (r) => r.status === 'normal' || r.status === 'late' || r.status === 'holiday_work' || r.status === 'leave',
+      );
       const isPreHireMonth = records.every((r) => r.status === 'unknown' || r.status === 'off');
-      if (!hasActivity && isPreHireMonth) {
+      if (!hasValidWork && isPreHireMonth) {
         continue;
       }
 
@@ -1076,6 +1094,19 @@ export default function CommuteScreen() {
             />
             <span>퇴직자 포함</span>
           </label>
+
+          {/* 테스트 계정으로 조회 시에만 노출되는 테스트 부서 제외 토글 */}
+          {isViewerTester && (
+            <label className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 cursor-pointer select-none ml-1 transition-colors hover:bg-amber-500/15">
+              <input
+                type="checkbox"
+                checked={excludeTestDept}
+                onChange={(e) => setExcludeTestDept(e.target.checked)}
+                className="rounded border-amber-500/40 text-amber-600 focus:ring-amber-500/30"
+              />
+              <span>테스트 부서 제외</span>
+            </label>
+          )}
 
           {/* 검색창 */}
           <div className="ml-auto flex items-center gap-1.5">

@@ -54,7 +54,7 @@ function CellStatusBadge({ status, leaveName, holidayName }: { status: string; l
   }
   if (status === 'absent') {
     return (
-      <span className="inline-flex items-center justify-center rounded bg-rose-500/20 px-1 py-0.2 text-[9.5px] font-black text-rose-600" title="결근">
+      <span className="inline-flex items-center justify-center font-bold text-[10px] text-rose-500" title="결근">
         ✕
       </span>
     );

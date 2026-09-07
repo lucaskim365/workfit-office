@@ -145,24 +145,25 @@ export function evaluateCommuteRecord(
   const isFuture = date > todayStr;
   const isBeforeHire = Boolean(hireDate && hireDate.trim() && date < hireDate.trim());
 
+  // 0. 입사일 이전인 경우 -> 과거 사번/카드 재사용 태그가 있더라도 입사 전이므로 'unknown'(— 표시) 처리
+  if (isBeforeHire) {
+    return {
+      empId,
+      date,
+      inAt: null,
+      outAt: null,
+      basicMin: 0,
+      overMin: 0,
+      nightMin: 0,
+      lateMin: 0,
+      totalMin: 0,
+      status: 'unknown',
+      holidayName: holiday ?? (weekend ? '주말 휴무' : undefined),
+    };
+  }
+
   // 1. 미출근 / 미기록 처리 (출/퇴근 모두 없는 날)
   if (!inAt && !outAt) {
-    // 1-0. 입사일 이전인 경우 -> 결근으로 처리하지 않고 'unknown'(— 표시) 처리
-    if (isBeforeHire) {
-      return {
-        empId,
-        date,
-        inAt: null,
-        outAt: null,
-        basicMin: 0,
-        overMin: 0,
-        nightMin: 0,
-        lateMin: 0,
-        totalMin: 0,
-        status: 'unknown',
-        holidayName: holiday ?? (weekend ? '주말 휴무' : undefined),
-      };
-    }
 
     // 1-1. 승인된 휴가가 존재하는 경우 -> 결근이 아닌 'leave'(휴가)로 확정 (미래 휴가도 예정으로 표시)
     if (approvedLeave) {
