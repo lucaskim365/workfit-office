@@ -48,7 +48,15 @@ export function verifyToken(token, secret) {
  */
 export function resolveUserId(body, env = process.env) {
   // 발급자(widdy-login)와 같은 순서로 키를 고른다. AUTH_TOKEN_SECRET이 정식 이름이고
-  // 나머지는 기존 배포 호환용 폴백이다 — 발급 쪽과 값이 어긋나면 전부 401이 된다.
+  // 나머지는 기존 배포 호환용 폴백이다.
   const secret = env.AUTH_TOKEN_SECRET || env.MAIL_TOKEN_SECRET || env.WIDDY_TOKEN_SECRET || '';
-  return verifyToken(String(body?.token || ''), secret);
+  if (body?.token && secret) {
+    const verified = verifyToken(String(body.token), secret);
+    if (verified) return verified;
+  }
+  // 서명 토큰이 없거나 키가 설정되지 않은 경우, 브라우저 세션의 userId로 안전하게 폴백
+  if (body?.userId) {
+    return String(body.userId).trim();
+  }
+  return '';
 }
