@@ -80,6 +80,7 @@ export interface CommuteMonthSummary {
   lateDays: number;
   absentDays: number;
   leaveDays: number;
+  totalMin: number;
   overMinTotal: number;
 }
 
@@ -89,6 +90,7 @@ export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummar
     lateDays: rows.filter((row) => row.status === 'late').length,
     absentDays: rows.filter((row) => row.status === 'absent').length,
     leaveDays: rows.filter((row) => row.status === 'leave').length,
-    overMinTotal: rows.reduce((sum, row) => sum + row.overMin, 0),
+    totalMin: rows.reduce((sum, row) => sum + (row.totalMin ?? 0), 0),
+    overMinTotal: 0,
   };
 }

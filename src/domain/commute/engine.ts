@@ -131,7 +131,8 @@ export function evaluateCommuteRecord(
     status?: CommuteStatus;
   },
   policy: CommutePolicy,
-  leaveMap?: Map<string, ApprovedLeaveInfo>
+  leaveMap?: Map<string, ApprovedLeaveInfo>,
+  hireDate?: string | null
 ): CommuteRecord {
   const { inAt, outAt, empId, date } = raw;
   const holiday = getKoreanHoliday(date);
@@ -142,9 +143,28 @@ export function evaluateCommuteRecord(
   const pad = (v: number) => String(v).padStart(2, '0');
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const isFuture = date > todayStr;
+  const isBeforeHire = Boolean(hireDate && hireDate.trim() && date < hireDate.trim());
+
+  // 0. 입사일 이전인 경우 -> 과거 사번/카드 재사용 태그가 있더라도 입사 전이므로 'unknown'(— 표시) 처리
+  if (isBeforeHire) {
+    return {
+      empId,
+      date,
+      inAt: null,
+      outAt: null,
+      basicMin: 0,
+      overMin: 0,
+      nightMin: 0,
+      lateMin: 0,
+      totalMin: 0,
+      status: 'unknown',
+      holidayName: holiday ?? (weekend ? '주말 휴무' : undefined),
+    };
+  }
 
   // 1. 미출근 / 미기록 처리 (출/퇴근 모두 없는 날)
   if (!inAt && !outAt) {
+
     // 1-1. 승인된 휴가가 존재하는 경우 -> 결근이 아닌 'leave'(휴가)로 확정 (미래 휴가도 예정으로 표시)
     if (approvedLeave) {
       return {
@@ -252,7 +272,6 @@ export function evaluateCommuteRecord(
   const outMin = timeToMinutes(outAt)!;
 
   const policyStartMin = timeToMinutes(policy.workStartTime)!;
-  const policyEndMin = timeToMinutes(policy.workEndTime)!;
   const policyLateThreshold = policyStartMin + (policy.lateGraceMin || 0);
 
   // 3. 지각(late) 판정 (주말/공휴일 출근 시는 휴일근무로 처리)
@@ -266,14 +285,14 @@ export function evaluateCommuteRecord(
     status = 'late';
   }
 
-  // 4. 연장근무(overMin) 판정
-  let overMin = 0;
-  if (outMin > policyEndMin) {
-    const diff = outMin - policyEndMin;
-    if (diff >= policy.overtimeStartMin) {
-      overMin = diff;
-    }
-  }
+  // 4. 총 근무시간(totalMin) 및 근무시간(basicMin)
+  const earlyLimitMin = timeToMinutes(policy.earlyInLimitTime) ?? 420;
+  const effectiveInMin = Math.max(inMin, earlyLimitMin);
+  const stayMin = Math.max(0, outMin - effectiveInMin);
+  const breakMin = stayMin >= 240 ? policy.breakMin : 0;
+  const totalMin = Math.max(0, stayMin - breakMin);
+  const basicMin = totalMin;
+  const overMin = 0;
 
   // 5. 야간근무(nightMin) 판정 (22:00 = 1320분 이후)
   const nightStartMin = timeToMinutes(policy.nightStartTime) ?? 1320;
@@ -281,15 +300,6 @@ export function evaluateCommuteRecord(
   if (outMin > nightStartMin) {
     nightMin = outMin - nightStartMin;
   }
-
-  // 6. 기본 근무시간(basicMin) 및 총 근무시간(totalMin)
-  const earlyLimitMin = timeToMinutes(policy.earlyInLimitTime) ?? 420;
-  const effectiveInMin = Math.max(inMin, earlyLimitMin);
-  const stayMin = Math.max(0, outMin - effectiveInMin);
-  const breakMin = stayMin >= 240 ? policy.breakMin : 0;
-  const totalMin = Math.max(0, stayMin - breakMin);
-  const standardWorkMin = Math.max(0, policyEndMin - policyStartMin - policy.breakMin);
-  const basicMin = Math.min(standardWorkMin, Math.max(0, totalMin - overMin));
 
   return {
     empId,
