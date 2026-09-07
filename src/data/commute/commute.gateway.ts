@@ -34,11 +34,20 @@ export class CommuteGatewayError extends Error {
   }
 }
 
+function getCurrentUserId(): string | null {
+  try {
+    return localStorage.getItem('workfit.auth.session');
+  } catch {
+    return null;
+  }
+}
+
 async function call<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   if (!client) throw new CommuteGatewayError('UNAVAILABLE', '근태 서버가 설정되지 않았습니다.');
 
   const token = getWiddyToken();
-  if (!token) {
+  const userId = getCurrentUserId();
+  if (!token && !userId) {
     throw new CommuteGatewayError('FORBIDDEN', '로그인 정보가 만료되었습니다. 다시 로그인해 주세요.');
   }
 
@@ -47,7 +56,7 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
   try {
     const execution = await new Functions(client).createExecution(
       FUNCTION_ID,
-      JSON.stringify({ token, action, payload }),
+      JSON.stringify({ token, userId, action, payload }),
       false,
     );
     raw = execution.responseBody ?? '';
