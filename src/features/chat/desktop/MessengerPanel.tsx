@@ -309,7 +309,9 @@ function MessengerThread({
   const [activeMenu, setActiveMenu] = useState<{ m: ChatMessage; x: number; y: number; mine: boolean } | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
+  const [attachmentRetention, setAttachmentRetention] = useState<'30d' | '90d' | '180d' | '1y' | 'permanent'>('30d');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+
   const [hasNewMsg, setHasNewMsg] = useState(false);
   const prevLengthRef = useRef(messages.length);
 
@@ -889,30 +891,53 @@ function MessengerThread({
             </div>
           )}
           {attachedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2 max-h-36 overflow-y-auto px-1 py-0.5 border-b border-border">
-              {attachedFiles.map((item) => (
-                <div key={item.id} className="relative w-14 h-14 rounded-lg border border-border-hi bg-panel-alt overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
-                  {item.previewUrl ? (
-                    <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
-                      <span className="text-[16px] leading-none">📄</span>
-                      <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
-                        {item.file.name}
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => removeAttachedFile(item.id)}
-                    title="첨부 취소"
-                    className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center text-[8px] transition-colors"
+            <div className="mb-2 space-y-1.5 border-b border-border pb-2 px-1">
+              <div className="flex items-center justify-between text-[10px] text-ink3 font-medium">
+                <span className="flex items-center gap-1.5 font-bold text-ink2">
+                  <span>📎 첨부 {attachedFiles.length}개</span>
+                  <span>· 보존기한:</span>
+                  <select
+                    value={attachmentRetention}
+                    onChange={(e) => setAttachmentRetention(e.target.value as any)}
+                    className="rounded border border-border bg-panel px-1.5 py-0.5 text-[10px] font-bold text-teal outline-none"
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                    <option value="30d">30일 (기본)</option>
+                    <option value="90d">90일 (3개월)</option>
+                    <option value="180d">180일 (6개월)</option>
+                    <option value="1y">1년</option>
+                    <option value="permanent">영구보존</option>
+                  </select>
+                </span>
+                <span className="text-[9.5px] text-amber font-semibold">
+                  {attachmentRetention === 'permanent' ? '영구 보관' : `기한 만료 시 자동 파기`}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto py-0.5">
+                {attachedFiles.map((item) => (
+                  <div key={item.id} className="relative w-14 h-14 rounded-lg border border-border-hi bg-panel-alt overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
+                    {item.previewUrl ? (
+                      <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
+                        <span className="text-[16px] leading-none">📄</span>
+                        <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
+                          {item.file.name}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeAttachedFile(item.id)}
+                      title="첨부 취소"
+                      className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center text-[8px] transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
           <div className="flex items-center gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
             <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
             <button

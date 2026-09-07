@@ -85,6 +85,8 @@ export default function MailComposer({ actor, accounts, mode, source, draft, ini
   /** 이 화면에서 만든/이어쓰는 임시보관 ID. 저장을 여러 번 눌러도 하나만 남는다. */
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const [attachments, setAttachments] = useState<OutgoingAttachment[]>([]);
+  /** 첨부파일 보존기한 (기본: 영구보존) */
+  const [attachmentRetention, setAttachmentRetention] = useState<'permanent' | '30d' | '90d' | '180d' | '1y'>('permanent');
   /** 파일을 base64로 읽는 동안 보내기를 막는다. 읽다 만 채로 보내면 첨부가 빠진다. */
   const [readingFiles, setReadingFiles] = useState(false);
   /** 파일을 끌고 들어온 상태. 놓을 자리를 표시한다. */
@@ -92,6 +94,7 @@ export default function MailComposer({ actor, accounts, mode, source, draft, ini
   /** 사용자가 입력을 고쳤는지. 초기값 그대로면 자동 저장하지 않는다. */
   const [dirty, setDirty] = useState(false);
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<string | null>(null);
+
 
   const account = accounts.find((row) => row.id === accountId);
   const selfEmails = useMemo(() => accounts.map((row) => row.email), [accounts]);
@@ -402,12 +405,36 @@ export default function MailComposer({ actor, accounts, mode, source, draft, ini
           </label>
 
           <div>
-            <span className="mb-1 flex items-center justify-between text-[10px] font-bold text-ink3">
-              첨부
-              <span className="font-semibold">
-                {attachments.length > 0 ? `${attachments.length}개 · ${formatBytes(attachedBytes)} / 20 MB` : '총 20MB까지'}
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold text-ink3">
+              <span className="flex items-center gap-2">
+                <span>첨부</span>
+                <span className="font-semibold">
+                  {attachments.length > 0 ? `${attachments.length}개 · ${formatBytes(attachedBytes)} / 20 MB` : '총 20MB까지'}
+                </span>
               </span>
-            </span>
+
+              {/* 보존기한 설정 드롭다운 */}
+              <div className="flex items-center gap-1.5 font-normal">
+                <span className="text-[10px] text-ink3">보존기한:</span>
+                <select
+                  value={attachmentRetention}
+                  onChange={(e) => setAttachmentRetention(e.target.value as any)}
+                  className="rounded border border-border bg-panel-alt/60 px-1.5 py-0.5 text-[10.5px] font-bold text-teal outline-none"
+                >
+                  <option value="permanent">영구 보존 (기본)</option>
+                  <option value="30d">30일 (단기 보관)</option>
+                  <option value="90d">90일 (3개월)</option>
+                  <option value="180d">180일 (6개월)</option>
+                  <option value="1y">1년 (365일)</option>
+                </select>
+                {attachmentRetention !== 'permanent' && (
+                  <span className="rounded bg-amber-soft/50 px-1.5 py-0.5 text-[9.5px] font-bold text-amber">
+                    기한 만료 시 자동 삭제
+                  </span>
+                )}
+              </div>
+            </div>
+
             {attachments.length > 0 && (
               <ul className="mb-2 space-y-1">
                 {attachments.map((file, index) => (

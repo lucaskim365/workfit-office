@@ -156,7 +156,9 @@ function ApprovalDraftInner({
   const selectedLeaveType = String(values['leaveType'] || '연차');
   const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
+  const [attachmentRetention, setAttachmentRetention] = useState<string>((editDoc as any)?.attachmentRetention ?? 'permanent');
   const [relatedDocs, setRelatedDocs] = useState<RelatedDoc[]>(editDoc?.relatedDocs ?? []);
+
   const [showRelatedModal, setShowRelatedModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -1451,40 +1453,63 @@ function ApprovalDraftInner({
               </div>
 
               {attachments.length > 0 && (
-                <ul className="mt-2.5 space-y-1.5">
-                  {attachments.map((f, i) => (
-                    <li
-                      key={i}
-                      className="group flex items-center justify-between text-[11.5px] text-ink bg-panel-alt hover:bg-panel-alt-hi px-3 py-1.5 rounded-lg border border-border transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Paperclip className="w-3.5 h-3.5 text-ink3 shrink-0" />
-                        <a
-                          href={f.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate font-medium hover:underline hover:text-teal cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {f.name}
-                        </a>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAttachments((prev) => prev.filter((_, idx) => idx !== i));
-                        }}
-                        className="p-1 rounded-md text-ink3 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
-                        title="삭제"
+                <div className="mt-2.5 space-y-2">
+                  <div className="flex items-center justify-between px-1 text-[11px] text-ink3 font-medium">
+                    <span className="flex items-center gap-1.5 font-bold text-ink">
+                      <span>보존기한 설정:</span>
+                      <select
+                        value={attachmentRetention}
+                        onChange={(e) => setAttachmentRetention(e.target.value)}
+                        className="rounded-md border border-border bg-panel px-2 py-0.5 text-[11px] font-bold text-teal outline-none"
                       >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <option value="permanent">영구 보존 (기본)</option>
+                        <option value="1y">1년 보존</option>
+                        <option value="3y">3년 보존</option>
+                        <option value="5y">5년 보존 (표준 규정)</option>
+                        <option value="10y">10년 보존 (중요 문서)</option>
+                      </select>
+                    </span>
+                    <span className="text-[10px] text-ink3">
+                      {attachmentRetention === 'permanent' ? '영구 보관 대상' : '기한 경과 시 파기 관리'}
+                    </span>
+                  </div>
+
+                  <ul className="space-y-1.5">
+                    {attachments.map((f, i) => (
+                      <li
+                        key={i}
+                        className="group flex items-center justify-between text-[11.5px] text-ink bg-panel-alt hover:bg-panel-alt-hi px-3 py-1.5 rounded-lg border border-border transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Paperclip className="w-3.5 h-3.5 text-ink3 shrink-0" />
+                          <a
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate font-medium hover:underline hover:text-teal cursor-pointer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {f.name}
+                          </a>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAttachments((prev) => prev.filter((_, idx) => idx !== i));
+                          }}
+                          className="p-1 rounded-md text-ink3 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                          title="삭제"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </Field>
+
 
             {/* 관련 문서 첨부 */}
             <Field label="관련 문서">

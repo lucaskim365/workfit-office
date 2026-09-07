@@ -1003,6 +1003,60 @@ function DocDetail({
   const canEditDraft = iAmDrafter && doc.status === '임시저장';
   const isInTrash = iAmDrafter && doc.status === '삭제';
 
+  // 기결재 문서 후열(공람) 전달 모달 상태
+  const [showForwardPostReadModal, setShowForwardPostReadModal] = useState(false);
+  const [forwardTargetUserId, setForwardTargetUserId] = useState('');
+  const [forwardMemo, setForwardMemo] = useState('');
+  const [postReadShareList, setPostReadShareList] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('workfit_post_read_shares');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const docShares = useMemo(
+    () => postReadShareList.filter((s) => s.docId === doc.id),
+    [postReadShareList, doc.id],
+  );
+
+  const handleSendPostRead = () => {
+    if (!forwardTargetUserId) {
+      alert('후열로 전달할 임직원을 선택해주세요.');
+      return;
+    }
+    const targetUser = org.userById(forwardTargetUserId) || users.find((u) => u.id === forwardTargetUserId);
+    const newShare = {
+      id: `prs-${Date.now()}`,
+      docId: doc.id,
+      docNo: doc.docNo,
+      docTitle: doc.title,
+      fromUserId: me,
+      fromUserName: org.userById(me)?.name || '기안자',
+      toUserId: forwardTargetUserId,
+      toUserName: targetUser?.name || forwardTargetUserId,
+      toUserDept: targetUser?.dept || '',
+      memo: forwardMemo.trim(),
+      sentAt: new Date().toISOString(),
+      isRead: false,
+    };
+
+    const updated = [newShare, ...postReadShareList];
+    setPostReadShareList(updated);
+    try {
+      localStorage.setItem('workfit_post_read_shares', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    alert(`${targetUser?.name || '해당 사용자'} 님에게 후열(공람) 문서로 성공적으로 전달되었습니다.`);
+    setShowForwardPostReadModal(false);
+    setForwardTargetUserId('');
+    setForwardMemo('');
+  };
+
+
   const run = async (fn: () => Promise<unknown>) => {
     setErr('');
     try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : '처리 중 오류가 발생했습니다.'); }
@@ -1377,7 +1431,47 @@ function DocDetail({
           );
         })()}
 
+        {/* 기결재 문서 후열(공람) 전달 이력 */}
+        {docShares.length > 0 && (
+          <div className="mb-4 rounded-xl border border-teal/40 bg-teal-soft/20 p-3.5 text-[12px] text-ink animate-fade-in print:hidden">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 font-bold text-teal">
+                <span>📨</span>
+                <span>후열(공람) 전달 이력 ({docShares.length}건)</span>
+              </div>
+              <span className="text-[10.5px] text-ink3 font-medium">기결재 완료 후 추가로 전달된 수신자 목록입니다</span>
+            </div>
+            <div className="space-y-1.5">
+              {docShares.map((share) => (
+                <div
+                  key={share.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-panel p-2.5 border border-border text-[11.5px]"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-teal-soft px-1.5 py-0.5 text-[10px] font-bold text-teal">
+                      후열 수신
+                    </span>
+                    <span className="font-bold text-ink">{share.toUserName}</span>
+                    <span className="text-ink3 font-mono text-[11px]">({share.toUserDept})</span>
+                    {share.memo && (
+                      <span className="text-ink2 text-[11px] ml-1">
+                        — &ldquo;{share.memo}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10.5px] text-ink3">
+                    <span>전달자: {share.fromUserName}</span>
+                    <span>·</span>
+                    <span className="font-mono">{share.sentAt?.slice(0, 16).replace('T', ' ')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 하단: 결재 문서 */}
+
         <div className="border-t border-border pt-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11.5px] font-bold text-ink2">결재 문서</div>
@@ -1465,14 +1559,103 @@ function DocDetail({
             </button>
           )
         )}
-        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && !postReadStep && (
+        {doc.status === '완료' && (
+          <button
+            type="button"
+            onClick={() => setShowForwardPostReadModal(true)}
+            className="rounded-lg bg-teal-soft text-teal border border-teal/40 px-3.5 py-2 text-[12.5px] font-bold hover:bg-teal hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <span>📨</span>
+            <span>후열 전달 (공람)</span>
+          </button>
+        )}
+        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && !postReadStep && doc.status !== '완료' && (
           <span className="text-[11px] text-ink3">
-            {doc.status === '완료' ? '결재가 완료된 문서입니다.' : doc.status === '진행중' ? '다른 결재자의 차례입니다.' : ''}
+            {doc.status === '진행중' ? '다른 결재자의 차례입니다.' : ''}
           </span>
         )}
       </div>
 
+      {/* 기결재 문서 후열(공람) 전달 모달 */}
+      {showForwardPostReadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-3xl border border-border bg-panel p-6 shadow-2xl animate-in zoom-in-95 duration-200"
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3.5">
+              <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
+                <span>📨 기결재 문서 후열(공람) 전달</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowForwardPostReadModal(false)}
+                className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl bg-panel-alt/50 p-3 border border-border">
+                <div className="text-[11px] text-ink3 font-medium">문서 번호 / 제목</div>
+                <div className="text-[12.5px] font-bold text-ink mt-0.5">[{doc.docNo}] {doc.title}</div>
+              </div>
+
+              <div>
+                <label className="block text-[11.5px] font-bold text-ink2 mb-1.5">후열 수신 대상자 *</label>
+                <select
+                  value={forwardTargetUserId}
+                  onChange={(e) => setForwardTargetUserId(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12px] text-ink outline-none focus:border-teal"
+                  autoFocus
+                >
+                  <option value="">후열(공람)로 전달할 사원을 선택하세요</option>
+                  {users
+                    .filter((u) => u.status === '사용' && u.id !== me)
+                    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.dept} / {u.position})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11.5px] font-bold text-ink2 mb-1.5">전달 메모 (선택)</label>
+                <textarea
+                  value={forwardMemo}
+                  onChange={(e) => setForwardMemo(e.target.value)}
+                  placeholder="예: 업무 참조 바랍니다, 기결재 완료본 확인 요망"
+                  rows={2}
+                  className="w-full rounded-xl border border-border bg-panel-alt/50 p-3 text-[12px] text-ink outline-none focus:border-teal resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowForwardPostReadModal(false)}
+                  className="rounded-xl px-4 py-2 text-[12px] font-bold text-ink2 hover:bg-panel-alt"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendPostRead}
+                  className="rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90"
+                >
+                  후열 전달하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 단일 결재 승인 의견 입력 모달 */}
+
       {showApproveModal && (
         <ApprovalOpinionModal
           title={isMyStepAgreement ? "합의 승인 확인" : "결재 승인 확인"}

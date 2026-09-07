@@ -86,10 +86,21 @@ const RECURRING_HOLIDAYS: Record<string, string> = {
  * 주어진 날짜(YYYY-MM-DD)의 대한민국 공휴일 명칭 반환 (공휴일이 아니면 null)
  */
 export function getKoreanHoliday(dateStr: string): string | null {
+  try {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('workfit_holidays_v1') : null;
+    if (saved) {
+      const list = JSON.parse(saved);
+      const match = list.find((h: any) => h.date === dateStr);
+      if (match) return match.name;
+    }
+  } catch {
+    // ignore
+  }
   if (KOREAN_HOLIDAYS[dateStr]) return KOREAN_HOLIDAYS[dateStr];
   const mmdd = dateStr.slice(5);
   return RECURRING_HOLIDAYS[mmdd] ?? null;
 }
+
 
 /** 주말(토/일) 여부 확인 */
 export function isWeekend(dateStr: string): boolean {

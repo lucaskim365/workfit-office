@@ -19,6 +19,7 @@ const PERIOD_OPTIONS: Option[] = [
   { value: 'today', label: '오늘' },
   { value: '7d', label: '최근 7일' },
   { value: '30d', label: '최근 30일' },
+  { value: 'custom', label: '기간 직접 지정' },
 ];
 
 /** 로그 관리 및 실시간 로그인 히스토리 모니터링 화면 */
@@ -26,8 +27,11 @@ export default function LogMgmtScreen() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<'login' | 'all'>('login');
   const [period, setPeriod] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [draft, setDraft] = useState({ type: '', q: '' });
   const [applied, setApplied] = useState(draft);
+
 
   const { data: logs = [], isLoading, refetch } = useSystemLogs();
 
@@ -88,7 +92,15 @@ export default function LogMgmtScreen() {
           return true;
         }
       });
+    } else if (period === 'custom') {
+      if (startDate) {
+        list = list.filter((l) => l.at.slice(0, 10) >= startDate);
+      }
+      if (endDate) {
+        list = list.filter((l) => l.at.slice(0, 10) <= endDate);
+      }
     }
+
 
     // 유형 필터
     if (applied.type) {
@@ -108,7 +120,8 @@ export default function LogMgmtScreen() {
     }
 
     return list;
-  }, [logs, activeTab, period, applied, todayStr]);
+  }, [logs, activeTab, period, applied, todayStr, startDate, endDate]);
+
 
   const handleRefresh = () => {
     qc.invalidateQueries({ queryKey: ['systemLogs'] });
@@ -192,9 +205,29 @@ export default function LogMgmtScreen() {
       {/* ── 검색 및 필터 툴바 ── */}
       <FilterBar onSearch={() => setApplied(draft)}>
         <FilterField label="조회 기간">
-          <Select value={period} onChange={(v) => setPeriod(v)} options={PERIOD_OPTIONS} width={110} />
+          <Select value={period} onChange={(v) => setPeriod(v)} options={PERIOD_OPTIONS} width={125} />
         </FilterField>
+        {period === 'custom' && (
+          <FilterField label="기간 지정">
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2 text-[11px] font-bold text-ink outline-none focus:border-teal"
+              />
+              <span className="text-ink3 text-xs">~</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2 text-[11px] font-bold text-ink outline-none focus:border-teal"
+              />
+            </div>
+          </FilterField>
+        )}
         {activeTab === 'all' && (
+
           <FilterField label="로그 유형">
             <Select
               value={draft.type}

@@ -60,7 +60,9 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', category: 'BASE', desc: '사원 등록, 계정 및 퇴사 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_DEPT', name: '부서/조직 관리', url: '/base/department', category: 'BASE', desc: '부서 생성, 트리 구조 및 부서장 지정', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_POSITION', name: '직급 관리', url: '/base/position', category: 'BASE', desc: '직급 서열 및 명칭 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_BASE_HOLIDAY', name: '공휴일 관리', url: '/base/holiday', category: 'BASE', desc: '법정 공휴일 및 회사 지정 휴일 등록/수정', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_VENDOR', name: '거래처 관리', url: '/base/vendor', category: 'BASE', desc: '협력업체 및 거래처 정보', supportedActions: ['access', 'create', 'update', 'delete'] },
+
   { id: 'S_BASE_CODE', name: '공통코드 정보', url: '/base/code', category: 'BASE', desc: '시스템 공통 코드 마스터', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APFORM', name: '결재서식 관리', url: '/base/approval-form', category: 'BASE', desc: '전자결재 양식, 입력필드 및 룰 설정', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APPROC', name: '결재 프로세스 설정', url: '/base/approval-process', category: 'BASE', desc: '부서합의, 전결규정 등 프로세스 옵션', supportedActions: ['access', 'create', 'update', 'delete'] },
