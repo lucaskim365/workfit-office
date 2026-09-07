@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   COMMUTE_STATUS_LABELS,
   summarizeCommuteMonth,
-  type CommuteEmployee,
   type CommuteRecord,
 } from '@/domain/commute/schema';
 import { COMMUTE_STATUS_TONES } from '@/data/commute/commute.fixture';
 import {
-  useCommuteDay,
   useCommuteEmployees,
   useCommuteMonth,
   useCommuteMonthAll,
@@ -20,7 +18,7 @@ import { resolveCommuteScope } from '@/features/auth/scopeHelper';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
-import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
+import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
@@ -32,17 +30,82 @@ import {
 } from '@/domain/commute/engine';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { CommutePolicyModal } from './components/CommutePolicyModal';
-import { Settings, Clock, Calendar as CalendarIcon, List, Info } from 'lucide-react';
+import { EmployeeDetailDrawer } from './components/EmployeeDetailDrawer';
+import { CommuteMatrixView } from './components/CommuteMatrixView';
+import { CommuteDeptView } from './components/CommuteDeptView';
+import { CommuteAnomalyView } from './components/CommuteAnomalyView';
+import { CommuteLeaveView } from './components/CommuteLeaveView';
+import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
+import {
+  Settings,
+  Clock,
+  Calendar as CalendarIcon,
+  List,
+  Info,
+  Building2,
+  AlertTriangle,
+  Users,
+  Search,
+  CalendarCheck2,
+  Filter,
+} from 'lucide-react';
 
-/**
- * 근태 조회 — CAPS 연동 데이터 및 승인 휴가/공휴일 연동 화면.
- */
-const DAY_VIEW = 'day';
-const MONTH_VIEW = 'month';
+/** 탭 상수 */
 const ME_TAB = 'me';
 const TEAM_TAB = 'team';
 
-const NON_ATTENDANCE_NAMES = new Set(['위원장님', '부위원장님']);
+/**
+ * 근태 관리 제외 대상 여부 판정
+ * 1. 부서: 경영기술전략위원회 / 기술경영전략위원회 등 위원회 소속
+ * 2. 직급/직책: 상무이사 이상 (상무, 상무이사, 전무, 부사장, 사장, 대표이사, 위원장, 부위원장 등)
+ */
+function isNonAttendanceTarget(info?: {
+  name?: string | null;
+  dept?: string | null;
+  position?: string | null;
+  jobTitle?: string | null;
+} | null): boolean {
+  if (!info) return false;
+  const dept = (info.dept || '').trim();
+  const position = (info.position || '').trim();
+  const jobTitle = (info.jobTitle || '').trim();
+  const name = (info.name || '').trim();
+
+  // 1. 위원회 부서 제외
+  if (
+    dept.includes('경영기술전략위원회') ||
+    dept.includes('기술경영전략위원회') ||
+    dept.includes('전략위원회')
+  ) {
+    return true;
+  }
+
+  // 2. 상무이사 이상 임원진 (상무, 전무, 부사장, 사장, 대표이사, 위원장, 부위원장, 회장 등)
+  const executiveKeywords = [
+    '상무',
+    '전무',
+    '부사장',
+    '사장',
+    '대표이사',
+    '위원장',
+    '부위원장',
+    '회장',
+    '부회장',
+  ];
+
+  const fullText = `${position} ${jobTitle} ${name}`;
+  if (executiveKeywords.some((keyword) => fullText.includes(keyword))) {
+    return true;
+  }
+
+  if (name.includes('대표이사') || name === '대표') {
+    return true;
+  }
+
+  return false;
+}
+
+const NON_ATTENDANCE_NAMES = new Set(['위원장님', '부위원장님', '대표이사']);
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -62,17 +125,6 @@ function moveMonth(month: string, amount: number): string {
   return `${next.getFullYear()}-${pad(next.getMonth() + 1)}`;
 }
 
-function moveDay(date: string, amount: number): string {
-  const [year, mm, dd] = date.split('-').map(Number);
-  const next = new Date(year, mm - 1, dd + amount);
-  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`;
-}
-
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const dayTitle = (date: string): string => {
-  const [year, mm, dd] = date.split('-').map(Number);
-  return `${year}년 ${mm}월 ${dd}일 (${WEEKDAYS[new Date(year, mm - 1, dd).getDay()]})`;
-};
 const monthTitle = (month: string): string => `${month.slice(0, 4)}년 ${Number(month.slice(5))}월`;
 
 const timeOf = (iso: string | null): string => {
@@ -83,10 +135,32 @@ const timeOf = (iso: string | null): string => {
 
 const hourText = (min: number): string => (min === 0 ? '—' : `${Math.floor(min / 60)}h ${min % 60}m`);
 
-function StatCard({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: string;
+  tone?: string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
   return (
-    <div className={`min-w-0 flex-1 rounded-xl border px-4 py-3 shadow-2xs transition-all ${tone ?? 'border-border bg-panel'}`}>
-      <div className="text-[10px] font-bold text-ink3">{label}</div>
+    <div
+      onClick={onClick}
+      className={`min-w-0 flex-1 rounded-xl border px-4 py-3 shadow-2xs transition-all ${
+        onClick ? 'cursor-pointer hover:border-teal/50 hover:shadow-sm' : ''
+      } ${active ? 'ring-2 ring-teal border-teal bg-teal/10' : tone ?? 'border-border bg-panel'}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-bold text-ink3">{label}</div>
+        {active && <span className="h-1.5 w-1.5 rounded-full bg-teal" />}
+      </div>
       <div className="mt-1 truncate text-[19px] font-extrabold leading-tight text-ink">{value}</div>
       {sub && <div className="mt-0.5 truncate text-[10px] text-ink3">{sub}</div>}
     </div>
@@ -127,9 +201,9 @@ function StatusBadge({ record }: { record: CommuteRecord }) {
 
 const NOTE = '상태 분류는 CAPS 원본 태그 및 전자결재 승인 휴가/법정 공휴일을 종합 판정한 실시간 근태 현황입니다.';
 const HEAD = 'p-2.5';
-
 const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors';
 const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] text-ink outline-none placeholder:text-ink3';
+const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5 shadow-2xs';
 
 export default function CommuteScreen() {
   const { user } = useAuth();
@@ -140,26 +214,34 @@ export default function CommuteScreen() {
 
   const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
   const canManagePolicy = isAdmin || commuteScope === 'ALL';
+  const canTeam = commuteScope === 'TEAM' || commuteScope === 'ALL';
 
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
-  const canTeam = commuteScope === 'ALL' || commuteScope === 'TEAM';
 
-  const { data: allUsers = [] } = useUsers();
+  // 시스템 전체 사용자 목록
+  const usersQuery = useUsers();
+  const allUsers = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+
+  // 이름 공백 정규화 (예: '모 란' vs '모란' 동일인 처리)
+  const normName = useCallback((s?: string | null) => (s || '').replace(/\s+/g, ''), []);
+
+  // CAPS 연동 직원 목록
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
 
-  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (테스트 계정은 테스터로 접속했을 때만 범위에 포함)
+  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합
   const employees = useMemo(() => {
-    const list = [...allEmployees.filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()))];
-    const existingNames = new Set(list.map((e) => e.name.trim()));
+    const list = [...allEmployees.filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()) && !isNonAttendanceTarget({ name: row.name }))];
+    const existingNormNames = new Set(list.map((e) => normName(e.name)));
     const existingEmpIds = new Set(list.map((e) => e.empId));
 
     const isViewerTester = (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test');
 
     for (const u of allUsers) {
       const name = (u.name || '').trim();
-      if (!name || existingNames.has(name) || NON_ATTENDANCE_NAMES.has(name)) continue;
+      const nName = normName(name);
+      if (!name || !nName || existingNormNames.has(nName) || NON_ATTENDANCE_NAMES.has(name) || NON_ATTENDANCE_NAMES.has(nName) || isNonAttendanceTarget(u)) continue;
 
       const isUserTester = (u.dept ?? '').includes('테스트') || name.toLowerCase().includes('test');
       if (isUserTester && !isViewerTester) continue;
@@ -176,7 +258,7 @@ export default function CommuteScreen() {
         while (existingEmpIds.has(empId)) empId++;
       }
 
-      existingNames.add(name);
+      existingNormNames.add(nName);
       existingEmpIds.add(empId);
 
       list.push({
@@ -188,100 +270,101 @@ export default function CommuteScreen() {
     }
 
     return list;
-  }, [allEmployees, allUsers, user?.dept, user?.name]);
+  }, [allEmployees, allUsers, user?.dept, user?.name, normName]);
 
   const userByEmpMap = useMemo(() => {
     const map = new Map<string, typeof allUsers[0]>();
     for (const u of allUsers) {
       if (u.empNo) map.set(u.empNo.trim(), u);
-      if (u.name) map.set(u.name.trim(), u);
+      if (u.name) {
+        map.set(u.name.trim(), u);
+        map.set(normName(u.name), u);
+      }
       if (u.id) map.set(u.id.trim(), u);
     }
     for (const emp of employees) {
       const matched = allUsers.find(
-        (u) => u.name?.trim() === emp.name.trim() || u.empNo?.trim() === String(emp.empId),
+        (u) => normName(u.name) === normName(emp.name) || u.empNo?.trim() === String(emp.empId),
       );
       if (matched) {
         map.set(String(emp.empId), matched);
+        map.set(emp.name.trim(), matched);
+        map.set(normName(emp.name), matched);
       }
     }
     return map;
-  }, [allUsers, employees]);
+  }, [allUsers, employees, normName]);
 
   const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const profileByEmpMap = useMemo(() => {
     const map = new Map<string, typeof employeeProfiles[0]>();
     for (const p of employeeProfiles) {
       if (p.empNo) map.set(p.empNo.trim(), p);
-      if (p.name) map.set(p.name.trim(), p);
+      if (p.name) {
+        map.set(p.name.trim(), p);
+        map.set(normName(p.name), p);
+      }
       if (p.userId) map.set(p.userId.trim(), p);
     }
     return map;
-  }, [employeeProfiles]);
+  }, [employeeProfiles, normName]);
 
   const getHireDateForEmp = useCallback(
     (empName?: string | null, empId?: number | null) => {
       if (!empName && !empId) return null;
       const profile =
-        (empName ? profileByEmpMap.get(empName.trim()) : undefined) ??
+        (empName ? (profileByEmpMap.get(empName.trim()) ?? profileByEmpMap.get(normName(empName))) : undefined) ??
         (empId ? profileByEmpMap.get(String(empId)) : undefined);
       return profile?.hireDate ? profile.hireDate.trim() : null;
     },
-    [profileByEmpMap],
+    [profileByEmpMap, normName],
   );
 
+  // 상위 탭 상태 (내 근태 vs 관제/부서원 근태)
   const [tab, setTab] = useState<string>(ME_TAB);
-  const [view, setView] = useState<string>(DAY_VIEW);
-  const [month, setMonth] = useState(thisMonth());
-  const [date, setDate] = useState(today());
-  const [keyword, setKeyword] = useState('');
-  const [showRetired, setShowRetired] = useState(false);
-
-  // 내 근태 보기 방식: 'calendar'(달력 그리드) vs 'table'(목록 표)
-  const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
-
   const activeTab = canTeam ? tab : ME_TAB;
   const isTeam = activeTab === TEAM_TAB;
 
-  const isEmployeeView = view !== DAY_VIEW && view !== MONTH_VIEW;
-  const teamEmpId = isEmployeeView ? Number(view) : null;
+  // 관제 4대 View 탭 상태
+  const [adminTab, setAdminTab] = useState<CommuteAdminTab>('all_matrix');
+
+  // 필터 상태
+  const [month, setMonth] = useState(thisMonth());
+  const [selectedDept, setSelectedDept] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [onlyAnomaly, setOnlyAnomaly] = useState<boolean>(false);
+  const [keyword, setKeyword] = useState('');
+  const [showRetired, setShowRetired] = useState(false);
+
+  // 상세 슬라이드오버 상태
+  const [selectedPersonDetail, setSelectedPersonDetail] = useState<CommutePersonRow | null>(null);
+
+  // 내 근태 보기 방식: 'calendar' vs 'table'
+  const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
+
   const myEmpId = useMemo(() => {
     if (viewer?.empId) return viewer.empId;
     const found = employees.find((e) => e.name.trim() === (user?.name ?? '').trim());
     return found?.empId ?? (user ? 99999 : null);
   }, [viewer?.empId, employees, user]);
 
-  const monthEmpId = activeTab === ME_TAB ? myEmpId : teamEmpId;
+  // 내 근태 쿼리
+  const myMonthQuery = useCommuteMonth(myEmpId, month);
 
-  const monthQuery = useCommuteMonth(monthEmpId, month);
-  const dayQuery = useCommuteDay(isTeam && view === DAY_VIEW ? date : null);
-  const monthAllQuery = useCommuteMonthAll(isTeam && view === MONTH_VIEW ? month : null);
+  // 전사 한 달치 전 직원 쿼리
+  const monthAllQuery = useCommuteMonthAll(isTeam ? month : null);
 
-  // 전자결재 승인 휴가 데이터 연동 (내 휴가 및 선택 직원 휴가)
+  // 전자결재 승인 휴가 데이터 연동
   const approvalsQuery = useAllApprovals();
-  const selected = useMemo(() => employees.find((row) => row.empId === teamEmpId), [employees, teamEmpId]);
 
-  const targetHireDate = useMemo(() => {
-    if (activeTab === ME_TAB) {
-      return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
-    }
-    return getHireDateForEmp(selected?.name, selected?.empId);
-  }, [activeTab, user, selected, getHireDateForEmp]);
-
-  const leaveMap = useMemo(() => {
-    const map = new Map<string, ApprovedLeaveInfo>();
-    const targetName = activeTab === ME_TAB ? (user?.name?.trim() ?? '') : (selected?.name?.trim() ?? '');
-    const targetUserId = activeTab === ME_TAB ? user?.id : undefined;
+  // 휴가 맵 생성
+  const globalLeaveMap = useMemo(() => {
+    const map = new Map<string, Map<string, ApprovedLeaveInfo>>();
 
     for (const doc of approvalsQuery.data ?? []) {
       if (doc.docType !== '휴가' || doc.status !== '완료' || !doc.form) continue;
 
       const drafterName = (doc.drafterName || '').trim();
-      const matchName = targetName && drafterName === targetName;
-      const matchId = targetUserId && doc.drafterId === targetUserId;
-
-      if (!matchName && !matchId) continue;
-
       const start = doc.form.startDate;
       const end = doc.form.endDate || doc.form.startDate;
       if (!start) continue;
@@ -295,21 +378,39 @@ export default function CommuteScreen() {
         const mm = String(curr.getMonth() + 1).padStart(2, '0');
         const dd = String(curr.getDate()).padStart(2, '0');
         const dateKey = `${yyyy}-${mm}-${dd}`;
-        map.set(dateKey, {
+
+        const leaveInfo = {
           leaveType: doc.form.leaveType || '연차',
           docTitle: doc.title,
           docId: doc.id,
-        });
+        };
+
+        if (!map.has(drafterName)) map.set(drafterName, new Map());
+        map.get(drafterName)!.set(dateKey, leaveInfo);
+        const normDrafter = normName(drafterName);
+        if (normDrafter && !map.has(normDrafter)) map.set(normDrafter, new Map());
+        if (normDrafter) map.get(normDrafter)!.set(dateKey, leaveInfo);
+
         curr.setDate(curr.getDate() + 1);
       }
     }
     return map;
-  }, [approvalsQuery.data, activeTab, user, selected]);
+  }, [approvalsQuery.data, normName]);
 
-  // 한 달 전체 날짜(1일~말일)를 생성하여 공휴일, 승인 휴가, 출퇴근 기록을 완벽히 합성
-  const monthRows = useMemo(() => {
+  // 내 전용 휴가 맵
+  const myLeaveMap = useMemo(() => {
+    const targetName = user?.name?.trim() ?? '';
+    return globalLeaveMap.get(targetName) ?? new Map();
+  }, [globalLeaveMap, user?.name]);
+
+  const myHireDate = useMemo(() => {
+    return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
+  }, [user, getHireDateForEmp]);
+
+  // 내 근태 한 달치 레코드
+  const myMonthRows = useMemo(() => {
     const rawMap = new Map<string, CommuteRecord>();
-    for (const r of monthQuery.data ?? []) {
+    for (const r of myMonthQuery.data ?? []) {
       rawMap.set(r.date, r);
     }
 
@@ -323,112 +424,288 @@ export default function CommuteScreen() {
       const dateStr = `${month}-${pad(dayNum)}`;
       const raw =
         rawMap.get(dateStr) ?? {
-          empId: monthEmpId ?? 0,
+          empId: myEmpId ?? 0,
           date: dateStr,
           inAt: null,
           outAt: null,
         };
-      records.push(evaluateCommuteRecord(raw, policy, leaveMap, targetHireDate));
+      records.push(evaluateCommuteRecord(raw, policy, myLeaveMap, myHireDate));
     }
     return records;
-  }, [monthQuery.data, month, monthEmpId, policy, leaveMap, targetHireDate]);
+  }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate]);
 
-  const summary = useMemo(() => summarizeCommuteMonth(monthRows), [monthRows]);
+  const mySummary = useMemo(() => summarizeCommuteMonth(myMonthRows), [myMonthRows]);
 
-  const matches = (employee: CommuteEmployee) => {
-    const text = keyword.trim();
-    if (text !== '' && !employee.name.includes(text) && !String(employee.empId).includes(text)) return false;
-    return showRetired || employee.active;
-  };
+  // 관제 대상 직원 필터링 (권한 범위 기반 및 비대상자 제외)
+  const scopedEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      const matchedUser = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
 
-  const visible = useMemo(
-    () =>
-      employees
-        .filter(matches)
-        .filter((emp) => {
-          // 1. 임원(ALL): 전사 임직원 열람 (테스터 접속 시 테스트 계정 포함, 실제 임원 접속 시 실제 임직원만 포함)
-          if (commuteScope === 'ALL') return true;
-
-          // 2. 팀장(TEAM): 자신 및 소속 부서 팀원들의 근태만 열람
-          if (commuteScope === 'TEAM') {
-            const myDept = (user?.dept ?? '').trim();
-            const matchedUser = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(String(emp.empId));
-            const empDept = (matchedUser?.dept ?? '').trim();
-            return Boolean(myDept && empDept && myDept === empDept);
-          }
-
-          // 3. 일반 사원(MY_ONLY): 팀 탭 접근 불가
-          return false;
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, 'ko')),
-    [employees, keyword, showRetired, commuteScope, user?.dept, userByEmpMap],
-  );
-
-  const firstEmpId = (visible.find((row) => row.active) ?? visible[0])?.empId;
-
-  useEffect(() => {
-    if (isEmployeeView && Number.isNaN(Number(view)) && firstEmpId !== undefined) {
-      setView(String(firstEmpId));
-    }
-  }, [firstEmpId, isEmployeeView, view]);
-
-  /** 일별 표 — 실제 DB 기록 반영 */
-  const dayRows = useMemo(() => {
-    const byEmp = new Map<number, CommuteRecord>();
-    for (const row of dayQuery.data ?? []) {
-      const empHireDate = getHireDateForEmp(null, row.empId);
-      byEmp.set(row.empId, evaluateCommuteRecord(row, policy, leaveMap, empHireDate));
-    }
-    return visible.map((employee) => {
-      const empHireDate = getHireDateForEmp(employee.name, employee.empId);
-      const rawRecord = byEmp.get(employee.empId);
-      let record = rawRecord ?? null;
-      if (!record && empHireDate && date < empHireDate) {
-        record = evaluateCommuteRecord(
-          { empId: employee.empId, date, inAt: null, outAt: null },
-          policy,
-          leaveMap,
-          empHireDate,
-        );
+      // 경영기술전략위원회 및 상무이사 이상 임원은 근태 관리 대상에서 제외
+      if (isNonAttendanceTarget(matchedUser) || isNonAttendanceTarget({ name: emp.name })) {
+        return false;
       }
-      return {
-        employee,
-        record,
-      };
+
+      if (commuteScope === 'ALL') return true;
+
+      if (commuteScope === 'TEAM') {
+        const myDept = (user?.dept ?? '').trim();
+        const empDept = (matchedUser?.dept ?? '').trim();
+        return Boolean(myDept && empDept && myDept === empDept);
+      }
+
+      return false;
     });
-  }, [dayQuery.data, visible, policy, leaveMap, getHireDateForEmp, date]);
+  }, [employees, commuteScope, user?.dept, userByEmpMap, normName]);
 
-  const dayStats = useMemo(() => ({
-    present: dayRows.filter((row) => row.record?.inAt).length,
-    late: dayRows.filter((row) => row.record?.status === 'late').length,
-    leave: dayRows.filter((row) => row.record?.status === 'leave').length,
-    missing: dayRows.filter((row) => !row.record || (!row.record.inAt && !row.record.outAt && row.record.status !== 'leave' && row.record.status !== 'off' && row.record.status !== 'unknown')).length,
-  }), [dayRows]);
+  // 부서 목록 추출
+  const deptList = useMemo(() => {
+    const set = new Set<string>();
+    for (const emp of scopedEmployees) {
+      const u = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
+      if (u?.dept && u.dept.trim()) set.add(u.dept.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [scopedEmployees, userByEmpMap, normName]);
 
-  /** 월별 집계 — 실제 DB 기록 반영 */
-  const monthAllRows = useMemo(() => {
-    const byEmp = new Map<number, CommuteRecord[]>();
+  // 전사 직원들의 한 달치 데이터 매트릭스 구성
+  const allPersonRows = useMemo(() => {
+    const rawByEmp = new Map<number, Map<string, CommuteRecord>>();
     for (const row of monthAllQuery.data ?? []) {
-      const empHireDate = getHireDateForEmp(null, row.empId);
-      const evaluated = evaluateCommuteRecord(row, policy, leaveMap, empHireDate);
-      const list = byEmp.get(row.empId);
-      if (list) list.push(evaluated);
-      else byEmp.set(row.empId, [evaluated]);
+      if (!rawByEmp.has(row.empId)) rawByEmp.set(row.empId, new Map());
+      rawByEmp.get(row.empId)!.set(row.date, row);
     }
 
-    return visible.map((employee) => ({
-      employee,
-      summary: summarizeCommuteMonth(byEmp.get(employee.empId) ?? []),
-    }));
-  }, [monthAllQuery.data, visible, policy, leaveMap, getHireDateForEmp]);
+    const [y, m] = month.split('-').map(Number);
+    const totalDays = y && m ? new Date(y, m, 0).getDate() : 0;
 
-  const monthTotals = useMemo(() => ({
-    workDays: monthAllRows.reduce((sum, row) => sum + row.summary.workDays, 0),
-    late: monthAllRows.reduce((sum, row) => sum + row.summary.lateDays, 0),
-    absent: monthAllRows.reduce((sum, row) => sum + row.summary.absentDays, 0),
-    leave: monthAllRows.reduce((sum, row) => sum + row.summary.leaveDays, 0),
-    totalMin: monthAllRows.reduce((sum, row) => sum + row.summary.totalMin, 0),
-  }), [monthAllRows]);
+    const list: CommutePersonRow[] = [];
+
+    for (const emp of scopedEmployees) {
+      const u = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
+      const hireDate = getHireDateForEmp(emp.name, emp.empId);
+      const personLeaveMap = globalLeaveMap.get(emp.name.trim()) ?? globalLeaveMap.get(normName(emp.name)) ?? new Map();
+      const rawMap = rawByEmp.get(emp.empId);
+
+      const records: CommuteRecord[] = [];
+      const recordsMap = new Map<string, CommuteRecord>();
+
+      for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+        const dateStr = `${month}-${pad(dayNum)}`;
+        const raw =
+          rawMap?.get(dateStr) ?? {
+            empId: emp.empId,
+            date: dateStr,
+            inAt: null,
+            outAt: null,
+          };
+        const evaluated = evaluateCommuteRecord(raw, policy, personLeaveMap, hireDate);
+        records.push(evaluated);
+        recordsMap.set(dateStr, evaluated);
+      }
+
+      // 입사일 이전 달이라 출퇴근 기록 및 유효 근태가 전무한 사원은 해당 월 명단에서 제외
+      const hasActivity = records.some((r) => r.inAt != null || r.outAt != null || r.status === 'leave');
+      const isPreHireMonth = records.every((r) => r.status === 'unknown' || r.status === 'off');
+      if (!hasActivity && isPreHireMonth) {
+        continue;
+      }
+
+      const summary = summarizeCommuteMonth(records);
+
+      const anomalyRecords = records.filter(
+        (rec) =>
+          rec.status === 'late' ||
+          rec.status === 'absent' ||
+          rec.status === 'missing_in' ||
+          rec.status === 'missing_out',
+      );
+
+      list.push({
+        empId: emp.empId,
+        name: u?.name?.trim() || emp.name,
+        empNo: u?.empNo,
+        dept: u?.dept ?? '부서 미지정',
+        position: u?.position ?? '사원',
+        hireDate,
+        active: emp.active,
+        records,
+        recordsMap,
+        summary,
+        anomalyRecords,
+        anomalyCount: anomalyRecords.length,
+      });
+    }
+
+    return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [scopedEmployees, monthAllQuery.data, month, policy, globalLeaveMap, getHireDateForEmp, userByEmpMap]);
+
+  // 글로벌 필터 적용된 PersonRows
+  const filteredPersonRows = useMemo(() => {
+    return allPersonRows.filter((row) => {
+      if (!showRetired && !row.active) return false;
+
+      if (selectedDept !== 'ALL' && row.dept !== selectedDept) return false;
+
+      const q = keyword.trim().toLowerCase();
+      if (q) {
+        const matchName = row.name.toLowerCase().includes(q);
+        const matchEmpNo = (row.empNo ?? '').toLowerCase().includes(q);
+        const matchDept = row.dept.toLowerCase().includes(q);
+        if (!matchName && !matchEmpNo && !matchDept) return false;
+      }
+
+      if (onlyAnomaly && row.anomalyCount === 0) return false;
+
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'missing') {
+          const hasMissing = row.records.some(
+            (r) => r.status === 'missing_in' || r.status === 'missing_out',
+          );
+          if (!hasMissing) return false;
+        } else if (statusFilter === 'present' || statusFilter === 'normal') {
+          const hasNormal = row.records.some((r) => r.status === 'normal');
+          if (!hasNormal) return false;
+        } else {
+          const hasStatus = row.records.some((r) => r.status === statusFilter);
+          if (!hasStatus) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [allPersonRows, showRetired, selectedDept, keyword, onlyAnomaly, statusFilter]);
+
+  // 상단 KPI 통계 집계
+  const kpiStats = useMemo(() => {
+    const totalMembers = allPersonRows.length;
+    let totalPresent = 0;
+    let totalLate = 0;
+    let totalAbsent = 0;
+    let totalLeave = 0;
+    let totalAnomaly = 0;
+
+    for (const row of allPersonRows) {
+      totalPresent += row.summary.workDays;
+      totalLate += row.summary.lateDays;
+      totalAbsent += row.summary.absentDays;
+      totalLeave += row.summary.leaveDays;
+      totalAnomaly += row.anomalyCount;
+    }
+
+    return {
+      totalMembers,
+      totalPresent,
+      totalLate,
+      totalAbsent,
+      totalLeave,
+      totalAnomaly,
+    };
+  }, [allPersonRows]);
+
+  // 부서별 통계 집계
+  const deptSummaries: DeptSummary[] = useMemo(() => {
+    const map = new Map<string, CommutePersonRow[]>();
+    for (const row of allPersonRows) {
+      const d = row.dept || '부서 미지정';
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(row);
+    }
+
+    const summaries: DeptSummary[] = [];
+    for (const [dept, members] of map.entries()) {
+      let presentDays = 0;
+      let lateCount = 0;
+      let absentCount = 0;
+      let leaveCount = 0;
+      let anomalyCount = 0;
+
+      for (const m of members) {
+        presentDays += m.summary.workDays;
+        lateCount += m.summary.lateDays;
+        absentCount += m.summary.absentDays;
+        leaveCount += m.summary.leaveDays;
+        anomalyCount += m.anomalyCount;
+      }
+
+      const totalWorkTarget = members.length * 20;
+      const attendanceRate =
+        totalWorkTarget > 0 ? Math.min(100, Math.round((presentDays / totalWorkTarget) * 100)) : 100;
+
+      summaries.push({
+        dept,
+        memberCount: members.length,
+        presentDays,
+        lateCount,
+        absentCount,
+        leaveCount,
+        anomalyCount,
+        attendanceRate,
+      });
+    }
+
+    return summaries.sort((a, b) => b.memberCount - a.memberCount);
+  }, [allPersonRows]);
+
+  // 전체 이상 근태 항목 목록
+  const anomalyItems: AnomalyItem[] = useMemo(() => {
+    const items: AnomalyItem[] = [];
+    for (const row of allPersonRows) {
+      if (selectedDept !== 'ALL' && row.dept !== selectedDept) continue;
+      if (keyword.trim()) {
+        const q = keyword.trim().toLowerCase();
+        if (!row.name.toLowerCase().includes(q) && !(row.empNo ?? '').includes(q)) continue;
+      }
+
+      for (const rec of row.anomalyRecords) {
+        let typeLabel = '이상';
+        let note = '';
+        if (rec.status === 'late') {
+          typeLabel = '지각';
+          note = `규정 시각(${policy.workStartTime}) 대비 ${rec.lateMin}분 지각`;
+        } else if (rec.status === 'absent') {
+          typeLabel = '결근';
+          note = '출근 기록 없음 (미승인 결근)';
+        } else if (rec.status === 'missing_in') {
+          typeLabel = '출근 누락';
+          note = '퇴근 태그만 기록됨';
+        } else if (rec.status === 'missing_out') {
+          typeLabel = '퇴근 누락';
+          note = '퇴근 미체크 (출근만 기록)';
+        }
+
+        items.push({
+          id: `${row.empId}-${rec.date}`,
+          date: rec.date,
+          empId: row.empId,
+          name: row.name,
+          dept: row.dept,
+          position: row.position,
+          status: rec.status,
+          typeLabel,
+          inAt: rec.inAt,
+          outAt: rec.outAt,
+          lateMin: rec.lateMin,
+          note,
+          record: rec,
+        });
+      }
+    }
+
+    return items.sort((a, b) => b.date.localeCompare(a.date));
+  }, [allPersonRows, selectedDept, keyword, policy.workStartTime]);
+
+  const personMap = useMemo(() => {
+    const map = new Map<number, CommutePersonRow>();
+    for (const p of allPersonRows) map.set(p.empId, p);
+    return map;
+  }, [allPersonRows]);
+
+  // 부서 클릭 시 드릴다운 처리
+  const handleDrillDownDept = useCallback((dept: string) => {
+    setSelectedDept(dept);
+    setAdminTab('all_matrix');
+  }, []);
 
   const toggleButton = (key: string, label: string, active: boolean, onClick: () => void, icon?: ReactNode) => (
     <button
@@ -444,54 +721,28 @@ export default function CommuteScreen() {
     </button>
   );
 
-  const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5 shadow-2xs';
-
   const tabToggle = canTeam ? (
     <div className={toggleShell}>
       {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => setTab(ME_TAB))}
-      {toggleButton(TEAM_TAB, commuteScope === 'ALL' ? '전사 근태' : '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
+      {toggleButton(
+        TEAM_TAB,
+        commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황',
+        isTeam,
+        () => setTab(TEAM_TAB),
+      )}
     </div>
   ) : null;
 
-  const modeToggle = (
-    <div className={toggleShell}>
-      {toggleButton(DAY_VIEW, '일별', view === DAY_VIEW, () => setView(DAY_VIEW))}
-      {toggleButton(MONTH_VIEW, '월별', view === MONTH_VIEW, () => setView(MONTH_VIEW))}
-      {toggleButton('employee', '직원별', isEmployeeView, () => {
-        if (firstEmpId !== undefined) setView(String(firstEmpId));
-      })}
-    </div>
-  );
-
-  const scopeLabel = commuteScope === 'ALL' ? '전사 전 임직원' : (user?.dept ? `${user.dept} 소속` : (viewer?.deptNames.join(' · ') || '내 부서'));
-
-  const searchBox = (
-    <input
-      value={keyword}
-      onChange={(event) => setKeyword(event.target.value)}
-      placeholder="이름·사번 검색"
-      className={`${searchInput} w-40`}
-    />
-  );
-
-  const tableNote = (
-    <div className="flex items-center gap-1.5 px-3 pt-3 text-[10px] text-ink3">
-      <Info size={12} className="text-teal shrink-0" />
-      <span>{NOTE}</span>
-    </div>
-  );
-
-  /** 캘린더 그리드 렌더러 */
+  /** 캘린더 그리드 렌더러 (내 근태 전용) */
   const renderCalendarGrid = (rows: CommuteRecord[]) => {
     if (rows.length === 0) return null;
 
     const [y, m] = month.split('-').map(Number);
-    const firstDayOfWeek = new Date(y, m - 1, 1).getDay(); // 0 = Sun, 1 = Mon ...
+    const firstDayOfWeek = new Date(y, m - 1, 1).getDay();
     const todayStr = today();
 
     return (
       <div className="p-3">
-        {/* 요일 헤더 */}
         <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold pb-2 border-b border-border mb-1.5">
           <div className="text-rose-500">일 (Sun)</div>
           <div className="text-ink">월 (Mon)</div>
@@ -502,36 +753,31 @@ export default function CommuteScreen() {
           <div className="text-blue-500">토 (Sat)</div>
         </div>
 
-        {/* 달력 그리드 */}
         <div className="grid grid-cols-7 gap-1.5">
-          {/* 이전 달 빈칸 패딩 */}
-          {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-            <div key={`empty-${idx}`} className="min-h-[100px] rounded-lg border border-dashed border-border/40 bg-panel-alt/20" />
+          {Array.from({ length: firstDayOfWeek }).map((_, index) => (
+            <div key={`empty-${index}`} className="min-h-[92px] rounded-lg border border-transparent p-1.5 bg-panel-alt/20" />
           ))}
 
-          {/* 실제 날짜 셀 */}
           {rows.map((row) => {
             const dayNum = Number(row.date.slice(8));
-            const d = new Date(row.date + 'T00:00:00');
-            const dayOfWeek = d.getDay();
-            const isSun = dayOfWeek === 0;
-            const isSat = dayOfWeek === 6;
-            const isToday = row.date === todayStr;
             const holiday = getKoreanHoliday(row.date);
-
-            let cellBg = 'bg-panel border-border';
-            if (row.status === 'leave') cellBg = 'bg-emerald-500/5 border-emerald-500/30';
-            else if (holiday || isSun) cellBg = 'bg-rose-500/4 border-rose-500/20';
-            else if (isSat) cellBg = 'bg-blue-500/4 border-blue-500/20';
+            const isSun = new Date(row.date).getDay() === 0;
+            const isSat = new Date(row.date).getDay() === 6;
+            const isToday = row.date === todayStr;
 
             return (
               <div
                 key={row.date}
-                className={`flex flex-col min-h-[105px] rounded-xl border p-2 shadow-2xs transition-all hover:shadow-sm ${cellBg} ${
-                  isToday ? 'ring-2 ring-teal ring-offset-1' : ''
+                className={`flex min-h-[95px] flex-col rounded-xl border p-2 transition-all ${
+                  isToday
+                    ? 'border-teal bg-teal/5 shadow-xs ring-1 ring-teal/30'
+                    : holiday || isSun
+                    ? 'border-rose-500/25 bg-rose-500/5'
+                    : isSat
+                    ? 'border-blue-500/25 bg-blue-500/5'
+                    : 'border-border bg-panel hover:border-border-strong hover:bg-panel-alt/40'
                 }`}
               >
-                {/* 상단 날짜 및 공휴일 배지 */}
                 <div className="flex items-center justify-between gap-1 mb-1">
                   <div className="flex items-center gap-1">
                     <span
@@ -549,9 +795,7 @@ export default function CommuteScreen() {
                   </div>
                 </div>
 
-                {/* 상태 및 출퇴근 시간 */}
                 <div className="mt-auto space-y-1">
-                  {/* 휴가 표시 */}
                   {row.status === 'leave' ? (
                     <div className="rounded-md bg-emerald-500/15 p-1.5 text-center border border-emerald-500/30">
                       <div className="text-[10px] font-extrabold text-emerald-600 flex items-center justify-center gap-1">
@@ -590,29 +834,27 @@ export default function CommuteScreen() {
     );
   };
 
-  /** 한 사람의 한 달 (캘린더 + 상세 목록 뷰) */
-  const renderMonthPanel = (ownerName: string, canDrillToDay: boolean) => (
+  /** 내 근태 패널 */
+  const myCommutePanel = (
     <>
       <div className="flex flex-wrap gap-2">
-        <StatCard label="근무일수" value={`${summary.workDays}일`} sub={ownerName} tone="border-teal/25 bg-teal/8" />
-        <StatCard label="휴가 사용" value={`${summary.leaveDays}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
-        <StatCard label="지각" value={`${summary.lateDays}회`} tone={summary.lateDays > 0 ? "border-amber/25 bg-amber/8" : undefined} />
-        <StatCard label="결근" value={`${summary.absentDays}일`} tone={summary.absentDays > 0 ? "border-red-500/20 bg-red-500/6" : undefined} />
-        <StatCard label="총 근무시간" value={hourText(summary.totalMin)} />
+        <StatCard label="근무일수" value={`${mySummary.workDays}일`} sub={user?.name} tone="border-teal/25 bg-teal/8" />
+        <StatCard label="휴가 사용" value={`${mySummary.leaveDays}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
+        <StatCard label="지각" value={`${mySummary.lateDays}회`} tone={mySummary.lateDays > 0 ? 'border-amber/25 bg-amber/8' : undefined} />
+        <StatCard label="결근" value={`${mySummary.absentDays}일`} tone={mySummary.absentDays > 0 ? 'border-red-500/20 bg-red-500/6' : undefined} />
+        <StatCard label="총 근무시간" value={hourText(mySummary.totalMin)} />
       </div>
 
       <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm overflow-hidden">
-        {/* 네비게이션 & 보기 모드 토글 */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 bg-panel">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="이전 달" className={navButton}>‹</button>
+            <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
             <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
-            <button type="button" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="다음 달" className={navButton}>›</button>
-            <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {ownerName}</h2>
+            <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
+            <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {user?.name}</h2>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 캘린더 / 목록 보기 토글 */}
             <div className={toggleShell}>
               {toggleButton('calendar', '달력 보기', displayMode === 'calendar', () => setDisplayMode('calendar'), <CalendarIcon size={13} />)}
               {toggleButton('table', '목록 표', displayMode === 'table', () => setDisplayMode('table'), <List size={13} />)}
@@ -620,12 +862,12 @@ export default function CommuteScreen() {
           </div>
         </div>
 
-        {monthQuery.isLoading ? (
+        {myMonthQuery.isLoading ? (
           <div className="grid min-h-64 place-items-center text-[11px] text-ink3">근태를 불러오는 중…</div>
-        ) : monthRows.length === 0 ? (
+        ) : myMonthRows.length === 0 ? (
           <div className="grid min-h-64 place-items-center text-[11px] text-ink3">이 달의 기록이 없습니다.</div>
         ) : displayMode === 'calendar' ? (
-          renderCalendarGrid(monthRows)
+          renderCalendarGrid(myMonthRows)
         ) : (
           <div className="overflow-x-auto p-2">
             <table className="w-full border-collapse text-left text-[11px]">
@@ -640,42 +882,18 @@ export default function CommuteScreen() {
                 </tr>
               </thead>
               <tbody>
-                {monthRows.map((row: CommuteRecord) => {
+                {myMonthRows.map((row) => {
                   const isSun = isWeekend(row.date) && new Date(row.date).getDay() === 0;
                   const isSat = isWeekend(row.date) && new Date(row.date).getDay() === 6;
                   const holiday = getKoreanHoliday(row.date);
 
                   return (
-                    <tr
-                      key={row.date}
-                      className={`border-b border-border/60 text-ink transition-colors hover:bg-panel-alt/50 ${
-                        row.status === 'leave' ? 'bg-emerald-500/4' : holiday ? 'bg-rose-500/3' : ''
-                      }`}
-                    >
+                    <tr key={row.date} className="border-b border-border/60 text-ink">
                       <td className="p-2 font-semibold">
-                        {canDrillToDay ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDate(row.date);
-                              setView(DAY_VIEW);
-                            }}
-                            title="이 날짜의 전원 보기"
-                            className="hover:text-teal hover:underline flex items-center gap-1.5"
-                          >
-                            <span className={holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : ''}>
-                              {row.date.slice(5).replace('-', '/')}
-                            </span>
-                            {holiday && <span className="text-[9px] text-rose-500 font-bold">({holiday})</span>}
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className={holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : ''}>
-                              {row.date.slice(5).replace('-', '/')}
-                            </span>
-                            {holiday && <span className="text-[9px] text-rose-500 font-bold">({holiday})</span>}
-                          </div>
-                        )}
+                        <span className={holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : ''}>
+                          {row.date.slice(5).replace('-', '/')}
+                        </span>
+                        {holiday && <span className="ml-1 text-[9px] text-rose-500 font-bold">({holiday})</span>}
                       </td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.inAt)}</td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.outAt)}</td>
@@ -691,173 +909,258 @@ export default function CommuteScreen() {
             </table>
           </div>
         )}
-        {tableNote}
+        <div className="flex items-center gap-1.5 px-3 py-3 text-[10px] text-ink3">
+          <Info size={12} className="text-teal shrink-0" />
+          <span>{NOTE}</span>
+        </div>
       </section>
     </>
   );
 
-  const dayPanel = (
-    <>
+  /** 전사 근태 관제 대시보드 패널 */
+  const adminControlPanel = (
+    <div className="space-y-3">
+      {/* 1. 상단 KPI 관제 카드 (인터랙티브 필터 연동) */}
       <div className="flex flex-wrap gap-2">
-        <StatCard label="재직 인원" value={`${dayRows.length}명`} sub={keyword.trim() ? '검색 결과 기준' : undefined} />
-        <StatCard label="출근" value={`${dayStats.present}명`} tone="border-teal/25 bg-teal/8" />
-        <StatCard label="지각" value={`${dayStats.late}명`} tone="border-amber/25 bg-amber/8" />
-        <StatCard label="휴가" value={`${dayStats.leave}명`} tone="border-emerald-500/25 bg-emerald-500/8" />
-        <StatCard label="기록 없음" value={`${dayStats.missing}명`} tone="border-red-500/20 bg-red-500/6" />
+        <StatCard
+          label="전체 인원"
+          value={`${kpiStats.totalMembers}명`}
+          sub={commuteScope === 'ALL' ? '전사 전 임직원' : `${user?.dept || '부서'} 기준`}
+          onClick={() => {
+            setStatusFilter('ALL');
+            setOnlyAnomaly(false);
+          }}
+          active={statusFilter === 'ALL' && !onlyAnomaly}
+        />
+        <StatCard
+          label="정상 출근"
+          value={`${kpiStats.totalPresent}건`}
+          sub="당월 누적 출근"
+          tone="border-teal/25 bg-teal/8"
+          onClick={() => {
+            setStatusFilter('present');
+            setOnlyAnomaly(false);
+          }}
+          active={statusFilter === 'present'}
+        />
+        <StatCard
+          label="지각"
+          value={`${kpiStats.totalLate}건`}
+          tone={kpiStats.totalLate > 0 ? 'border-amber/25 bg-amber/8' : undefined}
+          onClick={() => {
+            setStatusFilter('late');
+            setOnlyAnomaly(false);
+          }}
+          active={statusFilter === 'late'}
+        />
+        <StatCard
+          label="결근"
+          value={`${kpiStats.totalAbsent}건`}
+          tone={kpiStats.totalAbsent > 0 ? 'border-rose-500/20 bg-rose-500/6' : undefined}
+          onClick={() => {
+            setStatusFilter('absent');
+            setOnlyAnomaly(false);
+          }}
+          active={statusFilter === 'absent'}
+        />
+        <StatCard
+          label="휴가"
+          value={`${kpiStats.totalLeave}건`}
+          sub="승인 완료 건수"
+          tone="border-emerald-500/25 bg-emerald-500/8"
+          onClick={() => {
+            setStatusFilter('leave');
+            setOnlyAnomaly(false);
+          }}
+          active={statusFilter === 'leave'}
+        />
+        <StatCard
+          label="🚨 관리 필요"
+          value={`${kpiStats.totalAnomaly}건`}
+          sub="지각 · 결근 · 미기록"
+          tone="border-rose-500/40 bg-rose-500/12 ring-1 ring-rose-500/25"
+          onClick={() => {
+            setOnlyAnomaly((prev) => !prev);
+            setStatusFilter('ALL');
+            setAdminTab('anomaly');
+          }}
+          active={onlyAnomaly || adminTab === 'anomaly'}
+        />
       </div>
 
-      <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-          <button type="button" onClick={() => setDate((value) => moveDay(value, -1))} aria-label="이전 날" className={navButton}>‹</button>
-          <Button size="sm" onClick={() => setDate(today())}>오늘</Button>
-          <button type="button" onClick={() => setDate((value) => moveDay(value, 1))} aria-label="다음 날" className={navButton}>›</button>
-          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{dayTitle(date)}</h2>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => event.target.value && setDate(event.target.value)}
-            className={`${searchInput} text-ink2`}
-          />
-          <div className="ml-auto">{searchBox}</div>
+      {/* 2. 글로벌 필터 바 & 관제 탭 */}
+      <section className="rounded-xl border border-border bg-panel p-3 shadow-2xs space-y-3">
+        {/* 상단 뷰 탭 & 기간 컨트롤러 */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex items-center gap-1 bg-panel-alt p-0.5 rounded-lg border border-border shadow-2xs">
+            {toggleButton('all_matrix', '① 전사 현황', adminTab === 'all_matrix', () => setAdminTab('all_matrix'), <Users size={13} />)}
+            {toggleButton('dept_summary', '② 부서별 현황', adminTab === 'dept_summary', () => setAdminTab('dept_summary'), <Building2 size={13} />)}
+            {toggleButton(
+              'anomaly',
+              `③ 이상 근태 (${anomalyItems.length})`,
+              adminTab === 'anomaly',
+              () => setAdminTab('anomaly'),
+              <AlertTriangle size={13} className={anomalyItems.length > 0 ? 'text-rose-500' : ''} />,
+            )}
+            {toggleButton('leave', '④ 휴가 현황', adminTab === 'leave', () => setAdminTab('leave'), <CalendarCheck2 size={13} />)}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
+            <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
+            <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
+            <h2 className="ml-1 text-[13.5px] font-extrabold text-ink">{monthTitle(month)}</h2>
+          </div>
         </div>
 
-        {dayQuery.isLoading ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">근태를 불러오는 중…</div>
-        ) : dayRows.length === 0 ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">조건에 맞는 직원이 없습니다.</div>
-        ) : (
-          <div className="overflow-x-auto p-2">
-            <table className="w-full border-collapse text-left text-[11px]">
-              <thead>
-                <tr className="border-b border-border text-[10px] font-bold text-ink2">
-                  <th className={HEAD}>직원</th>
-                  <th className={HEAD}>출근</th>
-                  <th className={HEAD}>퇴근</th>
-                  <th className={HEAD}>근무시간</th>
-                  <th className={HEAD}>지각</th>
-                  <th className={HEAD}>상태 / 휴가</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dayRows.map(({ employee, record }) => (
-                  <tr key={employee.empId} className="border-b border-border/60 text-ink">
-                    <td className="p-2 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMonth(date.slice(0, 7));
-                          setView(String(employee.empId));
-                        }}
-                        title="이 직원의 월별 기록 보기"
-                        className="hover:text-teal hover:underline"
-                      >
-                        {employee.name}
-                      </button>
-                    </td>
-                    <td className="p-2 tabular-nums">{timeOf(record?.inAt ?? null)}</td>
-                    <td className="p-2 tabular-nums">{timeOf(record?.outAt ?? null)}</td>
-                    <td className="p-2 text-ink2">{hourText(record?.totalMin ?? 0)}</td>
-                    <td className="p-2 text-ink2">{record && record.lateMin > 0 ? `${record.lateMin}분` : '—'}</td>
-                    <td className="p-2">
-                      {record ? <StatusBadge record={record} /> : <span className="text-[9.5px] text-ink3">기록 없음</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {tableNote}
+        {/* 하단 상세 필터 툴바 */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 부서 필터 */}
+          <div className="flex items-center gap-1.5 text-xs text-ink3">
+            <Building2 size={13} className="text-teal" />
+            <select
+              value={selectedDept}
+              onChange={(e) => setSelectedDept(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-panel px-2 text-[11px] font-bold text-ink outline-none"
+            >
+              <option value="ALL">전체 부서 ({allPersonRows.length}명)</option>
+              {deptList.map((d) => (
+                <option key={d} value={d}>
+                  {d} ({allPersonRows.filter((p) => p.dept === d).length}명)
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-      </section>
-    </>
-  );
 
-  const monthAllPanel = (
-    <>
-      <div className="flex flex-wrap gap-2">
-        <StatCard label="대상 인원" value={`${monthAllRows.length}명`} sub={monthTitle(month)} />
-        <StatCard label="근무일 합계" value={`${monthTotals.workDays}일`} tone="border-teal/25 bg-teal/8" />
-        <StatCard label="지각" value={`${monthTotals.late}회`} tone="border-amber/25 bg-amber/8" />
-        <StatCard label="휴가 합계" value={`${monthTotals.leave}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
-        <StatCard label="결근" value={`${monthTotals.absent}일`} tone={monthTotals.absent > 0 ? "border-red-500/20 bg-red-500/6" : undefined} />
-        <StatCard label="근무시간 합계" value={hourText(monthTotals.totalMin)} />
-      </div>
+          {/* 상태 필터 */}
+          <div className="flex items-center gap-1.5 text-xs text-ink3">
+            <Filter size={13} className="text-teal" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setOnlyAnomaly(false);
+              }}
+              className="h-8 rounded-lg border border-border bg-panel px-2 text-[11px] font-bold text-ink outline-none"
+            >
+              <option value="ALL">전체 근태 상태</option>
+              <option value="present">정상 출근</option>
+              <option value="late">지각 발생</option>
+              <option value="absent">결근</option>
+              <option value="leave">휴가 사용</option>
+              <option value="missing">출·퇴근 미기록</option>
+            </select>
+          </div>
 
-      <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-          <button type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="이전 달" className={navButton}>‹</button>
-          <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
-          <button type="button" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="다음 달" className={navButton}>›</button>
-          <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {scopeLabel}</h2>
-          <div className="ml-auto">{searchBox}</div>
+          {/* 관리 필요(이상자)만 보기 토글 버튼 */}
+          <button
+            type="button"
+            onClick={() => setOnlyAnomaly((prev) => !prev)}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all ${
+              onlyAnomaly
+                ? 'bg-rose-500 text-white border-rose-600 shadow-2xs ring-2 ring-rose-500/30'
+                : 'border-border text-ink2 hover:border-rose-500/50 hover:bg-rose-500/10'
+            }`}
+          >
+            <AlertTriangle size={12} className={onlyAnomaly ? 'text-white' : 'text-rose-500'} />
+            <span>관리 필요만 보기 ({kpiStats.totalAnomaly}건)</span>
+          </button>
+
+          {/* 퇴직자 포함 토글 */}
+          <label className="flex items-center gap-1 text-[11px] text-ink3 cursor-pointer select-none ml-1">
+            <input
+              type="checkbox"
+              checked={showRetired}
+              onChange={(e) => setShowRetired(e.target.checked)}
+              className="rounded border-border"
+            />
+            <span>퇴직자 포함</span>
+          </label>
+
+          {/* 검색창 */}
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="relative">
+              <input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="이름 · 사번 · 부서 검색"
+                className={`${searchInput} w-44 pl-7`}
+              />
+              <Search size={12} className="absolute left-2.5 top-2.5 text-ink3" />
+            </div>
+            {(selectedDept !== 'ALL' || statusFilter !== 'ALL' || onlyAnomaly || keyword) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDept('ALL');
+                  setStatusFilter('ALL');
+                  setOnlyAnomaly(false);
+                  setKeyword('');
+                }}
+                className="text-[10.5px] font-bold text-ink3 hover:text-teal underline"
+              >
+                필터 초기화
+              </button>
+            )}
+          </div>
         </div>
-
-        {monthAllQuery.isLoading ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">근태를 불러오는 중…</div>
-        ) : monthAllRows.length === 0 ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">조건에 맞는 직원이 없습니다.</div>
-        ) : (
-          <div className="overflow-x-auto p-2">
-            <table className="w-full border-collapse text-left text-[11px]">
-              <thead>
-                <tr className="border-b border-border text-[10px] font-bold text-ink2">
-                  <th className={HEAD}>직원</th>
-                  <th className={HEAD}>근무</th>
-                  <th className={HEAD}>휴가</th>
-                  <th className={HEAD}>지각</th>
-                  <th className={HEAD}>결근</th>
-                  <th className={HEAD}>근무시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthAllRows.map(({ employee, summary: row }) => (
-                  <tr key={employee.empId} className="border-b border-border/60 text-ink">
-                    <td className="p-2 font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => setView(String(employee.empId))}
-                        title="이 직원의 날짜별 기록 보기"
-                        className="hover:text-teal hover:underline"
-                      >
-                        {employee.active ? employee.name : `${employee.name} (퇴사)`}
-                      </button>
-                    </td>
-                    <td className="p-2 text-ink2 font-medium">{row.workDays}일</td>
-                    <td className={`p-2 ${row.leaveDays > 0 ? 'font-bold text-emerald-600' : 'text-ink3'}`}>{row.leaveDays}일</td>
-                    <td className={`p-2 ${row.lateDays > 0 ? 'font-bold text-amber' : 'text-ink3'}`}>{row.lateDays}회</td>
-                    <td className={`p-2 ${row.absentDays > 0 ? 'font-bold text-red-500' : 'text-ink3'}`}>{row.absentDays}일</td>
-                    <td className="p-2 text-ink2">{hourText(row.totalMin)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {tableNote}
-          </div>
-        )}
       </section>
-    </>
-  );
 
-  if (viewerQuery.isLoading) {
-    return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">근태 권한을 확인하는 중…</div>;
-  }
-  if (viewerQuery.isError) {
-    return (
-      <div className="grid min-h-[60vh] place-items-center px-5 text-center text-[12px] font-semibold text-danger">
-        근태 열람 권한을 확인하지 못했습니다.
-        <br />
-        <span className="mt-1 block text-[10.5px] font-semibold text-ink3">
-          {viewerQuery.error instanceof Error ? viewerQuery.error.message : ''}
-        </span>
-      </div>
-    );
-  }
+      {/* 3. 4대 관제 View 전환 렌더링 */}
+      {monthAllQuery.isLoading ? (
+        <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-panel text-xs text-ink3">
+          전사 근태 데이터를 정밀 집계 중입니다…
+        </div>
+      ) : (
+        <>
+          {adminTab === 'all_matrix' && (
+            <CommuteMatrixView
+              month={month}
+              rows={filteredPersonRows}
+              onSelectPerson={(person) => setSelectedPersonDetail(person)}
+            />
+          )}
+
+          {adminTab === 'dept_summary' && (
+            <CommuteDeptView
+              deptSummaries={deptSummaries}
+              onDrillDownDept={handleDrillDownDept}
+            />
+          )}
+
+          {adminTab === 'anomaly' && (
+            <CommuteAnomalyView
+              anomalies={anomalyItems}
+              personMap={personMap}
+              onSelectPerson={(person) => setSelectedPersonDetail(person)}
+            />
+          )}
+
+          {adminTab === 'leave' && (
+            <CommuteLeaveView
+              month={month}
+              approvals={approvalsQuery.data ?? []}
+              personMap={personMap}
+              onSelectPerson={(person) => setSelectedPersonDetail(person)}
+            />
+          )}
+        </>
+      )}
+
+      {/* 4. 직원 상세 슬라이드오버 (Drawer) */}
+      <EmployeeDetailDrawer
+        person={selectedPersonDetail}
+        onClose={() => setSelectedPersonDetail(null)}
+        month={month}
+      />
+    </div>
+  );
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
+    <div className="mx-auto w-full max-w-[1560px] px-4 py-5 sm:px-6 sm:py-6">
       <GwHead
-        icon="⏱️"
-        name="근태"
+        icon="⏰"
+        name={activeTab === ME_TAB ? '내 근태' : commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황'}
         right={
           <div className="flex items-center gap-2">
             {canManagePolicy && (
@@ -865,7 +1168,7 @@ export default function CommuteScreen() {
                 type="button"
                 onClick={() => setIsPolicyModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs"
-                title="출/퇴근 시간 및 근무정책 설정"
+                title="출퇴근 시간 및 근무정책 설정"
               >
                 <Clock size={13} className="text-amber-500" />
                 <span>{policy.workStartTime}~{policy.workEndTime}</span>
@@ -877,41 +1180,10 @@ export default function CommuteScreen() {
         }
       />
 
-      {isTeam ? (
-        <GwSplit
-          nav={
-            <GwSideNav title={scopeLabel}>
-              <div className="mb-3">{modeToggle}</div>
-              <div className="space-y-2">
-                {searchBox}
-                <label className="flex items-center gap-1.5 text-[11px] text-ink2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showRetired}
-                    onChange={(event) => setShowRetired(event.target.checked)}
-                    className="accent-teal rounded"
-                  />
-                  <span>퇴사자 포함</span>
-                </label>
-              </div>
-            </GwSideNav>
-          }
-        >
-          {isEmployeeView ? (
-            renderMonthPanel(selected?.name ?? '직원 선택', true)
-          ) : view === DAY_VIEW ? (
-            dayPanel
-          ) : (
-            monthAllPanel
-          )}
-        </GwSplit>
-      ) : (
-        <div className="mt-4">
-          {renderMonthPanel(user?.name || viewer?.name || '내 근태', false)}
-        </div>
-      )}
+      <div className="mt-4">
+        {activeTab === ME_TAB ? myCommutePanel : adminControlPanel}
+      </div>
 
-      {/* 근무시간 및 정책 설정 모달 */}
       <CommutePolicyModal
         isOpen={isPolicyModalOpen}
         onClose={() => setIsPolicyModalOpen(false)}

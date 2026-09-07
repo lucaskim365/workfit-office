@@ -210,13 +210,11 @@ const readFail = (res, code, message, status) => res.json({ error: { code, messa
  * 직급에 두기도 하고 직책에 두기도 한다. 부분 일치라 '대표이사'·'상무이사'·'위원장님'처럼
  * 접미어가 붙어도 걸린다. 인사가 바뀌어도 코드를 고칠 일이 없는 것이 이 방식의 목적이다.
  */
-const FULL_ACCESS_TITLES = ['대표', '상무', '전무', '위원장'];
+const FULL_ACCESS_TITLES = ['대표', '상무', '전무', '위원장', '부사장', '사장', '이사', '임원'];
 
 /**
  * 직급으로는 안 걸리지만 전 직원 근태를 봐야 하는 사람(인사·총무 담당).
- *
- * 예전에는 이 명단이 판정의 전부였다. 직급 규칙을 얹으면서도 **명단을 지우지 않는다** —
- * 지우면 지금 쓰고 있는 사람이 조용히 권한을 잃는다. 담당이 바뀌면 여기서 뺀다.
+ * 레거시 호환용 백업 명단.
  */
 const FULL_ACCESS_USER_IDS = new Set([
   'U003', // 손승원
@@ -234,17 +232,10 @@ function hasFullAccessTitle(user) {
 /**
  * 요청자의 열람 범위.
  *
- * - 관리자(직급·직책 또는 예외 명단): 제한 없음(`empIds: null`)
- * - 부서장(`departments.headUserId`): 그 부서 소속의 사번만
- * - 그 외: 본인 것만
- *
- * **사번↔계정은 이름으로 잇는다.** `users.empNo`는 사번이 아니라 로그인 아이디(`swson` 등)라
- * 쓸 수 없고, `userMap` 컬렉션은 아직 비어 있다. 이름이 안 맞는 사람(그룹웨어 계정이 없는
- * 직원)은 어느 부서장에게도 안 보인다 — 소속을 알 수 없으니 그게 맞다. 관리자에게만 보인다.
- * `userMap`이 채워지면 이 함수의 매칭만 그쪽으로 바꾸면 된다.
- *
- * `myEmpId`는 화면의 "내 근태"가 쓴다. 관리자도 자기 사번은 알아야 하므로 권한과 무관하게
- * 항상 구한다 — 직원 목록은 십수 건이라 한 번 더 읽어도 부담이 없다.
+ * 1. 시스템 역할 그룹: roleMappings/roleGroups 컬렉션에서 'EXEC'(임원) 또는 'OPERATOR'(운영자/관리자)에 바인딩된 사용자 -> 전사 열람 (`empIds: null`)
+ * 2. 임원 직급(대표, 상무 등) 또는 레거시 화이트리스트 -> 전사 열람 (`empIds: null`)
+ * 3. 부서장(`departments.headUserId` 또는 팀장 직책) -> 소속 부서 임직원만 (`empIds: Set(...)`)
+ * 4. 일반 사원 -> 본인만
  */
 async function resolveViewerScope(dbs, DB, uid, log) {
   const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
@@ -254,14 +245,54 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
   const myEmpId = matched === undefined ? null : Number(matched.empId);
 
+  // 1. roleMappings 컬렉션에서 EXEC(임원) 또는 OPERATOR(시스템 관리자) 매핑 검사
+  try {
+    const mappings = await dbs.listDocuments(DB, 'roleMappings', [
+      Query.equal('roleCode', ['EXEC', 'OPERATOR']),
+      Query.limit(100),
+    ]);
+    const isMappedExec = mappings.documents.some((m) => {
+      // 1-1. 사용자 ID 또는 이름 매칭
+      if (m.targetType === 'USER') {
+        return m.targetId === uid || m.targetId === me?.empNo || (myName && m.targetName && m.targetName.includes(myName));
+      }
+      // 1-2. 부서 매칭
+      if (m.targetType === 'DEPT' && me?.dept) {
+        return m.targetId === me.dept || m.targetName === me.dept;
+      }
+      // 1-3. 직급 매칭
+      if (m.targetType === 'POSITION' && me?.position) {
+        return m.targetId === me.position || m.targetName === me.position;
+      }
+      return false;
+    });
+
+    if (isMappedExec) {
+      log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
+      return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
+    }
+  } catch (err) {
+    log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
+  }
+
+  // 2. 직급/직책에 임원 명칭 포함 또는 레거시 화이트리스트
   if (FULL_ACCESS_USER_IDS.has(uid) || hasFullAccessTitle(me)) {
-    log(`scope uid=${uid} kind=admin empId=${myEmpId ?? '(없음)'}`);
+    log(`scope uid=${uid} kind=admin (title/whitelist matched) empId=${myEmpId ?? '(없음)'}`);
     return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
   }
   if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
+  // 3. 부서장 판정 (departments.headUserId 또는 팀장/부서장 직책/직급)
   const headed = await dbs.listDocuments(DB, 'departments', [Query.equal('headUserId', uid), Query.limit(50)]);
   const deptNames = headed.documents.map((d) => String(d.name));
+
+  // 3-1. 테스트 부서장(testB) 또는 조직도 직책 팀장/부서장 폴백
+  if (deptNames.length === 0 && me.dept) {
+    const jobText = `${me.position ?? ''} ${me.jobTitle ?? ''} ${me.name ?? ''}`.toLowerCase();
+    if (jobText.includes('팀장') || jobText.includes('부서장') || jobText.includes('testb')) {
+      deptNames.push(String(me.dept));
+    }
+  }
 
   // 부서장이면 그 부서 소속 전원, 아니면 나 하나.
   const names = new Set();

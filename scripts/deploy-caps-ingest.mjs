@@ -45,7 +45,8 @@ const DB_ID = env('APPWRITE_DATABASE_ID') ?? env('VITE_APPWRITE_DATABASE_ID') ??
 const TOKEN_SECRET = IS_PROD ? env('AUTH_TOKEN_SECRET_PROD') : env('WIDDY_TOKEN_SECRET');
 const CAPS_SECRET = IS_PROD ? env('CAPS_INGEST_SECRET_PROD') : env('CAPS_INGEST_SECRET');
 
-const missing = Object.entries({ ENDPOINT, PROJECT, API_KEY, TOKEN_SECRET })
+const required = SKIP_VARS ? { ENDPOINT, PROJECT, API_KEY } : { ENDPOINT, PROJECT, API_KEY, TOKEN_SECRET };
+const missing = Object.entries(required)
   .filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) {
   console.error(`✗ 필수 설정 누락: ${missing.join(', ')}`);
@@ -125,7 +126,11 @@ mkdirSync(BUNDLE_DIR, { recursive: true });
 const tar = resolve(BUNDLE_DIR, `${FUNCTION_ID}.tar.gz`);
 rmSync(tar, { force: true });
 // `--force-local`이 없으면 GNU tar가 `C:\...`의 콜론을 원격 호스트로 읽어 실패한다.
-execFileSync('tar', ['--force-local', '-czf', tar, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.'], { stdio: 'inherit' });
+// 단, Windows 기본 bsdtar는 --force-local을 지원하지 않는다.
+const tarArgs = process.platform === 'win32'
+  ? ['-czf', tar, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.']
+  : ['--force-local', '-czf', tar, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.'];
+execFileSync('tar', tarArgs, { stdio: 'inherit' });
 
 let dep = await retry('deployment', () => fn.createDeployment({
   functionId: FUNCTION_ID, code: InputFile.fromPath(tar, `${FUNCTION_ID}.tar.gz`), activate: true,
