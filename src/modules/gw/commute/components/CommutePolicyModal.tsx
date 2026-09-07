@@ -40,7 +40,7 @@ export function CommutePolicyModal({ policy, isOpen, onClose, onSave }: Props) {
             </div>
             <div>
               <h2 className="text-[16px] font-bold">근무시간 및 근태 정책 설정</h2>
-              <p className="text-[11.5px] text-slate-400">정규 출/퇴근 시간 및 지각·연장근로 산정 기준</p>
+              <p className="text-[11.5px] text-slate-400">정규 출/퇴근 시간 및 지각 산정 기준</p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
@@ -124,36 +124,22 @@ export function CommutePolicyModal({ policy, isOpen, onClose, onSave }: Props) {
           </div>
 
           {/* 세부 판정 기준 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[12px] font-bold text-slate-700 mb-1">지각 유예 시간(분)</label>
-              <input
-                type="number"
-                min={0}
-                max={60}
-                value={formData.lateGraceMin}
-                onChange={(e) => setFormData({ ...formData, lateGraceMin: Number(e.target.value) })}
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-[13px] text-slate-800 focus:border-amber-500 focus:outline-none"
-              />
-              <span className="text-[10.5px] text-slate-400 mt-0.5 block">예: 0분 (정시 이후 지각)</span>
-            </div>
-            <div>
-              <label className="block text-[12px] font-bold text-slate-700 mb-1">연장근로 인정 기준(분)</label>
-              <input
-                type="number"
-                min={0}
-                max={120}
-                value={formData.overtimeStartMin}
-                onChange={(e) => setFormData({ ...formData, overtimeStartMin: Number(e.target.value) })}
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-[13px] text-slate-800 focus:border-amber-500 focus:outline-none"
-              />
-              <span className="text-[10.5px] text-slate-400 mt-0.5 block">퇴근 후 N분 이상 근무 시</span>
-            </div>
+          <div>
+            <label className="block text-[12px] font-bold text-slate-700 mb-1">지각 유예 시간(분)</label>
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={formData.lateGraceMin}
+              onChange={(e) => setFormData({ ...formData, lateGraceMin: Number(e.target.value) })}
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-[13px] text-slate-800 focus:border-amber-500 focus:outline-none"
+            />
+            <span className="text-[10.5px] text-slate-400 mt-0.5 block">예: 0분 (정시 이후 지각)</span>
           </div>
 
           <div className="flex items-start gap-2 rounded-xl bg-amber-50/70 p-3 text-[11.5px] text-amber-800 border border-amber-200/50">
             <Info size={15} className="shrink-0 mt-0.5 text-amber-600" />
-            <span>설정한 출/퇴근 기준 시각은 전사 임직원의 일일 근태 상태(정상·지각·연장근무) 및 월별 근태 집계에 실시간 자동 반영됩니다.</span>
+            <span>설정한 출/퇴근 기준 시각은 전사 임직원의 일일 근태 상태(정상·지각) 및 근무시간 집계에 실시간 자동 반영됩니다.</span>
           </div>
 
           {/* 버튼 영역 */}

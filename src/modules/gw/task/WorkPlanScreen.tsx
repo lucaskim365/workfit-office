@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveUserScope, canViewWorkPlan, isLeaderPosition } from '@/features/auth/scopeHelper';
+import { resolveWorkPlanScope, canViewWorkPlan, isLeaderPosition } from '@/features/auth/scopeHelper';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
@@ -42,12 +42,16 @@ const isExcludedFromRoster = (user: User, actor?: User | null) => {
   const isActorTest = Boolean(
     actor?.dept?.includes('테스트') ||
     actor?.name?.includes('테스트') ||
-    actor?.name?.includes('테스터')
+    actor?.name?.includes('테스터') ||
+    actor?.id?.toLowerCase().includes('test') ||
+    actor?.name?.toLowerCase().includes('test')
   );
   const isUserTest = Boolean(
     user.dept?.includes('테스트') ||
     user.name?.includes('테스트') ||
-    user.name?.includes('테스터')
+    user.name?.includes('테스터') ||
+    user.id?.toLowerCase().includes('test') ||
+    user.name?.toLowerCase().includes('test')
   );
 
   // 테스트 시연 모드: 테스트 부서 계정들 상호 노출
@@ -79,7 +83,7 @@ export default function WorkPlanScreen() {
     ?? users.find((user) => user.status === '사용')
     ?? null;
 
-  const actorScope = useMemo(() => resolveUserScope(actor, userRoles), [actor, userRoles]);
+  const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
 
   const today = calendarToday();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -127,7 +131,7 @@ export default function WorkPlanScreen() {
     if (!actor) return [];
     return users
       .filter((user) => user.status === '사용' && !isExcludedFromRoster(user, actor))
-      .filter((user) => canViewWorkPlan(actor, user, actorScope))
+      .filter((user) => canViewWorkPlan(actor, user, actorScope, org))
       .sort((a, b) => {
         // 1. 부서 조직도 순 정렬
         const orderA = deptOrderMap.get(a.dept) ?? 9999;
@@ -180,7 +184,7 @@ export default function WorkPlanScreen() {
       if (deptFilter === 'all') {
         matchesDept = true;
       } else if (deptFilter === 'leaders') {
-        matchesDept = user.dept !== actor?.dept && isLeaderPosition(user.position, user.jobTitle);
+        matchesDept = user.dept !== actor?.dept && isLeaderPosition(user.position, user.jobTitle, user.id, org);
       } else {
         matchesDept = user.dept === deptFilter;
       }
@@ -214,7 +218,7 @@ export default function WorkPlanScreen() {
       if (deptFilter !== 'all' && deptFilter !== 'leaders' && group.dept !== deptFilter) continue;
 
       const matchedMembers = group.members.filter((user) => {
-        if (deptFilter === 'leaders' && (user.dept === actor?.dept || !isLeaderPosition(user.position, user.jobTitle))) {
+        if (deptFilter === 'leaders' && (user.dept === actor?.dept || !isLeaderPosition(user.position, user.jobTitle, user.id, org))) {
           return false;
         }
         const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
@@ -381,9 +385,9 @@ export default function WorkPlanScreen() {
             onChange={(e) => setDeptFilter(e.target.value)}
             className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
           >
-            {actorScope === 'PERSONAL' ? (
-              <option value="all">내 업무계획 (1명)</option>
-            ) : actorScope === 'LEADER' ? (
+            {actorScope === 'TEAM' ? (
+              <option value="all">우리 팀 · {actor?.dept || '소속 부서'} ({roster.length}명)</option>
+            ) : actorScope === 'TEAM_AND_LEADERS' ? (
               <>
                 <option value="all">전체 ({roster.length}명)</option>
                 {actor?.dept && (
@@ -392,13 +396,8 @@ export default function WorkPlanScreen() {
                   </option>
                 )}
                 <option value="leaders">
-                  타 부서 팀장 모아보기 ({roster.filter((u) => u.dept !== actor?.dept && isLeaderPosition(u.position, u.jobTitle)).length}명)
+                  타 부서 팀장 모아보기 ({roster.filter((u) => u.dept !== actor?.dept && isLeaderPosition(u.position, u.jobTitle, u.id, org)).length}명)
                 </option>
-                {departments.filter((d) => d !== actor?.dept).map((d) => (
-                  <option key={d} value={d}>
-                    {d} ({roster.filter((u) => u.dept === d).length}명)
-                  </option>
-                ))}
               </>
             ) : (
               <>

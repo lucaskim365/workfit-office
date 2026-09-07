@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   COMMUTE_STATUS_LABELS,
-  canSeeOthers,
   summarizeCommuteMonth,
   type CommuteEmployee,
   type CommuteRecord,
@@ -17,7 +16,10 @@ import {
 } from '@/features/commute/useCommute';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveUserScope } from '@/features/auth/scopeHelper';
+import { resolveCommuteScope } from '@/features/auth/scopeHelper';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useUsers } from '@/features/user/useUsers';
+import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
@@ -132,21 +134,100 @@ const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[1
 export default function CommuteScreen() {
   const { user } = useAuth();
   const { userRoles, isAdmin } = usePermission();
+  const org = useOrgTree();
   const { policy = DEFAULT_COMMUTE_POLICY, savePolicy } = useCommutePolicy();
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
-  const userScope = useMemo(() => resolveUserScope(user, userRoles), [user, userRoles]);
-  const canManagePolicy = isAdmin || userScope === 'COMPANY';
+  const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
+  const canManagePolicy = isAdmin || commuteScope === 'ALL';
 
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
-  const canTeam = userScope === 'COMPANY' || userScope === 'LEADER' || canSeeOthers(viewer);
+  const canTeam = commuteScope === 'ALL' || commuteScope === 'TEAM';
 
+  const { data: allUsers = [] } = useUsers();
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
-  const employees = useMemo(
-    () => allEmployees.filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim())),
-    [allEmployees],
+
+  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (테스트 계정은 테스터로 접속했을 때만 범위에 포함)
+  const employees = useMemo(() => {
+    const list = [...allEmployees.filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()))];
+    const existingNames = new Set(list.map((e) => e.name.trim()));
+    const existingEmpIds = new Set(list.map((e) => e.empId));
+
+    const isViewerTester = (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test');
+
+    for (const u of allUsers) {
+      const name = (u.name || '').trim();
+      if (!name || existingNames.has(name) || NON_ATTENDANCE_NAMES.has(name)) continue;
+
+      const isUserTester = (u.dept ?? '').includes('테스트') || name.toLowerCase().includes('test');
+      if (isUserTester && !isViewerTester) continue;
+
+      let empId = Number(u.empNo);
+      if (Number.isNaN(empId) || empId <= 0 || existingEmpIds.has(empId)) {
+        let hash = 0;
+        const key = u.id || name;
+        for (let i = 0; i < key.length; i++) {
+          hash = ((hash << 5) - hash) + key.charCodeAt(i);
+          hash |= 0;
+        }
+        empId = 10000 + (Math.abs(hash) % 80000);
+        while (existingEmpIds.has(empId)) empId++;
+      }
+
+      existingNames.add(name);
+      existingEmpIds.add(empId);
+
+      list.push({
+        empId,
+        name,
+        active: u.status === '사용' && !u.resignedAt,
+        retireDate: u.resignedAt ?? null,
+      });
+    }
+
+    return list;
+  }, [allEmployees, allUsers, user?.dept, user?.name]);
+
+  const userByEmpMap = useMemo(() => {
+    const map = new Map<string, typeof allUsers[0]>();
+    for (const u of allUsers) {
+      if (u.empNo) map.set(u.empNo.trim(), u);
+      if (u.name) map.set(u.name.trim(), u);
+      if (u.id) map.set(u.id.trim(), u);
+    }
+    for (const emp of employees) {
+      const matched = allUsers.find(
+        (u) => u.name?.trim() === emp.name.trim() || u.empNo?.trim() === String(emp.empId),
+      );
+      if (matched) {
+        map.set(String(emp.empId), matched);
+      }
+    }
+    return map;
+  }, [allUsers, employees]);
+
+  const { data: employeeProfiles = [] } = useEmployeeProfiles();
+  const profileByEmpMap = useMemo(() => {
+    const map = new Map<string, typeof employeeProfiles[0]>();
+    for (const p of employeeProfiles) {
+      if (p.empNo) map.set(p.empNo.trim(), p);
+      if (p.name) map.set(p.name.trim(), p);
+      if (p.userId) map.set(p.userId.trim(), p);
+    }
+    return map;
+  }, [employeeProfiles]);
+
+  const getHireDateForEmp = useCallback(
+    (empName?: string | null, empId?: number | null) => {
+      if (!empName && !empId) return null;
+      const profile =
+        (empName ? profileByEmpMap.get(empName.trim()) : undefined) ??
+        (empId ? profileByEmpMap.get(String(empId)) : undefined);
+      return profile?.hireDate ? profile.hireDate.trim() : null;
+    },
+    [profileByEmpMap],
   );
 
   const [tab, setTab] = useState<string>(ME_TAB);
@@ -164,16 +245,13 @@ export default function CommuteScreen() {
 
   const isEmployeeView = view !== DAY_VIEW && view !== MONTH_VIEW;
   const teamEmpId = isEmployeeView ? Number(view) : null;
-  const monthEmpId = activeTab === ME_TAB ? (viewer?.empId ?? null) : teamEmpId;
-  const firstEmpId = (employees.find((row) => row.active) ?? employees[0])?.empId;
+  const myEmpId = useMemo(() => {
+    if (viewer?.empId) return viewer.empId;
+    const found = employees.find((e) => e.name.trim() === (user?.name ?? '').trim());
+    return found?.empId ?? (user ? 99999 : null);
+  }, [viewer?.empId, employees, user]);
 
-  const selected = employees.find((row) => row.empId === teamEmpId);
-
-  useEffect(() => {
-    if (isEmployeeView && Number.isNaN(Number(view)) && firstEmpId !== undefined) {
-      setView(String(firstEmpId));
-    }
-  }, [firstEmpId, isEmployeeView, view]);
+  const monthEmpId = activeTab === ME_TAB ? myEmpId : teamEmpId;
 
   const monthQuery = useCommuteMonth(monthEmpId, month);
   const dayQuery = useCommuteDay(isTeam && view === DAY_VIEW ? date : null);
@@ -181,6 +259,15 @@ export default function CommuteScreen() {
 
   // 전자결재 승인 휴가 데이터 연동 (내 휴가 및 선택 직원 휴가)
   const approvalsQuery = useAllApprovals();
+  const selected = useMemo(() => employees.find((row) => row.empId === teamEmpId), [employees, teamEmpId]);
+
+  const targetHireDate = useMemo(() => {
+    if (activeTab === ME_TAB) {
+      return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
+    }
+    return getHireDateForEmp(selected?.name, selected?.empId);
+  }, [activeTab, user, selected, getHireDateForEmp]);
+
   const leaveMap = useMemo(() => {
     const map = new Map<string, ApprovedLeaveInfo>();
     const targetName = activeTab === ME_TAB ? (user?.name?.trim() ?? '') : (selected?.name?.trim() ?? '');
@@ -234,16 +321,17 @@ export default function CommuteScreen() {
 
     for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
       const dateStr = `${month}-${pad(dayNum)}`;
-      const raw = rawMap.get(dateStr) ?? {
-        empId: monthEmpId ?? 0,
-        date: dateStr,
-        inAt: null,
-        outAt: null,
-      };
-      records.push(evaluateCommuteRecord(raw, policy, leaveMap));
+      const raw =
+        rawMap.get(dateStr) ?? {
+          empId: monthEmpId ?? 0,
+          date: dateStr,
+          inAt: null,
+          outAt: null,
+        };
+      records.push(evaluateCommuteRecord(raw, policy, leaveMap, targetHireDate));
     }
     return records;
-  }, [monthQuery.data, month, monthEmpId, policy, leaveMap]);
+  }, [monthQuery.data, month, monthEmpId, policy, leaveMap, targetHireDate]);
 
   const summary = useMemo(() => summarizeCommuteMonth(monthRows), [monthRows]);
 
@@ -254,47 +342,92 @@ export default function CommuteScreen() {
   };
 
   const visible = useMemo(
-    () => employees.filter(matches).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
-    [employees, keyword, showRetired],
+    () =>
+      employees
+        .filter(matches)
+        .filter((emp) => {
+          // 1. 임원(ALL): 전사 임직원 열람 (테스터 접속 시 테스트 계정 포함, 실제 임원 접속 시 실제 임직원만 포함)
+          if (commuteScope === 'ALL') return true;
+
+          // 2. 팀장(TEAM): 자신 및 소속 부서 팀원들의 근태만 열람
+          if (commuteScope === 'TEAM') {
+            const myDept = (user?.dept ?? '').trim();
+            const matchedUser = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(String(emp.empId));
+            const empDept = (matchedUser?.dept ?? '').trim();
+            return Boolean(myDept && empDept && myDept === empDept);
+          }
+
+          // 3. 일반 사원(MY_ONLY): 팀 탭 접근 불가
+          return false;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    [employees, keyword, showRetired, commuteScope, user?.dept, userByEmpMap],
   );
 
-  /** 일별 표 — 정책 및 휴가 반영 */
+  const firstEmpId = (visible.find((row) => row.active) ?? visible[0])?.empId;
+
+  useEffect(() => {
+    if (isEmployeeView && Number.isNaN(Number(view)) && firstEmpId !== undefined) {
+      setView(String(firstEmpId));
+    }
+  }, [firstEmpId, isEmployeeView, view]);
+
+  /** 일별 표 — 실제 DB 기록 반영 */
   const dayRows = useMemo(() => {
     const byEmp = new Map<number, CommuteRecord>();
     for (const row of dayQuery.data ?? []) {
-      byEmp.set(row.empId, evaluateCommuteRecord(row, policy, leaveMap));
+      const empHireDate = getHireDateForEmp(null, row.empId);
+      byEmp.set(row.empId, evaluateCommuteRecord(row, policy, leaveMap, empHireDate));
     }
-    return visible.map((employee) => ({ employee, record: byEmp.get(employee.empId) ?? null }));
-  }, [dayQuery.data, visible, policy, leaveMap]);
+    return visible.map((employee) => {
+      const empHireDate = getHireDateForEmp(employee.name, employee.empId);
+      const rawRecord = byEmp.get(employee.empId);
+      let record = rawRecord ?? null;
+      if (!record && empHireDate && date < empHireDate) {
+        record = evaluateCommuteRecord(
+          { empId: employee.empId, date, inAt: null, outAt: null },
+          policy,
+          leaveMap,
+          empHireDate,
+        );
+      }
+      return {
+        employee,
+        record,
+      };
+    });
+  }, [dayQuery.data, visible, policy, leaveMap, getHireDateForEmp, date]);
 
   const dayStats = useMemo(() => ({
     present: dayRows.filter((row) => row.record?.inAt).length,
     late: dayRows.filter((row) => row.record?.status === 'late').length,
     leave: dayRows.filter((row) => row.record?.status === 'leave').length,
-    missing: dayRows.filter((row) => !row.record || (!row.record.inAt && !row.record.outAt && row.record.status !== 'leave' && row.record.status !== 'off')).length,
+    missing: dayRows.filter((row) => !row.record || (!row.record.inAt && !row.record.outAt && row.record.status !== 'leave' && row.record.status !== 'off' && row.record.status !== 'unknown')).length,
   }), [dayRows]);
 
-  /** 월별 집계 — 정책 기반 동적 재계산 적용 */
+  /** 월별 집계 — 실제 DB 기록 반영 */
   const monthAllRows = useMemo(() => {
     const byEmp = new Map<number, CommuteRecord[]>();
     for (const row of monthAllQuery.data ?? []) {
-      const evaluated = evaluateCommuteRecord(row, policy, leaveMap);
+      const empHireDate = getHireDateForEmp(null, row.empId);
+      const evaluated = evaluateCommuteRecord(row, policy, leaveMap, empHireDate);
       const list = byEmp.get(row.empId);
       if (list) list.push(evaluated);
       else byEmp.set(row.empId, [evaluated]);
     }
+
     return visible.map((employee) => ({
       employee,
       summary: summarizeCommuteMonth(byEmp.get(employee.empId) ?? []),
     }));
-  }, [monthAllQuery.data, visible, policy, leaveMap]);
+  }, [monthAllQuery.data, visible, policy, leaveMap, getHireDateForEmp]);
 
   const monthTotals = useMemo(() => ({
     workDays: monthAllRows.reduce((sum, row) => sum + row.summary.workDays, 0),
     late: monthAllRows.reduce((sum, row) => sum + row.summary.lateDays, 0),
     absent: monthAllRows.reduce((sum, row) => sum + row.summary.absentDays, 0),
     leave: monthAllRows.reduce((sum, row) => sum + row.summary.leaveDays, 0),
-    over: monthAllRows.reduce((sum, row) => sum + row.summary.overMinTotal, 0),
+    totalMin: monthAllRows.reduce((sum, row) => sum + row.summary.totalMin, 0),
   }), [monthAllRows]);
 
   const toggleButton = (key: string, label: string, active: boolean, onClick: () => void, icon?: ReactNode) => (
@@ -313,12 +446,12 @@ export default function CommuteScreen() {
 
   const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5 shadow-2xs';
 
-  const tabToggle = (
+  const tabToggle = canTeam ? (
     <div className={toggleShell}>
       {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => setTab(ME_TAB))}
-      {canTeam && toggleButton(TEAM_TAB, userScope === 'COMPANY' ? '전사 근태' : '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
+      {toggleButton(TEAM_TAB, commuteScope === 'ALL' ? '전사 근태' : '부서원 근태', isTeam, () => setTab(TEAM_TAB))}
     </div>
-  );
+  ) : null;
 
   const modeToggle = (
     <div className={toggleShell}>
@@ -330,7 +463,7 @@ export default function CommuteScreen() {
     </div>
   );
 
-  const scopeLabel = userScope === 'COMPANY' ? '전사 전 임직원' : (user?.dept ? `${user.dept} 소속` : (viewer?.deptNames.join(' · ') || '내 부서'));
+  const scopeLabel = commuteScope === 'ALL' ? '전사 전 임직원' : (user?.dept ? `${user.dept} 소속` : (viewer?.deptNames.join(' · ') || '내 부서'));
 
   const searchBox = (
     <input
@@ -414,12 +547,6 @@ export default function CommuteScreen() {
                       </span>
                     )}
                   </div>
-
-                  {holiday && (
-                    <span className="truncate rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold text-rose-600 max-w-[85px]" title={holiday}>
-                      {holiday}
-                    </span>
-                  )}
                 </div>
 
                 {/* 상태 및 출퇴근 시간 */}
@@ -445,13 +572,8 @@ export default function CommuteScreen() {
                           <span className="font-bold text-ink">{timeOf(row.outAt)}</span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between gap-1 pt-0.5">
+                      <div className="flex items-center justify-start gap-1 pt-0.5">
                         <StatusBadge record={row} />
-                        {row.overMin > 0 && (
-                          <span className="rounded bg-indigo-500/10 px-1 py-0.5 text-[8.5px] font-bold text-indigo-500">
-                            +{Math.round(row.overMin / 60 * 10) / 10}h
-                          </span>
-                        )}
                       </div>
                     </>
                   ) : (
@@ -476,7 +598,7 @@ export default function CommuteScreen() {
         <StatCard label="휴가 사용" value={`${summary.leaveDays}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
         <StatCard label="지각" value={`${summary.lateDays}회`} tone={summary.lateDays > 0 ? "border-amber/25 bg-amber/8" : undefined} />
         <StatCard label="결근" value={`${summary.absentDays}일`} tone={summary.absentDays > 0 ? "border-red-500/20 bg-red-500/6" : undefined} />
-        <StatCard label="연장근무" value={hourText(summary.overMinTotal)} />
+        <StatCard label="총 근무시간" value={hourText(summary.totalMin)} />
       </div>
 
       <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm overflow-hidden">
@@ -512,8 +634,7 @@ export default function CommuteScreen() {
                   <th className={HEAD}>날짜</th>
                   <th className={HEAD}>출근</th>
                   <th className={HEAD}>퇴근</th>
-                  <th className={HEAD}>기본</th>
-                  <th className={HEAD}>연장</th>
+                  <th className={HEAD}>근무시간</th>
                   <th className={HEAD}>지각</th>
                   <th className={HEAD}>상태 / 휴가</th>
                 </tr>
@@ -558,8 +679,7 @@ export default function CommuteScreen() {
                       </td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.inAt)}</td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.outAt)}</td>
-                      <td className="p-2 text-ink2">{hourText(row.basicMin)}</td>
-                      <td className="p-2 text-ink2">{hourText(row.overMin)}</td>
+                      <td className="p-2 text-ink2">{hourText(row.totalMin)}</td>
                       <td className="p-2 text-ink2">{row.lateMin > 0 ? `${row.lateMin}분` : '—'}</td>
                       <td className="p-2">
                         <StatusBadge record={row} />
@@ -613,8 +733,7 @@ export default function CommuteScreen() {
                   <th className={HEAD}>직원</th>
                   <th className={HEAD}>출근</th>
                   <th className={HEAD}>퇴근</th>
-                  <th className={HEAD}>기본</th>
-                  <th className={HEAD}>연장</th>
+                  <th className={HEAD}>근무시간</th>
                   <th className={HEAD}>지각</th>
                   <th className={HEAD}>상태 / 휴가</th>
                 </tr>
@@ -637,8 +756,7 @@ export default function CommuteScreen() {
                     </td>
                     <td className="p-2 tabular-nums">{timeOf(record?.inAt ?? null)}</td>
                     <td className="p-2 tabular-nums">{timeOf(record?.outAt ?? null)}</td>
-                    <td className="p-2 text-ink2">{hourText(record?.basicMin ?? 0)}</td>
-                    <td className="p-2 text-ink2">{hourText(record?.overMin ?? 0)}</td>
+                    <td className="p-2 text-ink2">{hourText(record?.totalMin ?? 0)}</td>
                     <td className="p-2 text-ink2">{record && record.lateMin > 0 ? `${record.lateMin}분` : '—'}</td>
                     <td className="p-2">
                       {record ? <StatusBadge record={record} /> : <span className="text-[9.5px] text-ink3">기록 없음</span>}
@@ -661,8 +779,8 @@ export default function CommuteScreen() {
         <StatCard label="근무일 합계" value={`${monthTotals.workDays}일`} tone="border-teal/25 bg-teal/8" />
         <StatCard label="지각" value={`${monthTotals.late}회`} tone="border-amber/25 bg-amber/8" />
         <StatCard label="휴가 합계" value={`${monthTotals.leave}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
-        <StatCard label="결근" value={`${monthTotals.absent}일`} tone="border-red-500/20 bg-red-500/6" />
-        <StatCard label="연장 합계" value={hourText(monthTotals.over)} />
+        <StatCard label="결근" value={`${monthTotals.absent}일`} tone={monthTotals.absent > 0 ? "border-red-500/20 bg-red-500/6" : undefined} />
+        <StatCard label="근무시간 합계" value={hourText(monthTotals.totalMin)} />
       </div>
 
       <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm">
@@ -688,7 +806,7 @@ export default function CommuteScreen() {
                   <th className={HEAD}>휴가</th>
                   <th className={HEAD}>지각</th>
                   <th className={HEAD}>결근</th>
-                  <th className={HEAD}>연장</th>
+                  <th className={HEAD}>근무시간</th>
                 </tr>
               </thead>
               <tbody>
@@ -708,7 +826,7 @@ export default function CommuteScreen() {
                     <td className={`p-2 ${row.leaveDays > 0 ? 'font-bold text-emerald-600' : 'text-ink3'}`}>{row.leaveDays}일</td>
                     <td className={`p-2 ${row.lateDays > 0 ? 'font-bold text-amber' : 'text-ink3'}`}>{row.lateDays}회</td>
                     <td className={`p-2 ${row.absentDays > 0 ? 'font-bold text-red-500' : 'text-ink3'}`}>{row.absentDays}일</td>
-                    <td className="p-2 text-ink2">{hourText(row.overMinTotal)}</td>
+                    <td className="p-2 text-ink2">{hourText(row.totalMin)}</td>
                   </tr>
                 ))}
               </tbody>
