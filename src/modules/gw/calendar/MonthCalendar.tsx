@@ -5,9 +5,10 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 interface MonthCalendarProps {
   month: string;
   today: string;
+  selectedDate?: string;
   events: CalendarEvent[];
-  /** 그 날 일정 전체를 연다(칸 클릭 · 더보기). */
-  onOpenDay: (date: string) => void;
+  /** 날짜를 선택했을 때(좌측 패널 연동). */
+  onSelectDate: (date: string) => void;
   /** 그 날짜로 새 일정을 등록한다(칸 우상단 +). */
   onAddOn: (date: string) => void;
   onSelectEvent: (event: CalendarEvent) => void;
@@ -23,7 +24,17 @@ function eventLabel(event: CalendarEvent): string {
   return event.allDay ? event.title : `${event.startTime} ${event.title}`;
 }
 
-export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn, onSelectEvent, ownerNameOf, isMutedChip }: MonthCalendarProps) {
+export default function MonthCalendar({
+  month,
+  today,
+  selectedDate,
+  events,
+  onSelectDate,
+  onAddOn,
+  onSelectEvent,
+  ownerNameOf,
+  isMutedChip,
+}: MonthCalendarProps) {
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const eventsByDate = useMemo(() => {
     const rows = new Map<string, CalendarEvent[]>();
@@ -33,29 +44,39 @@ export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
-      <div className="min-w-[760px]">
+      <div className="min-w-[580px]">
         <div className="grid grid-cols-7 border-b border-border bg-panel-alt/65">
           {WEEKDAYS.map((day, index) => (
-            <div key={day} className={`px-2 py-2.5 text-center text-[10px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
+            <div key={day} className={`px-1.5 py-2 text-center text-[10px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
           ))}
         </div>
         <div className="grid grid-cols-7">
           {cells.map((cell, index) => {
             const rows = eventsByDate.get(cell.date) ?? [];
             const isToday = cell.date === today;
+            const isSelected = cell.date === selectedDate;
             return (
-              /*
-                칸 전체가 클릭 대상이다. 예전에는 24px짜리 날짜 숫자에만 핸들러가 있어서
-                칸의 빈 곳을 눌러도 아무 일이 없었다 — 달력에서 날짜를 고르는 자연스러운
-                동작이 통하지 않았다. 키보드는 안쪽 날짜 버튼이 담당한다(클릭이 버블링된다).
-              */
               <div
                 key={cell.date}
-                onClick={() => onOpenDay(cell.date)}
-                className={`group relative min-h-28 cursor-pointer border-b border-r border-border p-2 text-left align-top transition-colors hover:bg-panel-alt/45 ${index % 7 === 6 ? 'border-r-0' : ''}`}
+                onClick={() => onSelectDate(cell.date)}
+                className={`group relative min-h-[72px] lg:min-h-[78px] cursor-pointer border-b border-r border-border p-1.5 text-left align-top transition-all ${
+                  isSelected
+                    ? 'ring-2 ring-teal ring-inset bg-teal-soft/20 z-10'
+                    : 'hover:bg-panel-alt/50'
+                } ${index % 7 === 6 ? 'border-r-0' : ''}`}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <button type="button" aria-label={`${cell.date} 일정 ${rows.length}개 보기`} className={`grid h-6 w-6 place-items-center rounded-full text-[10.5px] font-bold focus:outline-none focus:ring-2 focus:ring-teal/40 ${isToday ? 'bg-teal text-white' : cell.inCurrentMonth ? 'text-ink2' : 'text-ink3/55'}`}>{Number(cell.date.slice(-2))}</button>
+                  <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold transition-all ${
+                    isToday
+                      ? 'bg-teal text-white shadow-2xs'
+                      : isSelected
+                        ? 'bg-teal/20 text-teal font-extrabold'
+                        : cell.inCurrentMonth
+                          ? 'text-ink2'
+                          : 'text-ink3/45'
+                  }`}>
+                    {Number(cell.date.slice(-2))}
+                  </span>
                   {/*
                     등록 버튼은 평소 숨긴다 — 42칸 전부에 +가 떠 있으면 달력이 시끄럽다.
                     숨은 동안 `pointer-events-none`으로 터치 오작동까지 막되, 키보드 포커스는
@@ -72,22 +93,53 @@ export default function MonthCalendar({ month, today, events, onOpenDay, onAddOn
                     +
                   </button>
                 </div>
-                <span className="mt-1.5 block space-y-1">
-                  {rows.slice(0, 3).map((event) => {
+                <span className="mt-1 block space-y-0.5">
+                  {rows.slice(0, 2).map((event) => {
                     const owner = ownerNameOf?.(event) ?? null;
                     const label = owner ? `${owner} · ${eventLabel(event)}` : eventLabel(event);
                     const muted = isMutedChip?.(event) ?? false;
+                    const isCompany = event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
+                    const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
+                    const isOutside = event.eventType === 'OUTSIDE';
+                    const isVacation = event.eventType === 'VACATION';
+
+                    let chipStyle = 'bg-blue/10 text-blue';
+                    let iconPrefix = '';
+                    if (muted) {
+                      chipStyle = 'bg-ink3/10 text-ink3';
+                    } else if (isCompany) {
+                      chipStyle = 'bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30';
+                      iconPrefix = '🎉 ';
+                    } else if (isMeeting) {
+                      chipStyle = 'bg-purple-500/15 text-purple-600 dark:text-purple-400 font-semibold border border-purple-500/30';
+                      iconPrefix = '👥 ';
+                    } else if (isOutside) {
+                      chipStyle = 'bg-blue-500/15 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/30';
+                      iconPrefix = '🔵 ';
+                    } else if (isVacation) {
+                      chipStyle = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold border border-amber-500/30';
+                      iconPrefix = '🏖️ ';
+                    } else if (event.allDay) {
+                      chipStyle = 'bg-teal-soft/75 text-teal';
+                    }
+
                     return (
                       /* 일정 칩은 상세를 연다. 칸 선택까지 겹쳐 일어나지 않게 전파를 끊는다. */
-                      <button type="button" key={event.id} onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }} title={label} className={`block w-full truncate rounded px-1.5 py-1 text-left text-[8.5px] font-semibold focus:outline-none focus:ring-2 focus:ring-teal/40 ${muted ? 'bg-ink3/10 text-ink3' : event.allDay ? 'bg-teal-soft/75 text-teal' : 'bg-blue/10 text-blue'}`}>
-                        {label}
+                      <button
+                        type="button"
+                        key={event.id}
+                        onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }}
+                        title={`${label}${event.attendeeUserIds?.length ? ` (참여자 ${event.attendeeUserIds.length}명)` : ''}`}
+                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-[8px] leading-tight focus:outline-none focus:ring-1 focus:ring-teal/40 ${chipStyle}`}
+                      >
+                        {iconPrefix}{label}
                       </button>
                     );
                   })}
-                  {rows.length > 3 && (
-                    <button type="button" onClick={(clicked) => { clicked.stopPropagation(); onOpenDay(cell.date); }} className="block px-1 text-[8.5px] font-bold text-ink3 hover:text-teal">
-                      +{rows.length - 3}개 더보기
-                    </button>
+                  {rows.length > 2 && (
+                    <span className="block px-0.5 text-[7.5px] font-bold text-ink3">
+                      +{rows.length - 2}개
+                    </span>
                   )}
                 </span>
               </div>

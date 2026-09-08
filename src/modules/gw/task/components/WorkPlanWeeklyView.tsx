@@ -57,6 +57,7 @@ interface WorkPlanWeeklyViewProps {
   myPlans: WorkPlan[];
   onSavePlan: (date: string, content: string, existingPlanId?: string) => Promise<void>;
   onDeletePlan: (planId: string) => Promise<void>;
+  onOpenCalendarModal?: (text: string, date: string, tag?: string) => void;
 }
 
 export function WorkPlanWeeklyView({
@@ -64,6 +65,7 @@ export function WorkPlanWeeklyView({
   myPlans,
   onSavePlan,
   onDeletePlan,
+  onOpenCalendarModal,
 }: WorkPlanWeeklyViewProps) {
   const [anchorDate, setAnchorDate] = useState(todayStr);
   const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan } | null>(null);
@@ -265,6 +267,21 @@ export function WorkPlanWeeklyView({
                             {item.text}
                           </span>
                         </div>
+
+                        {/* 캘린더 일정 등록/공유 버튼 */}
+                        {onOpenCalendarModal && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenCalendarModal(item.text, dayStr, item.tag);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-ink3 hover:bg-teal-soft/30 hover:text-teal transition-all shrink-0 ml-1"
+                            title="캘린더 일정으로 등록 및 공유"
+                          >
+                            <CalendarDays size={11} />
+                          </button>
+                        )}
 
                         {/* 행별 개별 삭제 버튼 (✕) */}
                         <button

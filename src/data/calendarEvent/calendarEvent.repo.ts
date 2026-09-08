@@ -1,7 +1,7 @@
 import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
-import { canViewEvent, maskEventForSupervisor, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
+import { canViewEvent, maskEventForSupervisor, isCompanyEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
 
 /**
@@ -128,26 +128,27 @@ function nextId(rows: CalendarEvent[], date: string): string {
  * 가르려면 이전 값과 비교해야 하는데, 지금은 생성 시점만으로 충분하다.
  */
 async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent): Promise<void> {
-  if (event.visibility === 'PRIVATE') return;
-
   const { userRepo } = await import('@/data/user/user.repo');
   let recipientIds: string[] = [];
 
-  if (event.visibility === 'COMPANY') {
-    recipientIds = (await userRepo.list({ status: '사용' })).map((row) => row.id);
+  // 참여자가 지정되어 있으면 참여자들에게도 알림
+  if (event.attendeeUserIds && event.attendeeUserIds.length > 0) {
+    recipientIds.push(...event.attendeeUserIds);
+  }
+
+  if (event.visibility === 'COMPANY' || event.eventType === 'COMPANY_EVENT') {
+    recipientIds.push(...(await userRepo.list({ status: '사용' })).map((row) => row.id));
   } else if (event.visibility === 'TEAM' && event.deptId) {
     const { departmentRepo } = await import('@/data/department/department.repo');
     const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
-    if (dept) recipientIds = (await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id);
+    if (dept) recipientIds.push(...(await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id));
   } else if (event.visibility === 'PROJECT' && event.projectId) {
     const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
-    // 이 프로젝트로 공유를 걸 수 있었다는 것 자체가 actor가 이미 그 프로젝트를 볼 수 있다는
-    // 뜻이라(화면이 참여 중인 프로젝트만 고르게 한다), 같은 actor로 조회해도 막히지 않는다.
     const project = await workProjectRepo.get(
       { userId: actor.userId, deptId: actor.deptId ?? null, active: actor.active },
       event.projectId,
     );
-    if (project) recipientIds = [project.ownerUserId, ...project.memberUserIds];
+    if (project) recipientIds.push(project.ownerUserId, ...project.memberUserIds);
   }
 
   const uniqueRecipients = [...new Set(recipientIds)].filter((id) => id !== event.ownerUserId);
@@ -157,20 +158,24 @@ async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent)
   const { notificationRepo } = await import('@/data/notification/notification.repo');
   const when = event.allDay ? `${event.date} 종일` : `${event.date} ${event.startTime}`;
 
+  const titlePrefix = event.eventType === 'COMPANY_EVENT' ? '사내행사 안내' : event.eventType === 'MEETING' ? '회의 참여 요청' : '새 일정 공유';
+
   await Promise.all(uniqueRecipients.map((userId) => notificationRepo.create({
     userId,
     type: '일정',
-    title: '새 일정 공유',
-    text: `[${event.title}] ${when}${scopeLabel(event.visibility)}`,
+    title: titlePrefix,
+    text: `[${event.title}] ${when}${scopeLabel(event)}`,
     senderName: owner?.name ?? '동료',
     linkUrl: `/gw/calendar?date=${event.date}`,
   })));
 }
 
-function scopeLabel(visibility: CalendarEvent['visibility']): string {
-  if (visibility === 'TEAM') return ' · 부서 공유';
-  if (visibility === 'PROJECT') return ' · 프로젝트 공유';
-  if (visibility === 'COMPANY') return ' · 전사 공개';
+function scopeLabel(event: CalendarEvent): string {
+  if (event.eventType === 'COMPANY_EVENT') return ' · 사내행사';
+  if (event.eventType === 'MEETING') return ' · 회의 일정';
+  if (event.visibility === 'TEAM') return ' · 부서 공유';
+  if (event.visibility === 'PROJECT') return ' · 프로젝트 공유';
+  if (event.visibility === 'COMPANY') return ' · 전사 공개';
   return '';
 }
 
@@ -217,7 +222,7 @@ export const calendarEventRepo = {
     const owners = ownerUserIds === null ? null : new Set(ownerUserIds);
     const rows = await loadAll();
     return sortEvents(rows
-      .filter((event) => owners === null || owners.has(event.ownerUserId))
+      .filter((event) => owners === null || owners.has(event.ownerUserId) || isCompanyEvent(event))
       .filter((event) => !filter?.from || event.date >= filter.from)
       .filter((event) => !filter?.to || event.date <= filter.to)
       .map((event) => maskEventForSupervisor(viewer.userId, cloneEvent(event))));

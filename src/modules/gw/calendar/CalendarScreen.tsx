@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { buildCalendarMonth, calendarToday, isValidCalendarDate, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
-import type { CalendarEvent } from '@/domain/calendarEvent/schema';
-import { isMaskedForSupervisor, resolveCalendarSupervisor } from '@/domain/calendarEvent/engine';
+import type { CalendarEvent, CalendarEventType } from '@/domain/calendarEvent/schema';
+import { isMaskedForSupervisor, isCompanyEvent, isAttendeeEvent } from '@/domain/calendarEvent/engine';
 import { resolveDeptId } from '@/domain/department/engine';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
@@ -11,11 +11,28 @@ import { useCalendarEvents, useTeamCalendarEvents } from '@/features/calendar/us
 import { useDepartments } from '@/features/department/useDepartments';
 import { useProjects } from '@/features/project/useProjects';
 import { useUsers } from '@/features/user/useUsers';
+import { usePermission } from '@/features/auth/usePermission';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { resolveWorkPlanScope, isLeaderPosition } from '@/features/auth/scopeHelper';
+import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
+import {
+  useMyWorkPlans,
+  useCreateWorkPlan,
+  useUpdateWorkPlan,
+} from '@/features/workPlan/useWorkPlans';
+import {
+  parseWorkPlanItems,
+  calculatePlanProgress,
+  toggleWorkPlanItem,
+  addWorkPlanItem,
+  getWorkPlanTagMeta,
+} from '@/domain/workPlan/engine';
+import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
-import { Modal } from '@/shared/ui/Modal';
 import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
+import { Sparkles, CheckCircle2, ListTodo, ExternalLink } from 'lucide-react';
 
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -51,8 +68,8 @@ function LocalCalendarScreen() {
   const linkedDate = searchParams.get('date');
   const initialDate = linkedDate && isValidCalendarDate(linkedDate) ? linkedDate : null;
   const [month, setMonth] = useState((initialDate ?? today).slice(0, 7));
-  /** 목록 모달을 띄운 날짜. 닫혀 있으면 null. */
-  const [dayListDate, setDayListDate] = useState<string | null>(initialDate);
+  /** 현재 선택된 날짜 (기본값 오늘 또는 링크 파라미터 날짜) */
+  const [selectedDate, setSelectedDate] = useState<string>(initialDate ?? today);
 
   /*
     읽고 나면 지운다 — 안 지우면 주소창에 남아 "오늘"을 눌러도 다시 이 날짜로 보인다.
@@ -62,10 +79,22 @@ function LocalCalendarScreen() {
     if (searchParams.has('date')) setSearchParams((prev) => { prev.delete('date'); return prev; }, { replace: true });
   }, [searchParams, setSearchParams]);
   const [demoUserId, setDemoUserId] = useState('U009');
-  const [modalTarget, setModalTarget] = useState<{ date: string; event?: CalendarEvent } | null>(null);
+  const { isOperator, isExecutive, userRoles } = usePermission();
+  const org = useOrgTree();
+  const canManageCompanyEvent = isOperator || isExecutive;
+
+  const [modalTarget, setModalTarget] = useState<{
+    date: string;
+    event?: CalendarEvent;
+    initialTitle?: string;
+    initialEventType?: CalendarEventType;
+    initialAttendees?: string[];
+  } | null>(null);
   const [notice, setNotice] = useState('');
   /** 내 일정 / 팀 일정. 열람 범위가 없으면 아래에서 내 일정으로 고정된다. */
   const [tab, setTab] = useState<'me' | 'team'>('me');
+  /** 관련 일정 세부 필터 (전체, 내 일정, 참여 회의·일정, 사내행사, 부서·프로젝트) */
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'attendee' | 'company' | 'team'>('all');
   /** 팀 일정의 부서 필터. ALL_DEPTS면 범위 전체(관리자는 전 직원, 팀장은 맡은 부서 전부). */
   const [teamDeptSel, setTeamDeptSel] = useState(ALL_DEPTS);
   const usersQuery = useUsers();
@@ -126,45 +155,73 @@ function LocalCalendarScreen() {
   };
 
   /*
-    관리자 종합 조회(팀 일정) 범위.
-
-    판정은 도메인 `resolveCalendarSupervisor` 한 곳이다 — 경영진·지정 인원은 전 직원,
-    부서장(팀장)은 맡은 부서만, 그 외에는 탭 자체가 안 보인다. 화면은 범위를 부서 필터와
-    소유자 목록으로 옮기기만 한다. 남의 '나만 보기' 일정은 repo가 제목·메모를 가려서 준다.
+    업무계획과 동일한 일정 열람 권한 판정:
+    - ALL (임원/운영진): 전사 임직원 일정 조회
+    - TEAM_AND_LEADERS (팀장급): 본인 부서 팀원 + 타 부서 팀장급 일정 조회
+    - TEAM (일반 사원): 본인 부서 팀원 및 팀장의 일정 조회 (타 부서는 비노출)
   */
-  const supervisorScope = useMemo(
-    () => (actor ? resolveCalendarSupervisor(actor, departmentsQuery.data ?? []) : null),
-    [actor, departmentsQuery.data],
-  );
-  const activeTab = supervisorScope ? tab : 'me';
+  const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
+
+  const supervisorScope = useMemo<CalendarSupervisorScope>(() => {
+    if (actorScope === 'ALL') {
+      return { kind: 'all' };
+    }
+    if (actorScope === 'TEAM_AND_LEADERS') {
+      const headed = (departmentsQuery.data ?? []).filter((dept) => dept.headUserId === actor?.id).map((dept) => dept.name);
+      const myDeptNames = headed.length > 0 ? headed : (actor?.dept ? [actor.dept] : []);
+      return { kind: 'depts', deptNames: myDeptNames };
+    }
+    // 일반 팀원(사원): 본인 부서 팀원 및 팀장 일정 열람
+    return { kind: 'depts', deptNames: actor?.dept ? [actor.dept] : [] };
+  }, [actorScope, actor, departmentsQuery.data]);
+
+  const activeTab = tab;
   const isTeam = activeTab === 'team';
 
-  /** 팀 일정의 부서 필터 선택지. 관리자는 전 부서, 팀장은 맡은 부서만. */
-  const teamDeptOptions = useMemo(() => {
-    if (!supervisorScope) return [];
-    if (supervisorScope.kind === 'depts') return supervisorScope.deptNames;
-    return (departmentsQuery.data ?? []).map((dept) => dept.name);
-  }, [supervisorScope, departmentsQuery.data]);
+  /** 팀 일정의 부서 필터 선택지. 관리자는 전 부서, 팀장은 맡은 부서만. 사원은 본인 부서 고정. */
+  const teamDeptOptions = useMemo<string[]>(() => {
+    if (actorScope === 'ALL') {
+      return (departmentsQuery.data ?? []).map((dept) => dept.name);
+    }
+    if (actorScope === 'TEAM_AND_LEADERS' && supervisorScope.kind === 'depts') {
+      return supervisorScope.deptNames;
+    }
+    return actor?.dept ? [actor.dept] : [];
+  }, [actorScope, supervisorScope, departmentsQuery.data, actor?.dept]);
 
   /*
-    부서 필터의 유효값. 저장된 선택이 지금 범위의 선택지에 없으면(데모 사용자 전환,
-    부서 개편) 전체로 되돌린다 — 잔존값을 그대로 쓰면 화면의 "열람 범위" 표기와 실제
-    데이터가 어긋난다. 특히 단일 부서 팀장에게는 선택기 자체가 안 그려져 되돌릴 수단이 없다.
+    부서 필터의 유효값.
   */
   const effectiveDeptSel = teamDeptSel !== ALL_DEPTS && teamDeptOptions.includes(teamDeptSel)
     ? teamDeptSel
-    : ALL_DEPTS;
+    : (actorScope === 'TEAM' ? (actor?.dept ?? ALL_DEPTS) : ALL_DEPTS);
 
-  /** 팀 일정의 소유자 목록. null = 전 직원(관리자가 '전체 부서'를 본 경우). */
+  /** 팀 일정의 소유자 목록: 업무계획의 조회 권한과 동일하게 매핑 */
   const teamOwners = useMemo<string[] | null>(() => {
-    if (!supervisorScope) return [];
-    const deptNames = effectiveDeptSel === ALL_DEPTS
-      ? (supervisorScope.kind === 'depts' ? supervisorScope.deptNames : null)
-      : [effectiveDeptSel];
-    if (deptNames === null) return null;
-    // 재직자만 — 이 화면의 다른 대상 계산(공유 알림 수신자)과 같은 기준을 쓴다.
-    return users.filter((user) => deptNames.includes(user.dept) && user.status === '사용').map((user) => user.id);
-  }, [supervisorScope, effectiveDeptSel, users]);
+    if (!actor) return [];
+
+    // 1. 임원: 전체 부서 선택 시 null(전 직원), 특정 부서 선택 시 해당 부서원
+    if (actorScope === 'ALL') {
+      if (effectiveDeptSel === ALL_DEPTS) return null;
+      return users.filter((u) => u.dept === effectiveDeptSel && u.status === '사용').map((u) => u.id);
+    }
+
+    // 2. 팀장: 전체일 때는 본인 부서원 + 타 부서 팀장급
+    if (actorScope === 'TEAM_AND_LEADERS') {
+      if (effectiveDeptSel !== ALL_DEPTS) {
+        return users.filter((u) => u.dept === effectiveDeptSel && u.status === '사용').map((u) => u.id);
+      }
+      return users
+        .filter((u) => u.status === '사용')
+        .filter((u) => u.dept === actor.dept || isLeaderPosition(u.position, u.jobTitle, u.id, org))
+        .map((u) => u.id);
+    }
+
+    // 3. 일반 사원(TEAM): 오직 본인 부서 소속 팀원들과 팀장의 일정만 조회!
+    return users
+      .filter((u) => u.status === '사용' && u.dept === actor.dept)
+      .map((u) => u.id);
+  }, [actor, actorScope, effectiveDeptSel, users, org]);
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
@@ -177,18 +234,97 @@ function LocalCalendarScreen() {
   const teamQuery = useTeamCalendarEvents(teamViewer, teamOwners, range, isTeam && actor !== null);
   const events = eventsQuery.data ?? [];
   /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. */
-  const visibleEvents = isTeam ? (teamQuery.data ?? []) : events;
-  const dayEvents = dayListDate ? visibleEvents.filter((event) => event.date === dayListDate) : [];
-  const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading;
-  /*
-    팀 쿼리의 로딩·오류는 전체 화면을 대체하지 않고 격자 자리에만 그린다 — 내 일정은
-    멀쩡한데 팀 조회가 잠깐 실패했다고 탭 버튼까지 사라지면 돌아갈 길이 없다.
-  */
+  const rawEvents = isTeam ? (teamQuery.data ?? []) : events;
+
+  /** 현재 사용자 기준 관련 일정 필터링 적용 */
+  const visibleEvents = useMemo(() => {
+    if (isTeam) return rawEvents;
+    if (!actor) return [];
+    return rawEvents.filter((event) => {
+      if (scopeFilter === 'all') return true;
+      if (scopeFilter === 'mine') return event.ownerUserId === actor.id;
+      if (scopeFilter === 'attendee') return isAttendeeEvent({ userId: actor.id, deptId, projectIds: access.projectIds ?? [], active: actor.status === '사용' }, event);
+      if (scopeFilter === 'company') return isCompanyEvent(event);
+      if (scopeFilter === 'team') return event.visibility === 'TEAM' || event.visibility === 'PROJECT';
+      return true;
+    });
+  }, [rawEvents, isTeam, scopeFilter, actor, deptId, access.projectIds]);
+
+  const workActor = useMemo(
+    () => ({ userId: actor?.id ?? '__anonymous__', active: actor?.status === '사용' }),
+    [actor],
+  );
+  const myWorkPlansQuery = useMyWorkPlans(workActor, range);
+  const createWorkPlan = useCreateWorkPlan();
+  const updateWorkPlan = useUpdateWorkPlan();
+  const { tags, tagMap } = useWorkPlanConfig();
+
+  /** 선택한 날짜에 해당하는 상세 일정 목록 */
+  const selectedDayEvents = useMemo(
+    () => visibleEvents.filter((event) => event.date === selectedDate),
+    [visibleEvents, selectedDate],
+  );
+
+  /** 선택한 날짜의 내 업무 계획 */
+  const selectedDayWorkPlan = useMemo(
+    () => (myWorkPlansQuery.data ?? []).find((plan) => plan.date === selectedDate),
+    [myWorkPlansQuery.data, selectedDate],
+  );
+
+  const selectedDayTodos = useMemo(
+    () => (selectedDayWorkPlan ? parseWorkPlanItems(selectedDayWorkPlan.content) : []),
+    [selectedDayWorkPlan],
+  );
+
+  const selectedDayProgress = useMemo(
+    () => (selectedDayWorkPlan ? calculatePlanProgress(selectedDayWorkPlan.content) : null),
+    [selectedDayWorkPlan],
+  );
+
+  const handleToggleTodo = useCallback(async (idx: number) => {
+    if (!selectedDayWorkPlan || !actor) return;
+    const nextContent = toggleWorkPlanItem(selectedDayWorkPlan.content, idx);
+    await updateWorkPlan.mutateAsync({
+      actor: { userId: actor.id, active: actor.status === '사용' },
+      id: selectedDayWorkPlan.id,
+      draft: { date: selectedDayWorkPlan.date, content: nextContent },
+    });
+  }, [selectedDayWorkPlan, actor, updateWorkPlan]);
+
+  const [quickTodoText, setQuickTodoText] = useState('');
+  const [quickTodoTag, setQuickTodoTag] = useState('');
+  const handleAddQuickTodo = useCallback(async () => {
+    if (!quickTodoText.trim() || !actor) return;
+    const currentContent = selectedDayWorkPlan?.content ?? '';
+    const nextContent = addWorkPlanItem(currentContent, quickTodoText.trim(), quickTodoTag || undefined);
+    const actorParam = { userId: actor.id, active: actor.status === '사용' };
+    if (selectedDayWorkPlan) {
+      await updateWorkPlan.mutateAsync({
+        actor: actorParam,
+        id: selectedDayWorkPlan.id,
+        draft: { date: selectedDate, content: nextContent },
+      });
+    } else {
+      await createWorkPlan.mutateAsync({
+        actor: actorParam,
+        draft: { date: selectedDate, content: nextContent },
+      });
+    }
+    setQuickTodoText('');
+  }, [quickTodoText, quickTodoTag, selectedDayWorkPlan, selectedDate, actor, createWorkPlan, updateWorkPlan]);
+
+  const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading || myWorkPlansQuery.isLoading;
+
   const queryError = usersQuery.error ?? eventsQuery.error;
 
-  /** 등록·수정 모달로 넘어간다. 목록 모달은 겹치지 않게 닫는다. */
-  const openEventModal = (target: { date: string; event?: CalendarEvent }) => {
-    setDayListDate(null);
+  /** 등록·수정 모달로 넘어간다. */
+  const openEventModal = (target: {
+    date: string;
+    event?: CalendarEvent;
+    initialTitle?: string;
+    initialEventType?: CalendarEventType;
+    initialAttendees?: string[];
+  }) => {
     setModalTarget(target);
   };
 
@@ -209,6 +345,20 @@ function LocalCalendarScreen() {
                 {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
               </select>
             )}
+
+            {/* 사내행사 등록 버튼 (운영자 / 임원만 노출) */}
+            {canManageCompanyEvent && (
+              <button
+                type="button"
+                onClick={() => openEventModal({ date: today, initialEventType: 'COMPANY_EVENT' })}
+                className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/30 px-3 py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/60 transition-all shadow-2xs"
+                title="전사 공통 사내행사 등록 (운영자/임원 권한)"
+              >
+                <Sparkles size={13} className="text-teal" />
+                <span>+ 사내행사 등록</span>
+              </button>
+            )}
+
             {/* 팀 일정 탭은 볼 수 있는 사람에게만 보인다 — 없는 권한을 눌러 보게 두지 않는다. */}
             {supervisorScope && (
               <div className="flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5">
@@ -230,112 +380,354 @@ function LocalCalendarScreen() {
 
       {notice && <div aria-live="polite" className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">{notice}</div>}
 
-      <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel p-3 shadow-sm">
-        <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">‹</button>
-        <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>오늘</Button>
-        <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">›</button>
-        <h2 className="ml-1 text-[16px] font-extrabold text-ink">{monthLabel(month)}{isTeam ? ' · 팀 일정' : ''}</h2>
-        {isTeam && (
-          <>
-            {/* 부서 필터. 팀장이 맡은 부서가 하나면 고를 게 없어 라벨만 보여 준다. */}
-            {supervisorScope?.kind === 'depts' && supervisorScope.deptNames.length === 1 ? (
-              <span className="rounded-lg border border-teal/25 bg-teal-soft/25 px-2.5 py-1.5 text-[10.5px] font-bold text-teal">{supervisorScope.deptNames[0]}</span>
-            ) : (
-              <select
-                value={effectiveDeptSel}
-                onChange={(event) => setTeamDeptSel(event.target.value)}
-                title="부서 선택"
-                className="h-8 rounded-lg border border-border bg-panel px-2.5 text-[10.5px] font-bold text-ink outline-none"
+      {/* 2열 레이아웃: 좌측(선택한 날의 상세 일정 + 내 To-Do) / 우측(컴팩트 월간 캘린더) */}
+      <div className="mt-5 flex flex-col xl:flex-row items-start gap-4">
+        {/* ── 좌측 패널: 선택한 날의 상세 일정 & 내 업무계획(To-Do) ── */}
+        <aside className="w-full xl:w-[350px] 2xl:w-[380px] shrink-0 space-y-3.5">
+          {/* 선택일 헤더 카드 */}
+          <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[14px] font-extrabold text-ink">{dayTitle(selectedDate)}</span>
+                  {selectedDate === today && (
+                    <span className="rounded bg-teal px-1.5 py-0.5 text-[9.5px] font-extrabold text-white">
+                      오늘
+                    </span>
+                  )}
+                </div>
+                {selectedDate !== today && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(today);
+                      setMonth(today.slice(0, 7));
+                    }}
+                    className="mt-0.5 text-[10px] font-semibold text-teal hover:underline"
+                  >
+                    오늘 날짜로 이동
+                  </button>
+                )}
+              </div>
+
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => openEventModal({ date: selectedDate })}
               >
-                <option value={ALL_DEPTS}>{supervisorScope?.kind === 'all' ? '전체 부서' : '내 부서 전체'}</option>
-                {teamDeptOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            )}
-            <span className="text-[10px] font-semibold text-ink3">
-              열람 범위 · {supervisorScope?.kind === 'all' ? '전 직원' : supervisorScope?.deptNames.join(' · ')}
-            </span>
-          </>
-        )}
-        <span className="ml-auto text-[10px] font-semibold text-ink3">
-          {isTeam
-            ? <>남의 <span className="font-bold text-ink2">나만 보기</span> 일정은 시간만 보이고 내용은 가려집니다</>
-            : <>날짜를 누르면 그 날 일정을 봅니다 · 칸 위에 마우스를 올리면 <span className="font-bold text-ink2">+</span> 로 바로 등록</>}
-        </span>
-      </div>
-
-      <div className="mt-4">
-        {/* 팀 조회의 로딩·오류는 격자 자리에만 그린다 — 내 일정은 멀쩡한데 탭 버튼까지 사라지면 돌아갈 길이 없다. */}
-        {isTeam && teamQuery.isLoading ? (
-          <div className="grid min-h-[40vh] place-items-center rounded-xl border border-border bg-panel text-[12px] font-semibold text-ink3">팀 일정을 불러오는 중…</div>
-        ) : isTeam && teamQuery.error ? (
-          <div className="grid min-h-[40vh] place-items-center gap-2 rounded-xl border border-border bg-panel px-5 text-center text-[12px] font-semibold text-danger">
-            팀 일정을 불러오지 못했습니다.
-            <Button onClick={() => teamQuery.refetch()}>다시 시도</Button>
+                + 일정 추가
+              </Button>
+            </div>
           </div>
-        ) : (
-        <MonthCalendar
-          month={month}
-          today={today}
-          events={visibleEvents}
-          onOpenDay={(date) => setDayListDate(date)}
-          onAddOn={(date) => openEventModal({ date })}
-          onSelectEvent={(event) => {
-            // 가린 일정은 열 것이 없다 — 제목·메모가 이미 비워져 있어 모달이 빈 껍데기가 된다.
-            if (isTeam && isMaskedForSupervisor(actor.id, event)) return;
-            openEventModal({ date: event.date, event });
-          }}
-          ownerNameOf={isTeam ? (event) => teamLabelOf(event) : undefined}
-          isMutedChip={isTeam ? (event) => isMaskedForSupervisor(actor.id, event) : undefined}
-        />
-        )}
-      </div>
 
-      {/* 그 날 일정 전체. 칸 안 미리보기는 3개까지라 나머지는 여기서 본다. */}
-      {dayListDate && (
-        <Modal
-          open
-          onClose={() => setDayListDate(null)}
-          title={dayTitle(dayListDate)}
-          width={460}
-          footer={(
-            <div className="flex w-full items-center justify-between gap-2">
-              <span className="text-[10.5px] font-semibold text-ink3">일정 {dayEvents.length}개</span>
+          {/* 섹션 1: 선택한 날의 상세 일정 목록 */}
+          <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
+            <div className="mb-2.5 flex items-center justify-between border-b border-border/60 pb-2">
               <div className="flex items-center gap-1.5">
-                <Button onClick={() => setDayListDate(null)}>닫기</Button>
-                <Button variant="primary" onClick={() => openEventModal({ date: dayListDate })}>+ 일정 추가</Button>
+                <span className="text-[12.5px] font-extrabold text-ink">상세 일정</span>
+                <span className="rounded-full bg-panel-alt px-1.5 py-0.2 text-[10px] font-bold text-ink3">
+                  {selectedDayEvents.length}건
+                </span>
               </div>
             </div>
-          )}
-        >
-          {dayEvents.length === 0 ? (
-            <div className="py-8 text-center text-[11px] font-semibold text-ink3">등록된 일정이 없습니다.</div>
-          ) : (
-            <div className="space-y-2">
-              {dayEvents.map((event) => {
-                const owner = isTeam ? teamLabelOf(event) : ownerNameOf(event);
-                const masked = isTeam && isMaskedForSupervisor(actor.id, event);
-                const body = (
-                  <>
-                    <div className="flex items-center justify-between gap-3"><div className={`truncate text-[11.5px] font-bold ${masked ? 'text-ink3' : 'text-ink'}`}>{event.title}</div><span className="shrink-0 text-[10px] font-semibold text-teal">{scheduleTime(event)}</span></div>
-                    {/* 팀 일정은 소유자를, 내 일정은 공유받은 것만 누구 것인지 밝힌다. */}
-                    {owner && <div className="mt-1 text-[10px] font-semibold text-ink3">{isTeam ? owner : `공유 · ${owner}`}</div>}
-                    {event.memo && <p className="mt-1 line-clamp-2 text-[10px] text-ink3">{event.memo}</p>}
-                  </>
-                );
-                /* 가린 일정은 열어도 빈 껍데기라 클릭 대상에서 뺀다. */
-                if (masked) {
-                  return <div key={event.id} className="block w-full rounded-lg border border-dashed border-border px-3 py-2.5 text-left">{body}</div>;
-                }
-                return (
-                  <button type="button" key={event.id} onClick={() => openEventModal({ date: event.date, event })} className="block w-full rounded-lg border border-border px-3 py-2.5 text-left hover:border-teal/35 hover:bg-teal-soft/15 focus:outline-none focus:ring-2 focus:ring-teal/30">
-                    {body}
-                  </button>
-                );
-              })}
+
+            {selectedDayEvents.length === 0 ? (
+              <div className="py-6 text-center">
+                <p className="text-[11px] font-medium text-ink3">등록된 일정이 없습니다.</p>
+                <button
+                  type="button"
+                  onClick={() => openEventModal({ date: selectedDate })}
+                  className="mt-1.5 text-[10.5px] font-bold text-teal hover:underline"
+                >
+                  + 새 일정 등록
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+                {selectedDayEvents.map((event) => {
+                  const owner = isTeam ? teamLabelOf(event) : ownerNameOf(event);
+                  const masked = isTeam && isMaskedForSupervisor(actor.id, event);
+                  const isCompany = event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
+                  const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
+                  const isOutside = event.eventType === 'OUTSIDE';
+                  const isVacation = event.eventType === 'VACATION';
+
+                  let badge = <span className="rounded bg-panel-alt px-1.5 py-0.5 text-[9px] font-bold text-ink3">일반</span>;
+                  if (isCompany) {
+                    badge = <span className="rounded bg-teal-500/15 border border-teal-500/30 px-1.5 py-0.5 text-[9px] font-bold text-teal">🎉 사내행사</span>;
+                  } else if (isMeeting) {
+                    badge = <span className="rounded bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 text-[9px] font-bold text-purple-600 dark:text-purple-400">👥 회의</span>;
+                  } else if (isOutside) {
+                    badge = <span className="rounded bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 text-[9px] font-bold text-blue">🔵 외근</span>;
+                  } else if (isVacation) {
+                    badge = <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">🏖️ 휴가</span>;
+                  }
+
+                  const body = (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {badge}
+                          <span className={`truncate text-[11.5px] font-bold ${masked ? 'text-ink3' : 'text-ink'}`}>
+                            {event.title}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-teal">
+                          {scheduleTime(event)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] text-ink3">
+                        {owner && <span>{isTeam ? owner : `공유 · ${owner}`}</span>}
+                        {event.attendeeUserIds && event.attendeeUserIds.length > 0 && (
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">
+                            참여자 {event.attendeeUserIds.length}명
+                          </span>
+                        )}
+                      </div>
+
+                      {event.memo && (
+                        <p className="line-clamp-1 text-[10px] text-ink3/80">
+                          {event.memo}
+                        </p>
+                      )}
+                    </div>
+                  );
+
+                  if (masked) {
+                    return (
+                      <div key={event.id} className="rounded-lg border border-dashed border-border/70 p-2.5 bg-panel-alt/20">
+                        {body}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      key={event.id}
+                      onClick={() => openEventModal({ date: event.date, event })}
+                      className="block w-full rounded-lg border border-border/70 p-2 text-left hover:border-teal/50 hover:bg-teal-soft/15 transition-all shadow-2xs group"
+                    >
+                      {body}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 섹션 2: 내 오늘의 업무계획 (To-Do) */}
+          <div className="rounded-xl border border-teal/30 bg-teal-soft/10 p-3.5 shadow-sm">
+            <div className="mb-2.5 flex items-center justify-between border-b border-teal/20 pb-2">
+              <div className="flex items-center gap-1.5">
+                <ListTodo size={14} className="text-teal" />
+                <span className="text-[12.5px] font-extrabold text-ink">내 업무계획 (To-Do)</span>
+              </div>
+              <Link
+                to={`/gw/work-plan?date=${selectedDate}`}
+                className="flex items-center gap-0.5 text-[10.5px] font-bold text-teal hover:underline"
+                title="업무계획 화면으로 이동"
+              >
+                <span>업무계획</span>
+                <ExternalLink size={10} />
+              </Link>
             </div>
+
+            {/* To-Do 진행률 게이지 */}
+            {selectedDayProgress && (
+              <div className="mb-2.5 flex items-center justify-between text-[10.5px]">
+                <span className="text-ink3 font-medium">
+                  진행률: {selectedDayProgress.completed}/{selectedDayProgress.total}건
+                </span>
+                <span className="font-bold text-teal">{selectedDayProgress.percent}%</span>
+              </div>
+            )}
+
+            {/* 빠른 To-Do 추가 인풋 */}
+            <div className="mb-2.5 flex items-center gap-1 rounded-lg border border-teal/30 bg-white dark:bg-panel p-1 shadow-2xs">
+              <select
+                value={quickTodoTag}
+                onChange={(e) => setQuickTodoTag(e.target.value)}
+                className="h-6 rounded border border-border bg-panel-alt/50 px-1 text-[10px] font-bold text-ink outline-none"
+              >
+                <option value="">태그</option>
+                {tags.map((t) => (
+                  <option key={t.tag} value={t.tag}>
+                    {t.tag}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={quickTodoText}
+                onChange={(e) => setQuickTodoText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleAddQuickTodo();
+                }}
+                placeholder="To-Do 등록 (Enter)"
+                className="h-6 flex-1 min-w-0 bg-transparent px-1.5 text-[11px] text-ink outline-none placeholder:text-ink3"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddQuickTodo()}
+                disabled={!quickTodoText.trim()}
+                className="h-6 rounded bg-teal px-2 text-[10.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+              >
+                +
+              </button>
+            </div>
+
+            {/* To-Do 체크리스트 항목들 */}
+            {selectedDayTodos.length === 0 ? (
+              <div className="py-4 text-center text-[11px] text-ink3 font-medium">
+                작성된 업무계획이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[220px] overflow-y-auto pr-0.5">
+                {selectedDayTodos.map((item, idx) => {
+                  if (!item.text && !item.tag && !item.isChecklist) return null;
+                  const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
+
+                  return (
+                    <div
+                      key={idx}
+                      className="group flex items-start gap-1.5 rounded-md p-1 hover:bg-white/60 dark:hover:bg-panel-alt/60 transition-colors"
+                    >
+                      {item.isChecklist ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleTodo(idx)}
+                          className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors ${
+                            item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel hover:border-teal'
+                          }`}
+                          title={item.completed ? '완료 취소' : '완료 체크'}
+                        >
+                          {item.completed && <CheckCircle2 size={11} />}
+                        </button>
+                      ) : (
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink3" />
+                      )}
+
+                      <div className="min-w-0 flex-1 leading-snug">
+                        {tagMeta && (
+                          <span className={`mr-1 inline-block rounded px-1 py-0.2 text-[9px] font-bold ${tagMeta.badgeClass}`}>
+                            {tagMeta.tag}
+                          </span>
+                        )}
+                        <span
+                          className={`text-[11px] break-words cursor-pointer ${
+                            item.completed ? 'line-through text-ink3' : 'font-medium text-ink'
+                          }`}
+                          onClick={() => void handleToggleTodo(idx)}
+                        >
+                          {item.text}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* ── 우측 영역: 월간 컴팩트 달력 ── */}
+        <div className="flex-1 min-w-0 w-full space-y-3">
+          {/* 상단 월 네비게이션 & 필터 툴바 */}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel p-3 shadow-sm">
+            <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">‹</button>
+            <Button size="sm" onClick={() => { setMonth(today.slice(0, 7)); setSelectedDate(today); }}>오늘</Button>
+            <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">›</button>
+            <h2 className="ml-1 text-[15px] font-extrabold text-ink">{monthLabel(month)}{isTeam ? ' · 팀 일정' : ''}</h2>
+
+            {/* 내 일정 탭일 때: 관련 일정 필터 칩 */}
+            {!isTeam && (
+              <div className="ml-2 flex flex-wrap items-center gap-1 border-l border-border pl-2">
+                {([
+                  ['all', '전체 관련 일정', ''],
+                  ['mine', '내 일정', '📝'],
+                  ['attendee', '참여 회의·일정', '👥'],
+                  ['company', '사내행사', '🎉'],
+                  ['team', '부서·프로젝트', '🏢'],
+                ] as const).map(([key, label, icon]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setScopeFilter(key)}
+                    className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-bold transition-all ${
+                      scopeFilter === key
+                        ? 'bg-teal text-white shadow-2xs'
+                        : 'bg-panel-alt/70 text-ink3 hover:bg-panel-alt hover:text-ink'
+                    }`}
+                  >
+                    {icon && <span>{icon}</span>}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {isTeam && (
+              <>
+                {actorScope === 'ALL' ? (
+                  <select
+                    value={effectiveDeptSel}
+                    onChange={(event) => setTeamDeptSel(event.target.value)}
+                    title="부서 선택"
+                    className="h-7 rounded-lg border border-border bg-panel px-2 text-[10px] font-bold text-ink outline-none"
+                  >
+                    <option value={ALL_DEPTS}>전체 부서</option>
+                    {teamDeptOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                ) : (
+                  <span className="rounded-lg border border-teal/25 bg-teal-soft/25 px-2.5 py-1 text-[10px] font-bold text-teal">
+                    {actor?.dept ?? '소속 부서'}
+                  </span>
+                )}
+                <span className="text-[10px] font-semibold text-ink3">
+                  열람 범위 ·{' '}
+                  {actorScope === 'ALL'
+                    ? (effectiveDeptSel === ALL_DEPTS ? '전 직원' : effectiveDeptSel)
+                    : actorScope === 'TEAM_AND_LEADERS'
+                      ? (effectiveDeptSel === ALL_DEPTS ? `${actor?.dept} 팀원 및 타 부서 팀장` : effectiveDeptSel)
+                      : `${actor?.dept} (팀원 및 팀장)`}
+                </span>
+              </>
+            )}
+            <span className="ml-auto text-[10px] font-semibold text-ink3">
+              날짜를 클릭하면 좌측에서 상세 일정과 To-Do를 확인합니다
+            </span>
+          </div>
+
+          {/* 팀 조회의 로딩·오류는 격자 자리에만 그린다 */}
+          {isTeam && teamQuery.isLoading ? (
+            <div className="grid min-h-[40vh] place-items-center rounded-xl border border-border bg-panel text-[12px] font-semibold text-ink3">팀 일정을 불러오는 중…</div>
+          ) : isTeam && teamQuery.error ? (
+            <div className="grid min-h-[40vh] place-items-center gap-2 rounded-xl border border-border bg-panel px-5 text-center text-[12px] font-semibold text-danger">
+              팀 일정을 불러오지 못했습니다.
+              <Button onClick={() => teamQuery.refetch()}>다시 시도</Button>
+            </div>
+          ) : (
+            <MonthCalendar
+              month={month}
+              today={today}
+              selectedDate={selectedDate}
+              events={visibleEvents}
+              onSelectDate={(date) => setSelectedDate(date)}
+              onAddOn={(date) => openEventModal({ date })}
+              onSelectEvent={(event) => {
+                if (isTeam && isMaskedForSupervisor(actor.id, event)) return;
+                openEventModal({ date: event.date, event });
+              }}
+              ownerNameOf={isTeam ? (event) => teamLabelOf(event) : undefined}
+              isMutedChip={isTeam ? (event) => isMaskedForSupervisor(actor.id, event) : undefined}
+            />
           )}
-        </Modal>
-      )}
+        </div>
+      </div>
+
+
 
       {modalTarget && (
         <CalendarEventModal
@@ -343,6 +735,9 @@ function LocalCalendarScreen() {
           actor={access}
           initialDate={modalTarget.date}
           event={modalTarget.event}
+          initialTitle={modalTarget.initialTitle}
+          initialEventType={modalTarget.initialEventType}
+          initialAttendees={modalTarget.initialAttendees}
           myProjects={myProjects}
           deptName={actor?.dept ?? null}
           ownerName={ownerNameOf(modalTarget.event)}

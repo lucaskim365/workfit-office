@@ -19,6 +19,17 @@ export const CALENDAR_VISIBILITY_LABELS: Record<CalendarVisibility, string> = {
   PROJECT: '프로젝트 공유',
 };
 
+export const CALENDAR_EVENT_TYPES = ['GENERAL', 'MEETING', 'COMPANY_EVENT', 'OUTSIDE', 'VACATION'] as const;
+export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
+
+export const CALENDAR_EVENT_TYPE_LABELS: Record<CalendarEventType, { label: string; icon: string; badgeClass: string }> = {
+  GENERAL: { label: '일반 일정', icon: '📝', badgeClass: 'bg-slate-500/10 text-slate-600 border-slate-500/20' },
+  MEETING: { label: '회의·미팅', icon: '👥', badgeClass: 'bg-purple-500/10 text-purple-600 border-purple-500/20' },
+  COMPANY_EVENT: { label: '사내행사', icon: '🎉', badgeClass: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
+  OUTSIDE: { label: '외근·출장', icon: '🔵', badgeClass: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+  VACATION: { label: '휴가·부재', icon: '🏖️', badgeClass: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
+};
+
 export const calendarEventSchema = z.object({
   id: z.string().regex(/^CAL-\d{8}-\d{4}$/, '일정 ID 형식이 올바르지 않습니다.'),
   ownerUserId: z.string().min(1),
@@ -34,6 +45,10 @@ export const calendarEventSchema = z.object({
     두면 마이그레이션 한 번 빠뜨렸을 때 남의 일정이 통째로 열린다.
   */
   visibility: z.enum(CALENDAR_VISIBILITIES).default('PRIVATE'),
+  /** 일정 성격 (일반, 회의, 사내행사, 외근·출장, 휴가) */
+  eventType: z.enum(CALENDAR_EVENT_TYPES).default('GENERAL'),
+  /** 함께하는 참여자 사원 ID 목록 (회의 참석자 등) */
+  attendeeUserIds: z.array(z.string()).default([]),
   /** `TEAM`일 때 공유 대상 부서. 그 외 범위에서는 판정에 쓰이지 않는다. */
   deptId: z.string().nullable().default(null),
   /** `PROJECT`일 때 공유 대상 프로젝트. 그 외 범위에서는 판정에 쓰이지 않는다. */
@@ -71,4 +86,10 @@ export const calendarEventSchema = z.object({
 
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarVisibility = (typeof CALENDAR_VISIBILITIES)[number];
-export type CalendarEventDraft = Omit<CalendarEvent, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded'>;
+export type CalendarEventDraft = Omit<
+  CalendarEvent,
+  'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded' | 'eventType' | 'attendeeUserIds'
+> & {
+  eventType?: CalendarEventType;
+  attendeeUserIds?: string[];
+};

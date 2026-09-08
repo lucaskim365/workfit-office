@@ -158,3 +158,31 @@ test('팀 조회는 지정 소유자의 일정을 공개 범위와 무관하게 
   await calendarEventRepo.remove(owner, mine.id);
   await calendarEventRepo.remove(owner, shared.id);
 });
+
+test('참여자로 지정된 회의 일정과 사내행사는 대상 사용자에게 정상 표시된다', async () => {
+  // owner가 other를 참여자로 지정한 회의 일정 생성
+  const meeting = await calendarEventRepo.create(owner, draft('설계 검토 회의', {
+    visibility: 'PRIVATE',
+    eventType: 'MEETING',
+    attendeeUserIds: [other.userId],
+  }));
+
+  // other 계정으로 목록 조회 시 meeting이 보여야 함
+  const otherRows = await calendarEventRepo.list(other, { from: '2026-08-01', to: '2026-08-31' });
+  const foundMeeting = otherRows.find((r) => r.id === meeting.id);
+  assert.ok(foundMeeting, '참여자로 지정된 회의가 목록에 보여야 함');
+  assert.equal(foundMeeting?.title, '설계 검토 회의');
+
+  // 사내행사 생성
+  const companyEvent = await calendarEventRepo.create(owner, draft('전사 타운홀 미팅', {
+    visibility: 'COMPANY',
+    eventType: 'COMPANY_EVENT',
+  }));
+
+  // defaultDemoUser(U009)에게도 사내행사가 보여야 함
+  const demoRows = await calendarEventRepo.list(defaultDemoUser, { from: '2026-08-01', to: '2026-08-31' });
+  assert.ok(demoRows.some((r) => r.id === companyEvent.id), '사내행사는 전 직원에게 보여야 함');
+
+  await calendarEventRepo.remove(owner, meeting.id);
+  await calendarEventRepo.remove(owner, companyEvent.id);
+});

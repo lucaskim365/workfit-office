@@ -27,7 +27,14 @@ export interface CalendarAccessContext {
  */
 export function canViewEvent(actor: CalendarAccessContext, event: CalendarEvent): boolean {
   if (!actor.active) return false;
+  // 본인 일정이면 항상 허용
   if (event.ownerUserId === actor.userId) return true;
+
+  // 참여자(attendee)로 등록된 회의/일정이면 항상 허용
+  if (event.attendeeUserIds && event.attendeeUserIds.includes(actor.userId)) return true;
+
+  // 사내행사는 전 직원 공통 일정으로 항상 허용
+  if (event.eventType === 'COMPANY_EVENT') return true;
 
   switch (event.visibility) {
     case 'PRIVATE':
@@ -57,6 +64,14 @@ export function canManageEvent(actor: CalendarAccessContext, event: CalendarEven
 /** 내가 만든 일정인가. 화면이 공유받은 일정과 내 일정을 다르게 그리는 데 쓴다. */
 export const isOwnEvent = (actor: CalendarAccessContext, event: CalendarEvent): boolean =>
   event.ownerUserId === actor.userId;
+
+/** 사용자가 참여자로 초대된 일정인가 */
+export const isAttendeeEvent = (actor: CalendarAccessContext, event: CalendarEvent): boolean =>
+  Boolean(event.attendeeUserIds && event.attendeeUserIds.includes(actor.userId) && event.ownerUserId !== actor.userId);
+
+/** 사내행사 일정인가 */
+export const isCompanyEvent = (event: CalendarEvent): boolean =>
+  event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
 
 /* ------------------------------------------------------------- 관리자 종합 조회 */
 
