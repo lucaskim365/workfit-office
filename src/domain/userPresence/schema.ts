@@ -1,14 +1,15 @@
 import { z } from 'zod';
 
 /**
- * 사용자 근무/활동 실시간 상태 코드 (5종 프리셋)
+ * 사용자 근무/활동 실시간 상태 코드 (6종 프리셋)
  * - ONLINE: 업무중 (온라인)
+ * - OFFLINE: 오프라인 (퇴근 또는 미접속)
  * - OUTSIDE: 외근·출장
  * - MEETING: 회의중
  * - FOCUS: 집중근무 (방해금지)
  * - LEAVE: 휴가 (부재중)
  */
-export const USER_PRESENCE_STATUSES = ['ONLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE'] as const;
+export const USER_PRESENCE_STATUSES = ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE'] as const;
 export type UserPresenceStatus = (typeof USER_PRESENCE_STATUSES)[number];
 
 export interface UserPresenceMeta {
@@ -30,6 +31,15 @@ export const USER_PRESENCE_META: Record<UserPresenceStatus, UserPresenceMeta> = 
     textColor: 'text-emerald-600 dark:text-emerald-400',
     icon: '🟢',
     desc: '기본 근무 중',
+  },
+  OFFLINE: {
+    code: 'OFFLINE',
+    label: '오프라인',
+    dotColor: 'bg-zinc-400',
+    bgTone: 'bg-zinc-400/10 border-zinc-400/30 text-zinc-600 dark:text-zinc-400',
+    textColor: 'text-zinc-500 dark:text-zinc-400',
+    icon: '⚪',
+    desc: '퇴근 또는 미접속',
   },
   OUTSIDE: {
     code: 'OUTSIDE',
