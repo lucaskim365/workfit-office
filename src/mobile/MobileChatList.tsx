@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Bell, LogOut, Search, Pin } from 'lucide-react';
+import { ClipboardCheck, Bell, LogOut, Search, Pin, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -125,6 +125,13 @@ export default function MobileChatList() {
             )}
           </button>
           <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><Bell size={18} strokeWidth={2} /></button>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-guide'))}
+            title="아이폰 설치 & 알림 가이드"
+            className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white/90 hover:text-white"
+          >
+            <HelpCircle size={18} strokeWidth={2} />
+          </button>
           <button onClick={() => void signOutUser()} title="로그아웃" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><LogOut size={18} strokeWidth={2} /></button>
         </div>
       </header>
