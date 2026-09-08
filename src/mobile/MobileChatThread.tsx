@@ -19,6 +19,8 @@ import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachm
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { statusColor } from './MobileApprovalList';
+import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 
 /** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
 export function getAvatarStyle(userId: string): { bg: string; text: string } {
@@ -65,6 +67,7 @@ export default function MobileChatThread() {
   const { data: messages = [] } = useChatThread(roomId);
   const { data: rooms = [] } = useChatRooms(me);
   const { data: users = [] } = useUsers();
+  const presenceMap = useAllUserPresences();
   const room = rooms.find((r) => r.id === roomId);
   const send = useSendMessage(roomId);
   const sendFile = useSendAttachment(roomId);
@@ -369,37 +372,65 @@ export default function MobileChatThread() {
 
   return (
     <div className="flex h-full flex-col relative" style={{ background: '#f2f8fc' }}>
-      <header className="flex shrink-0 items-center gap-1 px-2 py-3 text-white" style={{ background: '#101830' }}>
-        <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="truncate text-[15px] font-bold text-white">{displayName}</div>
-            {room && room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
-              <button
-                onClick={handleRenameRoom}
-                title="방 이름 변경"
-                className="opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer p-0.5"
-              >
-                <Pencil size={12} />
-              </button>
+      {(() => {
+        const isDirect = room?.type === 'direct';
+        const otherId = isDirect ? room.members.find((m) => m !== me) : null;
+        const otherPresence = otherId ? presenceMap[otherId] : null;
+
+        return (
+          <header className="flex shrink-0 items-center gap-1.5 px-2 py-3 text-white" style={{ background: '#101830' }}>
+            <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+            {isDirect && (
+              <div className="relative shrink-0 mr-1">
+                <span
+                  style={{ background: (room?.color || '#101830') + '33', color: '#fff' }}
+                  className="grid h-8 w-8 place-items-center rounded-[10px] text-[13px] font-bold border border-white/20"
+                >
+                  {displayName[0] ?? '?'}
+                </span>
+                <PresenceDot presence={otherPresence} size="sm" />
+              </div>
             )}
-          </div>
-          {room && room.type !== 'direct' && <div className="text-[10px] text-white/60">{room.members.length}명</div>}
-        </div>
-        <button
-          onClick={() => { setShowSearch((v) => !v); if (showSearch) setSearchQuery(''); }}
-          title="대화 검색"
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10 ${showSearch ? 'bg-white/15' : ''}`}
-        >
-          <Search size={16} />
-        </button>
-        {room?.type === 'group' && (
-          <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[19px] leading-none hover:bg-white/10">＋</button>
-        )}
-        {menuActions.length > 0 && (
-          <button onClick={() => setMenuOpen(true)} title="더보기" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[17px] leading-none hover:bg-white/10">⋮</button>
-        )}
-      </header>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="truncate text-[14.5px] font-bold text-white">{displayName}</div>
+                {isDirect && otherPresence && (
+                  <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
+                )}
+                {room && room.type === 'group' && (room.createdBy === me || !room.createdBy) && (
+                  <button
+                    onClick={handleRenameRoom}
+                    title="방 이름 변경"
+                    className="opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer p-0.5"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+              </div>
+              {room && room.type !== 'direct' ? (
+                <div className="text-[10px] text-white/60">{room.members.length}명</div>
+              ) : otherPresence?.message ? (
+                <div className="text-[10px] text-[#4ea8de] truncate font-medium">
+                  {otherPresence.message}
+                </div>
+              ) : null}
+            </div>
+            <button
+              onClick={() => { setShowSearch((v) => !v); if (showSearch) setSearchQuery(''); }}
+              title="대화 검색"
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10 ${showSearch ? 'bg-white/15' : ''}`}
+            >
+              <Search size={16} />
+            </button>
+            {room?.type === 'group' && (
+              <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[19px] leading-none hover:bg-white/10">＋</button>
+            )}
+            {menuActions.length > 0 && (
+              <button onClick={() => setMenuOpen(true)} title="더보기" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[17px] leading-none hover:bg-white/10">⋮</button>
+            )}
+          </header>
+        );
+      })()}
 
       {showSearch && (
         <div className="shrink-0 border-b border-black/10 bg-white px-4 py-2 flex items-center gap-2">
@@ -753,6 +784,7 @@ function ImageBundleBubble({
   onToggleEmoji?: (messageId: string, emoji: string) => void;
 }) {
   const m = bundle[0];
+  const presenceMap = useAllUserPresences();
   const mine = m.senderId === me;
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
@@ -864,9 +896,12 @@ function ImageBundleBubble({
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && (
-          <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] shrink-0 place-items-center self-end rounded-full text-[12px] font-bold">
-            {m.senderName?.[0] ?? '?'}
-          </span>
+          <div className="relative shrink-0 self-end">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
+              {m.senderName?.[0] ?? '?'}
+            </span>
+            <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
+          </div>
         )}
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
@@ -943,6 +978,7 @@ function MessageBubble({
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
+  const presenceMap = useAllUserPresences();
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const isMoving = useRef(false);
@@ -1095,9 +1131,12 @@ function MessageBubble({
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && (
-          <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">
-            {m.senderName?.[0] ?? '?'}
-          </span>
+          <div className="relative shrink-0 self-end">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+              {m.senderName?.[0] ?? '?'}
+            </span>
+            <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
+          </div>
         )}
         <div className="min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}

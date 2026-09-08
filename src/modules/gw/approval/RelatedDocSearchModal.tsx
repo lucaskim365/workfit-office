@@ -41,7 +41,7 @@ export function RelatedDocSearchModal({
   const [dateRange, setDateRange] = useState('전체');
   const [limit, setLimit] = useState<number | 'all'>(10);
 
-  // 💡 모달 레벨 다차원 필터링을 위해 keyword를 비우고 본인이 권한을 가진 전체 문서를 훅에서 로드함
+  // 모달 레벨 다차원 필터링을 위해 keyword를 비우고 본인이 권한을 가진 전체 문서를 훅에서 로드함
   const { data: docs = [], isLoading } = useCompletedDocsForSelection({
     userId,
     userDept,

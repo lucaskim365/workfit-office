@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 export function DraftConfirmDialog({
   title,
@@ -25,7 +26,8 @@ export function DraftConfirmDialog({
     <div className="fixed inset-0 z-[400] grid place-items-center bg-black/40 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
       <div className="w-[385px] rounded-2xl border border-border bg-panel p-5 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-[14px] font-bold text-ink mb-1.5 flex items-center gap-1.5">
-          <span>⚠️</span> {title}
+          <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+          <span>{title}</span>
         </h3>
         <p className="text-[11.5px] leading-relaxed text-ink2 mb-4">
           {description}

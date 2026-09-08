@@ -8,6 +8,8 @@ import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser } from '@/shared/lib/messaging';
 import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
+import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 
 // 데스크톱 QuickDock 과 동일 localStorage 키 — 고정/숨김 상태를 두 화면이 공유.
 const PIN_KEY = 'workfit-pinned-rooms';
@@ -31,6 +33,7 @@ export default function MobileChatList() {
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
+  const presenceMap = useAllUserPresences();
   const { counts: approvalCounts } = useApprovalBoxes(me);
   const pendingApprovals = approvalCounts['대기'] ?? 0;
   const [notice, setNotice] = useState('');
@@ -149,6 +152,10 @@ export default function MobileChatList() {
         {sortedRooms.map((r) => {
           const n = unread[r.id] ?? 0;
           const isPinned = pinnedIds.includes(r.id);
+          const isDirect = r.type === 'direct';
+          const otherId = isDirect ? r.members.find((m) => m !== me) : null;
+          const otherPresence = otherId ? presenceMap[otherId] : null;
+
           return (
             <div
               key={r.id}
@@ -158,22 +165,33 @@ export default function MobileChatList() {
                 onClick={() => nav(`/m/room/${r.id}`)}
                 className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
               >
-                <span
-                  style={{ background: (r.color || '#101830') + '22', color: r.color || '#101830' }}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[15px] font-bold"
-                >
-                  {r.type === 'direct' ? r.displayName[0] : r.type === 'dept' ? '🏢' : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
-                </span>
+                <div className="relative shrink-0">
+                  <span
+                    style={{ background: (r.color || '#101830') + '22', color: r.color || '#101830' }}
+                    className="grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
+                  >
+                    {isDirect ? r.displayName[0] : r.type === 'dept' ? '🏢' : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
+                  </span>
+                  {isDirect && <PresenceDot presence={otherPresence} size="sm" />}
+                </div>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[14px] font-bold text-ink">
-                      {r.displayName}
-                      {isPinned && <Pin size={11} className="ml-1 inline shrink-0" />}
+                    <span className="flex items-center gap-1.5 truncate text-[14px] font-bold text-ink">
+                      <span className="truncate">{r.displayName}</span>
+                      {isPinned && <Pin size={11} className="inline shrink-0" />}
+                      {isDirect && otherPresence && otherPresence.status !== 'OFFLINE' && (
+                        <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
+                      )}
                     </span>
                     <span className="shrink-0 text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] text-ink3">{r.lastMessage?.text ?? '대화를 시작하세요'}</span>
+                    <span className="truncate text-[12px] text-ink3">
+                      {isDirect && otherPresence?.message ? (
+                        <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
+                      ) : null}
+                      {r.lastMessage?.text ?? '대화를 시작하세요'}
+                    </span>
                     {n > 0 && (
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: '#e0483b' }}>{n}</span>
                     )}

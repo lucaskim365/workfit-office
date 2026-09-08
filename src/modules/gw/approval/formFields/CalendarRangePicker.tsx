@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Calendar } from 'lucide-react';
 import { daysBetween } from './utils';
 
 interface CalendarRangePickerProps {
@@ -104,7 +105,7 @@ export function CalendarRangePicker({
             ? `${start} ~ ${end || '종료일 선택'}${daysLabel > 0 ? ` (${daysLabel}일)` : ''}`
             : '기간을 선택하세요'}
         </span>
-        <span className="text-ink3 text-xs">📅</span>
+        <Calendar size={14} className="text-ink3" />
       </button>
 
       {open && (

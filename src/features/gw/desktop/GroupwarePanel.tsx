@@ -64,7 +64,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
     { l: '전자설문', icon: '📋', to: 'survey' },
     { l: '게시판', icon: '📌', to: 'board' },
     { l: '인명관리', icon: '👥', to: 'employee' },
-    { l: '업무관리', icon: '📗', to: 'task' },
+    { l: '프로젝트', icon: '📗', to: 'task' },
     { l: '업무계획', icon: '🗓️', to: 'work-plan' },
     { l: '근태·휴가', icon: '⏱️', to: 'commute' },
     { l: '조직도', icon: '🏢', to: 'orgchart' },

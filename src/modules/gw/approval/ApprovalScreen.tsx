@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { X, Send } from 'lucide-react';
+import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine } from 'lucide-react';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -39,8 +39,9 @@ import type { User } from '@/domain/user/schema';
 
 
 
-import { DOC_TYPE_ICON, fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
+import { fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
 import { DocStatusBadge } from './components/ApprovalBadges';
+import { DocTypeIcon } from './components/DocTypeIcon';
 import { useUsers } from '@/features/user/useUsers';
 
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
@@ -433,7 +434,7 @@ export default function ApprovalScreen() {
   // 일괄 영구 삭제 실행
   const handleBatchPermanentDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (confirm(`⚠️ 경고: 선택한 ${selectedIds.length}건의 문서를 영구 삭제하시겠습니까?\n이 작업은 복구할 수 없습니다.`)) {
+    if (confirm(`[경고] 선택한 ${selectedIds.length}건의 문서를 영구 삭제하시겠습니까?\n이 작업은 복구할 수 없습니다.`)) {
       try {
         await batchPermanentDelete.mutateAsync(selectedIds);
         setSelectedIds([]);
@@ -588,11 +589,11 @@ export default function ApprovalScreen() {
                         ? (badgeCount > 0
                           ? 'bg-rose-500 text-white animate-pulse'
                           : 'bg-ink3/15 text-ink2')
-                      : b === '후열'
-                        ? (unconfirmedPostReadCount > 0
-                          ? 'bg-amber-500 text-white animate-pulse'
-                          : 'bg-ink3/15 text-ink2')
-                        : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+                        : b === '후열'
+                          ? (unconfirmedPostReadCount > 0
+                            ? 'bg-amber-500 text-white animate-pulse'
+                            : 'bg-ink3/15 text-ink2')
+                          : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   return (
                     <button
@@ -619,10 +620,10 @@ export default function ApprovalScreen() {
 
         {/* 우측 영역: 타이틀 바 + (목록 & 상세) */}
         <div className="flex-1 flex flex-col gap-3">
-          {/* 🖥️ 상단 고정 통합 타이틀 바 ( GwHead 잘림 제거 대안 ) */}
+          {/* 상단 고정 통합 타이틀 바 ( GwHead 잘림 제거 대안 ) */}
           <div className="flex items-center justify-between border-b border-border pb-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-[20px]">🖋️</span>
+              <PenLine size={20} className="text-teal" />
               <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
             </div>
 
@@ -794,7 +795,7 @@ export default function ApprovalScreen() {
                         )}
                         <div className="flex flex-col gap-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[13px]">{DOC_TYPE_ICON[d.docType] ?? '📄'}</span>
+                            <DocTypeIcon type={d.docType} size={14} className="text-ink3 shrink-0" />
                             <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
                             {isRecentCompleted && (
                               <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
@@ -1117,7 +1118,7 @@ function DocDetail({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
               <DocStatusBadge doc={doc} me={me} />
-              <span className="text-[16px]">{DOC_TYPE_ICON[doc.docType] ?? '📄'}</span>
+              <DocTypeIcon type={doc.docType} size={17} className="text-ink3 shrink-0" />
               <h2 className="text-[16px] font-bold text-ink truncate">{doc.title}</h2>
             </div>
             <div className="text-[11.5px] text-ink3">
@@ -1137,108 +1138,153 @@ function DocDetail({
 
           {/* 우측: 결재선 플로우차트 (우측 정렬 & 자연스러운 래핑) */}
           <div className="shrink-0 flex items-center justify-end select-none">
-          {(() => {
-            const approvalSteps = doc.steps.filter((s) => s.kind !== '참조').sort((a, b) => a.seq - b.seq);
+            {(() => {
+              const approvalSteps = doc.steps.filter((s) => s.kind !== '참조').sort((a, b) => a.seq - b.seq);
 
-            // 병렬 그룹으로 묶기
-            const flowGroups: any[] = [];
-            approvalSteps.forEach((s) => {
-              if (s.parallelGroup) {
-                const existing = flowGroups.find((g) => g.isParallel && g.id === s.parallelGroup);
-                if (existing) {
-                  existing.steps.push(s);
+              // 병렬 그룹으로 묶기
+              const flowGroups: any[] = [];
+              approvalSteps.forEach((s) => {
+                if (s.parallelGroup) {
+                  const existing = flowGroups.find((g) => g.isParallel && g.id === s.parallelGroup);
+                  if (existing) {
+                    existing.steps.push(s);
+                  } else {
+                    flowGroups.push({
+                      id: s.parallelGroup,
+                      isParallel: true,
+                      steps: [s],
+                    });
+                  }
                 } else {
                   flowGroups.push({
-                    id: s.parallelGroup,
-                    isParallel: true,
+                    id: 'seq-' + s.seq,
+                    isParallel: false,
                     steps: [s],
                   });
                 }
-              } else {
-                flowGroups.push({
-                  id: 'seq-' + s.seq,
-                  isParallel: false,
-                  steps: [s],
-                });
+              });
+
+              const totalCount = 1 + flowGroups.length; // 기안자 + 결재 단계 수
+
+              // 일반 카드 크기 정의
+              let cardWidthClass = 'w-[90px] h-[76px]';
+              let nameFontClass = 'text-[11px]';
+              let subFontClass = 'text-[9px]';
+              let arrowFontClass = 'text-[11px]';
+              let gapClass = 'gap-1.5';
+              let paddingClass = 'p-2';
+
+              if (totalCount >= 6) {
+                cardWidthClass = 'w-[68px] h-[64px]';
+                nameFontClass = 'text-[9.5px]';
+                subFontClass = 'text-[7.5px]';
+                arrowFontClass = 'text-[8.5px]';
+                gapClass = 'gap-1';
+                paddingClass = 'p-1';
+              } else if (totalCount >= 5) {
+                cardWidthClass = 'w-[76px] h-[68px]';
+                nameFontClass = 'text-[10px]';
+                subFontClass = 'text-[8px]';
+                arrowFontClass = 'text-[9px]';
+                gapClass = 'gap-1';
+                paddingClass = 'p-1.5';
+              } else if (totalCount >= 4) {
+                cardWidthClass = 'w-[82px] h-[72px]';
+                nameFontClass = 'text-[10.5px]';
+                subFontClass = 'text-[8.5px]';
+                arrowFontClass = 'text-[10px]';
+                gapClass = 'gap-1';
+                paddingClass = 'p-1.5';
               }
-            });
 
-            const totalCount = 1 + flowGroups.length; // 기안자 + 결재 단계 수
+              // 병렬 카드 전용 크기 정의
+              let parallelCardWidthClass = 'w-[130px] h-[46px]';
+              let parallelPaddingClass = 'px-2 py-1.2';
+              let parallelNameFontClass = 'text-[11px]';
+              let parallelSubFontClass = 'text-[9px]';
 
-            // 일반 카드 크기 정의
-            let cardWidthClass = 'w-[90px] h-[76px]';
-            let nameFontClass = 'text-[11px]';
-            let subFontClass = 'text-[9px]';
-            let arrowFontClass = 'text-[11px]';
-            let gapClass = 'gap-1.5';
-            let paddingClass = 'p-2';
+              if (totalCount >= 6) {
+                parallelCardWidthClass = 'w-[110px] h-[40px]';
+                parallelPaddingClass = 'px-1.5 py-1';
+                parallelNameFontClass = 'text-[9.5px]';
+                parallelSubFontClass = 'text-[7.5px]';
+              } else if (totalCount >= 5) {
+                parallelCardWidthClass = 'w-[118px] h-[42px]';
+                parallelPaddingClass = 'px-2 py-1';
+                parallelNameFontClass = 'text-[10px]';
+                parallelSubFontClass = 'text-[8px]';
+              }
 
-            if (totalCount >= 6) {
-              cardWidthClass = 'w-[68px] h-[64px]';
-              nameFontClass = 'text-[9.5px]';
-              subFontClass = 'text-[7.5px]';
-              arrowFontClass = 'text-[8.5px]';
-              gapClass = 'gap-1';
-              paddingClass = 'p-1';
-            } else if (totalCount >= 5) {
-              cardWidthClass = 'w-[76px] h-[68px]';
-              nameFontClass = 'text-[10px]';
-              subFontClass = 'text-[8px]';
-              arrowFontClass = 'text-[9px]';
-              gapClass = 'gap-1';
-              paddingClass = 'p-1.5';
-            } else if (totalCount >= 4) {
-              cardWidthClass = 'w-[82px] h-[72px]';
-              nameFontClass = 'text-[10.5px]';
-              subFontClass = 'text-[8.5px]';
-              arrowFontClass = 'text-[10px]';
-              gapClass = 'gap-1';
-              paddingClass = 'p-1.5';
-            }
-
-            // 병렬 카드 전용 크기 정의
-            let parallelCardWidthClass = 'w-[130px] h-[46px]';
-            let parallelPaddingClass = 'px-2 py-1.2';
-            let parallelNameFontClass = 'text-[11px]';
-            let parallelSubFontClass = 'text-[9px]';
-
-            if (totalCount >= 6) {
-              parallelCardWidthClass = 'w-[110px] h-[40px]';
-              parallelPaddingClass = 'px-1.5 py-1';
-              parallelNameFontClass = 'text-[9.5px]';
-              parallelSubFontClass = 'text-[7.5px]';
-            } else if (totalCount >= 5) {
-              parallelCardWidthClass = 'w-[118px] h-[42px]';
-              parallelPaddingClass = 'px-2 py-1';
-              parallelNameFontClass = 'text-[10px]';
-              parallelSubFontClass = 'text-[8px]';
-            }
-
-            return (
-              <div className={'flex flex-wrap items-center ' + gapClass}>
-                {/* 기안자 카드 */}
-                <div className={cardWidthClass + ' ' + paddingClass + ' shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 text-center shadow-xs'}>
-                  <div className={subFontClass + ' font-bold text-teal'}>기안</div>
-                  <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                    <span className={nameFontClass + ' font-semibold text-ink truncate w-full'}>
-                      {doc.drafterName || nameOf(doc.drafterId)}
-                    </span>
-                    <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                      {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
-                    </span>
+              return (
+                <div className={'flex flex-wrap items-center ' + gapClass}>
+                  {/* 기안자 카드 */}
+                  <div className={cardWidthClass + ' ' + paddingClass + ' shrink-0 flex flex-col justify-between rounded-xl border border-teal/20 bg-teal-soft/10 text-center shadow-xs'}>
+                    <div className={subFontClass + ' font-bold text-teal'}>기안</div>
+                    <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                      <span className={nameFontClass + ' font-semibold text-ink truncate w-full'}>
+                        {doc.drafterName || nameOf(doc.drafterId)}
+                      </span>
+                      <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
+                        {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
+                      </span>
+                    </div>
+                    <div className={'rounded bg-teal/15 py-0.2 ' + subFontClass + ' font-bold text-teal'}>상신</div>
                   </div>
-                  <div className={'rounded bg-teal/15 py-0.2 ' + subFontClass + ' font-bold text-teal'}>상신</div>
-                </div>
 
-                {/* 결재권자 카드들 */}
-                {flowGroups.map((group) => {
-                  return (
-                    <Fragment key={group.id}>
-                      <span className={'text-ink3 ' + arrowFontClass + ' font-bold shrink-0'} style={{ lineHeight: '1' }}>➔</span>
-                      {group.isParallel ? (
-                        // 병렬 단계: 슬림 가로형 카드
-                        <div className="flex flex-col gap-1 shrink-0">
-                          {group.steps.map((s: typeof approvalSteps[number]) => {
+                  {/* 결재권자 카드들 */}
+                  {flowGroups.map((group) => {
+                    return (
+                      <Fragment key={group.id}>
+                        <span className={'text-ink3 ' + arrowFontClass + ' font-bold shrink-0'} style={{ lineHeight: '1' }}>➔</span>
+                        {group.isParallel ? (
+                          // 병렬 단계: 슬림 가로형 카드
+                          <div className="flex flex-col gap-1 shrink-0">
+                            {group.steps.map((s: typeof approvalSteps[number]) => {
+                              const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
+                              let statusText: string = s.decision;
+                              let statusBg = 'bg-ink3/10 text-ink3';
+                              if (s.decision === '승인') {
+                                statusText = '승인';
+                                statusBg = 'bg-teal-soft text-teal';
+                              } else if (s.decision === '반려') {
+                                statusText = '반려';
+                                statusBg = 'bg-red-500/10 text-red-500';
+                              } else if (s.decision === '보류') {
+                                statusText = s.kind === '합의' ? '협의요청' : '보류';
+                                statusBg = s.kind === '합의' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400 border border-purple-200' : 'bg-amber/10 text-amber';
+                              } else if (isActive) {
+                                statusText = s.kind === '합의' ? '합의대기' : '결재대기';
+                                statusBg = s.kind === '합의' ? 'bg-purple-600 text-white animate-pulse' : 'bg-amber text-white animate-pulse';
+                              }
+
+                              return (
+                                <div key={s.seq} className={parallelCardWidthClass + ' ' + parallelPaddingClass + ' flex items-center justify-between rounded-xl border shadow-xs transition-all gap-1.5 ' + (isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel')}>
+                                  <div className="flex flex-col items-start min-w-0 flex-1">
+                                    <span className={parallelNameFontClass + ' font-bold text-ink truncate w-full'}>
+                                      {s.approverName || nameOf(s.approverId)}
+                                    </span>
+                                    <span className={parallelSubFontClass + ' text-ink3 truncate w-full'}>
+                                      {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                                      {s.delegatedFromId && <span className="ml-1 text-[7.5px] text-amber font-bold">(대결)</span>}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-end shrink-0 gap-0.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[8px] text-ink3 font-medium">Seq{s.seq}</span>
+                                      <span className={(KIND_TONE[s.kind] || 'text-ink2') + ' ' + parallelSubFontClass + ' font-bold'}>{s.kind}</span>
+                                    </div>
+                                    <div className={'rounded px-1 py-0.2 ' + parallelSubFontClass + ' font-bold ' + statusBg}>
+                                      {statusText}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          // 단일 순차 단계: 기존 세로 3단 카드 유지
+                          (() => {
+                            const s = group.steps[0];
                             const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
                             let statusText: string = s.decision;
                             let statusBg = 'bg-ink3/10 text-ink3';
@@ -1257,81 +1303,36 @@ function DocDetail({
                             }
 
                             return (
-                              <div key={s.seq} className={parallelCardWidthClass + ' ' + parallelPaddingClass + ' flex items-center justify-between rounded-xl border shadow-xs transition-all gap-1.5 ' + (isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel')}>
-                                <div className="flex flex-col items-start min-w-0 flex-1">
-                                  <span className={parallelNameFontClass + ' font-bold text-ink truncate w-full'}>
+                              <div className={cardWidthClass + ' ' + paddingClass + ' shrink-0 flex flex-col justify-between rounded-xl border text-center shadow-xs transition-all ' + (isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel')}>
+                                <div className={'flex items-center justify-between ' + subFontClass + ' font-bold'}>
+                                  <span className="text-ink3">Seq{s.seq}</span>
+                                  <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
+                                </div>
+                                <div className="flex flex-col items-center justify-center flex-1 min-w-0">
+                                  <span className={nameFontClass + ' font-semibold text-ink truncate w-full'}>
                                     {s.approverName || nameOf(s.approverId)}
                                   </span>
-                                  <span className={parallelSubFontClass + ' text-ink3 truncate w-full'}>
+                                  <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
                                     {s.approverPos || org.userById(s.approverId)?.position || '—'}
-                                    {s.delegatedFromId && <span className="ml-1 text-[7.5px] text-amber font-bold">(대결)</span>}
                                   </span>
+                                  {s.delegatedFromId && <span className="text-[7.5px] text-amber truncate w-full">대결</span>}
                                 </div>
-                                <div className="flex flex-col items-end shrink-0 gap-0.5">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[8px] text-ink3 font-medium">Seq{s.seq}</span>
-                                    <span className={(KIND_TONE[s.kind] || 'text-ink2') + ' ' + parallelSubFontClass + ' font-bold'}>{s.kind}</span>
-                                  </div>
-                                  <div className={'rounded px-1 py-0.2 ' + parallelSubFontClass + ' font-bold ' + statusBg}>
-                                    {statusText}
-                                  </div>
+                                <div className={'rounded py-0.2 ' + subFontClass + ' font-bold ' + statusBg}>
+                                  {statusText}
                                 </div>
                               </div>
                             );
-                          })}
-                        </div>
-                      ) : (
-                        // 단일 순차 단계: 기존 세로 3단 카드 유지
-                        (() => {
-                          const s = group.steps[0];
-                          const isActive = activeIds.includes(s.approverId) && (s.decision === '대기' || s.decision === '보류') && s.kind !== '참조';
-                          let statusText: string = s.decision;
-                          let statusBg = 'bg-ink3/10 text-ink3';
-                          if (s.decision === '승인') {
-                            statusText = '승인';
-                            statusBg = 'bg-teal-soft text-teal';
-                          } else if (s.decision === '반려') {
-                            statusText = '반려';
-                            statusBg = 'bg-red-500/10 text-red-500';
-                          } else if (s.decision === '보류') {
-                            statusText = s.kind === '합의' ? '협의요청' : '보류';
-                            statusBg = s.kind === '합의' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400 border border-purple-200' : 'bg-amber/10 text-amber';
-                          } else if (isActive) {
-                            statusText = s.kind === '합의' ? '합의대기' : '결재대기';
-                            statusBg = s.kind === '합의' ? 'bg-purple-600 text-white animate-pulse' : 'bg-amber text-white animate-pulse';
-                          }
-
-                          return (
-                            <div className={cardWidthClass + ' ' + paddingClass + ' shrink-0 flex flex-col justify-between rounded-xl border text-center shadow-xs transition-all ' + (isActive ? 'border-teal bg-teal-soft/30 ring-2 ring-teal/30 scale-102' : 'border-border bg-panel')}>
-                              <div className={'flex items-center justify-between ' + subFontClass + ' font-bold'}>
-                                <span className="text-ink3">Seq{s.seq}</span>
-                                <span className={KIND_TONE[s.kind] || 'text-ink2'}>{s.kind}</span>
-                              </div>
-                              <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                                <span className={nameFontClass + ' font-semibold text-ink truncate w-full'}>
-                                  {s.approverName || nameOf(s.approverId)}
-                                </span>
-                                <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                                  {s.approverPos || org.userById(s.approverId)?.position || '—'}
-                                </span>
-                                {s.delegatedFromId && <span className="text-[7.5px] text-amber truncate w-full">대결</span>}
-                              </div>
-                              <div className={'rounded py-0.2 ' + subFontClass + ' font-bold ' + statusBg}>
-                                {statusText}
-                              </div>
-                            </div>
-                          );
-                        })()
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                          })()
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
         </div>
       </div>
-    </div>
 
       {/* 헤더 아래 본문 영역 */}
       <div className="px-4 sm:px-5 py-4 min-w-0 flex-1">
@@ -1341,50 +1342,54 @@ function DocDetail({
           if (effectiveRecipients.length === 0 && !doc.steps.some((s) => s.kind === '참조')) return null;
           return (
             <div className="mb-2.5 flex items-center gap-2 text-[11px] leading-none">
-              <span className="text-ink3 font-semibold shrink-0 select-none">└─ 📨 공유처:</span>
+              <span className="text-ink3 font-semibold shrink-0 select-none flex items-center gap-1">
+                <span>└─</span>
+                <Share2 size={11} className="text-teal shrink-0" />
+                <span>공유처:</span>
+              </span>
               <div className="flex flex-wrap items-center gap-1.5">
                 {effectiveRecipients.map((r) => {
-                let detailInfo = '';
-                let isRetired = false;
-                if (r.type === 'user') {
-                  const u = org.userById(r.id) || users.find((x) => x.id === r.id);
-                  if (u) {
-                    detailInfo = ` (${u.dept} ${u.position})`;
-                    isRetired = u.status === '미사용';
+                  let detailInfo = '';
+                  let isRetired = false;
+                  if (r.type === 'user') {
+                    const u = org.userById(r.id) || users.find((x) => x.id === r.id);
+                    if (u) {
+                      detailInfo = ` (${u.dept} ${u.position})`;
+                      isRetired = u.status === '미사용';
+                    }
+                  } else if (r.type === 'dept') {
+                    detailInfo = ' (부서)';
                   }
-                } else if (r.type === 'dept') {
-                  detailInfo = ' (부서)';
-                }
-                const label = r.type === 'drafter' ? '[기안자]' : '[수신]';
-                const displayName = isRetired ? `${r.name.replace('(퇴사)', '')}(퇴사)` : r.name;
-                return (
-                  <span key={r.id} className="inline-flex items-center gap-1 text-teal font-medium">
-                    <span className="text-[9.5px] opacity-75 font-bold">{label}</span>
-                    <span>{r.type === 'dept' ? '📁' : '👤'}</span>
-                    <span>{displayName}{detailInfo}</span>
-                  </span>
-                );
-              })}
-              {doc.steps.filter((s) => s.kind === '참조').map((s) => {
-                const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
-                const isRetired = u?.status === '미사용';
-                const displayName = isRetired ? `${u?.name || s.approverName || s.approverId}(퇴사)` : (s.approverName || nameOf(s.approverId));
+                  const label = r.type === 'drafter' ? '[기안자]' : '[수신]';
+                  const displayName = isRetired ? `${r.name.replace('(퇴사)', '')}(퇴사)` : r.name;
+                  return (
+                    <span key={r.id} className="inline-flex items-center gap-1 text-teal font-medium">
+                      <span className="text-[9.5px] opacity-75 font-bold">{label}</span>
+                      <span className="shrink-0">{r.type === 'dept' ? <Folder size={11} className="text-amber-500 inline" /> : <UserIcon size={11} className="text-teal inline" />}</span>
+                      <span>{displayName}{detailInfo}</span>
+                    </span>
+                  );
+                })}
+                {doc.steps.filter((s) => s.kind === '참조').map((s) => {
+                  const u = org.userById(s.approverId) || users.find((x) => x.id === s.approverId);
+                  const isRetired = u?.status === '미사용';
+                  const displayName = isRetired ? `${u?.name || s.approverName || s.approverId}(퇴사)` : (s.approverName || nameOf(s.approverId));
 
-                const pos = s.approverPos || u?.position || '';
-                const dept = s.approverDept || u?.dept || '';
-                const posDept = dept || pos ? ` (${dept} ${pos})` : '';
-                return (
-                  <span key={s.approverId} className="inline-flex items-center gap-1 text-teal font-medium">
-                    <span className="text-[9.5px] opacity-75 font-bold">[참조]</span>
-                    <span>{displayName}{posDept}</span>
-                  </span>
-                );
-              })}
+                  const pos = s.approverPos || u?.position || '';
+                  const dept = s.approverDept || u?.dept || '';
+                  const posDept = dept || pos ? ` (${dept} ${pos})` : '';
+                  return (
+                    <span key={s.approverId} className="inline-flex items-center gap-1 text-teal font-medium">
+                      <span className="text-[9.5px] opacity-75 font-bold">[참조]</span>
+                      <span>{displayName}{posDept}</span>
+                    </span>
+                  );
+                })}
 
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
         {/* 결재 진행 및 결재자 심사의견 / 코멘트 이력 카드 (기안자 및 모든 열람자 확인 가능, 인쇄 시에는 문서에 미표시) */}
         {(() => {
           const stepsWithComments = doc.steps.filter((s) => s.comment && s.comment.trim() && s.decision !== '대기');
@@ -1393,7 +1398,7 @@ function DocDetail({
             <div className="mb-4 rounded-xl border border-teal/30 bg-teal/5 p-3.5 text-[12px] text-ink animate-fade-in print:hidden">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 font-bold text-teal">
-                  <span>💬</span>
+                  <MessageSquare size={14} className="shrink-0" />
                   <span>결재자 심사의견 / 코멘트 ({stepsWithComments.length}건)</span>
                 </div>
                 <span className="text-[10.5px] text-ink3 font-medium">결재자가 남긴 처리 의견입니다</span>
@@ -1408,18 +1413,16 @@ function DocDetail({
                   return (
                     <div
                       key={idx}
-                      className={`rounded-lg p-2.5 border ${
-                        isReject
+                      className={`rounded-lg p-2.5 border ${isReject
                           ? 'border-danger/30 bg-danger/5'
                           : 'border-border/60 bg-white dark:bg-zinc-800 shadow-2xs'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
                         <div className="flex items-center gap-1.5 font-bold">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
-                              isReject ? 'bg-danger text-white' : 'bg-teal/15 text-teal'
-                            }`}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${isReject ? 'bg-danger text-white' : 'bg-teal/15 text-teal'
+                              }`}
                           >
                             {s.decision || s.kind}
                           </span>
@@ -1444,7 +1447,7 @@ function DocDetail({
           <div className="mb-4 rounded-xl border border-teal/40 bg-teal-soft/20 p-3.5 text-[12px] text-ink animate-fade-in print:hidden">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5 font-bold text-teal">
-                <span>📨</span>
+                <Send size={13} className="shrink-0" />
                 <span>후열(공람) 전달 이력 ({docShares.length}건)</span>
               </div>
               <span className="text-[10.5px] text-ink3 font-medium">기결재 완료 후 추가로 전달된 수신자 목록입니다</span>
@@ -1487,9 +1490,10 @@ function DocDetail({
             <button
               onClick={() => window.print()}
               title="결재 문서 인쇄"
-              className="rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-all print:hidden"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-all print:hidden"
             >
-              🖨 인쇄
+              <Printer size={13} />
+              <span>인쇄</span>
             </button>
           </div>
           <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
@@ -1553,7 +1557,7 @@ function DocDetail({
         {postReadStep && (
           postReadStep.postReadAt ? (
             <span className="rounded-lg bg-teal/15 px-3 py-1.5 text-[12px] font-bold text-teal border border-teal/30 flex items-center gap-1.5">
-              <span>✓</span>
+              <Check size={13} strokeWidth={2.5} />
               <span>후열 확인 완료 ({fmtDateTime(postReadStep.postReadAt)})</span>
             </span>
           ) : (
@@ -1562,7 +1566,7 @@ function DocDetail({
               disabled={busy}
               className="rounded-lg bg-amber-500 text-white px-4 py-2 text-[12.5px] font-bold shadow-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
             >
-              <span>👁️</span>
+              <Eye size={14} />
               <span>후열 확인</span>
             </button>
           )
@@ -1574,7 +1578,7 @@ function DocDetail({
             className="rounded-lg bg-teal-soft text-teal border border-teal/40 px-3.5 py-2 text-[12.5px] font-bold hover:bg-teal hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
             title="시스템관리자(operator) 전용: 기결재 문서 후열(공람) 전달"
           >
-            <span>📨</span>
+            <Send size={14} />
             <span>후열 전달 (공람)</span>
           </button>
         )}

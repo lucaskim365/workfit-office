@@ -12,6 +12,7 @@ import {
   APPWRITE_DATABASE_ID,
   isAppwriteConfigured,
   safeDocId,
+  Query,
 } from '@/shared/lib/appwrite';
 
 const COLLECTION_ID = 'user_presences';
@@ -70,8 +71,10 @@ export function useAllUserPresences(): Record<string, UserPresence> {
       }
 
       try {
-        // 1. Appwrite에서 기존 사용자 근무 상태 전체 목록 조회
-        const res = await appwriteDatabases.listDocuments(APPWRITE_DATABASE_ID, COLLECTION_ID);
+        // 1. Appwrite에서 기존 사용자 근무 상태 전체 목록 조회 (전사 인원 상한 500명)
+        const res = await appwriteDatabases.listDocuments(APPWRITE_DATABASE_ID, COLLECTION_ID, [
+          Query.limit(500),
+        ]);
         const remoteMap: Record<string, UserPresence> = {};
         res.documents.forEach((doc) => {
           const p = parsePresenceDoc(doc as Record<string, unknown>);
@@ -200,32 +203,14 @@ export function useMyPresence() {
     [userId],
   );
 
-  // 접속 시 자동 온라인 전환 & 탭 종료 시 오프라인 마킹
+  // 최초 1회: DB/로컬에 상태 기록이 전혀 없는 신규 사용자일 때만 기본 'ONLINE' 행 생성
   useEffect(() => {
-    if (!user || user.status !== '사용') return;
+    if (!user || user.status !== '사용' || userId === 'guest') return;
 
-    // 첫 진입 시 이전 상태가 없거나 OFFLINE 상태였으면 자동으로 ONLINE 전환
-    const current = readLocalPresenceMap()[userId];
-    if (!current || current.status === 'OFFLINE') {
-      void updatePresence('ONLINE');
+    const currentMap = readLocalPresenceMap();
+    if (!currentMap[userId]) {
+      void updatePresence('ONLINE', '');
     }
-
-    const handleBeforeUnload = () => {
-      const map = readLocalPresenceMap();
-      if (map[userId]) {
-        map[userId] = {
-          ...map[userId],
-          status: 'OFFLINE',
-          updatedAt: new Date().toISOString(),
-        };
-        writeLocalPresenceMap(map);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
   }, [user, userId, updatePresence]);
 
   const meta = USER_PRESENCE_META[myPresence.status] ?? USER_PRESENCE_META.ONLINE;
@@ -243,8 +228,12 @@ export function useMyPresence() {
 export function useUserPresence(userId?: string | null) {
   const presences = useAllUserPresences();
   if (!userId) return null;
-  const presence = presences[userId];
-  if (!presence) return null;
+  const presence = presences[userId] ?? {
+    userId,
+    status: 'OFFLINE',
+    message: '',
+    updatedAt: '',
+  };
   return {
     presence,
     meta: USER_PRESENCE_META[presence.status] ?? USER_PRESENCE_META.OFFLINE,

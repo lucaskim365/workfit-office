@@ -80,7 +80,7 @@ export function ApprovalStampTable({
 
   return (
     <div className="flex items-start justify-end gap-3.5 shrink-0">
-      {/* 🤝 합의(협조) 테이블: 합의 단계가 있을 때만 좌측에 렌더링 */}
+      {/* 합의(협조) 테이블: 합의 단계가 있을 때만 좌측에 렌더링 */}
       {agreementSteps.length > 0 && (
         <div className="flex shrink-0 border border-[#333] text-center bg-white">
           <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333] bg-[#f8f9fa] select-none">
@@ -109,7 +109,7 @@ export function ApprovalStampTable({
         </div>
       )}
 
-      {/* ⚖️ 결재 테이블: 직속 결재선 우측에 렌더링 */}
+      {/* 결재 테이블: 직속 결재선 우측에 렌더링 */}
       {approvalSteps.length > 0 && (
         <div className="flex shrink-0 border border-[#333] text-center bg-white">
           <div className="flex w-6 items-center justify-center border-r border-[#333] text-[10px] font-bold [writing-mode:vertical-rl] tracking-[0.3em] text-[#333] bg-[#f8f9fa] select-none">

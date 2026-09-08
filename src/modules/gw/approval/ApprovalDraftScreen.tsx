@@ -1143,14 +1143,16 @@ function ApprovalDraftInner({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 해상도 작을 때 우측 결재선 Drawer 호출 버튼 */}
           {!isWideScreen && (
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
             >
-              <span>🔗 결재선</span>
+              <span className="flex items-center gap-1.5">
+                <GitFork size={13} />
+                <span>결재선</span>
+              </span>
               <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                 {steps.length}명
               </span>
@@ -1241,7 +1243,8 @@ function ApprovalDraftInner({
             <div className="rounded-xl border-2 border-rose-500/40 bg-rose-500/5 p-4 space-y-4 shadow-sm">
               <div className="border-b border-rose-500/20 pb-2 flex items-center justify-between">
                 <span className="text-[13px] font-extrabold text-rose-700 flex items-center gap-1.5">
-                  📋 후결 사후 승인 사유 및 소명서 (필수 작성)
+                  <FileText size={14} className="shrink-0" />
+                  <span>후결 사후 승인 사유 및 소명서 (필수 작성)</span>
                 </span>
                 <span className="text-[10.5px] text-rose-600/80 font-medium">
                   ※ 선조치 후 사후 승인을 받기 위한 정당성 소명 양식입니다.
@@ -1343,7 +1346,7 @@ function ApprovalDraftInner({
                     : 'border-border bg-panel'
                     }`}>
                     <span className="text-[11px] font-semibold text-rose-700 flex items-center gap-1 flex-1">
-                      <span>🚨</span>
+                      <AlertTriangle size={13} className="shrink-0" />
                       <span>{isPostApproval ? '후결 요청 중' : '해당 없음'}</span>
                     </span>
                     <button
@@ -1537,7 +1540,10 @@ function ApprovalDraftInner({
                 <ul className="mt-2 space-y-1">
                   {relatedDocs.map((doc, i) => (
                     <li key={doc.docId} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md">
-                      <span className="truncate">📄 [{doc.docNo}] {doc.title}</span>
+                      <span className="truncate flex items-center gap-1.5">
+                        <FileText size={12} className="shrink-0 text-ink3" />
+                        <span>[{doc.docNo}] {doc.title}</span>
+                      </span>
                       <button
                         type="button"
                         onClick={() => setRelatedDocs((prev) => prev.filter((_, idx) => idx !== i))}

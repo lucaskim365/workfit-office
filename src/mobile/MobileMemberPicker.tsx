@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
+import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 
 /**
  * 조직도 트리 다중 선택 — 새 대화 만들기·멤버 초대 공용(모바일).
@@ -21,6 +23,7 @@ function OrgTreeNode({
   toggleExpand: (id: string) => void;
 }) {
   const { rankOf } = useOrgTree();
+  const presenceMap = useAllUserPresences();
   const show = isExpanded(node.dept.id);
   const deptUsers = useMemo(() => {
     const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id));
@@ -45,18 +48,32 @@ function OrgTreeNode({
         <div className="my-0.5 ml-3.5 flex flex-col gap-0.5 border-l border-border/50 pl-3.5">
           {deptUsers.map((u) => {
             const on = selected.includes(u.id);
+            const p = presenceMap[u.id];
             return (
               <button
                 key={u.id}
                 onClick={() => onToggle(u.id)}
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left active:bg-panel-alt"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">
-                  {u.name[0]}
-                </span>
+                <div className="relative shrink-0">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">
+                    {u.name[0]}
+                  </span>
+                  <PresenceDot presence={p} size="sm" />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-[13px] font-medium text-ink">{u.name}</span>
-                  <span className="ml-1.5 text-[11px] text-ink3">{u.position}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-medium text-ink">{u.name}</span>
+                    <span className="text-[11px] text-ink3">{u.position}</span>
+                    {p && p.status !== 'OFFLINE' && (
+                      <PresenceBadge presence={p} showMessage={false} size="xs" />
+                    )}
+                  </div>
+                  {p?.message && (
+                    <div className="text-[10px] text-ink3 truncate font-normal mt-0.5">
+                      {p.message}
+                    </div>
+                  )}
                 </div>
                 <span className={`grid h-[19px] w-[19px] shrink-0 place-items-center rounded-full border text-[10px] font-bold ${on ? 'border-amber bg-amber text-white' : 'border-border-hi text-transparent'}`}>✓</span>
               </button>

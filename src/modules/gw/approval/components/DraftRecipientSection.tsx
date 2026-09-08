@@ -120,7 +120,7 @@ export function SelectorDialog({
           className="flex items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
         >
           <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-ink select-none flex-1 py-1">
-            <span className="text-[10px] text-ink3 w-3 text-center">📂</span>
+            <Folder size={12} className="text-amber-500 shrink-0" />
             <span>{d.name}</span>
           </div>
           <input
@@ -140,9 +140,10 @@ export function SelectorDialog({
                 style={{ paddingLeft: `${(depth + 1) * 14 + 12}px` }}
                 className="flex items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
               >
-                <div className="flex-1 py-1 text-left text-[11.5px] font-medium text-ink2 truncate">
-                  <span>👤 {u.name}</span>
-                  <span className="ml-1.5 text-ink3 text-[10px]">{u.position}</span>
+                <div className="flex-1 py-1 text-left text-[11.5px] font-medium text-ink2 truncate flex items-center gap-1.5">
+                  <User size={12} className="text-teal shrink-0" />
+                  <span>{u.name}</span>
+                  <span className="ml-1 text-ink3 text-[10px]">{u.position}</span>
                 </div>
                 <input
                   type="checkbox"
@@ -202,7 +203,7 @@ export function SelectorDialog({
                     isDeptChecked(d) ? 'bg-teal-soft text-teal font-bold' : 'hover:bg-panel-alt text-ink'
                   }`}
                 >
-                  <span>📁</span>
+                  <Folder size={13} className="text-amber-500 shrink-0" />
                   <span className="flex-1 truncate">{d.name}</span>
                   <input
                     type="checkbox"
@@ -225,7 +226,7 @@ export function SelectorDialog({
                         isUserChecked(u, d) ? 'bg-teal-soft text-teal font-bold' : 'hover:bg-panel-alt text-ink'
                       }`}
                     >
-                      <span>👤</span>
+                      <User size={13} className="text-teal shrink-0" />
                       <span className="flex-1 truncate">
                         <span className="font-semibold">{u.name}</span>
                         <span className="ml-1.5 text-ink3 text-[10.5px]">{u.position} · {u.dept}</span>

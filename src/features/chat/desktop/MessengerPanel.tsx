@@ -8,6 +8,8 @@ import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeav
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
+import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
@@ -94,6 +96,7 @@ export function MessengerPanel() {
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unreadMap = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
+  const presenceMap = useAllUserPresences();
   const [q, setQ] = useState('');
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
 
@@ -204,25 +207,41 @@ export function MessengerPanel() {
             const display = getRoomDisplayName(r, me, users);
             // 내 미읽음 수
             const n = unreadMap[r.id] ?? 0;
+            const isDirect = r.type === 'direct';
+            const otherId = isDirect ? r.members.find((m) => m !== me) : null;
+            const otherPresence = otherId ? presenceMap[otherId] : null;
             return (
               <div
                 key={r.id}
                 onClick={() => setOpenRoomId(r.id)}
                 className="group relative flex items-center gap-3 border-b border-border px-4 py-3 hover:bg-panel-alt cursor-pointer"
               >
-                <span
-                  style={{ background: r.color + '22', color: r.color }}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[15px] font-bold"
-                >
-                  {r.type === 'direct' ? display[0] : '👥'}
-                </span>
+                <div className="relative shrink-0">
+                  <span
+                    style={{ background: r.color + '22', color: r.color }}
+                    className="grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
+                  >
+                    {isDirect ? display[0] : '👥'}
+                  </span>
+                  {isDirect && <PresenceDot presence={otherPresence} size="sm" />}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1">
-                    <span className="truncate text-[12.5px] font-bold text-ink">{display}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate text-[12.5px] font-bold text-ink">{display}</span>
+                      {isDirect && otherPresence && otherPresence.status !== 'OFFLINE' && (
+                        <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
+                      )}
+                    </div>
                     <span className="shrink-0 text-[10px] text-ink3">{fmtTime(r.lastMessage?.at)}</span>
                   </div>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <span className="truncate text-[11.5px] text-ink3">{r.lastMessage ? msgPreview(r.lastMessage as any) : '대화 내용이 없습니다.'}</span>
+                    <span className="truncate text-[11.5px] text-ink3">
+                      {isDirect && otherPresence?.message ? (
+                        <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
+                      ) : null}
+                      {r.lastMessage ? msgPreview(r.lastMessage as any) : '대화 내용이 없습니다.'}
+                    </span>
                     {n > 0 && (
                       <span className="grid h-[16px] min-w-[16px] shrink-0 place-items-center rounded-full bg-[#ff4d4f] px-1.5 text-[8.5px] font-extrabold text-white shadow-[0_2px_6px_rgba(255,77,79,0.3)] select-none">
                         {n}
@@ -266,6 +285,7 @@ function MessengerThread({
   onBack: () => void;
 }) {
   const displayName = getRoomDisplayName(room, me, users);
+  const presenceMap = useAllUserPresences();
   const { data: messages = [] } = useChatThread(room.id);
   const { data: rooms = [] } = useChatRooms(me);
   const send = useSendMessage(room.id);
@@ -628,77 +648,95 @@ function MessengerThread({
         </div>
       )}
 
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
-        <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
-          {room.type === 'direct' ? displayName[0] : '👥'}
-        </span>
-        <div className="min-w-0 flex-1 ml-0.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="truncate text-[12.5px] font-bold text-ink">{displayName}</span>
-            {room.type === 'group' && room.createdBy === me && (
-              <button
-                onClick={handleRenameRoom}
-                title="대화방 이름 변경"
-                className="opacity-60 hover:opacity-100 hover:text-teal transition-all shrink-0 cursor-pointer p-0.5"
-              >
-                <Pencil size={11} />
-              </button>
-            )}
-          </div>
-          {room.type !== 'direct' && (
-            <button
-              onClick={() => setShowMemberList((prev) => !prev)}
-              className="text-[10px] text-ink3 hover:text-teal font-semibold hover:underline transition-colors flex items-center gap-0.5"
-            >
-              {room.members.length}명 {showMemberList ? '▲' : '▼'}
-            </button>
-          )}
-        </div>
-        <button
-          onClick={() => {
-            setShowSearch((prev) => !prev);
-            if (showSearch) setSearchQuery('');
-          }}
-          title="대화 검색"
-          className={`grid h-7 w-7 place-items-center rounded-lg text-[15px] hover:bg-panel-alt ${showSearch ? 'text-amber bg-panel-alt' : 'text-ink2'}`}
-        >
-          🔍
-        </button>
-        <button
-          onClick={() => {
-            setShowFileBox((prev) => !prev);
-          }}
-          title="파일함 모아보기"
-          className={`grid h-7 w-7 place-items-center rounded-lg text-[14px] hover:bg-panel-alt ${showFileBox ? 'text-amber bg-panel-alt' : 'text-ink2'}`}
-        >
-          📁
-        </button>
-        {room.type === 'group' && (
-          <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
-        )}
-        {(canLeave || canDelete || room.type === 'direct') && (
-          <div className="relative shrink-0">
-            <button onClick={() => setMenuOpen((v) => !v)} title="더보기" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] leading-none text-ink2 hover:bg-panel-alt">⋮</button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-8 z-20 w-32 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg">
-                  {canLeave && (
-                    <button onClick={() => { setMenuOpen(false); onLeave(); }} className="block w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt">방 나가기</button>
-                  )}
-                  {canDelete && (
-                    <button onClick={() => { setMenuOpen(false); onDelete(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">방 삭제</button>
-                  )}
-                  {room.type === 'direct' && (
-                    <button onClick={() => { setMenuOpen(false); onDeleteDirect(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">채팅방 삭제</button>
-                  )}
+      {(() => {
+        const isDirect = room.type === 'direct';
+        const otherId = isDirect ? room.members.find((m) => m !== me) : null;
+        const otherPresence = otherId ? presenceMap[otherId] : null;
+
+        return (
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
+            <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
+            <div className="relative shrink-0">
+              <span className="grid h-8 w-8 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
+                {isDirect ? displayName[0] : '👥'}
+              </span>
+              {isDirect && <PresenceDot presence={otherPresence} size="md" />}
+            </div>
+            <div className="min-w-0 flex-1 ml-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate text-[12.5px] font-bold text-ink">{displayName}</span>
+                {isDirect && otherPresence && (
+                  <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
+                )}
+                {room.type === 'group' && room.createdBy === me && (
+                  <button
+                    onClick={handleRenameRoom}
+                    title="대화방 이름 변경"
+                    className="opacity-60 hover:opacity-100 hover:text-teal transition-all shrink-0 cursor-pointer p-0.5"
+                  >
+                    <Pencil size={11} />
+                  </button>
+                )}
+              </div>
+              {room.type !== 'direct' ? (
+                <button
+                  onClick={() => setShowMemberList((prev) => !prev)}
+                  className="text-[10px] text-ink3 hover:text-teal font-semibold hover:underline transition-colors flex items-center gap-0.5"
+                >
+                  {room.members.length}명 {showMemberList ? '▲' : '▼'}
+                </button>
+              ) : otherPresence?.message ? (
+                <div className="text-[10px] text-teal truncate font-medium">
+                  {otherPresence.message}
                 </div>
-              </>
+              ) : null}
+            </div>
+            <button
+              onClick={() => {
+                setShowSearch((prev) => !prev);
+                if (showSearch) setSearchQuery('');
+              }}
+              title="대화 검색"
+              className={`grid h-7 w-7 place-items-center rounded-lg text-[15px] hover:bg-panel-alt ${showSearch ? 'text-amber bg-panel-alt' : 'text-ink2'}`}
+            >
+              🔍
+            </button>
+            <button
+              onClick={() => {
+                setShowFileBox((prev) => !prev);
+              }}
+              title="파일함 모아보기"
+              className={`grid h-7 w-7 place-items-center rounded-lg text-[14px] hover:bg-panel-alt ${showFileBox ? 'text-amber bg-panel-alt' : 'text-ink2'}`}
+            >
+              📁
+            </button>
+            {room.type === 'group' && (
+              <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
+            )}
+            {(canLeave || canDelete || room.type === 'direct') && (
+              <div className="relative shrink-0">
+                <button onClick={() => setMenuOpen((v) => !v)} title="더보기" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] leading-none text-ink2 hover:bg-panel-alt">⋮</button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                    <div className="absolute right-0 top-8 z-20 w-32 overflow-hidden rounded-lg border border-border bg-panel py-1 shadow-lg">
+                      {canLeave && (
+                        <button onClick={() => { setMenuOpen(false); onLeave(); }} className="block w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt">방 나가기</button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => { setMenuOpen(false); onDelete(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">방 삭제</button>
+                      )}
+                      {room.type === 'direct' && (
+                        <button onClick={() => { setMenuOpen(false); onDeleteDirect(); }} className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt">채팅방 삭제</button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {showMemberList && room.type !== 'direct' && (
         <div className="shrink-0 border-b border-[#d0e6f7] bg-[#f2f8fc] px-4 py-3 max-h-48 overflow-y-auto">
@@ -712,16 +750,27 @@ function MessengerThread({
             </button>
           </div>
           <div className="space-y-2">
-            {memberDetails.map((m) => (
-              <div key={m.id} className="flex items-center gap-2 text-[11.5px]">
-                <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold">
-                  {m.name?.[0] ?? '?'}
-                </span>
-                <span className="font-semibold text-ink">{m.name}</span>
-                <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
-                <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
-              </div>
-            ))}
+            {memberDetails.map((m) => {
+              const p = presenceMap[m.id];
+              return (
+                <div key={m.id} className="flex items-center justify-between gap-2 text-[11.5px]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="relative shrink-0">
+                      <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
+                        {m.name?.[0] ?? '?'}
+                      </span>
+                      <PresenceDot presence={p} size="sm" />
+                    </div>
+                    <span className="font-semibold text-ink truncate">{m.name}</span>
+                    <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
+                    <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
+                  </div>
+                  {p && (
+                    <PresenceBadge presence={p} showMessage={true} size="xs" />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1104,6 +1153,7 @@ function ImageBundleBubble({
   onToggleEmoji?: (messageId: string, emoji: string) => void;
 }) {
   const m = bundle[0];
+  const presenceMap = useAllUserPresences();
   const mine = m.senderId === me;
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
@@ -1190,7 +1240,14 @@ function ImageBundleBubble({
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">{m.senderName?.[0] ?? '?'}</span>}
+        {!mine && (
+          <div className="relative shrink-0 self-end">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+              {m.senderName?.[0] ?? '?'}
+            </span>
+            <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
+          </div>
+        )}
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
@@ -1274,6 +1331,7 @@ function MessageBubble({
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
+  const presenceMap = useAllUserPresences();
 
   useEffect(() => {
     setEditVal(m.text);
@@ -1416,7 +1474,14 @@ function MessageBubble({
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end rounded-full text-[11px] font-bold">{m.senderName?.[0] ?? '?'}</span>}
+        {!mine && (
+          <div className="relative shrink-0 self-end">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+              {m.senderName?.[0] ?? '?'}
+            </span>
+            <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
+          </div>
+        )}
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
@@ -1664,6 +1729,7 @@ function OrgTreeNode({
   isExpanded: (id: string) => boolean;
 }) {
   const { rankOf } = useOrgTree();
+  const presenceMap = useAllUserPresences();
   const show = isExpanded(node.dept.id);
   const deptUsers = useMemo(() => {
     const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id));
@@ -1690,18 +1756,32 @@ function OrgTreeNode({
         <div className="flex flex-col pl-3.5 border-l border-border/50 ml-3.5 my-0.5 gap-0.5">
           {deptUsers.map((u) => {
             const on = selected.includes(u.id);
+            const p = presenceMap[u.id];
             return (
               <button
                 key={u.id}
                 onClick={() => onToggle(u.id)}
                 className="flex items-center gap-3 py-1.5 px-2 rounded-lg text-left hover:bg-panel-alt transition-colors w-full"
               >
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
-                  {u.name[0]}
-                </span>
+                <div className="relative shrink-0">
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
+                    {u.name[0]}
+                  </span>
+                  <PresenceDot presence={p} size="sm" />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-[12px] font-medium text-ink">{u.name}</span>
-                  <span className="text-[10px] text-ink3 ml-1.5">{u.position}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] font-medium text-ink">{u.name}</span>
+                    <span className="text-[10px] text-ink3">{u.position}</span>
+                    {p && p.status !== 'OFFLINE' && (
+                      <PresenceBadge presence={p} showMessage={false} size="xs" />
+                    )}
+                  </div>
+                  {p?.message && (
+                    <div className="text-[9.5px] text-ink3 truncate font-normal mt-0.5">
+                      {p.message}
+                    </div>
+                  )}
                 </div>
                 <span className={`grid h-[17px] w-[17px] shrink-0 place-items-center rounded-full border text-[9px] font-bold ${on ? 'border-amber bg-amber text-white' : 'border-border-hi text-transparent'}`}>✓</span>
               </button>

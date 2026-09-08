@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { USER_PRESENCE_META, USER_PRESENCE_STATUSES, type UserPresenceStatus } from '@/domain/userPresence/schema';
+import { User as UserIcon, Settings, Globe, MessageSquare } from 'lucide-react';
 
 interface UserMenuProps {
   onClose: () => void;
 }
 
-function Item({ icon, label, sub, onClick }: { icon: string; label: string; sub?: string; onClick?: () => void }) {
+function Item({ icon, label, sub, onClick }: { icon: ReactNode; label: string; sub?: string; onClick?: () => void }) {
   return (
     <button onClick={onClick} className="flex w-full items-center gap-3 px-[18px] py-2 text-left transition-colors hover:bg-panel-alt">
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-panel-alt text-[13px]">{icon}</span>
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-panel-alt text-[13px] text-ink2">{icon}</span>
       <span className="min-w-0">
         <span className="block text-[12px] font-semibold text-ink">{label}</span>
         {sub && <span className="mt-px block text-[10px] text-ink3">{sub}</span>}
@@ -110,8 +111,15 @@ export function UserMenu({ onClose }: UserMenuProps) {
                 className="group flex w-full items-center justify-center gap-1 rounded-lg border border-border/80 bg-white/70 dark:bg-panel/70 px-2.5 py-1 text-[11px] text-ink2 hover:border-teal hover:bg-white transition-all shadow-2xs"
                 title="상태 메시지 편집"
               >
-                <span className="truncate">
-                  {presence.message ? `💬 "${presence.message}"` : '+ 상태 메시지 설정'}
+                <span className="truncate flex items-center gap-1 justify-center">
+                  {presence.message ? (
+                    <>
+                      <MessageSquare size={11} className="text-teal shrink-0" />
+                      <span>"{presence.message}"</span>
+                    </>
+                  ) : (
+                    '+ 상태 메시지 설정'
+                  )}
                 </span>
               </button>
             )}
@@ -146,13 +154,13 @@ export function UserMenu({ onClose }: UserMenuProps) {
 
         <div className="border-b border-border py-1.5">
           <Item
-            icon="👤"
+            icon={<UserIcon size={14} />}
             label="내 계정 관리"
             sub="프로필 사진 및 개인정보 설정"
             onClick={goProfile}
           />
           <Item
-            icon="⚙️"
+            icon={<Settings size={14} />}
             label="환경설정"
             sub="테마 및 기본 환경 설정"
             onClick={() => {
@@ -160,7 +168,7 @@ export function UserMenu({ onClose }: UserMenuProps) {
               navigate('/settings');
             }}
           />
-          <Item icon="🌐" label="언어 / 지역" sub="한국어 (Korea)" />
+          <Item icon={<Globe size={14} />} label="언어 / 지역" sub="한국어 (Korea)" />
         </div>
 
         <div className="py-2">

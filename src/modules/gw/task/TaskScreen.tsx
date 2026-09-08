@@ -65,7 +65,7 @@ function LocalProjectScreen() {
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
       <GwHead
         icon="PM"
-        name="업무관리 (프로젝트)"
+        name="프로젝트"
         desc="프로젝트 단위 관리 시스템: 각 팀이 유기적으로 연결되어 회사 전체 단위 프로젝트의 시작부터 마무리까지 함께 진행하고 확인·관리합니다."
         right={!authenticatedUser ? (
           <select

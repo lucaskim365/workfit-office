@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { getCellMergeInfo, type CellMerge } from './utils';
 import { EditableHeader } from './EditableHeader';
-import { X } from 'lucide-react';
+import { X, Coins, Calculator, Copy, ArrowRight, ArrowDown, Split, Lock } from 'lucide-react';
 interface TableFieldEditorProps {
   field: FormField;
   v: FieldValue;
@@ -948,9 +948,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleAmountColumn(cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold flex items-center gap-1.5"
                 >
-                  💰 금액 열 지정 해제
+                  <Coins size={13} className="shrink-0" />
+                  <span>금액 열 지정 해제</span>
                 </button>
               ) : (
                 <button
@@ -959,9 +960,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleAmountColumn(cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold flex items-center gap-1.5"
                 >
-                  💰 금액 열로 지정
+                  <Coins size={13} className="shrink-0" />
+                  <span>금액 열로 지정</span>
                 </button>
               )}
               <hr className="border-border my-1" />
@@ -976,9 +978,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleSecretCell(contextMenu.rIdx, contextMenu.cIdx);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold flex items-center gap-1.5"
                 >
-                  보안 셀 지정 해제
+                  <Lock size={13} className="shrink-0" />
+                  <span>보안 셀 지정 해제</span>
                 </button>
               ) : (
                 <button
@@ -987,9 +990,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleSecretCell(contextMenu.rIdx, contextMenu.cIdx);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold flex items-center gap-1.5"
                 >
-                  보안 셀로 지정
+                  <Lock size={13} className="shrink-0" />
+                  <span>보안 셀로 지정</span>
                 </button>
               )}
 
@@ -1000,9 +1004,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleAmountCell(contextMenu.rIdx, cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold flex items-center gap-1.5"
                 >
-                  💰 금액 셀 지정 해제
+                  <Coins size={13} className="shrink-0" />
+                  <span>금액 셀 지정 해제</span>
                 </button>
               ) : (
                 <button
@@ -1011,9 +1016,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleAmountCell(contextMenu.rIdx, cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold flex items-center gap-1.5"
                 >
-                  💰 금액 셀로 지정
+                  <Coins size={13} className="shrink-0" />
+                  <span>금액 셀로 지정</span>
                 </button>
               )}
 
@@ -1024,9 +1030,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleSumCell(contextMenu.rIdx, cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-amber-600 font-semibold flex items-center gap-1.5"
                 >
-                  📊 합산 셀 지정 해제
+                  <Calculator size={13} className="shrink-0" />
+                  <span>합산 셀 지정 해제</span>
                 </button>
               ) : (
                 <button
@@ -1035,9 +1042,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     toggleSumCell(contextMenu.rIdx, cols[contextMenu.cIdx]);
                     setContextMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold"
+                  className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold flex items-center gap-1.5"
                 >
-                  📊 합산 결과 표시 지정
+                  <Calculator size={13} className="shrink-0" />
+                  <span>합산 결과 표시 지정</span>
                 </button>
               )}
               <hr className="border-border my-1" />
@@ -1050,9 +1058,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                 copyRowBelow(contextMenu.rIdx);
                 setContextMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold"
+              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-teal font-semibold flex items-center gap-1.5"
             >
-              📋 행: 아래에 현재 행 복사
+              <Copy size={13} className="shrink-0" />
+              <span>행: 아래에 현재 행 복사</span>
             </button>
           )}
           <button
@@ -1061,9 +1070,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
               copyColRight(contextMenu.cIdx);
               setContextMenu(null);
             }}
-            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold"
+            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-indigo-600 font-semibold flex items-center gap-1.5"
           >
-            📋 열: 오른쪽에 현재 열 복사
+            <Copy size={13} className="shrink-0" />
+            <span>열: 오른쪽에 현재 열 복사</span>
           </button>
           <hr className="border-border my-1" />
           <button
@@ -1073,9 +1083,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
               setContextMenu(null);
             }}
             disabled={contextMenu.cIdx >= cols.length - 1}
-            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent"
+            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent flex items-center gap-1.5"
           >
-            👉 오른쪽 셀과 병합
+            <ArrowRight size={13} className="shrink-0" />
+            <span>오른쪽 셀과 병합</span>
           </button>
           <button
             type="button"
@@ -1084,9 +1095,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
               setContextMenu(null);
             }}
             disabled={contextMenu.rIdx !== -1 && contextMenu.rIdx >= rows.length - 1}
-            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent"
+            className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink disabled:opacity-50 disabled:hover:bg-transparent flex items-center gap-1.5"
           >
-            👇 아래 셀과 병합
+            <ArrowDown size={13} className="shrink-0" />
+            <span>아래 셀과 병합</span>
           </button>
           {getMergeInfo(contextMenu.rIdx, contextMenu.cIdx).isMerged && (
             <button
@@ -1095,9 +1107,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                 unmerge(contextMenu.rIdx, contextMenu.cIdx);
                 setContextMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink"
+              className="w-full text-left px-3 py-1.5 hover:bg-panel-alt text-ink flex items-center gap-1.5"
             >
-              🔓 병합 해제
+              <Split size={13} className="shrink-0" />
+              <span>병합 해제</span>
             </button>
           )}
         </div>

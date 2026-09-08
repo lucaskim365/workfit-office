@@ -13,6 +13,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { RelatedDocDetailModal } from './RelatedDocDetailModal';
 import { downloadFile } from '@/shared/lib/download';
+import { ShieldAlert, Lock, AlertTriangle } from 'lucide-react';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -423,7 +424,7 @@ export function ApprovalDocumentView({
   if (!canAccessDocument) {
     return (
       <div className="py-12 px-6 text-center space-y-3 bg-panel-alt/30 rounded-xl border border-dashed border-border-hi">
-        <div className="text-[28px]">🛡️</div>
+        <ShieldAlert size={36} className="mx-auto text-danger/80" />
         <div className="text-[14px] font-bold text-ink">열람할 수 없는 보안 문서입니다.</div>
         <div className="text-[12px] text-ink3 max-w-sm mx-auto leading-relaxed">
           본 문서는 <span className="font-semibold text-danger">[{doc.securityLevel ?? '대외비'}]</span> 보안 등급 문서로 지정되어 접근 권한이 제한되어 있습니다.
@@ -438,11 +439,11 @@ export function ApprovalDocumentView({
 
   return (
     <>
-      {/* 🔒 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
+      {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
       {hasSecretFields && (
         <div className="mx-auto mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl max-w-[800px] flex items-center justify-between text-[11.5px] font-bold text-amber-800 print:hidden shadow-2xs">
           <div className="flex items-center gap-2">
-            <span>🔒</span>
+            <Lock size={13} className="shrink-0 text-amber-700" />
             <span>
               {canViewSecret
                 ? '귀하는 본 보안 문서의 공식 권한자(기안자/결재자)입니다.'
@@ -493,14 +494,14 @@ export function ApprovalDocumentView({
           <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-[12px] print-avoid-break">
             <div className="flex items-center justify-between border-b border-rose-500/20 pb-2 mb-2.5">
               <span className="font-extrabold text-rose-700 dark:text-rose-400 flex items-center gap-1.5 text-[12.5px]">
-                <span>🚨</span>
+                <AlertTriangle size={14} className="shrink-0 text-rose-700" />
                 <span>긴급 선조치 내용 (후결 사후 승인 문서)</span>
               </span>
               <span className={`px-2 py-0.5 rounded text-[10.5px] font-extrabold ${doc.status === '긴급 조치 사후 검토 반려'
                   ? 'bg-rose-600 text-white'
                   : 'bg-rose-500/15 text-rose-700'
                 }`}>
-                {doc.status === '긴급 조치 사후 검토 반려' ? '🚨 사후 검토 반려됨 (감사 영구 보존)' : '사후 감사 대상'}
+                {doc.status === '긴급 조치 사후 검토 반려' ? '사후 검토 반려됨 (감사 영구 보존)' : '사후 감사 대상'}
               </span>
             </div>
 
@@ -596,10 +597,15 @@ export function ApprovalDocumentView({
                     )}
                     <div className="text-[11px] font-semibold text-ink2 mb-0.5 flex items-center gap-1">
                       {f.label}
-                      {isBlurred && <span className="text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">🔒 보안</span>}
+                      {isBlurred && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded">
+                          <Lock size={9} />
+                          <span>보안</span>
+                        </span>
+                      )}
                     </div>
                     <div
-                      title={isBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
+                      title={isBlurred ? "보안 필드입니다. 열람 권한이 없습니다." : undefined}
                       className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
                     >
                       {val || ' '}
@@ -718,7 +724,7 @@ export function ApprovalDocumentView({
                                   key={col}
                                   rowSpan={rowSpan > 1 ? rowSpan : undefined}
                                   colSpan={colSpan > 1 ? colSpan : undefined}
-                                  title={isCellBlurred ? "🔒 보안 필드입니다. 열람 권한이 없습니다." : undefined}
+                                  title={isCellBlurred ? "보안 필드입니다. 열람 권한이 없습니다." : undefined}
                                   className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap ${isNumLike ? 'text-right' : 'text-left'} ${isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
                                     }`}
                                 >

@@ -163,6 +163,18 @@ const COLLECTIONS: CollectionDef[] = [
     ],
     indexes: [IX('userId', ['userId']), IX('createdAt', ['createdAt']), IX('userId_read', ['userId', 'read'])],
   },
+  // ── 사용자 근무 상태 (Realtime 동기화) ──
+  {
+    id: 'user_presences',
+    name: '사용자 실시간 근무 상태',
+    attributes: [
+      S('userId', 64, true),
+      EN('status', ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE']),
+      S('message', 255),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('userId', ['userId'])],
+  },
 
   // ── 마스터 / 조직 ──
   {
@@ -1214,15 +1226,19 @@ async function ensureIndex(dbs: Databases, dbId: string, collId: string, idx: In
 // 메인
 // ─────────────────────────────────────────────────────────────
 async function main() {
+  const isProd = process.argv.includes('--prod');
   const endpoint = readEnv('APPWRITE_ENDPOINT') ?? readEnv('VITE_APPWRITE_ENDPOINT');
-  const projectId = readEnv('APPWRITE_PROJECT_ID') ?? readEnv('VITE_APPWRITE_PROJECT_ID');
-  const databaseId = readEnv('APPWRITE_DATABASE_ID') ?? readEnv('VITE_APPWRITE_DATABASE_ID');
+  const projectId = isProd
+    ? '6a6bf85e002acb7f71d6'
+    : (readEnv('APPWRITE_PROJECT_ID') ?? readEnv('VITE_APPWRITE_PROJECT_ID'));
+  const databaseId = readEnv('APPWRITE_DATABASE_ID') ?? readEnv('VITE_APPWRITE_DATABASE_ID') ?? 'workfit';
   /**
    * `.env.local`은 dev·prod 키를 접미어로 구분해 둔다(`APPWRITE_API_KEY_DEV` / `_PROD`).
-   * 접미어 없는 이름이 없으면 **dev 키로만** 폴백한다 — 기본값이 운영이면 스키마 스크립트가
-   * 실수로 prod를 건드린다. prod에 적용할 때는 `APPWRITE_API_KEY`를 명시적으로 넘긴다.
+   * --prod 지정 시 APPWRITE_API_KEY_PROD 및 운영 프로젝트 ID(6a6bf85e002acb7f71d6) 자동 매핑.
    */
-  const apiKey = readEnv('APPWRITE_API_KEY') ?? readEnv('APPWRITE_API_KEY_DEV');
+  const apiKey = isProd
+    ? (readEnv('APPWRITE_API_KEY_PROD') ?? readEnv('APPWRITE_API_KEY'))
+    : (readEnv('APPWRITE_API_KEY') ?? readEnv('APPWRITE_API_KEY_DEV'));
 
   const missing = [
     ['APPWRITE_ENDPOINT', endpoint],

@@ -1,4 +1,5 @@
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
+import { Folder } from 'lucide-react';
 
 export interface SidebarFolder {
   id: string;
@@ -75,7 +76,7 @@ export function DraftFormSidebar({
                     className="flex w-full items-center justify-between py-1 text-[11.5px] font-bold text-ink hover:text-teal transition-colors"
                   >
                     <span className="flex items-center gap-1.5">
-                      <span>📂</span>
+                      <Folder size={12} className="text-amber-500 shrink-0" />
                       <span>{f.name}</span>
                     </span>
                     <span className="text-[9px] text-ink3">{isOpen ? '▼' : '▶'}</span>

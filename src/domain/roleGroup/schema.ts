@@ -43,7 +43,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_GW_BOARD', name: '사내게시판', url: '/gw/board', category: 'GW', desc: '공지사항 및 전사 게시판', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_CALENDAR', name: '일정관리', url: '/gw/calendar', category: 'GW', desc: '개인/부서/전사 캘린더', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_MAIL', name: '사내메일', url: '/gw/mail', category: 'GW', desc: '웹메일 송수신 및 메일함', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_GW_TASK', name: '업무관리', url: '/gw/task', category: 'GW', desc: '칸반/목록 업무 배정 및 진행 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_GW_TASK', name: '프로젝트', url: '/gw/task', category: 'GW', desc: '칸반/목록 프로젝트 배정 및 진행 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_WORK_PLAN', name: '업무계획', url: '/gw/work-plan', category: 'GW', desc: '주간/월간 업무 보고 및 계획', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_RESOURCE', name: '자원예약', url: '/gw/resource', category: 'GW', desc: '회의실, 법인차량, 비품 예약', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_SURVEY', name: '전자설문', url: '/gw/survey', category: 'GW', desc: '사내 설문조사 생성 및 응답', supportedActions: ['access', 'create', 'update', 'delete'] },

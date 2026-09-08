@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Zap, Network, Users, Building2 } from 'lucide-react';
 
 import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
@@ -42,7 +42,7 @@ function toSteps(edits: EditStep[]): ApprovalStep[] {
     // 명시적으로 groupId가 지정되어 있거나, 앞/뒤와 linkedPrev로 묶인 경우에만 병렬 그룹 처리
     const isLinkedParallel = edits[i].linkedPrev || (i + 1 < edits.length && edits[i + 1].linkedPrev);
     const finalGroupId = e.groupId ? e.groupId : isLinkedParallel ? `G${runStart + 1}` : null;
-    
+
     return {
       seq: i + 1,
       parallelGroup: finalGroupId,
@@ -116,18 +116,18 @@ export function ApprovalLineBuilder({
     const nextApprovers = approverEdits.map((e, idx) => (idx === approverIdx ? { ...e, kind } : e));
     emit([...nextApprovers, ...refEdits]);
   };
-  
+
   /** 결재자 삭제 처리 (그룹 구조 붕괴 방지) */
   const removeApprover = (approverIdx: number) => {
     const target = approverEdits[approverIdx];
     const nextApprovers = approverEdits.filter((_, idx) => idx !== approverIdx);
-    
+
     // 만약 삭제 대상이 그룹의 첫 멤버(linkedPrev: false이고 groupId가 있음)였고, 뒤에 연달아 같은 groupId를 가진 멤버가 있다면
     if (!target.linkedPrev && target.groupId && nextApprovers.length > approverIdx && nextApprovers[approverIdx].groupId === target.groupId) {
       // 뒤 멤버가 그룹의 리더 역할을 이어받음
       nextApprovers[approverIdx] = { ...nextApprovers[approverIdx], linkedPrev: false };
     }
-    
+
     if (nextApprovers.length > 0) {
       nextApprovers[0] = { ...nextApprovers[0], linkedPrev: false };
     }
@@ -139,7 +139,7 @@ export function ApprovalLineBuilder({
     const nextRefs = refEdits.filter((_, idx) => idx !== refIdx);
     emit([...approverEdits, ...nextRefs]);
   };
-  
+
   /** 단독 결재 노드 단위 이동 */
   const moveApprover = (i: number, dir: -1 | 1) => {
     const j = i + dir;
@@ -308,9 +308,10 @@ export function ApprovalLineBuilder({
           onClick={fillAuto}
           disabled={route.isLoading}
           title="기안자 부서·직급·금액에 맞는 결재선을 룰 엔진으로 자동 생성"
-          className="rounded-lg border border-teal/30 bg-teal-soft/40 px-2.5 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-teal/30 bg-teal-soft/40 px-2.5 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft transition-colors disabled:opacity-50"
         >
-          ⚡ 자동 결재선(룰)
+          <Zap size={12} className="text-teal shrink-0" />
+          <span>자동 결재선(룰)</span>
         </button>
         <button
           type="button"
@@ -608,12 +609,12 @@ export function ApprovalLineBuilder({
                 {picker.mode === 'add'
                   ? '결재자 추가'
                   : picker.mode === 'add-ref'
-                  ? '참조자 추가 (다중 선택 가능)'
-                  : picker.mode === 'replace'
-                  ? '결재자 변경'
-                  : picker.groupIndex === -1
-                  ? '병렬 그룹 결재자 추가 (최소 2명 이상 선택)'
-                  : '병렬 그룹에 결재자 추가'}
+                    ? '참조자 추가 (다중 선택 가능)'
+                    : picker.mode === 'replace'
+                      ? '결재자 변경'
+                      : picker.groupIndex === -1
+                        ? '병렬 그룹 결재자 추가 (최소 2명 이상 선택)'
+                        : '병렬 그룹에 결재자 추가'}
               </span>
               <button type="button" onClick={() => setPicker(null)} className="text-ink3 hover:text-ink">
                 <X className="h-4 w-4" />
@@ -679,20 +680,20 @@ function UserPickList({
           <button
             type="button"
             onClick={() => setTab('org')}
-            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${
-              tab === 'org' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
-            }`}
+            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'org' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
+              }`}
           >
-            🌳 조직도
+            <Network size={12} className="shrink-0" />
+            <span>조직도</span>
           </button>
           <button
             type="button"
             onClick={() => setTab('list')}
-            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${
-              tab === 'list' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
-            }`}
+            className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'list' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'
+              }`}
           >
-            📋 전체 사용자 목록
+            <Users size={12} className="shrink-0" />
+            <span>전체 사용자 목록</span>
           </button>
         </div>
 
@@ -776,7 +777,7 @@ function OrgTreeNodeItem({
         className="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[12px] font-bold text-ink hover:bg-panel-alt transition-colors"
       >
         <span className="flex items-center gap-1.5 truncate">
-          <span className="text-[13px]">🏢</span>
+          <Building2 size={13} className="text-teal shrink-0" />
           <span className="truncate">{node.dept.name}</span>
           <span className="text-[10px] text-ink3 font-normal">({node.members.length})</span>
         </span>
@@ -817,15 +818,13 @@ function UserPickItem({
     <button
       type="button"
       onClick={() => onPick(user.id)}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-all group ${
-        isSelected
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-all group ${isSelected
           ? 'bg-teal-soft/80 text-teal border border-teal/40 font-bold'
           : 'hover:bg-teal-soft/30 hover:text-teal'
-      }`}
+        }`}
     >
-      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold transition-colors ${
-        isSelected ? 'bg-teal text-white' : 'bg-teal-soft text-teal group-hover:bg-teal group-hover:text-white'
-      }`}>
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold transition-colors ${isSelected ? 'bg-teal text-white' : 'bg-teal-soft text-teal group-hover:bg-teal group-hover:text-white'
+        }`}>
         {isSelected ? '✓' : user.name[0]}
       </span>
       <div className="min-w-0 flex-1">
