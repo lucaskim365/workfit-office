@@ -135,8 +135,6 @@ const ICON_PATHS: Record<string, string[]> = {
   '▤': ['M4 6h16', 'M4 12h16', 'M4 18h16'],
   '▦': ['M4 5h16v14H4z', 'M4 12h16', 'M12 5v14'],
   '⚙': ['M12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z', 'M12 3.5v2.2M12 18.3v2.2M4.6 7.8l1.9 1.1M17.5 15.1l1.9 1.1M4.6 16.2l1.9-1.1M17.5 8.9l1.9-1.1'],
-  '✦': ['M12 3.5l2.1 5.6 5.9.3-4.6 3.7 1.6 5.7-5-3.3-5 3.3 1.6-5.7-4.6-3.7 5.9-.3z'],
-  'widdy': ['M12 3.5l2.1 5.6 5.9.3-4.6 3.7 1.6 5.7-5-3.3-5 3.3 1.6-5.7-4.6-3.7 5.9-.3z'],
   '⬓': ['M12 3.5l8 4.2v8.6L12 20.5 4 16.3V7.7z', 'M4 7.7l8 4.3 8-4.3', 'M12 12v8.5'],
   '⚐': ['M6 3.5v17', 'M6 4.5h11l-2.5 3.5L17 11.5H6'],
   '⌗': ['M9 4 7.5 20', 'M16.5 4 15 20', 'M4.5 9h15', 'M4 15h15'],
@@ -172,6 +170,18 @@ interface MenuGlyphProps {
 }
 
 export function MenuGlyph({ glyph, size = 16, color, strokeWidth = 1.7, className }: MenuGlyphProps) {
+  // 0) Widdy 공식 아이콘 (✦)
+  if (glyph === '✦' || glyph === 'widdy') {
+    return (
+      <span
+        style={{ fontSize: `${size}px`, color, lineHeight: 1 }}
+        className={`inline-flex items-center justify-center select-none font-bold shrink-0 ${className ?? ''}`}
+      >
+        ✦
+      </span>
+    );
+  }
+
   // 1) Lucide 등록 글리프 확인 (이모지 및 앱 슬러그 키)
   if (glyph && LUCIDE_GLYPHS[glyph]) {
     const IconComponent = LUCIDE_GLYPHS[glyph];
