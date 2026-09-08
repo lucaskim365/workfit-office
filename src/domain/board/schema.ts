@@ -19,13 +19,16 @@ export const postSchema = z.object({
   views: z.number().default(0),
   isPinned: z.boolean().optional().default(false),
   hasAttachment: z.boolean().optional().default(false),
-  attachedFiles: z.array(
-    z.object({
-      name: z.string(),
-      size: z.string(),
-      url: z.string().optional(),
-    })
-  ).optional(),
+  attachedFiles: z.preprocess(
+    (val) => (val === null ? undefined : val),
+    z.array(
+      z.object({
+        name: z.string(),
+        size: z.string(),
+        url: z.string().optional(),
+      })
+    ).optional()
+  ),
 });
 
 export type Post = z.infer<typeof postSchema>;

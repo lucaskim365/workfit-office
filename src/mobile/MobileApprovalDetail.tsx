@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Smartphone, ZoomIn, Paperclip } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -184,9 +185,17 @@ export default function MobileApprovalDetail() {
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setZoomIn((z) => !z); }}
-                  className="rounded-full bg-[#2563eb] px-3 py-2 text-[10.5px] font-extrabold text-white shadow-xl active:scale-95 transition-all select-none border border-white/10"
+                  className="rounded-full bg-[#2563eb] px-3 py-2 text-[10.5px] font-extrabold text-white shadow-xl active:scale-95 transition-all select-none border border-white/10 flex items-center gap-1"
                 >
-                  {zoomIn ? '📱 화면맞춤' : '🔍 100% 확대'}
+                  {zoomIn ? (
+                    <>
+                      <Smartphone size={13} /> 화면맞춤
+                    </>
+                  ) : (
+                    <>
+                      <ZoomIn size={13} /> 100% 확대
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -327,7 +336,9 @@ export default function MobileApprovalDetail() {
                           onClick={() => void downloadFile(file.url, file.name)}
                           className="flex items-center justify-between rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2 text-[12.5px] hover:bg-black/[0.04] active:scale-[0.99] transition-all text-left w-full cursor-pointer"
                         >
-                          <span className="font-semibold text-ink truncate mr-2">📎 {file.name}</span>
+                          <span className="font-semibold text-ink truncate mr-2 flex items-center gap-1">
+                            <Paperclip size={12} className="shrink-0 text-ink3" /> {file.name}
+                          </span>
                           <span className="shrink-0 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">다운로드</span>
                         </button>
                       ))}

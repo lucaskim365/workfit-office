@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 
 interface ModalProps {
   open: boolean;
@@ -46,7 +47,7 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
               aria-label="닫기"
               className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
             >
-              ✕
+              <X size={16} />
             </button>
           </div>
         )}

@@ -27,7 +27,7 @@ import { DraftFormSidebar } from './components/DraftFormSidebar';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
-import { Upload, X, Paperclip } from 'lucide-react';
+import { Upload, X, Paperclip, AlertTriangle, Lock, FileText, GitFork } from 'lucide-react';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -1189,8 +1189,13 @@ function ApprovalDraftInner({
       {/* 에러 메시지 팝업 바 */}
       {error && (
         <div className="flex items-center justify-between bg-rose-500/10 border-b border-rose-500/30 px-6 py-2 text-[12px] font-bold text-rose-600">
-          <span>⚠ {error}</span>
-          <button type="button" onClick={() => setError('')} className="text-rose-500 hover:text-rose-700">✕</button>
+          <span className="flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </span>
+          <button type="button" onClick={() => setError('')} className="text-rose-500 hover:text-rose-700">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -1370,7 +1375,11 @@ function ApprovalDraftInner({
                   ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20' 
                   : 'bg-red-500/10 text-red-700 border border-red-500/20'
               }`}>
-                <span>{code === '지출결의' ? '⚠️' : '🔒'}</span>
+                {code === '지출결의' ? (
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                ) : (
+                  <Lock className="h-4 w-4 shrink-0 text-red-600" />
+                )}
                 <span>
                   {code === '지출결의' 
                     ? '지출결의서는 보안 규정에 의해 [대외비 / 부서 공개] 로 기본 제한됩니다.' 
@@ -1384,7 +1393,10 @@ function ApprovalDraftInner({
           {/* 서식 본문 및 동적 필드 영역 */}
           <div className="rounded-xl border border-border bg-panel p-4 space-y-4 shadow-2xs">
             <div className="text-[13px] font-bold text-ink border-b border-border pb-2 flex items-center justify-between">
-              <span>📝 기안 본문 작성</span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-teal shrink-0" />
+                <span>기안 본문 작성</span>
+              </span>
               <span className="text-[11px] text-ink3 font-normal">필요 항목을 정확히 작성해 주세요.</span>
             </div>
 
@@ -1392,7 +1404,7 @@ function ApprovalDraftInner({
             {code === '휴가' && (
               <div className="rounded-lg border border-teal/30 bg-teal-soft/30 p-3 text-[12px] text-teal space-y-1">
                 <div className="font-bold flex items-center justify-between">
-                  <span>🌴 {me.name} 님의 연차 현황</span>
+                  <span>{me.name} 님의 연차 현황</span>
                   <span>잔여 {bal.remaining}일 (총 {bal.grant}일 / 사용 {bal.used}일)</span>
                 </div>
                 {selectedLeaveType === '반차' && (
@@ -1409,8 +1421,9 @@ function ApprovalDraftInner({
 
           {/* 첨부파일 / 관련 문서 영역 */}
           <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-2xs">
-            <div className="text-[13px] font-bold text-ink border-b border-border pb-2">
-              📎 첨부파일 및 관련 문서
+            <div className="text-[13px] font-bold text-ink border-b border-border pb-2 flex items-center gap-1.5">
+              <Paperclip className="h-4 w-4 text-teal shrink-0" />
+              <span>첨부파일 및 관련 문서</span>
             </div>
 
             {/* 첨부 파일 업로드 */}
@@ -1586,8 +1599,13 @@ function ApprovalDraftInner({
         <div className="fixed inset-0 z-[300] flex justify-end bg-black/40 xl:hidden" onClick={() => setDrawerOpen(false)}>
           <div className="h-full w-full max-w-md bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-              <span className="text-[15px] font-bold text-ink">🔗 결재선 설정</span>
-              <button type="button" onClick={() => setDrawerOpen(false)} className="text-[16px] text-ink3 hover:text-ink">✕</button>
+              <span className="text-[15px] font-bold text-ink flex items-center gap-1.5">
+                <GitFork className="h-4 w-4 text-teal shrink-0" />
+                <span>결재선 설정</span>
+              </span>
+              <button type="button" onClick={() => setDrawerOpen(false)} className="text-ink3 hover:text-ink">
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <ApprovalLineBuilder
               steps={steps}

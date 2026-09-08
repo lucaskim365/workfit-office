@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { useCompletedDocsForSelection } from '@/features/gw/useApprovals';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { Link2, X, Info, Search, Paperclip } from 'lucide-react';
 
 interface RelatedDocSearchModalProps {
   userId: string;
@@ -147,21 +148,21 @@ export function RelatedDocSearchModal({
         {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/40 px-5 py-3.5">
           <div className="flex items-center gap-2">
-            <span className="text-lg">🔗</span>
+            <Link2 className="h-4 w-4 text-teal shrink-0" />
             <h2 className="text-sm font-bold text-ink">관련 문서 선택 (기결재 완료 문서)</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
+            className="rounded-lg p-1 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
           >
-            ✕
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* 보안 안내 팁 */}
         <div className="bg-amber-soft/10 border-b border-amber/15 px-5 py-2.5 text-[11px] text-amber-700 flex items-start gap-2">
-          <span className="shrink-0 text-sm">💡</span>
+          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
             <b>보안 안내:</b> 관련 문서 연동 시 원본 문서의 열람 권한이 그대로 유지됩니다. 개인정보나 연봉 등 민감 정보가 포함된 기결재 문서를 선택할 때는 결재선 지정 및 보안 지침에 유의해 주세요.
           </div>
@@ -169,7 +170,8 @@ export function RelatedDocSearchModal({
 
         {/* 검색 필터 바 */}
         <div className="flex flex-col gap-2.5 border-b border-border p-4 bg-panel shrink-0">
-          <div className="relative">
+          <div className="relative flex items-center">
+            <Search className="absolute left-3 h-4 w-4 text-ink3 pointer-events-none" />
             <input
               type="text"
               value={keyword}
@@ -177,7 +179,6 @@ export function RelatedDocSearchModal({
               placeholder="문서 제목, 문서 번호, 기안자로 검색..."
               className="w-full rounded-xl border border-border bg-panel-alt px-3.5 py-2 pl-9 text-[12px] text-ink outline-none focus:border-[#4ea8de] focus:ring-2 focus:ring-[#4ea8de]/15 transition-all"
             />
-            <span className="absolute left-3 top-2.5 text-[13px] text-ink3">🔍</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
@@ -305,8 +306,9 @@ export function RelatedDocSearchModal({
                           <span className="ml-1.5 text-[10px] font-normal text-ink3">(이미 추가됨)</span>
                         )}
                         {doc.attachments && doc.attachments.length > 0 && (
-                          <span className="ml-1 text-[10px] text-[#4ea8de] font-normal" title={`첨부파일 ${doc.attachments.length}개 포함`}>
-                            📎 ({doc.attachments.length})
+                          <span className="inline-flex items-center gap-0.5 ml-1.5 text-[10px] text-[#4ea8de] font-normal" title={`첨부파일 ${doc.attachments.length}개 포함`}>
+                            <Paperclip className="h-3 w-3 inline" />
+                            <span>({doc.attachments.length})</span>
                           </span>
                         )}
                       </td>

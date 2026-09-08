@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import { Kpi } from '@/shared/ui/Kpi';
 import { Pill, type Tone } from '@/shared/ui/Pill';
@@ -183,7 +184,7 @@ export default function UserScreen() {
       {/* 퇴사 처리 결과 알림 */}
       {notice && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-teal-300 bg-teal-soft px-3.5 py-2.5 text-[12px] text-navy">
-          <span>✅ {notice}</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 size={15} className="text-teal" /> {notice}</span>
           <button className="font-semibold underline-offset-2 hover:underline" onClick={() => setNotice('')}>
             닫기
           </button>

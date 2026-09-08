@@ -1,4 +1,137 @@
-/** 메뉴 글리프(◫,◷,✦ …) → 통일된 SVG 라인 아이콘. 와이어프레임 menu-icons.jsx 정본. */
+import type { ComponentType } from 'react';
+import type { LucideProps } from 'lucide-react';
+import {
+  Building2,
+  FileSignature,
+  Palmtree,
+  Calendar,
+  Mail,
+  Package,
+  ClipboardList,
+  Pin,
+  MessageSquare,
+  FolderArchive,
+  Users,
+  BookOpen,
+  Clock,
+  Image,
+  Search,
+  FileText,
+  Scale,
+  Settings,
+  Pencil,
+  Sparkles,
+  Globe,
+  User,
+  Palette,
+  Bell,
+  Receipt,
+  CheckSquare,
+  Wrench,
+  Vote,
+  Hand,
+  Megaphone,
+  PartyPopper,
+  ScrollText,
+  Folder,
+  FileEdit,
+  Star,
+  FolderOpen,
+  CheckCircle2,
+  CalendarDays,
+  BarChart3,
+  PhoneCall,
+  Check,
+} from 'lucide-react';
+
+/** 유니코드 이모지/키 → Lucide SVG 아이콘 컴포넌트 매핑 */
+const LUCIDE_GLYPHS: Record<string, ComponentType<LucideProps>> = {
+  // 그룹웨어 탭 및 앱 메타 (이모지 & 슬러그)
+  '🏢': Building2,
+  'orgchart': Building2,
+  '🖋': FileSignature,
+  '🖋️': FileSignature,
+  'approval': FileSignature,
+  '🏖': Palmtree,
+  '🏖️': Palmtree,
+  'leave': Palmtree,
+  '📅': Calendar,
+  'calendar': Calendar,
+  '✉': Mail,
+  '✉️': Mail,
+  'mail': Mail,
+  '📦': Package,
+  'resource': Package,
+  '📋': ClipboardList,
+  'survey': ClipboardList,
+  '📌': Pin,
+  'board': Pin,
+  '💬': MessageSquare,
+  'community': MessageSquare,
+  '🗂': FolderArchive,
+  '🗂️': FolderArchive,
+  'document': FolderArchive,
+  '👥': Users,
+  'employee': Users,
+  '📗': BookOpen,
+  'task': BookOpen,
+  '⏱': Clock,
+  '⏱️': Clock,
+  'commute': Clock,
+  '🖼': Image,
+  '🖼️': Image,
+  'gallery': Image,
+  '🗓': CalendarDays,
+  '🗓️': CalendarDays,
+  'work-plan': CalendarDays,
+
+  // 자원예약, 설문, 업무 서브 탭
+  '🧾': Receipt,
+  '☑️': CheckSquare,
+  '☑': CheckSquare,
+  '🛠️': Wrench,
+  '🛠': Wrench,
+  '🗳️': Vote,
+  '🗳': Vote,
+  '🙋': Hand,
+  '📢': Megaphone,
+  '💐': PartyPopper,
+  '🎉': PartyPopper,
+  '📑': ScrollText,
+  '📁': Folder,
+  '📘': BookOpen,
+  '📝': FileEdit,
+  '⭐': Star,
+  '📂': FolderOpen,
+  '✅': CheckCircle2,
+  '📊': BarChart3,
+  '📞': PhoneCall,
+  '✓': Check,
+
+  // 메뉴 트리 & 기준정보
+  '🔍': Search,
+  'search': Search,
+  '📄': FileText,
+  'file-text': FileText,
+  '⚖': Scale,
+  'scale': Scale,
+  '⚙': Settings,
+  'settings': Settings,
+  '✎': Pencil,
+  'pencil': Pencil,
+  '✦': Sparkles,
+  'widdy': Sparkles,
+  '🌐': Globe,
+  'gw': Globe,
+  '👤': User,
+  'user': User,
+  '🎨': Palette,
+  'theme': Palette,
+  '🔔': Bell,
+  'noti': Bell,
+};
+
+/** 레거시 MES 메뉴 글리프(◫,◷ …) → SVG 라인 아이콘 */
 const ICON_PATHS: Record<string, string[]> = {
   '◫': ['M3.5 5h17v14h-17z', 'M10 5v14'],
   '◷': ['M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z', 'M12 7.5V12l3 2'],
@@ -41,29 +174,38 @@ interface MenuGlyphProps {
 }
 
 export function MenuGlyph({ glyph, size = 16, color, strokeWidth = 1.7, className }: MenuGlyphProps) {
+  // 1) Lucide 등록 글리프 확인 (이모지 및 앱 슬러그 키)
+  if (glyph && LUCIDE_GLYPHS[glyph]) {
+    const IconComponent = LUCIDE_GLYPHS[glyph];
+    return <IconComponent size={size} color={color} strokeWidth={strokeWidth} className={`block shrink-0 ${className ?? ''}`} />;
+  }
+
+  // 2) 레거시 ICON_PATHS 확인
   const paths = glyph ? ICON_PATHS[glyph] : undefined;
-  if (!paths) {
+  if (paths) {
     return (
-      <span style={{ fontSize: size, color, lineHeight: 1 }} className={className}>
-        {glyph}
-      </span>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color || 'currentColor'}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`block shrink-0 ${className ?? ''}`}
+      >
+        {paths.map((d, i) => (
+          <path key={i} d={d} />
+        ))}
+      </svg>
     );
   }
+
+  // 3) 폴백 (기본 텍스트/기호)
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={color || 'currentColor'}
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`block shrink-0 ${className ?? ''}`}
-    >
-      {paths.map((d, i) => (
-        <path key={i} d={d} />
-      ))}
-    </svg>
+    <span style={{ fontSize: size, color, lineHeight: 1 }} className={className}>
+      {glyph}
+    </span>
   );
 }

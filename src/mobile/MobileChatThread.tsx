@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, Paperclip, FileSignature, FileText } from 'lucide-react';
+import { Search, Paperclip, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -378,9 +378,9 @@ export default function MobileChatThread() {
               <button
                 onClick={handleRenameRoom}
                 title="방 이름 변경"
-                className="text-[11px] opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer"
+                className="opacity-70 hover:opacity-100 transition-all shrink-0 cursor-pointer p-0.5"
               >
-                ✏️
+                <Pencil size={12} />
               </button>
             )}
           </div>
@@ -415,7 +415,9 @@ export default function MobileChatThread() {
               className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-[10px] text-ink3">✕</button>
+              <button onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-ink3">
+                <X size={10} />
+              </button>
             )}
           </div>
           {searchMatchIds.length > 0 && (
@@ -532,7 +534,9 @@ export default function MobileChatThread() {
                 <div className="text-[10.5px] font-bold" style={{ color: '#1890ff' }}>{replyTo.senderName || '메시지'}에게 답장</div>
                 <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo)}</div>
               </div>
-              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 active:bg-black/5">✕</button>
+              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 active:bg-black/5">
+                <X size={13} />
+              </button>
             </div>
           )}
           {/* 다중 첨부 대기 파일 칩 목록 */}
@@ -553,9 +557,9 @@ export default function MobileChatThread() {
                   <button
                     onClick={() => removeAttachedFile(item.id)}
                     title="첨부 취소"
-                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-4 h-4 grid place-items-center text-[8px]"
+                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-4 h-4 grid place-items-center"
                   >
-                    ✕
+                    <X size={9} />
                   </button>
                 </div>
               ))}
@@ -1199,7 +1203,9 @@ function ImageViewer({
           {att.name} {attachments.length > 1 ? `(${currentIdx + 1}/${attachments.length})` : ''}
         </span>
         <button onClick={() => downloadAttachment(att)} title="다운로드" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[15px] active:bg-white/25">⤓</button>
-        <button onClick={onClose} title="닫기" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-[16px] active:bg-white/25">✕</button>
+        <button onClick={onClose} title="닫기" className="grid h-9 w-9 place-items-center rounded-lg bg-white/15 active:bg-white/25">
+          <X size={18} />
+        </button>
       </div>
 
       {/* 이미지 렌더링 및 이전/다음 버튼 */}
@@ -1545,7 +1551,9 @@ function MobileForwardModal({
       >
         <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
           <span className="text-[15px] font-bold text-ink">이 메시지 전달</span>
-          <button onClick={onClose} className="text-[18px] text-ink3">✕</button>
+          <button onClick={onClose} className="text-ink3 p-1">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto py-3 space-y-4">
@@ -1556,7 +1564,9 @@ function MobileForwardModal({
               {selectedTargets.map((t) => (
                 <div key={t.id} className="flex items-center gap-1 rounded bg-[#4ea8de]/10 border border-[#4ea8de]/20 px-2 py-0.5 text-[11px] font-semibold text-[#1d74a8]">
                   <span>{t.name}</span>
-                  <button onClick={() => handleRemoveTarget(t.id)} className="text-[9px] hover:text-red">✕</button>
+                  <button onClick={() => handleRemoveTarget(t.id)} className="hover:text-red p-0.5">
+                    <X size={10} />
+                  </button>
                 </div>
               ))}
               <input
@@ -1746,10 +1756,10 @@ function MobileFileBoxModal({
                   </button>
                   <button 
                     onClick={() => downloadAttachment(f.attachment)}
-                    className="shrink-0 text-[16px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                    className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
                     title="다운로드"
                   >
-                    📥
+                    <Download size={15} />
                   </button>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Download, RotateCcw, Plus, Pencil, Trash2, Calendar, X } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared/ui/FilterBar';
@@ -206,16 +207,16 @@ export default function HolidayScreen() {
         {/* 상단 버튼 모음 */}
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={handleExportCsv}>
-            <span>📥 CSV 다운로드</span>
+            <span className="flex items-center gap-1.5"><Download size={14} /> CSV 다운로드</span>
           </Button>
           {canDelete && (
             <Button size="sm" variant="secondary" onClick={handleReset}>
-              <span>🔄 기본값 복원</span>
+              <span className="flex items-center gap-1.5"><RotateCcw size={14} /> 기본값 복원</span>
             </Button>
           )}
           {canCreate && (
             <Button size="sm" variant="primary" onClick={handleOpenCreate}>
-              <span>➕ 공휴일 추가</span>
+              <span className="flex items-center gap-1.5"><Plus size={14} /> 공휴일 추가</span>
             </Button>
           )}
         </div>
@@ -347,7 +348,7 @@ export default function HolidayScreen() {
                             className="rounded-lg p-1 text-xs text-ink3 hover:bg-teal-soft hover:text-teal transition-colors"
                             title="수정"
                           >
-                            ✏️
+                            <Pencil size={14} />
                           </button>
                         )}
                         {canDelete && (
@@ -357,7 +358,7 @@ export default function HolidayScreen() {
                             className="rounded-lg p-1 text-xs text-ink3 hover:bg-danger/10 hover:text-danger transition-colors"
                             title="삭제"
                           >
-                            🗑️
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
@@ -387,14 +388,18 @@ export default function HolidayScreen() {
           >
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>{editingId ? '✏️ 공휴일 정보 수정' : '📅 신규 공휴일 등록'}</span>
+                {editingId ? (
+                  <span className="flex items-center gap-1.5"><Pencil size={16} className="text-teal" /> 공휴일 정보 수정</span>
+                ) : (
+                  <span className="flex items-center gap-1.5"><Calendar size={16} className="text-teal" /> 신규 공휴일 등록</span>
+                )}
               </h2>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
+                className="rounded-lg p-1 text-ink3 hover:bg-panel-alt hover:text-ink"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
 

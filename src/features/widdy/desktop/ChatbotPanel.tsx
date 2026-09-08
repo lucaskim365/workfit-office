@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { Paperclip, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useWiddyChat } from '@/features/widdy/useWiddyChat';
 import { fileStorage } from '@/shared/lib/storage';
@@ -121,7 +122,9 @@ export function ChatbotPanel() {
                   </div>
                   {m.attachmentName && (
                     <div className={`mt-1 flex ${me ? 'justify-end' : 'justify-start'}`}>
-                      <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal">📎 {m.attachmentName}</span>
+                      <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal">
+                        <Paperclip size={10} className="shrink-0" /> {m.attachmentName}
+                      </span>
                     </div>
                   )}
                   {m.citations.length > 0 && (
@@ -130,9 +133,13 @@ export function ChatbotPanel() {
                         const name = c.source.split('/').pop() || c.source || c.docId;
                         const label = c.url ? `${name}#${c.chunkIdx}` : name;
                         return c.url ? (
-                          <a key={i} href={c.url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal hover:underline">📎 {label}</a>
+                          <a key={i} href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal hover:underline">
+                            <Paperclip size={10} className="shrink-0" /> {label}
+                          </a>
                         ) : (
-                          <span key={i} className="rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal">📎 {label}</span>
+                          <span key={i} className="inline-flex items-center gap-1 rounded-full bg-teal-soft px-2 py-[3px] text-[10px] font-medium text-teal">
+                            <Paperclip size={10} className="shrink-0" /> {label}
+                          </span>
                         );
                       })}
                     </div>
@@ -166,10 +173,12 @@ export function ChatbotPanel() {
         {/* 선택된 첨부 미리보기 칩 */}
         {file && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-teal-soft/40 px-2.5 py-1.5">
-            <span className="text-[13px]">📎</span>
+            <Paperclip size={13} className="text-teal shrink-0" />
             <span className="flex-1 truncate text-[11px] text-ink">{file.name}</span>
             <span className="shrink-0 text-[10px] text-ink3">{(file.size / 1024 / 1024).toFixed(1)}MB</span>
-            <button type="button" onClick={() => setFile(null)} disabled={uploading} aria-label="첨부 제거" className="shrink-0 text-ink3 hover:text-ink disabled:opacity-40">✕</button>
+            <button type="button" onClick={() => setFile(null)} disabled={uploading} aria-label="첨부 제거" className="shrink-0 text-ink3 hover:text-ink disabled:opacity-40">
+              <X size={13} />
+            </button>
           </div>
         )}
         {attachError && <div className="mb-2 px-1 text-[10.5px] text-[#b23b2e]">{attachError}</div>}
@@ -184,9 +193,9 @@ export function ChatbotPanel() {
             disabled={isSending || uploading}
             aria-label="파일 첨부"
             title="파일 첨부 (최대 100MB)"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-[15px] text-ink3 hover:bg-teal-soft hover:text-teal disabled:opacity-50"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-teal-soft hover:text-teal disabled:opacity-50"
           >
-            📎
+            <Paperclip size={16} />
           </button>
           <input
             value={input}

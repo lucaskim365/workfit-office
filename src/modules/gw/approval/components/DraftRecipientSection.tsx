@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ApprovalRecipient } from '@/domain/approvalDoc/schema';
+import { X, Folder, User, Send } from 'lucide-react';
 
 /* ────────────── ⓘ 툴팁 컴포넌트 ────────────── */
 function InfoTooltip({ text }: { text: string }) {
@@ -170,7 +171,9 @@ export function SelectorDialog({
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-panel-alt/20">
           <span className="text-[13px] font-bold text-ink">{title}</span>
-          <button type="button" onClick={onClose} className="text-[14px] text-ink3 hover:text-ink transition-colors cursor-pointer">✕</button>
+          <button type="button" onClick={onClose} className="text-ink3 hover:text-ink transition-colors cursor-pointer">
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* 검색창 */}
@@ -253,13 +256,13 @@ export function SelectorDialog({
           <div className="border-t border-border px-4 py-2 flex flex-wrap gap-1 bg-panel-alt/10">
             {selected.map((s) => (
               <span key={s.id} className="flex items-center gap-1 rounded-full bg-teal-soft px-2.5 py-0.5 text-[10px] font-bold text-teal border border-teal/15 shadow-2xs">
-                {s.type === 'dept' ? '📁' : '👤'} {s.name.split(' · ')[0]}
+                {s.type === 'dept' ? <Folder className="h-3 w-3" /> : <User className="h-3 w-3" />} {s.name.split(' · ')[0]}
                 <button
                   type="button"
                   onClick={() => setSelected((p) => p.filter((x) => x.id !== s.id))}
                   className="text-teal/60 hover:text-red-500 font-bold ml-0.5 transition-colors cursor-pointer"
                 >
-                  ✕
+                  <X className="h-3 w-3" />
                 </button>
               </span>
             ))}
@@ -299,7 +302,7 @@ export function DraftRecipientSection({
       {/* 섹션 헤더 */}
       <div className="px-3 pt-2.5 pb-2 border-b border-border/60 flex items-center justify-between">
         <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1.5">
-          <span>📬</span>
+          <Send className="h-3.5 w-3.5 text-teal shrink-0" />
           <span>수신처 설정</span>
         </span>
         <span className="text-[10px] text-ink3">결재 완료 후 자동 공유/전달</span>
@@ -309,7 +312,7 @@ export function DraftRecipientSection({
       <div className="relative p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold text-teal flex items-center gap-1">
-            <span>📨</span><span>수신처 (참조/수신 전용)</span>
+            <span>수신처 (참조/수신 전용)</span>
           </div>
           <InfoTooltip text="문서가 최종 완료되면 지정한 수신처(부서 또는 사원)에 읽기 권한이 자동으로 부여(수신함)됩니다." />
         </div>
@@ -318,8 +321,10 @@ export function DraftRecipientSection({
           <div className="flex flex-wrap gap-1.5">
             {recipients.map((r) => (
               <span key={r.id} className="flex items-center gap-1 rounded-md border border-teal/25 bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-teal shadow-xs">
-                {r.type === 'dept' ? '📁' : '👤'} {r.name}
-                <button type="button" onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">✕</button>
+                {r.type === 'dept' ? <Folder className="h-3 w-3" /> : <User className="h-3 w-3" />} {r.name}
+                <button type="button" onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))} className="ml-0.5 font-bold text-teal/50 hover:text-red-500 transition-colors">
+                  <X className="h-3 w-3" />
+                </button>
               </span>
             ))}
           </div>

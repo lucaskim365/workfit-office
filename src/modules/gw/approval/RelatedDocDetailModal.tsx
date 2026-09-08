@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FileText, X } from 'lucide-react';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
@@ -46,7 +47,7 @@ export function RelatedDocDetailModal({ docId, onClose }: RelatedDocDetailModalP
         {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/40 px-6 py-3.5">
           <div className="flex items-center gap-2">
-            <span className="text-lg">📄</span>
+            <FileText size={18} className="text-teal" />
             <h2 className="text-sm font-bold text-ink">
               관련 문서 상세 보기 {doc && <span className="font-mono text-teal ml-1.5">[{doc.docNo}]</span>}
             </h2>
@@ -54,9 +55,9 @@ export function RelatedDocDetailModal({ docId, onClose }: RelatedDocDetailModalP
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-[#4ea8de]/10 text-[#4ea8de] hover:bg-[#4ea8de] hover:text-white px-3.5 py-1.5 text-[11.5px] font-bold active:scale-95 transition-all cursor-pointer"
+            className="rounded-xl bg-[#4ea8de]/10 text-[#4ea8de] hover:bg-[#4ea8de] hover:text-white px-3.5 py-1.5 text-[11.5px] font-bold active:scale-95 transition-all cursor-pointer flex items-center gap-1"
           >
-            ✕ 닫고 원본으로 복귀
+            <X size={13} /> 닫고 원본으로 복귀
           </button>
         </div>
 

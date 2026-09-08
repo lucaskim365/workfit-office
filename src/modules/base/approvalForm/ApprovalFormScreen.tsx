@@ -11,6 +11,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
+import { Pencil, Trash2 } from 'lucide-react';
 
 export default function ApprovalFormScreen() {
   const { data: forms = [] } = useApprovalForms();
@@ -295,15 +296,17 @@ export default function ApprovalFormScreen() {
         >
           <button
             onClick={() => renameFolder(folderMenu.folder)}
-            className="block w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 w-full px-3 py-2 text-left text-[12px] text-ink hover:bg-panel-alt transition-colors cursor-pointer"
           >
-            ✏️ 이름 변경
+            <Pencil className="h-3.5 w-3.5" />
+            <span>이름 변경</span>
           </button>
           <button
             onClick={() => delFolder(folderMenu.folder)}
-            className="block w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 w-full px-3 py-2 text-left text-[12px] text-danger hover:bg-panel-alt transition-colors cursor-pointer"
           >
-            🗑️ 폴더 삭제
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>폴더 삭제</span>
           </button>
         </div>
       )}

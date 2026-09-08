@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PenTool, X } from 'lucide-react';
 
 export function ApprovalOpinionModal({
   title = '결재 승인 확인',
@@ -30,15 +31,15 @@ export function ApprovalOpinionModal({
       >
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">
           <div className="flex items-center gap-2 text-[14px] font-extrabold text-ink">
-            <span className="text-teal">✍️</span>
+            <PenTool size={16} className="text-teal" />
             <span>{title}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-7 w-7 place-items-center rounded-lg text-[14px] text-ink3 hover:bg-panel-alt transition-colors"
+            className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel-alt transition-colors"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DocStatus, StepDecision, StepKind } from '@/domain/approvalDoc/schema';
+import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 
 /**
  * 그룹웨어 공통 UI — 전자결재/휴가 화면이 공유하는 배지·아이콘·포맷터.
@@ -14,7 +15,9 @@ export function GwHead({ icon, name, right }: { icon: string; name: string; righ
       <div>
         <div className="mb-1 text-xs font-medium text-ink3">그룹웨어 <span className="px-1">/</span> {name}</div>
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">{icon}</span>
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">
+            <MenuGlyph glyph={icon} size={20} className="text-teal" />
+          </span>
           <h1 className="text-xl font-bold text-ink">{name}</h1>
         </div>
       </div>
@@ -80,7 +83,11 @@ export function GwSideNav({ title, desc, items, activeId, onSelect, filter, scro
                       : 'text-ink2 hover:bg-panel-alt hover:text-ink'
                 }`}
               >
-                {item.icon && <span className="text-base">{item.icon}</span>}
+                {item.icon && (
+                  <span className="shrink-0 flex items-center justify-center">
+                    <MenuGlyph glyph={item.icon} size={16} className={active ? 'text-white' : 'text-teal'} />
+                  </span>
+                )}
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.badge && (
                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold ${

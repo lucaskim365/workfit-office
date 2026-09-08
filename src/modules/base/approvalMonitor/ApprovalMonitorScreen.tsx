@@ -4,6 +4,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { usePermission } from '@/features/auth/usePermission';
+import { Search, X } from 'lucide-react';
 
 type MonitorTab = 'ALL' | '진행중' | '완료' | '반려' | '임시저장' | '회수';
 
@@ -130,7 +131,7 @@ export default function ApprovalMonitorScreen() {
           {/* 검색어 입력바 */}
           <div className="border-b border-border p-3 shrink-0">
             <div className="flex items-center gap-2 rounded-full border border-border-hi bg-panel px-3.5 py-1.5">
-              <span className="text-[12px] text-ink3">🔍</span>
+              <Search className="h-3.5 w-3.5 text-ink3 shrink-0" />
               <input
                 value={q}
                 onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -138,7 +139,9 @@ export default function ApprovalMonitorScreen() {
                 className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink3"
               />
               {q && (
-                <button onClick={() => { setQ(''); setPage(1); }} className="text-[11px] text-ink3 hover:text-ink">✕</button>
+                <button onClick={() => { setQ(''); setPage(1); }} className="text-ink3 hover:text-ink cursor-pointer">
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
           </div>

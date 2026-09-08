@@ -2,6 +2,28 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { Button } from '@/shared/ui/Button';
 import { usePermission } from '@/features/auth/usePermission';
+import {
+  Folder,
+  FolderArchive,
+  FolderPlus,
+  FolderInput,
+  LayoutGrid,
+  Calendar,
+  Camera,
+  Plus,
+  CheckSquare,
+  Pencil,
+  Trash2,
+  Download,
+  Image as ImageIcon,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  Info,
+  Sparkles,
+  X,
+  ChevronLeft,
+  Check,
+} from 'lucide-react';
 
 export interface GalleryAlbum {
   id: string;
@@ -200,16 +222,38 @@ export default function GalleryScreen() {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [targetMoveAlbumId, setTargetMoveAlbumId] = useState<string>('');
 
-  // ── 앨범별 사진 매수 계산 ──
+  // ── 앨범별 사진 매수 계산 (전체/최근항목은 항상 전체 사진 총 개수 보장) ──
   const albumCounts = useMemo(() => {
-    const counts: Record<string, number> = { recent: items.length };
+    const counts: Record<string, number> = {};
     albums.forEach((a) => {
       counts[a.id] = 0;
     });
     items.forEach((it) => {
-      counts[it.albumId] = (counts[it.albumId] || 0) + 1;
+      if (counts[it.albumId] !== undefined) {
+        counts[it.albumId] += 1;
+      }
     });
+    // 전체 (최근 항목)은 항상 전체 갤러리 내 사진 총 매수 보장
+    counts.recent = items.length;
     return counts;
+  }, [albums, items]);
+
+  // ── 앨범별 최신 사진 날짜 계산 (앨범 카드 표시용) ──
+  const albumLatestDateMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    albums.forEach((alb) => {
+      const albumPhotos =
+        alb.id === 'recent' ? items : items.filter((it) => it.albumId === alb.id);
+
+      if (albumPhotos.length > 0) {
+        // 등록된 사진 중 가장 최근 일자 산출
+        const latest = albumPhotos.reduce((max, it) => (it.date > max ? it.date : max), '');
+        map[alb.id] = latest;
+      } else {
+        map[alb.id] = alb.createdAt || '';
+      }
+    });
+    return map;
   }, [albums, items]);
 
   // ── 날짜별 사이드바용 년도 - 월 계층 데이터 추출 ──
@@ -675,8 +719,8 @@ export default function GalleryScreen() {
             그룹웨어 <span className="px-1">/</span> 회사 갤러리
           </div>
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-teal-soft text-xl text-teal shadow-xs">
-              📸
+            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-teal-soft text-teal shadow-xs">
+              <Camera className="h-5 w-5" />
             </span>
             <div>
               <h1 className="text-xl font-bold text-ink flex items-center gap-2">
@@ -725,12 +769,23 @@ export default function GalleryScreen() {
                 : 'border-border bg-panel text-ink2 hover:bg-panel-alt hover:text-ink'
             }`}
           >
-            <span>{isSelectionMode ? '✓ 선택 종료' : '☑️ 사진 선택'}</span>
+            {isSelectionMode ? (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                <span>선택 종료</span>
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-3.5 w-3.5" />
+                <span>사진 선택</span>
+              </>
+            )}
           </button>
 
           {canCreate && (
             <Button size="md" variant="primary" onClick={handleOpenUploadModal}>
-              <span>➕ 사진 추가</span>
+              <Plus className="h-4 w-4 mr-1" />
+              <span>사진 추가</span>
             </Button>
           )}
         </div>
@@ -776,7 +831,8 @@ export default function GalleryScreen() {
               disabled={selectedItemIds.size === 0}
               onClick={handleOpenMoveModal}
             >
-              <span>📁 앨범에 넣기 ({selectedItemIds.size})</span>
+              <FolderInput className="h-3.5 w-3.5 mr-1" />
+              <span>앨범에 넣기 ({selectedItemIds.size})</span>
             </Button>
 
             <Button
@@ -791,7 +847,7 @@ export default function GalleryScreen() {
         </div>
       )}
 
-      {/* ── 탭 스위처: [📁 앨범 (기본)] 먼저, 그 다음 [📅 날짜별] ── */}
+      {/* ── 탭 스위처: [앨범 (기본)] 먼저, 그 다음 [날짜별] ── */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 bg-panel-alt/40 p-1.5 rounded-2xl border border-border">
         <div className="flex items-center gap-1">
           {/* 1. 앨범 탭 (기본 우선 노출) */}
@@ -804,7 +860,7 @@ export default function GalleryScreen() {
                 : 'text-ink3 hover:text-ink'
             }`}
           >
-            <span>📁</span>
+            <FolderArchive className="h-4 w-4" />
             <span>앨범 보관함 ({albums.length})</span>
           </button>
 
@@ -818,7 +874,7 @@ export default function GalleryScreen() {
                 : 'text-ink3 hover:text-ink'
             }`}
           >
-            <span>📅</span>
+            <Calendar className="h-4 w-4" />
             <span>날짜별 (타임라인)</span>
           </button>
         </div>
@@ -827,9 +883,19 @@ export default function GalleryScreen() {
         <button
           type="button"
           onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-          className="flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink2 hover:text-teal transition-colors"
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink2 hover:text-teal transition-colors"
         >
-          <span>{sortOrder === 'desc' ? '⬇ 최신 날짜순' : '⬆ 과거 날짜순'}</span>
+          {sortOrder === 'desc' ? (
+            <>
+              <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+              <span>최신 날짜순</span>
+            </>
+          ) : (
+            <>
+              <ArrowUpNarrowWide className="h-3.5 w-3.5" />
+              <span>과거 날짜순</span>
+            </>
+          )}
         </button>
       </div>
 
@@ -847,7 +913,7 @@ export default function GalleryScreen() {
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-border">
                 <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                  <span>📁</span>
+                  <Folder className="h-4 w-4 text-teal" />
                   <span>앨범 목록</span>
                 </span>
                 {canCreate && (
@@ -856,7 +922,8 @@ export default function GalleryScreen() {
                     onClick={() => handleOpenAlbumModal()}
                     className="flex items-center gap-1 text-[11px] font-bold text-teal hover:bg-teal-soft/60 px-2 py-0.5 rounded-md transition-colors"
                   >
-                    <span>+ 새 앨범</span>
+                    <Plus className="h-3 w-3" />
+                    <span>새 앨범</span>
                   </button>
                 )}
               </div>
@@ -873,7 +940,7 @@ export default function GalleryScreen() {
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate min-w-0">
-                    <span className="text-base">🗂️</span>
+                    <LayoutGrid className="h-4 w-4 shrink-0" />
                     <span className="truncate">앨범 전체 모아보기</span>
                   </div>
                   <span
@@ -908,7 +975,7 @@ export default function GalleryScreen() {
                             className="h-6 w-6 rounded-md object-cover border border-white/20 shrink-0 shadow-xs"
                           />
                         ) : (
-                          <span className="text-base">{album.id === 'recent' ? '🗂️' : '📁'}</span>
+                          <Folder className={`h-4 w-4 shrink-0 ${isSelected ? 'text-white' : 'text-ink3'}`} />
                         )}
                         <span className="truncate">{album.name}</span>
                       </div>
@@ -931,7 +998,7 @@ export default function GalleryScreen() {
                               isSelected ? 'text-white/80 hover:text-white' : 'text-ink3 hover:text-danger'
                             }`}
                           >
-                            ✕
+                            <X className="h-3 w-3" />
                           </button>
                         )}
                       </div>
@@ -945,7 +1012,7 @@ export default function GalleryScreen() {
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-border">
                 <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                  <span>📅</span>
+                  <Calendar className="h-4 w-4 text-teal" />
                   <span>년도 · 월 선택</span>
                 </span>
                 <span className="text-[10px] font-mono text-ink3">총 {items.length}장</span>
@@ -962,7 +1029,10 @@ export default function GalleryScreen() {
                       : 'text-ink2 hover:bg-panel-alt hover:text-ink'
                   }`}
                 >
-                  <span>📅 전체 기간</span>
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span>전체 기간</span>
+                  </span>
                   <span
                     className={`rounded-full px-2 py-0.2 text-[10px] font-mono ${
                       selectedYearMonth === 'all'
@@ -990,7 +1060,7 @@ export default function GalleryScreen() {
                         }`}
                       >
                         <span className="flex items-center gap-1.5">
-                          <span className="text-[10px]">📁</span>
+                          <Folder className="h-3.5 w-3.5 text-teal/80" />
                           <span>{group.year}년</span>
                         </span>
                         <span className="text-[10px] font-mono text-ink3">{group.count}장</span>
@@ -1050,7 +1120,7 @@ export default function GalleryScreen() {
                   title="전체 앨범 보관함으로 돌아가기"
                   className="flex items-center gap-1.5 rounded-xl border border-border bg-panel-alt/70 px-2.5 py-1.5 text-xs font-bold text-ink2 hover:bg-panel hover:text-teal hover:border-teal/50 transition-all shadow-2xs mr-0.5 shrink-0"
                 >
-                  <span className="text-base leading-none">‹</span>
+                  <ChevronLeft className="h-4 w-4" />
                   <span>모든 앨범</span>
                 </button>
               )}
@@ -1062,15 +1132,17 @@ export default function GalleryScreen() {
                   className="h-11 w-11 rounded-xl object-cover border border-border shadow-xs shrink-0"
                 />
               ) : (
-                <span className="text-2xl">
-                  {activeTab === 'albums'
-                    ? selectedAlbumId === 'all_albums'
-                      ? '🗂️'
-                      : selectedAlbumId === 'recent'
-                      ? '🕒'
-                      : '📁'
-                    : '📅'}
-                </span>
+                <div className="grid h-11 w-11 place-items-center rounded-xl bg-teal-soft text-teal shrink-0">
+                  {activeTab === 'albums' ? (
+                    selectedAlbumId === 'all_albums' ? (
+                      <LayoutGrid className="h-5 w-5" />
+                    ) : (
+                      <Folder className="h-5 w-5" />
+                    )
+                  ) : (
+                    <Calendar className="h-5 w-5" />
+                  )}
+                </div>
               )}
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1093,8 +1165,9 @@ export default function GalleryScreen() {
                       <p className="text-[11.5px] text-ink3">{currentAlbum.description}</p>
                     )}
                     {selectedAlbumId !== 'recent' && selectedAlbumId !== 'all_albums' && (
-                      <span className="text-[10.5px] text-teal font-medium">
-                        💡 팁: 사진을 우클릭하여 이 앨범의 대표 이미지로 지정할 수 있습니다.
+                      <span className="text-[10.5px] text-teal font-medium flex items-center gap-1">
+                        <Info className="h-3 w-3" />
+                        <span>팁: 사진을 우클릭하여 이 앨범의 대표 이미지로 지정할 수 있습니다.</span>
                       </span>
                     )}
                   </div>
@@ -1105,12 +1178,14 @@ export default function GalleryScreen() {
             <div className="flex items-center gap-2">
               {canCreate && (
                 <Button size="sm" variant="primary" onClick={handleOpenUploadModal}>
-                  <span>➕ {selectedAlbumId === 'all_albums' ? '사진 올리기' : '이 위치에 사진 올리기'}</span>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  <span>{selectedAlbumId === 'all_albums' ? '사진 올리기' : '이 위치에 사진 올리기'}</span>
                 </Button>
               )}
               {activeTab === 'albums' && selectedAlbumId === 'all_albums' && canCreate && (
                 <Button size="sm" variant="secondary" onClick={() => handleOpenAlbumModal()}>
-                  <span>📁 새 앨범 만들기</span>
+                  <FolderPlus className="h-3.5 w-3.5 mr-1" />
+                  <span>새 앨범 만들기</span>
                 </Button>
               )}
               {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && !currentAlbum?.isSystem && (
@@ -1119,7 +1194,8 @@ export default function GalleryScreen() {
                   variant="secondary"
                   onClick={(e) => handleOpenAlbumModal(currentAlbum, e)}
                 >
-                  <span>✏️ 앨범명 수정</span>
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  <span>앨범명 수정</span>
                 </Button>
               )}
             </div>
@@ -1175,6 +1251,7 @@ export default function GalleryScreen() {
               {albums.map((album) => {
                 const count = albumCounts[album.id] || 0;
                 const cover = albumCoverMap[album.id];
+                const displayDate = albumLatestDateMap[album.id] || album.createdAt || '날짜 없음';
 
                 return (
                   <div
@@ -1192,8 +1269,8 @@ export default function GalleryScreen() {
                           loading="lazy"
                         />
                       ) : (
-                        <div className="grid h-full w-full place-items-center text-4xl text-ink3/40 bg-gradient-to-br from-panel-alt/60 to-panel">
-                          {album.id === 'recent' ? '🗂️' : '📁'}
+                        <div className="grid h-full w-full place-items-center text-ink3/40 bg-gradient-to-br from-panel-alt/60 to-panel">
+                          <Folder className="h-14 w-14 stroke-[1.2] text-ink3/30 group-hover:text-teal/50 transition-colors" />
                         </div>
                       )}
 
@@ -1221,7 +1298,7 @@ export default function GalleryScreen() {
                             title="앨범명 수정"
                             className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-teal transition-colors shadow-xs"
                           >
-                            ✏️
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
@@ -1229,7 +1306,7 @@ export default function GalleryScreen() {
                             title="앨범 삭제"
                             className="grid h-7 w-7 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-danger transition-colors shadow-xs"
                           >
-                            ✕
+                            <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       )}
@@ -1247,7 +1324,10 @@ export default function GalleryScreen() {
                       </div>
 
                       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/50 text-[11px] text-ink3">
-                        <span className="font-mono text-[10px]">{album.createdAt || '시스템'}</span>
+                        <span className="font-mono text-[10px] flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-ink3/70 inline" />
+                          {displayDate}
+                        </span>
                         <span className="font-bold text-teal flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
                           사진 보기 ›
                         </span>
@@ -1263,8 +1343,8 @@ export default function GalleryScreen() {
                   onClick={() => handleOpenAlbumModal()}
                   className="flex aspect-square flex-col items-center justify-center rounded-3xl border-2 border-dashed border-border hover:border-teal bg-panel-alt/20 hover:bg-teal-soft/20 text-ink3 hover:text-teal transition-all cursor-pointer p-6 text-center group"
                 >
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-panel border border-border group-hover:border-teal text-2xl shadow-xs transition-colors">
-                    ➕
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-panel border border-border group-hover:border-teal text-teal shadow-xs transition-colors">
+                    <Plus className="h-6 w-6 stroke-[2.2]" />
                   </div>
                   <span className="mt-3.5 text-sm font-bold text-ink group-hover:text-teal transition-colors">
                     새 앨범 만들기
@@ -1410,7 +1490,8 @@ export default function GalleryScreen() {
                       variant="secondary"
                       onClick={() => handleSetCoverImage(activeItem.albumId, activeItem.images[0])}
                     >
-                      <span>🖼️ 대표이미지 지정</span>
+                      <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                      <span>대표이미지 지정</span>
                     </Button>
                   )}
                   {canManageItem(activeItem) && (
@@ -1423,14 +1504,16 @@ export default function GalleryScreen() {
                           setActiveItemId(null);
                         }}
                       >
-                        ✏️ 캡션 수정
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        <span>캡션 수정</span>
                       </Button>
                       <Button
                         size="sm"
                         variant="danger"
                         onClick={(e) => handleDeleteItem(activeItem.id, e)}
                       >
-                        🗑️ 삭제
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        <span>삭제</span>
                       </Button>
                     </>
                   )}
@@ -1441,7 +1524,8 @@ export default function GalleryScreen() {
                     rel="noreferrer"
                     className="flex items-center gap-1.5 rounded-xl border border-border bg-panel-alt px-3 py-1.5 text-[11px] font-bold text-ink hover:bg-teal-soft hover:text-teal transition-all"
                   >
-                    💾 다운로드
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    <span>다운로드</span>
                   </a>
                 </div>
               </div>
@@ -1468,14 +1552,24 @@ export default function GalleryScreen() {
           >
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>{editingItemId ? '✏️ 사진 정보 수정' : '📸 사진 업로드'}</span>
+                {editingItemId ? (
+                  <>
+                    <Pencil className="h-4 w-4 text-teal" />
+                    <span>사진 정보 수정</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4 text-teal" />
+                    <span>사진 업로드</span>
+                  </>
+                )}
               </h2>
               <button
                 type="button"
                 onClick={() => setIsUploadModalOpen(false)}
                 className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -1583,7 +1677,7 @@ export default function GalleryScreen() {
                             title="이 사진 제외"
                             className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-danger/10 hover:text-danger transition-colors shrink-0"
                           >
-                            ✕
+                            <X className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -1594,7 +1688,8 @@ export default function GalleryScreen() {
                         onClick={() => fileInputRef.current?.click()}
                         className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border hover:border-teal/50 bg-panel-alt/20 py-3.5 cursor-pointer transition-all text-xs font-bold text-ink2 hover:text-teal"
                       >
-                        <span>➕ 사진 더 추가하기</span>
+                        <Plus className="h-4 w-4 text-teal" />
+                        <span>사진 더 추가하기</span>
                         <span className="text-[11px] text-ink3 font-normal">(최대 50장)</span>
                       </div>
                     )}
@@ -1604,12 +1699,12 @@ export default function GalleryScreen() {
                     onClick={() => fileInputRef.current?.click()}
                     className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border hover:border-teal/50 bg-panel-alt/30 hover:bg-panel-alt/60 cursor-pointer transition-all"
                   >
-                    <span className="text-3xl">📁</span>
+                    <Camera className="h-9 w-9 text-teal/70" />
                     <span className="mt-2 text-[12.5px] font-bold text-ink">
                       클릭하여 사진 선택 (다중 선택 가능)
                     </span>
                     <span className="mt-0.5 text-[11px] text-teal font-medium">
-                      ✓ 각 사진별로 개별 캡션을 자유롭게 입력할 수 있습니다.
+                      각 사진별로 개별 캡션을 자유롭게 입력할 수 있습니다.
                     </span>
                   </div>
                 )}
@@ -1649,25 +1744,74 @@ export default function GalleryScreen() {
           >
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>{editingAlbumId ? '✏️ 앨범 수정' : '📁 새 앨범 만들기'}</span>
+                {editingAlbumId ? (
+                  <>
+                    <Pencil className="h-4 w-4 text-teal" />
+                    <span>앨범 정보 수정</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderPlus className="h-4 w-4 text-teal" />
+                    <span>새 앨범 만들기</span>
+                  </>
+                )}
               </h2>
               <button
                 type="button"
                 onClick={() => setIsAlbumModalOpen(false)}
                 className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitAlbum} className="mt-4 space-y-4">
               <div>
-                <label className="block text-[11.5px] font-bold text-ink2 mb-1">앨범 이름 *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11.5px] font-bold text-ink2">앨범 이름 *</label>
+                  <span className="text-[10.5px] text-teal font-medium flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    <span>이모지 꾸미기 지원</span>
+                  </span>
+                </div>
+
+                {/* 이모지 빠른 추가 프리셋 바 */}
+                <div className="mb-2 p-2 rounded-xl bg-panel-alt/50 border border-border/60">
+                  <div className="text-[10px] text-ink3 mb-1.5 font-medium flex items-center justify-between">
+                    <span>추천 이모지 클릭 시 제목에 추가:</span>
+                    <span className="text-[9.5px] text-ink3/80 font-mono">단축키: Win + .</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {['📁', '🏢', '🎉', '📸', '✈️', '🏆', '💡', '👥', '🍕', '☕', '🏃', '🏖️', '🌿', '🎁', '🎓', '🎨'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setAlbumFormName((prev) => {
+                            const trimmed = prev.trim();
+                            // 맨 앞 글자가 이미 이모지인지 정규식으로 감지
+                            const emojiRegex = /^(\p{Extended_Pictographic}|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|\uD83D[\uDE80-\uDEFF])\s*/u;
+                            const match = trimmed.match(emojiRegex);
+                            if (match) {
+                              return `${emoji} ${trimmed.slice(match[0].length)}`;
+                            }
+                            return trimmed ? `${emoji} ${trimmed}` : `${emoji} `;
+                          });
+                        }}
+                        className="h-7 w-7 rounded-lg hover:bg-panel hover:scale-110 active:scale-95 transition-all text-sm grid place-items-center border border-transparent hover:border-border/80 shadow-2xs cursor-pointer"
+                        title={`${emoji} 추가/교체`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <input
                   value={albumFormName}
                   onChange={(e) => setAlbumFormName(e.target.value)}
-                  placeholder="예: 2026 해외 워크숍, 축구 동호회 등"
-                  className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12px] text-ink outline-none focus:border-teal"
+                  placeholder="예: 🎉 2026 워크핏 확장 이전, 🏢 전사 행사 등"
+                  className="h-10 w-full rounded-xl border border-border bg-panel px-3 text-[12px] text-ink outline-none focus:border-teal transition-all"
                   autoFocus
                   required
                 />
@@ -1681,7 +1825,7 @@ export default function GalleryScreen() {
                   value={albumFormDesc}
                   onChange={(e) => setAlbumFormDesc(e.target.value)}
                   placeholder="간단한 앨범 설명을 입력하세요..."
-                  className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12px] text-ink outline-none focus:border-teal"
+                  className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12px] text-ink outline-none focus:border-teal transition-all"
                 />
               </div>
 
@@ -1715,7 +1859,7 @@ export default function GalleryScreen() {
           >
             <div className="flex items-center justify-between pb-3.5 border-b border-border">
               <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>📁</span>
+                <FolderInput className="h-4 w-4 text-teal" />
                 <span>선택한 사진 앨범에 넣기</span>
               </h3>
               <button
@@ -1723,7 +1867,7 @@ export default function GalleryScreen() {
                 onClick={() => setIsMoveModalOpen(false)}
                 className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -1752,7 +1896,7 @@ export default function GalleryScreen() {
                         }`}
                       >
                         <div className="flex items-center gap-2.5 truncate min-w-0">
-                          <span className="text-lg">📁</span>
+                          <Folder className="h-4 w-4 text-teal shrink-0" />
                           <div className="truncate min-w-0">
                             <h5 className="text-xs font-bold text-ink truncate">{album.name}</h5>
                             {album.description && (
@@ -1786,7 +1930,7 @@ export default function GalleryScreen() {
               {/* 최근항목 상시 보존 안내 팁 */}
               <div className="rounded-2xl bg-panel-alt/60 p-3.5 border border-border text-[11.5px] text-ink3 space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-ink">
-                  <span>💡</span>
+                  <Info className="h-3.5 w-3.5 text-teal shrink-0" />
                   <span>'전체 (최근 항목)' 상시 보존</span>
                 </div>
                 <p className="leading-relaxed">
@@ -1838,7 +1982,7 @@ export default function GalleryScreen() {
             }}
             className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink hover:bg-teal-soft hover:text-teal transition-all cursor-pointer"
           >
-            <span>🖼️</span>
+            <ImageIcon className="h-3.5 w-3.5 text-teal" />
             <span>이 사진을 앨범 대표이미지로 지정</span>
           </button>
         </div>
@@ -1930,7 +2074,7 @@ function PhonePhotoCard({
                 title="캡션 수정"
                 className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-[10px] text-white hover:bg-teal transition-colors"
               >
-                ✏️
+                <Pencil className="h-3 w-3" />
               </button>
               <button
                 type="button"
@@ -1938,7 +2082,7 @@ function PhonePhotoCard({
                 title="사진 삭제"
                 className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-[10px] text-white hover:bg-danger transition-colors"
               >
-                ✕
+                <X className="h-3 w-3" />
               </button>
             </div>
           )
@@ -1946,7 +2090,7 @@ function PhonePhotoCard({
 
         {count > 1 && (
           <div className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[9.5px] font-mono font-bold text-white backdrop-blur-xs">
-            <span>📷</span>
+            <Camera className="h-3 w-3" />
             <span>{count}</span>
           </div>
         )}
@@ -1976,7 +2120,7 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-panel-alt/20 py-20 text-center">
-      <span className="text-5xl">📷</span>
+      <Camera className="h-12 w-12 text-ink3/40 stroke-[1.2]" />
       <h3 className="mt-4 text-base font-bold text-ink">
         {keyword ? '검색 결과와 일치하는 사진이 없습니다.' : '이 영역에 등록된 사진이 없습니다.'}
       </h3>
@@ -1988,7 +2132,8 @@ function EmptyState({
       {!keyword && canCreate && (
         <div className="mt-5">
           <Button size="md" variant="primary" onClick={onUpload}>
-            사진 올리기
+            <Plus className="h-4 w-4 mr-1" />
+            <span>사진 올리기</span>
           </Button>
         </div>
       )}

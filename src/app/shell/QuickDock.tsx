@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Bell, X, ArrowLeft, User } from 'lucide-react';
+import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { GroupwarePanel } from '@/features/gw/desktop/GroupwarePanel';
 import { ChatbotPanel } from '@/features/widdy/desktop/ChatbotPanel';
 import { MessengerPanel } from '@/features/chat/desktop/MessengerPanel';
@@ -91,7 +93,9 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
                           key={n.id}
                           className={`flex items-start gap-3 border-b border-border px-4 py-3 ${n.read ? 'opacity-55' : ''}`}
                         >
-                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#bae0ff] text-[15px]">👤</span>
+                          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#bae0ff] text-ink">
+                            <User size={16} />
+                          </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
                               <span className="truncate text-[11.5px] font-bold text-ink">{n.from}</span>
@@ -119,7 +123,7 @@ function DockHeader({ tool, onClose, notiCount, notiView, onNoti }: { tool: Tool
   return (
     <header style={{ background: tool.color }} className="flex h-14 shrink-0 items-center justify-between px-4">
       <span className="flex items-center gap-2.5 text-ink">
-        <span className="text-[17px]">{tool.icon}</span>
+        <MenuGlyph glyph={tool.icon} size={18} />
         <span className="text-[14.5px] font-extrabold">
           {notiView ? '메신저 알림' : tool.label}
         </span>
@@ -130,9 +134,9 @@ function DockHeader({ tool, onClose, notiCount, notiView, onNoti }: { tool: Tool
           <button
             onClick={onNoti}
             title={notiView ? '메신저로 돌아가기' : '알림 기록'}
-            className="relative grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors"
+            className="relative grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-ink hover:bg-black/15 transition-colors"
           >
-            {notiView ? '←' : '🔔'}
+            {notiView ? <ArrowLeft size={15} /> : <Bell size={15} />}
             {!notiView && notiCount != null && notiCount > 0 && (
               <span className="absolute -right-[3px] -top-[3px] grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-[rgba(0,0,0,0.12)] bg-danger px-[2px] text-[8px] font-extrabold text-white">
                 {notiCount}
@@ -140,8 +144,8 @@ function DockHeader({ tool, onClose, notiCount, notiView, onNoti }: { tool: Tool
             )}
           </button>
         )}
-        <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-[13px] text-ink hover:bg-black/15 transition-colors">
-          ✕
+        <button onClick={onClose} title="닫기" className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-ink hover:bg-black/15 transition-colors">
+          <X size={15} />
         </button>
       </div>
     </header>

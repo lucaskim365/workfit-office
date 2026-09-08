@@ -1,4 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
+import {
+  Settings,
+  Palette,
+  Bell,
+  UserCheck,
+  Check,
+  AlertCircle,
+  Lightbulb,
+  Calendar,
+  FileText,
+  CheckSquare,
+  Square,
+} from 'lucide-react';
 import { applyTheme, getContrastColor } from '@/app/shell/ThemeCustomizerModal';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { absenceRepo } from '@/data/absence/absence.repo';
@@ -169,14 +182,14 @@ export default function SettingsScreen() {
       {/* Toast */}
       {absenceToast && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-xs font-semibold text-white shadow-xl animate-in fade-in slide-in-from-bottom-3">
-          <span className="text-teal">✓</span>
+          <Check size={14} className="text-teal" />
           <span>{absenceToast}</span>
         </div>
       )}
 
       {/* 타이틀 헤더 */}
       <div className="flex items-center gap-2 pb-4 border-b border-border">
-        <span className="text-[20px]">⚙️</span>
+        <Settings size={20} className="text-teal" />
         <h1 className="text-[17px] font-bold text-ink">환경설정</h1>
       </div>
 
@@ -194,7 +207,8 @@ export default function SettingsScreen() {
               : 'text-ink2 hover:bg-panel-alt'
               }`}
           >
-            🎨 테마 설정
+            <Palette size={14} />
+            <span>테마 설정</span>
           </button>
           <button
             onClick={() => setActiveTab('notification')}
@@ -203,7 +217,8 @@ export default function SettingsScreen() {
               : 'text-ink2 hover:bg-panel-alt'
               }`}
           >
-            🔔 알림 설정
+            <Bell size={14} />
+            <span>알림 설정</span>
           </button>
 
           <div className="px-2.5 py-1 rounded bg-panel-alt text-[10px] font-extrabold tracking-wider uppercase text-ink3 mt-3 mb-1">
@@ -216,7 +231,8 @@ export default function SettingsScreen() {
               : 'text-ink2 hover:bg-panel-alt'
               }`}
           >
-            📋 부재/대결 관리
+            <UserCheck size={14} />
+            <span>부재/대결 관리</span>
           </button>
         </div>
 
@@ -443,7 +459,7 @@ export default function SettingsScreen() {
                 {/* 시스템 대결 기능 비활성화 경고 배너 */}
                 {!isProxySystemEnabled && (
                   <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in">
-                    <span className="text-lg shrink-0">🚫</span>
+                    <AlertCircle size={20} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                     <div className="flex flex-col gap-1">
                       <span className="font-extrabold text-[12.5px] text-rose-800 dark:text-rose-200">
                         '대결자 지정' 기능 비활성화 안내
@@ -457,7 +473,7 @@ export default function SettingsScreen() {
 
                 {/* 추후 개발 예정 자동 부재 연동 안내 배너 */}
                 <div className="flex items-start gap-2.5 rounded-xl border border-teal/30 bg-teal/5 p-3.5 text-xs text-ink">
-                  <span className="text-base shrink-0">💡</span>
+                  <Lightbulb size={18} className="text-teal shrink-0 mt-0.5" />
                   <div className="flex flex-col gap-0.5">
                     <span className="font-bold text-teal">자동 부재 연동 안내 (추후 개발 예정)</span>
                     <span className="text-[11.5px] leading-relaxed text-ink2">
@@ -537,7 +553,10 @@ export default function SettingsScreen() {
 
                   {/* 부재 기간 설정 */}
                   <div className="flex flex-col gap-3 p-4 border border-border rounded-xl bg-panel-alt/50">
-                    <div className="text-[13px] font-bold text-ink">📅 부재 기간 및 사유</div>
+                    <div className="text-[13px] font-bold text-ink flex items-center gap-1.5">
+                      <Calendar size={15} className="text-teal" />
+                      <span>부재 기간 및 사유</span>
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="flex flex-col gap-1">
                         <label className="text-[11px] font-semibold text-ink3">부재 시작일시</label>
@@ -621,9 +640,10 @@ export default function SettingsScreen() {
                     {absenceConfig.scope === 'SPECIFIC_FORMS' && (
                       <div className="mt-2 rounded-lg border border-teal/30 bg-panel p-3.5 flex flex-col gap-2.5 animate-in fade-in duration-200">
                         <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11.5px] font-bold text-ink">📋 대결 위임 허용 서식 선택</span>
-                            <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[10.5px] font-bold text-teal">
+                          <div className="flex items-center gap-1.5">
+                            <FileText size={14} className="text-teal" />
+                            <span className="text-[11.5px] font-bold text-ink">대결 위임 허용 서식 선택</span>
+                            <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[10.5px] font-bold text-teal ml-1">
                               {absenceConfig.allowedDocTypes?.length ?? 0} / {allAvailableDocTypes.length}개 서식 선택됨
                             </span>
                           </div>
@@ -633,17 +653,19 @@ export default function SettingsScreen() {
                             <button
                               type="button"
                               onClick={() => setAbsenceConfig((prev) => ({ ...prev, allowedDocTypes: [...allAvailableDocTypes] }))}
-                              className="rounded px-2 py-1 text-[10.5px] font-bold text-teal hover:bg-teal/10 transition-colors"
+                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10.5px] font-bold text-teal hover:bg-teal/10 transition-colors"
                             >
-                              ☑️ 전체 선택
+                              <CheckSquare size={13} />
+                              <span>전체 선택</span>
                             </button>
                             <span className="text-ink3 text-[10px]">|</span>
                             <button
                               type="button"
                               onClick={() => setAbsenceConfig((prev) => ({ ...prev, allowedDocTypes: [] }))}
-                              className="rounded px-2 py-1 text-[10.5px] font-bold text-ink3 hover:bg-panel-alt transition-colors"
+                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10.5px] font-bold text-ink3 hover:bg-panel-alt transition-colors"
                             >
-                              ☐ 전체 해제
+                              <Square size={13} />
+                              <span>전체 해제</span>
                             </button>
                           </div>
                         </div>

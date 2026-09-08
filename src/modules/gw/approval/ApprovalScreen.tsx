@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { X, Send } from 'lucide-react';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -1593,7 +1594,8 @@ function DocDetail({
           >
             <div className="flex items-center justify-between border-b border-border pb-3.5">
               <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
-                <span>📨 기결재 문서 후열(공람) 전달</span>
+                <Send className="h-4 w-4 text-teal shrink-0" />
+                <span>기결재 문서 후열(공람) 전달</span>
                 <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10.5px] font-bold text-amber-600 border border-amber-500/20">
                   관리자 전용
                 </span>
@@ -1601,9 +1603,9 @@ function DocDetail({
               <button
                 type="button"
                 onClick={() => setShowForwardPostReadModal(false)}
-                className="rounded-lg p-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink"
+                className="rounded-lg p-1 text-ink3 hover:bg-panel-alt hover:text-ink cursor-pointer"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Bell, Settings } from 'lucide-react';
+import { ClipboardCheck, Bell, Settings, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
@@ -415,7 +415,9 @@ export default function MobileApprovalList() {
           <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
             <div className="flex items-center justify-between pb-3 border-b border-black/5">
               <span className="text-[15px] font-bold text-ink">결재함 설정</span>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-[13px] text-ink3">✕</button>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-ink3 p-1">
+                <X size={16} />
+              </button>
             </div>
             
             <div className="py-4 space-y-3.5">

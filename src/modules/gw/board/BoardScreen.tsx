@@ -1,4 +1,20 @@
 import { useState, useMemo, useEffect } from 'react';
+import {
+  Search,
+  Pin,
+  Paperclip,
+  Pencil,
+  Trash2,
+  Megaphone,
+  PartyPopper,
+  ScrollText,
+  FolderArchive,
+  FileText,
+  Globe,
+  PenLine,
+  ArrowLeft,
+  Lightbulb,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -8,6 +24,21 @@ import type { Post } from '@/domain/board/schema';
 import { fileStorage } from '@/shared/lib/storage';
 
 const BOARDS = BOARDS_SEED;
+
+function getBoardIcon(boardId: string, size = 16, className = '') {
+  switch (boardId) {
+    case 'notice':
+      return <Megaphone size={size} className={className} />;
+    case 'event':
+      return <PartyPopper size={size} className={className} />;
+    case 'rule':
+      return <ScrollText size={size} className={className} />;
+    case 'archive':
+      return <FolderArchive size={size} className={className} />;
+    default:
+      return <FileText size={size} className={className} />;
+  }
+}
 
 export default function BoardScreen() {
   const navigate = useNavigate();
@@ -304,7 +335,10 @@ export default function BoardScreen() {
       {/* ── 좌측 게시판 사이드바 (고정) ── */}
       <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm">
         <div>
-          <h2 className="text-sm font-extrabold text-navy">🌐 사내 게시판</h2>
+          <h2 className="text-sm font-extrabold text-navy flex items-center gap-2">
+            <Globe size={16} className="text-teal" />
+            <span>사내 게시판</span>
+          </h2>
           <p className="mt-1 text-[11px] text-ink3">공식 정보 및 사내 공지를 열람합니다.</p>
         </div>
 
@@ -319,13 +353,13 @@ export default function BoardScreen() {
                   setSearchQuery('');
                   setViewMode('list');
                 }}
-                className={`flex w-full items-center gap-3.5 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
+                className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
                   isActive
                     ? 'bg-teal text-white shadow-xs'
                     : 'text-ink2 hover:bg-panel-alt hover:text-ink'
                 }`}
               >
-                <span className="text-base">{b.icon}</span>
+                <span className="shrink-0">{getBoardIcon(b.id, 16, isActive ? 'text-white' : 'text-teal')}</span>
                 <span className="flex-1 truncate">{b.name}</span>
               </button>
             );
@@ -342,7 +376,7 @@ export default function BoardScreen() {
             <div className="flex flex-col gap-2 border-b border-border pb-4">
               <div className="flex items-center justify-between">
                 <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
-                  <span>{activeBoardMeta.icon}</span>
+                  <span>{getBoardIcon(activeBoardMeta.id, 18, 'text-teal')}</span>
                   <span>{activeBoardMeta.name}</span>
                 </h1>
                 {canCreate && (
@@ -351,9 +385,10 @@ export default function BoardScreen() {
                       setNewPost({ ...newPost, boardId: activeBoard });
                       setViewMode('write');
                     }}
-                    className="rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
                   >
-                    ✍️ 새 글 쓰기
+                    <PenLine size={13} />
+                    <span>새 글 쓰기</span>
                   </button>
                 )}
               </div>
@@ -369,7 +404,7 @@ export default function BoardScreen() {
                   placeholder="제목, 내용 또는 작성자 검색"
                   className="h-9 w-full rounded-lg border border-border-hi bg-panel px-3.5 pr-8 text-[12px] outline-none focus:border-teal transition-colors"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink3 text-xs pointer-events-none">🔍</span>
+                <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink3 pointer-events-none" />
               </div>
             </div>
 
@@ -402,7 +437,9 @@ export default function BoardScreen() {
                       >
                         <td className="p-3 text-center">
                           {p.isPinned ? (
-                            <span className="text-teal font-bold" title="중요 공지">📌</span>
+                            <span title="중요 공지" className="inline-flex items-center justify-center">
+                              <Pin size={14} className="text-teal inline-block" />
+                            </span>
                           ) : (
                             <span className="text-ink3">{filteredPosts.length - idx}</span>
                           )}
@@ -414,7 +451,11 @@ export default function BoardScreen() {
                             </span>
                           )}
                           <span className="truncate hover:text-teal transition-colors">{p.title}</span>
-                          {p.hasAttachment && <span className="text-[10px] opacity-75 shrink-0" title="첨부파일 있음">📎</span>}
+                          {p.hasAttachment && (
+                            <span title="첨부파일 있음" className="inline-flex items-center">
+                              <Paperclip size={12} className="opacity-75 shrink-0 text-ink3" />
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-ink2 truncate">{p.author}</td>
                         <td className="p-3 text-ink3">{p.date}</td>
@@ -442,7 +483,7 @@ export default function BoardScreen() {
                 onClick={() => setViewMode('list')}
                 className="flex items-center gap-1.5 text-teal font-bold hover:underline"
               >
-                <span>←</span> <span>목록으로</span>
+                <ArrowLeft size={14} /> <span>목록으로</span>
               </button>
               {user && selectedPost.author === `${user.name} ${user.position}` ? (
                 <div className="flex gap-1.5">
@@ -450,18 +491,18 @@ export default function BoardScreen() {
                     <button
                       type="button"
                       onClick={() => handleStartEdit(selectedPost)}
-                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors flex items-center gap-1"
                     >
-                      ✍️ 수정
+                      <Pencil size={12} /> 수정
                     </button>
                   )}
                   {canDelete && (
                     <button
                       type="button"
                       onClick={() => handleDeletePost(selectedPost.id)}
-                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors"
+                      className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors flex items-center gap-1"
                     >
-                      🗑️ 삭제
+                      <Trash2 size={12} /> 삭제
                     </button>
                   )}
                 </div>
@@ -472,9 +513,9 @@ export default function BoardScreen() {
 
             <div className="flex-1 overflow-y-auto pr-1 py-4 space-y-5">
               <div className="space-y-2 border-b border-border pb-3">
-                <h2 className="text-[15px] font-extrabold text-ink leading-snug">
-                  {selectedPost.isPinned && <span className="text-teal mr-1.5">📌</span>}
-                  {selectedPost.title}
+                <h2 className="text-[15px] font-extrabold text-ink leading-snug flex items-center gap-1.5">
+                  {selectedPost.isPinned && <Pin size={16} className="text-teal shrink-0" />}
+                  <span>{selectedPost.title}</span>
                 </h2>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink3">
                   <div className="flex items-center gap-3">
@@ -494,7 +535,10 @@ export default function BoardScreen() {
               {/* 연계 문서 바로가기 링크 */}
               {selectedPost.id === '1' && (
                 <div className="rounded-lg border border-teal/20 bg-teal-soft/10 p-3.5 flex items-center justify-between">
-                  <span className="text-[11.5px] font-semibold text-ink2">💡 개정된 최신 규정집 본문은 문서관리에서 즉시 확인 가능합니다.</span>
+                  <div className="flex items-center gap-2">
+                    <Lightbulb size={15} className="text-teal shrink-0" />
+                    <span className="text-[11.5px] font-semibold text-ink2">개정된 최신 규정집 본문은 문서관리에서 즉시 확인 가능합니다.</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => navigate('/gw/document?docId=1')}
@@ -508,7 +552,9 @@ export default function BoardScreen() {
               {/* 첨부파일 영역 */}
               {selectedPost.hasAttachment && selectedPost.attachedFiles && (
                 <div className="rounded-lg border border-border bg-panel-alt/30 p-3.5 space-y-2">
-                  <div className="font-bold text-[11px] text-ink2">📎 첨부파일 ({selectedPost.attachedFiles.length}개)</div>
+                  <div className="font-bold text-[11px] text-ink2 flex items-center gap-1">
+                    <Paperclip size={13} /> 첨부파일 ({selectedPost.attachedFiles.length}개)
+                  </div>
                   {selectedPost.attachedFiles.map((file, fidx) => (
                     <div
                       key={fidx}
@@ -535,10 +581,11 @@ export default function BoardScreen() {
                 onClick={() => setViewMode(viewMode === 'edit' ? 'detail' : 'list')}
                 className="flex items-center gap-1 text-ink2 hover:text-ink font-semibold"
               >
-                <span>←</span> <span>{viewMode === 'edit' ? '수정 취소' : '작성 취소'}</span>
+                <ArrowLeft size={14} /> <span>{viewMode === 'edit' ? '수정 취소' : '작성 취소'}</span>
               </button>
-              <span className="font-extrabold text-teal">
-                {viewMode === 'edit' ? '✍️ 게시글 수정' : '✍️ 새 게시글 작성'}
+              <span className="font-extrabold text-teal flex items-center gap-1">
+                <Pencil size={15} />
+                <span>{viewMode === 'edit' ? '게시글 수정' : '새 게시글 작성'}</span>
               </span>
             </div>
 
@@ -552,7 +599,7 @@ export default function BoardScreen() {
                 >
                   {BOARDS.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.icon} {b.name}
+                      {b.name}
                     </option>
                   ))}
                 </select>
@@ -584,7 +631,9 @@ export default function BoardScreen() {
 
               {/* 기존 및 신규 첨부파일 영역 */}
               <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-ink2">📎 첨부파일</label>
+                <label className="font-bold text-ink2 flex items-center gap-1">
+                  <Paperclip size={13} /> 첨부파일
+                </label>
 
                 {/* 기존 첨부파일 표시 (수정 모드일 때만) */}
                 {viewMode === 'edit' && existingAttachments.length > 0 && (
@@ -593,7 +642,9 @@ export default function BoardScreen() {
                     <ul className="space-y-1">
                       {existingAttachments.map((f, idx) => (
                         <li key={idx} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md border border-border/50 opacity-90">
-                          <span className="truncate">📎 {f.name} ({f.size})</span>
+                          <span className="truncate flex items-center gap-1">
+                            <Paperclip size={12} className="shrink-0 text-ink3" /> {f.name} ({f.size})
+                          </span>
                           <button
                             type="button"
                             onClick={() => setExistingAttachments((prev) => prev.filter((_, i) => i !== idx))}
@@ -621,7 +672,9 @@ export default function BoardScreen() {
                   <ul className="mt-2 space-y-1">
                     {writeAttachments.map((f, idx) => (
                       <li key={idx} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md border border-border/50">
-                        <span className="truncate">📎 {f.name} ({f.size})</span>
+                        <span className="truncate flex items-center gap-1">
+                          <Paperclip size={12} className="shrink-0 text-ink3" /> {f.name} ({f.size})
+                        </span>
                         <button
                           type="button"
                           onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))}
@@ -643,7 +696,9 @@ export default function BoardScreen() {
                     onChange={(e) => setNewPost({ ...newPost, isPinned: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  <span>📌 중요 공지로 설정 (목록 최상단 고정)</span>
+                  <span className="flex items-center gap-1">
+                    <Pin size={13} className="text-teal" /> 중요 공지로 설정 (목록 최상단 고정)
+                  </span>
                 </label>
               </div>
             </div>

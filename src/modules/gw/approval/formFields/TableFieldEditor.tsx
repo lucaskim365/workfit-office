@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { getCellMergeInfo, type CellMerge } from './utils';
 import { EditableHeader } from './EditableHeader';
+import { X } from 'lucide-react';
 interface TableFieldEditorProps {
   field: FormField;
   v: FieldValue;
@@ -774,10 +775,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                             e.stopPropagation();
                             removeCol(cIdx);
                           }}
-                          className="text-[10px] text-ink3 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold shrink-0"
+                          className="text-ink3 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold shrink-0 cursor-pointer"
                           title="이 열 삭제"
                         >
-                          ✕
+                          <X className="h-3 w-3" />
                         </button>
                       )}
                     </div>
@@ -879,9 +880,10 @@ export function TableFieldEditor({ field, v, set }: TableFieldEditorProps) {
                     <button
                       type="button"
                       onClick={() => removeRow(rIdx)}
-                      className="text-[12px] text-ink3 hover:text-red-500 font-bold"
+                      className="text-ink3 hover:text-red-500 font-bold cursor-pointer"
+                      title="이 행 삭제"
                     >
-                      ✕
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </td>
                 </tr>

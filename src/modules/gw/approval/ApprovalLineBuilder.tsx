@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
+import { X, AlertTriangle } from 'lucide-react';
 
 import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
@@ -387,7 +388,7 @@ export function ApprovalLineBuilder({
                                 title="결재자 삭제"
                                 className="text-ink3 hover:text-rose-500 text-[13px] p-0.5 transition-colors shrink-0"
                               >
-                                ✕
+                                <X className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           ))}
@@ -398,11 +399,9 @@ export function ApprovalLineBuilder({
                       <button
                         type="button"
                         onClick={() => setPicker({ mode: 'add-to-group', groupIndex: firstItemIdx, targetGroupId: group.id })}
-                        title="병렬 그룹에 결재자 추가"
-                        className="flex items-center justify-center gap-1.5 rounded border border-dashed border-teal/40 bg-panel py-1.5 text-[11px] font-bold text-teal hover:bg-teal-soft/40 hover:border-teal/60 transition-all w-full"
+                        className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-teal/40 bg-teal-soft/20 py-1 text-[11px] font-semibold text-teal hover:bg-teal-soft/40 transition-colors"
                       >
-                        <span className="text-[12px] font-extrabold">+</span>
-                        <span>병렬 결재자 추가</span>
+                        <span>+ 병렬 결재자 추가</span>
                       </button>
                     </div>
 
@@ -426,7 +425,7 @@ export function ApprovalLineBuilder({
                       </button>
                     </div>
 
-                    {/* 병렬 그룹 전체 삭제 (x) 버튼 */}
+                    {/* 병렬 그룹 전체 삭제 버튼 */}
                     <button
                       type="button"
                       onClick={() => {
@@ -443,7 +442,7 @@ export function ApprovalLineBuilder({
                       title="병렬 그룹 삭제"
                       className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
                     >
-                      ✕
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -493,7 +492,7 @@ export function ApprovalLineBuilder({
                     title="결재자 삭제"
                     className="shrink-0 text-[13px] text-ink3 hover:text-red-500"
                   >
-                    ✕
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -582,7 +581,7 @@ export function ApprovalLineBuilder({
                   title="참조자 삭제"
                   className="shrink-0 p-0.5 text-[12px] text-ink3 hover:text-red-500 transition-colors"
                 >
-                  ✕
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
@@ -591,7 +590,10 @@ export function ApprovalLineBuilder({
       </div>
 
       {dupWarn && (
-        <p className="mt-2 text-[10.5px] text-amber">⚠ 기안자 본인 또는 중복 결재자가 포함돼 있습니다.</p>
+        <p className="mt-2 text-[10.5px] text-amber flex items-center gap-1">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <span>기안자 본인 또는 중복 결재자가 포함돼 있습니다.</span>
+        </p>
       )}
 
       {/* [3] 수신처 등 외부 slot */}
@@ -613,7 +615,9 @@ export function ApprovalLineBuilder({
                   ? '병렬 그룹 결재자 추가 (최소 2명 이상 선택)'
                   : '병렬 그룹에 결재자 추가'}
               </span>
-              <button type="button" onClick={() => setPicker(null)} className="text-[16px] text-ink3 hover:text-ink">✕</button>
+              <button type="button" onClick={() => setPicker(null)} className="text-ink3 hover:text-ink">
+                <X className="h-4 w-4" />
+              </button>
             </div>
             <UserPickList
               users={users.filter((u) => u.status === '사용')}

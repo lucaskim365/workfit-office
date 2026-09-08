@@ -1,3 +1,4 @@
+import { FileText, X } from 'lucide-react';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { ApprovalDocumentView } from '../ApprovalDocumentView';
@@ -27,7 +28,7 @@ export function DocumentPreviewModal({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3">
           <div className="text-[13.5px] font-bold text-ink flex items-center gap-1.5">
-            <span>📄</span> {title}
+            <FileText size={15} className="text-teal" /> {title}
           </div>
           <button
             type="button"
@@ -35,9 +36,9 @@ export function DocumentPreviewModal({
               e.stopPropagation();
               onClose();
             }}
-            className="grid h-8 w-8 place-items-center rounded-lg text-[16px] text-ink3 hover:bg-panel-alt"
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink3 hover:bg-panel-alt"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6 bg-white dark:bg-black/10">

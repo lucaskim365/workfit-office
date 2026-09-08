@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { X, Download, Printer, Building2, BarChart3, PhoneCall, Briefcase, Mail, Phone, Check, Copy } from 'lucide-react';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
@@ -49,7 +50,9 @@ export default function OrgChartScreen() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">🏢</span>
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">
+            <Building2 size={18} />
+          </span>
           <h1 className="text-xl font-bold text-ink">조직도</h1>
           <span className="ml-2 text-[12px] text-ink3">
             {validDepts.length}개 부서 · {validUsers.length}명
@@ -67,7 +70,8 @@ export default function OrgChartScreen() {
                 : 'text-ink3 hover:text-ink'
             }`}
           >
-            <span>📊</span> 비주얼 차트
+            <BarChart3 size={14} />
+            <span>비주얼 차트</span>
           </button>
           <button
             type="button"
@@ -78,7 +82,8 @@ export default function OrgChartScreen() {
                 : 'text-ink3 hover:text-ink'
             }`}
           >
-            <span>📞</span> 비상연락망
+            <PhoneCall size={14} />
+            <span>비상연락망</span>
           </button>
         </div>
       </div>
@@ -138,8 +143,9 @@ export default function OrgChartScreen() {
                 </div>
               </div>
 
-              <div className="w-full rounded-xl border border-border/40 bg-panel-alt/20 py-2 text-center text-[10.5px] text-ink3">
-                🏢 {selectedUser.dept} · {selectedUser.position}
+              <div className="w-full rounded-xl border border-border/40 bg-panel-alt/20 py-2 text-center text-[10.5px] text-ink3 flex items-center justify-center gap-1">
+                <Building2 size={12} className="text-ink3 shrink-0" />
+                <span>{selectedUser.dept} · {selectedUser.position}</span>
               </div>
             </div>
 
@@ -150,15 +156,16 @@ export default function OrgChartScreen() {
                 <button
                   type="button"
                   onClick={() => setSelectedUserId(null)}
-                  className="rounded px-2 py-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
+                  className="rounded p-1 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
                 >
-                  ✕
+                  <X size={15} />
                 </button>
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto p-6 text-[12px]">
                 <h2 className="flex items-center gap-1.5 border-b border-border pb-2 text-sm font-extrabold text-ink">
-                  <span>💼</span> 인사 및 소속 정보
+                  <Briefcase size={15} className="text-teal" />
+                  <span>인사 및 소속 정보</span>
                 </h2>
 
                 <div className="grid grid-cols-2 gap-x-3.5 gap-y-4">
@@ -186,9 +193,10 @@ export default function OrgChartScreen() {
                     ) : (
                       <a
                         href={`mailto:${selectedUser.email}`}
-                        className="mt-1 block font-mono font-semibold text-teal hover:underline break-all"
+                        className="mt-1 flex items-center gap-1 font-mono font-semibold text-teal hover:underline break-all"
                       >
-                        ✉ {selectedUser.email || '-'}
+                        <Mail size={12} className="shrink-0" />
+                        <span>{selectedUser.email || '-'}</span>
                       </a>
                     )}
                   </div>
@@ -198,8 +206,13 @@ export default function OrgChartScreen() {
                     {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? (
                       <span className="mt-1 block font-mono text-[11px] text-ink3 italic">비공개</span>
                     ) : (
-                      <span className="mt-1 block font-mono font-semibold text-ink">
-                        {selectedProfile?.phone ? `📞 ${selectedProfile.phone}` : '—'}
+                      <span className="mt-1 flex items-center gap-1 font-mono font-semibold text-ink">
+                        {selectedProfile?.phone ? (
+                          <>
+                            <Phone size={12} className="shrink-0 text-ink3" />
+                            <span>{selectedProfile.phone}</span>
+                          </>
+                        ) : '—'}
                       </span>
                     )}
                   </div>
@@ -674,8 +687,8 @@ function EmergencyContactView({
       {/* 툴바 & 검색 & 액션 */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-panel p-4 shadow-xs">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-soft text-xl text-teal shadow-xs">
-            📞
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-soft text-teal shadow-xs">
+            <PhoneCall size={20} />
           </span>
           <div>
             <div className="flex items-center gap-2">
@@ -693,8 +706,8 @@ function EmergencyContactView({
         <div className="flex flex-wrap items-center gap-2">
           {/* 복사 안내 알림 토스트 */}
           {copiedText && (
-            <span className="rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white shadow-xs animate-in fade-in">
-              ✓ {copiedText}
+            <span className="rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white shadow-xs animate-in fade-in flex items-center gap-1">
+              <Check size={12} /> {copiedText}
             </span>
           )}
 
@@ -710,19 +723,19 @@ function EmergencyContactView({
               <button
                 type="button"
                 onClick={() => setKeyword('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-ink3 hover:text-ink"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5"
               >
-                ✕
+                <X size={13} />
               </button>
             )}
           </div>
 
           {/* CSV 내보내기 & 인쇄 */}
           <Button size="sm" variant="secondary" onClick={handleExportCsv}>
-            <span>📥 CSV 저장</span>
+            <span className="flex items-center gap-1.5"><Download size={13} /> CSV 저장</span>
           </Button>
           <Button size="sm" variant="secondary" onClick={() => window.print()}>
-            <span>🖨️ 인쇄</span>
+            <span className="flex items-center gap-1.5"><Printer size={13} /> 인쇄</span>
           </Button>
         </div>
       </div>
@@ -822,9 +835,9 @@ function EmergencyContactView({
                             type="button"
                             onClick={(e) => handleCopy(item.phone, '전화번호', e)}
                             title="전화번호 복사"
-                            className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-1 text-ink3 hover:text-ink transition-opacity"
                           >
-                            📋
+                            <Copy size={12} />
                           </button>
                         </div>
                       ) : (
@@ -848,9 +861,9 @@ function EmergencyContactView({
                             type="button"
                             onClick={(e) => handleCopy(item.email, '이메일', e)}
                             title="이메일 복사"
-                            className="opacity-0 group-hover:opacity-100 p-1 text-[10px] text-ink3 hover:text-ink transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-1 text-ink3 hover:text-ink transition-opacity"
                           >
-                            📋
+                            <Copy size={12} />
                           </button>
                         </div>
                       ) : (

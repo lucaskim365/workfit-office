@@ -9,7 +9,11 @@ import { createCrudBackend } from '@/data/_backend/crudBackend';
 const backend = createCrudBackend<Post>({
   coll: 'posts',
   parse: (raw) => {
-    const p = postSchema.safeParse(raw);
+    const candidate = raw && typeof raw === 'object' ? {
+      ...raw,
+      attachedFiles: Array.isArray((raw as any).attachedFiles) ? (raw as any).attachedFiles : undefined,
+    } : raw;
+    const p = postSchema.safeParse(candidate);
     if (!p.success) {
       console.error('Failed to parse post:', p.error);
       return null;

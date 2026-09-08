@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bell, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useGwSummary } from '@/features/gw/useGwSummary';
@@ -10,6 +11,7 @@ import { isMailBackendReady, isMailSampleData } from '@/data/mail/mail.client';
 import { isGwAppReady } from '@/app/shell/gw-screens';
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { Pill } from '@/shared/ui/Pill';
+import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 
 /** 도크 패널 공용 카드(흰 배경 + 틸 액센트 바). */
 export function DockCard({ title, count, children }: { title: string; count?: string; children: ReactNode }) {
@@ -94,16 +96,18 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
             setShowNotiPanel(!showNotiPanel);
           }}
           title="알림"
-          className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors"
+          className="relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-ink hover:bg-black/15 transition-colors"
         >
-          🔔
+          <Bell size={16} />
           {unreadCount > 0 && (
             <span className="absolute -right-[3px] -top-[3px] grid h-[15px] min-w-[15px] place-items-center rounded-full border-[1.5px] border-[#c7ecc5] bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white">
               {unreadCount}
             </span>
           )}
         </button>
-        <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-[14px] text-ink hover:bg-black/15 transition-colors">✕</button>
+        <button onClick={onClose} title="닫기" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-black/10 text-ink hover:bg-black/15 transition-colors">
+          <X size={16} />
+        </button>
       </header>
 
       {/* 알림 레이어 */}
@@ -174,7 +178,9 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
                   }`}
               >
                 <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: enabled && a.hot ? CYAN : 'transparent', color: enabled && a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
-                <div className="grid flex-1 place-items-center pb-0.5"><span className="text-[17px] leading-none">{a.icon}</span></div>
+                <div className="grid flex-1 place-items-center pb-0.5">
+                  <MenuGlyph glyph={a.icon} size={22} className="text-ink" />
+                </div>
                 {enabled && a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
               </button>
             );

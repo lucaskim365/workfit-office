@@ -1,4 +1,26 @@
 import { useState, useMemo, useEffect } from 'react';
+import {
+  Search,
+  X,
+  Pin,
+  AlertTriangle,
+  FolderGit2,
+  Globe,
+  ScrollText,
+  BookOpen,
+  FileText,
+  Building2,
+  Folder,
+  User,
+  FileEdit,
+  Star,
+  FolderOpen,
+  History,
+  Download,
+  FolderPlus,
+  FilePlus,
+  TrendingUp,
+} from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -255,8 +277,8 @@ export default function DocumentScreen() {
       {/* ── 좌측 문서함 관리 사이드바 ── */}
       <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm select-none overflow-y-auto max-h-[calc(100vh-140px)]">
         <div className="flex items-center justify-between border-b border-border pb-2 shrink-0">
-          <h2 className="text-sm font-extrabold text-navy flex items-center gap-1.5">
-            <span>🗂️</span>
+          <h2 className="text-sm font-extrabold text-navy flex items-center gap-2">
+            <FolderGit2 size={16} className="text-teal" />
             <span>문서관리</span>
           </h2>
         </div>
@@ -276,15 +298,15 @@ export default function DocumentScreen() {
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>🌐</span>
+              <Globe size={14} className="text-teal" />
               <span>전사 공용 문서함</span>
             </span>
           </button>
           <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
             {[
-              { id: 'rule', label: '사내 규정', icon: '📑' },
-              { id: 'manual', label: '업무 매뉴얼', icon: '📘' },
-              { id: 'form', label: '공통 서식 양식', icon: '📝' }
+              { id: 'rule', label: '사내 규정', icon: <ScrollText size={13} /> },
+              { id: 'manual', label: '업무 매뉴얼', icon: <BookOpen size={13} /> },
+              { id: 'form', label: '공통 서식 양식', icon: <FileText size={13} /> }
             ].map((sub) => (
               <button
                 key={sub.id}
@@ -299,7 +321,7 @@ export default function DocumentScreen() {
                     : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
                 }`}
               >
-                <span>{sub.icon}</span>
+                <span className="shrink-0">{sub.icon}</span>
                 <span>{sub.label}</span>
               </button>
             ))}
@@ -321,7 +343,7 @@ export default function DocumentScreen() {
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>🏢</span>
+              <Building2 size={14} className="text-teal" />
               <span>부서별 문서함</span>
             </span>
           </button>
@@ -345,7 +367,7 @@ export default function DocumentScreen() {
                     : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
                 }`}
               >
-                <span>📁</span>
+                <Folder size={13} className="shrink-0" />
                 <span className="truncate">{deptName}</span>
               </button>
             ))}
@@ -367,14 +389,14 @@ export default function DocumentScreen() {
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>👤</span>
+              <User size={14} className="text-teal" />
               <span>개인 문서함</span>
             </span>
           </button>
           <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
             {[
-              { id: 'draft', label: '내 기안 초안', icon: '📝' },
-              { id: 'fav', label: '개인 보관 문서', icon: '⭐' }
+              { id: 'draft', label: '내 기안 초안', icon: <FileEdit size={13} /> },
+              { id: 'fav', label: '개인 보관 문서', icon: <Star size={13} /> }
             ].map((sub) => (
               <button
                 key={sub.id}
@@ -389,7 +411,7 @@ export default function DocumentScreen() {
                     : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
                 }`}
               >
-                <span>{sub.icon}</span>
+                <span className="shrink-0">{sub.icon}</span>
                 <span>{sub.label}</span>
               </button>
             ))}
@@ -409,7 +431,8 @@ export default function DocumentScreen() {
               : 'border-border text-ink3 hover:border-ink hover:text-ink'
           }`}
         >
-          <span>📁 전체 보기</span>
+          <FolderOpen size={14} />
+          <span>전체 보기</span>
         </button>
       </aside>
 
@@ -419,7 +442,9 @@ export default function DocumentScreen() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 shrink-0">
           <div>
             <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
-              <span>{activeCategory === 'all' ? '📁' : activeCategory === 'public' ? '🌐' : activeCategory === 'dept' ? '🏢' : '👤'}</span>
+              <span className="text-teal">
+                {activeCategory === 'all' ? <FolderOpen size={18} /> : activeCategory === 'public' ? <Globe size={18} /> : activeCategory === 'dept' ? <Building2 size={18} /> : <User size={18} />}
+              </span>
               <span>
                 {activeCategory === 'all' 
                   ? '전체 문서함' 
@@ -441,7 +466,7 @@ export default function DocumentScreen() {
                 placeholder="문서명 검색"
                 className="h-8 w-full rounded-lg border border-border-hi bg-panel px-3 pr-7 text-[11px] outline-none focus:border-teal"
               />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 text-[10px] pointer-events-none">🔍</span>
+              <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 pointer-events-none" />
             </div>
 
             {/* 등록 버튼 */}
@@ -535,9 +560,9 @@ export default function DocumentScreen() {
               </div>
               <button
                 onClick={() => setSelectedDocId(null)}
-                className="text-ink3 hover:text-ink font-bold text-sm px-2.5 py-1 rounded hover:bg-panel-alt"
+                className="text-ink3 hover:text-ink p-1 rounded hover:bg-panel-alt"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
 
@@ -548,7 +573,9 @@ export default function DocumentScreen() {
               {selectedDoc.isRule && (
                 <div className="bg-teal-soft/10 border border-teal/20 rounded-xl p-3.5 space-y-2 text-[11.5px]">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold text-teal">📌 시행 버전: {activeDocDisplay.version}</span>
+                    <span className="font-bold text-teal flex items-center gap-1">
+                      <Pin size={13} /> 시행 버전: {activeDocDisplay.version}
+                    </span>
                     <span className="text-ink3">시행일: {activeDocDisplay.date}</span>
                   </div>
                   {activeDocDisplay.reason && (
@@ -592,11 +619,14 @@ export default function DocumentScreen() {
               {/* PDF 미리보기 (MVP PDF 뷰어 연동) */}
               <div className="rounded-xl border border-border bg-panel-alt/30 overflow-hidden flex flex-col">
                 <div className="bg-panel-alt border-b border-border p-2.5 flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-ink2">📄 브라우저 미리보기 (PDF v1.0)</span>
+                  <span className="font-bold text-ink2 flex items-center gap-1.5">
+                    <FileText size={13} className="text-teal" />
+                    <span>브라우저 미리보기 (PDF v1.0)</span>
+                  </span>
                   <span className="text-teal font-extrabold">조회 모드</span>
                 </div>
                 <div className="h-56 p-4 flex flex-col items-center justify-center text-center bg-panel space-y-2">
-                  <span className="text-3xl">🔍</span>
+                  <Search size={32} className="text-ink3 opacity-30" />
                   <div className="space-y-1">
                     <p className="font-bold text-ink2 text-[12px]">{activeDocDisplay.attachments[0] || '가상문서_미리보기.pdf'}</p>
                     <p className="text-[10px] text-ink3">본문 내부 미리보기가 MVP로 호환 모드로 렌더링되었습니다.</p>
@@ -614,7 +644,10 @@ export default function DocumentScreen() {
               {selectedDoc.isRule && (
                 <div className="space-y-2 pt-2 border-t border-border/40">
                   <div className="flex justify-between items-center">
-                    <h4 className="font-extrabold text-ink text-xs">📋 개정 이력</h4>
+                    <h4 className="font-extrabold text-ink text-xs flex items-center gap-1.5">
+                      <History size={13} className="text-teal" />
+                      <span>개정 이력</span>
+                    </h4>
                     {hasWriteAccess && (
                       <button
                         onClick={() => {
@@ -659,9 +692,10 @@ export default function DocumentScreen() {
             <div className="p-4 border-t border-border bg-panel-alt/20 shrink-0 flex gap-2">
               <button
                 onClick={() => downloadVirtualFile(activeDocDisplay.attachments[0])}
-                className="flex-1 rounded-lg bg-teal py-2.5 text-center font-bold text-white hover:opacity-90 transition-opacity"
+                className="flex-1 rounded-lg bg-teal py-2.5 text-center font-bold text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
               >
-                💾 원본 파일 다운로드
+                <Download size={14} />
+                <span>원본 파일 다운로드</span>
               </button>
               {hasWriteAccess && (
                 <button
@@ -681,10 +715,13 @@ export default function DocumentScreen() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-panel border border-border w-[400px] rounded-xl p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex justify-between items-center border-b border-border pb-2">
-              <span className="font-extrabold text-navy text-[13px]">
-                {editingBoxId ? '📂 문서함 정보 수정' : '📂 신규 문서함 추가'}
+              <span className="font-extrabold text-navy text-[13px] flex items-center gap-1.5">
+                <FolderPlus size={15} className="text-teal" />
+                <span>{editingBoxId ? '문서함 정보 수정' : '신규 문서함 추가'}</span>
               </span>
-              <button onClick={() => setIsBoxModalOpen(false)} className="text-ink3 hover:text-ink font-bold text-sm">✕</button>
+              <button onClick={() => setIsBoxModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
+              </button>
             </div>
 
             <form onSubmit={handleSaveBox} className="space-y-4">
@@ -734,8 +771,13 @@ export default function DocumentScreen() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-panel border border-border w-[460px] rounded-xl p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
-              <span className="font-extrabold text-navy text-[13px]">📝 신규 공식 문서 등록</span>
-              <button onClick={() => setIsDocModalOpen(false)} className="text-ink3 hover:text-ink font-bold text-sm">✕</button>
+              <span className="font-extrabold text-navy text-[13px] flex items-center gap-1.5">
+                <FilePlus size={15} className="text-teal" />
+                <span>신규 공식 문서 등록</span>
+              </span>
+              <button onClick={() => setIsDocModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
+              </button>
             </div>
 
             <form onSubmit={handleCreateDoc} className="space-y-4">
@@ -852,8 +894,13 @@ export default function DocumentScreen() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-panel border border-border w-[440px] rounded-xl p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex justify-between items-center border-b border-border pb-2">
-              <span className="font-extrabold text-navy text-[13px]">📈 {selectedDoc.name} 개정안 등록</span>
-              <button onClick={() => setIsReviseModalOpen(false)} className="text-ink3 hover:text-ink font-bold text-sm">✕</button>
+              <span className="font-extrabold text-navy text-[13px] flex items-center gap-1.5">
+                <TrendingUp size={15} className="text-teal" />
+                <span>{selectedDoc.name} 개정안 등록</span>
+              </span>
+              <button onClick={() => setIsReviseModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
+              </button>
             </div>
 
             <form onSubmit={handleCreateRevise} className="space-y-4">
@@ -928,8 +975,8 @@ export default function DocumentScreen() {
       {isNoticeOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs select-none text-ink">
           <div className="w-[400px] rounded-2xl border border-border bg-panel p-6 shadow-2xl flex flex-col gap-4 text-center font-sans">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-2xl text-amber">
-              ⚠️
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-amber">
+              <AlertTriangle size={24} />
             </div>
             <div className="space-y-1.5 text-center">
               <h3 className="text-base font-extrabold text-ink">서비스 이용 안내</h3>

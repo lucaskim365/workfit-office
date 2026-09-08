@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import { Paperclip, Search, X, Plus, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useCommunity } from '@/features/community/useCommunity';
@@ -439,7 +440,7 @@ export default function CommunityScreen() {
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-ink3 border-t border-border/40 pt-2 shrink-0">
                             <span>💬 댓글 0</span>
-                            <span>📎 첨부파일 없음</span>
+                            <span className="flex items-center gap-1"><Paperclip size={12} className="text-ink3" /> 첨부파일 없음</span>
                           </div>
                         </div>
                       ))
@@ -466,15 +467,15 @@ export default function CommunityScreen() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="소모임 이름, 설명, 태그 검색..."
-                        className="h-8 w-56 rounded-lg border border-border bg-panel pl-7 pr-3 text-[11px] outline-none focus:border-teal"
+                        className="h-8 w-56 rounded-lg border border-border bg-panel pl-7 pr-7 text-[11px] outline-none focus:border-teal"
                       />
-                      <span className="absolute left-2.5 top-2.5 text-ink3 text-[9px]">🔍</span>
+                      <Search size={13} className="absolute left-2.5 top-2.5 text-ink3 pointer-events-none" />
                       {searchQuery && (
                         <button 
                           onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-1.5 text-ink3 hover:text-ink font-bold text-xs"
+                          className="absolute right-2 top-2 text-ink3 hover:text-ink p-0.5"
                         >
-                          ✕
+                          <X size={13} />
                         </button>
                       )}
                     </div>
@@ -579,8 +580,9 @@ export default function CommunityScreen() {
                   </div>
 
                   {filteredClubs.length === 0 && (
-                    <div className="py-12 text-center text-ink3 border border-dashed rounded-xl text-[11.5px]">
-                      🔍 조건에 맞는 소모임이 없습니다.
+                    <div className="py-12 flex flex-col items-center justify-center gap-1.5 text-ink3 border border-dashed rounded-xl text-[11.5px]">
+                      <Search size={20} className="opacity-40" />
+                      <span>조건에 맞는 소모임이 없습니다.</span>
                     </div>
                   )}
                 </div>
@@ -661,7 +663,9 @@ export default function CommunityScreen() {
               >
                 <span>←</span> <span>돌아가기</span>
               </button>
-              <span className="font-extrabold text-teal">➕ 신규 소모임 개설</span>
+              <span className="font-extrabold text-teal flex items-center gap-1.5">
+                <Plus size={15} /> 신규 소모임 개설
+              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
@@ -722,7 +726,9 @@ export default function CommunityScreen() {
                     {newClubTags.map((t, idx) => (
                       <span key={idx} className="inline-flex items-center gap-1 text-[10px] text-teal font-extrabold bg-teal-soft/30 px-2 py-0.5 rounded-full">
                         <span>{t}</span>
-                        <button type="button" onClick={() => removeNewClubTag(idx)} className="text-[8px] font-bold text-ink3 hover:text-ink">✕</button>
+                        <button type="button" onClick={() => removeNewClubTag(idx)} className="text-ink3 hover:text-ink">
+                          <X size={10} />
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -757,9 +763,9 @@ export default function CommunityScreen() {
                     <button
                       type="button"
                       onClick={() => setNewClubCoverImage('')}
-                      className="absolute top-1 right-1 h-5 w-5 bg-black/60 text-white rounded-full text-[10px] font-bold flex items-center justify-center hover:bg-black"
+                      className="absolute top-1 right-1 h-5 w-5 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black"
                     >
-                      ✕
+                      <X size={11} />
                     </button>
                   </div>
                 )}
@@ -907,7 +913,7 @@ export default function CommunityScreen() {
                             onClick={() => setIsPostWriteOpen(true)}
                             className="w-full rounded-xl border border-border bg-panel p-3.5 flex items-center gap-2.5 cursor-pointer hover:bg-panel-alt/50 transition-colors shadow-2xs"
                           >
-                            <span className="text-teal text-sm">✏️</span>
+                            <Pencil size={15} className="text-teal shrink-0" />
                             <span className="text-ink3 text-[11.5px] flex-1">소모임에 새로운 이야기를 남겨보세요...</span>
                           </div>
                         ) : (
@@ -968,7 +974,7 @@ export default function CommunityScreen() {
                                 <p className="text-[12px] text-ink2 leading-relaxed whitespace-pre-wrap">{p.content}</p>
                                 <div className="flex items-center gap-3 text-[11px] text-ink3 border-t border-border/40 pt-2 shrink-0">
                                   <span>💬 댓글 0</span>
-                                  <span>📎 첨부파일 없음</span>
+                                  <span className="flex items-center gap-1"><Paperclip size={12} className="text-ink3" /> 첨부파일 없음</span>
                                 </div>
                               </div>
                             ))
@@ -1326,7 +1332,9 @@ export default function CommunityScreen() {
           <div className="bg-panel border border-border w-[400px] rounded-xl p-5 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <span className="font-extrabold text-navy text-[13px]">⚙️ 소모임 관리자 메뉴</span>
-              <button onClick={() => setIsAdminModalOpen(false)} className="text-ink3 hover:text-ink font-bold">✕</button>
+              <button onClick={() => setIsAdminModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
+              </button>
             </div>
             
             <div className="space-y-3">
@@ -1392,8 +1400,8 @@ export default function CommunityScreen() {
       {isNoticeOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs select-none text-ink">
           <div className="w-[400px] rounded-2xl border border-border bg-panel p-6 shadow-2xl flex flex-col gap-4 text-center font-sans">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-2xl text-amber">
-              ⚠️
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber/10 text-amber">
+              <AlertTriangle size={24} />
             </div>
             <div className="space-y-1.5 text-center">
               <h3 className="text-base font-extrabold text-ink">서비스 이용 안내</h3>

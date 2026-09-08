@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Search } from 'lucide-react';
+import { Search, X, Paperclip, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
@@ -237,9 +237,9 @@ export function MessengerPanel() {
                     handleHideRoom(r.id);
                   }}
                   title="대화방 숨기기"
-                  className="absolute right-2 top-2 hidden h-5 w-5 place-items-center rounded bg-black/5 text-[9px] text-ink3 hover:bg-black/10 group-hover:grid"
+                  className="absolute right-2 top-2 hidden h-5 w-5 place-items-center rounded bg-black/5 text-ink3 hover:bg-black/10 group-hover:grid"
                 >
-                  ✕
+                  <X size={11} />
                 </button>
               </div>
             );
@@ -622,7 +622,7 @@ function MessengerThread({
           onDrop={handleDrop}
           className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#f2f8fc]/95 backdrop-blur-xs border-2 border-dashed border-amber m-2 rounded-2xl"
         >
-          <div className="text-[32px] mb-2">📥</div>
+          <Download size={32} className="text-amber mb-2" />
           <div className="text-[13px] font-extrabold text-[#1c2536]">여기에 파일을 놓아 전송</div>
           <div className="text-[10.5px] text-ink3 mt-1">최대 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB</div>
         </div>
@@ -640,9 +640,9 @@ function MessengerThread({
               <button
                 onClick={handleRenameRoom}
                 title="대화방 이름 변경"
-                className="text-[10px] opacity-60 hover:opacity-100 hover:text-teal transition-all shrink-0 cursor-pointer"
+                className="opacity-60 hover:opacity-100 hover:text-teal transition-all shrink-0 cursor-pointer p-0.5"
               >
-                ✏️
+                <Pencil size={11} />
               </button>
             )}
           </div>
@@ -729,7 +729,7 @@ function MessengerThread({
       {showSearch && (
         <div className="shrink-0 border-b border-border bg-panel px-4 py-2 flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-full border border-border-hi bg-panel px-3 py-1.5">
-            <span className="text-[11px] text-ink3">🔍</span>
+            <Search size={12} className="text-ink3 shrink-0" />
             <input
               value={searchQuery}
               onChange={(e) => {
@@ -742,9 +742,9 @@ function MessengerThread({
             {searchQuery && (
               <button
                 onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }}
-                className="text-[10px] text-ink3 hover:text-ink w-4 h-4 grid place-items-center rounded bg-black/5 cursor-pointer"
+                className="text-ink3 hover:text-ink w-4 h-4 grid place-items-center rounded bg-black/5 cursor-pointer"
               >
-                ✕
+                <X size={10} />
               </button>
             )}
           </div>
@@ -887,14 +887,16 @@ function MessengerThread({
                 <div className="text-[10.5px] font-bold text-amber">{(replyTo.senderName || '메시지')}에게 답장</div>
                 <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo as any)}</div>
               </div>
-              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[13px] text-ink3 hover:bg-black/5">✕</button>
+              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 hover:bg-black/5">
+                <X size={13} />
+              </button>
             </div>
           )}
           {attachedFiles.length > 0 && (
             <div className="mb-2 space-y-1.5 border-b border-border pb-2 px-1">
               <div className="flex items-center justify-between text-[10px] text-ink3 font-medium">
                 <span className="flex items-center gap-1.5 font-bold text-ink2">
-                  <span>📎 첨부 {attachedFiles.length}개</span>
+                  <span className="flex items-center gap-1"><Paperclip size={11} className="shrink-0 text-ink3" /> 첨부 {attachedFiles.length}개</span>
                   <span>· 보존기한:</span>
                   <select
                     value={attachmentRetention}
@@ -928,9 +930,9 @@ function MessengerThread({
                     <button
                       onClick={() => removeAttachedFile(item.id)}
                       title="첨부 취소"
-                      className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center text-[8px] transition-colors"
+                      className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center transition-colors"
                     >
-                      ✕
+                      <X size={9} />
                     </button>
                   </div>
                 ))}
@@ -944,9 +946,9 @@ function MessengerThread({
               onClick={() => fileRef.current?.click()}
               disabled={sendFile.isPending}
               title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-[16px] text-ink3 hover:bg-panel-alt disabled:opacity-40"
+              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40"
             >
-              📎
+              <Paperclip size={16} />
             </button>
             <textarea
               rows={1}
@@ -1587,7 +1589,9 @@ function ImageViewer({
         >
           ⤓
         </button>
-        <button onClick={onClose} title="닫기(Esc)" className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[16px] hover:bg-white/25">✕</button>
+        <button onClick={onClose} title="닫기(Esc)" className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 hover:bg-white/25">
+          <X size={18} />
+        </button>
       </div>
 
       <div className="relative flex w-full max-w-full items-center justify-center h-[75vh]" onClick={(e) => e.stopPropagation()}>
@@ -2105,7 +2109,9 @@ function DesktopForwardModal({
       >
         <div className="flex items-center justify-between border-b border-border/60 pb-3">
           <span className="text-[15px] font-bold text-ink">이 메시지 전달</span>
-          <button onClick={onClose} className="text-[16px] text-ink3 hover:text-ink transition-colors cursor-pointer">✕</button>
+          <button onClick={onClose} className="text-ink3 hover:text-ink transition-colors cursor-pointer p-1">
+            <X size={16} />
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto py-4 space-y-4">
@@ -2116,7 +2122,9 @@ function DesktopForwardModal({
               {selectedTargets.map((t) => (
                 <div key={t.id} className="flex items-center gap-1 rounded-md bg-[#e6960c]/10 border border-[#e6960c]/25 px-2 py-0.5 text-[11px] font-semibold text-[#b8780a]">
                   <span>{t.name}</span>
-                  <button onClick={() => handleRemoveTarget(t.id)} className="text-[9px] hover:text-red transition-colors ml-0.5 cursor-pointer">✕</button>
+                  <button onClick={() => handleRemoveTarget(t.id)} className="hover:text-red transition-colors ml-0.5 cursor-pointer">
+                    <X size={10} />
+                  </button>
                 </div>
               ))}
               <input
@@ -2310,10 +2318,10 @@ function DesktopFileBoxPanel({
                   </button>
                   <button 
                     onClick={() => downloadAttachment(f.attachment)}
-                    className="shrink-0 text-[13px] p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
+                    className="shrink-0 p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
                     title="다운로드"
                   >
-                    📥
+                    <Download size={14} />
                   </button>
                 </div>
               </div>

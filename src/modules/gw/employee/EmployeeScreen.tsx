@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Search, Plus, X, AlertTriangle } from 'lucide-react';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles, useUpsertEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
@@ -501,7 +502,7 @@ export default function EmployeeScreen() {
                     placeholder="이름, 사번, 이메일 검색"
                     className="h-8.5 w-60 rounded-lg border border-border bg-panel pl-3 pr-8 text-[11.5px] outline-none focus:border-teal"
                   />
-                  <span className="absolute right-2.5 top-2 text-[12px] text-ink3">🔍</span>
+                  <Search size={14} className="absolute right-2.5 top-2.5 text-ink3 pointer-events-none" />
                 </div>
 
                 {isAdmin && (
@@ -514,7 +515,7 @@ export default function EmployeeScreen() {
                     }}
                     className="flex h-8.5 items-center gap-1.5 rounded-lg bg-teal px-3 text-[11.5px] font-bold text-white shadow-xs hover:opacity-90"
                   >
-                    <span>➕</span>
+                    <Plus size={14} />
                     <span>임직원 등록</span>
                   </button>
                 )}
@@ -821,9 +822,9 @@ export default function EmployeeScreen() {
               <div className="flex shrink-0 items-center justify-end border-b border-border bg-panel-alt/5 p-3.5">
                 <button
                   onClick={() => setSelectedUserId(null)}
-                  className="rounded px-2 py-1 text-sm font-bold text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
+                  className="rounded p-1 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
                 >
-                  ✕
+                  <X size={16} />
                 </button>
               </div>
 
@@ -980,9 +981,10 @@ export default function EmployeeScreen() {
                   <button
                     type="button"
                     onClick={() => handleRetireEmployee(selectedEmp.id)}
-                    className="flex-1 rounded-lg border border-red/20 bg-red-soft/10 py-2 text-[11.5px] font-bold text-red transition-colors hover:bg-red-soft/20"
+                    className="flex-1 rounded-lg border border-red/20 bg-red-soft/10 py-2 text-[11.5px] font-bold text-red transition-colors hover:bg-red-soft/20 flex items-center justify-center gap-1"
                   >
-                    ⚠️ 퇴직 처리
+                    <AlertTriangle size={13} />
+                    <span>퇴직 처리</span>
                   </button>
                 </div>
               )}
@@ -997,8 +999,8 @@ export default function EmployeeScreen() {
           <div className="flex max-h-[90vh] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-border pb-2">
               <span className="text-[13px] font-extrabold text-navy">👤 임직원 인사 발령 (등록)</span>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-sm font-bold text-ink3 hover:text-ink">
-                ✕
+              <button onClick={() => setIsCreateModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
               </button>
             </div>
 
@@ -1223,8 +1225,8 @@ export default function EmployeeScreen() {
           <div className="flex max-h-[90vh] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-border pb-2">
               <span className="text-[13px] font-extrabold text-navy">⚙️ {selectedEmp.name} 인사 및 신상 정보 수정</span>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-sm font-bold text-ink3 hover:text-ink">
-                ✕
+              <button onClick={() => setIsEditModalOpen(false)} className="text-ink3 hover:text-ink p-1">
+                <X size={15} />
               </button>
             </div>
 

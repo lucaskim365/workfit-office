@@ -1,4 +1,6 @@
 import type { FlatScreen } from '@/shared/types/menu';
+import { MenuGlyph } from '@/shared/ui/MenuGlyph';
+import { X, Plus, ChevronDown, LayoutGrid } from 'lucide-react';
 import { isGwUrl } from './gw-screens';
 
 interface TabBarProps {
@@ -27,21 +29,23 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
               }`}
             >
               {gw ? (
-                <span className="text-[11px] leading-none">{t.icon ?? '▦'}</span>
+                <MenuGlyph glyph={t.icon} size={13} className="shrink-0 text-ink2" />
               ) : (
                 <span className={`h-1.5 w-1.5 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
               )}
               <span className={`whitespace-nowrap text-[11px] ${a ? 'font-bold text-ink' : 'font-semibold text-ink2'}`}>{t.name}</span>
               <span
                 onClick={(e) => onClose(t.url, e)}
-                className={`grid h-4 w-4 place-items-center rounded-full text-[11px] ${a ? 'bg-panel-alt text-ink2' : 'text-ink3'}`}
+                className={`grid h-4 w-4 place-items-center rounded-full transition-colors ${a ? 'bg-panel-alt text-ink2 hover:bg-border' : 'text-ink3 hover:text-ink'}`}
               >
-                ×
+                <X size={10} />
               </span>
             </button>
           );
         })}
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end text-[15px] text-ink3">+</span>
+        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center self-end text-ink3">
+          <Plus size={14} />
+        </span>
       </div>
 
       {/* 전체 탭 드롭다운 */}
@@ -51,9 +55,9 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
           title="전체 탭 목록"
           className={`flex h-6 items-center gap-1.5 rounded-[7px] border border-border-hi px-2.5 text-[11px] font-bold text-ink2 ${menuOpen ? 'bg-panel' : 'bg-white'}`}
         >
-          <span className="text-[10px] text-ink3">▦</span>
+          <LayoutGrid size={11} className="text-ink3" />
           {tabs.length}
-          <span className={`inline-block text-[8px] ${menuOpen ? 'rotate-180' : ''}`}>▾</span>
+          <ChevronDown size={11} className={`transition-transform text-ink3 ${menuOpen ? 'rotate-180' : ''}`} />
         </button>
         {menuOpen && (
           <>
@@ -69,12 +73,14 @@ export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOp
                     className={`flex cursor-pointer items-center gap-2 rounded-[7px] px-2.5 py-[7px] ${a ? 'bg-teal-soft' : 'hover:bg-panel-alt'}`}
                   >
                     {isGwUrl(t.url) ? (
-                      <span className="shrink-0 text-[11px] leading-none">{t.icon ?? '▦'}</span>
+                      <MenuGlyph glyph={t.icon} size={13} className="shrink-0 text-ink2" />
                     ) : (
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
                     )}
                     <span className={`min-w-0 flex-1 truncate text-[11.5px] ${a ? 'font-bold text-teal' : 'font-medium text-ink2'}`}>{t.name}</span>
-                    <span onClick={(e) => onClose(t.url, e)} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-[11px] text-ink3">×</span>
+                    <span onClick={(e) => onClose(t.url, e)} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-ink3 hover:text-ink">
+                      <X size={11} />
+                    </span>
                   </div>
                 );
               })}
