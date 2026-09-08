@@ -201,6 +201,7 @@ function LocalCalendarScreen() {
       <GwHead
         icon="📅"
         name="일정관리"
+        desc="전사·개인 일정 캘린더: 임직원의 주요 일정 및 사내 일정(외근, 휴가, 회의, 사내행사 등)을 캘린더에 배치해 한눈에 확인하고 조율합니다."
         right={(
           <div className="flex items-center gap-2">
             {!authenticatedUser && (

@@ -8,17 +8,20 @@ import { MenuGlyph } from '@/shared/ui/MenuGlyph';
  * ([[wireframe-source-of-truth]] 기존 마스터-디테일 디자인 언어 재사용)
  */
 
-/** 화면 상단 브레드크럼 + 타이틀(그룹웨어 / {name}). */
-export function GwHead({ icon, name, right }: { icon: string; name: string; right?: ReactNode }) {
+/** 화면 상단 브레드크럼 + 타이틀(그룹웨어 / {name}) 및 목적/설명. */
+export function GwHead({ icon, name, desc, right }: { icon: string; name: string; desc?: string; right?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
         <div className="mb-1 text-xs font-medium text-ink3">그룹웨어 <span className="px-1">/</span> {name}</div>
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-soft text-teal">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-soft text-teal">
             <MenuGlyph glyph={icon} size={20} className="text-teal" />
           </span>
-          <h1 className="text-xl font-bold text-ink">{name}</h1>
+          <div>
+            <h1 className="text-xl font-bold text-ink">{name}</h1>
+            {desc && <p className="mt-0.5 text-xs text-ink3 leading-relaxed">{desc}</p>}
+          </div>
         </div>
       </div>
       {right}

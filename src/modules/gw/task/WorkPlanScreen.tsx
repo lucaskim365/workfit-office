@@ -276,6 +276,7 @@ export default function WorkPlanScreen() {
       <GwHead
         icon="🗓️"
         name="업무계획"
+        desc="개인 업무 계획 & 실무 로스터: 직원별 일일 업무 계획(To-Do)을 작성하고, 전사/부서별 일일 실무 진행 계획을 한눈에 공유·확인합니다."
         right={!authenticatedUser ? (
           <select value={actor.id} onChange={(event) => setDemoUserId(event.target.value)} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
             {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}

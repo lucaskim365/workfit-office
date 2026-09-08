@@ -14,8 +14,8 @@ export interface GwAppMeta {
 export const GW_APP_META: Record<string, GwAppMeta> = {
   orgchart: { name: '조직도', icon: '🏢', desc: '부서 계층과 사원 배치·상급자 관계를 조회합니다.' },
   approval: { name: '전자결재', icon: '🖋️', desc: '기안·품의·지출결의 등 사내 문서의 승인 과정을 온라인으로 처리합니다.' },
-  leave: { name: '휴가관리', icon: '🏖️', desc: '연차·반차·경조 등 잔여 휴가 조회와 신청·승인 내역을 관리합니다.' },
-  calendar: { name: '일정관리', icon: '📅', desc: '개인·부서·전사 일정을 기록하고 관리하는 캘린더입니다.' },
+  leave: { name: '근태·휴가', icon: '⏱️', desc: '출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다.' },
+  calendar: { name: '일정관리', icon: '📅', desc: '전사·개인 일정 캘린더: 임직원 주요 일정 및 사내 일정(외근, 출장, 회의, 행사)을 캘린더에서 종합 확인하고 조율합니다.' },
   mail: { name: '메일', icon: '✉️', desc: '사내·외부 비즈니스 소통을 주고받는 사내 메일 시스템입니다.' },
   resource: { name: '자원예약', icon: '📦', desc: '회의실·차량·공용 장비의 사용 시간을 예약·관리합니다.' },
   survey: { name: '전자설문', icon: '📋', desc: '임직원 대상 의견 수렴·만족도 조사를 비대면으로 진행합니다.' },
@@ -23,8 +23,9 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   community: { name: '커뮤니티', icon: '💬', desc: '동호회·소모임 등 임직원 간 자유로운 소통 공간입니다.' },
   document: { name: '문서관리', icon: '🗂️', desc: '매뉴얼·서식·산출물 등 중요 문서를 분류·보관하는 문서고입니다.' },
   employee: { name: '인명관리', icon: '👥', desc: '임직원·외부 거래처 연락처를 검색·관리하는 주소록입니다.' },
-  task: { name: '업무관리', icon: '📗', desc: '프로젝트·업무 보고·TO-DO를 등록하고 진행을 트래킹합니다.' },
-  commute: { name: '근태', icon: '⏱️', desc: 'CAPS 출퇴근 기록을 직원·월별로 조회합니다.' },
+  task: { name: '업무관리', icon: '📗', desc: '프로젝트 단위 관리: 회사 전체 단위 프로젝트의 시작부터 마무리까지 유기적인 협업과 진행을 관리합니다.' },
+  'work-plan': { name: '업무계획', icon: '🗓️', desc: '개인 업무 계획 & 실무 로스터: 직원별 일일 업무 계획(To-Do) 작성 및 부서별 일일 실무 진행 현황을 공유합니다.' },
+  commute: { name: '근태·휴가', icon: '⏱️', desc: '출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다.' },
   gallery: { name: '회사 갤러리', icon: '🖼️', desc: '사내 행사, 전사 이벤트 및 프로젝트 활동 기록을 공유하는 회사 갤러리입니다.' },
 };
 

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   COMMUTE_STATUS_LABELS,
   summarizeCommuteMonth,
@@ -36,6 +37,7 @@ import { CommuteMatrixView } from './components/CommuteMatrixView';
 import { CommuteDeptView } from './components/CommuteDeptView';
 import { CommuteAnomalyView } from './components/CommuteAnomalyView';
 import { CommuteLeaveView } from './components/CommuteLeaveView';
+import { MyLeaveTab } from './components/MyLeaveTab';
 import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
 import {
   Settings,
@@ -53,6 +55,7 @@ import {
 
 /** 탭 상수 */
 const ME_TAB = 'me';
+const LEAVE_TAB = 'leave';
 const TEAM_TAB = 'team';
 
 /**
@@ -331,9 +334,26 @@ export default function CommuteScreen() {
     [profileByEmpMap, normName],
   );
 
-  // 상위 탭 상태 (내 근태 vs 관제/부서원 근태)
-  const [tab, setTab] = useState<string>(ME_TAB);
-  const activeTab = canTeam ? tab : ME_TAB;
+  // 상위 탭 상태 (내 근태 vs 내 연차·휴가 vs 관제/부서원 근태)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab');
+  const initialTab = urlTab === LEAVE_TAB ? LEAVE_TAB : (urlTab === TEAM_TAB && canTeam) ? TEAM_TAB : ME_TAB;
+  const [tab, setTab] = useState<string>(initialTab);
+
+  const handleTabChange = useCallback((nextTab: string) => {
+    setTab(nextTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nextTab === ME_TAB) {
+        next.delete('tab');
+      } else {
+        next.set('tab', nextTab);
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const activeTab = (tab === TEAM_TAB && !canTeam) ? ME_TAB : tab;
   const isTeam = activeTab === TEAM_TAB;
 
   // 관제 4대 View 탭 상태
@@ -750,17 +770,20 @@ export default function CommuteScreen() {
     </button>
   );
 
-  const tabToggle = canTeam ? (
+  const tabToggle = (
     <div className={toggleShell}>
-      {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => setTab(ME_TAB))}
-      {toggleButton(
-        TEAM_TAB,
-        commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황',
-        isTeam,
-        () => setTab(TEAM_TAB),
+      {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => handleTabChange(ME_TAB))}
+      {toggleButton(LEAVE_TAB, '내 연차·휴가', activeTab === LEAVE_TAB, () => handleTabChange(LEAVE_TAB))}
+      {canTeam && (
+        toggleButton(
+          TEAM_TAB,
+          commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황',
+          isTeam,
+          () => handleTabChange(TEAM_TAB),
+        )
       )}
     </div>
-  ) : null;
+  );
 
   /** 캘린더 그리드 렌더러 (내 근태 전용) */
   const renderCalendarGrid = (rows: CommuteRecord[]) => {
@@ -1203,8 +1226,9 @@ export default function CommuteScreen() {
   return (
     <div className="mx-auto w-full max-w-[1560px] px-4 py-5 sm:px-6 sm:py-6">
       <GwHead
-        icon="⏰"
-        name={activeTab === ME_TAB ? '내 근태' : commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황'}
+        icon="⏱️"
+        name="근태·휴가"
+        desc="출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다."
         right={
           <div className="flex items-center gap-2">
             {canManagePolicy && (
@@ -1225,7 +1249,13 @@ export default function CommuteScreen() {
       />
 
       <div className="mt-4">
-        {activeTab === ME_TAB ? myCommutePanel : adminControlPanel}
+        {activeTab === LEAVE_TAB ? (
+          <MyLeaveTab />
+        ) : activeTab === ME_TAB ? (
+          myCommutePanel
+        ) : (
+          adminControlPanel
+        )}
       </div>
 
       <CommutePolicyModal
