@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { resolveWorkPlanScope, canViewWorkPlan, isLeaderPosition } from '@/features/auth/scopeHelper';
@@ -14,9 +14,24 @@ import {
   useRemoveWorkPlan,
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
+import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { USER_PRESENCE_META } from '@/domain/userPresence/schema';
+import {
+  parseWorkPlanItems,
+  calculatePlanProgress,
+  toggleWorkPlanItem,
+  removeWorkPlanItem,
+  addWorkPlanItem,
+  getWorkPlanTagMeta,
+} from '@/domain/workPlan/engine';
+import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
+import { WorkPlanEditorModal } from './components/WorkPlanEditorModal';
+import { WorkPlanWeeklyView } from './components/WorkPlanWeeklyView';
+import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
+import { CheckCircle2, ListTodo, Calendar, Edit3, X, Plus, Settings } from 'lucide-react';
 
 /**
  * 업무계획 — 이사진 등이 구글시트로 적던 개인 영업/업무 예정을 옮겨오는 화면.
@@ -84,14 +99,22 @@ export default function WorkPlanScreen() {
     ?? null;
 
   const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
+  const presences = useAllUserPresences();
 
   const today = calendarToday();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(today);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [draftText, setDraftText] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'roster' | 'weekly'>('roster');
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddText, setQuickAddText] = useState('');
+  const [quickAddTag, setQuickAddTag] = useState('');
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [notice, setNotice] = useState('');
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+  const { tags, tagMap } = useWorkPlanConfig();
 
   // ── 다차원 필터 상태 ──
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -244,29 +267,47 @@ export default function WorkPlanScreen() {
   );
 
   const myDayPlan = actor ? dayPlanByOwner.get(actor.id) : undefined;
+  const myDayParsed = useMemo(() => (myDayPlan ? parseWorkPlanItems(myDayPlan.content) : []), [myDayPlan]);
+  const myDayProgress = useMemo(() => (myDayPlan ? calculatePlanProgress(myDayPlan.content) : null), [myDayPlan]);
 
-  const save = async () => {
-    if (draftText === null || !actor) return;
-    const content = draftText.trim();
-    if (content === '') return;
-    try {
-      if (myDayPlan) {
-        await update.mutateAsync({ actor: workActor, id: myDayPlan.id, draft: { date: selectedDate, content } });
-      } else {
-        await create.mutateAsync({ actor: workActor, draft: { date: selectedDate, content } });
-      }
-      setDraftText(null);
-      setNotice('저장했습니다.');
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : '저장하지 못했습니다.');
+  const savePlan = useCallback(async (date: string, content: string, existingPlanId?: string) => {
+    if (!actor) return;
+    const actorParam = { userId: actor.id, active: actor.status === '사용' };
+    if (existingPlanId) {
+      await update.mutateAsync({ actor: actorParam, id: existingPlanId, draft: { date, content } });
+    } else {
+      await create.mutateAsync({ actor: actorParam, draft: { date, content } });
     }
-  };
+    setNotice('업무계획을 저장했습니다.');
+  }, [actor, create, update]);
 
-  const removeMine = async () => {
-    if (!myDayPlan || !window.confirm('오늘 작성한 계획을 삭제하시겠습니까?')) return;
-    await remove.mutateAsync({ actor: workActor, id: myDayPlan.id });
-    setNotice('삭제했습니다.');
-  };
+  const removePlan = useCallback(async (planId: string) => {
+    if (!actor) return;
+    await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
+    setNotice('업무계획을 삭제했습니다.');
+  }, [actor, remove]);
+
+  const handleToggleMyItem = useCallback(async (plan: WorkPlan, idx: number) => {
+    const nextContent = toggleWorkPlanItem(plan.content, idx);
+    await savePlan(plan.date, nextContent, plan.id);
+  }, [savePlan]);
+
+  const handleRemoveMyItem = useCallback(async (plan: WorkPlan, idx: number) => {
+    const nextContent = removeWorkPlanItem(plan.content, idx);
+    if (!nextContent.trim()) {
+      await removePlan(plan.id);
+    } else {
+      await savePlan(plan.date, nextContent, plan.id);
+    }
+  }, [removePlan, savePlan]);
+
+  const handleQuickAdd = useCallback(async () => {
+    if (!quickAddText.trim() || !actor) return;
+    const currentContent = myDayPlan?.content ?? '';
+    const nextContent = addWorkPlanItem(currentContent, quickAddText.trim(), quickAddTag || undefined);
+    await savePlan(selectedDate, nextContent, myDayPlan?.id);
+    setQuickAddText('');
+  }, [quickAddText, quickAddTag, myDayPlan, selectedDate, savePlan, actor]);
 
   if (loading) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">불러오는 중…</div>;
   if (!actor) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
@@ -277,94 +318,288 @@ export default function WorkPlanScreen() {
         icon="🗓️"
         name="업무계획"
         desc="개인 업무 계획 & 실무 로스터: 직원별 일일 업무 계획(To-Do)을 작성하고, 전사/부서별 일일 실무 진행 계획을 한눈에 공유·확인합니다."
-        right={!authenticatedUser ? (
-          <select value={actor.id} onChange={(event) => setDemoUserId(event.target.value)} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
-            {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
-        ) : undefined}
+        right={
+          <div className="flex items-center gap-2">
+            {!authenticatedUser && (
+              <select value={actor.id} onChange={(event) => setDemoUserId(event.target.value)} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
+                {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              </select>
+            )}
+
+            {/* 뷰 모드 탭: 일일 실무 로스터 vs 내 주간 계획 */}
+            <div className="flex items-center rounded-lg border border-border bg-panel p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('roster')}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-bold transition-all ${
+                  viewMode === 'roster' ? 'bg-teal text-white shadow-2xs' : 'text-ink3 hover:text-ink hover:bg-panel-alt/60'
+                }`}
+              >
+                <ListTodo size={13} />
+                <span>일일 실무 로스터</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('weekly')}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-bold transition-all ${
+                  viewMode === 'weekly' ? 'bg-teal text-white shadow-2xs' : 'text-ink3 hover:text-ink hover:bg-panel-alt/60'
+                }`}
+              >
+                <Calendar size={13} />
+                <span>내 주간 계획</span>
+              </button>
+            </div>
+          </div>
+        }
       />
 
       {notice && <div aria-live="polite" className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">{notice}</div>}
 
-      {/* 내 카드 — 날짜 선택도 여기 붙는다(달력만 따로 떨어져 덩그러니 있던 걸 팝업으로 합침, 2026-08-27 피드백).
-          요약만 여기, 실제 작성/수정도 팝업으로(항상 펼쳐진 입력칸이 화면을 잡아먹지 않게). */}
-      <section className="mt-5 rounded-xl border border-teal/30 bg-teal-soft/10 shadow-sm">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-[12.5px] font-extrabold text-ink">{dayTitle(selectedDate)} · 내 계획</h3>
-              <button
-                type="button"
-                onClick={() => setDatePickerOpen(true)}
-                className="rounded-md border border-border bg-panel px-1.5 py-0.5 text-[10px] font-semibold text-ink3 hover:border-teal/40 hover:text-teal"
-              >
-                📅 날짜 변경
-              </button>
+      {/* 뷰 모드가 주간 계획일 때 */}
+      {viewMode === 'weekly' && (
+        <div className="mt-5">
+          <WorkPlanWeeklyView
+            actor={actor}
+            todayStr={today}
+            myPlans={mineQuery.data ?? []}
+            onSavePlan={savePlan}
+            onDeletePlan={removePlan}
+          />
+        </div>
+      )}
+
+      {/* 뷰 모드가 일일 실무 로스터일 때 */}
+      {viewMode === 'roster' && (
+        <>
+          {/* 내 카드 — To-Do 체크리스트 & 진행률 바 지원 */}
+          <section className="mt-5 rounded-xl border border-teal/30 bg-teal-soft/10 shadow-sm transition-all hover:border-teal/50">
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3 mb-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-[13px] font-extrabold text-ink">{dayTitle(selectedDate)} · 내 계획</h3>
+                  <button
+                    type="button"
+                    onClick={() => setDatePickerOpen(true)}
+                    className="rounded-md border border-border bg-panel px-2 py-0.5 text-[10.5px] font-semibold text-ink3 hover:border-teal/40 hover:text-teal transition-colors"
+                  >
+                    📅 날짜 변경
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setQuickAddOpen((prev) => !prev)}
+                    className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[11.5px] font-bold transition-all shadow-2xs ${
+                      quickAddOpen
+                        ? 'border-teal bg-teal text-white'
+                        : 'border-teal/30 bg-teal-soft/40 text-teal hover:bg-teal-soft/70'
+                    }`}
+                  >
+                    <Plus size={13} />
+                    <span>업무 추가</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditorOpen(true)}
+                    className="flex items-center gap-1 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs"
+                  >
+                    <Edit3 size={12} className="text-ink3" />
+                    <span>편집</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfigOpen(true)}
+                    className="flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-[11.5px] font-bold text-ink3 hover:text-teal hover:border-teal/40 transition-colors shadow-2xs"
+                    title="루틴 템플릿 및 업무 태그 설정"
+                  >
+                    <Settings size={12} />
+                    <span>설정</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 빠른 인라인 업무 추가 바 */}
+              {quickAddOpen && (
+                <div className="mb-3.5 flex flex-wrap items-center gap-1.5 rounded-xl border border-teal/40 bg-white dark:bg-panel p-2 shadow-xs transition-all">
+                  <select
+                    value={quickAddTag}
+                    onChange={(e) => setQuickAddTag(e.target.value)}
+                    className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2 text-[11px] font-bold text-ink outline-none focus:border-teal"
+                  >
+                    <option value="">태그 없음</option>
+                    {tags.map((t) => (
+                      <option key={t.tag} value={t.tag}>
+                        {t.tag}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={quickAddText}
+                    onChange={(e) => setQuickAddText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleQuickAdd();
+                    }}
+                    placeholder="추가할 업무 내용을 입력하세요 (Enter 키로 바로 등록)"
+                    className="h-8 min-w-[220px] flex-1 bg-transparent px-2.5 text-[12px] text-ink outline-none placeholder:text-ink3"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickAdd()}
+                    disabled={!quickAddText.trim()}
+                    className="h-8 rounded-lg bg-teal px-3.5 text-[11.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity shadow-2xs"
+                  >
+                    추가
+                  </button>
+                </div>
+              )}
+
+              {/* 내 계획 To-Do 체크리스트 항목들 */}
+              {myDayParsed.length === 0 ? (
+                <div
+                  onClick={() => setQuickAddOpen(true)}
+                  className="cursor-pointer py-3 text-[11.5px] text-ink3 hover:text-ink2"
+                >
+                  작성된 계획이 없습니다. <span className="font-semibold text-teal underline">+ 업무 추가</span>를 눌러 오늘의 To-Do를 등록해보세요.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {myDayParsed.map((item, idx) => {
+                    if (!item.text && !item.tag && !item.isChecklist) return null;
+                    const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="group flex items-center justify-between gap-2 rounded-lg py-1 px-1.5 hover:bg-panel-alt/50 transition-colors"
+                      >
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          {item.isChecklist ? (
+                            <button
+                              type="button"
+                              onClick={() => myDayPlan && handleToggleMyItem(myDayPlan, idx)}
+                              className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors ${
+                                item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel hover:border-teal'
+                              }`}
+                              title={item.completed ? '완료 취소' : '완료 체크'}
+                            >
+                              {item.completed && <CheckCircle2 size={12} />}
+                            </button>
+                          ) : (
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink3" />
+                          )}
+
+                          <div className="min-w-0 flex-1 leading-snug">
+                            {tagMeta && (
+                              <span className={`mr-1.5 inline-block rounded px-1.5 py-0.2 text-[10px] font-bold ${tagMeta.badgeClass}`}>
+                                {tagMeta.tag}
+                              </span>
+                            )}
+                            <span className={`text-[12px] ${item.completed ? 'line-through text-ink3' : 'font-medium text-ink'}`}>
+                              {item.text}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 행별 개별 삭제 버튼 (✕) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (myDayPlan) void handleRemoveMyItem(myDayPlan, idx);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-ink3 hover:bg-rose-500/10 hover:text-rose-500 transition-all shrink-0"
+                          title="이 업무 삭제"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 내 카드 진행률 게이지 바 */}
+              {myDayProgress && (
+                <div className="mt-3.5 pt-2.5 border-t border-teal/20 flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-ink2">진행률:</span>
+                    <span className="text-ink3">{myDayProgress.completed}/{myDayProgress.total}건 완료</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-28 rounded-full bg-border/80 overflow-hidden">
+                      <div
+                        className="h-full bg-teal transition-all duration-500 rounded-full"
+                        style={{ width: `${myDayProgress.percent}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-teal">{myDayProgress.percent}%</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <p className={`mt-1 truncate text-[11px] ${myDayPlan ? 'text-ink2' : 'text-ink3'}`}>{myDayPlan?.content || '작성 없음'}</p>
-          </div>
-          <div className="flex shrink-0 gap-1.5">
-            {myDayPlan && <Button size="sm" variant="danger" onClick={() => void removeMine()}>삭제</Button>}
-            <Button size="sm" variant="primary" onClick={() => setDraftText(myDayPlan?.content ?? '')}>{myDayPlan ? '수정' : '작성'}</Button>
-          </div>
-        </div>
-      </section>
+          </section>
 
-      {/* 날짜 선택 팝업 — 달력은 이 용도 하나뿐이라 별도 상시 영역 대신 팝업으로. */}
-      <Modal open={datePickerOpen} onClose={() => setDatePickerOpen(false)} title="날짜 선택" width={320}>
-        <div className="flex items-center gap-1.5 pb-2">
-          <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">‹</button>
-          <span className="min-w-[64px] text-center text-[11.5px] font-bold text-ink">{monthLabel(month)}</span>
-          <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">›</button>
-          <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>오늘</Button>
-        </div>
-        <div className="grid grid-cols-7 border-b border-border bg-panel-alt/65">
-          {WEEKDAYS.map((day, index) => (
-            <div key={day} className={`py-1 text-center text-[9.5px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {cells.map((cell, index) => {
-            const mine = myPlansByDate.get(cell.date) ?? [];
-            const isToday = cell.date === today;
-            const selected = cell.date === selectedDate;
-            return (
-              <button
-                key={cell.date}
-                type="button"
-                onClick={() => { setSelectedDate(cell.date); setDatePickerOpen(false); }}
-                className={`flex h-9 cursor-pointer flex-col items-center justify-center border-b border-r border-border text-left transition-colors ${selected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/45'} ${index % 7 === 6 ? 'border-r-0' : ''}`}
-              >
-                <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${isToday ? 'bg-teal text-white' : cell.inCurrentMonth ? 'text-ink2' : 'text-ink3/55'}`}>{Number(cell.date.slice(-2))}</span>
-                {mine.length > 0 && <span className="mt-0.5 block h-1 w-1 rounded-full bg-teal" title={`내 계획 ${mine.length}건`} />}
-              </button>
-            );
-          })}
-        </div>
-      </Modal>
+          {/* 에디터 모달 */}
+          {isEditorOpen && (
+            <WorkPlanEditorModal
+              isOpen={isEditorOpen}
+              onClose={() => setIsEditorOpen(false)}
+              date={selectedDate}
+              dateTitle={dayTitle(selectedDate)}
+              initialContent={myDayPlan?.content ?? ''}
+              onSave={async (content) => {
+                await savePlan(selectedDate, content, myDayPlan?.id);
+              }}
+              onDelete={
+                myDayPlan
+                  ? async () => {
+                      await removePlan(myDayPlan.id);
+                    }
+                  : undefined
+              }
+            />
+          )}
 
-      <Modal
-        open={draftText !== null}
-        onClose={() => setDraftText(null)}
-        title={`${dayTitle(selectedDate)} · 내 계획`}
-        width={640}
-        footer={(
-          <>
-            <Button size="sm" onClick={() => setDraftText(null)}>취소</Button>
-            <Button size="sm" variant="primary" disabled={(draftText ?? '').trim() === ''} onClick={() => void save()}>저장</Button>
-          </>
-        )}
-      >
-        <textarea
-          value={draftText ?? ''}
-          onChange={(event) => setDraftText(event.target.value)}
-          maxLength={1000}
-          rows={18}
-          autoFocus
-          placeholder="오늘 할 일을 자유롭게 적으세요"
-          className="min-h-[50vh] w-full resize-y rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none"
-        />
-      </Modal>
+          {/* 루틴 템플릿 및 태그 관리 모달 */}
+          <WorkPlanConfigModal
+            isOpen={isConfigOpen}
+            onClose={() => setIsConfigOpen(false)}
+          />
+          {/* 날짜 선택 팝업 */}
+          <Modal open={datePickerOpen} onClose={() => setDatePickerOpen(false)} title="날짜 선택" width={320}>
+            <div className="flex items-center gap-1.5 pb-2">
+              <button type="button" onClick={() => setMonth(moveCalendarMonth(month, -1))} aria-label="이전 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">‹</button>
+              <span className="min-w-[64px] text-center text-[11.5px] font-bold text-ink">{monthLabel(month)}</span>
+              <button type="button" onClick={() => setMonth(moveCalendarMonth(month, 1))} aria-label="다음 달" className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt">›</button>
+              <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>오늘</Button>
+            </div>
+            <div className="grid grid-cols-7 border-b border-border bg-panel-alt/65">
+              {WEEKDAYS.map((day, index) => (
+                <div key={day} className={`py-1 text-center text-[9.5px] font-bold ${index === 5 ? 'text-blue' : index === 6 ? 'text-danger' : 'text-ink3'}`}>{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {cells.map((cell, index) => {
+                const mine = myPlansByDate.get(cell.date) ?? [];
+                const isToday = cell.date === today;
+                const selected = cell.date === selectedDate;
+                return (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    onClick={() => { setSelectedDate(cell.date); setDatePickerOpen(false); }}
+                    className={`flex h-9 cursor-pointer flex-col items-center justify-center border-b border-r border-border text-left transition-colors ${selected ? 'bg-teal-soft/25' : 'hover:bg-panel-alt/45'} ${index % 7 === 6 ? 'border-r-0' : ''}`}
+                  >
+                    <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${isToday ? 'bg-teal text-white' : cell.inCurrentMonth ? 'text-ink2' : 'text-ink3/55'}`}>{Number(cell.date.slice(-2))}</span>
+                    {mine.length > 0 && <span className="mt-0.5 block h-1 w-1 rounded-full bg-teal" title={`내 계획 ${mine.length}건`} />}
+                  </button>
+                );
+              })}
+            </div>
+          </Modal>
 
       {/* 남의 계획 열람 — 로스터 행은 미리보기 2줄만 보여주고, 전체 내용은 여기서 본다. */}
       <Modal
@@ -508,28 +743,153 @@ export default function WorkPlanScreen() {
                 {group.members.map((user) => {
                   const isSelf = user.id === actor.id;
                   const plan = dayPlanByOwner.get(user.id);
-                  const onOpen = isSelf ? () => setDraftText(myDayPlan?.content ?? '') : plan ? () => setViewingUser(user) : undefined;
+                  const presence = presences[user.id];
+                  const presenceMeta = presence ? USER_PRESENCE_META[presence.status] : USER_PRESENCE_META.ONLINE;
+                  const parsed = plan ? parseWorkPlanItems(plan.content) : [];
+                  const progress = plan ? calculatePlanProgress(plan.content) : null;
+                  const onOpen = isSelf ? () => setIsEditorOpen(true) : plan ? () => setViewingUser(user) : undefined;
+
                   return (
-                    <button
+                    <div
                       key={user.id}
-                      type="button"
-                      disabled={!onOpen}
-                      onClick={onOpen}
-                      className={`flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors ${isSelf ? 'bg-teal-soft/10' : ''} ${onOpen ? 'cursor-pointer hover:bg-panel-alt/45' : 'cursor-default'}`}
+                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
+                        isSelf ? 'bg-teal-soft/10' : 'hover:bg-panel-alt/40'
+                      }`}
                     >
-                      <div className="w-24 shrink-0 pt-0.5 text-[11px] font-bold text-ink2">
-                        {user.name}
-                        {user.position && <span className="ml-1 text-[9.5px] font-normal text-ink3">{user.position}</span>}
-                        {isSelf && <span className="ml-1 font-semibold text-teal">(나)</span>}
+                      {/* 좌측: 사원 정보 + Teams/Discord 실시간 상태 뱃지 */}
+                      <div className="w-48 shrink-0 pt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[12px] font-extrabold text-ink">{user.name}</span>
+                          {user.position && (
+                            <span className="text-[10px] text-ink3 font-medium">{user.position}</span>
+                          )}
+                          {isSelf && (
+                            <span className="rounded bg-teal-soft px-1 text-[9.5px] font-bold text-teal">
+                              나
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 실시간 근무 상태 뱃지 */}
+                        <div className="mt-1 flex items-center gap-1">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-bold ${presenceMeta.bgTone}`}
+                            title={presence?.message ? `${presenceMeta.label}: ${presence.message}` : presenceMeta.desc}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${presenceMeta.dotColor}`} />
+                            <span>{presenceMeta.label}</span>
+                          </span>
+
+                          {presence?.message && (
+                            <span
+                              className="text-[9.5px] text-ink3 truncate max-w-[110px]"
+                              title={presence.message}
+                            >
+                              "{presence.message}"
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1 text-[11px] text-ink">
-                        {plan ? (
-                          <p className="line-clamp-2 whitespace-pre-wrap">{plan.content}</p>
+
+                      {/* 우측: 계획 본문 (체크리스트 or 텍스트) + 진행률 */}
+                      <div className="min-w-0 flex-1">
+                        {parsed.length === 0 ? (
+                          <div
+                            onClick={onOpen}
+                            className={`text-[11.5px] ${onOpen ? 'cursor-pointer' : ''} text-ink3 italic py-0.5`}
+                          >
+                            {isSelf ? '+ 클릭하여 오늘의 계획 작성' : '작성 없음'}
+                          </div>
                         ) : (
-                          <span className="text-ink3 italic">작성 없음</span>
+                          <div className="space-y-1">
+                            {parsed.map((item, idx) => {
+                              if (!item.text && !item.tag && !item.isChecklist) return null;
+                              const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
+
+                              return (
+                                <div key={idx} className="flex items-start gap-2">
+                                  {item.isChecklist ? (
+                                    <button
+                                      type="button"
+                                      disabled={!isSelf}
+                                      onClick={() => isSelf && plan && handleToggleMyItem(plan, idx)}
+                                      className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors ${
+                                        item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel'
+                                      } ${isSelf ? 'hover:border-teal cursor-pointer' : 'cursor-default'}`}
+                                      title={isSelf ? (item.completed ? '완료 취소' : '완료 체크') : undefined}
+                                    >
+                                      {item.completed && <CheckCircle2 size={11} />}
+                                    </button>
+                                  ) : (
+                                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink3" />
+                                  )}
+
+                                  <div className="min-w-0 flex-1 leading-snug">
+                                    {tagMeta && (
+                                      <span className={`mr-1.5 inline-block rounded px-1.5 py-0.2 text-[9.5px] font-bold ${tagMeta.badgeClass}`}>
+                                        {tagMeta.tag}
+                                      </span>
+                                    )}
+                                    <span className={`text-[11.5px] ${item.completed ? 'line-through text-ink3' : 'text-ink font-medium'}`}>
+                                      {item.text}
+                                    </span>
+                                  </div>
+
+                                  {isSelf && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (plan) void handleRemoveMyItem(plan, idx);
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-ink3 hover:text-rose-500 transition-all shrink-0"
+                                      title="이 업무 삭제"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* 진행률 게이지 바 */}
+                            {progress && (
+                              <div className="mt-2 flex items-center gap-2 text-[10.5px] text-ink3 pt-1 border-t border-border/40">
+                                <span>{progress.completed}/{progress.total}건 완료 ({progress.percent}%)</span>
+                                <div className="h-1.5 w-20 rounded-full bg-border overflow-hidden">
+                                  <div
+                                    className="h-full bg-teal rounded-full transition-all"
+                                    style={{ width: `${progress.percent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </button>
+
+                      {/* 액션 버튼 */}
+                      {isSelf ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditorOpen(true)}
+                          className="shrink-0 rounded-md p-1.5 text-ink3 hover:bg-panel-alt hover:text-teal transition-colors"
+                          title="계획 수정"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                      ) : (
+                        plan && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingUser(user)}
+                            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
+                          >
+                            상세
+                          </button>
+                        )
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -537,6 +897,8 @@ export default function WorkPlanScreen() {
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }

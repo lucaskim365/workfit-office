@@ -13,6 +13,7 @@ import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead 
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import defaultLogo from '@/assets/logo.png';
 
 interface TopbarProps {
@@ -90,6 +91,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
   // 로그인 사용자 이니셜(이름 뒤 2글자). 미로그인/데모 시 기본 표기.
   const initials = user?.name ? user.name.slice(-2) : 'WF';
+  const { meta: presenceMeta, presence: myPresence } = useMyPresence();
   const [notiOpen, setNotiOpen] = useState(false);
   const rawNotifications = useNotifications(user?.id);
   const markAll = useMarkAllNotificationsRead();
@@ -346,18 +348,24 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           )}
         </div>
 
-        {/* 사용자 정보 */}
+        {/* 사용자 정보 & 실시간 상태 점 */}
         <div className="relative">
           <button
             onClick={() => setUserOpen(!userOpen)}
-            title={user ? `${user.name} (${user.empNo})` : '계정'}
-            className={`relative grid h-8 w-8 place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white overflow-hidden ${userOpen ? 'ring-2 ring-white/30' : ''}`}
+            title={user ? `${user.name} (${user.empNo}) · ${presenceMeta.label}${myPresence.message ? ` - ${myPresence.message}` : ''}` : '계정'}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-full transition-all ${userOpen ? 'ring-2 ring-white/40' : 'hover:opacity-90'}`}
           >
-            {user?.photoUrl ? (
-              <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
-            ) : (
-              initials
-            )}
+            <div className="grid h-full w-full place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white overflow-hidden shadow-xs">
+              {user?.photoUrl ? (
+                <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
+            </div>
+            {/* 상태 인디케이터 점 */}
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-panel shadow-2xs ${presenceMeta.dotColor}`}
+            />
           </button>
           {userOpen && (
             <UserMenu
