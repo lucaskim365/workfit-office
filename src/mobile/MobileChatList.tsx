@@ -127,7 +127,7 @@ export default function MobileChatList() {
           <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><Bell size={18} strokeWidth={2} /></button>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-guide'))}
-            title="아이폰 설치 & 알림 가이드"
+            title="모바일 앱 설치 & 알림 가이드"
             className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white/90 hover:text-white"
           >
             <HelpCircle size={18} strokeWidth={2} />

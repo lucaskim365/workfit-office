@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { checkDeviceEnvironment } from './IosPwaGuideModal';
 
 /** 모바일 PWA 로그인 — 사번/이메일 + 비밀번호(자체 로그인). */
 export default function MobileLogin() {
@@ -24,6 +25,8 @@ export default function MobileLogin() {
       setBusy(false);
     }
   };
+
+  const env = checkDeviceEnvironment();
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-7" style={{ background: '#101830' }}>
@@ -63,8 +66,14 @@ export default function MobileLogin() {
         onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-guide'))}
         className="mt-5 flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[12px] font-medium text-white/90 hover:bg-white/20 active:scale-95 transition-all shadow-sm"
       >
-        <span>📱</span>
-        <span>아이폰 설치 &amp; 알림 설정 가이드</span>
+        <span>{env.isAndroid ? '🤖' : env.isIos ? '🍎' : '📱'}</span>
+        <span>
+          {env.isAndroid
+            ? '안드로이드(갤럭시) 설치 & 알림 가이드'
+            : env.isIos
+            ? '아이폰 설치 & 알림 설정 가이드'
+            : '모바일 앱 설치 & 알림 설정 가이드'}
+        </span>
       </button>
 
       <p className="mt-4 text-[10.5px] text-white/40">© Workfit Mobile</p>
