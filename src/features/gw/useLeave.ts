@@ -1,9 +1,16 @@
 import { useMemo } from 'react';
 import { useAllApprovals } from '@/features/gw/useApprovals';
+import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { byRecent } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, LeaveType } from '@/domain/approvalDoc/schema';
+import {
+  calculateStatutoryEntitlement,
+  evaluateAdvanceLeaveOffset,
+  type StatutoryLeaveResult,
+  type AdvanceOffsetResult,
+} from '@/domain/leave/accrualEngine';
 
-export const ANNUAL_GRANT = 15;
+export const FALLBACK_ANNUAL_GRANT = 15;
 
 const DEDUCTS_ANNUAL = (t: LeaveType) => t === '연차' || t === '반차';
 
@@ -19,6 +26,7 @@ export interface SubstituteHolidayItem {
 }
 
 export interface LeaveBalance {
+  /** 법정 부여 총 일수 (엔진 산출) */
   grant: number;
   /** 승인완료된 연차·반차 사용 합. */
   used: number;
@@ -28,6 +36,13 @@ export interface LeaveBalance {
   remaining: number;
   /** 병가·경조·공가 등 기타 승인완료 일수 합(부여 무관, 참고 표시). */
   otherUsed: number;
+
+  /** 법정 연차 상세 산정 결과 (1년 미만 월별 발생/소멸, 가산연차 등) */
+  statutory?: StatutoryLeaveResult;
+  /** 신입사원 연차 선사용(Advance Leave) 및 상계 분석 상태 */
+  advanceOffset?: AdvanceOffsetResult;
+  /** 임직원 실제 입사일 */
+  hireDate?: string;
 
   /** 대체휴무 요약 및 내역 */
   substituteHoliday: {
@@ -49,6 +64,8 @@ const INITIAL_SUBSTITUTE_HOLIDAYS: Array<{ id: string; occurrenceDate: string; e
 
 export function useLeave(userId: string | undefined): LeaveBalance {
   const q = useAllApprovals();
+  const profilesQ = useEmployeeProfiles();
+
   return useMemo(() => {
     const rows = q.data ?? [];
     const mine = userId
@@ -67,8 +84,24 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     const approvedSubDays = sumDays((d) => d.status === '완료' && d.form!.leaveType === '대체휴무');
     const pendingSubDays = sumDays((d) => d.status === '진행중' && d.form!.leaveType === '대체휴무');
 
-    const todayStr = '2026-07-16';
-    const thirtyDaysLaterStr = '2026-08-15'; // 30일 이내 만료 예정 검사용 (대략 2026-08-15)
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysLaterStr = `${thirtyDaysLater.getFullYear()}-${String(thirtyDaysLater.getMonth() + 1).padStart(2, '0')}-${String(thirtyDaysLater.getDate()).padStart(2, '0')}`;
+
+    // 임직원 인사 프로필에서 hireDate 조회 및 법정 연차 엔진 산출
+    const userProfile = profilesQ.data?.find((p) => p.userId === userId || p.id === userId);
+    const hireDate = userProfile?.hireDate || undefined;
+
+    let statutory: StatutoryLeaveResult | undefined;
+    let advanceOffset: AdvanceOffsetResult | undefined;
+    let dynamicGrant = FALLBACK_ANNUAL_GRANT;
+
+    if (hireDate) {
+      statutory = calculateStatutoryEntitlement(hireDate, todayStr);
+      dynamicGrant = statutory.totalStatutoryGranted;
+      advanceOffset = evaluateAdvanceLeaveOffset(hireDate, todayStr, used);
+    }
 
     // 선입선출(FIFO) 기반 대체휴무 상태 분배 및 차감 로직
     let remainingApprovedToAllocate = approvedSubDays;
@@ -128,11 +161,14 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     ).length;
 
     return {
-      grant: ANNUAL_GRANT,
+      grant: dynamicGrant,
       used,
       pending,
-      remaining: Math.max(0, ANNUAL_GRANT - used),
+      remaining: Math.max(0, dynamicGrant - used),
       otherUsed,
+      statutory,
+      advanceOffset,
+      hireDate,
       substituteHoliday: {
         total: subTotal,
         used: subUsed,
@@ -142,7 +178,7 @@ export function useLeave(userId: string | undefined): LeaveBalance {
         detailList,
       },
       myDocs: mine,
-      isLoading: q.isLoading,
+      isLoading: q.isLoading || profilesQ.isLoading,
     };
-  }, [q.data, q.isLoading, userId]);
+  }, [q.data, q.isLoading, profilesQ.data, profilesQ.isLoading, userId]);
 }

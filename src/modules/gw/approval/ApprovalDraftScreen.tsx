@@ -27,7 +27,9 @@ import { DraftFormSidebar } from './components/DraftFormSidebar';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
-import { Upload, X, Paperclip, AlertTriangle, Lock, FileText, GitFork } from 'lucide-react';
+import { getDefaultTimeWindow } from '@/domain/leave/policy';
+import { businessDaysBetween, CalendarRangePicker } from '@/modules/gw/approval/formFields';
+import { Upload, X, Paperclip, AlertTriangle, Lock, FileText, GitFork, Calendar, Clock, Info, CheckCircle2 } from 'lucide-react';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -750,10 +752,29 @@ function ApprovalDraftInner({
     let leave: LeaveForm | null = null;
     if (code === '휴가') {
       const pStart = String(values['period'] || '');
-      const pEnd = String(values['period__end'] || '');
-      const pDays = Number(values['period__days']) || 0;
       const lType = String(values['leaveType'] || '연차') as LeaveType;
-      leave = { leaveType: lType, startDate: pStart, endDate: pEnd, days: pDays };
+      const isHalf = lType === '오전반차' || lType === '오후반차' || lType === '반차';
+      const isQuarter = lType === '반반차';
+      const pEnd = isHalf || isQuarter ? pStart : String(values['period__end'] || pStart);
+
+      let pDays = Number(values['period__days']) || 0;
+      if (isHalf) pDays = 0.5;
+      else if (isQuarter) pDays = 0.25;
+
+      const timeWin = getDefaultTimeWindow(lType);
+      const startTime = String(values['startTime'] || timeWin.startTime);
+      const endTime = String(values['endTime'] || timeWin.endTime);
+      const reason = values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : undefined;
+
+      leave = {
+        leaveType: lType,
+        startDate: pStart,
+        endDate: pEnd,
+        startTime,
+        endTime,
+        days: pDays,
+        reason,
+      };
     }
 
     const postApprovedUser = org.userById(postApprovedById);
@@ -816,12 +837,13 @@ function ApprovalDraftInner({
     if (code === '휴가') {
       const pStart = values['period'];
       const pEnd = values['period__end'];
-      const pDays = Number(values['period__days']) || 0;
-      if (!pStart || !pEnd || pDays <= 0) return '휴가 기간을 올바르게 입력하세요.';
-
       const lType = String(values['leaveType'] || '연차');
-      if (lType === '연차' || lType === '반차') {
-        if (pDays > bal.remaining) return `잔여 연차(${bal.remaining}일)를 초과하여 신청할 수 없습니다.`;
+      const isHalf = lType === '오전반차' || lType === '오후반차' || lType === '반차';
+      const isQuarter = lType === '반반차';
+      const effectiveDays = isHalf ? 0.5 : isQuarter ? 0.25 : (Number(values['period__days']) || 0);
+
+      if (!pStart || (!isHalf && !isQuarter && !pEnd) || effectiveDays <= 0) {
+        return '휴가 기간을 올바르게 입력하세요.';
       }
     }
 
@@ -997,6 +1019,72 @@ function ApprovalDraftInner({
         </div>,
       );
     }
+    if (code === '휴가' && field.key === 'leaveType') {
+      // 상단에 이미 세련된 카드 라디오 선택기가 제공되므로 중복 노출 스킵
+      continue;
+    }
+
+    if (code === '휴가' && field.key === 'period') {
+      const isHalf = selectedLeaveType === '오전반차' || selectedLeaveType === '오후반차' || selectedLeaveType === '반차';
+      const isQuarter = selectedLeaveType === '반반차';
+      const curStart = String(values['period'] ?? '');
+      const curEnd = String(values['period__end'] ?? curStart);
+      const win = getDefaultTimeWindow(selectedLeaveType);
+
+      fieldNodes.push(
+        <div key={field.key} className="col-span-2">
+          <Field label={isHalf ? `${selectedLeaveType} 사용일자 *` : isQuarter ? '반반차 사용일자 *' : '휴가 기간 (토·일 주말 자동 제외) *'}>
+            {isHalf || isQuarter ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="date"
+                  value={curStart}
+                  onChange={(e) => {
+                    const nextDate = e.target.value;
+                    setVals({
+                      period: nextDate,
+                      period__end: nextDate,
+                      period__days: isHalf ? 0.5 : 0.25,
+                      startTime: win.startTime,
+                      endTime: win.endTime,
+                    });
+                  }}
+                  className={`${INP} w-48`}
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal/30 bg-teal-soft/50 px-2.5 py-1.5 text-[12px] font-bold text-teal">
+                  <Clock size={13} />
+                  <span>부재시간: {win.startTime} ~ {win.endTime} ({isHalf ? '0.5일' : '0.25일'} 차감)</span>
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <CalendarRangePicker
+                  start={curStart}
+                  end={curEnd}
+                  onChange={(newStart: string, newEnd: string) => {
+                    const days = newStart && newEnd ? businessDaysBetween(newStart, newEnd) : 0;
+                    setVals({
+                      period: newStart,
+                      period__end: newEnd,
+                      period__days: days,
+                      startTime: '08:30',
+                      endTime: '17:30',
+                    });
+                  }}
+                />
+                {curStart && curEnd && (
+                  <p className="text-[11px] text-ink3">
+                    선택 기간: {curStart} ~ {curEnd} (토·일 주말 제외 <strong>{values['period__days'] ?? 0}일</strong> 차감)
+                  </p>
+                )}
+              </div>
+            )}
+          </Field>
+        </div>,
+      );
+      continue;
+    }
+
     const span = effectiveWidth === 'half' ? 'col-span-1' : 'col-span-2';
     if (field.type === '금액' && field === amountField) {
       fieldNodes.push(
@@ -1095,8 +1183,15 @@ function ApprovalDraftInner({
           ? {
             leaveType: String(values['leaveType'] || '연차') as LeaveType,
             startDate: String(values['period'] || ''),
-            endDate: String(values['period__end'] || ''),
-            days: Number(values['period__days']) || 0,
+            endDate: String(values['leaveType'] || '').includes('반차') ? String(values['period'] || '') : String(values['period__end'] || values['period'] || ''),
+            startTime: String(values['startTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차')).startTime),
+            endTime: String(values['endTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차')).endTime),
+            days: String(values['leaveType'] || '').includes('반차')
+              ? 0.5
+              : String(values['leaveType'] || '') === '반반차'
+              ? 0.25
+              : Number(values['period__days']) || 1,
+            reason: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : undefined,
           }
           : null,
       execution: executionTarget
@@ -1403,15 +1498,137 @@ function ApprovalDraftInner({
               <span className="text-[11px] text-ink3 font-normal">필요 항목을 정확히 작성해 주세요.</span>
             </div>
 
-            {/* 휴가 전용 연차 잔여 일수 현황 위젯 */}
+            {/* 휴가 전용 연차 잔여 일수 현황 위젯 및 휴가 종류 세분화 선택기 */}
             {code === '휴가' && (
-              <div className="rounded-lg border border-teal/30 bg-teal-soft/30 p-3 text-[12px] text-teal space-y-1">
-                <div className="font-bold flex items-center justify-between">
-                  <span>{me.name} 님의 연차 현황</span>
-                  <span>잔여 {bal.remaining}일 (총 {bal.grant}일 / 사용 {bal.used}일)</span>
+              <div className="space-y-3">
+                {/* 1. 기안자 연차 요약 카드 */}
+                <div className="rounded-xl border border-teal/25 bg-linear-to-r from-teal-soft/40 via-panel-alt to-teal-soft/20 p-3.5 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal/15 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-teal text-white shadow-xs">
+                        <Calendar size={15} />
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-bold text-ink">{me.name} 님의 연차 현황</span>
+                          {bal.hireDate && (
+                            <span className="text-[11px] text-ink3">입사일: {bal.hireDate}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-[12px]">
+                      <span className="text-ink3">총 발생 <strong className="text-ink font-semibold">{bal.grant}일</strong></span>
+                      <span className="text-ink3">·</span>
+                      <span className="text-ink3">사용 <strong className="text-ink font-semibold">{bal.used}일</strong></span>
+                      {bal.pending > 0 && (
+                        <>
+                          <span className="text-ink3">·</span>
+                          <span className="text-amber-600 font-medium">진행중 {bal.pending}일</span>
+                        </>
+                      )}
+                      <span className="text-ink3">·</span>
+                      <span className="rounded-full bg-teal/15 px-2.5 py-0.5 font-bold text-teal">
+                        잔여 {bal.remaining}일
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 선사용(Advance Leave) 상계 현황 안내 배너 */}
+                  {bal.advanceOffset?.isAdvanceUsed && (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] text-amber-800">
+                      <Info size={14} className="shrink-0 text-amber-600" />
+                      <span>
+                        <strong>선사용 안내:</strong> 현재 하계휴가 등 선사용({bal.advanceOffset.totalUsed}일) 중 <strong>{bal.advanceOffset.offsetCompletedDays}일 상계 완료</strong>되었습니다. (잔여 상계: {bal.advanceOffset.offsetRemainingDays}일 / 정상화 예상: {bal.advanceOffset.estimatedFullOffsetDate ?? '근무 지속 시 자동 완제'})
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {selectedLeaveType === '반차' && (
-                  <p className="text-[11px] text-teal/80">※ 반차 선택 시 0.5일이 차감됩니다.</p>
+
+                {/* 2. 휴가 종류 빠른 선택 버튼 그리드 */}
+                <div className="space-y-1.5">
+                  <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1">
+                    <Clock size={12} className="text-teal" />
+                    <span>휴가 구분 선택</span>
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { type: '연차', title: '종일 연차', sub: '08:30 ~ 17:30 (1.0일)', days: 1.0 },
+                      { type: '오전반차', title: '오전 반차', sub: '08:30 ~ 12:30 (0.5일)', days: 0.5 },
+                      { type: '오후반차', title: '오후 반차', sub: '13:30 ~ 17:30 (0.5일)', days: 0.5 },
+                      { type: '반반차', title: '반반차', sub: '2시간 부재 (0.25일)', days: 0.25 },
+                    ].map((item) => {
+                      const isSelected = selectedLeaveType === item.type;
+                      return (
+                        <button
+                          key={item.type}
+                          type="button"
+                          onClick={() => {
+                            const curStart = String(values['period'] || '');
+                            const curEnd = String(values['period__end'] || curStart);
+                            const win = getDefaultTimeWindow(item.type);
+
+                            let nextDays = item.days;
+                            let nextEnd = curEnd;
+
+                            if (item.type === '오전반차' || item.type === '오후반차' || item.type === '반반차') {
+                              nextEnd = curStart; // 반차는 당일 처리
+                              nextDays = item.days;
+                            } else if (item.type === '연차' && curStart && curEnd) {
+                              nextDays = businessDaysBetween(curStart, curEnd) || 1.0;
+                            }
+
+                            setVals({
+                              leaveType: item.type,
+                              period__end: nextEnd,
+                              period__days: nextDays,
+                              startTime: win.startTime,
+                              endTime: win.endTime,
+                            });
+                          }}
+                          className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition-all ${
+                            isSelected
+                              ? 'border-teal bg-teal-soft/60 shadow-xs ring-1 ring-teal/30'
+                              : 'border-border bg-panel-alt hover:border-teal/40 hover:bg-panel'
+                          }`}
+                        >
+                          <div className="flex w-full items-center justify-between">
+                            <span className={`text-[12.5px] font-bold ${isSelected ? 'text-teal' : 'text-ink'}`}>
+                              {item.title}
+                            </span>
+                            {isSelected && <CheckCircle2 size={13} className="text-teal" />}
+                          </div>
+                          <span className="mt-0.5 text-[10.5px] text-ink3">{item.sub}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. 오전/오후 반차 상세 복무 안내 피드백 */}
+                {selectedLeaveType === '오전반차' && (
+                  <div className="rounded-lg border border-sky-500/30 bg-sky-500/8 px-3 py-2 text-[11.5px] text-sky-800 flex items-center gap-2">
+                    <Info size={14} className="shrink-0 text-sky-600" />
+                    <span>
+                      <strong>오전 반차 안내:</strong> 부재시간은 <strong>08:30 ~ 12:30</strong>(4시간)이며, 점심시간(12:30~13:30) 후 <strong>13:30에 정상 출근</strong>하여 근무합니다. (0.5일 차감)
+                    </span>
+                  </div>
+                )}
+                {selectedLeaveType === '오후반차' && (
+                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/8 px-3 py-2 text-[11.5px] text-indigo-800 flex items-center gap-2">
+                    <Info size={14} className="shrink-0 text-indigo-600" />
+                    <span>
+                      <strong>오후 반차 안내:</strong> 부재시간은 <strong>13:30 ~ 17:30</strong>(4시간)이며, 오전 근무(08:30~12:30) 수행 후 <strong>12:30 점심시간 시작과 함께 퇴근(조퇴)</strong>합니다. (0.5일 차감)
+                    </span>
+                  </div>
+                )}
+                {selectedLeaveType === '반반차' && (
+                  <div className="rounded-lg border border-teal/30 bg-teal-soft/40 px-3 py-2 text-[11.5px] text-teal flex items-center gap-2">
+                    <Info size={14} className="shrink-0 text-teal" />
+                    <span>
+                      <strong>반반차 안내:</strong> 2시간 지정 부재(0.25일 차감)입니다. 조기퇴근 시 기본 15:30~17:30 적용됩니다.
+                    </span>
+                  </div>
                 )}
               </div>
             )}

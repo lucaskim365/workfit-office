@@ -24,6 +24,24 @@ export function daysBetween(start: string, end: string): number {
   return Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
 }
 
+/** 주말(토/일)을 제외한 평일(영업일) 일수 계산 */
+export function businessDaysBetween(start: string, end: string): number {
+  const s = new Date(start.slice(0, 10) + 'T00:00:00');
+  const e = new Date(end.slice(0, 10) + 'T00:00:00');
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) return 0;
+  
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const day = cur.getDay();
+    if (day !== 0 && day !== 6) {
+      count++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
 export function getCellMergeInfo(rIdx: number, cIdx: number, merges: CellMerge[]) {
   const mergeInfo = (merges || []).find((m) => {
     const rMatch = rIdx >= m.startRow && rIdx < m.startRow + m.rowSpan;

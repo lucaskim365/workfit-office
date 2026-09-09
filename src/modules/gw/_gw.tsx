@@ -11,7 +11,7 @@ import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 /** 화면 상단 브레드크럼 + 타이틀(그룹웨어 / {name}) 및 목적/설명. */
 export function GwHead({ icon, name, desc, right }: { icon: string; name: string; desc?: string; right?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
       <div>
         <div className="mb-1 text-xs font-medium text-ink3">그룹웨어 <span className="px-1">/</span> {name}</div>
         <div className="flex items-center gap-2.5">

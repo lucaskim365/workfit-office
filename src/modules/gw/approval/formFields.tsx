@@ -11,10 +11,12 @@ import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 
 // Re-export utility functions and types for backward compatibility
+export { CalendarRangePicker } from './formFields/CalendarRangePicker';
 export {
   END_SUFFIX,
   DAYS_SUFFIX,
   daysBetween,
+  businessDaysBetween,
   getCellMergeInfo,
   fieldText,
   missingRequired,

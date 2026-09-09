@@ -25,8 +25,8 @@ export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회
 export const STEP_KINDS = ['결재', '합의', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
 export const STEP_DECISIONS = ['대기', '승인', '반려', '보류'] as const;
-/** 휴가 종류(§5.4). */
-export const LEAVE_TYPES = ['연차', '반차', '병가', '경조', '공가', '대체휴무', '기타'] as const;
+/** 휴가 종류(§5.4). 오전반차(08:30~12:30), 오후반차(13:30~17:30), 반반차 세분화 */
+export const LEAVE_TYPES = ['연차', '오전반차', '오후반차', '반차', '반반차', '병가', '경조', '공가', '대체휴무', '기타'] as const;
 /** 문서 보안 등급 */
 export const DOC_SECURITY_LEVELS = ['일반', '대외비', '극비'] as const;
 
@@ -85,8 +85,14 @@ export const leaveFormSchema = z.object({
   /** 기간(date, YYYY-MM-DD). */
   startDate: z.string(),
   endDate: z.string(),
-  /** 사용 일수(반차=0.5). 잔여일수는 저장 안 하고 도출(§5.4). */
+  /** 시작 시간 (예: "08:30", "13:30") */
+  startTime: z.string().optional(),
+  /** 종료 시간 (예: "12:30", "17:30") */
+  endTime: z.string().optional(),
+  /** 사용 일수(반차=0.5, 반반차=0.25). 잔여일수는 저장 안 하고 도출(§5.4). */
   days: z.number().min(0),
+  /** 사유 */
+  reason: z.string().optional(),
 });
 
 export type LeaveForm = z.infer<typeof leaveFormSchema>;

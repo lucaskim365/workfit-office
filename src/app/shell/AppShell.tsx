@@ -167,7 +167,7 @@ export default function AppShell() {
     setFavs((f) => (f.includes(name) ? f.filter((x) => x !== name) : [...f, name]));
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-bg w-fit min-w-full">
+    <div className="relative flex min-h-screen flex-col bg-bg w-full max-w-full min-w-0 overflow-x-clip">
       <Topbar
         activeModuleId={activeModuleId}
         activeUrl={activeUrl}

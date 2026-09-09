@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -38,6 +38,16 @@ import { CommuteDeptView } from './components/CommuteDeptView';
 import { CommuteAnomalyView } from './components/CommuteAnomalyView';
 import { CommuteLeaveView } from './components/CommuteLeaveView';
 import { MyLeaveTab } from './components/MyLeaveTab';
+import { LeaveLedgerTable } from '../leave/components/LeaveLedgerTable';
+import { LeaveAdjustmentModal } from '../leave/components/LeaveAdjustmentModal';
+import {
+  buildLeaveLedger,
+  type LeaveLedgerEntry,
+} from '@/domain/leave/ledger';
+import {
+  getStoredAdjustments,
+  type LeaveAdjustmentTransaction,
+} from '@/domain/leave/adjustmentStore';
 import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
 import {
   Settings,
@@ -51,6 +61,7 @@ import {
   Search,
   CalendarCheck2,
   Filter,
+  BookOpen,
 } from 'lucide-react';
 
 /** 탭 상수 */
@@ -227,8 +238,8 @@ export default function CommuteScreen() {
   }, [holidays]);
 
   const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
-  const canManagePolicy = isAdmin || commuteScope === 'ALL';
-  const canTeam = commuteScope === 'TEAM' || commuteScope === 'ALL';
+  const canAll = isAdmin || commuteScope === 'ALL';
+  const canManagePolicy = canAll;
 
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
@@ -334,10 +345,10 @@ export default function CommuteScreen() {
     [profileByEmpMap, normName],
   );
 
-  // 상위 탭 상태 (내 근태 vs 내 연차·휴가 vs 관제/부서원 근태)
+  // 상위 탭 상태 (내 근태 vs 내 연차·휴가 vs 전사 관리)
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get('tab');
-  const initialTab = urlTab === LEAVE_TAB ? LEAVE_TAB : (urlTab === TEAM_TAB && canTeam) ? TEAM_TAB : ME_TAB;
+  const initialTab = urlTab === LEAVE_TAB ? LEAVE_TAB : (urlTab === TEAM_TAB && canAll) ? TEAM_TAB : ME_TAB;
   const [tab, setTab] = useState<string>(initialTab);
 
   const handleTabChange = useCallback((nextTab: string) => {
@@ -353,11 +364,41 @@ export default function CommuteScreen() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const activeTab = (tab === TEAM_TAB && !canTeam) ? ME_TAB : tab;
+  const activeTab = (tab === TEAM_TAB && !canAll) ? ME_TAB : tab;
   const isTeam = activeTab === TEAM_TAB;
 
-  // 관제 4대 View 탭 상태
-  const [adminTab, setAdminTab] = useState<CommuteAdminTab>('all_matrix');
+  // 관제 서브 View 탭 상태
+  const urlAdminTab = searchParams.get('adminTab') as CommuteAdminTab | null;
+  const [adminTab, setAdminTab] = useState<CommuteAdminTab>(urlAdminTab || 'all_matrix');
+
+  const handleAdminTabChange = useCallback((nextAdminTab: CommuteAdminTab) => {
+    setAdminTab(nextAdminTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('adminTab', nextAdminTab);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // URL 변경 시 adminTab 동기화
+  useEffect(() => {
+    if (urlAdminTab && urlAdminTab !== adminTab) {
+      setAdminTab(urlAdminTab);
+    }
+  }, [urlAdminTab, adminTab]);
+
+  // 연차 원장 산정 모드 & 수동 가감 상태
+  const [ledgerMode, setLedgerMode] = useState<'HIRE_DATE' | 'FISCAL_YEAR'>('HIRE_DATE');
+  const [adjustmentTarget, setAdjustmentTarget] = useState<LeaveLedgerEntry | null>(null);
+  const [adjustments, setAdjustments] = useState<LeaveAdjustmentTransaction[]>(() => getStoredAdjustments());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAdjustments(getStoredAdjustments());
+    };
+    window.addEventListener('workfit-leave-adjustment-updated', handleUpdate);
+    return () => window.removeEventListener('workfit-leave-adjustment-updated', handleUpdate);
+  }, []);
 
   // 필터 상태
   const [month, setMonth] = useState(thisMonth());
@@ -444,6 +485,60 @@ export default function CommuteScreen() {
   const myHireDate = useMemo(() => {
     return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
   }, [user, getHireDateForEmp]);
+
+  // 전사 연차 원장 실시간 집계 (전사 권한자 전용)
+  const { entries: leaveLedgerEntries, summary: leaveLedgerSummary } = useMemo(() => {
+    if (!canAll) {
+      return {
+        entries: [],
+        summary: {
+          totalEmployees: 0,
+          totalEntitled: 0,
+          totalAdjusted: 0,
+          totalGranted: 0,
+          totalUsed: 0,
+          totalPending: 0,
+          totalRemaining: 0,
+          avgUsageRate: 0,
+          advanceEmployeeCount: 0,
+        },
+      };
+    }
+
+    const empInput = employees.map((e) => {
+      const u =
+        userByEmpMap.get(e.name.trim()) ??
+        userByEmpMap.get(normName(e.name)) ??
+        userByEmpMap.get(String(e.empId));
+      const hire = getHireDateForEmp(e.name, e.empId);
+      return {
+        empId: e.empId,
+        empNo: u?.empNo ? String(u.empNo) : String(e.empId),
+        name: e.name,
+        dept: u?.dept || null,
+        position: u?.position || null,
+        hireDate: hire,
+      };
+    });
+
+    return buildLeaveLedger(
+      empInput,
+      employeeProfiles,
+      approvalsQuery.data ?? [],
+      adjustments,
+      { mode: ledgerMode },
+    );
+  }, [
+    canAll,
+    employees,
+    userByEmpMap,
+    normName,
+    getHireDateForEmp,
+    employeeProfiles,
+    approvalsQuery.data,
+    adjustments,
+    ledgerMode,
+  ]);
 
   // 내 근태 한 달치 레코드
   const myMonthRows = useMemo(() => {
@@ -774,10 +869,10 @@ export default function CommuteScreen() {
     <div className={toggleShell}>
       {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => handleTabChange(ME_TAB))}
       {toggleButton(LEAVE_TAB, '내 연차·휴가', activeTab === LEAVE_TAB, () => handleTabChange(LEAVE_TAB))}
-      {canTeam && (
+      {canAll && (
         toggleButton(
           TEAM_TAB,
-          commuteScope === 'ALL' ? '전사 근태현황' : '부서원 근태현황',
+          '전사 관리',
           isTeam,
           () => handleTabChange(TEAM_TAB),
         )
@@ -973,7 +1068,7 @@ export default function CommuteScreen() {
   const adminControlPanel = (
     <div className="space-y-3">
       {/* 1. 상단 KPI 관제 카드 (인터랙티브 필터 연동) */}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <StatCard
           label="전체 인원"
           value={`${kpiStats.totalMembers}명`}
@@ -1021,10 +1116,13 @@ export default function CommuteScreen() {
           sub="승인 완료 건수"
           tone="border-emerald-500/25 bg-emerald-500/8"
           onClick={() => {
-            setStatusFilter('leave');
-            setOnlyAnomaly(false);
+            if (canAll) {
+              handleAdminTabChange('leave_ledger');
+            } else {
+              handleAdminTabChange('leave');
+            }
           }}
-          active={statusFilter === 'leave'}
+          active={adminTab === 'leave_ledger' || adminTab === 'leave'}
         />
         <StatCard
           label="🚨 관리 필요"
@@ -1044,28 +1142,43 @@ export default function CommuteScreen() {
       <section className="rounded-xl border border-border bg-panel p-3 shadow-2xs space-y-3">
         {/* 상단 뷰 탭 & 기간 컨트롤러 */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-          <div className="flex items-center gap-1 bg-panel-alt p-0.5 rounded-lg border border-border shadow-2xs">
-            {toggleButton('all_matrix', '① 전사 현황', adminTab === 'all_matrix', () => setAdminTab('all_matrix'), <Users size={13} />)}
-            {toggleButton('dept_summary', '② 부서별 현황', adminTab === 'dept_summary', () => setAdminTab('dept_summary'), <Building2 size={13} />)}
+          <div className="flex flex-wrap items-center gap-1 bg-panel-alt p-0.5 rounded-lg border border-border shadow-2xs">
+            {toggleButton('all_matrix', '① 전사·부서별 근태', adminTab === 'all_matrix', () => handleAdminTabChange('all_matrix'), <Users size={13} />)}
             {toggleButton(
               'anomaly',
-              `③ 이상 근태 (${anomalyItems.length})`,
+              `② 이상 근태 (${anomalyItems.length})`,
               adminTab === 'anomaly',
-              () => setAdminTab('anomaly'),
+              () => handleAdminTabChange('anomaly'),
               <AlertTriangle size={13} className={anomalyItems.length > 0 ? 'text-rose-500' : ''} />,
             )}
-            {toggleButton('leave', '④ 휴가 현황', adminTab === 'leave', () => setAdminTab('leave'), <CalendarCheck2 size={13} />)}
+            {canAll && (
+              toggleButton(
+                'leave_ledger',
+                '③ 전사 연차 원장',
+                adminTab === 'leave_ledger',
+                () => handleAdminTabChange('leave_ledger'),
+                <BookOpen size={13} />,
+              )
+            )}
+            {toggleButton('leave', '④ 승인 휴가 목록', adminTab === 'leave', () => handleAdminTabChange('leave'), <CalendarCheck2 size={13} />)}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
-            <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
-            <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
-            <h2 className="ml-1 text-[13.5px] font-extrabold text-ink">{monthTitle(month)}</h2>
-          </div>
+          {adminTab !== 'leave_ledger' ? (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
+              <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
+              <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
+              <h2 className="ml-1 text-[13.5px] font-extrabold text-ink">{monthTitle(month)}</h2>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[11.5px] font-extrabold text-teal shrink-0">
+              <span>📅 {new Date().getFullYear()}년도 전사 연차 원장</span>
+            </div>
+          )}
         </div>
 
-        {/* 하단 상세 필터 툴바 */}
+        {/* 하단 상세 필터 툴바 (근태 전용) */}
+        {adminTab !== 'leave_ledger' && (
         <div className="flex flex-wrap items-center gap-2">
           {/* 부서 필터 */}
           <div className="flex items-center gap-1.5 text-xs text-ink3">
@@ -1169,6 +1282,7 @@ export default function CommuteScreen() {
             )}
           </div>
         </div>
+        )}
       </section>
 
       {/* 3. 4대 관제 View 전환 렌더링 */}
@@ -1210,7 +1324,64 @@ export default function CommuteScreen() {
               onSelectPerson={(person) => setSelectedPersonDetail(person)}
             />
           )}
+
+          {adminTab === 'leave_ledger' && canAll && (
+            <div className="space-y-3">
+              {/* 전사 연차 KPI 통계 바 */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+                <StatCard
+                  label="관리 인원"
+                  value={`${leaveLedgerSummary.totalEmployees}명`}
+                  sub="전사 임직원"
+                />
+                <StatCard
+                  label="총 부여 연차"
+                  value={`${leaveLedgerSummary.totalGranted}일`}
+                  sub={`법정 ${leaveLedgerSummary.totalEntitled}일 + 조정`}
+                  tone="border-teal/25 bg-teal/8"
+                />
+                <StatCard
+                  label="총 사용 연차"
+                  value={`${leaveLedgerSummary.totalUsed}일`}
+                  sub="승인 완료 누적"
+                  tone="border-emerald-500/25 bg-emerald-500/8"
+                />
+                <StatCard
+                  label="평균 소진율"
+                  value={`${leaveLedgerSummary.avgUsageRate}%`}
+                  sub="부여 대비 사용"
+                  tone="border-teal/25 bg-teal/8"
+                />
+                <StatCard
+                  label="잔여 연차 합계"
+                  value={`${leaveLedgerSummary.totalRemaining}일`}
+                  sub={`신청중 ${leaveLedgerSummary.totalPending}일 제외`}
+                />
+              </div>
+
+              {/* 전사 연차 원장 테이블 */}
+              <LeaveLedgerTable
+                entries={leaveLedgerEntries}
+                calculationMode={ledgerMode}
+                onToggleCalculationMode={setLedgerMode}
+                onOpenAdjustment={(entry) => setAdjustmentTarget(entry)}
+                isAdmin={canAll}
+              />
+            </div>
+          )}
         </>
+      )}
+
+      {/* 4. 연차 수동 가감 모달 */}
+      {adjustmentTarget && (
+        <LeaveAdjustmentModal
+          entry={adjustmentTarget}
+          adminName={user?.name || '관리자'}
+          onClose={() => setAdjustmentTarget(null)}
+          onSuccess={() => {
+            setAdjustments(getStoredAdjustments());
+          }}
+        />
       )}
 
       {/* 4. 직원 상세 슬라이드오버 (Drawer) */}
@@ -1224,13 +1395,13 @@ export default function CommuteScreen() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1560px] px-4 py-5 sm:px-6 sm:py-6">
+    <div className="mx-auto w-full max-w-[1560px] px-3 py-4 sm:px-5 sm:py-5 min-w-0 overflow-x-hidden">
       <GwHead
         icon="⏱️"
         name="근태·휴가"
         desc="출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
             {canManagePolicy && (
               <button
                 type="button"

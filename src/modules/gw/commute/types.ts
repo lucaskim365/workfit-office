@@ -1,6 +1,6 @@
 import type { CommuteRecord, CommuteMonthSummary } from '@/domain/commute/schema';
 
-export type CommuteAdminTab = 'all_matrix' | 'dept_summary' | 'anomaly' | 'leave';
+export type CommuteAdminTab = 'all_matrix' | 'dept_summary' | 'anomaly' | 'leave' | 'leave_ledger';
 
 export interface CommutePersonRow {
   empId: number;

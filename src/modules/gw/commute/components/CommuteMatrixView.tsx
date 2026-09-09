@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import { getKoreanHoliday } from '@/domain/commute/engine';
+import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
+import { Building2 } from 'lucide-react';
 
 interface CommuteMatrixViewProps {
   month: string;
@@ -70,8 +72,30 @@ function CellStatusBadge({ status, leaveName, holidayName }: { status: string; l
   return <span className="text-[9px] text-ink3/50 font-mono">—</span>;
 }
 
+/** 조직도 트리(roots)를 전위 순회하여 부서명 순서 리스트 도출 */
+function extractDeptOrderFromOrg(roots: OrgNode[]): string[] {
+  const result: string[] = [];
+  const traverse = (nodes: OrgNode[]) => {
+    for (const node of nodes) {
+      if (node.dept?.name) result.push(node.dept.name);
+      if (node.children?.length) {
+        traverse(node.children);
+      }
+    }
+  };
+  traverse(roots);
+  return result;
+}
+
 export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: CommuteMatrixViewProps) {
   const [year, mm] = month.split('-').map(Number);
+  const org = useOrgTree();
+
+  // 조직도 상의 공식 부서 순서
+  const orgDeptOrder = useMemo(() => {
+    return extractDeptOrderFromOrg(org.roots);
+  }, [org.roots]);
+
   const daysInMonth = useMemo(() => {
     if (!year || !mm) return [];
     const totalDays = new Date(year, mm, 0).getDate();
@@ -90,30 +114,75 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
     return days;
   }, [year, mm, month, holidayMap]);
 
+  // 부서별 그룹화 및 조직도 순서 정렬
+  const deptGroups = useMemo(() => {
+    const map = new Map<string, CommutePersonRow[]>();
+    for (const row of rows) {
+      const d = row.dept || '소속 미지정';
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(row);
+    }
+
+    const list = Array.from(map.entries()).map(([dept, groupRows]) => {
+      let presentCount = 0;
+      let anomalyCount = 0;
+      let lateCount = 0;
+      let leaveCount = 0;
+
+      groupRows.forEach((r) => {
+        presentCount += r.summary.workDays;
+        anomalyCount += r.anomalyCount;
+        lateCount += r.summary.lateDays;
+        leaveCount += r.summary.leaveDays;
+      });
+
+      return {
+        dept,
+        groupRows,
+        memberCount: groupRows.length,
+        presentCount,
+        anomalyCount,
+        lateCount,
+        leaveCount,
+      };
+    });
+
+    // 조직도 상의 순서(orgDeptOrder) 우선 정렬
+    return list.sort((a, b) => {
+      const idxA = orgDeptOrder.indexOf(a.dept);
+      const idxB = orgDeptOrder.indexOf(b.dept);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.dept.localeCompare(b.dept, 'ko');
+    });
+  }, [rows, orgDeptOrder]);
+
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs">
-      {/* 상태 기호 범례 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-panel-alt/50 px-4 py-2 text-[11px] text-ink3">
-        <div className="flex items-center gap-1.5 font-bold text-ink2">
-          <span>전사 임직원 일자별 근태 매트릭스 ({rows.length}명)</span>
+    <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs w-full max-w-full min-w-0">
+      {/* 상태 기호 범례 헤더 */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel-alt/50 px-3.5 py-2 text-[11px] text-ink3">
+        <div className="flex items-center gap-1.5 font-bold text-ink2 shrink-0">
+          <Building2 size={13} className="text-teal" />
+          <span>전사 부서별 근태 ({deptGroups.length}개 부서 · 총 {rows.length}명)</span>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[10px] font-semibold">
+        <div className="flex flex-wrap items-center gap-2.5 text-[9.5px] font-semibold">
           <span className="flex items-center gap-1"><span className="text-teal font-black">●</span> 정상</span>
           <span className="flex items-center gap-1"><span className="text-amber font-black">△</span> 지각</span>
           <span className="flex items-center gap-1"><span className="text-rose-600 font-black">✕</span> 결근</span>
           <span className="flex items-center gap-1"><span>🏖️</span> 휴가</span>
           <span className="flex items-center gap-1"><span className="text-orange-600 font-black">❓</span> 미기록</span>
           <span className="flex items-center gap-1"><span className="text-ink3">—</span> 휴무/미체크</span>
-          <span className="text-ink3 font-normal">※ 직원 클릭 시 상세 내역 확인</span>
         </div>
       </div>
 
-      <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
+      {/* 단일 일체형 테이블 (최상단 날짜 헤더 고정) */}
+      <div className="overflow-x-auto w-full max-w-full min-w-0 max-h-[calc(100vh-280px)]">
         <table className="w-full border-collapse text-left text-[11px]">
-          <thead className="sticky top-0 z-20 bg-panel-alt border-b border-border shadow-2xs">
+          <thead className="sticky top-0 z-30 bg-panel-alt border-b border-border shadow-2xs">
             <tr className="text-[10.5px] font-bold text-ink2">
-              <th className="sticky left-0 z-30 bg-panel-alt px-3 py-2.5 min-w-[140px] border-r border-border">
-                직원 / 부서
+              <th className="sticky left-0 z-40 bg-panel-alt px-3 py-2.5 min-w-[150px] border-r border-border">
+                부서 / 직원
               </th>
               {daysInMonth.map(({ dateStr, dayNum, isSun, isSat, holiday }) => (
                 <th
@@ -124,7 +193,7 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
                   title={holiday ? `${dayNum}일 (${holiday})` : `${dayNum}일`}
                 >
                   <div className="font-extrabold">{dayNum}</div>
-                  <div className="text-[8.5px] font-medium opacity-80">
+                  <div className="text-[8px] font-medium opacity-80">
                     {isSun ? '일' : isSat ? '토' : ''}
                   </div>
                 </th>
@@ -138,86 +207,130 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {rows.length === 0 ? (
+            {deptGroups.length === 0 ? (
               <tr>
                 <td colSpan={daysInMonth.length + 3} className="py-16 text-center text-xs text-ink3">
                   조건에 일치하는 임직원이 없습니다.
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr
-                  key={row.empId}
-                  onClick={() => onSelectPerson(row)}
-                  className="group hover:bg-panel-alt/70 cursor-pointer transition-colors"
-                >
-                  {/* 고정 직원 열 */}
-                  <td className="sticky left-0 z-10 bg-panel group-hover:bg-panel-alt/90 px-3 py-2 border-r border-border min-w-[140px] shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-ink group-hover:text-teal transition-colors flex items-center gap-1.5">
-                          <span>{row.name}</span>
-                          <span className="text-[10px] font-normal text-ink3">
-                            {row.position || '사원'}
-                          </span>
-                        </div>
-                        <div className="text-[9.5px] text-ink3 truncate max-w-[110px]">
-                          {row.dept || '부서 미지정'}
-                        </div>
-                      </div>
-                      {row.anomalyCount > 0 && (
-                        <span
-                          className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500/15 px-1 text-[9px] font-extrabold text-rose-600 border border-rose-500/30"
-                          title={`이상 근태 ${row.anomalyCount}건`}
-                        >
-                          {row.anomalyCount}
+              deptGroups.map((group) => (
+                <React.Fragment key={group.dept}>
+                  {/* 부서 구분 가로 헤더 행 (부서원 최상단에 1행 배치) */}
+                  <tr className="bg-panel-alt/90 border-t-2 border-b border-border select-none">
+                    {/* 왼쪽 고정 열 (부서명 & 인원수) */}
+                    <td className="sticky left-0 z-20 bg-panel-alt px-3 py-2 border-r border-border min-w-[150px] shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-[12px] text-ink flex items-center gap-1.5">
+                          <span>🏢</span>
+                          <span>{group.dept}</span>
                         </span>
-                      )}
-                    </div>
-                  </td>
+                        <span className="rounded bg-teal/15 px-1.5 py-0.2 text-[9.5px] font-extrabold text-teal border border-teal/20">
+                          {group.memberCount}명
+                        </span>
+                      </div>
+                    </td>
 
-                  {/* 일자별 상태 셀 */}
-                  {daysInMonth.map(({ dateStr, isSun, isSat, holiday }) => {
-                    const record = row.recordsMap.get(dateStr);
-                    const status = record?.status ?? 'unknown';
+                    {/* 오른쪽 날짜 영역 전체를 가로지르는 통계 바 */}
+                    <td
+                      colSpan={daysInMonth.length + 2}
+                      className="bg-panel-alt/60 px-4 py-2 text-ink2"
+                    >
+                      <div className="flex items-center gap-3 text-[10.5px]">
+                        <span className="text-ink3">
+                          출근 누적: <strong className="text-ink font-bold">{group.presentCount}일</strong>
+                        </span>
+                        {group.lateCount > 0 && (
+                          <span className="rounded bg-amber/15 px-1.5 py-0.2 text-[9.5px] font-bold text-amber">
+                            지각 {group.lateCount}건
+                          </span>
+                        )}
+                        {group.leaveCount > 0 && (
+                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-600">
+                            휴가 {group.leaveCount}건
+                          </span>
+                        )}
+                        {group.anomalyCount > 0 && (
+                          <span className="rounded bg-rose-500/15 px-1.5 py-0.2 text-[9.5px] font-extrabold text-rose-600 border border-rose-500/25">
+                            이상 {group.anomalyCount}건
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
 
-                    return (
-                      <td
-                        key={dateStr}
-                        className={`px-0.5 py-1.5 text-center border-r border-border/30 tabular-nums ${
-                          holiday || isSun ? 'bg-rose-500/4' : isSat ? 'bg-blue-500/4' : ''
-                        }`}
-                        title={
-                          record && (record.inAt || record.outAt)
-                            ? `${record.date}: ${record.inAt ? record.inAt.slice(11, 16) : '미체크'} ~ ${record.outAt ? record.outAt.slice(11, 16) : '미체크'}`
-                            : `${dateStr}`
-                        }
-                      >
-                        <CellStatusBadge
-                          status={status}
-                          leaveName={record?.leaveName}
-                          holidayName={record?.holidayName}
-                        />
+                  {/* 해당 부서 소속 직원 행들 */}
+                  {group.groupRows.map((row) => (
+                    <tr
+                      key={row.empId}
+                      onClick={() => onSelectPerson(row)}
+                      className="group hover:bg-panel-alt/60 cursor-pointer transition-colors"
+                    >
+                      {/* 고정 직원 열 */}
+                      <td className="sticky left-0 z-10 bg-panel group-hover:bg-panel-alt/90 px-3 py-2 border-r border-border min-w-[150px] shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-ink group-hover:text-teal transition-colors flex items-center gap-1.5">
+                              <span>{row.name}</span>
+                              <span className="text-[10px] font-normal text-ink3">
+                                {row.position || '사원'}
+                              </span>
+                            </div>
+                            <div className="text-[9.5px] text-ink3">
+                              {row.empNo || '—'}
+                            </div>
+                          </div>
+                          {row.anomalyCount > 0 && (
+                            <span
+                              className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500/15 px-1 text-[9px] font-extrabold text-rose-600 border border-rose-500/30"
+                              title={`이상 근태 ${row.anomalyCount}건`}
+                            >
+                              {row.anomalyCount}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                    );
-                  })}
 
-                  {/* 근무일수 */}
-                  <td className="px-2 py-1.5 text-center font-bold tabular-nums text-ink border-r border-border">
-                    {row.summary.workDays}일
-                  </td>
+                      {/* 일자별 상태 셀 */}
+                      {daysInMonth.map(({ dateStr, isSun, isSat, holiday }) => {
+                        const record = row.recordsMap.get(dateStr);
+                        const status = record?.status ?? 'unknown';
 
-                  {/* 이상 건수 */}
-                  <td className="px-2 py-1.5 text-center tabular-nums">
-                    {row.anomalyCount > 0 ? (
-                      <span className="inline-flex items-center justify-center rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-rose-600 border border-rose-500/25">
-                        {row.anomalyCount}건
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-ink3/50 font-mono">—</span>
-                    )}
-                  </td>
-                </tr>
+                        return (
+                          <td
+                            key={dateStr}
+                            className={`px-0.5 py-1 text-center border-r border-border/30 tabular-nums ${
+                              holiday || isSun ? 'bg-rose-500/4' : isSat ? 'bg-blue-500/4' : ''
+                            }`}
+                            title={
+                              record && (record.inAt || record.outAt)
+                                ? `${record.date}: ${record.inAt ? record.inAt.slice(11, 16) : '미체크'} ~ ${record.outAt ? record.outAt.slice(11, 16) : '미체크'}`
+                                : `${dateStr}`
+                            }
+                          >
+                            <CellStatusBadge
+                              status={status}
+                              leaveName={record?.leaveName}
+                              holidayName={record?.holidayName}
+                            />
+                          </td>
+                        );
+                      })}
+
+                      {/* 요약 통계 */}
+                      <td className="px-2 py-1 text-center font-extrabold text-ink border-r border-border tabular-nums bg-panel/30">
+                        {row.summary.workDays}일
+                      </td>
+                      <td className="px-2 py-1 text-center font-extrabold tabular-nums bg-panel/30">
+                        {row.anomalyCount > 0 ? (
+                          <span className="text-rose-600 font-black">{row.anomalyCount}</span>
+                        ) : (
+                          <span className="text-ink3/40 font-normal">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))
             )}
           </tbody>

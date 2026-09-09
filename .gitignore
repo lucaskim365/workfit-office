@@ -62,3 +62,6 @@ jwheo/CommuteRef/
 
 # 시드 적재 산출물(환경별) — gw-testdata.json 에서 재생성 가능
 scripts/gw-testdata.*.manifest.json
+
+# 임시 분석/테스트 스크립트 디렉토리
+scratch/
