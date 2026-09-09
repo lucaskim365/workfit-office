@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Bell, LogOut, Search, Pin, HelpCircle } from 'lucide-react';
+import { ClipboardCheck, Search, Pin, Bell } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -8,10 +8,11 @@ import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser } from '@/shared/lib/messaging';
 import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
-import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { useAllUserPresences, useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import MobileUserMenuSheet from './MobileUserMenuSheet';
 
 // 데스크톱 QuickDock 과 동일 localStorage 키 — 고정/숨김 상태를 두 화면이 공유.
 const PIN_KEY = 'workfit-pinned-rooms';
@@ -29,13 +30,14 @@ function loadIds(key: string): string[] {
 
 /** 모바일 채팅방 목록 — 검색·상대 이름·상단 고정·숨김·새 대화. */
 export default function MobileChatList() {
-  const { user, signOutUser } = useAuth();
+  const { user } = useAuth();
   const nav = useNavigate();
   const me = user!.id;
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
+  const { meta: presenceMeta, presence: myPresence } = useMyPresence();
   const { byBox } = useApprovalBoxes(me);
   const preds = useMemo(() => getPredecessorsOf(me), [me]);
   const pendingApprovals = useMemo(() => {
@@ -48,11 +50,19 @@ export default function MobileChatList() {
   const [notice, setNotice] = useState('');
   const [q, setQ] = useState('');
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadIds(PIN_KEY));
   const [hiddenIds, setHiddenIds] = useState<string[]>(() => loadIds(hiddenKeyOf(me)));
 
   const leave = useLeaveRoom();
+
+  const enablePush = async () => {
+    setNotice('알림 설정 중…');
+    const res = await enablePushForUser(me);
+    setNotice(res.ok ? '✅ 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
+    setTimeout(() => setNotice(''), 6000);
+  };
 
   const handleLeaveRoom = async (roomId: string) => {
     const room = rooms.find((r) => r.id === roomId);
@@ -77,13 +87,6 @@ export default function MobileChatList() {
     const next = [...hiddenIds, roomId];
     setHiddenIds(next);
     localStorage.setItem(hiddenKeyOf(me), JSON.stringify(next));
-  };
-
-  const enablePush = async () => {
-    setNotice('알림 설정 중…');
-    const res = await enablePushForUser(me);
-    setNotice(res.ok ? '✅ 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
-    setTimeout(() => setNotice(''), 8000);
   };
 
   const kw = q.trim().toLowerCase();
@@ -119,33 +122,74 @@ export default function MobileChatList() {
       ]
     : [];
 
+  const initials = user?.name ? user.name.slice(-2) : 'WF';
+
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: '#101830' }}>
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => nav('/m/approval')} title="전자결재" className="relative grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10">
-            <ClipboardCheck size={18} strokeWidth={2} />
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* 전자결재 버튼 (미결재 건수 뱃지) */}
+          <button
+            onClick={() => nav('/m/approval')}
+            title="전자결재"
+            className="relative grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all"
+          >
+            <ClipboardCheck size={19} strokeWidth={2} />
             {pendingApprovals > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9px] font-extrabold text-white" style={{ background: '#e0483b' }}>
+              <span
+                className="absolute -right-0.5 -top-0.5 grid h-[16px] min-w-[16px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white shadow-xs"
+                style={{ background: '#e0483b' }}
+              >
                 {pendingApprovals}
               </span>
             )}
           </button>
-          <button onClick={enablePush} title="알림 켜기" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><Bell size={18} strokeWidth={2} /></button>
+
+          {/* 푸시 알림 켜기 버튼 (헤더 직접 노출) */}
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-guide'))}
-            title="모바일 앱 설치 & 알림 가이드"
-            className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white/90 hover:text-white"
+            onClick={enablePush}
+            title="알림 켜기"
+            className="grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white"
           >
-            <HelpCircle size={18} strokeWidth={2} />
+            <Bell size={18} strokeWidth={2} />
           </button>
-          <button onClick={() => void signOutUser()} title="로그아웃" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10"><LogOut size={18} strokeWidth={2} /></button>
+
+          {/* 내 프로필 아바타 + 근무 상태 인디케이터 (탭 시 상태 관리 바텀시트 오픈) */}
+          <button
+            type="button"
+            onClick={() => setIsUserMenuOpen(true)}
+            title={user ? `${user.name} (${user.empNo}) · ${presenceMeta.label}${myPresence.message ? ` - ${myPresence.message}` : ''}` : '내 프로필 및 근무 상태 관리'}
+            className="relative ml-0.5 flex items-center rounded-full p-0.5 transition-all hover:ring-2 hover:ring-white/20 active:scale-95"
+          >
+            {user?.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="h-8 w-8 rounded-full object-cover border border-white/30"
+              />
+            ) : (
+              <div
+                className="grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold text-white shadow-xs"
+                style={{ background: '#17a89a' }}
+              >
+                {initials}
+              </div>
+            )}
+            <span
+              className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#101830] shadow-xs ${presenceMeta.dotColor}`}
+              title={presenceMeta.label}
+            />
+          </button>
         </div>
       </header>
 
-      {notice && <div className="px-4 py-2 text-[11.5px] text-navy" style={{ background: '#c7ecc5' }}>{notice}</div>}
+      {notice && (
+        <div className="px-4 py-2 text-[11.5px] font-semibold text-navy animate-in fade-in" style={{ background: '#c7ecc5' }}>
+          {notice}
+        </div>
+      )}
 
       {/* 검색 + 새 대화 */}
       <div className="flex items-center gap-2 border-b border-black/5 bg-white px-4 py-2.5">
@@ -227,6 +271,12 @@ export default function MobileChatList() {
       </div>
 
       {sheetRoom && <MobileActionSheet actions={sheetActions} onClose={() => setSheetRoom(null)} />}
+
+      <MobileUserMenuSheet
+        isOpen={isUserMenuOpen}
+        onClose={() => setIsUserMenuOpen(false)}
+      />
     </div>
   );
 }
+

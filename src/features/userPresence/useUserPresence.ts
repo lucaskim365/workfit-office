@@ -36,7 +36,10 @@ function readLocalPresenceMap(): Record<string, UserPresence> {
 function writeLocalPresenceMap(map: Record<string, UserPresence>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: map }));
+    // 비동기 마이크로태스크로 디스패치하여 렌더링 중 타 컴포넌트 동기 setState 트리거 방지
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: map }));
+    });
   } catch {
     // ignore
   }
@@ -84,11 +87,10 @@ export function useAllUserPresences(): Record<string, UserPresence> {
         });
 
         if (Object.keys(remoteMap).length > 0) {
-          setPresenceMap((prev) => {
-            const merged = { ...prev, ...remoteMap };
-            writeLocalPresenceMap(merged);
-            return merged;
-          });
+          const current = readLocalPresenceMap();
+          const merged = { ...current, ...remoteMap };
+          writeLocalPresenceMap(merged);
+          setPresenceMap(merged);
         }
 
         // 2. Appwrite Realtime WebSocket 채널 구독 (팀원 상태 변경 실시간 브로드캐스트)
@@ -98,11 +100,10 @@ export function useAllUserPresences(): Record<string, UserPresence> {
           if (payload) {
             const p = parsePresenceDoc(payload);
             if (p.userId) {
-              setPresenceMap((prev) => {
-                const next = { ...prev, [p.userId]: p };
-                writeLocalPresenceMap(next);
-                return next;
-              });
+              const current = readLocalPresenceMap();
+              const next = { ...current, [p.userId]: p };
+              writeLocalPresenceMap(next);
+              setPresenceMap(next);
             }
           }
         });
