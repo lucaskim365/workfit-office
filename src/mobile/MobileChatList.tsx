@@ -10,6 +10,8 @@ import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 
 // 데스크톱 QuickDock 과 동일 localStorage 키 — 고정/숨김 상태를 두 화면이 공유.
 const PIN_KEY = 'workfit-pinned-rooms';
@@ -34,8 +36,15 @@ export default function MobileChatList() {
   const { data: unread = {} } = useUnreadCounts(me);
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
-  const { counts: approvalCounts } = useApprovalBoxes(me);
-  const pendingApprovals = approvalCounts['대기'] ?? 0;
+  const { byBox } = useApprovalBoxes(me);
+  const preds = useMemo(() => getPredecessorsOf(me), [me]);
+  const pendingApprovals = useMemo(() => {
+    const list = byBox['대기'] ?? [];
+    return list.filter((d: ApprovalDoc) => {
+      const approvers = currentApproverIds(d);
+      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+    }).length;
+  }, [byBox, me, preds]);
   const [notice, setNotice] = useState('');
   const [q, setQ] = useState('');
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);

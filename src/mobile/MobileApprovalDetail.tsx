@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Smartphone, ZoomIn, Paperclip } from 'lucide-react';
+import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -36,7 +36,8 @@ export default function MobileApprovalDetail() {
   const { data: forms = [] } = useApprovalForms();
   const form = forms.find((f) => f.code === doc?.docType);
   const decide = useDecideStep();
-  const [comment, setComment] = useState('');
+  const [modalDecision, setModalDecision] = useState<'승인' | '반려' | null>(null);
+  const [modalComment, setModalComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [viewMode, setViewMode] = useState<'compact' | 'original'>('compact');
   const [zoomIn, setZoomIn] = useState(false);
@@ -62,17 +63,35 @@ export default function MobileApprovalDetail() {
   const nameOf = (approverId: string, snapshot?: string | null) =>
     snapshot || users.find((u) => u.id === approverId)?.name || approverId;
 
-  const handle = async (decision: '승인' | '반려') => {
-    if (!doc) return;
+  const openDecisionModal = (decision: '승인' | '반려') => {
+    setModalDecision(decision);
+    setModalComment('');
+  };
+
+  const closeDecisionModal = () => {
+    if (busy) return;
+    setModalDecision(null);
+    setModalComment('');
+  };
+
+  const confirmDecision = async () => {
+    if (!doc || !modalDecision) return;
     const myStep = activeSteps(doc).find((s) => s.approverId === me);
     if (!myStep) return;
-    if (decision === '반려' && !comment.trim()) {
+    if (modalDecision === '반려' && !modalComment.trim()) {
       window.alert('반려 사유(의견)를 입력하세요.');
       return;
     }
     setBusy(true);
     try {
-      await decide.mutateAsync({ id: doc.id, seq: myStep.seq, userId: me, decision, comment: comment.trim() });
+      await decide.mutateAsync({
+        id: doc.id,
+        seq: myStep.seq,
+        userId: me,
+        decision: modalDecision,
+        comment: modalComment.trim(),
+      });
+      setModalDecision(null);
       back();
     } catch (e) {
       window.alert(`처리 실패: ${e instanceof Error ? e.message : e}`);
@@ -351,35 +370,156 @@ export default function MobileApprovalDetail() {
 
           {/* 액션바 — 내 결재 차례일 때만 */}
           {myTurn && (
-            <div className="shrink-0 border-t border-black/10 bg-white p-3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="결재 의견 (반려 시 필수)"
-                rows={2}
-                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-[13px] text-ink outline-none focus:border-[#2563eb]"
-              />
-              <div className="mt-2.5 flex gap-2.5">
+            <div className="shrink-0 border-t border-black/10 bg-white p-3 shadow-lg" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+              <div className="flex gap-2.5">
                 <button
-                  onClick={() => handle('반려')}
+                  type="button"
+                  onClick={() => openDecisionModal('반려')}
                   disabled={busy}
-                  className="flex-1 rounded-lg border py-3 text-[15px] font-bold disabled:opacity-50"
-                  style={{ borderColor: '#e0483b', color: '#e0483b' }}
+                  className="flex-1 rounded-xl border border-[#e0483b]/40 bg-red-50/40 py-3 text-[15px] font-bold text-[#e0483b] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xs"
                 >
                   반려
                 </button>
                 <button
-                  onClick={() => handle('승인')}
+                  type="button"
+                  onClick={() => openDecisionModal('승인')}
                   disabled={busy}
-                  className="flex-1 rounded-lg py-3 text-[15px] font-bold text-white disabled:opacity-50"
+                  className="flex-1 rounded-xl py-3 text-[15px] font-bold text-white active:scale-[0.98] transition-all disabled:opacity-50 shadow-sm"
                   style={{ background: '#16a34a' }}
                 >
-                  {busy ? '처리 중…' : '승인'}
+                  승인
                 </button>
               </div>
             </div>
           )}
+
+          {/* 반려 문서인 경우 하단 안내바 */}
+          {!myTurn && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송') && (
+            <div className="shrink-0 border-t border-slate-200/80 bg-slate-50/90 p-3.5 text-center shadow-xs" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+              <p className="text-[12px] text-slate-600 flex items-center justify-center gap-1.5 font-medium">
+                <Info size={15} className="text-blue-500 shrink-0" strokeWidth={2.2} />
+                <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
+              </p>
+            </div>
+          )}
         </>
+      )}
+
+      {/* 승인/반려 확인 및 의견 입력 모달 */}
+      {modalDecision && doc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          onClick={closeDecisionModal}
+        >
+          <div
+            className="flex w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div
+              className={`flex items-center justify-between border-b px-5 py-3.5 ${
+                modalDecision === '반려' ? 'border-red-100 bg-red-50/70' : 'border-emerald-100 bg-emerald-50/70'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {modalDecision === '반려' ? (
+                  <AlertTriangle size={18} className="text-[#e0483b]" />
+                ) : (
+                  <CheckCircle2 size={18} className="text-[#16a34a]" />
+                )}
+                <span
+                  className="text-[15px] font-extrabold"
+                  style={{ color: modalDecision === '반려' ? '#b91c1c' : '#15803d' }}
+                >
+                  {modalDecision === '반려'
+                    ? (activeSteps(doc).find((s) => s.approverId === me)?.kind === '합의' ? '합의 반려 확인' : '결재 반려 확인')
+                    : (activeSteps(doc).find((s) => s.approverId === me)?.kind === '합의' ? '합의 승인 확인' : '결재 승인 확인')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={closeDecisionModal}
+                disabled={busy}
+                className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-black/5 active:scale-95"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 본문 */}
+            <div className="p-5 space-y-3.5">
+              <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
+                <div className="text-[11px] font-semibold text-slate-500">문서 제목</div>
+                <div className="text-[13px] font-bold text-[#101830] truncate mt-0.5">{doc.title}</div>
+              </div>
+
+              <p className="text-[12px] text-slate-600 leading-relaxed">
+                {modalDecision === '반려'
+                  ? '이 결재 문서를 반려하시겠습니까? 기안자가 확인할 수 있도록 사유를 반드시 입력해 주세요.'
+                  : '이 결재 문서를 승인하시겠습니까? 필요한 경우 의견을 남기실 수 있습니다.'}
+              </p>
+
+              <div>
+                <label className="block text-[11.5px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>{modalDecision === '반려' ? '반려 사유' : '결재 의견'}</span>
+                  <span
+                    className={`text-[10.5px] font-medium ${
+                      modalDecision === '반려' ? 'text-red-500 font-bold' : 'text-slate-400'
+                    }`}
+                  >
+                    {modalDecision === '반려' ? '(필수 입력)' : '(선택 사항)'}
+                  </span>
+                </label>
+                <textarea
+                  value={modalComment}
+                  onChange={(e) => setModalComment(e.target.value)}
+                  placeholder={
+                    modalDecision === '반려'
+                      ? '반려 사유를 구체적으로 입력해 주세요 (필수)'
+                      : '승인 의견이나 전달사항을 입력하세요 (선택)'
+                  }
+                  rows={3}
+                  autoFocus
+                  className={`w-full resize-none rounded-xl border p-3 text-[13px] text-[#101830] outline-none transition-all placeholder:text-slate-400 ${
+                    modalDecision === '반려'
+                      ? 'border-red-200 focus:border-red-500 focus:ring-2 focus:ring-red-100'
+                      : 'border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 px-5 py-3">
+              <button
+                type="button"
+                onClick={closeDecisionModal}
+                disabled={busy}
+                className="flex-1 rounded-xl bg-slate-200/80 py-2.5 text-[13.5px] font-bold text-slate-700 hover:bg-slate-300 active:scale-95 transition-all disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmDecision}
+                disabled={busy || (modalDecision === '반려' && !modalComment.trim())}
+                className={`flex-1 rounded-xl py-2.5 text-[13.5px] font-bold text-white active:scale-95 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                  modalDecision === '반려'
+                    ? 'bg-[#e0483b] hover:bg-red-600'
+                    : 'bg-[#16a34a] hover:bg-green-700'
+                }`}
+              >
+                {busy
+                  ? '처리 중…'
+                  : modalDecision === '반려'
+                  ? '반려 확정'
+                  : activeSteps(doc).find((s) => s.approverId === me)?.kind === '합의'
+                  ? '합의 승인'
+                  : '승인 확정'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

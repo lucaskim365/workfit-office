@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Bell, Settings, X } from 'lucide-react';
+import { ClipboardCheck, Bell, Settings, X, Info } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
@@ -71,13 +71,44 @@ export default function MobileApprovalList() {
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
-  const [doneFilter, setDoneFilter] = useState<'all' | 'approved' | 'rejected'>('all');
+  const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
   const org = useOrgTree();
+
+  const preds = useMemo(() => getPredecessorsOf(me), [me]);
+
+  // 1. 내가 즉시 승인/결재해야 할 활성 대기 건수 (전임자 승계 건 포함)
+  const activePendingCount = useMemo(() => {
+    const list = byBox['대기'] ?? [];
+    return list.filter((d: ApprovalDoc) => {
+      const approvers = currentApproverIds(d);
+      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+    }).length;
+  }, [byBox, me, preds]);
+
+  // 2. 상신한 문서 중 반려되어 조치가 필요한 건수
+  const rejectedDraftCount = useMemo(() => {
+    const list = byBox['상신'] ?? [];
+    return list.filter(
+      (d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송'
+    ).length;
+  }, [byBox]);
+
+  // 3. 아직 열람하지 않은 반려 문서 건수
+  const unreadRejectedCount = useMemo(() => {
+    const list = byBox['반려'] ?? [];
+    return list.filter((d) => !readRejectedIds.has(d.id)).length;
+  }, [byBox, readRejectedIds]);
+
+  // 4. 사후 열람 확인이 필요한 후열 문서 건수
+  const unconfirmedPostReadCount = useMemo(() => {
+    const list = byBox['후열'] ?? [];
+    return list.filter((d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)).length;
+  }, [byBox, me]);
 
   // 로컬스토리지 키 설정
   const STORAGE_KEY = 'workfit-approval-extra-tabs-v3';
@@ -194,8 +225,8 @@ export default function MobileApprovalList() {
 
     // 3. 기결재 완료함 필터링
     if (box === '완료') {
+      if (doneFilter === 'draft') return rawDocs.filter((d) => d.drafterId === me);
       if (doneFilter === 'approved') return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
-      if (doneFilter === 'rejected') return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '반려'));
       return rawDocs;
     }
 
@@ -249,15 +280,43 @@ export default function MobileApprovalList() {
         {activeBoxes.map((b) => {
           const active = b.key === box;
           const rawCnt = counts[b.key as ApprovalBox] ?? 0;
-          const cnt = b.key === '반려'
-            ? (byBox['반려'] ?? []).filter((d) => !readRejectedIds.has(d.id)).length
-            : rawCnt;
+          const cnt =
+            b.key === '대기'
+              ? activePendingCount
+              : b.key === '반려'
+              ? unreadRejectedCount
+              : b.key === '상신'
+              ? rejectedDraftCount
+              : rawCnt;
+
+          // 스마트 뱃지 색상 정책 (웹과 완벽 통일)
+          const badgeBg =
+            b.key === '대기'
+              ? activePendingCount > 0
+                ? '#ef4444' // 내 차례 결재가 있으면 빨간색 경고
+                : '#94a3b8' // 내 차례가 아니면 일반 회색
+              : b.key === '상신'
+              ? '#ef4444' // 반려된 상신 문서 경고 레드
+              : b.key === '반려'
+              ? '#f43f5e' // 미열람 반려 문서 로즈 레드
+              : b.key === '후열'
+              ? unconfirmedPostReadCount > 0
+                ? '#f59e0b' // 미확인 후열 문서 주황 앰버
+                : '#94a3b8'
+              : '#94a3b8';
+
+          const shouldPulse =
+            (b.key === '대기' && activePendingCount > 0) ||
+            (b.key === '상신' && rejectedDraftCount > 0) ||
+            (b.key === '반려' && unreadRejectedCount > 0) ||
+            (b.key === '후열' && unconfirmedPostReadCount > 0);
+
           return (
             <button
               key={b.key}
               onClick={() => {
                 setBox(b.key);
-                setTodoFilter('all');
+                setTodoFilter('pending');
                 setDraftFilter('all');
                 setDoneFilter('all');
                 setDocBoxFilter('dept');
@@ -269,8 +328,10 @@ export default function MobileApprovalList() {
                 {b.label}
                 {cnt > 0 && (
                   <span
-                    className="grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white animate-pulse"
-                    style={{ background: b.key === '대기' ? '#3b82f6' : b.key === '반려' ? '#f43f5e' : '#94a3b8' }}
+                    className={`grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white ${
+                      shouldPulse ? 'animate-pulse' : ''
+                    }`}
+                    style={{ background: badgeBg }}
                   >
                     {cnt}
                   </span>
@@ -284,18 +345,27 @@ export default function MobileApprovalList() {
 
       {box === '대기' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['all', 'pending', 'progress'] as const).map((f) => {
-            const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
+          {(['pending', 'progress', 'all'] as const).map((f) => {
+            const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
             const active = todoFilter === f;
             return (
               <button
                 key={f}
                 onClick={() => setTodoFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
-                {label}
+                <span>{label}</span>
+                {f === 'pending' && activePendingCount > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[9.5px] font-extrabold ${
+                      active ? 'bg-white text-red-600' : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {activePendingCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -304,18 +374,27 @@ export default function MobileApprovalList() {
 
       {box === '상신' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['all', 'progress', 'completed', 'rejected'] as const).map((f) => {
-            const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'completed' ? '완료' : '반려';
+          {(['all', 'progress', 'rejected', 'completed'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'rejected' ? '반려' : '완료';
             const active = draftFilter === f;
             return (
               <button
                 key={f}
                 onClick={() => setDraftFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
-                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
+                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                  active ? 'bg-[#2563eb] text-white shadow-sm shadow-[#2563eb]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
-                {label}
+                <span>{label}</span>
+                {f === 'rejected' && rejectedDraftCount > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[9.5px] font-extrabold ${
+                      active ? 'bg-white text-red-600' : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {rejectedDraftCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -324,8 +403,8 @@ export default function MobileApprovalList() {
 
       {box === '완료' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['all', 'approved', 'rejected'] as const).map((f) => {
-            const label = f === 'all' ? '전체' : f === 'approved' ? '결재승인' : '결재반려';
+          {(['all', 'draft', 'approved'] as const).map((f) => {
+            const label = f === 'all' ? '전체' : f === 'draft' ? '기안한 문서' : '결재한 문서';
             const active = doneFilter === f;
             return (
               <button
@@ -409,6 +488,16 @@ export default function MobileApprovalList() {
           ))
         )}
       </div>
+
+      {/* 반려함 안내 문구 */}
+      {(box === '반려' || (box === '상신' && draftFilter === 'rejected')) && (
+        <div className="shrink-0 border-t border-slate-200/80 bg-slate-50/90 px-4 py-2.5 text-center shadow-xs" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+          <p className="text-[12px] text-slate-600 flex items-center justify-center gap-1.5 font-medium">
+            <Info size={15} className="text-blue-500 shrink-0" strokeWidth={2.2} />
+            <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
+          </p>
+        </div>
+      )}
 
       {isSettingsOpen && createPortal(
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-4" onClick={() => setIsSettingsOpen(false)}>

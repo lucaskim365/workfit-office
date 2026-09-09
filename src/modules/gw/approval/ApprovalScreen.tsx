@@ -85,20 +85,26 @@ export default function ApprovalScreen() {
   const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
   const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
 
-  const myActivePendingCount = useMemo(() => {
+  const preds = useMemo(() => getPredecessorsOf(me), [me]);
+
+  const activePendingCount = useMemo(() => {
     const list = byBox['대기'] ?? [];
-    return list.filter((d) => currentApproverIds(d).includes(me)).length;
-  }, [byBox, me]);
+    return list.filter((d) => {
+      const approvers = currentApproverIds(d);
+      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+    }).length;
+  }, [byBox, me, preds]);
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'all' | 'pending' | 'progress'>('all');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
   const handleSelectBox = (newBox: ApprovalBox | '문서함') => {
     setBox(newBox);
     setSelId(null);
+    if (newBox === '대기') setTodoFilter('pending');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
     nextUrl.searchParams.delete('doc');
@@ -143,8 +149,6 @@ export default function ApprovalScreen() {
   const batchDecide = useBatchDecideStep();
   const batchRestore = useBatchRestoreFromTrash();
   const batchPermanentDelete = useBatchPermanentlyDelete();
-
-  const preds = useMemo(() => getPredecessorsOf(me), [me]);
 
   // 본인 및 전임자(들)의 approval boxes 데이터를 병합하여 단일 결재함 리스트 구성 (권한 승계 완벽 반영)
   const list = useMemo(() => {
@@ -569,6 +573,8 @@ export default function ApprovalScreen() {
                         .map(id => combined.find(d => d.id === id)!)
                         .filter((d) => !readRejectedIds.has(d.id))
                         .length;
+                    } else if (b === '대기') {
+                      badgeCount = activePendingCount;
                     } else {
                       badgeCount = uniqueIds.size;
                     }
@@ -578,7 +584,7 @@ export default function ApprovalScreen() {
                   const hasBadge = badgeCount > 0;
 
                   const badgeClass = b === '대기'
-                    ? (myActivePendingCount > 0
+                    ? (activePendingCount > 0
                       ? 'bg-red-500 text-white animate-pulse'
                       : 'bg-ink3/15 text-ink2')
                     : b === '상신'
@@ -665,38 +671,64 @@ export default function ApprovalScreen() {
 
                 {box === '상신' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'progress', 'rejected', 'completed'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'rejected' ? '반려' : '완료';
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setDraftFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${draftFilter === f
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+                    {(() => {
+                      const rejectedDraftCount = (byBox['상신'] ?? []).filter(
+                        (d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송'
+                      ).length;
+
+                      return (['all', 'progress', 'rejected', 'completed'] as const).map((f) => {
+                        const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'rejected' ? '반려' : '완료';
+                        const active = draftFilter === f;
+                        return (
+                          <button
+                            key={f}
+                            onClick={() => setDraftFilter(f)}
+                            className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all flex items-center justify-center gap-1 ${active
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
+                              }`}
+                          >
+                            <span>{label}</span>
+                            {f === 'rejected' && rejectedDraftCount > 0 && (
+                              <span
+                                className={`rounded-full px-1.5 py-0.2 text-[9px] font-extrabold ${
+                                  active ? 'bg-white text-red-600' : 'bg-red-500 text-white'
+                                }`}
+                              >
+                                {rejectedDraftCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
 
                 {box === '대기' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'pending', 'progress'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'pending' ? '결재대기중' : '진행중';
+                    {(['pending', 'progress', 'all'] as const).map((f) => {
+                      const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
+                      const active = todoFilter === f;
                       return (
                         <button
                           key={f}
                           onClick={() => setTodoFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${todoFilter === f
+                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all flex items-center justify-center gap-1 ${active
                             ? 'bg-teal text-white shadow-sm'
                             : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
                             }`}
                         >
-                          {label}
+                          <span>{label}</span>
+                          {f === 'pending' && activePendingCount > 0 && (
+                            <span
+                              className={`rounded-full px-1.5 py-0.2 text-[9px] font-extrabold ${
+                                active ? 'bg-white text-teal' : 'bg-red-500 text-white'
+                              }`}
+                            >
+                              {activePendingCount}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
