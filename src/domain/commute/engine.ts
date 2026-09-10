@@ -133,12 +133,13 @@ export function timeToMinutes(timeStr?: string | null): number | null {
 
 export interface ApprovedLeaveInfo {
   leaveType: string;
+  category?: 'LEAVE' | 'OUTSIDE' | 'TRIP';
   docTitle?: string;
   docId?: string;
 }
 
 /**
- * 정책(CommutePolicy)과 출/퇴근 시각, 공휴일 및 승인 휴가를 기반으로 근태 레코드 상태 및 시간을 정밀 계산합니다.
+ * 정책(CommutePolicy)과 출/퇴근 시각, 공휴일 및 승인 휴가/외근/출장을 기반으로 근태 레코드 상태 및 시간을 정밀 계산합니다.
  */
 export function evaluateCommuteRecord(
   raw: {
@@ -184,20 +185,25 @@ export function evaluateCommuteRecord(
   // 1. 미출근 / 미기록 처리 (출/퇴근 모두 없는 날)
   if (!inAt && !outAt) {
 
-    // 1-1. 승인된 휴가가 존재하는 경우 -> 결근이 아닌 'leave'(휴가)로 확정 (미래 휴가도 예정으로 표시)
+    // 1-1. 승인된 휴가/외근/출장이 존재하는 경우 -> 결근이 아닌 인정 상태로 확정 (미래 일정도 예정으로 표시)
     if (approvedLeave) {
+      const cat = approvedLeave.category ?? 'LEAVE';
+      const status: CommuteStatus = cat === 'OUTSIDE' ? 'outside' : cat === 'TRIP' ? 'trip' : 'leave';
+      const isWorkApproved = status === 'outside' || status === 'trip';
       return {
         empId,
         date,
         inAt: null,
         outAt: null,
-        basicMin: 0,
+        basicMin: isWorkApproved ? 8 * 60 : 0,
         overMin: 0,
         nightMin: 0,
         lateMin: 0,
-        totalMin: 0,
-        status: 'leave',
-        leaveName: approvedLeave.leaveType,
+        totalMin: isWorkApproved ? 8 * 60 : 0,
+        status,
+        leaveName: status === 'leave' ? approvedLeave.leaveType : undefined,
+        outsideName: status === 'outside' ? approvedLeave.leaveType : undefined,
+        tripName: status === 'trip' ? approvedLeave.leaveType : undefined,
         holidayName: holiday ?? undefined,
       };
     }
@@ -252,8 +258,27 @@ export function evaluateCommuteRecord(
     };
   }
 
-  // 2. 출근 또는 퇴근 한쪽만 있는 경우 (미기록)
+  // 2. 출근 또는 퇴근 한쪽만 있는 경우 (미기록 또는 외근/출장 보정)
   if (inAt && !outAt) {
+    if (approvedLeave && (approvedLeave.category === 'OUTSIDE' || approvedLeave.category === 'TRIP')) {
+      const status: CommuteStatus = approvedLeave.category === 'OUTSIDE' ? 'outside' : 'trip';
+      return {
+        empId,
+        date,
+        inAt,
+        outAt: null,
+        basicMin: 8 * 60,
+        overMin: 0,
+        nightMin: 0,
+        lateMin: 0,
+        totalMin: 8 * 60,
+        status,
+        outsideName: status === 'outside' ? approvedLeave.leaveType : undefined,
+        tripName: status === 'trip' ? approvedLeave.leaveType : undefined,
+        holidayName: holiday ?? undefined,
+      };
+    }
+
     return {
       empId,
       date,
@@ -271,6 +296,25 @@ export function evaluateCommuteRecord(
   }
 
   if (!inAt && outAt) {
+    if (approvedLeave && (approvedLeave.category === 'OUTSIDE' || approvedLeave.category === 'TRIP')) {
+      const status: CommuteStatus = approvedLeave.category === 'OUTSIDE' ? 'outside' : 'trip';
+      return {
+        empId,
+        date,
+        inAt: null,
+        outAt,
+        basicMin: 8 * 60,
+        overMin: 0,
+        nightMin: 0,
+        lateMin: 0,
+        totalMin: 8 * 60,
+        status,
+        outsideName: status === 'outside' ? approvedLeave.leaveType : undefined,
+        tripName: status === 'trip' ? approvedLeave.leaveType : undefined,
+        holidayName: holiday ?? undefined,
+      };
+    }
+
     return {
       empId,
       date,

@@ -78,7 +78,11 @@ export function fieldText(field: FormField, values: Record<string, FieldValue>, 
       const start = (v as string) ?? '';
       const end = (values[field.key + END_SUFFIX] as string) ?? '';
       const days = (values[field.key + DAYS_SUFFIX] as number) ?? (start && end ? daysBetween(start, end) : 0);
-      return start && end ? `${start} ~ ${end} (${days}일)` : '—';
+      const startTime = values['startTime'] as string | undefined;
+      const endTime = values['endTime'] as string | undefined;
+      const isPartDay = days > 0 && days < 1;
+      const timeInfo = isPartDay && startTime && endTime ? `, ${startTime}~${endTime}` : '';
+      return start && end ? `${start} ~ ${end} (${days}일${timeInfo})` : '—';
     }
     case '체크':
       return v === true ? '예' : '아니오';

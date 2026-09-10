@@ -19,9 +19,9 @@ export const departmentSchema = z.object({
   /** 부서명 — `users.dept` 와 매칭되는 표준명. */
   name: z.string().min(1, '부서명은 필수입니다'),
   /** 상위 부서 ID(FK, nullable) → 트리 계층. 최상위는 null. */
-  parentId: z.string().nullable().default(null),
+  parentId: z.preprocess((v) => (v === '' ? null : v), z.string().nullable().default(null)),
   /** 부서장 users.id(FK, nullable) → 합의/전결 라우팅. */
-  headUserId: z.string().nullable().default(null),
+  headUserId: z.preprocess((v) => (v === '' ? null : v), z.string().nullable().default(null)),
   /**
    * 조직 유형 — 본사/공장/영업소 등. 동적 결재선 룰의 부서범위 매칭·역할 해석(공장장)에 사용.
    * ([[dynamic-route-engine]] · docs/동적_결재선_룰엔진_개발_계획서.md §5.1)

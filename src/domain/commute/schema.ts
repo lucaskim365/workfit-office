@@ -6,7 +6,7 @@ import { z } from 'zod';
  * 정규화한다(Firestore Timestamp 변환은 repo 몫).
  */
 export const COMMUTE_STATUS = [
-  'normal', 'late', 'holiday_work', 'off', 'absent', 'leave', 'missing_out', 'missing_in', 'unknown',
+  'normal', 'late', 'holiday_work', 'off', 'absent', 'leave', 'outside', 'trip', 'missing_out', 'missing_in', 'unknown',
 ] as const;
 
 export type CommuteStatus = (typeof COMMUTE_STATUS)[number];
@@ -18,6 +18,8 @@ export const COMMUTE_STATUS_LABELS: Record<CommuteStatus, string> = {
   off: '휴무/공휴일',
   absent: '결근',
   leave: '휴가',
+  outside: '외근',
+  trip: '출장',
   missing_out: '퇴근 미기록',
   missing_in: '출근 미기록',
   unknown: '—',
@@ -69,6 +71,8 @@ export const commuteRecordSchema = z.object({
   totalMin: z.number().int(),
   status: z.enum(COMMUTE_STATUS),
   leaveName: z.string().optional(),
+  outsideName: z.string().optional(),
+  tripName: z.string().optional(),
   holidayName: z.string().optional(),
 });
 

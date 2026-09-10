@@ -176,8 +176,8 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
         </div>
       </div>
 
-      {/* 단일 일체형 테이블 (최상단 날짜 헤더 고정) */}
-      <div className="overflow-x-auto w-full max-w-full min-w-0 max-h-[calc(100vh-280px)]">
+      {/* 단일 일체형 테이블 */}
+      <div className="overflow-x-auto w-full max-w-full min-w-0">
         <table className="w-full border-collapse text-left text-[11px]">
           <thead className="sticky top-0 z-30 bg-panel-alt border-b border-border shadow-2xs">
             <tr className="text-[10.5px] font-bold text-ink2">

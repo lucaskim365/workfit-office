@@ -66,7 +66,44 @@ export const approvalFormRepo = {
       }
     }
 
-    return [...list].sort(byOrder);
+    // 표준 서식(휴가, 외근, 국내출장, 해외출장)의 최신 표준 필드 스펙을 반영하여 결재서식 관리에 노출
+    const seedMap = new Map<string, ApprovalForm>();
+    for (const seedForm of APPROVAL_FORM_SEED) {
+      seedMap.set(seedForm.id, approvalFormSchema.parse(seedForm));
+    }
+
+    const mergedList: ApprovalForm[] = [];
+    const seenIds = new Set<string>();
+
+    for (const item of list) {
+      seenIds.add(item.id);
+      const seedForm = seedMap.get(item.id);
+      if (seedForm && ['휴가', '외근', '국내출장', '해외출장'].includes(item.id)) {
+        // 표준 서식의 경우 SEED의 최신 표준 필드 정의를 반영하고, 기존 사용자가 추가한 커스텀 필드는 보존
+        const seedFieldKeys = new Set(seedForm.fields.map((f) => f.key));
+        const customFields = (item.fields || []).filter((f) => !seedFieldKeys.has(f.key));
+        mergedList.push({
+          ...item,
+          name: item.name || seedForm.name,
+          docTitle: item.docTitle || seedForm.docTitle,
+          icon: item.icon || seedForm.icon,
+          closing: item.closing || seedForm.closing,
+          folderId: item.folderId || seedForm.folderId,
+          fields: [...seedForm.fields, ...customFields],
+        });
+      } else {
+        mergedList.push(item);
+      }
+    }
+
+    // 만약 DB에 아직 없는 SEED 서식이 있다면 추가
+    for (const [id, seedForm] of seedMap.entries()) {
+      if (!seenIds.has(id)) {
+        mergedList.push(seedForm);
+      }
+    }
+
+    return mergedList.sort(byOrder);
   },
 
   async save(form: ApprovalForm): Promise<void> {

@@ -14,22 +14,22 @@ import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } 
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
-import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
+import { useActiveApprovalForms } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
-import { DynamicField } from '@/modules/gw/approval/formFields';
 import { RelatedDocSearchModal } from '@/modules/gw/approval/RelatedDocSearchModal';
 import { DraftConfirmDialog } from './components/DraftConfirmDialog';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
-import { DraftFormSidebar } from './components/DraftFormSidebar';
+import { DraftFormSelectModal } from './components/DraftFormSelectModal';
+import { FormChangeConfirmDialog } from './components/FormChangeConfirmDialog';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
+import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
 import { getDefaultTimeWindow } from '@/domain/leave/policy';
-import { businessDaysBetween, CalendarRangePicker } from '@/modules/gw/approval/formFields';
-import { Upload, X, Paperclip, AlertTriangle, Lock, FileText, GitFork, Calendar, Clock, Info, CheckCircle2 } from 'lucide-react';
+import { X, AlertTriangle, GitFork, RefreshCw } from 'lucide-react';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -110,6 +110,8 @@ export default function ApprovalDraftScreen() {
       me={user}
       editDoc={fetchedDoc ?? null}
       fixedType={params.get('type') ?? undefined}
+      initialDate={params.get('date')}
+      initialLeaveType={params.get('leaveType')}
       navigate={navigate}
     />
   );
@@ -119,11 +121,15 @@ function ApprovalDraftInner({
   me,
   editDoc,
   fixedType,
+  initialDate,
+  initialLeaveType,
   navigate,
 }: {
   me: User;
   editDoc?: ApprovalDoc | null;
   fixedType?: string;
+  initialDate?: string | null;
+  initialLeaveType?: string | null;
   navigate: (url: string) => void;
 }) {
   const { canAction } = usePermission();
@@ -150,12 +156,27 @@ function ApprovalDraftInner({
       if (!initialVals['period']) initialVals['period'] = editDoc.form.startDate;
       if (!initialVals['period__end']) initialVals['period__end'] = editDoc.form.endDate;
       if (!initialVals['period__days']) initialVals['period__days'] = editDoc.form.days;
+      if (!initialVals['substituteId'] && editDoc.form.substituteId) initialVals['substituteId'] = editDoc.form.substituteId;
+      if (!initialVals['emergencyContact'] && editDoc.form.emergencyContact) initialVals['emergencyContact'] = editDoc.form.emergencyContact;
+    }
+    // URL 딥링크(근태/휴가 화면 등)에서 넘어온 날짜 및 유형 기본 바인딩
+    if (!editDoc && initialDate) {
+      if (!initialVals['period']) initialVals['period'] = initialDate;
+      if (!initialVals['period__end']) initialVals['period__end'] = initialDate;
+      if (!initialVals['period__days']) initialVals['period__days'] = 1;
+    }
+    if (!editDoc && initialLeaveType) {
+      initialVals['leaveType'] = initialLeaveType;
+      if (initialLeaveType === '오전반차' || initialLeaveType === '오후반차' || initialLeaveType === '반차') {
+        initialVals['period__days'] = 0.5;
+      } else if (initialLeaveType === '반반차') {
+        initialVals['period__days'] = 0.25;
+      }
     }
     return initialVals;
   });
 
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
-  const selectedLeaveType = String(values['leaveType'] || '연차');
   const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
   const [attachmentRetention, setAttachmentRetention] = useState<string>((editDoc as any)?.attachmentRetention ?? 'permanent');
@@ -168,6 +189,11 @@ function ApprovalDraftInner({
   const [zoomFactor, setZoomFactor] = useState(1);
   const [isWideScreen, setIsWideScreen] = useState(true);
   const [isAgreementEnabled, setIsAgreementEnabled] = useState(false);
+
+  // 양식 선택 모달 및 양식 변경 확인 다이얼로그 상태
+  const [showSelectModal, setShowSelectModal] = useState(false);
+  const [showChangeConfirm, setShowChangeConfirm] = useState(false);
+  const [isChangingFormSaving, setIsChangingFormSaving] = useState(false);
 
   useEffect(() => {
     approvalProcessRepo.isOptionEnabled('dept_agreement').then(setIsAgreementEnabled);
@@ -192,19 +218,6 @@ function ApprovalDraftInner({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragActive, setIsDragActive] = useState(false);
-
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setIsDragActive(true);
-    } else if (e.type === "dragleave") {
-      setIsDragActive(false);
-    }
-  };
-
   const handleFilesUpload = async (files: File[]) => {
     if (files.length === 0) return;
     setUploading(true);
@@ -223,16 +236,6 @@ function ApprovalDraftInner({
       setError('파일 업로드 실패: ' + String(err));
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const files = Array.from(e.dataTransfer.files);
-      await handleFilesUpload(files);
     }
   };
 
@@ -320,20 +323,59 @@ function ApprovalDraftInner({
     );
   };
 
-  // 양식 변경 시 작성내용 유실 경고 핸들러
-  const handleFormChange = (newCode: string) => {
-    const hasContent = hasManuallyEnteredValues();
-
-    if (hasContent && newCode !== code) {
-      const ok = window.confirm(
-        '새 양식으로 변경하면 현재 작성 중인 내용이 지워지고 초기화됩니다. 계속하시겠습니까?'
-      );
-      if (!ok) return;
+  // URL 쿼리에 type이 없고 신규 기안으로 진입한 경우, 양식 선택 모달 자동 오픈
+  useEffect(() => {
+    if (!editDoc && !fixedType && !initialDate && !initialLeaveType) {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (!urlParams.get('type')) {
+        setShowSelectModal(true);
+      }
     }
-    setCode(newCode);
+  }, [editDoc, fixedType, initialDate, initialLeaveType]);
+
+  // 상단 [양식 변경] 버튼 클릭 핸들러
+  const handleClickChangeForm = () => {
+    if (hasManuallyEnteredValues()) {
+      setShowChangeConfirm(true);
+    } else {
+      setShowSelectModal(true);
+    }
+  };
+
+  // 작성 중인 내용 임시 저장 후 새 양식 선택
+  const handleSaveAndChange = async () => {
+    setIsChangingFormSaving(true);
+    try {
+      await persistDraft();
+      clearAutosave();
+      setShowChangeConfirm(false);
+      setShowSelectModal(true);
+    } catch (e) {
+      setError('임시 저장에 실패하여 양식 변경이 중단되었습니다: ' + String(e));
+    } finally {
+      setIsChangingFormSaving(false);
+    }
+  };
+
+  // 작성 중인 내용 폐기 후 새 양식 선택
+  const handleDiscardAndChange = () => {
+    clearAutosave();
     setValues({});
     setTitle('');
     setAmount('');
+    setAttachments([]);
+    setRelatedDocs([]);
+    setShowChangeConfirm(false);
+    setShowSelectModal(true);
+  };
+
+  // 모달에서 새 서식을 최종 선택했을 때
+  const handleSelectNewForm = (newForm: ApprovalForm) => {
+    setCode(newForm.code);
+    setValues({});
+    setTitle('');
+    setAmount('');
+    navigate(`/gw/approval/new?type=${encodeURIComponent(newForm.code)}`);
   };
 
   /** 마지막으로 브라우저에 보관한 시각. 화면에 "마지막 보관 HH:MM:SS"로 보여 준다. */
@@ -537,9 +579,6 @@ function ApprovalDraftInner({
   const [pendingAutosaveData, setPendingAutosaveData] = useState<any>(null);
   const [autosaveFormName, setAutosaveFormName] = useState('');
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarSearch, setSidebarSearch] = useState('');
-  const [onlyAllowedForms, setOnlyAllowedForms] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false); // 해상도 작을 때 결재선 Drawer
 
   // 후결(사후 승인) 옵션
@@ -653,7 +692,8 @@ function ApprovalDraftInner({
     }
   }, [editDoc]);
 
-  const isFixed = !!fixedType || !!editDoc;
+  // 이미 등록/저장된 기존 문서 편집이 아니라면, 새 기안 중에는 언제든 양식 변경 가능
+  const canChangeForm = !editDoc;
 
 
 
@@ -761,10 +801,18 @@ function ApprovalDraftInner({
       if (isHalf) pDays = 0.5;
       else if (isQuarter) pDays = 0.25;
 
-      const timeWin = getDefaultTimeWindow(lType);
+      const quarterSlot = isQuarter ? String(values['quarterSlot'] || 'PM2') : undefined;
+      const timeWin = getDefaultTimeWindow(lType, quarterSlot);
       const startTime = String(values['startTime'] || timeWin.startTime);
       const endTime = String(values['endTime'] || timeWin.endTime);
       const reason = values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : undefined;
+      const subId = values['substituteId'] ? String(values['substituteId']) : undefined;
+      const subUser = subId ? org.userById(subId) : null;
+      const emergencyContact = values['emergencyContact']
+        ? String(values['emergencyContact'])
+        : values['contactNumber']
+        ? String(values['contactNumber'])
+        : undefined;
 
       leave = {
         leaveType: lType,
@@ -774,6 +822,9 @@ function ApprovalDraftInner({
         endTime,
         days: pDays,
         reason,
+        substituteId: subId,
+        substituteName: subUser ? `${subUser.name} · ${subUser.dept}` : undefined,
+        emergencyContact,
       };
     }
 
@@ -845,6 +896,34 @@ function ApprovalDraftInner({
       if (!pStart || (!isHalf && !isQuarter && !pEnd) || effectiveDays <= 0) {
         return '휴가 기간을 올바르게 입력하세요.';
       }
+
+      // 연차 및 반차 잔여일수 검증
+      if (['연차', '오전반차', '오후반차', '반차', '반반차'].includes(lType)) {
+        if (effectiveDays > bal.remaining) {
+          return `신청 가능한 잔여 연차(${bal.remaining}일)를 초과하였습니다. (신청일수: ${effectiveDays}일)`;
+        }
+      }
+
+      // 대체휴무 잔여일수 검증
+      if (lType === '대체휴무') {
+        if (effectiveDays > bal.substituteHoliday.remaining) {
+          return `신청 가능한 잔여 대체휴무(${bal.substituteHoliday.remaining}일)를 초과하였습니다. (신청일수: ${effectiveDays}일)`;
+        }
+      }
+    }
+
+    if (code === '외근') {
+      const pStart = values['period'];
+      const dest = values['destination'];
+      if (!pStart) return '외근 일자/기간을 입력하세요.';
+      if (!dest || !String(dest).trim()) return '외근지(방문처)를 입력하세요.';
+    }
+
+    if (code === '국내출장' || code === '해외출장') {
+      const pStart = values['period'];
+      const dest = values['destination'];
+      if (!pStart) return '출장 기간을 입력하세요.';
+      if (!dest || !String(dest).trim()) return '출장지를 입력하세요.';
     }
 
     if (forSubmit) {
@@ -990,166 +1069,8 @@ function ApprovalDraftInner({
     }
   };
 
-  // 폼 필드 노드 렌더링
-  const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
-  const currentTabValue = tabSelectorField ? String(values[tabSelectorField.key] ?? '') : '';
 
-  const fieldNodes: React.ReactNode[] = [];
-  let lastSection = '';
-  for (const field of form?.fields ?? []) {
-    if (field.visibleIf) {
-      const parts = field.visibleIf.split(':');
-      if (parts.length === 2) {
-        const [condKey, condVal] = parts;
-        if (String(values[condKey] ?? '') !== condVal) continue;
-      }
-    }
 
-    const isCommonField = !field.visibleIf;
-    const override: { width?: 'full' | 'half'; section?: string } =
-      (isCommonField && currentTabValue && field.tabOverrides?.[currentTabValue]) || {};
-    const effectiveWidth = (override.width ?? field.width) as 'full' | 'half';
-    const effectiveSection = override.section ?? field.section;
-
-    if (effectiveSection && effectiveSection !== lastSection) {
-      lastSection = effectiveSection;
-      fieldNodes.push(
-        <div key={`sec-${effectiveSection}`} className="col-span-2 mt-2 text-[11.5px] font-bold text-teal border-b border-teal/20 pb-1">
-          {effectiveSection}
-        </div>,
-      );
-    }
-    if (code === '휴가' && field.key === 'leaveType') {
-      // 상단에 이미 세련된 카드 라디오 선택기가 제공되므로 중복 노출 스킵
-      continue;
-    }
-
-    if (code === '휴가' && field.key === 'period') {
-      const isHalf = selectedLeaveType === '오전반차' || selectedLeaveType === '오후반차' || selectedLeaveType === '반차';
-      const isQuarter = selectedLeaveType === '반반차';
-      const curStart = String(values['period'] ?? '');
-      const curEnd = String(values['period__end'] ?? curStart);
-      const win = getDefaultTimeWindow(selectedLeaveType);
-
-      fieldNodes.push(
-        <div key={field.key} className="col-span-2">
-          <Field label={isHalf ? `${selectedLeaveType} 사용일자 *` : isQuarter ? '반반차 사용일자 *' : '휴가 기간 (토·일 주말 자동 제외) *'}>
-            {isHalf || isQuarter ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  type="date"
-                  value={curStart}
-                  onChange={(e) => {
-                    const nextDate = e.target.value;
-                    setVals({
-                      period: nextDate,
-                      period__end: nextDate,
-                      period__days: isHalf ? 0.5 : 0.25,
-                      startTime: win.startTime,
-                      endTime: win.endTime,
-                    });
-                  }}
-                  className={`${INP} w-48`}
-                />
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal/30 bg-teal-soft/50 px-2.5 py-1.5 text-[12px] font-bold text-teal">
-                  <Clock size={13} />
-                  <span>부재시간: {win.startTime} ~ {win.endTime} ({isHalf ? '0.5일' : '0.25일'} 차감)</span>
-                </span>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <CalendarRangePicker
-                  start={curStart}
-                  end={curEnd}
-                  onChange={(newStart: string, newEnd: string) => {
-                    const days = newStart && newEnd ? businessDaysBetween(newStart, newEnd) : 0;
-                    setVals({
-                      period: newStart,
-                      period__end: newEnd,
-                      period__days: days,
-                      startTime: '08:30',
-                      endTime: '17:30',
-                    });
-                  }}
-                />
-                {curStart && curEnd && (
-                  <p className="text-[11px] text-ink3">
-                    선택 기간: {curStart} ~ {curEnd} (토·일 주말 제외 <strong>{values['period__days'] ?? 0}일</strong> 차감)
-                  </p>
-                )}
-              </div>
-            )}
-          </Field>
-        </div>,
-      );
-      continue;
-    }
-
-    const span = effectiveWidth === 'half' ? 'col-span-1' : 'col-span-2';
-    if (field.type === '금액' && field === amountField) {
-      fieldNodes.push(
-        <div key={field.key} className={span}>
-          <Field label={field.label}>
-            <input
-              value={amount}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                setAmount(val);
-                setVals({ [field.key]: val });
-              }}
-              inputMode="numeric"
-              placeholder="예: 3000000"
-              className={INP}
-            />
-            {amountNum != null && <span className="mt-1 block text-[11px] text-ink3">₩{amountNum.toLocaleString()}</span>}
-          </Field>
-        </div>,
-      );
-    } else {
-      fieldNodes.push(
-        <div key={field.key} className={span}>
-          <Field label={field.label + (field.required ? ' *' : '')}>
-            <DynamicField field={field} values={values} set={setVals} org={org} />
-          </Field>
-        </div>,
-      );
-    }
-  }
-
-  const { data: folders = [] } = useApprovalFolders();
-  const sidebarFolders = useMemo(() => {
-    const filteredForms = forms.filter((f) => {
-      if (f.code === '전체' || !f.active) return false;
-      if (sidebarSearch.trim() && !f.name.toLowerCase().includes(sidebarSearch.toLowerCase()) && !f.code.toLowerCase().includes(sidebarSearch.toLowerCase())) {
-        return false;
-      }
-      if (onlyAllowedForms && disabledFormCodes.has(f.code)) {
-        return false;
-      }
-      return true;
-    });
-
-    const list = folders
-      .map((f) => ({
-        ...f,
-        forms: filteredForms.filter((form) => form.folderId === f.id),
-      }))
-      .filter((f) => f.forms.length > 0);
-
-    const others = filteredForms.filter((form) => !form.folderId);
-    if (others.length > 0) {
-      list.push({
-        id: 'others',
-        name: '기타 서식',
-        order: 999,
-        forms: others,
-      });
-    }
-    return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  }, [folders, forms, sidebarSearch, onlyAllowedForms, disabledFormCodes]);
-
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
-  const toggleFolder = (id: string) => setOpenFolders((p) => ({ ...p, [id]: p[id] === false ? true : false }));
 
   const previewDoc: ApprovalDoc = useMemo(
     () => {
@@ -1184,8 +1105,8 @@ function ApprovalDraftInner({
             leaveType: String(values['leaveType'] || '연차') as LeaveType,
             startDate: String(values['period'] || ''),
             endDate: String(values['leaveType'] || '').includes('반차') ? String(values['period'] || '') : String(values['period__end'] || values['period'] || ''),
-            startTime: String(values['startTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차')).startTime),
-            endTime: String(values['endTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차')).endTime),
+            startTime: String(values['startTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차'), values['quarterSlot'] as string).startTime),
+            endTime: String(values['endTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차'), values['quarterSlot'] as string).endTime),
             days: String(values['leaveType'] || '').includes('반차')
               ? 0.5
               : String(values['leaveType'] || '') === '반반차'
@@ -1227,13 +1148,25 @@ function ApprovalDraftInner({
           >
             ←
           </button>
-          <div>
-            <h1 className="text-[16px] font-bold text-ink flex items-center gap-2">
-              <span>{isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : fixedType === '휴가' ? '휴가 신청' : '새 결재 작성'}</span>
-              <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[11px] font-extrabold text-teal">
-                {code}
-              </span>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[15px] font-extrabold text-ink flex items-center gap-2">
+              <span>{isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : '기안 작성'}</span>
             </h1>
+            <div className="flex items-center gap-1.5 rounded-lg bg-teal-soft/80 px-2.5 py-1 text-[11.5px] font-extrabold text-teal border border-teal/20 shadow-2xs">
+              <span>{form?.icon || '📄'}</span>
+              <span>{form?.name || code}</span>
+            </div>
+            {canChangeForm && (
+              <button
+                type="button"
+                onClick={handleClickChangeForm}
+                className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/60 px-3 py-1.5 text-[11.5px] font-extrabold text-teal hover:bg-teal hover:text-white transition-all shadow-xs cursor-pointer ml-1"
+                title="다른 결재 양식으로 변경합니다"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>양식 변경</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1295,485 +1228,52 @@ function ApprovalDraftInner({
           </button>
         </div>
       )}
-
-      {/* 3단 워크스페이스 본문 메인 레이아웃 */}
-      <div className="flex flex-1">
-        {/* [1단] 좌측 서식 탐색 사이드바 (Wide/Desktop 전용, 서식 변경 가능 시만 노출) */}
-        {!isFixed && (
-          <div className={`transition-all duration-300 border-r border-border bg-panel-alt/50 shrink-0 sticky self-start overflow-y-auto overflow-x-hidden ${sidebarOpen ? 'w-[210px]' : 'w-[46px]'}`} style={{ top: '53px', height: 'calc(100vh - 53px)' }}>
-            <DraftFormSidebar
-              sidebarOpen={sidebarOpen}
-              setSidebarOpen={setSidebarOpen}
-              sidebarSearch={sidebarSearch}
-              setSidebarSearch={setSidebarSearch}
-              onlyAllowedForms={onlyAllowedForms}
-              setOnlyAllowedForms={setOnlyAllowedForms}
-              sidebarFolders={sidebarFolders}
-              openFolders={openFolders}
-              toggleFolder={toggleFolder}
-              disabledFormCodes={disabledFormCodes}
-              code={code}
-              setCode={handleFormChange}
-            />
-          </div>
-        )}
-
-        {/* 2단: 기안 작성 영역 (3단 우측 패널보다 레이어 우선순위를 낮게 z-0 설정) */}
-        <div className="flex-1 min-w-0 px-6 py-6 space-y-5 bg-panel relative z-0">
-
-          {/* 작성 흐름 안내 헤더 */}
-          <div className="flex items-center gap-2 pb-1">
-            <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-teal">
-              <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">2</span>
-                <span>기안 작성</span>
-              </span>
-
-            </div>
-          </div>
-
-
-          {/* 후결 필수 소명 입력 서식 카드 */}
-          {isPostApprovalSystemEnabled && isPostApproval && (
-            <div className="rounded-xl border-2 border-rose-500/40 bg-rose-500/5 p-4 space-y-4 shadow-sm">
-              <div className="border-b border-rose-500/20 pb-2 flex items-center justify-between">
-                <span className="text-[13px] font-extrabold text-rose-700 flex items-center gap-1.5">
-                  <FileText size={14} className="shrink-0" />
-                  <span>후결 사후 승인 사유 및 소명서 (필수 작성)</span>
-                </span>
-                <span className="text-[10.5px] text-rose-600/80 font-medium">
-                  ※ 선조치 후 사후 승인을 받기 위한 정당성 소명 양식입니다.
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="선조치 일시 *">
-                  <input
-                    type="datetime-local"
-                    value={postApprovedAt}
-                    onChange={(e) => setPostApprovedAt(e.target.value)}
-                    className={INP}
-                  />
-                </Field>
-                <Field label="구두/임시 승인자 *">
-                  <select
-                    value={postApprovedById}
-                    onChange={(e) => setPostApprovedById(e.target.value)}
-                    className={INP}
-                  >
-                    {org.users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.dept} · {u.position})
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-
-              <Field label="1. 선조치 내용 및 결과 *">
-                <textarea
-                  value={postApprovalActionTaken}
-                  onChange={(e) => setPostApprovalActionTaken(e.target.value)}
-                  rows={2}
-                  placeholder="긴급 조치한 업무 내용 및 현재 처리 결과를 기술하세요."
-                  className={`${INP} resize-none`}
-                />
-              </Field>
-
-              <Field label="2. 긴급성 및 불가피성 소명 (Why?) *">
-                <textarea
-                  value={postApprovalNecessity}
-                  onChange={(e) => setPostApprovalNecessity(e.target.value)}
-                  rows={2}
-                  placeholder="사전 결재를 진행하지 못하고 선조치해야만 했던 소명 사유를 기술하세요."
-                  className={`${INP} resize-none`}
-                />
-              </Field>
-            </div>
-          )}
-
-          {/* 기본 문서 속성 (제목 / 보안등급 / 보존연한) */}
-          <div className="rounded-xl border border-border bg-panel-alt p-4 space-y-3.5 shadow-2xs">
-            <Field label="문서 제목 *">
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="문서 제목을 입력하세요"
-                className={`${INP} text-[13.5px] font-bold text-ink`}
-              />
-            </Field>
-
-            <div className="grid grid-cols-3 gap-3 items-end">
-              <Field label="공개 범위">
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as any)}
-                  className={INP}
-                  disabled={code === '채용' || code === '인사'}
-                >
-                  <option value="전사">전사 공개</option>
-                  <option value="부서">부서 공개</option>
-                  <option value="비공개">비공개</option>
-                </select>
-              </Field>
-
-              <Field label="보존연한">
-                <select
-                  value={preservationPeriod}
-                  onChange={(e) => setPreservationPeriod(e.target.value)}
-                  className={INP}
-                >
-                  <option value="1년">1년</option>
-                  <option value="3년">3년</option>
-                  <option value="5년">5년</option>
-                  <option value="10년">10년</option>
-                  <option value="영구">영구</option>
-                </select>
-              </Field>
-
-
-              {/* 후결(사후 승인) 옵션 토글 스위치 — 보안등급/보존연한과 같은 행에 배치 */}
-              {isPostApprovalSystemEnabled ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold text-ink2">긴급 후결 요청</span>
-                  <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-[7px] transition-all ${isPostApproval
-                    ? 'border-rose-500/40 bg-rose-500/8'
-                    : 'border-border bg-panel'
-                    }`}>
-                    <span className="text-[11px] font-semibold text-rose-700 flex items-center gap-1 flex-1">
-                      <AlertTriangle size={13} className="shrink-0" />
-                      <span>{isPostApproval ? '후결 요청 중' : '해당 없음'}</span>
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={isPostApproval}
-                      onClick={() => setIsPostApproval(!isPostApproval)}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isPostApproval ? 'bg-rose-500' : 'bg-gray-300'
-                        }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPostApproval ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div />
-              )}
-            </div>
-
-
-
-            {/* 보안 매핑에 따른 피드백 안내 문구 */}
-            {(code === '채용' || code === '인사' || code === '지출결의') && (
-              <div className={`rounded-lg px-3 py-2 text-[11px] font-semibold flex items-center gap-2 ${
-                code === '지출결의' 
-                  ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20' 
-                  : 'bg-red-500/10 text-red-700 border border-red-500/20'
-              }`}>
-                {code === '지출결의' ? (
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                ) : (
-                  <Lock className="h-4 w-4 shrink-0 text-red-600" />
-                )}
-                <span>
-                  {code === '지출결의' 
-                    ? '지출결의서는 보안 규정에 의해 [대외비 / 부서 공개] 로 기본 제한됩니다.' 
-                    : `본 서식(${code}품의)은 극비 기안 양식으로써 기안 시점에 [극비 / 비공개]로 강제 자동 설정됩니다.`}
-                </span>
-              </div>
-            )}
-          </div>
-
-
-          {/* 서식 본문 및 동적 필드 영역 */}
-          <div className="rounded-xl border border-border bg-panel p-4 space-y-4 shadow-2xs">
-            <div className="text-[13px] font-bold text-ink border-b border-border pb-2 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-teal shrink-0" />
-                <span>기안 본문 작성</span>
-              </span>
-              <span className="text-[11px] text-ink3 font-normal">필요 항목을 정확히 작성해 주세요.</span>
-            </div>
-
-            {/* 휴가 전용 연차 잔여 일수 현황 위젯 및 휴가 종류 세분화 선택기 */}
-            {code === '휴가' && (
-              <div className="space-y-3">
-                {/* 1. 기안자 연차 요약 카드 */}
-                <div className="rounded-xl border border-teal/25 bg-linear-to-r from-teal-soft/40 via-panel-alt to-teal-soft/20 p-3.5 shadow-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal/15 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-teal text-white shadow-xs">
-                        <Calendar size={15} />
-                      </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-bold text-ink">{me.name} 님의 연차 현황</span>
-                          {bal.hireDate && (
-                            <span className="text-[11px] text-ink3">입사일: {bal.hireDate}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-[12px]">
-                      <span className="text-ink3">총 발생 <strong className="text-ink font-semibold">{bal.grant}일</strong></span>
-                      <span className="text-ink3">·</span>
-                      <span className="text-ink3">사용 <strong className="text-ink font-semibold">{bal.used}일</strong></span>
-                      {bal.pending > 0 && (
-                        <>
-                          <span className="text-ink3">·</span>
-                          <span className="text-amber-600 font-medium">진행중 {bal.pending}일</span>
-                        </>
-                      )}
-                      <span className="text-ink3">·</span>
-                      <span className="rounded-full bg-teal/15 px-2.5 py-0.5 font-bold text-teal">
-                        잔여 {bal.remaining}일
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 선사용(Advance Leave) 상계 현황 안내 배너 */}
-                  {bal.advanceOffset?.isAdvanceUsed && (
-                    <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] text-amber-800">
-                      <Info size={14} className="shrink-0 text-amber-600" />
-                      <span>
-                        <strong>선사용 안내:</strong> 현재 하계휴가 등 선사용({bal.advanceOffset.totalUsed}일) 중 <strong>{bal.advanceOffset.offsetCompletedDays}일 상계 완료</strong>되었습니다. (잔여 상계: {bal.advanceOffset.offsetRemainingDays}일 / 정상화 예상: {bal.advanceOffset.estimatedFullOffsetDate ?? '근무 지속 시 자동 완제'})
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. 휴가 종류 빠른 선택 버튼 그리드 */}
-                <div className="space-y-1.5">
-                  <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1">
-                    <Clock size={12} className="text-teal" />
-                    <span>휴가 구분 선택</span>
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { type: '연차', title: '종일 연차', sub: '08:30 ~ 17:30 (1.0일)', days: 1.0 },
-                      { type: '오전반차', title: '오전 반차', sub: '08:30 ~ 12:30 (0.5일)', days: 0.5 },
-                      { type: '오후반차', title: '오후 반차', sub: '13:30 ~ 17:30 (0.5일)', days: 0.5 },
-                      { type: '반반차', title: '반반차', sub: '2시간 부재 (0.25일)', days: 0.25 },
-                    ].map((item) => {
-                      const isSelected = selectedLeaveType === item.type;
-                      return (
-                        <button
-                          key={item.type}
-                          type="button"
-                          onClick={() => {
-                            const curStart = String(values['period'] || '');
-                            const curEnd = String(values['period__end'] || curStart);
-                            const win = getDefaultTimeWindow(item.type);
-
-                            let nextDays = item.days;
-                            let nextEnd = curEnd;
-
-                            if (item.type === '오전반차' || item.type === '오후반차' || item.type === '반반차') {
-                              nextEnd = curStart; // 반차는 당일 처리
-                              nextDays = item.days;
-                            } else if (item.type === '연차' && curStart && curEnd) {
-                              nextDays = businessDaysBetween(curStart, curEnd) || 1.0;
-                            }
-
-                            setVals({
-                              leaveType: item.type,
-                              period__end: nextEnd,
-                              period__days: nextDays,
-                              startTime: win.startTime,
-                              endTime: win.endTime,
-                            });
-                          }}
-                          className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition-all ${
-                            isSelected
-                              ? 'border-teal bg-teal-soft/60 shadow-xs ring-1 ring-teal/30'
-                              : 'border-border bg-panel-alt hover:border-teal/40 hover:bg-panel'
-                          }`}
-                        >
-                          <div className="flex w-full items-center justify-between">
-                            <span className={`text-[12.5px] font-bold ${isSelected ? 'text-teal' : 'text-ink'}`}>
-                              {item.title}
-                            </span>
-                            {isSelected && <CheckCircle2 size={13} className="text-teal" />}
-                          </div>
-                          <span className="mt-0.5 text-[10.5px] text-ink3">{item.sub}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 3. 오전/오후 반차 상세 복무 안내 피드백 */}
-                {selectedLeaveType === '오전반차' && (
-                  <div className="rounded-lg border border-sky-500/30 bg-sky-500/8 px-3 py-2 text-[11.5px] text-sky-800 flex items-center gap-2">
-                    <Info size={14} className="shrink-0 text-sky-600" />
-                    <span>
-                      <strong>오전 반차 안내:</strong> 부재시간은 <strong>08:30 ~ 12:30</strong>(4시간)이며, 점심시간(12:30~13:30) 후 <strong>13:30에 정상 출근</strong>하여 근무합니다. (0.5일 차감)
-                    </span>
-                  </div>
-                )}
-                {selectedLeaveType === '오후반차' && (
-                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/8 px-3 py-2 text-[11.5px] text-indigo-800 flex items-center gap-2">
-                    <Info size={14} className="shrink-0 text-indigo-600" />
-                    <span>
-                      <strong>오후 반차 안내:</strong> 부재시간은 <strong>13:30 ~ 17:30</strong>(4시간)이며, 오전 근무(08:30~12:30) 수행 후 <strong>12:30 점심시간 시작과 함께 퇴근(조퇴)</strong>합니다. (0.5일 차감)
-                    </span>
-                  </div>
-                )}
-                {selectedLeaveType === '반반차' && (
-                  <div className="rounded-lg border border-teal/30 bg-teal-soft/40 px-3 py-2 text-[11.5px] text-teal flex items-center gap-2">
-                    <Info size={14} className="shrink-0 text-teal" />
-                    <span>
-                      <strong>반반차 안내:</strong> 2시간 지정 부재(0.25일 차감)입니다. 조기퇴근 시 기본 15:30~17:30 적용됩니다.
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 서식에 정의된 동적 필드들 */}
-            <div className="grid grid-cols-2 gap-3.5">
-              {fieldNodes}
-            </div>
-          </div>
-
-          {/* 첨부파일 / 관련 문서 영역 */}
-          <div className="rounded-xl border border-border bg-panel p-4 space-y-3 shadow-2xs">
-            <div className="text-[13px] font-bold text-ink border-b border-border pb-2 flex items-center gap-1.5">
-              <Paperclip className="h-4 w-4 text-teal shrink-0" />
-              <span>첨부파일 및 관련 문서</span>
-            </div>
-
-            {/* 첨부 파일 업로드 */}
-            <Field label="첨부파일">
-              <div
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 transition-all cursor-pointer ${
-                  isDragActive
-                    ? 'border-teal bg-teal-soft/20 scale-[0.99]'
-                    : 'border-border bg-panel-alt/30 hover:bg-panel-alt/60 hover:border-border-hi'
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    await handleFilesUpload(files);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="hidden"
-                />
-                
-                <div className="flex flex-col items-center gap-2">
-                  <div className="p-2.5 bg-panel rounded-full shadow-2xs border border-border">
-                    <Upload className="w-5 h-5 text-ink3" />
-                  </div>
-                  <div className="text-[12px] font-bold text-ink text-center">
-                    {uploading ? '파일을 업로드하는 중...' : '여기에 파일을 드래그하거나 클릭하여 추가'}
-                  </div>
-                  <p className="text-[10.5px] text-ink3 text-center">
-                    여러 개의 파일을 마우스 드래그로 선택하여 올릴 수 있습니다.
-                  </p>
-                </div>
-              </div>
-
-              {attachments.length > 0 && (
-                <div className="mt-2.5 space-y-2">
-                  <div className="flex items-center justify-between px-1 text-[11px] text-ink3 font-medium">
-                    <span className="flex items-center gap-1.5 font-bold text-ink">
-                      <span>보존기한 설정:</span>
-                      <select
-                        value={attachmentRetention}
-                        onChange={(e) => setAttachmentRetention(e.target.value)}
-                        className="rounded-md border border-border bg-panel px-2 py-0.5 text-[11px] font-bold text-teal outline-none"
-                      >
-                        <option value="permanent">영구 보존 (기본)</option>
-                        <option value="1y">1년 보존</option>
-                        <option value="3y">3년 보존</option>
-                        <option value="5y">5년 보존 (표준 규정)</option>
-                        <option value="10y">10년 보존 (중요 문서)</option>
-                      </select>
-                    </span>
-                    <span className="text-[10px] text-ink3">
-                      {attachmentRetention === 'permanent' ? '영구 보관 대상' : '기한 경과 시 파기 관리'}
-                    </span>
-                  </div>
-
-                  <ul className="space-y-1.5">
-                    {attachments.map((f, i) => (
-                      <li
-                        key={i}
-                        className="group flex items-center justify-between text-[11.5px] text-ink bg-panel-alt hover:bg-panel-alt-hi px-3 py-1.5 rounded-lg border border-border transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Paperclip className="w-3.5 h-3.5 text-ink3 shrink-0" />
-                          <a
-                            href={f.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="truncate font-medium hover:underline hover:text-teal cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {f.name}
-                          </a>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAttachments((prev) => prev.filter((_, idx) => idx !== i));
-                          }}
-                          className="p-1 rounded-md text-ink3 hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
-                          title="삭제"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Field>
-
-
-            {/* 관련 문서 첨부 */}
-            <Field label="관련 문서">
-              <button
-                type="button"
-                onClick={() => setShowRelatedModal(true)}
-                className="rounded-lg border border-dashed border-border-hi px-3 py-1.5 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-colors"
-              >
-                + 관련 문서 검색 및 선택
-              </button>
-              {relatedDocs.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {relatedDocs.map((doc, i) => (
-                    <li key={doc.docId} className="flex items-center justify-between text-[11.5px] text-ink bg-panel-alt px-2.5 py-1 rounded-md">
-                      <span className="truncate flex items-center gap-1.5">
-                        <FileText size={12} className="shrink-0 text-ink3" />
-                        <span>[{doc.docNo}] {doc.title}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setRelatedDocs((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-[11px] text-rose-500 hover:underline ml-2 shrink-0"
-                      >
-                        삭제
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Field>
-          </div>
+      {/* 기안 워크스페이스 본문 메인 레이아웃 (미리보기와 100% 일치하는 단일 A4 공문서 캔버스 시트) */}
+      <div className="flex flex-1 bg-[#f4f6f8] min-h-[calc(100vh-53px)]">
+        {/* 중앙 A4 문서 캔버스 */}
+        <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex justify-center">
+          <ApprovalDraftDocumentSheet
+            form={form}
+            docCode={code}
+            me={me}
+            title={title}
+            setTitle={setTitle}
+            values={values}
+            setVals={setVals}
+            amount={amount}
+            setAmount={setAmount}
+            securityLevel={securityLevel}
+            setSecurityLevel={setSecurityLevel}
+            visibility={visibility}
+            setVisibility={setVisibility}
+            preservationPeriod={preservationPeriod}
+            setPreservationPeriod={setPreservationPeriod}
+            isPostApproval={isPostApproval}
+            setIsPostApproval={setIsPostApproval}
+            isPostApprovalSystemEnabled={isPostApprovalSystemEnabled}
+            postApprovedAt={postApprovedAt}
+            setPostApprovedAt={setPostApprovedAt}
+            postApprovedBy={postApprovedById}
+            setPostApprovedBy={setPostApprovedById}
+            postApprovalActionTaken={postApprovalActionTaken}
+            setPostApprovalActionTaken={setPostApprovalActionTaken}
+            postApprovalNecessity={postApprovalNecessity}
+            setPostApprovalNecessity={setPostApprovalNecessity}
+            steps={steps}
+            recipients={recipients}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            attachmentRetention={attachmentRetention}
+            setAttachmentRetention={setAttachmentRetention}
+            relatedDocs={relatedDocs}
+            setRelatedDocs={setRelatedDocs}
+            setShowRelatedModal={setShowRelatedModal}
+            onFileUpload={handleFilesUpload}
+            uploading={uploading}
+            leaveBalance={bal}
+            editDocNo={editDoc?.docNo}
+            lastSavedAt={autosavedAt}
+          />
         </div>
 
         {/* [3단] 우측 결재선 전용 고정 패널 — sticky self-start top-53px, 내부 스크롤 + 패널 내부 헤더 sticky 고정 */}
@@ -1784,8 +1284,8 @@ function ApprovalDraftInner({
           >
             {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
-              <span className="text-[14px] font-bold text-ink flex items-center gap-1.5">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal text-white text-[10px] font-extrabold">3</span>
+              <span className="text-[13px] font-extrabold text-ink flex items-center gap-1.5">
+                <GitFork className="h-4 w-4 text-teal shrink-0" />
                 <span>결재선 설정</span>
               </span>
               <span className="text-[11px] text-ink3 font-semibold">
@@ -1971,18 +1471,26 @@ function ApprovalDraftInner({
           onClose={() => setShowRelatedModal(false)}
         />
       )}
+
+      {/* 결재 양식 선택 모달 */}
+      <DraftFormSelectModal
+        open={showSelectModal}
+        onClose={() => setShowSelectModal(false)}
+        onSelect={handleSelectNewForm}
+        currentCode={code}
+      />
+
+      {/* 양식 변경 확인 다이얼로그 (작성 내용 보존 여부 선택) */}
+      <FormChangeConfirmDialog
+        open={showChangeConfirm}
+        currentFormName={form?.name || code}
+        onSaveAndChange={handleSaveAndChange}
+        onDiscardAndChange={handleDiscardAndChange}
+        onCancel={() => setShowChangeConfirm(false)}
+        isSaving={isChangingFormSaving}
+      />
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <label className="block text-[11px] font-bold text-ink2">{label}</label>
-      {children}
-    </div>
-  );
-}
 
-const INP =
-  'w-full rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] text-ink outline-none focus:border-teal focus:ring-1 focus:ring-teal/30 transition-all';

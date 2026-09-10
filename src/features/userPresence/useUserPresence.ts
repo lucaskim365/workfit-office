@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import {
   type UserPresence,
@@ -6,6 +6,11 @@ import {
   USER_PRESENCE_META,
   USER_PRESENCE_STATUSES,
 } from '@/domain/userPresence/schema';
+import { useAllApprovals } from '@/features/gw/useApprovals';
+import {
+  extractApprovedSchedules,
+  isDateInSchedule,
+} from '@/domain/approvalDoc/scheduleEngine';
 import {
   client as appwriteClient,
   databases as appwriteDatabases,
@@ -130,7 +135,38 @@ export function useAllUserPresences(): Record<string, UserPresence> {
     };
   }, []);
 
-  return presenceMap;
+  const approvalsQuery = useAllApprovals();
+
+  // 승인 완료된 당일 휴가·외근·출장 결재 문서를 기반으로 실시간 프레즌스 자동 동기화
+  const effectivePresenceMap = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const approvedSchedules = extractApprovedSchedules(approvalsQuery.data ?? []);
+    const merged: Record<string, UserPresence> = { ...presenceMap };
+
+    for (const schedule of approvedSchedules) {
+      if (!isDateInSchedule(today, schedule)) continue;
+
+      const current = merged[schedule.drafterId];
+      const targetStatus: UserPresenceStatus = schedule.category === 'LEAVE' ? 'LEAVE' : 'OUTSIDE';
+      const targetMessage = schedule.category === 'LEAVE'
+        ? (schedule.leaveType || '휴가')
+        : `${schedule.subType || (schedule.category === 'OUTSIDE' ? '외근' : '출장')}${schedule.destination ? ` · ${schedule.destination}` : ''}`;
+
+      // 수동으로 설정한 오프라인/온라인 상태 또는 기본 상태보다 승인된 공식 결재 일정(휴가, 외근, 출장)을 우선 반영
+      if (!current || current.status === 'ONLINE' || current.status === 'OFFLINE' || current.status === targetStatus) {
+        merged[schedule.drafterId] = {
+          userId: schedule.drafterId,
+          status: targetStatus,
+          message: current?.message || targetMessage,
+          updatedAt: current?.updatedAt || new Date().toISOString(),
+        };
+      }
+    }
+
+    return merged;
+  }, [presenceMap, approvalsQuery.data]);
+
+  return effectivePresenceMap;
 }
 
 /**

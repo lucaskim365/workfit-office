@@ -1,0 +1,406 @@
+import { useState, useMemo, useEffect } from 'react';
+import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
+import type { ApprovalForm } from '@/domain/approvalForm/schema';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { Search, Folder, FileText, Star, Clock, X, ChevronRight, Check } from 'lucide-react';
+
+interface DraftFormSelectModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (form: ApprovalForm) => void;
+  currentCode?: string;
+}
+
+const STORAGE_KEY_FAVORITES = 'workfit_favorite_forms';
+const STORAGE_KEY_RECENTS = 'workfit_recent_forms';
+
+export function DraftFormSelectModal({
+  open,
+  onClose,
+  onSelect,
+  currentCode,
+}: DraftFormSelectModalProps) {
+  const { user } = useAuth();
+  const org = useOrgTree();
+  const { data: forms = [] } = useActiveApprovalForms();
+  const { data: folders = [] } = useApprovalFolders();
+
+  const [search, setSearch] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_FAVORITES);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [recents, setRecents] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_RECENTS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 사용자 직급 서열 계산 (기안 권한 체크용)
+  const myRank = useMemo(() => {
+    if (!user?.position) return 999;
+    const pos = org.positions.find((p) => p.name === user.position);
+    return pos ? pos.rank : 999;
+  }, [user?.position, org.positions]);
+
+  // 서식별 기안 가능 여부 판별
+  const isFormAllowed = (form: ApprovalForm) => {
+    if (form.allowedPositionFromRank == null) return true;
+    return myRank <= form.allowedPositionFromRank;
+  };
+
+  const toggleFavorite = (e: React.MouseEvent, code: string) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
+      try {
+        localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const handleSelectForm = (form: ApprovalForm) => {
+    if (!isFormAllowed(form)) {
+      alert('해당 서식은 기안 권한이 제한되어 있습니다.');
+      return;
+    }
+
+    // 최근 사용 서식 저장
+    try {
+      const nextRecents = [form.code, ...recents.filter((c) => c !== form.code)].slice(0, 8);
+      setRecents(nextRecents);
+      localStorage.setItem(STORAGE_KEY_RECENTS, JSON.stringify(nextRecents));
+    } catch {
+      /* ignore */
+    }
+
+    onSelect(form);
+    onClose();
+  };
+
+  // 모달 열릴 때 검색어 초기화
+  useEffect(() => {
+    if (open) {
+      setSearch('');
+    }
+  }, [open]);
+
+  // 폴더별 필터링 및 검색
+  const filteredForms = useMemo(() => {
+    let list = forms;
+
+    // 검색어 필터
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      return list.filter(
+        (f) =>
+          f.name.toLowerCase().includes(q) ||
+          f.code.toLowerCase().includes(q) ||
+          (f.docTitle && f.docTitle.toLowerCase().includes(q))
+      );
+    }
+
+    // 카테고리 탭 필터
+    if (selectedFolderId === 'favorites') {
+      return list.filter((f) => favorites.includes(f.code));
+    }
+    if (selectedFolderId === 'recents') {
+      return list.filter((f) => recents.includes(f.code));
+    }
+    if (selectedFolderId === 'all') {
+      return list;
+    }
+    if (selectedFolderId === 'root') {
+      return list.filter((f) => !f.folderId);
+    }
+    return list.filter((f) => f.folderId === selectedFolderId);
+  }, [forms, search, selectedFolderId, favorites, recents]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+      <div
+        className="flex h-[80vh] max-h-[680px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 모달 상단 헤더 */}
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-soft text-teal font-bold text-sm">
+                📄
+              </span>
+              <span>결재 서식 선택</span>
+            </h2>
+            <p className="mt-0.5 text-xs text-ink3">
+              작성할 전자결재 문서의 양식을 선택하세요.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* 검색창 */}
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink3" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="서식명 또는 코드 검색..."
+                className="w-full rounded-lg border border-border bg-panel-alt/50 pl-8 pr-3 py-1.5 text-xs text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel transition-all"
+                autoFocus
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 모달 2단 본문: 좌측 카테고리 트리 + 우측 서식 카드 그리드 */}
+        <div className="grid grid-cols-[220px_1fr] flex-1 overflow-hidden">
+          {/* 좌측: 폴더 및 스마트 필터 네비게이션 */}
+          <div className="border-r border-border bg-panel-alt/30 p-3 overflow-y-auto space-y-1 select-none">
+            <div className="text-[11px] font-bold text-ink3 px-2 py-1 uppercase tracking-wider">
+              스마트 보기
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSelectedFolderId('all'); setSearch(''); }}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                selectedFolderId === 'all' && !search
+                  ? 'bg-teal text-white font-bold shadow-xs'
+                  : 'text-ink2 hover:bg-panel-alt'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span>전체 서식</span>
+              </span>
+              <span className="text-[11px] opacity-70">{forms.length}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setSelectedFolderId('favorites'); setSearch(''); }}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                selectedFolderId === 'favorites' && !search
+                  ? 'bg-amber-500 text-white font-bold shadow-xs'
+                  : 'text-ink2 hover:bg-panel-alt'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Star className={`h-4 w-4 ${selectedFolderId === 'favorites' ? 'fill-white' : 'text-amber-500 fill-amber-500/20'}`} />
+                <span>즐겨찾는 서식</span>
+              </span>
+              <span className="text-[11px] opacity-70">
+                {forms.filter((f) => favorites.includes(f.code)).length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setSelectedFolderId('recents'); setSearch(''); }}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                selectedFolderId === 'recents' && !search
+                  ? 'bg-teal text-white font-bold shadow-xs'
+                  : 'text-ink2 hover:bg-panel-alt'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                <span>최근 사용 서식</span>
+              </span>
+              <span className="text-[11px] opacity-70">
+                {forms.filter((f) => recents.includes(f.code)).length}
+              </span>
+            </button>
+
+            <div className="pt-3 pb-1">
+              <div className="border-t border-border/80 my-1" />
+              <div className="text-[11px] font-bold text-ink3 px-2 py-1 uppercase tracking-wider">
+                서식 분류함
+              </div>
+            </div>
+
+            {/* 일반 루트 폴더 */}
+            <button
+              type="button"
+              onClick={() => { setSelectedFolderId('root'); setSearch(''); }}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                selectedFolderId === 'root' && !search
+                  ? 'bg-teal text-white font-bold shadow-xs'
+                  : 'text-ink2 hover:bg-panel-alt'
+              }`}
+            >
+              <span className="flex items-center gap-2 truncate">
+                <Folder className="h-4 w-4 shrink-0" />
+                <span className="truncate">기본 / 공통</span>
+              </span>
+              <span className="text-[11px] opacity-70">
+                {forms.filter((f) => !f.folderId).length}
+              </span>
+            </button>
+
+            {/* 개별 생성된 폴더들 */}
+            {folders.map((f) => {
+              const count = forms.filter((form) => form.folderId === f.id).length;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => { setSelectedFolderId(f.id); setSearch(''); }}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                    selectedFolderId === f.id && !search
+                      ? 'bg-teal text-white font-bold shadow-xs'
+                      : 'text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <Folder className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{f.name}</span>
+                  </span>
+                  <span className="text-[11px] opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 우측: 서식 카드 그리드 */}
+          <div className="p-5 overflow-y-auto bg-panel">
+            {filteredForms.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-ink3">
+                <FileText className="h-10 w-10 stroke-1 opacity-40 mb-2" />
+                <p className="text-sm font-semibold">해당하는 서식이 없습니다.</p>
+                {search && <p className="text-xs mt-1">검색어를 다시 확인해주세요.</p>}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3.5">
+                {filteredForms.map((form) => {
+                  const allowed = isFormAllowed(form);
+                  const isCurrent = currentCode === form.code;
+                  const isFav = favorites.includes(form.code);
+
+                  return (
+                    <div
+                      key={form.id}
+                      onClick={() => allowed && handleSelectForm(form)}
+                      className={`group relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
+                        !allowed
+                          ? 'opacity-40 border-border bg-panel-alt/30 cursor-not-allowed'
+                          : isCurrent
+                          ? 'border-teal bg-teal-soft/20 shadow-sm cursor-pointer'
+                          : 'border-border bg-panel hover:border-teal/60 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
+                      }`}
+                    >
+                      <div>
+                        {/* 카드 상단: 아이콘 + 서식명 + 즐겨찾기 버튼 */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-alt text-lg shadow-2xs group-hover:scale-105 transition-transform">
+                              {form.icon || '📄'}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="font-extrabold text-sm text-ink truncate group-hover:text-teal transition-colors">
+                                  {form.name}
+                                </h3>
+                                {form.system && (
+                                  <span className="rounded bg-ink3/10 px-1.5 py-0.5 text-[9px] font-bold text-ink3 shrink-0">
+                                    기본
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-ink3 font-mono mt-0.5 truncate">
+                                코드: {form.code}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(e, form.code)}
+                            className="p-1 text-ink3 hover:text-amber-500 transition-colors cursor-pointer"
+                            title={isFav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                          >
+                            <Star
+                              className={`h-4 w-4 ${
+                                isFav ? 'fill-amber-400 text-amber-500' : 'opacity-40 group-hover:opacity-100'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* 서식 설명 또는 문서 타이틀 */}
+                        <p className="mt-3 text-xs text-ink2 line-clamp-2 leading-relaxed">
+                          {form.docTitle ? `공식 양식: ${form.docTitle}` : `${form.name} 양식으로 결재를 상신합니다.`}
+                        </p>
+                      </div>
+
+                      {/* 카드 하단 메타 */}
+                      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-ink3">
+                        <span className="flex items-center gap-1">
+                          {allowed ? (
+                            <span className="inline-flex items-center gap-1 text-teal font-semibold">
+                              <span>작성하기</span>
+                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                            </span>
+                          ) : (
+                            <span className="text-rose-500 font-semibold">직급 권한 제한</span>
+                          )}
+                        </span>
+
+                        {isCurrent && (
+                          <span className="flex items-center gap-1 text-teal font-bold text-[11px]">
+                            <Check className="h-3.5 w-3.5" />
+                            <span>현재 작성 중</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 모달 하단 닫기 */}
+        <div className="flex items-center justify-end border-t border-border px-6 py-3 bg-panel-alt/20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border px-4 py-1.5 text-xs font-bold text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

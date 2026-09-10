@@ -93,6 +93,11 @@ export const leaveFormSchema = z.object({
   days: z.number().min(0),
   /** 사유 */
   reason: z.string().optional(),
+  /** 업무 대행자(대결자) ID 및 성명 */
+  substituteId: z.string().optional(),
+  substituteName: z.string().optional(),
+  /** 비상 연락처 */
+  emergencyContact: z.string().optional(),
 });
 
 export type LeaveForm = z.infer<typeof leaveFormSchema>;

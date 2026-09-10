@@ -23,5 +23,5 @@ export default function LeaveScreen() {
     return <Navigate to="/gw/commute?tab=team&adminTab=leave_ledger" replace />;
   }
 
-  return <Navigate to="/gw/commute?tab=leave" replace />;
+  return <Navigate to="/gw/commute" replace />;
 }

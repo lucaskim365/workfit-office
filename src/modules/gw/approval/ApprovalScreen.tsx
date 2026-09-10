@@ -35,10 +35,6 @@ import {
 } from '@/domain/approvalDoc/engine';
 import { type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
-
-
-
-
 import { fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
 import { DocStatusBadge } from './components/ApprovalBadges';
 import { DocTypeIcon } from './components/DocTypeIcon';
@@ -46,6 +42,7 @@ import { useUsers } from '@/features/user/useUsers';
 
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { DraftFormSelectModal } from './components/DraftFormSelectModal';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 
@@ -73,6 +70,7 @@ export default function ApprovalScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const me = user?.id ?? '';
+  const [showFormSelectModal, setShowFormSelectModal] = useState(false);
   const org = useOrgTree();
   const userObj = org.userById(me);
   const { data: users = [] } = useUsers();
@@ -457,8 +455,8 @@ export default function ApprovalScreen() {
         <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
 
           <button
-            onClick={() => navigate('/gw/approval/new')}
-            className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm mb-0.5"
+            onClick={() => setShowFormSelectModal(true)}
+            className="w-full rounded-lg bg-teal py-2 text-[12.5px] font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-1 shadow-sm mb-0.5 cursor-pointer"
           >
             + 새 상신
           </button>
@@ -942,6 +940,17 @@ export default function ApprovalScreen() {
             handleBatchApprove();
           }}
           onClose={() => setShowBatchApproveConfirm(false)}
+        />
+      )}
+
+      {/* 새 상신 양식 선택 모달 */}
+      {showFormSelectModal && (
+        <DraftFormSelectModal
+          open={showFormSelectModal}
+          onClose={() => setShowFormSelectModal(false)}
+          onSelect={(form) => {
+            navigate(`/gw/approval/new?type=${encodeURIComponent(form.code)}`);
+          }}
         />
       )}
     </div>

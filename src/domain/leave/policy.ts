@@ -165,13 +165,31 @@ export const LEAVE_TYPE_OPTIONS = [
   { value: '기타', policyCode: 'UNPAID', label: '기타 휴가', deductDays: 0.0 },
 ] as const;
 
+/** 반반차(0.25일 / 2시간) 세부 시간대 슬롯 */
+export interface QuarterLeaveSlot {
+  key: 'AM1' | 'AM2' | 'PM1' | 'PM2';
+  label: string;
+  startTime: string;
+  endTime: string;
+}
+
+export const QUARTER_LEAVE_SLOTS: readonly QuarterLeaveSlot[] = [
+  { key: 'AM1', label: '오전 1', startTime: '08:30', endTime: '10:30' },
+  { key: 'AM2', label: '오전 2', startTime: '10:30', endTime: '12:30' },
+  { key: 'PM1', label: '오후 1', startTime: '13:30', endTime: '15:30' },
+  { key: 'PM2', label: '오후 2', startTime: '15:30', endTime: '17:30' },
+] as const;
+
 /** 연차 차감 대상 여부 판정 */
 export function isAnnualLeaveDeduction(leaveType: string): boolean {
   return ['연차', '오전반차', '오후반차', '반차', '반반차', 'ANNUAL', 'AM_HALF', 'PM_HALF', 'QUARTER'].includes(leaveType);
 }
 
 /** 휴가 유형별 기본 시간대 반환 */
-export function getDefaultTimeWindow(leaveType: string): { startTime: string; endTime: string } {
+export function getDefaultTimeWindow(
+  leaveType: string,
+  quarterSlotKey?: string,
+): { startTime: string; endTime: string } {
   if (leaveType === '오전반차' || leaveType === 'AM_HALF') {
     return { startTime: '08:30', endTime: '12:30' };
   }
@@ -179,7 +197,12 @@ export function getDefaultTimeWindow(leaveType: string): { startTime: string; en
     return { startTime: '13:30', endTime: '17:30' };
   }
   if (leaveType === '반반차' || leaveType === 'QUARTER') {
+    if (quarterSlotKey) {
+      const slot = QUARTER_LEAVE_SLOTS.find((s) => s.key === quarterSlotKey);
+      if (slot) return { startTime: slot.startTime, endTime: slot.endTime };
+    }
     return { startTime: '15:30', endTime: '17:30' };
   }
   return { startTime: '08:30', endTime: '17:30' };
 }
+

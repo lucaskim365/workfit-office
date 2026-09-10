@@ -12,7 +12,8 @@ export const DEPARTMENT_SEED: Department[] = [
   // 대표이사 직속 · 위원회 · 사업본부(대표이사 산하)
   { id: 'D110', name: '대표이사 직속', parentId: 'D100', headUserId: null, deptType: '본사', order: 1 },
   { id: 'D120', name: '기술경영전략위원회', parentId: 'D100', headUserId: null, deptType: '본사', order: 2 },
-  { id: 'D200', name: 'AX지능화본부', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 3 },
+  { id: 'D130', name: '경영기획팀', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 3 },
+  { id: 'D200', name: 'AX지능화본부', parentId: 'D100', headUserId: 'U003', deptType: '본사', order: 4 },
   // AX지능화본부 산하 팀 — 현재 사업장은 본사 하나뿐(공장·영업소 없음) → 전부 본사
   { id: 'D210', name: '품질심사팀', parentId: 'D200', headUserId: 'U006', deptType: '본사', order: 1 },
   { id: 'D220', name: 'AX 솔루션컨설팅팀', parentId: 'D200', headUserId: 'U008', deptType: '본사', order: 2 },

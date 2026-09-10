@@ -36,16 +36,30 @@ export default function DepartmentScreen() {
   const ordered = useMemo(() => {
     const byParent = new Map<string | null, Department[]>();
     for (const d of rows) {
-      const arr = byParent.get(d.parentId) ?? [];
+      const pKey = d.parentId || null;
+      const arr = byParent.get(pKey) ?? [];
       arr.push(d);
-      byParent.set(d.parentId, arr);
+      byParent.set(pKey, arr);
     }
     for (const arr of byParent.values()) arr.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
     const out: { d: Department; depth: number }[] = [];
+    const visited = new Set<string>();
     const walk = (parent: string | null, depth: number) => {
-      for (const d of byParent.get(parent) ?? []) { out.push({ d, depth }); walk(d.id, depth + 1); }
+      for (const d of byParent.get(parent) ?? []) {
+        if (visited.has(d.id)) continue;
+        visited.add(d.id);
+        out.push({ d, depth });
+        walk(d.id, depth + 1);
+      }
     };
     walk(null, 0);
+
+    // 혹시라도 최상위 탐색에서 누락된 부서(상위 ID 오류 등)가 있다면 depth 0으로 안전하게 노출
+    for (const d of rows) {
+      if (!visited.has(d.id)) {
+        out.push({ d, depth: 0 });
+      }
+    }
     return out;
   }, [rows]);
 
@@ -78,7 +92,12 @@ export default function DepartmentScreen() {
     const oldHeadUserId = oldDept?.headUserId;
 
     const targetId = sel.id || nextId();
-    await upsert.mutateAsync({ ...sel, id: targetId });
+    await upsert.mutateAsync({
+      ...sel,
+      id: targetId,
+      parentId: sel.parentId || null,
+      headUserId: sel.headUserId || null,
+    });
 
     // 부서명 변경에 따른 소속 사용자들의 부서명 일괄 자동 업데이트 (동기화)
     if (oldDept && oldDept.name !== sel.name) {
@@ -166,6 +185,11 @@ export default function DepartmentScreen() {
             <span>부서명</span><span>유형</span><span>부서장</span><span className="text-right">관리</span>
           </div>
           {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
+          {!isLoading && ordered.length === 0 && (
+            <div className="py-12 text-center text-[12px] text-ink3">
+              등록된 부서가 없습니다.
+            </div>
+          )}
           {ordered.map(({ d, depth }) => (
             <div key={d.id} onClick={() => { setSel(d); setMsg(''); }} className={`grid grid-cols-[1fr_70px_90px_70px] items-center border-b border-border px-3.5 py-2.5 text-[12.5px] ${sel?.id === d.id ? 'bg-teal-soft/60' : 'cursor-pointer hover:bg-panel-alt'}`}>
               <span className="truncate font-semibold text-ink" style={{ paddingLeft: depth * 16 }}>{depth > 0 && <span className="text-ink3">└ </span>}{d.name}</span>

@@ -14,6 +14,8 @@ import { useUsers } from '@/features/user/useUsers';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveWorkPlanScope, isLeaderPosition } from '@/features/auth/scopeHelper';
+import { useAllApprovals } from '@/features/gw/useApprovals';
+import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
 import {
   useMyWorkPlans,
@@ -232,9 +234,60 @@ function LocalCalendarScreen() {
     [actor],
   );
   const teamQuery = useTeamCalendarEvents(teamViewer, teamOwners, range, isTeam && actor !== null);
+  // 전자결재 승인 건(휴가·외근·출장) 캘린더 자동 연동
+  const approvalsQuery = useAllApprovals();
+  const scheduleEvents = useMemo<CalendarEvent[]>(() => {
+    const list: CalendarEvent[] = [];
+    const schedules = extractApprovedSchedules(approvalsQuery.data ?? []);
+    for (const s of schedules) {
+      let curr = new Date(s.startDate + 'T00:00:00');
+      const last = new Date(s.endDate + 'T00:00:00');
+      if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
+
+      const eventType: CalendarEventType = s.category === 'LEAVE' ? 'VACATION' : 'OUTSIDE';
+      const typeLabel = s.category === 'LEAVE' ? (s.leaveType || '휴가') : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
+      const prefix = s.category === 'LEAVE' ? '🏖️ [휴가]' : s.category === 'OUTSIDE' ? '🏃 [외근]' : '🚗 [출장]';
+      const title = `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${s.drafterName || ''}`;
+
+      while (curr <= last) {
+        const yyyy = curr.getFullYear();
+        const mm = String(curr.getMonth() + 1).padStart(2, '0');
+        const dd = String(curr.getDate()).padStart(2, '0');
+        const dStr = `${yyyy}-${mm}-${dd}`;
+
+        const isAllDay = !s.startTime || !s.endTime || s.startTime >= s.endTime;
+
+        list.push({
+          id: `CAL-APPR-${s.docId}-${dStr}`,
+          ownerUserId: s.drafterId,
+          title,
+          date: dStr,
+          allDay: isAllDay,
+          startTime: isAllDay ? null : s.startTime!,
+          endTime: isAllDay ? null : s.endTime!,
+          memo: `전자결재 승인 건: ${s.docTitle}\n사유: ${s.body || '—'}`,
+          visibility: 'TEAM',
+          eventType,
+          attendeeUserIds: [],
+          deptId: null,
+          projectId: null,
+          reminded: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
+    return list;
+  }, [approvalsQuery.data]);
+
   const events = eventsQuery.data ?? [];
-  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. */
-  const rawEvents = isTeam ? (teamQuery.data ?? []) : events;
+  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (전자결재 승인 일정 자동 합성) */
+  const rawEvents = useMemo(() => {
+    const base = isTeam ? (teamQuery.data ?? []) : events;
+    return [...base, ...scheduleEvents];
+  }, [isTeam, teamQuery.data, events, scheduleEvents]);
 
   /** 현재 사용자 기준 관련 일정 필터링 적용 */
   const visibleEvents = useMemo(() => {

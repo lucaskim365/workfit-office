@@ -1,4 +1,8 @@
+import { useState } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { SelectorDialog } from './components/DraftRecipientSection';
+import { User, X, Building2 } from 'lucide-react';
 import {
   END_SUFFIX,
   DAYS_SUFFIX,
@@ -25,6 +29,89 @@ export {
 } from './formFields/utils';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal';
+
+/** 조직도 기반 단일 사용자 선택 필드 위젯 */
+function UserFieldEditor({
+  field,
+  value,
+  onChange,
+  org,
+}: {
+  field: FormField;
+  value: string;
+  onChange: (val: string) => void;
+  org?: any;
+}) {
+  const fullOrg = useOrgTree();
+  const effectiveOrg = org && (org as any).roots ? org : fullOrg;
+  const [showModal, setShowModal] = useState(false);
+
+  const selectedUser = effectiveOrg.users?.find((u: any) => u.id === value);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        onClick={() => setShowModal(true)}
+        className={`flex-1 flex items-center justify-between rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[12.5px] cursor-pointer hover:border-teal transition-all ${
+          selectedUser ? 'text-ink font-semibold' : 'text-ink3'
+        }`}
+      >
+        {selectedUser ? (
+          <div className="flex items-center gap-2 truncate">
+            <User size={13} className="text-teal shrink-0" />
+            <span className="truncate">{selectedUser.name}</span>
+            <span className="text-[11px] text-ink3 font-normal truncate">
+              {selectedUser.position || ''} · {selectedUser.dept || ''}
+            </span>
+          </div>
+        ) : (
+          <span className="text-ink3 truncate">
+            {field.placeholder || '업무대행자(대결자) 선택 (조직도 검색)'}
+          </span>
+        )}
+
+        {selectedUser && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange('');
+            }}
+            className="p-0.5 text-ink3 hover:text-rose-500 rounded hover:bg-panel transition-colors ml-1"
+            title="선택 해제"
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowModal(true)}
+        className="flex items-center gap-1 rounded-lg border border-teal/40 bg-teal-soft/60 px-3 py-2 text-[12px] font-bold text-teal hover:bg-teal hover:text-white transition-all shrink-0 cursor-pointer shadow-2xs"
+      >
+        <Building2 size={13} />
+        <span>조직도</span>
+      </button>
+
+      {showModal && (
+        <SelectorDialog
+          title={`${field.label || '사용자'} 선택`}
+          org={effectiveOrg}
+          singleSelect={true}
+          deptOnly={false}
+          onConfirm={(items) => {
+            if (items[0]) {
+              onChange(items[0].id);
+            }
+            setShowModal(false);
+          }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  );
+}
 
 /** 단일 동적 필드 입력 위젯. values/set 로 상태를 주고받는다(기간은 다중 키). */
 export function DynamicField({
@@ -111,10 +198,12 @@ export function DynamicField({
 
     case '사용자':
       return (
-        <select value={sv} onChange={(e) => set({ [field.key]: e.target.value })} className={inp}>
-          <option value="">선택</option>
-          {(org?.users ?? []).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.dept}</option>)}
-        </select>
+        <UserFieldEditor
+          field={field}
+          value={sv}
+          onChange={(val) => set({ [field.key]: val })}
+          org={org}
+        />
       );
 
     case '부서':

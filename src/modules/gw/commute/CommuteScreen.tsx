@@ -2,11 +2,9 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  COMMUTE_STATUS_LABELS,
   summarizeCommuteMonth,
   type CommuteRecord,
 } from '@/domain/commute/schema';
-import { COMMUTE_STATUS_TONES } from '@/data/commute/commute.fixture';
 import {
   useCommuteEmployees,
   useCommuteMonth,
@@ -26,18 +24,17 @@ import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import {
   evaluateCommuteRecord,
-  getKoreanHoliday,
-  isWeekend,
   type ApprovedLeaveInfo,
 } from '@/domain/commute/engine';
 import { useAllApprovals } from '@/features/gw/useApprovals';
+import { extractScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
 import { CommutePolicyModal } from './components/CommutePolicyModal';
 import { EmployeeDetailDrawer } from './components/EmployeeDetailDrawer';
 import { CommuteMatrixView } from './components/CommuteMatrixView';
 import { CommuteDeptView } from './components/CommuteDeptView';
 import { CommuteAnomalyView } from './components/CommuteAnomalyView';
 import { CommuteLeaveView } from './components/CommuteLeaveView';
-import { MyLeaveTab } from './components/MyLeaveTab';
+import { MyCommuteLeaveTab } from './components/MyCommuteLeaveTab';
 import { LeaveLedgerTable } from '../leave/components/LeaveLedgerTable';
 import { LeaveAdjustmentModal } from '../leave/components/LeaveAdjustmentModal';
 import {
@@ -52,9 +49,6 @@ import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from
 import {
   Settings,
   Clock,
-  Calendar as CalendarIcon,
-  List,
-  Info,
   Building2,
   AlertTriangle,
   Users,
@@ -66,7 +60,6 @@ import {
 
 /** 탭 상수 */
 const ME_TAB = 'me';
-const LEAVE_TAB = 'leave';
 const TEAM_TAB = 'team';
 
 /**
@@ -129,11 +122,6 @@ const thisMonth = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
 };
 
-const today = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
-
 function moveMonth(month: string, amount: number): string {
   const [year, mm] = month.split('-').map(Number);
   const next = new Date(year, mm - 1 + amount, 1);
@@ -141,14 +129,6 @@ function moveMonth(month: string, amount: number): string {
 }
 
 const monthTitle = (month: string): string => `${month.slice(0, 4)}년 ${Number(month.slice(5))}월`;
-
-const timeOf = (iso: string | null): string => {
-  if (!iso) return '—';
-  const at = new Date(iso);
-  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
-};
-
-const hourText = (min: number): string => (min === 0 ? '—' : `${Math.floor(min / 60)}h ${min % 60}m`);
 
 function StatCard({
   label,
@@ -182,40 +162,6 @@ function StatCard({
   );
 }
 
-function StatusBadge({ record }: { record: CommuteRecord }) {
-  const { status, leaveName, holidayName } = record;
-
-  if (status === 'unknown') {
-    return <span className="text-[10px] text-ink3/70 font-medium">—</span>;
-  }
-
-  if (status === 'leave') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/12 px-2 py-0.5 text-[10px] font-extrabold text-emerald-600 border border-emerald-500/25 shadow-2xs">
-        <span>🏖️</span>
-        <span>{leaveName || '휴가'}</span>
-      </span>
-    );
-  }
-
-  if (status === 'off' && holidayName && holidayName !== '주말 휴무') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[9.5px] font-bold text-rose-500 border border-rose-500/20">
-        <span>●</span>
-        <span>{holidayName}</span>
-      </span>
-    );
-  }
-
-  return (
-    <span className={`rounded-md px-2 py-0.5 text-[9.5px] font-bold ${COMMUTE_STATUS_TONES[status]}`}>
-      {COMMUTE_STATUS_LABELS[status]}
-    </span>
-  );
-}
-
-const NOTE = '상태 분류는 CAPS 원본 태그 및 전자결재 승인 휴가/법정 공휴일을 종합 판정한 실시간 근태 현황입니다.';
-const HEAD = 'p-2.5';
 const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors';
 const searchInput = 'h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] text-ink outline-none placeholder:text-ink3';
 const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border border-border bg-panel p-0.5 shadow-2xs';
@@ -345,14 +291,18 @@ export default function CommuteScreen() {
     [profileByEmpMap, normName],
   );
 
-  // 상위 탭 상태 (내 근태 vs 내 연차·휴가 vs 전사 관리)
+  // 권한 판별: 전사 관리자(ALL) vs 팀장/부서장(TEAM) vs 일반 사원(MY_ONLY)
+  const isExec = canAll;
+  const isLeader = commuteScope === 'TEAM';
+  const canManage = isExec || isLeader;
+
+  // 상위 탭 상태: URL searchParams를 단일 원천(Single Source of Truth)으로 사용
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get('tab');
-  const initialTab = urlTab === LEAVE_TAB ? LEAVE_TAB : (urlTab === TEAM_TAB && canAll) ? TEAM_TAB : ME_TAB;
-  const [tab, setTab] = useState<string>(initialTab);
+  const activeTab = (urlTab === TEAM_TAB && canManage) ? TEAM_TAB : ME_TAB;
+  const isTeam = activeTab === TEAM_TAB;
 
   const handleTabChange = useCallback((nextTab: string) => {
-    setTab(nextTab);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (nextTab === ME_TAB) {
@@ -364,28 +314,21 @@ export default function CommuteScreen() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const activeTab = (tab === TEAM_TAB && !canAll) ? ME_TAB : tab;
-  const isTeam = activeTab === TEAM_TAB;
-
   // 관제 서브 View 탭 상태
   const urlAdminTab = searchParams.get('adminTab') as CommuteAdminTab | null;
-  const [adminTab, setAdminTab] = useState<CommuteAdminTab>(urlAdminTab || 'all_matrix');
+  const adminTab: CommuteAdminTab = urlAdminTab || 'all_matrix';
 
   const handleAdminTabChange = useCallback((nextAdminTab: CommuteAdminTab) => {
-    setAdminTab(nextAdminTab);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.set('adminTab', nextAdminTab);
+      if (nextAdminTab === 'all_matrix') {
+        next.delete('adminTab');
+      } else {
+        next.set('adminTab', nextAdminTab);
+      }
       return next;
     }, { replace: true });
   }, [setSearchParams]);
-
-  // URL 변경 시 adminTab 동기화
-  useEffect(() => {
-    if (urlAdminTab && urlAdminTab !== adminTab) {
-      setAdminTab(urlAdminTab);
-    }
-  }, [urlAdminTab, adminTab]);
 
   // 연차 원장 산정 모드 & 수동 가감 상태
   const [ledgerMode, setLedgerMode] = useState<'HIRE_DATE' | 'FISCAL_YEAR'>('HIRE_DATE');
@@ -418,9 +361,6 @@ export default function CommuteScreen() {
   // 상세 슬라이드오버 상태
   const [selectedPersonDetail, setSelectedPersonDetail] = useState<CommutePersonRow | null>(null);
 
-  // 내 근태 보기 방식: 'calendar' vs 'table'
-  const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
-
   const myEmpId = useMemo(() => {
     if (viewer?.empId) return viewer.empId;
     const found = employees.find((e) => e.name.trim() === (user?.name ?? '').trim());
@@ -430,22 +370,24 @@ export default function CommuteScreen() {
   // 내 근태 쿼리
   const myMonthQuery = useCommuteMonth(myEmpId, month);
 
-  // 전사 한 달치 전 직원 쿼리
-  const monthAllQuery = useCommuteMonthAll(isTeam ? month : null);
+  // 전사 한 달치 전 직원 쿼리 (캐시를 유지하여 탭 전환 시 깜빡임 방지)
+  const monthAllQuery = useCommuteMonthAll(canManage ? month : null);
 
   // 전자결재 승인 휴가 데이터 연동
   const approvalsQuery = useAllApprovals();
 
-  // 휴가 맵 생성
+  // 휴가·외근·출장 승인 일정 맵 생성 (단일 추출 엔진 extractScheduleInfo 활용)
   const globalLeaveMap = useMemo(() => {
     const map = new Map<string, Map<string, ApprovedLeaveInfo>>();
 
     for (const doc of approvalsQuery.data ?? []) {
-      if (doc.docType !== '휴가' || doc.status !== '완료' || !doc.form) continue;
+      if (doc.status !== '완료') continue;
+      const schedule = extractScheduleInfo(doc);
+      if (!schedule) continue;
 
-      const drafterName = (doc.drafterName || '').trim();
-      const start = doc.form.startDate;
-      const end = doc.form.endDate || doc.form.startDate;
+      const drafterName = (schedule.drafterName || doc.drafterName || '').trim();
+      const start = schedule.startDate;
+      const end = schedule.endDate || start;
       if (!start) continue;
 
       let curr = new Date(start + 'T00:00:00');
@@ -458,10 +400,15 @@ export default function CommuteScreen() {
         const dd = String(curr.getDate()).padStart(2, '0');
         const dateKey = `${yyyy}-${mm}-${dd}`;
 
-        const leaveInfo = {
-          leaveType: doc.form.leaveType || '연차',
-          docTitle: doc.title,
-          docId: doc.id,
+        const leaveInfo: ApprovedLeaveInfo = {
+          leaveType: schedule.category === 'LEAVE'
+            ? (schedule.leaveType || '연차')
+            : schedule.category === 'OUTSIDE'
+            ? (schedule.subType || '외근')
+            : (schedule.subType || '출장'),
+          category: schedule.category,
+          docTitle: schedule.docTitle,
+          docId: schedule.docId,
         };
 
         if (!map.has(drafterName)) map.set(drafterName, new Map());
@@ -566,8 +513,6 @@ export default function CommuteScreen() {
     }
     return records;
   }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate, holidayMap]);
-
-  const mySummary = useMemo(() => summarizeCommuteMonth(myMonthRows), [myMonthRows]);
 
   // 관제 대상 직원 필터링 (권한 범위 기반 및 비대상자 제외)
   const scopedEmployees = useMemo(() => {
@@ -848,8 +793,8 @@ export default function CommuteScreen() {
   // 부서 클릭 시 드릴다운 처리
   const handleDrillDownDept = useCallback((dept: string) => {
     setSelectedDept(dept);
-    setAdminTab('all_matrix');
-  }, []);
+    handleAdminTabChange('all_matrix');
+  }, [handleAdminTabChange]);
 
   const toggleButton = (key: string, label: string, active: boolean, onClick: () => void, icon?: ReactNode) => (
     <button
@@ -867,12 +812,11 @@ export default function CommuteScreen() {
 
   const tabToggle = (
     <div className={toggleShell}>
-      {toggleButton(ME_TAB, '내 근태', activeTab === ME_TAB, () => handleTabChange(ME_TAB))}
-      {toggleButton(LEAVE_TAB, '내 연차·휴가', activeTab === LEAVE_TAB, () => handleTabChange(LEAVE_TAB))}
-      {canAll && (
+      {toggleButton(ME_TAB, '내 근태·휴가', activeTab === ME_TAB, () => handleTabChange(ME_TAB))}
+      {canManage && (
         toggleButton(
           TEAM_TAB,
-          '전사 관리',
+          isExec ? '전사 관리' : '부서 관리',
           isTeam,
           () => handleTabChange(TEAM_TAB),
         )
@@ -880,287 +824,94 @@ export default function CommuteScreen() {
     </div>
   );
 
-  /** 캘린더 그리드 렌더러 (내 근태 전용) */
-  const renderCalendarGrid = (rows: CommuteRecord[]) => {
-    if (rows.length === 0) return null;
-
-    const [y, m] = month.split('-').map(Number);
-    const firstDayOfWeek = new Date(y, m - 1, 1).getDay();
-    const todayStr = today();
-
-    return (
-      <div className="p-3">
-        <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold pb-2 border-b border-border mb-1.5">
-          <div className="text-rose-500">일 (Sun)</div>
-          <div className="text-ink">월 (Mon)</div>
-          <div className="text-ink">화 (Tue)</div>
-          <div className="text-ink">수 (Wed)</div>
-          <div className="text-ink">목 (Thu)</div>
-          <div className="text-ink">금 (Fri)</div>
-          <div className="text-blue-500">토 (Sat)</div>
-        </div>
-
-        <div className="grid grid-cols-7 gap-1.5">
-          {Array.from({ length: firstDayOfWeek }).map((_, index) => (
-            <div key={`empty-${index}`} className="min-h-[92px] rounded-lg border border-transparent p-1.5 bg-panel-alt/20" />
-          ))}
-
-          {rows.map((row) => {
-            const dayNum = Number(row.date.slice(8));
-            const holiday = getKoreanHoliday(row.date, holidayMap);
-            const isSun = new Date(row.date).getDay() === 0;
-            const isSat = new Date(row.date).getDay() === 6;
-            const isToday = row.date === todayStr;
-
-            return (
-              <div
-                key={row.date}
-                className={`flex min-h-[95px] flex-col rounded-xl border p-2 transition-all ${
-                  isToday
-                    ? 'border-teal bg-teal/5 shadow-xs ring-1 ring-teal/30'
-                    : holiday || isSun
-                    ? 'border-rose-500/25 bg-rose-500/5'
-                    : isSat
-                    ? 'border-blue-500/25 bg-blue-500/5'
-                    : 'border-border bg-panel hover:border-border-strong hover:bg-panel-alt/40'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <div className="flex items-center gap-1">
-                    <span
-                      className={`text-[12px] font-extrabold ${
-                        holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : 'text-ink'
-                      }`}
-                    >
-                      {dayNum}
-                    </span>
-                    {isToday && (
-                      <span className="rounded bg-teal px-1 py-0.2 text-[8.5px] font-bold text-white">
-                        오늘
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-auto space-y-1">
-                  {row.status === 'leave' ? (
-                    <div className="rounded-md bg-emerald-500/15 p-1.5 text-center border border-emerald-500/30">
-                      <div className="text-[10px] font-extrabold text-emerald-600 flex items-center justify-center gap-1">
-                        <span>🏖️</span>
-                        <span>{row.leaveName || '연차 휴가'}</span>
-                      </div>
-                      <div className="text-[8.5px] font-medium text-emerald-700/80 mt-0.5">승인 완료</div>
-                    </div>
-                  ) : row.inAt || row.outAt ? (
-                    <>
-                      <div className="rounded bg-panel-alt/80 px-1.5 py-1 text-[9.5px] font-semibold text-ink2 tabular-nums">
-                        <div className="flex justify-between">
-                          <span className="text-ink3 text-[8.5px]">출근</span>
-                          <span className="font-bold text-ink">{timeOf(row.inAt)}</span>
-                        </div>
-                        <div className="flex justify-between mt-0.5">
-                          <span className="text-ink3 text-[8.5px]">퇴근</span>
-                          <span className="font-bold text-ink">{timeOf(row.outAt)}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-start gap-1 pt-0.5">
-                        <StatusBadge record={row} />
-                      </div>
-                    </>
-                  ) : (
-                    <div className="py-1 text-center">
-                      <StatusBadge record={row} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  /** 내 근태 패널 */
-  const myCommutePanel = (
-    <>
-      <div className="flex flex-wrap gap-2">
-        <StatCard label="근무일수" value={`${mySummary.workDays}일`} sub={user?.name} tone="border-teal/25 bg-teal/8" />
-        <StatCard label="휴가 사용" value={`${mySummary.leaveDays}일`} tone="border-emerald-500/25 bg-emerald-500/8" />
-        <StatCard label="지각" value={`${mySummary.lateDays}회`} tone={mySummary.lateDays > 0 ? 'border-amber/25 bg-amber/8' : undefined} />
-        <StatCard label="결근" value={`${mySummary.absentDays}일`} tone={mySummary.absentDays > 0 ? 'border-red-500/20 bg-red-500/6' : undefined} />
-        <StatCard label="총 근무시간" value={hourText(mySummary.totalMin)} />
-      </div>
-
-      <section className="mt-3 rounded-xl border border-border bg-panel shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 bg-panel">
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
-            <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
-            <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
-            <h2 className="ml-1 text-[14px] font-extrabold text-ink">{monthTitle(month)} · {user?.name}</h2>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className={toggleShell}>
-              {toggleButton('calendar', '달력 보기', displayMode === 'calendar', () => setDisplayMode('calendar'), <CalendarIcon size={13} />)}
-              {toggleButton('table', '목록 표', displayMode === 'table', () => setDisplayMode('table'), <List size={13} />)}
-            </div>
-          </div>
-        </div>
-
-        {myMonthQuery.isLoading ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">근태를 불러오는 중…</div>
-        ) : myMonthRows.length === 0 ? (
-          <div className="grid min-h-64 place-items-center text-[11px] text-ink3">이 달의 기록이 없습니다.</div>
-        ) : displayMode === 'calendar' ? (
-          renderCalendarGrid(myMonthRows)
-        ) : (
-          <div className="overflow-x-auto p-2">
-            <table className="w-full border-collapse text-left text-[11px]">
-              <thead>
-                <tr className="border-b border-border text-[10px] font-bold text-ink2">
-                  <th className={HEAD}>날짜</th>
-                  <th className={HEAD}>출근</th>
-                  <th className={HEAD}>퇴근</th>
-                  <th className={HEAD}>근무시간</th>
-                  <th className={HEAD}>지각</th>
-                  <th className={HEAD}>상태 / 휴가</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myMonthRows.map((row) => {
-                  const isSun = isWeekend(row.date) && new Date(row.date).getDay() === 0;
-                  const isSat = isWeekend(row.date) && new Date(row.date).getDay() === 6;
-                  const holiday = getKoreanHoliday(row.date, holidayMap);
-
-                  return (
-                    <tr key={row.date} className="border-b border-border/60 text-ink">
-                      <td className="p-2 font-semibold">
-                        <span className={holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : ''}>
-                          {row.date.slice(5).replace('-', '/')}
-                        </span>
-                        {holiday && <span className="ml-1 text-[9px] text-rose-500 font-bold">({holiday})</span>}
-                      </td>
-                      <td className="p-2 font-medium tabular-nums">{timeOf(row.inAt)}</td>
-                      <td className="p-2 font-medium tabular-nums">{timeOf(row.outAt)}</td>
-                      <td className="p-2 text-ink2">{hourText(row.totalMin)}</td>
-                      <td className="p-2 text-ink2">{row.lateMin > 0 ? `${row.lateMin}분` : '—'}</td>
-                      <td className="p-2">
-                        <StatusBadge record={row} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5 px-3 py-3 text-[10px] text-ink3">
-          <Info size={12} className="text-teal shrink-0" />
-          <span>{NOTE}</span>
-        </div>
-      </section>
-    </>
-  );
-
   /** 전사 근태 관제 대시보드 패널 */
   const adminControlPanel = (
     <div className="space-y-3">
-      {/* 1. 상단 KPI 관제 카드 (인터랙티브 필터 연동) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <StatCard
-          label="전체 인원"
-          value={`${kpiStats.totalMembers}명`}
-          sub={commuteScope === 'ALL' ? '전사 전 임직원' : `${user?.dept || '부서'} 기준`}
-          onClick={() => {
-            setStatusFilter('ALL');
-            setOnlyAnomaly(false);
-          }}
-          active={statusFilter === 'ALL' && !onlyAnomaly}
-        />
-        <StatCard
-          label="정상 출근"
-          value={`${kpiStats.totalPresent}건`}
-          sub="당월 누적 출근"
-          tone="border-teal/25 bg-teal/8"
-          onClick={() => {
-            setStatusFilter('present');
-            setOnlyAnomaly(false);
-          }}
-          active={statusFilter === 'present'}
-        />
-        <StatCard
-          label="지각"
-          value={`${kpiStats.totalLate}건`}
-          tone={kpiStats.totalLate > 0 ? 'border-amber/25 bg-amber/8' : undefined}
-          onClick={() => {
-            setStatusFilter('late');
-            setOnlyAnomaly(false);
-          }}
-          active={statusFilter === 'late'}
-        />
-        <StatCard
-          label="결근"
-          value={`${kpiStats.totalAbsent}건`}
-          tone={kpiStats.totalAbsent > 0 ? 'border-rose-500/20 bg-rose-500/6' : undefined}
-          onClick={() => {
-            setStatusFilter('absent');
-            setOnlyAnomaly(false);
-          }}
-          active={statusFilter === 'absent'}
-        />
-        <StatCard
-          label="휴가"
-          value={`${kpiStats.totalLeave}건`}
-          sub="승인 완료 건수"
-          tone="border-emerald-500/25 bg-emerald-500/8"
-          onClick={() => {
-            if (canAll) {
-              handleAdminTabChange('leave_ledger');
-            } else {
+      {/* 1. 상단 KPI 관제 카드 (출퇴근 관리 탭일 때만 노출, 연차 원장 대장일 때는 분리) */}
+      {adminTab !== 'leave_ledger' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <StatCard
+            label="전체 인원"
+            value={`${kpiStats.totalMembers}명`}
+            sub={commuteScope === 'ALL' ? '전사 전 임직원' : `${user?.dept || '부서'} 기준`}
+            onClick={() => {
+              setStatusFilter('ALL');
+              setOnlyAnomaly(false);
+            }}
+            active={statusFilter === 'ALL' && !onlyAnomaly}
+          />
+          <StatCard
+            label="정상 출근"
+            value={`${kpiStats.totalPresent}건`}
+            sub="당월 누적 출근"
+            tone="border-teal/25 bg-teal/8"
+            onClick={() => {
+              setStatusFilter('present');
+              setOnlyAnomaly(false);
+            }}
+            active={statusFilter === 'present'}
+          />
+          <StatCard
+            label="지각"
+            value={`${kpiStats.totalLate}건`}
+            tone={kpiStats.totalLate > 0 ? 'border-amber/25 bg-amber/8' : undefined}
+            onClick={() => {
+              setStatusFilter('late');
+              setOnlyAnomaly(false);
+            }}
+            active={statusFilter === 'late'}
+          />
+          <StatCard
+            label="결근"
+            value={`${kpiStats.totalAbsent}건`}
+            tone={kpiStats.totalAbsent > 0 ? 'border-rose-500/20 bg-rose-500/6' : undefined}
+            onClick={() => {
+              setStatusFilter('absent');
+              setOnlyAnomaly(false);
+            }}
+            active={statusFilter === 'absent'}
+          />
+          <StatCard
+            label="휴가"
+            value={`${kpiStats.totalLeave}건`}
+            sub="승인 완료 건수"
+            tone="border-emerald-500/25 bg-emerald-500/8"
+            onClick={() => {
               handleAdminTabChange('leave');
-            }
-          }}
-          active={adminTab === 'leave_ledger' || adminTab === 'leave'}
-        />
-        <StatCard
-          label="🚨 관리 필요"
-          value={`${kpiStats.totalAnomaly}건`}
-          sub="지각 · 결근 · 미기록"
-          tone="border-rose-500/40 bg-rose-500/12 ring-1 ring-rose-500/25"
-          onClick={() => {
-            setOnlyAnomaly((prev) => !prev);
-            setStatusFilter('ALL');
-            setAdminTab('anomaly');
-          }}
-          active={onlyAnomaly || adminTab === 'anomaly'}
-        />
-      </div>
+            }}
+            active={adminTab === 'leave'}
+          />
+          <StatCard
+            label="⚠️ 확인 필요"
+            value={`${kpiStats.totalAnomaly}건`}
+            sub="지각 · 결근 · 미기록"
+            tone="border-rose-500/40 bg-rose-500/12 ring-1 ring-rose-500/25"
+            onClick={() => {
+              setOnlyAnomaly((prev) => !prev);
+              setStatusFilter('ALL');
+              handleAdminTabChange('all_matrix');
+            }}
+            active={onlyAnomaly}
+          />
+        </div>
+      )}
 
       {/* 2. 글로벌 필터 바 & 관제 탭 */}
       <section className="rounded-xl border border-border bg-panel p-3 shadow-2xs space-y-3">
         {/* 상단 뷰 탭 & 기간 컨트롤러 */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
           <div className="flex flex-wrap items-center gap-1 bg-panel-alt p-0.5 rounded-lg border border-border shadow-2xs">
-            {toggleButton('all_matrix', '① 전사·부서별 근태', adminTab === 'all_matrix', () => handleAdminTabChange('all_matrix'), <Users size={13} />)}
-            {toggleButton(
-              'anomaly',
-              `② 이상 근태 (${anomalyItems.length})`,
-              adminTab === 'anomaly',
-              () => handleAdminTabChange('anomaly'),
-              <AlertTriangle size={13} className={anomalyItems.length > 0 ? 'text-rose-500' : ''} />,
-            )}
-            {canAll && (
+            {toggleButton('all_matrix', isExec ? '전사 근태 현황' : '부서 근태 현황', adminTab === 'all_matrix', () => handleAdminTabChange('all_matrix'), <Users size={13} />)}
+            {toggleButton('leave', isExec ? '전사 휴가 현황' : '부서 휴가 현황', adminTab === 'leave', () => handleAdminTabChange('leave'), <CalendarCheck2 size={13} />)}
+            {isExec && (
               toggleButton(
                 'leave_ledger',
-                '③ 전사 연차 원장',
+                '전사 연차 원장',
                 adminTab === 'leave_ledger',
                 () => handleAdminTabChange('leave_ledger'),
                 <BookOpen size={13} />,
               )
             )}
-            {toggleButton('leave', '④ 승인 휴가 목록', adminTab === 'leave', () => handleAdminTabChange('leave'), <CalendarCheck2 size={13} />)}
           </div>
 
           {adminTab !== 'leave_ledger' ? (
@@ -1217,7 +968,7 @@ export default function CommuteScreen() {
             </select>
           </div>
 
-          {/* 관리 필요(이상자)만 보기 토글 버튼 */}
+          {/* 확인 필요(이상 근태)만 보기 토글 버튼 */}
           <button
             type="button"
             onClick={() => setOnlyAnomaly((prev) => !prev)}
@@ -1228,7 +979,7 @@ export default function CommuteScreen() {
             }`}
           >
             <AlertTriangle size={12} className={onlyAnomaly ? 'text-white' : 'text-rose-500'} />
-            <span>관리 필요만 보기 ({kpiStats.totalAnomaly}건)</span>
+            <span>확인 필요 ({kpiStats.totalAnomaly}건)</span>
           </button>
 
           {/* 퇴직자 포함 토글 */}
@@ -1420,12 +1171,18 @@ export default function CommuteScreen() {
       />
 
       <div className="mt-4">
-        {activeTab === LEAVE_TAB ? (
-          <MyLeaveTab />
-        ) : activeTab === ME_TAB ? (
-          myCommutePanel
-        ) : (
+        {activeTab === TEAM_TAB ? (
           adminControlPanel
+        ) : (
+          <MyCommuteLeaveTab
+            month={month}
+            setMonth={setMonth}
+            monthRows={myMonthRows}
+            isLoading={myMonthQuery.isLoading}
+            holidayMap={holidayMap}
+            policyStartTime={policy.workStartTime}
+            policyEndTime={policy.workEndTime}
+          />
         )}
       </div>
 
