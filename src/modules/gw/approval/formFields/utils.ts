@@ -93,23 +93,3 @@ export function fieldText(field: FormField, values: Record<string, FieldValue>, 
   }
 }
 
-export function missingRequired(fields: FormField[], values: Record<string, FieldValue>): string[] {
-  return fields
-    .filter((f) => f.required && f.type !== '안내문')
-    .filter((f) => {
-      if (f.visibleIf) {
-        const parts = f.visibleIf.split(':');
-        if (parts.length === 2) {
-          const [condKey, condVal] = parts;
-          if (String(values[condKey] ?? '') !== condVal) {
-            return false;
-          }
-        }
-      }
-      const v = values[f.key];
-      if (f.type === '기간') return !(v && values[f.key + END_SUFFIX]);
-      if (f.type === '체크') return v !== true;
-      return v === '' || v == null;
-    })
-    .map((f) => f.label);
-}

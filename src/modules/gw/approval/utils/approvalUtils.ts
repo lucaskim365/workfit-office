@@ -15,36 +15,11 @@ export function fmtDateTime(isoStr?: string | null): string {
   }
 }
 
-/** 날짜 포맷터 (YYYY.MM.DD) */
-export function fmtDate(isoStr?: string | null): string {
-  if (!isoStr) return '—';
-  try {
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return isoStr;
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}.${mm}.${dd}`;
-  } catch {
-    return isoStr;
-  }
-}
-
 /** 원화 금액 포맷터 */
 export function won(num?: number | null): string {
   if (num == null || isNaN(num)) return '0원';
   return `${num.toLocaleString('ko-KR')}원`;
 }
-
-/** 문서 종류별 이모지 아이콘 매핑 */
-export const DOC_TYPE_ICON: Record<string, string> = {
-  일반: '📄',
-  휴가: '🏖️',
-  지출: '💳',
-  구매: '🛒',
-  품의: '📋',
-  업무보고: '📊',
-};
 
 /** 문서 상태별 뱃지 스타일 매핑 */
 export const STATUS_BADGE: Record<string, { label: string; toneClass: string }> = {
