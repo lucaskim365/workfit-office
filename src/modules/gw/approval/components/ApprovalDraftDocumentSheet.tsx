@@ -89,6 +89,11 @@ export interface ApprovalDraftDocumentSheetProps {
   leaveBalance?: any;
   editDocNo?: string;
   lastSavedAt?: number | null;
+  isDesignMode?: boolean;
+  selectedFieldKey?: string | null;
+  onSelectFieldKey?: (key: string) => void;
+  onUpdateDocTitle?: (v: string) => void;
+  onUpdateClosing?: (v: string) => void;
 }
 
 export function ApprovalDraftDocumentSheet({
@@ -129,6 +134,11 @@ export function ApprovalDraftDocumentSheet({
   leaveBalance,
   editDocNo,
   lastSavedAt,
+  isDesignMode = false,
+  selectedFieldKey,
+  onSelectFieldKey,
+  onUpdateDocTitle,
+  onUpdateClosing,
 }: ApprovalDraftDocumentSheetProps) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -356,8 +366,24 @@ export function ApprovalDraftDocumentSheet({
 
       {/* 2. 대형 문서 타이틀 & 우측 상단 실시간 결재 직인란 */}
       <div className="relative mb-5 flex items-start justify-between gap-4">
-        <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">
+        <h1
+          onClick={() => {
+            if (isDesignMode && onUpdateDocTitle) {
+              const next = prompt('격식 문서명(인쇄 타이틀)을 입력하세요:', docTitle);
+              if (next !== null && next.trim()) onUpdateDocTitle(next.trim());
+            }
+          }}
+          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${
+            isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
+          }`}
+          title={isDesignMode ? '클릭하여 격식 문서명(인쇄) 수정' : undefined}
+        >
           {docTitle}
+          {isDesignMode && (
+            <span className="block text-[10px] tracking-normal font-normal text-teal opacity-70 mt-0.5">
+              (클릭하여 격식 문서명 수정)
+            </span>
+          )}
         </h1>
         {/* 실시간 연동 결재 직인 테이블 */}
         <ApprovalStampTable
@@ -641,16 +667,30 @@ export function ApprovalDraftDocumentSheet({
             if (block.type === 'longtext') {
               const f = block.fields[0];
               const val = String(values[f.key] ?? '');
+              const isSelected = isDesignMode && selectedFieldKey === f.key;
               return (
-                <div key={blockIdx} className="space-y-1">
+                <div
+                  key={blockIdx}
+                  onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                  className={`space-y-1 transition-all rounded p-1.5 ${
+                    isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
+                  }`}
+                >
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
                       {block.section}
                     </div>
                   )}
-                  <div className="text-[11px] font-semibold text-[#444] mb-0.5 flex items-center gap-1">
-                    {f.label}
-                    {f.required && <span className="text-rose-500">*</span>}
+                  <div className="text-[11px] font-semibold text-[#444] mb-0.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      {f.label}
+                      {f.required && <span className="text-rose-500">*</span>}
+                    </span>
+                    {isSelected && (
+                      <span className="rounded bg-teal px-1.5 py-0.2 text-[9px] font-bold text-white">
+                        선택됨 (좌측에서 편집)
+                      </span>
+                    )}
                   </div>
                   <AutoResizeTextarea
                     value={val}
@@ -666,11 +706,25 @@ export function ApprovalDraftDocumentSheet({
             if (block.type === 'table-field') {
               const f = block.fields[0];
               const v = values[f.key];
+              const isSelected = isDesignMode && selectedFieldKey === f.key;
               return (
-                <div key={blockIdx} className="space-y-1">
+                <div
+                  key={blockIdx}
+                  onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                  className={`space-y-1 transition-all rounded p-1.5 ${
+                    isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
+                  }`}
+                >
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
                       {block.section}
+                    </div>
+                  )}
+                  {isSelected && (
+                    <div className="flex justify-end mb-1">
+                      <span className="rounded bg-teal px-1.5 py-0.2 text-[9px] font-bold text-white">
+                        선택됨 (좌측에서 편집)
+                      </span>
                     </div>
                   )}
                   <div className="border border-[#bbb] p-2 bg-white">
@@ -710,17 +764,31 @@ export function ApprovalDraftDocumentSheet({
             for (let i = 0; i < fields.length; i++) {
               const f = fields[i];
               const { width: fw } = effectiveFieldProps(f);
+              const isSelected = isDesignMode && selectedFieldKey === f.key;
 
               if (fw === 'half') {
                 const next = fields[i + 1];
                 const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
                 if (next && nw === 'half') {
+                  const isNextSelected = isDesignMode && selectedFieldKey === next.key;
                   tableRows.push(
                     <tr key={f.key}>
-                      <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                      <th
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
+                          isDesignMode
+                            ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                            : 'bg-[#f2f2f2] text-[#444]'
+                        }`}
+                      >
                         {f.label} {f.required && <span className="text-rose-500">*</span>}
                       </th>
-                      <td className="border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222]">
+                      <td
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
+                          isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                        }`}
+                      >
                         <InlineFieldEditor
                           field={f}
                           values={values}
@@ -729,10 +797,22 @@ export function ApprovalDraftDocumentSheet({
                           onOpenUserPicker={setActiveUserField}
                         />
                       </td>
-                      <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                      <th
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(next.key); }}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
+                          isDesignMode
+                            ? 'cursor-pointer ' + (isNextSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                            : 'bg-[#f2f2f2] text-[#444]'
+                        }`}
+                      >
                         {next.label} {next.required && <span className="text-rose-500">*</span>}
                       </th>
-                      <td className="border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222]">
+                      <td
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(next.key); }}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
+                          isDesignMode && isNextSelected ? 'bg-teal-soft/10' : ''
+                        }`}
+                      >
                         <InlineFieldEditor
                           field={next}
                           values={values}
@@ -747,10 +827,22 @@ export function ApprovalDraftDocumentSheet({
                 } else {
                   tableRows.push(
                     <tr key={f.key}>
-                      <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                      <th
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
+                          isDesignMode
+                            ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                            : 'bg-[#f2f2f2] text-[#444]'
+                        }`}
+                      >
                         {f.label} {f.required && <span className="text-rose-500">*</span>}
                       </th>
-                      <td className="border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222]">
+                      <td
+                        onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
+                          isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                        }`}
+                      >
                         <InlineFieldEditor
                           field={f}
                           values={values}
@@ -767,10 +859,23 @@ export function ApprovalDraftDocumentSheet({
               } else {
                 tableRows.push(
                   <tr key={f.key}>
-                    <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                    <th
+                      onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                      className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
+                        isDesignMode
+                          ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                          : 'bg-[#f2f2f2] text-[#444]'
+                      }`}
+                    >
                       {f.label} {f.required && <span className="text-rose-500">*</span>}
                     </th>
-                    <td colSpan={3} className="border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222]">
+                    <td
+                      colSpan={3}
+                      onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                      className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
+                        isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                      }`}
+                    >
                       <InlineFieldEditor
                         field={f}
                         values={values}
@@ -967,7 +1072,29 @@ export function ApprovalDraftDocumentSheet({
 
       {/* 12. 공문서 하단 격식 맺음말 및 기안자 서명/직인란 (ApprovalDocumentView와 100% 일치) */}
       <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
-        {closing.trim() && <div>{closing}</div>}
+        {closing.trim() && (
+          <div
+            onClick={() => {
+              if (isDesignMode && onUpdateClosing) {
+                const next = prompt('공문서 맺음말을 입력하세요:', closing);
+                if (next !== null && next.trim()) onUpdateClosing(next.trim());
+              }
+            }}
+            className={
+              isDesignMode
+                ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1 inline-block'
+                : ''
+            }
+            title={isDesignMode ? '클릭하여 맺음말 수정' : undefined}
+          >
+            {closing}
+            {isDesignMode && (
+              <span className="block text-[10px] tracking-normal font-normal text-teal opacity-70">
+                (클릭하여 맺음말 수정)
+              </span>
+            )}
+          </div>
+        )}
         <div className="mt-4 font-semibold tracking-wide">{korToday()}</div>
         <div className="mt-1 flex items-center justify-center gap-1">
           기안자{' '}
