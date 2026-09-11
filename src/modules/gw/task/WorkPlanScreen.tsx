@@ -14,26 +14,16 @@ import {
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
+import { syncWorkPlanToCalendar, cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
 import { WorkPlanEditorModal } from './components/WorkPlanEditorModal';
 import { WorkPlanTeamWeeklyMatrix } from './components/WorkPlanTeamWeeklyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
-import type { CalendarEventType } from '@/domain/calendarEvent/schema';
 import { resolveDeptId } from '@/domain/department/engine';
-import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import { useDepartments } from '@/features/department/useDepartments';
-import { useProjects } from '@/features/project/useProjects';
-import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
-
-function mapTagToCalendarEventType(tag?: string): CalendarEventType {
-  if (!tag) return 'GENERAL';
-  if (tag.includes('외근') || tag.includes('출장')) return 'OUTSIDE';
-  if (tag.includes('회의') || tag.includes('미팅')) return 'MEETING';
-  if (tag.includes('휴가') || tag.includes('연차')) return 'VACATION';
-  return 'GENERAL';
-}
+import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 
 const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -100,11 +90,6 @@ export default function WorkPlanScreen() {
   const [viewingDetail, setViewingDetail] = useState<{ user: User; plan: WorkPlan } | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [calendarBridgeTarget, setCalendarBridgeTarget] = useState<{
-    title: string;
-    date: string;
-    eventType?: CalendarEventType;
-  } | null>(null);
 
   const departmentsQuery = useDepartments();
   const deptId = useMemo(
@@ -112,21 +97,17 @@ export default function WorkPlanScreen() {
     [departmentsQuery.data, actor],
   );
 
-  const projectAccess = useMemo<ProjectAccessContext>(
-    () => ({
-      userId: actor?.id ?? '__anonymous__',
-      deptId,
-      active: actor?.status === '사용',
-    }),
+  const calendarActor = useMemo(
+    () => ({ userId: actor?.id ?? '__anonymous__', deptId, active: actor?.status === '사용' }),
     [actor, deptId],
   );
-  const projectsQuery = useProjects(projectAccess);
-  const myProjects = useMemo(() => {
-    const userId = actor?.id ?? '';
-    return (projectsQuery.data ?? []).filter(
-      (project) => project.ownerUserId === userId || project.memberUserIds.includes(userId),
-    );
-  }, [projectsQuery.data, actor]);
+  const userEventsQuery = useCalendarEvents(calendarActor, undefined, Boolean(actor));
+  const userEvents = userEventsQuery.data ?? [];
+
+  const editingDateEvents = useMemo(() => {
+    if (!editingTarget) return [];
+    return userEvents.filter((ev) => ev.date === editingTarget.date);
+  }, [userEvents, editingTarget]);
 
   // ── 부서 및 검색 필터 ──
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -192,30 +173,39 @@ export default function WorkPlanScreen() {
     });
   }, [roster, deptFilter, searchKeyword, actor?.dept, org]);
 
-  const savePlan = useCallback(async (date: string, content: string, existingPlanId?: string) => {
-    if (!actor) return;
-    const actorParam = { userId: actor.id, active: actor.status === '사용' };
-    if (existingPlanId) {
-      await update.mutateAsync({ actor: actorParam, id: existingPlanId, draft: { date, content } });
-    } else {
-      await create.mutateAsync({ actor: actorParam, draft: { date, content } });
-    }
-    setNotice('업무계획을 저장했습니다.');
-  }, [actor, create, update]);
+  const savePlan = useCallback(
+    async (date: string, content: string, existingPlanId?: string, shareToCalendar = true) => {
+      if (!actor) return;
+      const actorParam = { userId: actor.id, active: actor.status === '사용' };
+      const saved = existingPlanId
+        ? await update.mutateAsync({ actor: actorParam, id: existingPlanId, draft: { date, content } })
+        : await create.mutateAsync({ actor: actorParam, draft: { date, content } });
 
-  const removePlan = useCallback(async (planId: string) => {
-    if (!actor) return;
-    await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
-    setNotice('업무계획을 삭제했습니다.');
-  }, [actor, remove]);
+      if (saved) {
+        await syncWorkPlanToCalendar(
+          { userId: actor.id, active: actor.status === '사용', deptId },
+          saved,
+          shareToCalendar,
+        );
+      }
+      setNotice('업무계획을 저장했습니다.');
+    },
+    [actor, create, update, deptId],
+  );
 
-  const handleOpenCalendarModal = useCallback((text: string, date: string, tag?: string) => {
-    setCalendarBridgeTarget({
-      title: text,
-      date,
-      eventType: mapTagToCalendarEventType(tag),
-    });
-  }, []);
+  const removePlan = useCallback(
+    async (planId: string, date?: string) => {
+      if (!actor) return;
+      await cleanupWorkPlanCalendarEvents(
+        { userId: actor.id, active: actor.status === '사용', deptId },
+        planId,
+        date,
+      );
+      await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
+      setNotice('업무계획을 삭제했습니다.');
+    },
+    [actor, remove, deptId],
+  );
 
   const loading = usersQuery.isLoading;
 
@@ -323,13 +313,13 @@ export default function WorkPlanScreen() {
         todayStr={initialDate ?? today}
         members={scopedMembers}
         presences={presences}
+        deptId={deptId}
         onOpenEditor={(date, plan) => setEditingTarget({ date, plan })}
         onOpenDetail={(user, plan) => setViewingDetail({ user, plan })}
-        onOpenCalendarModal={handleOpenCalendarModal}
         onOpenConfig={() => setIsConfigOpen(true)}
       />
 
-      {/* 에디터 모달 */}
+      {/* 스마트 에디터 모달 */}
       {editingTarget && (
         <WorkPlanEditorModal
           isOpen={Boolean(editingTarget)}
@@ -337,14 +327,15 @@ export default function WorkPlanScreen() {
           date={editingTarget.date}
           dateTitle={dayTitle(editingTarget.date)}
           initialContent={editingTarget.plan?.content ?? ''}
-          onSave={async (content) => {
-            await savePlan(editingTarget.date, content, editingTarget.plan?.id);
+          todayEvents={editingDateEvents}
+          onSave={async (content, shareToCal) => {
+            await savePlan(editingTarget.date, content, editingTarget.plan?.id, shareToCal);
             setEditingTarget(null);
           }}
           onDelete={
             editingTarget.plan
               ? async () => {
-                  await removePlan(editingTarget.plan!.id);
+                  await removePlan(editingTarget.plan!.id, editingTarget.date);
                   setEditingTarget(null);
                 }
               : undefined
@@ -374,24 +365,6 @@ export default function WorkPlanScreen() {
           </p>
         </div>
       </Modal>
-
-      {/* 업무계획 ↔ 캘린더 일정 등록 및 참여자 초청 모달 */}
-      {calendarBridgeTarget && (
-        <CalendarEventModal
-          actor={{ userId: actor.id, active: actor.status === '사용' }}
-          initialDate={calendarBridgeTarget.date}
-          initialTitle={calendarBridgeTarget.title}
-          initialEventType={calendarBridgeTarget.eventType}
-          myProjects={myProjects}
-          deptName={actor.dept || null}
-          onClose={() => setCalendarBridgeTarget(null)}
-          onSaved={(saved) => {
-            setCalendarBridgeTarget(null);
-            setNotice(`캘린더에 "${saved.title}" 일정을 등록했습니다.`);
-          }}
-          onRemoved={() => setCalendarBridgeTarget(null)}
-        />
-      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { workPlanRepo, type WorkPlanActor, type WorkPlanFilter } from '@/data/workPlan/workPlan.repo';
-import type { WorkPlanDraft } from '@/domain/workPlan/schema';
+import type { WorkPlan, WorkPlanDraft } from '@/domain/workPlan/schema';
 
 const KEY = 'workPlans';
+const CALENDAR_KEY = 'calendarEvents';
 
 export function useMyWorkPlans(actor: WorkPlanActor, filter?: WorkPlanFilter) {
   return useQuery({
@@ -19,19 +20,34 @@ export function useAllWorkPlans(filter: WorkPlanFilter | undefined, enabled: boo
   });
 }
 
-function useWorkPlanMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
+function useWorkPlanMutation<T, R = unknown>(mutationFn: (input: T) => Promise<R>) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn, onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }) });
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [KEY] });
+      queryClient.invalidateQueries({ queryKey: [CALENDAR_KEY] });
+    },
+  });
 }
 
 export function useCreateWorkPlan() {
-  return useWorkPlanMutation(({ actor, draft }: { actor: WorkPlanActor; draft: WorkPlanDraft }) => workPlanRepo.create(actor, draft));
+  return useWorkPlanMutation<
+    { actor: WorkPlanActor; draft: WorkPlanDraft },
+    WorkPlan
+  >(({ actor, draft }) => workPlanRepo.create(actor, draft));
 }
 
 export function useUpdateWorkPlan() {
-  return useWorkPlanMutation(({ actor, id, draft }: { actor: WorkPlanActor; id: string; draft: WorkPlanDraft }) => workPlanRepo.update(actor, id, draft));
+  return useWorkPlanMutation<
+    { actor: WorkPlanActor; id: string; draft: WorkPlanDraft },
+    WorkPlan
+  >(({ actor, id, draft }) => workPlanRepo.update(actor, id, draft));
 }
 
 export function useRemoveWorkPlan() {
-  return useWorkPlanMutation(({ actor, id }: { actor: WorkPlanActor; id: string }) => workPlanRepo.remove(actor, id));
+  return useWorkPlanMutation<
+    { actor: WorkPlanActor; id: string },
+    WorkPlan
+  >(({ actor, id }) => workPlanRepo.remove(actor, id));
 }

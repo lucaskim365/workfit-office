@@ -1,22 +1,28 @@
 import { useMemo, useState, useCallback } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
-import { useAllWorkPlans, useUpdateWorkPlan, useCreateWorkPlan } from '@/features/workPlan/useWorkPlans';
+import { useAllWorkPlans, useUpdateWorkPlan } from '@/features/workPlan/useWorkPlans';
 import {
   parseWorkPlanItems,
   calculatePlanProgress,
   getWorkPlanTagMeta,
   toggleWorkPlanItem,
-  addWorkPlanItem,
 } from '@/domain/workPlan/engine';
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { USER_PRESENCE_META } from '@/domain/userPresence/schema';
 import type { UserPresence } from '@/domain/userPresence/schema';
+import { useAllApprovals } from '@/features/gw/useApprovals';
+import { extractApprovedSchedules, isDateInSchedule } from '@/domain/approvalDoc/scheduleEngine';
+import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
+import {
+  isWorkPlanDerivedEvent,
+  syncWorkPlanToCalendar,
+  extractTimeFromText,
+} from '@/domain/workPlan/workPlanCalendarBridge';
 import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  CalendarDays,
   Edit3,
   Plus,
   Settings,
@@ -55,9 +61,9 @@ interface WorkPlanTeamWeeklyMatrixProps {
   todayStr: string;
   members: User[];
   presences?: Record<string, UserPresence>;
+  deptId?: string | null;
   onOpenEditor: (date: string, plan?: WorkPlan) => void;
   onOpenDetail: (user: User, plan: WorkPlan) => void;
-  onOpenCalendarModal?: (text: string, date: string, tag?: string) => void;
   onOpenConfig?: () => void;
 }
 
@@ -66,17 +72,13 @@ export function WorkPlanTeamWeeklyMatrix({
   todayStr,
   members,
   presences,
+  deptId,
   onOpenEditor,
   onOpenDetail,
-  onOpenCalendarModal,
   onOpenConfig,
 }: WorkPlanTeamWeeklyMatrixProps) {
   const [anchorDate, setAnchorDate] = useState(todayStr);
-  const { tags, tagMap } = useWorkPlanConfig();
-
-  const [addingDate, setAddingDate] = useState<string | null>(null);
-  const [addingText, setAddingText] = useState('');
-  const [addingTag, setAddingTag] = useState('');
+  const { tagMap } = useWorkPlanConfig();
 
   const weekDays = useMemo(() => getWorkWeekDays(anchorDate), [anchorDate]);
   const startDay = weekDays[0];
@@ -85,7 +87,6 @@ export function WorkPlanTeamWeeklyMatrix({
   // 주간 범위의 전체 사용자 업무계획 조회
   const weeklyPlansQuery = useAllWorkPlans({ from: startDay, to: endDay }, true);
   const updateMutation = useUpdateWorkPlan();
-  const createMutation = useCreateWorkPlan();
 
   // (userId -> (date -> WorkPlan)) 맵 생성
   const plansByUserAndDate = useMemo(() => {
@@ -98,6 +99,102 @@ export function WorkPlanTeamWeeklyMatrix({
     });
     return userMap;
   }, [weeklyPlansQuery.data]);
+
+  // ── 전자결재 및 캘린더 일정 역방향 투영 맵 ──
+  const approvalsQuery = useAllApprovals();
+  const calendarActor = useMemo(
+    () => ({ userId: actor.id, active: actor.status === '사용', deptId }),
+    [actor.id, actor.status, deptId],
+  );
+  const calendarEventsQuery = useCalendarEvents(calendarActor, { from: startDay, to: endDay });
+
+  // (userId -> (date -> ProjectedScheduleItem[]))
+  const projectedSchedulesMap = useMemo(() => {
+    const map = new Map<
+      string,
+      Map<
+        string,
+        Array<{
+          id: string;
+          title: string;
+          type: 'LEAVE' | 'OUTSIDE' | 'TRIP' | 'CALENDAR';
+          label: string;
+          badgeClass: string;
+          timeStr?: string;
+        }>
+      >
+    >();
+
+    // 1) 전자결재 승인 일정 (외근, 출장, 휴가)
+    const approvedSchedules = extractApprovedSchedules(approvalsQuery.data ?? []);
+    for (const s of approvedSchedules) {
+      if (!map.has(s.drafterId)) map.set(s.drafterId, new Map());
+      const userDateMap = map.get(s.drafterId)!;
+
+      for (const dStr of weekDays) {
+        if (isDateInSchedule(dStr, s)) {
+          if (!userDateMap.has(dStr)) userDateMap.set(dStr, []);
+          const label =
+            s.category === 'LEAVE'
+              ? `🏖️ ${s.leaveType || '휴가'}`
+              : s.category === 'OUTSIDE'
+              ? `🏃 ${s.subType || '외근'}${s.destination ? ` (${s.destination})` : ''}`
+              : `🚗 ${s.subType || '출장'}${s.destination ? ` (${s.destination})` : ''}`;
+
+          const badgeClass =
+            s.category === 'LEAVE'
+              ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 dark:text-amber-400'
+              : s.category === 'OUTSIDE'
+              ? 'bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400'
+              : 'bg-indigo-500/15 text-indigo-700 border-indigo-500/30 dark:text-indigo-400';
+
+          userDateMap.get(dStr)!.push({
+            id: `appr-${s.docId}-${dStr}`,
+            title: s.docTitle,
+            type: s.category,
+            label,
+            badgeClass,
+            timeStr: s.startTime && s.endTime ? `${s.startTime}~${s.endTime}` : undefined,
+          });
+        }
+      }
+    }
+
+    // 2) 캘린더 공유 일정 (회의, 외근 등. 단, WP-SYNC 태그로 생성된 업무계획 복제본은 중복 방지를 위해 제외)
+    for (const ev of calendarEventsQuery.data ?? []) {
+      if (isWorkPlanDerivedEvent(ev)) continue;
+
+      const targetUserIds = new Set<string>([ev.ownerUserId, ...(ev.attendeeUserIds || [])]);
+      const timeStr = ev.allDay
+        ? undefined
+        : ev.startTime && ev.endTime
+        ? `${ev.startTime}~${ev.endTime}`
+        : ev.startTime || undefined;
+
+      for (const uId of targetUserIds) {
+        if (!map.has(uId)) map.set(uId, new Map());
+        const userDateMap = map.get(uId)!;
+        if (!userDateMap.has(ev.date)) userDateMap.set(ev.date, []);
+
+        const isMeeting = ev.eventType === 'MEETING';
+        const label = `${isMeeting ? '👥' : '📅'} ${ev.title}`;
+        const badgeClass = isMeeting
+          ? 'bg-purple-500/15 text-purple-700 border-purple-500/30 dark:text-purple-400'
+          : 'bg-teal-500/15 text-teal-700 border-teal-500/30 dark:text-teal-400';
+
+        userDateMap.get(ev.date)!.push({
+          id: `cal-${ev.id}`,
+          title: ev.title,
+          type: 'CALENDAR',
+          label,
+          badgeClass,
+          timeStr,
+        });
+      }
+    }
+
+    return map;
+  }, [approvalsQuery.data, calendarEventsQuery.data, weekDays]);
 
   const handlePrevWeek = () => {
     const d = parseDateUtc(anchorDate);
@@ -118,38 +215,20 @@ export function WorkPlanTeamWeeklyMatrix({
   const handleToggleMyItem = useCallback(
     async (plan: WorkPlan, idx: number) => {
       const nextContent = toggleWorkPlanItem(plan.content, idx);
-      await updateMutation.mutateAsync({
+      const updated = await updateMutation.mutateAsync({
         actor: { userId: actor.id, active: actor.status === '사용' },
         id: plan.id,
         draft: { date: plan.date, content: nextContent },
       });
-    },
-    [actor, updateMutation],
-  );
-
-  const handleQuickAdd = useCallback(
-    async (targetDate: string, existingPlan?: WorkPlan) => {
-      if (!addingText.trim()) return;
-      const currentContent = existingPlan?.content ?? '';
-      const nextContent = addWorkPlanItem(currentContent, addingText.trim(), addingTag || undefined);
-      const actorParam = { userId: actor.id, active: actor.status === '사용' };
-
-      if (existingPlan) {
-        await updateMutation.mutateAsync({
-          actor: actorParam,
-          id: existingPlan.id,
-          draft: { date: targetDate, content: nextContent },
-        });
-      } else {
-        await createMutation.mutateAsync({
-          actor: actorParam,
-          draft: { date: targetDate, content: nextContent },
-        });
+      if (updated) {
+        await syncWorkPlanToCalendar(
+          { userId: actor.id, active: actor.status === '사용', deptId: deptId ?? null },
+          updated,
+          true,
+        );
       }
-      setAddingText('');
-      setAddingDate(null);
     },
-    [actor, addingText, addingTag, updateMutation, createMutation],
+    [actor, updateMutation, deptId],
   );
 
   const [startYear, startMonth, startDayNum] = startDay.split('-').map(Number);
@@ -195,29 +274,18 @@ export function WorkPlanTeamWeeklyMatrix({
           </span>
         </div>
 
-        {/* 사용자 액션 3종 버튼: [+ 업무 추가], [✏️ 편집], [⚙️ 설정] */}
+        {/* 사용자 액션 버튼: [+ 오늘 업무 작성], [⚙️ 설정] */}
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              setAddingDate(todayStr);
-              setAddingText('');
-            }}
-            className="flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-1.5 text-[11.5px] font-bold text-indigo-600 hover:bg-indigo-100/60 transition-colors shadow-2xs dark:border-indigo-800/40 dark:bg-indigo-950/40 dark:text-indigo-300"
-          >
-            <Plus size={13} />
-            <span>업무 추가</span>
-          </button>
           <button
             type="button"
             onClick={() => {
               const myTodayPlan = plansByUserAndDate.get(actor.id)?.get(todayStr);
               onOpenEditor(todayStr, myTodayPlan);
             }}
-            className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 rounded-xl border border-teal/40 bg-teal-soft/20 px-3 py-1.5 text-[11.5px] font-bold text-teal hover:bg-teal-soft/30 transition-colors shadow-2xs cursor-pointer"
           >
-            <Edit3 size={12} className="text-ink3" />
-            <span>편집</span>
+            <Plus size={13} />
+            <span>오늘 업무 작성</span>
           </button>
           {onOpenConfig && (
             <button
@@ -332,6 +400,8 @@ export function WorkPlanTeamWeeklyMatrix({
                       const plan = userPlans?.get(dayStr);
                       const parsed = plan ? parseWorkPlanItems(plan.content) : [];
                       const prog = plan ? calculatePlanProgress(plan.content) : null;
+                      const userProjectedDateMap = projectedSchedulesMap.get(member.id);
+                      const projectedItems = userProjectedDateMap?.get(dayStr) ?? [];
 
                       return (
                         <td
@@ -340,74 +410,33 @@ export function WorkPlanTeamWeeklyMatrix({
                             isToday ? 'bg-teal-soft/10' : ''
                           }`}
                         >
+                          {/* 역방향 투영: 결재 승인 및 캘린더 공유 일정 칩 */}
+                          {projectedItems.length > 0 && (
+                            <div className="space-y-1 mb-2 pb-1.5 border-b border-border/50">
+                              {projectedItems.map((pItem) => (
+                                <div
+                                  key={pItem.id}
+                                  className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-bold border shadow-2xs ${pItem.badgeClass}`}
+                                  title={`${pItem.label} (${pItem.timeStr || '종일'})`}
+                                >
+                                  <span className="truncate">{pItem.label}</span>
+                                  {pItem.timeStr && (
+                                    <span className="text-[8.5px] opacity-80 shrink-0 font-normal">{pItem.timeStr}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {parsed.length === 0 ? (
                             isSelf ? (
-                              addingDate === dayStr ? (
-                                <div className="rounded-lg border border-teal/40 bg-teal-soft/20 p-2 shadow-xs space-y-2">
-                                  <div className="text-[10px] font-bold text-teal flex items-center justify-between">
-                                    <span>새 업무 등록 ({dayStr.slice(5)})</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => { setAddingDate(null); setAddingText(''); }}
-                                      className="text-ink3 hover:text-ink"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <select
-                                      value={addingTag}
-                                      onChange={(e) => setAddingTag(e.target.value)}
-                                      className="h-6 rounded border border-border bg-panel text-[10px] font-bold text-ink px-1 outline-none"
-                                    >
-                                      <option value="">태그 없음</option>
-                                      {tags.map((t) => (
-                                        <option key={t.tag} value={t.tag}>{t.tag}</option>
-                                      ))}
-                                    </select>
-                                    <input
-                                      type="text"
-                                      value={addingText}
-                                      onChange={(e) => setAddingText(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') void handleQuickAdd(dayStr, plan);
-                                        if (e.key === 'Escape') { setAddingDate(null); setAddingText(''); }
-                                      }}
-                                      placeholder="업무 입력 (Enter)"
-                                      className="h-6 flex-1 min-w-0 rounded border border-border bg-panel px-1.5 text-[11px] text-ink outline-none focus:border-teal"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                                    <button
-                                      type="button"
-                                      onClick={() => { setAddingDate(null); setAddingText(''); }}
-                                      className="rounded px-2 py-0.5 text-ink3 hover:bg-panel font-medium"
-                                    >
-                                      취소
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={!addingText.trim()}
-                                      onClick={() => void handleQuickAdd(dayStr, plan)}
-                                      className="rounded bg-teal px-2.5 py-0.5 font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-                                    >
-                                      추가
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAddingDate(dayStr);
-                                    setAddingText('');
-                                  }}
-                                  className="flex h-full min-h-[64px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-border/70 p-2 text-center text-ink3 hover:border-teal hover:bg-teal-soft/20 hover:text-teal transition-all"
-                                >
-                                  <span className="text-[10.5px] font-semibold">+ 업무 추가</span>
-                                </button>
-                              )
+                              <button
+                                type="button"
+                                onClick={() => onOpenEditor(dayStr, plan)}
+                                className="flex h-full min-h-[64px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-border/70 p-2 text-center text-ink3 hover:border-teal hover:bg-teal-soft/20 hover:text-teal transition-all group cursor-pointer"
+                              >
+                                <Plus size={14} className="mb-0.5 text-ink3/70 group-hover:text-teal transition-colors" />
+                                <span className="text-[10.5px] font-semibold">+ 계획 작성</span>
+                              </button>
                             ) : (
                               <div className="grid min-h-[64px] place-items-center text-[10.5px] text-ink3/40">
                                 -
@@ -451,109 +480,55 @@ export function WorkPlanTeamWeeklyMatrix({
                                             {tagMeta.tag}
                                           </span>
                                         )}
-                                        <span
-                                          className={`text-[10.5px] break-words ${
-                                            item.completed ? 'line-through text-ink3' : 'text-ink'
-                                          }`}
-                                        >
-                                          {item.text}
-                                        </span>
+                                        {/* 시간 표기 추출 */}
+                                        {(() => {
+                                          const { startTime, endTime, cleanText } = extractTimeFromText(item.text);
+                                          if (!startTime) {
+                                            return (
+                                              <span
+                                                className={`text-[10.5px] break-words ${
+                                                  item.completed ? 'line-through text-ink3' : 'text-ink'
+                                                }`}
+                                              >
+                                                {item.text}
+                                              </span>
+                                            );
+                                          }
+                                          return (
+                                            <span
+                                              className={`text-[10.5px] break-words flex items-center gap-1 flex-wrap ${
+                                                item.completed ? 'line-through text-ink3' : 'text-ink'
+                                              }`}
+                                            >
+                                              <span className="rounded bg-blue-500/10 px-1 py-0.2 text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                                                {startTime}{endTime ? `~${endTime}` : ''}
+                                              </span>
+                                              <span>{cleanText || item.text}</span>
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
-
-                                      {/* 본인 행인 경우 캘린더 등록 호버 버튼 */}
-                                      {isSelf && onOpenCalendarModal && (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            onOpenCalendarModal(item.text, dayStr, item.tag);
-                                          }}
-                                          className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-ink3 hover:text-teal transition-all shrink-0"
-                                          title="캘린더 일정으로 등록"
-                                        >
-                                          <CalendarDays size={10} />
-                                        </button>
-                                      )}
                                     </div>
                                   );
                                 })}
                               </div>
 
-                              {/* 기존 업무 목록 아래: 업무 추가 박스 또는 추가 버튼 */}
+                              {/* 기존 업무 목록 아래: 본인인 경우 바로 모달을 여는 추가 버튼 */}
                               {isSelf && (
-                                addingDate === dayStr ? (
-                                  <div className="rounded-lg border border-teal/40 bg-teal-soft/20 p-2 shadow-xs space-y-2 mt-1">
-                                    <div className="text-[10px] font-bold text-teal flex items-center justify-between">
-                                      <span>새 업무 추가 ({dayStr.slice(5)})</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => { setAddingDate(null); setAddingText(''); }}
-                                        className="text-ink3 hover:text-ink"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <select
-                                        value={addingTag}
-                                        onChange={(e) => setAddingTag(e.target.value)}
-                                        className="h-6 rounded border border-border bg-panel text-[10px] font-bold text-ink px-1 outline-none"
-                                      >
-                                        <option value="">태그 없음</option>
-                                        {tags.map((t) => (
-                                          <option key={t.tag} value={t.tag}>{t.tag}</option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        type="text"
-                                        value={addingText}
-                                        onChange={(e) => setAddingText(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') void handleQuickAdd(dayStr, plan);
-                                          if (e.key === 'Escape') { setAddingDate(null); setAddingText(''); }
-                                        }}
-                                        placeholder="업무 입력 (Enter)"
-                                        className="h-6 flex-1 min-w-0 rounded border border-border bg-panel px-1.5 text-[11px] text-ink outline-none focus:border-teal"
-                                        autoFocus
-                                      />
-                                    </div>
-                                    <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                                      <button
-                                        type="button"
-                                        onClick={() => { setAddingDate(null); setAddingText(''); }}
-                                        className="rounded px-2 py-0.5 text-ink3 hover:bg-panel font-medium"
-                                      >
-                                        취소
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={!addingText.trim()}
-                                        onClick={() => void handleQuickAdd(dayStr, plan)}
-                                        className="rounded bg-teal px-2.5 py-0.5 font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-                                      >
-                                        추가
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setAddingDate(dayStr);
-                                      setAddingText('');
-                                    }}
-                                    className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/60 py-0.5 text-[9.5px] font-semibold text-ink3 hover:border-teal/50 hover:bg-teal-soft/20 hover:text-teal transition-colors mt-1"
-                                  >
-                                    <Plus size={10} />
-                                    <span>추가</span>
-                                  </button>
-                                )
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenEditor(dayStr, plan)}
+                                  className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/60 py-1 text-[10px] font-semibold text-ink3 hover:border-teal/50 hover:bg-teal-soft/20 hover:text-teal transition-colors mt-1 cursor-pointer"
+                                >
+                                  <Plus size={11} />
+                                  <span>추가 및 편집</span>
+                                </button>
                               )}
 
                               {/* 하단 진행률 및 액션 버튼 */}
                               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[9.5px]">
                                 {prog && (
-                                  <span className="text-ink3">
+                                  <span className="text-ink3 font-medium">
                                     {prog.completed}/{prog.total} ({prog.percent}%)
                                   </span>
                                 )}
@@ -562,17 +537,18 @@ export function WorkPlanTeamWeeklyMatrix({
                                   <button
                                     type="button"
                                     onClick={() => onOpenEditor(dayStr, plan)}
-                                    className="ml-auto rounded p-0.5 text-ink3 hover:text-teal transition-colors"
-                                    title="계획 전체 편집"
+                                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-ink3 hover:text-teal hover:bg-teal-soft/20 font-semibold transition-colors cursor-pointer"
+                                    title="계획 편집 (모달 열기)"
                                   >
                                     <Edit3 size={11} />
+                                    <span>편집</span>
                                   </button>
                                 ) : (
                                   plan && (
                                     <button
                                       type="button"
                                       onClick={() => onOpenDetail(member, plan)}
-                                      className="ml-auto rounded px-1 text-ink3 hover:text-ink font-semibold transition-colors"
+                                      className="ml-auto rounded px-1 text-ink3 hover:text-ink font-semibold transition-colors cursor-pointer"
                                     >
                                       상세
                                     </button>
