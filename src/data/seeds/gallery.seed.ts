@@ -1,32 +1,9 @@
-export interface GalleryFolder {
-  id: string;
-  name: string;
-  icon?: string;
-  isSystem?: boolean;
-}
+import type { GalleryFolder, GalleryPhoto } from '@/domain/gallery/schema';
 
-export interface GalleryPost {
-  id: string;
-  title: string;
-  description: string;
-  images: string[]; // 다중 이미지 DataURL / URL 목록
-  folderId?: string; // 소속 폴더 ID (기본: 'f_event' 등)
-  authorId?: string;
-  authorName: string;
-  authorDept: string;
-  createdAt: string; // YYYY-MM-DD
-  updatedAt?: string; // YYYY-MM-DD
-  isEdited?: boolean;
-  likes?: number;
-}
+/**
+ * 갤러리 초기 시드 데이터 (초기 상태: 빈 배열)
+ * - 임의의 샘플 데이터를 임의 생성하지 않고, 사용자가 직접 폴더를 생성하고 사진을 등록하도록 빈 상태 유지
+ */
+export const GALLERY_FOLDERS_SEED: GalleryFolder[] = [];
 
-export const DEFAULT_GALLERY_FOLDERS: GalleryFolder[] = [
-  { id: 'f_event', name: '사내 행사', icon: '🎉', isSystem: true },
-  { id: 'f_workshop', name: '워크숍 & 세미나', icon: '🏕️', isSystem: true },
-  { id: 'f_club', name: '동호회 & 소모임', icon: '⚽', isSystem: true },
-  { id: 'f_project', name: '프로젝트 활동', icon: '🚀', isSystem: true },
-  { id: 'f_etc', name: '기타 미디어', icon: '📁', isSystem: true },
-];
-
-export const INITIAL_GALLERY_POSTS: GalleryPost[] = [];
-
+export const GALLERY_PHOTOS_SEED: GalleryPhoto[] = [];

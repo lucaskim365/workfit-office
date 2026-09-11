@@ -7,6 +7,8 @@ import { useDepartments } from '@/features/department/useDepartments';
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import type { EmploymentStatus } from '@/domain/employee/schema';
+import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
+import { Button } from '@/shared/ui/Button';
 
 interface OrgNode {
   id: string;
@@ -437,59 +439,57 @@ export default function EmployeeScreen() {
   };
 
   return (
-    <div className="relative flex h-full w-full gap-5 overflow-hidden bg-panel p-6 text-[12.5px] text-ink">
-      {/* ── 좌측 탭 전환 사이드바 ── */}
-      <aside className="flex w-[200px] shrink-0 flex-col gap-5 rounded-xl border border-border bg-panel p-4 shadow-sm">
-        <div className="space-y-5">
-          <div>
-            <h2 className="flex items-center gap-1.5 text-sm font-extrabold text-navy">
-              <span>👤</span>
-              <span>인명관리</span>
-            </h2>
-          </div>
-
-          <nav className="flex flex-col gap-1">
-            <button
+    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 text-[12px] text-ink">
+      {/* ── 상단 헤더 영역 ── */}
+      <GwHead
+        icon="👥"
+        name="인명관리"
+        desc="임직원의 직급, 직책, 재직 현황 및 조직도 정보를 조회하고 관리합니다."
+        right={
+          isAdmin && activeTab === 'list' ? (
+            <Button
               onClick={() => {
-                setActiveTab('list');
-                setSelectedUserId(null);
+                setNewEmpDept(departments[0]?.name || '인사지원팀');
+                setNewEmpPos(positions[0]?.name || '사원');
+                setNewEmpDuty('팀원');
+                setIsCreateModalOpen(true);
               }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${
-                activeTab === 'list'
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
+              variant="primary"
             >
-              <span>👥</span>
-              <span>임직원 관리</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('org');
-                setSelectedUserId(null);
-              }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-bold transition-all ${
-                activeTab === 'org'
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-              }`}
-            >
-              <span>🏢</span>
-              <span>회사 조직도</span>
-            </button>
-          </nav>
-        </div>
-      </aside>
+              <Plus size={14} />
+              <span>신규 임직원 등록</span>
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* ── 메인 콘텐츠 영역 ── */}
-      <main className="flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-border bg-panel p-5 shadow-sm">
+      {/* ── 사이드바 + 메인 분할 레이아웃 ── */}
+      <GwSplit
+        nav={
+          <GwSideNav
+            title="인명관리"
+            desc="임직원 및 조직도를 탐색합니다."
+            items={[
+              { id: 'list', icon: '👥', label: '임직원 관리' },
+              { id: 'org', icon: '🏢', label: '회사 조직도' },
+            ]}
+            activeId={activeTab}
+            onSelect={(id) => {
+              setActiveTab(id as 'list' | 'org');
+              setSelectedUserId(null);
+            }}
+          />
+        }
+      >
+        {/* ── 메인 콘텐츠 영역 ── */}
+        <main className="flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-border bg-panel p-6 shadow-sm min-w-0">
         {/* ==================== A. 임직원 관리 탭 ==================== */}
         {activeTab === 'list' && (
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            {/* 상단 타이틀 및 액션바 */}
+            {/* 상단 타이틀 및 검색바 */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
               <div>
-                <h1 className="text-base font-extrabold text-ink">임직원 목록</h1>
+                <h1 className="text-[13.5px] font-extrabold text-ink">임직원 목록</h1>
                 <p className="mt-0.5 text-[11px] text-ink3">사내 직원의 직급, 직책, 재직 현황 기준정보를 파악하고 검색합니다.</p>
               </div>
 
@@ -500,30 +500,15 @@ export default function EmployeeScreen() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="이름, 사번, 이메일 검색"
-                    className="h-8.5 w-60 rounded-lg border border-border bg-panel pl-3 pr-8 text-[11.5px] outline-none focus:border-teal"
+                    className="h-8 w-56 rounded-lg border border-border bg-panel pl-3 pr-8 text-[11px] outline-none focus:border-teal placeholder:text-ink3"
                   />
-                  <Search size={14} className="absolute right-2.5 top-2.5 text-ink3 pointer-events-none" />
+                  <Search size={13} className="absolute right-2.5 top-2.5 text-ink3 pointer-events-none" />
                 </div>
-
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      setNewEmpDept(departments[0]?.name || '인사지원팀');
-                      setNewEmpPos(positions[0]?.name || '사원');
-                      setNewEmpDuty('팀원');
-                      setIsCreateModalOpen(true);
-                    }}
-                    className="flex h-8.5 items-center gap-1.5 rounded-lg bg-teal px-3 text-[11.5px] font-bold text-white shadow-xs hover:opacity-90"
-                  >
-                    <Plus size={14} />
-                    <span>임직원 등록</span>
-                  </button>
-                )}
               </div>
             </div>
 
             {/* 필터 툴바 */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-panel-alt/20 p-2.5">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-panel-alt/30 p-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 {[
                   { key: 'all', label: '전체', count: statusCounts.total },
@@ -555,11 +540,11 @@ export default function EmployeeScreen() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-ink2">소속 부서:</span>
+                  <span className="text-[11px] font-semibold text-ink3">소속 부서:</span>
                   <select
                     value={deptFilter}
                     onChange={(e) => setDeptFilter(e.target.value)}
-                    className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
+                    className="h-7.5 rounded-lg border border-border bg-panel px-2 text-[11px] outline-none text-ink"
                   >
                     <option value="all">전체</option>
                     {allDepts.map((d) => (
@@ -571,11 +556,11 @@ export default function EmployeeScreen() {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-ink2">직급:</span>
+                  <span className="text-[11px] font-semibold text-ink3">직급:</span>
                   <select
                     value={posFilter}
                     onChange={(e) => setPosFilter(e.target.value)}
-                    className="h-7.5 rounded border border-border bg-panel px-2 text-[11.5px] outline-none"
+                    className="h-7.5 rounded-lg border border-border bg-panel px-2 text-[11px] outline-none text-ink"
                   >
                     <option value="all">전체</option>
                     {allPositions.map((p) => (
@@ -590,18 +575,18 @@ export default function EmployeeScreen() {
 
             {/* 임직원 목록 테이블 */}
             <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
-              <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/50 text-[11.5px] font-bold text-ink2">
+              <table className="w-full text-left border-collapse text-[11.5px]">
+                <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2">
                   <tr>
-                    <th className="p-3 text-center w-12">사진</th>
-                    <th className="p-3 w-28">사번</th>
-                    <th className="p-3 w-28">이름</th>
-                    <th className="p-3">부서</th>
-                    <th className="p-3 w-24">직급</th>
-                    <th className="p-3 w-24">직책</th>
-                    <th className="p-3">이메일</th>
-                    <th className="p-3 w-32">연락처</th>
-                    <th className="p-3 text-center w-20">재직상태</th>
+                    <th className="py-2.5 px-3 text-center w-12">사진</th>
+                    <th className="py-2.5 px-3 w-28">사번</th>
+                    <th className="py-2.5 px-3 w-28">이름</th>
+                    <th className="py-2.5 px-3">부서</th>
+                    <th className="py-2.5 px-3 w-24">직급</th>
+                    <th className="py-2.5 px-3 w-24">직책</th>
+                    <th className="py-2.5 px-3">이메일</th>
+                    <th className="py-2.5 px-3 w-36">연락처</th>
+                    <th className="py-2.5 px-3 text-center w-20">재직상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -616,27 +601,27 @@ export default function EmployeeScreen() {
                             isSelected ? 'bg-teal-soft/10 font-semibold' : ''
                           }`}
                         >
-                          <td className="p-3 text-center">
-                            <span className="mx-auto grid h-7 w-7 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
+                          <td className="py-2 px-3 text-center">
+                            <span className="mx-auto grid h-6.5 w-6.5 place-items-center rounded-full bg-teal-soft text-[10.5px] font-bold text-teal">
                               {e.name[0]}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-ink2">{e.employeeNo}</td>
-                          <td className="p-3 font-semibold text-ink">{e.name}</td>
-                          <td className="p-3 text-ink2">
+                          <td className="py-2 px-3 font-mono text-[11px] text-ink2">{e.employeeNo}</td>
+                          <td className="py-2 px-3 font-bold text-[11.5px] text-ink">{e.name}</td>
+                          <td className="py-2 px-3 text-[11.5px] text-ink2">
                             {e.isPending ? (
-                              <span className="text-amber-600 font-medium">발령대기 (미지정)</span>
+                              <span className="text-amber-600 font-medium text-[11px]">발령대기 (미지정)</span>
                             ) : (
                               e.dept
                             )}
                           </td>
-                          <td className="p-3 text-ink2">{e.position}</td>
-                          <td className="p-3 text-ink3">{e.duty}</td>
-                          <td className="p-3 truncate font-mono text-ink2">{e.email || '-'}</td>
-                          <td className="p-3 font-mono text-ink3">{e.phone || '-'}</td>
-                          <td className="p-3 text-center">
+                          <td className="py-2 px-3 text-[11.5px] text-ink2">{e.position}</td>
+                          <td className="py-2 px-3 text-[11.5px] text-ink3">{e.duty}</td>
+                          <td className="py-2 px-3 truncate font-mono text-[11px] text-ink2">{e.email || '-'}</td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
+                          <td className="py-2 px-3 text-center">
                             <span
-                              className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${
+                              className={`inline-block rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
                                 e.employmentStatus === 'RETIRED'
                                   ? 'border-border bg-panel-alt text-ink3'
                                   : e.isPending
@@ -660,7 +645,7 @@ export default function EmployeeScreen() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center text-ink3">
+                      <td colSpan={9} className="p-12 text-center text-ink3 text-[11.5px]">
                         {isUsersLoading ? '임직원 목록을 불러오는 중...' : '검색 조건에 일치하는 임직원이 없습니다.'}
                       </td>
                     </tr>
@@ -675,7 +660,7 @@ export default function EmployeeScreen() {
         {activeTab === 'org' && (
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             <div>
-              <h1 className="text-base font-extrabold text-ink">조직도 트리</h1>
+              <h1 className="text-[13.5px] font-extrabold text-ink">조직도 트리</h1>
               <p className="mt-0.5 text-[11px] text-ink3">회사 계층별 부서 트리와 소속 재직 직원 명단을 실시간으로 탐색합니다.</p>
             </div>
 
@@ -780,6 +765,7 @@ export default function EmployeeScreen() {
           </div>
         )}
       </main>
+      </GwSplit>
 
       {/* ==================== C. 임직원 상세 모달 패널 ==================== */}
       {selectedUserId && selectedEmp && (

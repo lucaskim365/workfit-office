@@ -1,125 +1,125 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
-import { Button } from '@/shared/ui/Button';
+import React, { useState, useMemo } from 'react';
 import {
   Camera,
-  FolderArchive,
-  Calendar,
+  FolderPlus,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
-  Plus,
-  Folder,
   LayoutGrid,
-  ChevronLeft,
-  Info,
-  FolderPlus,
-  Pencil,
+  List,
+  Search,
+  Loader2,
+  FolderOpen,
 } from 'lucide-react';
 
-import type { GalleryAlbum, GalleryItem, UploadImageItem } from './types';
-import { useGallery } from './hooks/useGallery';
-import { useGallerySelection } from './hooks/useGallerySelection';
-import { GallerySidebar } from './components/GallerySidebar';
-import { AlbumCardGrid } from './components/AlbumCardGrid';
+import { useGalleryDirectory } from '@/features/gw/gallery/useGalleryDirectory';
+import type { GalleryFolder } from '@/domain/gallery/schema';
+import { toGalleryItem, type GalleryItem, type GalleryAlbum } from './types';
+import { GalleryFolderTree } from './components/GalleryFolderTree';
+import { GalleryBreadcrumb } from './components/GalleryBreadcrumb';
+import { SubFolderGrid } from './components/SubFolderGrid';
+import { FolderManageModal } from './components/FolderManageModal';
+import { FolderSelectModal } from './components/FolderSelectModal';
+import { PhotoUploadModal } from './components/PhotoUploadModal';
 import { PhotoGrid } from './components/PhotoGrid';
 import { LightboxViewer } from './components/LightboxViewer';
-import { PhotoUploadModal } from './components/PhotoUploadModal';
-import { AlbumManageModal } from './components/AlbumManageModal';
-import { BatchMoveModal } from './components/BatchMoveModal';
-import { BatchCopyModal } from './components/BatchCopyModal';
-import { ContextMenu } from './components/ContextMenu';
 import { SelectionFloatingBar } from './components/SelectionFloatingBar';
-
-export type { GalleryAlbum, GalleryItem, UploadImageItem } from './types';
+import { ContextMenu } from './components/ContextMenu';
+import { useGallerySelection } from './hooks/useGallerySelection';
+import { GwHead, GwSplit } from '@/modules/gw/_gw';
+import { Button } from '@/shared/ui/Button';
 
 export default function GalleryScreen() {
-  const { user } = useAuth();
-  const { isSuperAdmin, canAction } = usePermission();
-  const canCreate = canAction('S_GW_GALLERY', 'create');
-  const canUpdate = canAction('S_GW_GALLERY', 'update');
-  const canDelete = canAction('S_GW_GALLERY', 'delete');
-
-  // ── 갤러리 메인 데이터 & 필터링 훅 ──
+  // ── 디렉토리 훅 (중앙 DB / S3 연동) ──
   const {
-    albums,
-    items,
-    activeTab,
-    setActiveTab,
-    selectedAlbumId,
-    setSelectedAlbumId,
-    selectedYearMonth,
-    setSelectedYearMonth,
-    sortOrder,
-    setSortOrder,
+    folders,
+    photos,
+    isFoldersLoading,
+    isPhotosLoading,
+    currentFolderId,
+    setCurrentFolderId,
+    currentFolder,
+    folderTree,
+    breadcrumbs,
+    subFolders,
+    currentPhotos,
+    photoCountMap,
     keyword,
     setKeyword,
-    currentAlbum,
-    albumCounts,
-    albumCoverMap,
-    albumLatestDateMap,
-    timelineNav,
-    filteredItems,
-    groupedByDate,
-    createAlbum,
-    updateAlbum,
-    deleteAlbum,
-    setCoverImage,
-    addPhotos,
-    updatePhoto,
+    sortOrder,
+    setSortOrder,
+    viewMode,
+    setViewMode,
+    goUp,
+    createFolder,
+    updateFolder,
+    deleteFolder,
+    uploadPhotos,
     deletePhoto,
-    batchMovePhotos,
-    batchCopyPhotos,
-    batchDeletePhotos,
-  } = useGallery();
+    batchMove,
+    batchCopy,
+    batchDelete,
+  } = useGalleryDirectory();
+
+  // 호환용 사진 아이템 변환
+  const galleryItems = useMemo(() => {
+    return currentPhotos.map(toGalleryItem);
+  }, [currentPhotos]);
+
+  // 호환용 앨범 목록 변환
+  const galleryAlbums = useMemo((): GalleryAlbum[] => {
+    return folders.map((f) => ({
+      id: f.id,
+      name: f.name,
+      description: f.description,
+      isSystem: f.isSystem,
+      createdAt: f.createdAt,
+    }));
+  }, [folders]);
 
   // ── 다중 선택 훅 ──
   const {
     isSelectionMode,
     setIsSelectionMode,
     selectedItemIds,
-    setSelectedItemIds,
     toggleSelectItem,
     handleSelectAll,
     handleCancelSelection,
-  } = useGallerySelection(filteredItems);
+  } = useGallerySelection(galleryItems);
 
-  // ── 라이트박스 상태 ──
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  // ── 라이트박스 뷰어 상태 ──
+  const [activeItem, setActiveItem] = useState<GalleryItem | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
 
-  // ── 업로드 / 수정 모달 상태 ──
+  const activeItemIndex = useMemo(() => {
+    if (!activeItem) return -1;
+    return galleryItems.findIndex((it) => it.id === activeItem.id);
+  }, [activeItem, galleryItems]);
+
+  // ── 업로드 모달 상태 ──
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [uploadImages, setUploadImages] = useState<UploadImageItem[]>([]);
-  const [editCaption, setEditCaption] = useState('');
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [formAlbumId, setFormAlbumId] = useState('recent');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ── 앨범 생성 / 수정 모달 상태 ──
-  const [isAlbumModalOpen, setIsAlbumModalOpen] = useState(false);
-  const [editingAlbumId, setEditingAlbumId] = useState<string | null>(null);
-  const [albumFormName, setAlbumFormName] = useState('');
-  const [albumFormDesc, setAlbumFormDesc] = useState('');
+  // ── 폴더 생성/수정 모달 상태 ──
+  const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
+  const [parentFolderForCreate, setParentFolderForCreate] = useState<GalleryFolder | null>(null);
+  const [editingFolder, setEditingFolder] = useState<GalleryFolder | null>(null);
 
-  // ── 일괄 이동 모달 상태 ──
-  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-  const [targetMoveAlbumId, setTargetMoveAlbumId] = useState('');
-
-  // ── 일괄 복사 모달 상태 ──
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
-  const [targetCopyAlbumId, setTargetCopyAlbumId] = useState('');
+  // ── 일괄 이동/복사 대상 폴더 선택 모달 상태 ──
+  const [selectFolderModalMode, setSelectFolderModalMode] = useState<'move' | 'copy' | null>(null);
 
   // ── 우클릭 컨텍스트 메뉴 상태 ──
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: GalleryItem } | null>(null);
 
-  // 권한 체크
-  const canManageItem = (item: GalleryItem) => {
-    if (isSuperAdmin) return true;
-    if (user?.id && item.authorId === user.id) return true;
-    return canUpdate || canDelete;
-  };
+  // 기존 로컬스토리지 갤러리 잔여 데이터 1회 초기화
+  React.useEffect(() => {
+    try {
+      localStorage.removeItem('workfit_phone_gallery_albums_v3');
+      localStorage.removeItem('workfit_phone_gallery_items_v3');
+      localStorage.removeItem('workfit_gallery_posts_v2');
+      localStorage.removeItem('workfit_gallery_albums');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // 컨텍스트 메뉴 전역 닫기
   React.useEffect(() => {
@@ -128,628 +128,375 @@ export default function GalleryScreen() {
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  // ESC 키로 사진 선택 해제 (라이트박스 미열람 시)
+  // ESC 키로 선택 해제
   React.useEffect(() => {
-    if (!isSelectionMode || activeItemId) return;
+    if (!isSelectionMode || activeItem) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleCancelSelection();
-      }
+      if (e.key === 'Escape') handleCancelSelection();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSelectionMode, activeItemId, handleCancelSelection]);
+  }, [isSelectionMode, activeItem, handleCancelSelection]);
 
-  // ── 업로드 / 수정 핸들러 ──
-  const handleOpenUploadModal = () => {
-    setEditingItemId(null);
-    setUploadImages([]);
-    setEditCaption('');
-    setFormDate(new Date().toISOString().split('T')[0]);
-    setFormAlbumId(selectedAlbumId !== 'all_albums' ? selectedAlbumId : 'recent');
-    setIsUploadModalOpen(true);
+  // ── 핸들러들 ──
+  const handleOpenCreateFolder = (parentFolderId: string | null) => {
+    const parent = parentFolderId ? folders.find((f) => f.id === parentFolderId) || null : null;
+    setParentFolderForCreate(parent);
+    setEditingFolder(null);
+    setIsFolderModalOpen(true);
   };
 
-  const handleOpenEditModal = (item: GalleryItem, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setEditingItemId(item.id);
-    setFormAlbumId(item.albumId);
-    setFormDate(item.date);
-    setEditCaption(item.caption || item.description || '');
-    setUploadImages([{ id: item.id, url: item.images[0] || '', caption: item.description || '' }]);
-    setIsUploadModalOpen(true);
+  const handleOpenEditFolder = (folder: GalleryFolder) => {
+    setEditingFolder(folder);
+    setParentFolderForCreate(null);
+    setIsFolderModalOpen(true);
   };
 
-  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-
-    if (uploadImages.length + files.length > 50) {
-      alert('한 번에 최대 50장의 사진까지 등록할 수 있습니다.');
-      return;
+  const handleDeleteFolder = async (folder: GalleryFolder) => {
+    if (confirm(`'${folder.name}' 폴더와 내부 하위 폴더 및 사진을 모두 삭제하시겠습니까?`)) {
+      await deleteFolder(folder.id);
     }
+  };
 
-    const readers: Promise<string>[] = [];
-    for (const file of files) {
-      if (file.size > 20 * 1024 * 1024) {
-        alert(`20MB를 초과하는 파일(${file.name})은 제외됩니다.`);
-        continue;
-      }
-      readers.push(
-        new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => resolve(ev.target?.result as string);
-          reader.readAsDataURL(file);
-        }),
-      );
+  const handleFolderModalSubmit = async (name: string, description?: string) => {
+    if (editingFolder) {
+      await updateFolder({ id: editingFolder.id, name, description });
+    } else {
+      await createFolder({
+        name,
+        parentId: parentFolderForCreate ? parentFolderForCreate.id : currentFolderId,
+        description,
+      });
     }
+  };
 
-    Promise.all(readers).then((newUrls) => {
-      const newItems: UploadImageItem[] = newUrls.map((url, i) => ({
-        id: `up-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
-        url,
-        caption: '',
-      }));
-      setUploadImages((prev) => [...prev, ...newItems]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+  // 일괄 이동 실행
+  const handleConfirmMove = async (targetFolderId: string) => {
+    await batchMove({
+      photoIds: Array.from(selectedItemIds),
+      targetFolderId,
     });
+    handleCancelSelection();
   };
 
-  const handleUpdateImageCaption = (id: string, caption: string) => {
-    setUploadImages((prev) =>
-      prev.map((img) => (img.id === id ? { ...img, caption } : img)),
-    );
+  // 일괄 복사 실행
+  const handleConfirmCopy = async (targetFolderId: string) => {
+    await batchCopy({
+      photoIds: Array.from(selectedItemIds),
+      targetFolderId,
+    });
+    handleCancelSelection();
   };
 
-  const handleRemoveUploadImage = (id: string) => {
-    setUploadImages((prev) => prev.filter((img) => img.id !== id));
-  };
-
-  const handleSubmitForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (uploadImages.length === 0) {
-      alert('사진을 1장 이상 등록해주세요.');
-      return;
+  // 일괄 삭제 실행
+  const handleBatchDelete = async () => {
+    if (confirm(`선택한 사진 ${selectedItemIds.size}장을 삭제하시겠습니까?`)) {
+      await batchDelete(Array.from(selectedItemIds));
+      handleCancelSelection();
     }
-
-    if (editingItemId) {
-      updatePhoto(editingItemId, {
-        caption: editCaption.trim(),
-        date: formDate,
-        albumId: formAlbumId,
-      });
-    } else {
-      addPhotos({
-        uploadImages,
-        albumId: formAlbumId,
-        date: formDate,
-      });
-    }
-
-    setIsUploadModalOpen(false);
-    setEditingItemId(null);
   };
 
-  const handleDeleteItem = (id: string, e?: React.MouseEvent) => {
+  // 사진 삭제 단건
+  const handleDeletePhoto = async (photoId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!confirm('이 사진을 갤러리에서 삭제하시겠습니까?')) return;
-    deletePhoto(id);
-    if (activeItemId === id) setActiveItemId(null);
-  };
-
-  // ── 앨범 생성 / 수정 / 삭제 핸들러 ──
-  const handleOpenAlbumModal = (album?: GalleryAlbum, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (album) {
-      setEditingAlbumId(album.id);
-      setAlbumFormName(album.name);
-      setAlbumFormDesc(album.description || '');
-    } else {
-      setEditingAlbumId(null);
-      setAlbumFormName('');
-      setAlbumFormDesc('');
-    }
-    setIsAlbumModalOpen(true);
-  };
-
-  const handleSubmitAlbum = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = albumFormName.trim();
-    if (!name) {
-      alert('앨범 이름을 입력해주세요.');
-      return;
-    }
-
-    if (editingAlbumId) {
-      updateAlbum(editingAlbumId, name, albumFormDesc.trim());
-    } else {
-      const newAlbum = createAlbum(name, albumFormDesc.trim());
-      setSelectedAlbumId(newAlbum.id);
-    }
-    setIsAlbumModalOpen(false);
-  };
-
-  const handleDeleteAlbum = (albumId: string, albumName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm(`'${albumName}' 앨범을 삭제하시겠습니까?\n앨범 내 사진들은 삭제되지 않고 '전체 (최근 항목)'에 유지됩니다.`)) {
-      return;
-    }
-    deleteAlbum(albumId);
-    if (selectedAlbumId === albumId) setSelectedAlbumId('recent');
-  };
-
-  // ── 앨범 대표 이미지 핸들러 ──
-  const handlePhotoContextMenu = (e: React.MouseEvent, item: GalleryItem) => {
-    const targetAlbumId = selectedAlbumId !== 'recent' ? selectedAlbumId : item.albumId;
-    if (!targetAlbumId || targetAlbumId === 'recent') return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const x = Math.min(e.clientX, window.innerWidth - 240);
-    const y = Math.min(e.clientY, window.innerHeight - 180);
-    setContextMenu({ x, y, item });
-  };
-
-  const handleSetCover = (albumId: string, imageUrl: string) => {
-    if (!albumId || albumId === 'recent') {
-      alert('최근 항목(전체)에는 대표 이미지를 지정할 수 없습니다. 특정 앨범을 선택해주세요.');
-      return;
-    }
-    setCoverImage(albumId, imageUrl);
-    const targetAlbum = albums.find((a) => a.id === albumId);
-    alert(`'${targetAlbum?.name || '앨범'}'의 대표 이미지로 지정되었습니다.`);
-    setContextMenu(null);
-  };
-
-  // ── 일괄 이동 모달 핸들러 ──
-  const handleOpenMoveModal = () => {
-    if (selectedItemIds.size === 0) return;
-    const nonRecentAlbums = albums.filter((a) => !a.isSystem);
-    setTargetMoveAlbumId(nonRecentAlbums[0]?.id || 'alb_event');
-    setIsMoveModalOpen(true);
-  };
-
-  const handleExecuteMove = () => {
-    if (!targetMoveAlbumId) {
-      alert('이동할 대상 앨범을 선택해주세요.');
-      return;
-    }
-    const targetAlbum = albums.find((a) => a.id === targetMoveAlbumId);
-    const targetName = targetAlbum ? targetAlbum.name : '선택된 앨범';
-
-    batchMovePhotos(selectedItemIds, targetMoveAlbumId);
-
-    alert(
-      `${selectedItemIds.size}장의 사진을 '${targetName}' 앨범에 보관했습니다.\n(※ '전체 (최근 항목)'에는 모든 사진이 계속 보관되어 표시됩니다.)`,
-    );
-    setIsMoveModalOpen(false);
-    setSelectedItemIds(new Set());
-    setIsSelectionMode(false);
-  };
-
-  const handleBatchDelete = () => {
-    if (selectedItemIds.size === 0) return;
-    if (!confirm(`선택한 ${selectedItemIds.size}장의 사진을 갤러리에서 삭제하시겠습니까?`)) {
-      return;
-    }
-    batchDeletePhotos(selectedItemIds);
-    setSelectedItemIds(new Set());
-  };
-
-  // ── 앨범 복사 핸들러 (최근항목이 아닌 앨범에서 다른 앨범으로 복사) ──
-  const isNonRecentAlbumView = activeTab === 'albums' && selectedAlbumId !== 'recent' && selectedAlbumId !== 'all_albums';
-
-  const handleOpenCopyModal = () => {
-    if (selectedItemIds.size === 0) return;
-    const candidateAlbums = albums.filter((a) => !a.isSystem && a.id !== selectedAlbumId);
-    setTargetCopyAlbumId(candidateAlbums[0]?.id || '');
-    setIsCopyModalOpen(true);
-  };
-
-  const handleExecuteCopy = () => {
-    if (!targetCopyAlbumId) {
-      alert('복사할 대상 앨범을 선택해주세요.');
-      return;
-    }
-    const targetAlbum = albums.find((a) => a.id === targetCopyAlbumId);
-    const targetName = targetAlbum ? targetAlbum.name : '선택된 앨범';
-
-    batchCopyPhotos(selectedItemIds, targetCopyAlbumId);
-
-    alert(
-      `${selectedItemIds.size}장의 사진을 '${targetName}' 앨범에 복사했습니다.\n(※ 기존 앨범의 사진도 그대로 보존됩니다.)`,
-    );
-    setIsCopyModalOpen(false);
-    setSelectedItemIds(new Set());
-    setIsSelectionMode(false);
-  };
-
-  const handleCopySinglePhoto = (item: GalleryItem) => {
-    setSelectedItemIds(new Set([item.id]));
-    const candidateAlbums = albums.filter((a) => !a.isSystem && a.id !== item.albumId);
-    setTargetCopyAlbumId(candidateAlbums[0]?.id || '');
-    setIsCopyModalOpen(true);
-  };
-
-  // ── 라이트박스 네비게이션 ──
-  const activeItem = useMemo(
-    () => (activeItemId ? items.find((it) => it.id === activeItemId) ?? null : null),
-    [activeItemId, items],
-  );
-
-  const currentActiveIndex = useMemo(() => {
-    if (!activeItemId) return -1;
-    return filteredItems.findIndex((it) => it.id === activeItemId);
-  }, [activeItemId, filteredItems]);
-
-  const handlePrevPhoto = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!activeItem) return;
-    if (activeItem.images.length > 1 && activeImageIndex > 0) {
-      setActiveImageIndex((prev: number) => prev - 1);
-      return;
-    }
-    if (filteredItems.length > 1 && currentActiveIndex !== -1) {
-      const prevIdx = currentActiveIndex > 0 ? currentActiveIndex - 1 : filteredItems.length - 1;
-      setActiveItemId(filteredItems[prevIdx].id);
-      setActiveImageIndex(0);
+    if (confirm('이 사진을 갤러리에서 삭제하시겠습니까?')) {
+      await deletePhoto(photoId);
+      if (activeItem?.id === photoId) setActiveItem(null);
     }
   };
 
-  const handleNextPhoto = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!activeItem) return;
-    if (activeItem.images.length > 1 && activeImageIndex < activeItem.images.length - 1) {
-      setActiveImageIndex((prev: number) => prev + 1);
-      return;
-    }
-    if (filteredItems.length > 1 && currentActiveIndex !== -1) {
-      const nextIdx = currentActiveIndex < filteredItems.length - 1 ? currentActiveIndex + 1 : 0;
-      setActiveItemId(filteredItems[nextIdx].id);
-      setActiveImageIndex(0);
-    }
-  };
+  const isLoading = isFoldersLoading || isPhotosLoading;
 
   return (
-    <div className="mx-auto max-w-7xl pb-16">
-      {/* ── 상단 헤더 ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <div className="text-xs font-medium text-ink3 mb-1">
-            그룹웨어 <span className="px-1">/</span> 회사 갤러리
+    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
+      {/* ── 그룹웨어 표준 헤더 (GwHead) ── */}
+      <GwHead
+        icon="📷"
+        name="회사 갤러리"
+        desc="사내 행사, 워크숍, 활동 사진을 등록하고 전사 직원과 공유하는 공용 갤러리입니다."
+        right={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => handleOpenCreateFolder(currentFolderId)}
+              variant="secondary"
+            >
+              <FolderPlus size={14} className="text-amber-500" />
+              <span>새 폴더</span>
+            </Button>
+            <Button
+              onClick={() => setIsUploadModalOpen(true)}
+              variant="primary"
+            >
+              <Camera size={14} />
+              <span>사진 업로드</span>
+            </Button>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-teal-soft text-teal shadow-xs">
-              <Camera className="h-5 w-5" />
-            </span>
-            <div>
-              <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-                <span>회사 갤러리</span>
-                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-panel-alt text-ink2 border border-border">
-                  {items.length}장의 사진
-                </span>
-              </h1>
-              <p className="text-[11.5px] text-ink3 mt-0.5">
-                앨범별 폴더 및 년도/날짜별 타임라인 사이드바로 사진을 쉽고 편리하게 정리하세요.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 탭 스위처 & 검색 & 정렬 바 ── */}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 bg-panel-alt/40 p-1.5 rounded-2xl border border-border">
-        {/* 좌측: 탭 전환 */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('albums')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-bold transition-all ${
-              activeTab === 'albums'
-                ? 'bg-panel text-teal shadow-xs border border-border/50'
-                : 'text-ink3 hover:text-ink'
-            }`}
-          >
-            <FolderArchive className="h-4 w-4" />
-            <span>앨범 보관함 ({albums.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('timeline')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-bold transition-all ${
-              activeTab === 'timeline'
-                ? 'bg-panel text-teal shadow-xs border border-border/50'
-                : 'text-ink3 hover:text-ink'
-            }`}
-          >
-            <Calendar className="h-4 w-4" />
-            <span>날짜별 (타임라인)</span>
-          </button>
-        </div>
-
-        {/* 우측: 검색창 & 정렬 버튼 */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="사진 제목, 일자, 작성자 검색..."
-              className="h-8.5 w-56 rounded-xl border border-border bg-panel pl-3 pr-8 text-[12px] text-ink outline-none focus:border-teal transition-all placeholder:text-ink3 shadow-2xs"
-            />
-            {keyword && (
-              <button
-                type="button"
-                onClick={() => setKeyword('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-ink3 hover:text-ink"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSortOrder((prev: 'desc' | 'asc') => (prev === 'desc' ? 'asc' : 'desc'))}
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink2 hover:text-teal transition-colors shadow-2xs"
-          >
-            {sortOrder === 'desc' ? (
-              <>
-                <ArrowDownWideNarrow className="h-3.5 w-3.5" />
-                <span>최신 날짜순</span>
-              </>
-            ) : (
-              <>
-                <ArrowUpNarrowWide className="h-3.5 w-3.5" />
-                <span>과거 날짜순</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* ── 메인 2단 레이아웃 ── */}
-      <div className="mt-5 flex flex-col md:flex-row gap-5 items-start">
-        {/* A. 좌측 사이드바 */}
-        <GallerySidebar
-          activeTab={activeTab}
-          albums={albums}
-          selectedAlbumId={selectedAlbumId}
-          onSelectAlbum={setSelectedAlbumId}
-          albumCounts={albumCounts}
-          canCreate={canCreate}
-          onOpenAlbumModal={handleOpenAlbumModal}
-          onDeleteAlbum={handleDeleteAlbum}
-          selectedYearMonth={selectedYearMonth}
-          onSelectYearMonth={setSelectedYearMonth}
-          timelineNav={timelineNav}
-          totalCount={items.length}
-        />
-
-        {/* B. 우측 메인 영역 */}
-        <main className="flex-1 min-w-0 w-full">
-          {/* 상단 뷰어 안내 바 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 rounded-2xl border border-border bg-panel p-4 shadow-xs">
-            <div className="flex items-center gap-3">
-              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedAlbumId('all_albums')}
-                  title="전체 앨범 보관함으로 돌아가기"
-                  className="flex items-center gap-1.5 rounded-xl border border-border bg-panel-alt/70 px-2.5 py-1.5 text-xs font-bold text-ink2 hover:bg-panel hover:text-teal hover:border-teal/50 transition-all shadow-2xs mr-0.5 shrink-0"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  <span>모든 앨범</span>
-                </button>
-              )}
-
-              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && currentAlbum?.coverImage ? (
-                <img
-                  src={currentAlbum.coverImage}
-                  alt={currentAlbum.name}
-                  className="h-11 w-11 rounded-xl object-cover border border-border shadow-xs shrink-0"
-                />
-              ) : (
-                <div className="grid h-11 w-11 place-items-center rounded-xl bg-teal-soft text-teal shrink-0">
-                  {activeTab === 'albums' ? (
-                    selectedAlbumId === 'all_albums' ? (
-                      <LayoutGrid className="h-5 w-5" />
-                    ) : (
-                      <Folder className="h-5 w-5" />
-                    )
-                  ) : (
-                    <Calendar className="h-5 w-5" />
-                  )}
-                </div>
-              )}
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-bold text-ink">
-                    {activeTab === 'albums'
-                      ? currentAlbum?.name
-                      : selectedYearMonth === 'all'
-                      ? '전체 타임라인 사진'
-                      : `${selectedYearMonth.replace('-', '년 ')}월 사진`}
-                  </h2>
-                  <span className="rounded-full bg-teal-soft px-2.5 py-0.5 text-[11px] font-bold text-teal font-mono">
-                    {activeTab === 'albums' && selectedAlbumId === 'all_albums'
-                      ? `총 ${albums.length}개 앨범`
-                      : `${filteredItems.length}장의 사진`}
-                  </span>
-                </div>
-                {activeTab === 'albums' ? (
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {currentAlbum?.description && (
-                      <p className="text-[11.5px] text-ink3">{currentAlbum.description}</p>
-                    )}
-                    {selectedAlbumId !== 'recent' && selectedAlbumId !== 'all_albums' && (
-                      <span className="text-[10.5px] text-teal font-medium flex items-center gap-1">
-                        <Info className="h-3 w-3" />
-                        <span>팁: 사진을 우클릭하여 이 앨범의 대표 이미지로 지정할 수 있습니다.</span>
-                      </span>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {canCreate && (
-                <Button size="sm" variant="primary" onClick={handleOpenUploadModal}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  <span>{selectedAlbumId === 'all_albums' ? '사진 올리기' : '이 위치에 사진 올리기'}</span>
-                </Button>
-              )}
-              {activeTab === 'albums' && selectedAlbumId === 'all_albums' && canCreate && (
-                <Button size="sm" variant="secondary" onClick={() => handleOpenAlbumModal()}>
-                  <FolderPlus className="h-3.5 w-3.5 mr-1" />
-                  <span>새 앨범 만들기</span>
-                </Button>
-              )}
-              {activeTab === 'albums' && selectedAlbumId !== 'all_albums' && !currentAlbum?.isSystem && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={(e) => handleOpenAlbumModal(currentAlbum, e)}
-                >
-                  <Pencil className="h-3.5 w-3.5 mr-1" />
-                  <span>앨범명 수정</span>
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* 콘텐츠 영역: 모아보기 / 그리드 */}
-          {activeTab === 'albums' && selectedAlbumId === 'all_albums' ? (
-            <AlbumCardGrid
-              albums={albums}
-              albumCounts={albumCounts}
-              albumCoverMap={albumCoverMap}
-              albumLatestDateMap={albumLatestDateMap}
-              canCreate={canCreate}
-              onSelectAlbum={setSelectedAlbumId}
-              onOpenAlbumModal={handleOpenAlbumModal}
-              onDeleteAlbum={handleDeleteAlbum}
-            />
-          ) : (
-            <PhotoGrid
-              activeTab={activeTab}
-              filteredItems={filteredItems}
-              groupedByDate={groupedByDate}
-              albums={albums}
-              isSelectionMode={isSelectionMode}
-              selectedItemIds={selectedItemIds}
-              onToggleSelect={toggleSelectItem}
-              onContextMenu={handlePhotoContextMenu}
-              onOpenEdit={handleOpenEditModal}
-              onDelete={handleDeleteItem}
-              onClickItem={(item) => {
-                if (isSelectionMode) {
-                  toggleSelectItem(item.id);
-                } else {
-                  setActiveItemId(item.id);
-                  setActiveImageIndex(0);
-                }
-              }}
-              canManageItem={canManageItem}
-              keyword={keyword}
-              onUpload={handleOpenUploadModal}
-              canCreate={canCreate}
-            />
-          )}
-        </main>
-      </div>
-
-      {/* ── 서브 모달 컴포넌트 ── */}
-      <LightboxViewer
-        activeItem={activeItem}
-        activeImageIndex={activeImageIndex}
-        setActiveImageIndex={setActiveImageIndex}
-        onClose={() => setActiveItemId(null)}
-        onPrev={handlePrevPhoto}
-        onNext={handleNextPhoto}
-        albums={albums}
-        currentActiveIndex={currentActiveIndex}
-        totalItemsCount={filteredItems.length}
-        canManage={activeItem ? canManageItem(activeItem) : false}
-        onSetCoverImage={handleSetCover}
-        onOpenEdit={handleOpenEditModal}
-        onDelete={handleDeleteItem}
-        onCopyPhoto={handleCopySinglePhoto}
+        }
       />
 
+      {/* ── 그룹웨어 표준 2단 레이아웃 (GwSplit) ── */}
+      <GwSplit
+        nav={
+          <aside className="flex flex-col gap-3 rounded-xl border border-border bg-panel p-4 shadow-sm">
+            <div>
+              <h2 className="text-sm font-extrabold text-navy">디렉토리 구조</h2>
+              <p className="mt-1 text-[11px] text-ink3">폴더를 선택하여 사진을 탐색하세요.</p>
+            </div>
+            <GalleryFolderTree
+              folderTree={folderTree}
+              currentFolderId={currentFolderId}
+              totalPhotosCount={photos.length}
+              onSelectFolder={(id) => setCurrentFolderId(id)}
+              onCreateSubFolder={(parentId) => handleOpenCreateFolder(parentId)}
+              onEditFolder={(folder) => handleOpenEditFolder(folder)}
+              onDeleteFolder={(folder) => handleDeleteFolder(folder)}
+            />
+          </aside>
+        }
+      >
+        {/* 우측 디렉토리 콘텐츠 영역 */}
+        <main className="flex flex-col min-w-0 rounded-xl border border-border bg-panel shadow-sm overflow-hidden">
+          {/* 상단 브레드크럼 & 툴바(검색/정렬/뷰 모드) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-panel px-4 py-2.5">
+            <div className="flex-1 min-w-0">
+              <GalleryBreadcrumb
+                breadcrumbs={breadcrumbs}
+                currentFolder={currentFolder}
+                onSelectFolder={(id) => setCurrentFolderId(id)}
+                onGoUp={goUp}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* 검색 입력창 */}
+              <div className="relative w-40 sm:w-52">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder="사진 검색"
+                  className="h-8 w-full rounded-xl border border-border bg-panel-alt pl-8 pr-3 text-[11.5px] text-ink outline-none focus:border-teal"
+                />
+              </div>
+
+              {/* 정렬 순서 토글 */}
+              <button
+                type="button"
+                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                title={sortOrder === 'desc' ? '최신순 (클릭 시 오래된순)' : '오래된순 (클릭 시 최신순)'}
+                className="flex h-8 items-center gap-1 rounded-xl border border-border bg-panel px-2.5 text-[11.5px] font-semibold text-ink hover:bg-panel-alt transition-colors"
+              >
+                {sortOrder === 'desc' ? <ArrowDownWideNarrow size={13} /> : <ArrowUpNarrowWide size={13} />}
+                <span className="hidden sm:inline">{sortOrder === 'desc' ? '최신순' : '오래된순'}</span>
+              </button>
+
+              {/* 뷰 모드 토글 */}
+              <div className="hidden sm:flex items-center rounded-xl border border-border bg-panel p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`grid h-7 w-7 place-items-center rounded-lg transition-colors ${
+                    viewMode === 'grid' ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'
+                  }`}
+                  title="그리드 뷰"
+                >
+                  <LayoutGrid size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`grid h-7 w-7 place-items-center rounded-lg transition-colors ${
+                    viewMode === 'list' ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'
+                  }`}
+                  title="리스트 뷰"
+                >
+                  <List size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 메인 뷰포트 (하위 폴더 목록 + 사진 그리드) */}
+          <div className="p-6">
+            {isLoading ? (
+              <div className="flex h-64 flex-col items-center justify-center gap-3 text-ink3">
+                <Loader2 size={24} className="animate-spin text-teal" />
+                <span className="text-[13px] font-semibold">전사 갤러리 불러오는 중…</span>
+              </div>
+            ) : (
+              <>
+                {/* 1. 현재 폴더의 직속 하위 폴더 그리드 */}
+                <SubFolderGrid
+                  subFolders={subFolders}
+                  photoCountMap={photoCountMap}
+                  onSelectFolder={(id) => setCurrentFolderId(id)}
+                  onCreateFolder={() => handleOpenCreateFolder(currentFolderId)}
+                  onEditFolder={(f) => handleOpenEditFolder(f)}
+                  onDeleteFolder={(f) => handleDeleteFolder(f)}
+                />
+
+                {/* 2. 사진 목록 헤더 및 다중 선택 모드 토글 */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-bold text-ink">
+                      {currentFolder ? currentFolder.name : '전체 사진'}
+                    </span>
+                    <span className="text-[11.5px] font-semibold text-ink3">
+                      ({galleryItems.length}장)
+                    </span>
+                  </div>
+
+                  {galleryItems.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isSelectionMode) handleCancelSelection();
+                          else setIsSelectionMode(true);
+                        }}
+                        className={`text-[11.5px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                          isSelectionMode
+                            ? 'bg-teal text-white border-teal'
+                            : 'bg-panel border-border text-ink hover:bg-panel-alt'
+                        }`}
+                      >
+                        {isSelectionMode ? '선택 취소' : '사진 선택'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. 사진 그리드 또는 빈 상태 */}
+                {galleryItems.length > 0 ? (
+                  <PhotoGrid
+                    activeTab="albums"
+                    filteredItems={galleryItems}
+                    groupedByDate={[]}
+                    albums={galleryAlbums}
+                    isSelectionMode={isSelectionMode}
+                    selectedItemIds={selectedItemIds}
+                    onToggleSelect={toggleSelectItem}
+                    onContextMenu={(e, item) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, item });
+                    }}
+                    onOpenEdit={() => {}}
+                    onDelete={(id, e) => handleDeletePhoto(id, e)}
+                    onClickItem={(item) => {
+                      setActiveItem(item);
+                      setActiveImageIndex(0);
+                    }}
+                    canManageItem={() => true}
+                    keyword={keyword}
+                    onUpload={() => setIsUploadModalOpen(true)}
+                    canCreate={true}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-border rounded-2xl bg-panel/50">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-teal/10 text-teal mb-3">
+                      <FolderOpen size={24} />
+                    </div>
+                    <h3 className="text-[14px] font-bold text-ink">이 폴더에 등록된 사진이 없습니다.</h3>
+                    <p className="text-[12px] text-ink3 mt-1 max-w-sm">
+                      상단의 [사진 업로드] 버튼을 눌러 소중한 행사 및 활동 사진을 등록해보세요.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsUploadModalOpen(true)}
+                      className="mt-4 flex items-center gap-1.5 rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:bg-teal/90 transition-all"
+                    >
+                      <Camera size={14} />
+                      <span>사진 업로드하기</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </main>
+      </GwSplit>
+
+      {/* ── 플로팅 다중 선택 액션 바 ── */}
+      <SelectionFloatingBar
+        selectedCount={selectedItemIds.size}
+        totalCount={galleryItems.length}
+        canCopy={true}
+        canDelete={true}
+        onSelectAll={handleSelectAll}
+        onCancelSelection={handleCancelSelection}
+        onOpenMoveModal={() => setSelectFolderModalMode('move')}
+        onOpenCopyModal={() => setSelectFolderModalMode('copy')}
+        onDeleteSelected={handleBatchDelete}
+      />
+
+      {/* ── 라이트박스 뷰어 ── */}
+      {activeItem && (
+        <LightboxViewer
+          activeItem={activeItem}
+          activeImageIndex={activeImageIndex}
+          setActiveImageIndex={setActiveImageIndex}
+          onClose={() => setActiveItem(null)}
+          onPrev={() => {
+            if (activeItemIndex > 0) {
+              setActiveItem(galleryItems[activeItemIndex - 1]);
+              setActiveImageIndex(0);
+            }
+          }}
+          onNext={() => {
+            if (activeItemIndex < galleryItems.length - 1) {
+              setActiveItem(galleryItems[activeItemIndex + 1]);
+              setActiveImageIndex(0);
+            }
+          }}
+          albums={galleryAlbums}
+          currentActiveIndex={activeItemIndex}
+          totalItemsCount={galleryItems.length}
+          canManage={true}
+          onSetCoverImage={() => {}}
+          onOpenEdit={() => {}}
+          onDelete={(id) => handleDeletePhoto(id)}
+        />
+      )}
+
+      {/* ── 컨텍스트 메뉴 (우클릭) ── */}
+      {contextMenu && (
+        <ContextMenu
+          contextMenu={contextMenu}
+          selectedAlbumId={currentFolderId || ''}
+          onSetCoverImage={() => {}}
+        />
+      )}
+
+      {/* ── 사진 업로드 모달 ── */}
       <PhotoUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        albums={albums}
-        formAlbumId={formAlbumId}
-        setFormAlbumId={setFormAlbumId}
-        formDate={formDate}
-        setFormDate={setFormDate}
-        uploadImages={uploadImages}
-        setUploadImages={setUploadImages}
-        editingItemId={editingItemId}
-        editCaption={editCaption}
-        setEditCaption={setEditCaption}
-        onSubmit={handleSubmitForm}
-        fileInputRef={fileInputRef}
-        handleFilesChange={handleFilesChange}
-        handleUpdateImageCaption={handleUpdateImageCaption}
-        handleRemoveUploadImage={handleRemoveUploadImage}
+        folders={folders}
+        defaultFolderId={currentFolderId}
+        onUpload={uploadPhotos}
       />
 
-      <AlbumManageModal
-        isOpen={isAlbumModalOpen}
-        onClose={() => setIsAlbumModalOpen(false)}
-        editingAlbumId={editingAlbumId}
-        albumName={albumFormName}
-        setAlbumName={setAlbumFormName}
-        albumDesc={albumFormDesc}
-        setAlbumDesc={setAlbumFormDesc}
-        onSubmit={handleSubmitAlbum}
+      {/* ── 폴더 생성 / 수정 모달 ── */}
+      <FolderManageModal
+        isOpen={isFolderModalOpen}
+        onClose={() => setIsFolderModalOpen(false)}
+        parentFolder={parentFolderForCreate}
+        editingFolder={editingFolder}
+        onSubmit={handleFolderModalSubmit}
       />
 
-      <BatchMoveModal
-        isOpen={isMoveModalOpen}
-        onClose={() => setIsMoveModalOpen(false)}
-        selectedCount={selectedItemIds.size}
-        albums={albums}
-        albumCounts={albumCounts}
-        targetAlbumId={targetMoveAlbumId}
-        setTargetAlbumId={setTargetMoveAlbumId}
-        onExecuteMove={handleExecuteMove}
-      />
-
-      <BatchCopyModal
-        isOpen={isCopyModalOpen}
-        onClose={() => setIsCopyModalOpen(false)}
-        selectedCount={selectedItemIds.size}
-        albums={albums}
-        albumCounts={albumCounts}
-        currentAlbumId={selectedAlbumId}
-        targetAlbumId={targetCopyAlbumId}
-        setTargetAlbumId={setTargetCopyAlbumId}
-        onExecuteCopy={handleExecuteCopy}
-      />
-
-      <ContextMenu
-        contextMenu={contextMenu}
-        selectedAlbumId={selectedAlbumId}
-        onSetCoverImage={handleSetCover}
-      />
-
-      {/* ── 하단 플로팅 선택 액션바 (Google Photos 스타일) ── */}
-      <SelectionFloatingBar
-        selectedCount={selectedItemIds.size}
-        totalCount={filteredItems.length}
-        canCopy={isNonRecentAlbumView}
-        canDelete={canDelete}
-        onSelectAll={handleSelectAll}
-        onCancelSelection={handleCancelSelection}
-        onOpenMoveModal={handleOpenMoveModal}
-        onOpenCopyModal={handleOpenCopyModal}
-        onDeleteSelected={handleBatchDelete}
-      />
+      {/* ── 폴더 일괄 이동 / 복사 대상 선택 모달 ── */}
+      {selectFolderModalMode && (
+        <FolderSelectModal
+          isOpen={true}
+          onClose={() => setSelectFolderModalMode(null)}
+          folderTree={folderTree}
+          title={selectFolderModalMode === 'move' ? '사진 일괄 이동' : '사진 일괄 복사'}
+          count={selectedItemIds.size}
+          onConfirm={selectFolderModalMode === 'move' ? handleConfirmMove : handleConfirmCopy}
+        />
+      )}
     </div>
   );
 }

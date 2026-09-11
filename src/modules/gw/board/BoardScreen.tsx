@@ -10,7 +10,6 @@ import {
   ScrollText,
   FolderArchive,
   FileText,
-  Globe,
   PenLine,
   ArrowLeft,
   Lightbulb,
@@ -22,6 +21,8 @@ import { boardRepo } from '@/data/board/board.repo';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
 import { fileStorage } from '@/shared/lib/storage';
+import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
+import { Button } from '@/shared/ui/Button';
 
 const BOARDS = BOARDS_SEED;
 
@@ -331,44 +332,50 @@ export default function BoardScreen() {
   };
 
   return (
-    <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink">
-      {/* ── 좌측 게시판 사이드바 (고정) ── */}
-      <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm">
-        <div>
-          <h2 className="text-sm font-extrabold text-navy flex items-center gap-2">
-            <Globe size={16} className="text-teal" />
-            <span>사내 게시판</span>
-          </h2>
-          <p className="mt-1 text-[11px] text-ink3">공식 정보 및 사내 공지를 열람합니다.</p>
-        </div>
+    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
+      <GwHead
+        icon="📢"
+        name="사내 게시판"
+        desc="공식 정보 및 사내 공지를 열람하고 공유합니다."
+        right={
+          canCreate && viewMode === 'list' ? (
+            <Button
+              onClick={() => {
+                setNewPost({ ...newPost, boardId: activeBoard });
+                setViewMode('write');
+              }}
+              variant="primary"
+            >
+              <PenLine size={14} />
+              <span>새 글 쓰기</span>
+            </Button>
+          ) : undefined
+        }
+      />
 
-        <nav className="flex flex-col gap-1">
-          {BOARDS.map((b) => {
-            const isActive = b.id === activeBoard;
-            return (
-              <button
-                key={b.id}
-                onClick={() => {
-                  setActiveBoard(b.id);
-                  setSearchQuery('');
-                  setViewMode('list');
-                }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left font-bold transition-all ${
-                  isActive
-                    ? 'bg-teal text-white shadow-xs'
-                    : 'text-ink2 hover:bg-panel-alt hover:text-ink'
-                }`}
-              >
-                <span className="shrink-0">{getBoardIcon(b.id, 16, isActive ? 'text-white' : 'text-teal')}</span>
-                <span className="flex-1 truncate">{b.name}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* ── 우측 메인 컨텐츠 영역 ── */}
-      <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-5 shadow-sm overflow-hidden">
+      <GwSplit
+        nav={
+          <GwSideNav
+            title="사내 게시판"
+            desc="공식 정보 및 사내 공지를 열람합니다."
+            items={BOARDS.map((b) => ({
+              id: b.id,
+              icon: b.id === 'notice' ? '📢' : b.id === 'event' ? '🎉' : b.id === 'rule' ? '📜' : '📁',
+              label: b.name,
+              badge: b.id === 'notice' ? '필독' : undefined,
+              badgeTone: 'amber' as const,
+            }))}
+            activeId={activeBoard}
+            onSelect={(id) => {
+              setActiveBoard(id);
+              setSearchQuery('');
+              setViewMode('list');
+            }}
+          />
+        }
+      >
+        {/* ── 우측 메인 컨텐츠 영역 ── */}
+        <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-6 shadow-sm overflow-hidden min-w-0">
         
         {/* 1) 목록 뷰 */}
         {viewMode === 'list' && (
@@ -722,6 +729,7 @@ export default function BoardScreen() {
           </form>
         )}
       </main>
+      </GwSplit>
     </div>
   );
 }
