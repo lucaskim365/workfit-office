@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import {
@@ -27,6 +28,7 @@ interface MobileUserMenuSheetProps {
  * 실시간 동기화 및 파편화 방지를 보장합니다.
  */
 export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuSheetProps) {
+  const navigate = useNavigate();
   const { signOutUser, user } = useAuth();
   const { presence, meta, updatePresence } = useMyPresence();
 
@@ -78,6 +80,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
 
   const handleSignOut = () => {
     onClose();
+    navigate('/m', { replace: true });
     void signOutUser();
   };
 

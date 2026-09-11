@@ -90,6 +90,8 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/department': lazy(() => import('@/modules/base/department/DepartmentScreen')),
   '/base/position': lazy(() => import('@/modules/base/position/PositionScreen')),
   '/base/holiday': lazy(() => import('@/modules/base/holiday/HolidayScreen')),
+  '/base/approval-rule': lazy(() => import('@/modules/base/approvalRule/ApprovalRouteRuleScreen')),
+  '/base/approval-rules': lazy(() => import('@/modules/base/approvalRule/ApprovalRouteRuleScreen')),
 
   '/base/approval-process': lazy(() => import('@/modules/base/approvalProcess/ApprovalProcessScreen')),
 

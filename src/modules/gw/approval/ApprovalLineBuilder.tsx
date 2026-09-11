@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
-import { X, AlertTriangle, Zap, Network, Users, Building2 } from 'lucide-react';
+import { X, AlertTriangle, Zap, Network, Users, Building2, Star, ChevronDown, BookmarkPlus } from 'lucide-react';
 
 import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
+import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
+import { fromMyRouteSteps, type MyApprovalRoute } from '@/domain/myApprovalRoute/schema';
 
 /**
  * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 전결규정 적용
@@ -79,6 +81,22 @@ export function ApprovalLineBuilder({
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
   const route = useRouteEngine();
+
+  // 사용자별 개인 '내 결재선' 훅 연동 (사용자별 완전 격리)
+  const {
+    routes: myRoutes,
+    saveRoute: saveMyRoute,
+    removeRoute: removeMyRoute,
+  } = useMyApprovalRoutes(drafterId);
+
+  const [showMyRoutesMenu, setShowMyRoutesMenu] = useState(false);
+  const [isSavingNewRoute, setIsSavingNewRoute] = useState(false);
+  const [newRouteName, setNewRouteName] = useState('');
+  const [myRouteMsg, setMyRouteMsg] = useState('');
+
+  const drafterUser = useMemo(() => {
+    return users.find((u) => u.id === drafterId) || org.users?.find((u: any) => u.id === drafterId);
+  }, [users, org.users, drafterId]);
 
   // 빈 병렬 그룹 ID 목록 (사용자가 생성한 빈 병렬 그룹 박스 유지용)
   const [emptyGroupIds, setEmptyGroupIds] = useState<string[]>([]);
@@ -253,6 +271,33 @@ export function ApprovalLineBuilder({
     onChange(built.length ? built : steps);
   };
 
+  /** 내 결재선 선택 시 적용 */
+  const applyMyRoute = (r: MyApprovalRoute) => {
+    const converted = fromMyRouteSteps(r.steps);
+    onChange(converted);
+    setShowMyRoutesMenu(false);
+  };
+
+  /** 현재 결재선을 내 결재선으로 신규 저장 */
+  const handleSaveCurrentRoute = async () => {
+    if (!newRouteName.trim()) {
+      setMyRouteMsg('결재선 이름을 입력해 주세요.');
+      return;
+    }
+    if (approverEdits.length === 0) {
+      setMyRouteMsg('결재자가 최소 1명 이상이어야 합니다.');
+      return;
+    }
+    try {
+      await saveMyRoute(newRouteName.trim(), steps);
+      setNewRouteName('');
+      setIsSavingNewRoute(false);
+      setMyRouteMsg('');
+    } catch (e: any) {
+      setMyRouteMsg(e.message || '저장에 실패했습니다.');
+    }
+  };
+
   const dupWarn = useMemo(() => {
     const ids = edits.map((e) => e.approverId);
     return ids.includes(drafterId) || new Set(ids).size !== ids.length;
@@ -313,13 +358,37 @@ export function ApprovalLineBuilder({
           <Zap size={12} className="text-teal shrink-0" />
           <span>자동 결재선(룰)</span>
         </button>
+
+        {/* 내 결재선 토글 버튼 */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowMyRoutesMenu((prev) => !prev);
+            setIsSavingNewRoute(false);
+            setMyRouteMsg('');
+          }}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+            showMyRoutesMenu
+              ? 'border-amber-500 bg-amber-500 text-white shadow-xs'
+              : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+          }`}
+          title="자주 쓰는 내 결재선 불러오기 및 저장"
+        >
+          <Star size={12} className={showMyRoutesMenu ? 'fill-white text-white' : 'fill-amber-500 text-amber-500'} />
+          <span>내 결재선 ({myRoutes.length})</span>
+          <ChevronDown
+            size={11}
+            className={showMyRoutesMenu ? 'rotate-180 transition-transform' : 'transition-transform'}
+          />
+        </button>
+
         <button
           type="button"
           onClick={() => {
             onChange([]);
             setEmptyGroupIds([]);
           }}
-          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500 hover:border-red-300 transition-colors"
+          className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500 hover:border-red-300 transition-colors cursor-pointer"
         >
           비우기
         </button>
@@ -327,6 +396,156 @@ export function ApprovalLineBuilder({
           결재 {approverEdits.length}명 ({renderGroups.length}단계){refEdits.length > 0 ? ` · 참조 ${refEdits.length}명` : ''}
         </span>
       </div>
+
+      {/* 내 결재선 인라인 확장 패널 — 절대 잘리지 않고 420px 전체 폭을 활용하는 스마트 카드 */}
+      {showMyRoutesMenu && (
+        <div className="mb-3.5 rounded-xl border border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10 p-3 shadow-xs space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+            <div>
+              <div className="text-[12px] font-bold text-ink flex items-center gap-1.5">
+                <Star size={13} className="fill-amber-500 text-amber-500" />
+                <span>내 결재선 (자주 쓰는 결재선)</span>
+              </div>
+              <div className="text-[10px] text-ink3 mt-0.5">
+                {drafterUser?.name || '사용자'}님 전용 맞춤 결재선 ({myRoutes.length}개)
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMyRoutesMenu(false)}
+              className="text-ink3 hover:text-ink text-[12px] p-1 rounded-md hover:bg-panel-alt transition-colors cursor-pointer"
+              title="닫기"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* 결재선 목록 */}
+          <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+            {myRoutes.length === 0 ? (
+              <div className="py-4 text-center text-[11.5px] text-ink3 leading-relaxed border border-dashed border-border rounded-lg bg-panel/60">
+                등록된 내 결재선이 없습니다.<br />
+                아래 버튼을 눌러 현재 결재선을 저장해 보세요.
+              </div>
+            ) : (
+              myRoutes.map((r) => {
+                const names = r.steps
+                  .filter((s) => s.kind !== '참조')
+                  .map((s) => {
+                    const u =
+                      users.find((user) => user.id === s.approverId) ||
+                      org.users?.find((user: any) => user.id === s.approverId);
+                    return u ? `${u.name}(${s.kind})` : `${s.approverId}(${s.kind})`;
+                  })
+                  .join(' → ');
+
+                return (
+                  <div
+                    key={r.id}
+                    className="group flex items-center justify-between rounded-lg border border-border bg-panel p-2.5 hover:border-amber-500/50 hover:shadow-xs transition-all"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => applyMyRoute(r)}
+                      className="min-w-0 flex-1 text-left cursor-pointer"
+                    >
+                      <div className="text-[12px] font-bold text-ink group-hover:text-amber-600 dark:group-hover:text-amber-400 truncate">
+                        📌 {r.name}
+                      </div>
+                      <div className="text-[10.5px] text-ink3 truncate mt-0.5 font-medium">
+                        {names || `${r.steps.length}단계`}
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <button
+                        type="button"
+                        onClick={() => applyMyRoute(r)}
+                        className="rounded-md bg-amber-500/20 px-2 py-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors cursor-pointer"
+                      >
+                        적용
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (window.confirm(`'${r.name}' 결재선을 삭제하시겠습니까?`)) {
+                            await removeMyRoute(r.id);
+                          }
+                        }}
+                        className="p-1 text-ink3 hover:text-red-500 transition-colors cursor-pointer rounded"
+                        title="삭제"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* 하단: 현재 결재선 저장 폼 */}
+          <div className="border-t border-amber-500/20 pt-2">
+            {!isSavingNewRoute ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (approverEdits.length === 0) {
+                    alert('저장할 결재자가 없습니다. 먼저 결재자를 추가하세요.');
+                    return;
+                  }
+                  setIsSavingNewRoute(true);
+                  setNewRouteName('');
+                  setMyRouteMsg('');
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-panel py-1.5 text-[11px] font-bold text-ink2 hover:border-amber-500/50 hover:text-amber-600 transition-colors cursor-pointer"
+              >
+                <BookmarkPlus size={13} />
+                <span>현재 결재선을 '내 결재선'으로 저장</span>
+              </button>
+            ) : (
+              <div className="space-y-1.5 rounded-lg bg-panel border border-border p-2.5 shadow-xs">
+                <div className="text-[11px] font-bold text-ink">새 결재선 이름 입력</div>
+                <input
+                  type="text"
+                  value={newRouteName}
+                  onChange={(e) => setNewRouteName(e.target.value)}
+                  placeholder="예: 주간보고용, 팀장-대표이사 결재선"
+                  className="w-full rounded-lg border border-border bg-panel-alt px-2.5 py-1 text-[11.5px] text-ink outline-none focus:border-amber-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveCurrentRoute();
+                    }
+                  }}
+                />
+                {myRouteMsg && (
+                  <div className="text-[10.5px] text-red-500 font-semibold">{myRouteMsg}</div>
+                )}
+                <div className="flex justify-end gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSavingNewRoute(false);
+                      setMyRouteMsg('');
+                    }}
+                    className="rounded-md px-2.5 py-1 text-[11px] text-ink3 hover:text-ink cursor-pointer"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrentRoute}
+                    className="rounded-md bg-amber-500 px-3 py-1 text-[11px] font-bold text-white hover:opacity-90 transition-opacity cursor-pointer"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* [1] 결재선 노드 리스트 (그룹 단위 렌더링) — 매끄러운 1->2->3 타임라인 */}
       <div>

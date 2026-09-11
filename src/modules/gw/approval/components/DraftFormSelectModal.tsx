@@ -12,8 +12,29 @@ interface DraftFormSelectModalProps {
   currentCode?: string;
 }
 
-const STORAGE_KEY_FAVORITES = 'workfit_favorite_forms';
-const STORAGE_KEY_RECENTS = 'workfit_recent_forms';
+/** 사용자별 로컬스토리지 키 분리 */
+const getFavoriteStorageKey = (userId?: string) => `workfit:favorite_forms:${userId || 'guest'}`;
+const getRecentStorageKey = (userId?: string) => `workfit:recent_forms:${userId || 'guest'}`;
+
+/** 서식별 직관적인 한 줄 안내 문구 딕셔너리 */
+const FORM_DESCRIPTIONS: Record<string, string> = {
+  기안: '일반 업무 품의 및 결재 보고',
+  휴가: '연차·반차·경조 휴가 신청서',
+  지출결의: '법인 경비 청구 및 영수증 지출 결의',
+  연장근로: '연장·야간·휴일 근무 신청',
+  외근: '외근 및 현장 방문 업무 신청',
+  국내출장: '국내 출장 신청 및 여비 정산',
+  해외출장: '해외 출장 품의 및 일정 보고',
+  보험: '사내 차량 및 시설 보험 관련 신청',
+  채용: '신규 인력 충원 및 채용 요청',
+  인사: '인사 발령 및 부서 이동 신청',
+  구매: '비품·소모품 및 자재 구매 요청',
+  계약: '대외 계약 체결 및 검토 품의',
+  회의록: '사내외 주요 회의 결과 보고',
+  경조사: '경조 휴가 및 경조금 신청',
+  시말서: '업무상 과실 소명 및 보고',
+  사직서: '퇴직 및 사직원 제출',
+};
 
 export function DraftFormSelectModal({
   open,
@@ -28,23 +49,22 @@ export function DraftFormSelectModal({
 
   const [search, setSearch] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_FAVORITES);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [recents, setRecents] = useState<string[]>([]);
 
-  const [recents, setRecents] = useState<string[]>(() => {
+  // 사용자 계정별 즐겨찾기 및 최근 사용 서식 완전 격리 로드
+  useEffect(() => {
+    if (!user?.id) return;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_RECENTS);
-      return saved ? JSON.parse(saved) : [];
+      const favSaved = localStorage.getItem(getFavoriteStorageKey(user.id));
+      setFavorites(favSaved ? JSON.parse(favSaved) : []);
+      const recSaved = localStorage.getItem(getRecentStorageKey(user.id));
+      setRecents(recSaved ? JSON.parse(recSaved) : []);
     } catch {
-      return [];
+      setFavorites([]);
+      setRecents([]);
     }
-  });
+  }, [user?.id, open]);
 
   // 사용자 직급 서열 계산 (기안 권한 체크용)
   const myRank = useMemo(() => {
@@ -64,7 +84,9 @@ export function DraftFormSelectModal({
     setFavorites((prev) => {
       const next = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
       try {
-        localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(next));
+        if (user?.id) {
+          localStorage.setItem(getFavoriteStorageKey(user.id), JSON.stringify(next));
+        }
       } catch {
         /* ignore */
       }
@@ -78,11 +100,13 @@ export function DraftFormSelectModal({
       return;
     }
 
-    // 최근 사용 서식 저장
+    // 사용자별 최근 사용 서식 저장 (최대 8개)
     try {
       const nextRecents = [form.code, ...recents.filter((c) => c !== form.code)].slice(0, 8);
       setRecents(nextRecents);
-      localStorage.setItem(STORAGE_KEY_RECENTS, JSON.stringify(nextRecents));
+      if (user?.id) {
+        localStorage.setItem(getRecentStorageKey(user.id), JSON.stringify(nextRecents));
+      }
     } catch {
       /* ignore */
     }
@@ -129,16 +153,35 @@ export function DraftFormSelectModal({
     return list.filter((f) => f.folderId === selectedFolderId);
   }, [forms, search, selectedFolderId, favorites, recents]);
 
+  // 상단 1행 최근 사용 서식 목록 (최대 4개)
+  const recentFormsList = useMemo(() => {
+    if (selectedFolderId !== 'all' || search.trim()) return [];
+    return recents
+      .map((code) => forms.find((f) => f.code === code))
+      .filter((f): f is ApprovalForm => !!f)
+      .slice(0, 4);
+  }, [recents, forms, selectedFolderId, search]);
+
+  const currentFolderTitle = useMemo(() => {
+    if (search.trim()) return `"${search}" 검색 결과`;
+    if (selectedFolderId === 'all') return '전체 서식';
+    if (selectedFolderId === 'favorites') return '즐겨찾는 서식';
+    if (selectedFolderId === 'recents') return '최근 사용 서식';
+    if (selectedFolderId === 'root') return '기본 / 공통 서식';
+    const f = folders.find((fol) => fol.id === selectedFolderId);
+    return f ? `${f.name} 서식` : '서식 목록';
+  }, [selectedFolderId, search, folders]);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="flex h-[80vh] max-h-[680px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
+        className="flex h-[82vh] max-h-[720px] w-full max-w-5xl xl:max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 상단 헤더 */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
           <div>
             <h2 className="text-base font-extrabold text-ink flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-soft text-teal font-bold text-sm">
@@ -159,7 +202,7 @@ export function DraftFormSelectModal({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="서식명 또는 코드 검색..."
+                placeholder="서식명 검색..."
                 className="w-full rounded-lg border border-border bg-panel-alt/50 pl-8 pr-3 py-1.5 text-xs text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel transition-all"
                 autoFocus
               />
@@ -183,9 +226,9 @@ export function DraftFormSelectModal({
         </div>
 
         {/* 모달 2단 본문: 좌측 카테고리 트리 + 우측 서식 카드 그리드 */}
-        <div className="grid grid-cols-[220px_1fr] flex-1 overflow-hidden">
+        <div className="grid grid-cols-[210px_1fr] flex-1 min-h-0 overflow-hidden">
           {/* 좌측: 폴더 및 스마트 필터 네비게이션 */}
-          <div className="border-r border-border bg-panel-alt/30 p-3 overflow-y-auto space-y-1 select-none">
+          <div className="border-r border-border bg-panel-alt/30 p-3 overflow-y-auto space-y-1 select-none shrink-0">
             <div className="text-[11px] font-bold text-ink3 px-2 py-1 uppercase tracking-wider">
               스마트 보기
             </div>
@@ -291,8 +334,51 @@ export function DraftFormSelectModal({
             })}
           </div>
 
-          {/* 우측: 서식 카드 그리드 */}
+          {/* 우측: 서식 카드 그리드 (3~4열) */}
           <div className="p-5 overflow-y-auto bg-panel">
+            {/* 1. 상단 1행: 최근 사용 서식 섹션 (동일한 정규 서식 카드 1행 최대 4개 노출 + 가로 구분선) */}
+            {recentFormsList.length > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-ink">
+                    <Clock className="h-3.5 w-3.5 text-teal" />
+                    <span>최근 사용 서식</span>
+                    <span className="text-[10.5px] font-normal text-ink3">
+                      (최근에 작성한 서식입니다)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {recentFormsList.map((form) => (
+                    <FormCard
+                      key={`recent-${form.id}`}
+                      form={form}
+                      isAllowed={isFormAllowed(form)}
+                      isCurrent={currentCode === form.code}
+                      isFav={favorites.includes(form.code)}
+                      onSelect={() => handleSelectForm(form)}
+                      onToggleFav={(e) => toggleFavorite(e, form.code)}
+                    />
+                  ))}
+                </div>
+
+                {/* 최근 사용 서식과 전체 서식 사이의 명확한 가로 구분선 */}
+                <div className="border-b border-border/80 my-5" />
+              </div>
+            )}
+
+            {/* 2. 하단 본문: 전체 / 카테고리별 서식 목록 헤더 */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-extrabold text-ink flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-teal" />
+                <span>{currentFolderTitle}</span>
+              </span>
+              <span className="text-[11px] text-ink3 font-semibold">
+                총 {filteredForms.length}개 서식
+              </span>
+            </div>
+
             {filteredForms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-ink3">
                 <FileText className="h-10 w-10 stroke-1 opacity-40 mb-2" />
@@ -300,98 +386,25 @@ export function DraftFormSelectModal({
                 {search && <p className="text-xs mt-1">검색어를 다시 확인해주세요.</p>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3.5">
-                {filteredForms.map((form) => {
-                  const allowed = isFormAllowed(form);
-                  const isCurrent = currentCode === form.code;
-                  const isFav = favorites.includes(form.code);
-
-                  return (
-                    <div
-                      key={form.id}
-                      onClick={() => allowed && handleSelectForm(form)}
-                      className={`group relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
-                        !allowed
-                          ? 'opacity-40 border-border bg-panel-alt/30 cursor-not-allowed'
-                          : isCurrent
-                          ? 'border-teal bg-teal-soft/20 shadow-sm cursor-pointer'
-                          : 'border-border bg-panel hover:border-teal/60 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
-                      }`}
-                    >
-                      <div>
-                        {/* 카드 상단: 아이콘 + 서식명 + 즐겨찾기 버튼 */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-alt text-lg shadow-2xs group-hover:scale-105 transition-transform">
-                              {form.icon || '📄'}
-                            </span>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <h3 className="font-extrabold text-sm text-ink truncate group-hover:text-teal transition-colors">
-                                  {form.name}
-                                </h3>
-                                {form.system && (
-                                  <span className="rounded bg-ink3/10 px-1.5 py-0.5 text-[9px] font-bold text-ink3 shrink-0">
-                                    기본
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-ink3 font-mono mt-0.5 truncate">
-                                코드: {form.code}
-                              </p>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(e) => toggleFavorite(e, form.code)}
-                            className="p-1 text-ink3 hover:text-amber-500 transition-colors cursor-pointer"
-                            title={isFav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-                          >
-                            <Star
-                              className={`h-4 w-4 ${
-                                isFav ? 'fill-amber-400 text-amber-500' : 'opacity-40 group-hover:opacity-100'
-                              }`}
-                            />
-                          </button>
-                        </div>
-
-                        {/* 서식 설명 또는 문서 타이틀 */}
-                        <p className="mt-3 text-xs text-ink2 line-clamp-2 leading-relaxed">
-                          {form.docTitle ? `공식 양식: ${form.docTitle}` : `${form.name} 양식으로 결재를 상신합니다.`}
-                        </p>
-                      </div>
-
-                      {/* 카드 하단 메타 */}
-                      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-ink3">
-                        <span className="flex items-center gap-1">
-                          {allowed ? (
-                            <span className="inline-flex items-center gap-1 text-teal font-semibold">
-                              <span>작성하기</span>
-                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-                            </span>
-                          ) : (
-                            <span className="text-rose-500 font-semibold">직급 권한 제한</span>
-                          )}
-                        </span>
-
-                        {isCurrent && (
-                          <span className="flex items-center gap-1 text-teal font-bold text-[11px]">
-                            <Check className="h-3.5 w-3.5" />
-                            <span>현재 작성 중</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredForms.map((form) => (
+                  <FormCard
+                    key={form.id}
+                    form={form}
+                    isAllowed={isFormAllowed(form)}
+                    isCurrent={currentCode === form.code}
+                    isFav={favorites.includes(form.code)}
+                    onSelect={() => handleSelectForm(form)}
+                    onToggleFav={(e) => toggleFavorite(e, form.code)}
+                  />
+                ))}
               </div>
             )}
           </div>
         </div>
 
         {/* 모달 하단 닫기 */}
-        <div className="flex items-center justify-end border-t border-border px-6 py-3 bg-panel-alt/20">
+        <div className="flex items-center justify-end border-t border-border px-6 py-3 bg-panel-alt/20 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -400,6 +413,104 @@ export function DraftFormSelectModal({
             닫기
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** 단순화된 사용자 중심 서식 카드 컴포넌트 */
+interface FormCardProps {
+  form: ApprovalForm;
+  isAllowed: boolean;
+  isCurrent: boolean;
+  isFav: boolean;
+  onSelect: () => void;
+  onToggleFav: (e: React.MouseEvent) => void;
+}
+
+function FormCard({
+  form,
+  isAllowed,
+  isCurrent,
+  isFav,
+  onSelect,
+  onToggleFav,
+}: FormCardProps) {
+  const desc = FORM_DESCRIPTIONS[form.code] || (form.docTitle && form.docTitle !== form.name ? form.docTitle : '전자결재 문서 작성');
+
+  return (
+    <div
+      onClick={() => isAllowed && onSelect()}
+      className={`group relative flex flex-col justify-between rounded-xl border p-3.5 transition-all text-left select-none ${
+        !isAllowed
+          ? 'opacity-40 border-border bg-panel-alt/20 cursor-not-allowed'
+          : isCurrent
+          ? 'border-teal bg-teal-soft/20 shadow-xs cursor-pointer'
+          : 'border-border bg-panel hover:border-teal/60 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
+      }`}
+    >
+      <div>
+        {/* 상단: 아이콘 + 서식명 + 즐겨찾기 별표 버튼 */}
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-alt text-base shadow-2xs group-hover:scale-105 transition-transform">
+              {form.icon || '📄'}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <h3 className="font-extrabold text-[13px] text-ink truncate group-hover:text-teal transition-colors">
+                  {form.name}
+                </h3>
+                {form.system && (
+                  <span className="rounded bg-ink3/10 px-1 py-0.2 text-[8.5px] font-bold text-ink3 shrink-0">
+                    기본
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToggleFav}
+            className="p-1 text-ink3 hover:text-amber-500 transition-colors cursor-pointer shrink-0"
+            title={isFav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+          >
+            <Star
+              className={`h-4 w-4 ${
+                isFav ? 'fill-amber-400 text-amber-500' : 'opacity-30 group-hover:opacity-100'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* 한 줄 직관 설명 (관리자용 코드 및 공식양식명 제거) */}
+        <p className="mt-2 text-[11.5px] text-ink3 line-clamp-2 leading-relaxed h-[34px]">
+          {desc}
+        </p>
+      </div>
+
+      {/* 카드 하단: 현재 작성 중 상태 또는 [작성하기 →] 버튼 CTA */}
+      <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between text-[11px]">
+        <div>
+          {isCurrent && (
+            <span className="flex items-center gap-1 text-teal font-extrabold text-[10.5px]">
+              <Check className="h-3 w-3" />
+              <span>작성 중</span>
+            </span>
+          )}
+        </div>
+
+        {isAllowed ? (
+          <span className="inline-flex items-center gap-1 rounded-lg bg-teal-soft/70 px-2.5 py-1 text-[11px] font-bold text-teal group-hover:bg-teal group-hover:text-white transition-all shadow-2xs">
+            <span>작성하기</span>
+            <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        ) : (
+          <span className="rounded bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500">
+            권한 제한
+          </span>
+        )}
       </div>
     </div>
   );

@@ -94,6 +94,7 @@ export interface ApprovalDraftDocumentSheetProps {
   onSelectFieldKey?: (key: string) => void;
   onUpdateDocTitle?: (v: string) => void;
   onUpdateClosing?: (v: string) => void;
+  onStampTableClick?: () => void;
 }
 
 export function ApprovalDraftDocumentSheet({
@@ -139,6 +140,7 @@ export function ApprovalDraftDocumentSheet({
   onSelectFieldKey,
   onUpdateDocTitle,
   onUpdateClosing,
+  onStampTableClick,
 }: ApprovalDraftDocumentSheetProps) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -339,7 +341,7 @@ export function ApprovalDraftDocumentSheet({
   let lastRenderedSection = '';
 
   return (
-    <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-sm border border-[#ccc] rounded-xs box-border transition-all">
+    <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
       <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
         <div className="flex items-center gap-2 h-full">
@@ -385,15 +387,30 @@ export function ApprovalDraftDocumentSheet({
             </span>
           )}
         </h1>
-        {/* 실시간 연동 결재 직인 테이블 */}
-        <ApprovalStampTable
-          steps={stampSteps}
-          nameOf={nameOf}
-          posOf={posOf}
-          sealOf={sealOf}
-          isSignatureOf={isSignatureOf}
-          isPostApproval={isPostApproval}
-        />
+        {/* 실시간 연동 결재 직인 테이블 (디자인 모드 시 클릭하여 결재선 규칙 모달 호출) */}
+        <div
+          onClick={isDesignMode ? onStampTableClick : undefined}
+          className={`relative group ${
+            isDesignMode
+              ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 transition-all rounded p-1'
+              : ''
+          }`}
+          title={isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : undefined}
+        >
+          {isDesignMode && (
+            <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">
+              <span>⚙️ 클릭하여 결재선 규칙 설정</span>
+            </div>
+          )}
+          <ApprovalStampTable
+            steps={stampSteps}
+            nameOf={nameOf}
+            posOf={posOf}
+            sealOf={sealOf}
+            isSignatureOf={isSignatureOf}
+            isPostApproval={isPostApproval}
+          />
+        </div>
       </div>
 
       {/* 3. 긴급 후결(선조치 사후승인) 안내 및 입력 인포 박스 */}

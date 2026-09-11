@@ -21,7 +21,6 @@ import { useLeave } from '@/features/gw/useLeave';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import { RelatedDocSearchModal } from '@/modules/gw/approval/RelatedDocSearchModal';
 import { DraftConfirmDialog } from './components/DraftConfirmDialog';
-import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { DraftFormSelectModal } from './components/DraftFormSelectModal';
 import { FormChangeConfirmDialog } from './components/FormChangeConfirmDialog';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
@@ -186,7 +185,6 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
-  const [zoomFactor, setZoomFactor] = useState(1);
   const [isWideScreen, setIsWideScreen] = useState(true);
   const [isAgreementEnabled, setIsAgreementEnabled] = useState(false);
 
@@ -202,16 +200,7 @@ function ApprovalDraftInner({
   useEffect(() => {
     const handleResize = () => {
       const w = window.innerWidth;
-      const wide = w >= 1200;
-      setIsWideScreen(wide);
-
-      if (wide) {
-        // Widescreen baseline: 1750px (min zoom 0.6)
-        setZoomFactor(w < 1750 ? Math.max(0.6, w / 1750) : 1);
-      } else {
-        // Collapsed baseline: 1380px (min zoom 0.6)
-        setZoomFactor(Math.max(0.6, w / 1380));
-      }
+      setIsWideScreen(w >= 1200);
     };
     window.addEventListener('resize', handleResize);
     handleResize();
@@ -554,25 +543,7 @@ function ApprovalDraftInner({
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
-  const executionTarget = useMemo(() => {
-    if (editDoc?.execution) {
-      const t = editDoc.execution;
-      let name = t.targetId;
-      if (t.targetType === 'USER') {
-        const u = org.userById(t.targetId);
-        if (u) name = `${u.name} ${u.position}`;
-      } else {
-        const d = org.depts.find((dept) => dept.id === t.targetId);
-        if (d) name = d.name;
-      }
-      return { type: t.targetType, id: t.targetId, name };
-    }
-    return null;
-  }, [editDoc, org]);
-
   const [showConfirmClose, setShowConfirmClose] = useState(false);
-  const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
 
   // 자동저장 복구 제안 모달 상태
   const [showAutosaveRecoverModal, setShowAutosaveRecoverModal] = useState(false);
@@ -1072,70 +1043,9 @@ function ApprovalDraftInner({
 
 
 
-  const previewDoc: ApprovalDoc = useMemo(
-    () => {
-      const myDeptObj = org.depts.find((d) => d.name === me.dept);
-      const myDeptId = myDeptObj ? myDeptObj.id : '';
-      return {
-        id: editDoc?.id ?? 'preview-doc-id',
-        docNo: editDoc?.docNo ?? 'DRAFT-PREVIEW',
-        docType: code,
-        title: title || '(제목 없음)',
-        body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : '',
-        drafterId: me.id,
-        drafterDept: me.dept,
-        drafterDeptId: myDeptId,
-      status: '진행중',
-      amount: amountNum,
-      securityLevel,
-      visibility: visibility,
-      createdAt: new Date().toISOString(),
-      submittedAt: null,
-      completedAt: null,
-      currentSeq: 0,
-      fieldValues: values,
-      attachments,
-      recipients,
-      executionDepts: [],
-      relatedDocs,
-      steps,
-      form:
-        code === '휴가'
-          ? {
-            leaveType: String(values['leaveType'] || '연차') as LeaveType,
-            startDate: String(values['period'] || ''),
-            endDate: String(values['leaveType'] || '').includes('반차') ? String(values['period'] || '') : String(values['period__end'] || values['period'] || ''),
-            startTime: String(values['startTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차'), values['quarterSlot'] as string).startTime),
-            endTime: String(values['endTime'] || getDefaultTimeWindow(String(values['leaveType'] || '연차'), values['quarterSlot'] as string).endTime),
-            days: String(values['leaveType'] || '').includes('반차')
-              ? 0.5
-              : String(values['leaveType'] || '') === '반반차'
-              ? 0.25
-              : Number(values['period__days']) || 1,
-            reason: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]) : undefined,
-          }
-          : null,
-      execution: executionTarget
-        ? { docId: editDoc?.id ?? 'preview-doc-id', targetType: executionTarget.type, targetId: executionTarget.id, status: '대기중' as const, comment: '' }
-        : null,
-      executionsSnapshot: editDoc?.executionsSnapshot ?? [],
-      preservationPeriod: values['preservationPeriod'] ? String(values['preservationPeriod']) : (form?.preservationPeriod ?? '3년'),
-      isPostApproval,
-      postApprovalReason,
-      postApprovalActionTaken,
-      postApprovalNecessity,
-      postApprovalCostDetails,
-      postApprovalFollowup,
-      postApprovedAt,
-      postApprovedById,
-      postApprovedByName: org.userById(postApprovedById)?.name ?? null,
-    };
-  },
-    [editDoc, code, title, me, amountNum, values, attachments, recipients, steps, executionTarget, form, isPostApproval, postApprovalReason, postApprovalActionTaken, postApprovalNecessity, postApprovalCostDetails, postApprovalFollowup, postApprovedAt, postApprovedById, org, securityLevel, relatedDocs],
-  );
 
   return (
-    <div className="flex w-full flex-col bg-panel" style={{ zoom: zoomFactor }}>
+    <div className="flex w-full flex-col bg-panel">
       {/* 상단 헤더 툴바 — body 스크롤 기준으로 sticky top-0 고정
            (/gw에서 main overflow 없음 → body가 스크롤 → 스크롤 내리면 Topbar가 사라지고 이 헤더가 스크린 상단에 고정됨) */}
       <header className="sticky top-0 z-30 h-[53px] flex shrink-0 items-center justify-between border-b border-border bg-panel/95 backdrop-blur-md px-6 shadow-xs">
@@ -1188,13 +1098,6 @@ function ApprovalDraftInner({
           )}
 
           <AutosaveIndicator at={autosavedAt} />
-          <button
-            type="button"
-            onClick={() => setShowPreview(true)}
-            className="rounded-lg border border-border px-3.5 py-1.5 text-[12px] font-bold text-ink2 hover:bg-panel-alt transition-colors"
-          >
-            미리보기
-          </button>
           {!isResubmit && (
             <button
               type="button"
@@ -1228,10 +1131,10 @@ function ApprovalDraftInner({
           </button>
         </div>
       )}
-      {/* 기안 워크스페이스 본문 메인 레이아웃 (미리보기와 100% 일치하는 단일 A4 공문서 캔버스 시트) */}
-      <div className="flex flex-1 bg-[#f4f6f8] min-h-[calc(100vh-53px)]">
-        {/* 중앙 A4 문서 캔버스 */}
-        <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex justify-center">
+      {/* 기안 워크스페이스 본문 메인 레이아웃 (세로 완전 분리: 좌측 #878d90 공문서 캔버스 + 우측 세로 고정 결재선 사이드바) */}
+      <div className="flex flex-1 w-full bg-[#878d90] min-h-[calc(100vh-53px)]">
+        {/* 중앙 A4 문서 캔버스 (배경색 #878d90으로 백색 A4 용지와 완벽한 대비 및 세로 스크롤) */}
+        <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex justify-center bg-[#878d90] transition-colors">
           <ApprovalDraftDocumentSheet
             form={form}
             docCode={code}
@@ -1276,14 +1179,13 @@ function ApprovalDraftInner({
           />
         </div>
 
-        {/* [3단] 우측 결재선 전용 고정 패널 — sticky self-start top-53px, 내부 스크롤 + 패널 내부 헤더 sticky 고정 */}
+        {/* [3단] 우측 결재선 전용 고정 사이드바 — 공문서 공간과 세로 경계선으로 완벽 분리, 상단부터 바닥까지 100% 꽉 채움 */}
         {isWideScreen && (
-          <div
-            className="w-[370px] shrink-0 border-l border-border bg-panel-alt/40 sticky self-start z-30 overflow-y-auto"
-            style={{ top: '53px', maxHeight: 'calc(100vh - 53px)' }}
+          <aside
+            className="w-[410px] xl:w-[430px] shrink-0 border-l border-slate-400/40 dark:border-slate-700 bg-panel sticky top-[53px] h-[calc(100vh-53px)] flex flex-col z-20 shadow-md"
           >
-            {/* 패널 내부 헤더 — 패널 스크롤 시에도 상단에 잘라붙어 보임 */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-2.5">
+            {/* 패널 내부 헤더 — 패널 상단 고정 */}
+            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-3">
               <span className="text-[13px] font-extrabold text-ink flex items-center gap-1.5">
                 <GitFork className="h-4 w-4 text-teal shrink-0" />
                 <span>결재선 설정</span>
@@ -1293,8 +1195,8 @@ function ApprovalDraftInner({
               </span>
             </div>
 
-            {/* 결재선 빌더 + 수신/시행 (bottomSlot) */}
-            <div className="px-4 py-4">
+            {/* 결재선 빌더 + 수신/시행 (bottomSlot) — 내부 독립 스크롤 */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4">
               <ApprovalLineBuilder
                 steps={steps}
                 onChange={setSteps}
@@ -1312,7 +1214,7 @@ function ApprovalDraftInner({
                 }
               />
             </div>
-          </div>
+          </aside>
         )}
 
       </div>
@@ -1320,7 +1222,7 @@ function ApprovalDraftInner({
       {/* 해상도 작을 때 우측 결재선 Drawer (header z-[200]보다 높은 z-[300] 지정) */}
       {drawerOpen && (
         <div className="fixed inset-0 z-[300] flex justify-end bg-black/40 xl:hidden" onClick={() => setDrawerOpen(false)}>
-          <div className="h-full w-full max-w-md bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-full max-w-lg bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
               <span className="text-[15px] font-bold text-ink flex items-center gap-1.5">
                 <GitFork className="h-4 w-4 text-teal shrink-0" />
@@ -1392,19 +1294,6 @@ function ApprovalDraftInner({
         />
       )}
 
-      {showConfirmDiscard && (
-        <DraftConfirmDialog
-          title="기안 작성 취소"
-          description={<>기안 작성을 취소하시겠습니까?<br />작성 중이던 내용은 저장되지 않습니다.</>}
-          confirmLabel="변경내용 모두 취소"
-          confirmColor="bg-danger"
-          onConfirm={() => {
-            clearAutosave();
-            navigate('/gw/approval');
-          }}
-          onCancel={() => setShowConfirmDiscard(false)}
-        />
-      )}
 
       {showAutosaveRecoverModal && (
         <DraftConfirmDialog
@@ -1443,14 +1332,6 @@ function ApprovalDraftInner({
         />
       )}
 
-      {showPreview && (
-        <DocumentPreviewModal
-          title="문서 미리보기"
-          doc={previewDoc}
-          currentUser={me}
-          onClose={() => setShowPreview(false)}
-        />
-      )}
 
       {showRelatedModal && (
         <RelatedDocSearchModal

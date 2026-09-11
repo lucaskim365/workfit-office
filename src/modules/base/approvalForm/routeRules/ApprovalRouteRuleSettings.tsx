@@ -186,7 +186,7 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
 
       {/* 룰 편집 모달 다이얼로그 */}
       {selRule && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
           <div
             className="relative w-[640px] max-h-[85vh] overflow-y-auto rounded-xl bg-panel border border-border p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}

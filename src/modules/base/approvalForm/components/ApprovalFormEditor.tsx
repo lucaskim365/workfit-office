@@ -8,7 +8,8 @@ import { blankField } from '../utils';
 import { OptionsInput } from './OptionsInput';
 import { FormPermissionSettings } from './FormPermissionSettings';
 import { FormTargetSelector } from './FormTargetSelector';
-import { ApprovalRouteRuleSettings } from '../routeRules/ApprovalRouteRuleSettings';
+import { ApprovalRouteRuleModal } from '../routeRules/ApprovalRouteRuleModal';
+import { resolveRoute } from '@/domain/approvalRoute/engine';
 import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep } from '@/domain/approvalDoc/schema';
@@ -24,6 +25,7 @@ import {
   ChevronUp,
   ChevronDown,
   MousePointerClick,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
@@ -158,6 +160,9 @@ export function ApprovalFormEditor({
   // 상단 주 탭: 'design' (도구함 & 필드 속성) vs 'config' (서식 메타/보안/결재규칙)
   const [activeMainTab, setActiveMainTab] = useState<'design' | 'config'>('design');
 
+  // 결재선 규칙(전결규정) 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
+  const [showRouteRuleModal, setShowRouteRuleModal] = useState(false);
+
   // 현재 선택된 필드 인덱스 (기본값은 0번째 필드)
   const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(() => {
     return form.fields[0]?.key || null;
@@ -243,6 +248,27 @@ export function ApprovalFormEditor({
     ],
     [dummyMe.id]
   );
+
+  // 현재 서식 및 규칙에 따른 실시간 결재선 시뮬레이션 계산 (규칙 추가/수정 시 직인란 즉각 반영)
+  const previewSteps: ApprovalStep[] = useMemo(() => {
+    try {
+      const res = resolveRoute({
+        drafter: dummyMe,
+        docType: form.code,
+        amount: 3000000,
+        users,
+        depts,
+        positions: org.positions || [],
+        rules,
+      });
+      if (res.steps && res.steps.length > 0) {
+        return res.steps;
+      }
+    } catch {
+      // 규칙 매칭 오류 시 기본 폴백
+    }
+    return dummySteps;
+  }, [dummyMe, form.code, users, depts, org.positions, rules, dummySteps]);
 
   const [previewValues, setPreviewValues] = useState<Record<string, FieldValue>>({});
   const setPreviewVals = (patch: Record<string, FieldValue>) => {
@@ -840,33 +866,55 @@ export function ApprovalFormEditor({
                 }
               />
 
-              {/* 결재규칙 설정 */}
-              {form.id && <ApprovalRouteRuleSettings form={form} org={org} />}
+              {/* 결재선 규칙 모달 바로가기 카드 (스크롤 제로 달성) */}
+              {form.id && (
+                <div className="rounded-xl border border-border bg-panel p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[12.5px] font-bold text-ink">결재선(전결) 규칙 설정</div>
+                      <div className="text-[10.5px] text-ink3 mt-0.5">
+                        등록된 서식 전용 규칙: <span className="text-teal font-bold">{formRulesCount}개</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteRuleModal(true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-teal-soft px-3 py-1.5 text-[11.5px] font-bold text-teal hover:bg-teal hover:text-white transition-colors cursor-pointer"
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      <span>규칙 설정 모달 열기</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ink3 leading-relaxed">
+                    A4 캔버스 상단의 결재 직인란을 클릭하거나 위 버튼을 눌러 결재선 규칙을 편집할 수 있습니다.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* 우측 패널: [실시간 A4 공문서 캔버스] (기안 화면과 100% 동일) */}
-        <div className="flex flex-col rounded-xl border border-border bg-slate-100 dark:bg-panel-alt/30 p-3.5 overflow-hidden">
+        {/* 우측 패널: [실시간 A4 공문서 캔버스] (기안 화면과 100% 동일한 #878d90 작업대 배경) */}
+        <div className="flex flex-col rounded-xl border border-border/80 bg-[#878d90] dark:bg-[#878d90] p-3.5 overflow-hidden shadow-sm">
           {/* 캔버스 상단 툴바 */}
-          <div className="mb-2.5 flex items-center justify-between border-b border-border/80 pb-2 px-2">
+          <div className="mb-2.5 flex items-center justify-between border-b border-white/10 pb-2 px-2">
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-teal text-white text-[11px] font-bold">
                 A4
               </span>
-              <span className="text-[12px] font-bold text-ink">
+              <span className="text-[12px] font-bold text-white">
                 실시간 A4 공문서 캔버스
               </span>
               <span className="rounded bg-teal-soft px-1.5 py-0.2 text-[9.5px] font-extrabold text-teal">
                 기안 화면과 100% 동일
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-ink3">
+            <div className="flex items-center gap-2 text-[11px] text-slate-300">
               <span>캔버스 내 항목을 클릭하면 좌측에서 즉시 편집됩니다</span>
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex items-center gap-1 rounded border border-border bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
+                className="flex items-center gap-1 rounded border border-white/20 bg-panel/80 px-2.5 py-1 text-[11px] font-semibold text-ink hover:bg-panel transition-colors cursor-pointer"
               >
                 <Printer className="h-3 w-3" />
                 인쇄 규격
@@ -902,7 +950,7 @@ export function ApprovalFormEditor({
                 setPostApprovalActionTaken={() => {}}
                 postApprovalNecessity=""
                 setPostApprovalNecessity={() => {}}
-                steps={dummySteps}
+                steps={previewSteps}
                 recipients={[]}
                 attachments={[]}
                 setAttachments={() => {}}
@@ -922,11 +970,20 @@ export function ApprovalFormEditor({
                 }}
                 onUpdateDocTitle={(newTitle) => set({ docTitle: newTitle })}
                 onUpdateClosing={(newClosing) => set({ closing: newClosing })}
+                onStampTableClick={() => setShowRouteRuleModal(true)}
               />
             </div>
           </div>
         </div>
       </div>
+
+      {/* 결재선 규칙 팝업 모달 */}
+      <ApprovalRouteRuleModal
+        isOpen={showRouteRuleModal}
+        onClose={() => setShowRouteRuleModal(false)}
+        form={form}
+        org={org}
+      />
     </div>
   );
 }

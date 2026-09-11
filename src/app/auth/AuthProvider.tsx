@@ -80,6 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOutUser() {
     localStorage.removeItem(SESSION_KEY);
     clearWiddyToken();
+    if (typeof window !== 'undefined') {
+      const isMobile = window.location.pathname.startsWith('/m');
+      const targetUrl = isMobile ? '/m' : '/';
+      if (window.location.pathname !== targetUrl || window.location.search) {
+        window.history.replaceState(null, '', targetUrl);
+      }
+    }
     setUser(null);
   }
 

@@ -186,7 +186,11 @@ export function UserMenu({ onClose }: UserMenuProps) {
         <div className="flex border-t border-border">
           <button onClick={onClose} className="flex-1 border-r border-border py-2.5 text-[11.5px] font-semibold text-ink2 hover:bg-panel-alt">도움말</button>
           <button
-            onClick={() => { onClose(); void signOutUser(); }}
+            onClick={() => {
+              onClose();
+              navigate('/', { replace: true });
+              void signOutUser();
+            }}
             className="flex-1 py-2.5 text-[11.5px] font-bold text-danger hover:bg-panel-alt"
           >
             로그아웃

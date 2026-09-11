@@ -12,13 +12,6 @@ export const RESOLVER_LABEL: Record<Resolver, string> = {
   SPECIFIC_DEPT_HEAD: '특정 부서장',
 };
 
-export const ARG_HINT: Partial<Record<Resolver, string>> = {
-  PARENT_DEPT_HEAD: 'level(예: 1)',
-  POSITION_AT_LEAST: 'rank(예: 3)',
-  SPECIFIC_USER: 'userId',
-  SPECIFIC_DEPT_HEAD: 'deptId',
-};
-
 export const blankRule = (formId: string, docType: string): ApprovalRouteRule => ({
   id: '',
   name: '',
