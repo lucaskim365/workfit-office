@@ -71,11 +71,11 @@ export function FolderManageModal({
             </div>
             <div>
               <h3 className="text-[14px] font-bold text-ink">
-                {isEdit ? '폴더 이름 및 정보 변경' : '새 폴더 생성'}
+                {isEdit ? '카테고리 정보 변경' : '새 카테고리 생성'}
               </h3>
               {!isEdit && (
                 <p className="text-[11px] text-ink3">
-                  {parentFolder ? `상위: ${parentFolder.name}` : '위치: 최상위(루트)'}
+                  {parentFolder ? `상위 분류: ${parentFolder.name}` : '위치: 1단계 최상위 분류'}
                 </p>
               )}
             </div>
@@ -99,13 +99,13 @@ export function FolderManageModal({
 
           <div>
             <label className="block text-[12px] font-bold text-ink mb-1.5">
-              폴더명 <span className="text-danger">*</span>
+              카테고리명 <span className="text-danger">*</span>
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="예: 2026년 행사, 워크숍, 연구소 등"
+              placeholder="예: 사내 행사, 워크숍, 제품 촬영, 일상 등"
               maxLength={50}
               autoFocus
               className="w-full rounded-xl border border-border bg-panel px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10 transition-all"
@@ -114,12 +114,12 @@ export function FolderManageModal({
 
           <div>
             <label className="block text-[12px] font-bold text-ink mb-1.5">
-              폴더 설명 <span className="text-[11px] font-normal text-ink3">(선택)</span>
+              카테고리 설명 <span className="text-[11px] font-normal text-ink3">(선택)</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="이 폴더에 담길 사진에 대한 간단한 설명을 입력하세요."
+              placeholder="이 카테고리에 등록될 사진에 대한 간단한 설명을 입력하세요."
               rows={2}
               maxLength={150}
               className="w-full resize-none rounded-xl border border-border bg-panel px-3.5 py-2 text-[12.5px] text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/10 transition-all"
@@ -138,9 +138,9 @@ export function FolderManageModal({
             <button
               type="submit"
               disabled={isSubmitting || !name.trim()}
-              className="flex items-center gap-1.5 rounded-xl bg-teal px-5 py-2 text-[12.5px] font-bold text-white shadow-xs hover:bg-teal/90 disabled:opacity-50 transition-all"
+              className="rounded-xl bg-teal px-4 py-2 text-[12.5px] font-bold text-white shadow-xs hover:bg-teal/90 disabled:opacity-50 transition-all"
             >
-              {isSubmitting ? '저장 중…' : isEdit ? '수정 완료' : '폴더 만들기'}
+              {isSubmitting ? '저장 중…' : isEdit ? '변경사항 저장' : '카테고리 생성'}
             </button>
           </div>
         </form>

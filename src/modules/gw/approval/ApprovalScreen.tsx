@@ -1053,9 +1053,10 @@ function DocDetail({
   const [showForwardPostReadModal, setShowForwardPostReadModal] = useState(false);
   const [forwardTargetUserId, setForwardTargetUserId] = useState('');
   const [forwardMemo, setForwardMemo] = useState('');
+  const postReadStorageKey = `workfit_post_read_shares_${me || 'guest'}`;
   const [postReadShareList, setPostReadShareList] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('workfit_post_read_shares');
+      const saved = localStorage.getItem(postReadStorageKey) || localStorage.getItem('workfit_post_read_shares');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -1095,7 +1096,7 @@ function DocDetail({
     const updated = [newShare, ...postReadShareList];
     setPostReadShareList(updated);
     try {
-      localStorage.setItem('workfit_post_read_shares', JSON.stringify(updated));
+      localStorage.setItem(postReadStorageKey, JSON.stringify(updated));
     } catch {
       // ignore
     }

@@ -14,8 +14,8 @@ import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engi
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
 
-// 데스크톱 QuickDock 과 동일 localStorage 키 — 고정/숨김 상태를 두 화면이 공유.
-const PIN_KEY = 'workfit-pinned-rooms';
+// 고정/숨김 상태를 사용자별로 안전하게 분리 저장.
+const pinKeyOf = (me: string) => `workfit-pinned-rooms-${me}`;
 const hiddenKeyOf = (me: string) => `workfit-hidden-rooms-${me}`;
 
 
@@ -52,7 +52,10 @@ export default function MobileChatList() {
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadIds(PIN_KEY));
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
+    const userPinned = loadIds(pinKeyOf(me));
+    return userPinned.length > 0 ? userPinned : loadIds('workfit-pinned-rooms');
+  });
   const [hiddenIds, setHiddenIds] = useState<string[]>(() => loadIds(hiddenKeyOf(me)));
 
   const leave = useLeaveRoom();
@@ -79,7 +82,7 @@ export default function MobileChatList() {
   const togglePin = (roomId: string) => {
     const next = pinnedIds.includes(roomId) ? pinnedIds.filter((id) => id !== roomId) : [...pinnedIds, roomId];
     setPinnedIds(next);
-    localStorage.setItem(PIN_KEY, JSON.stringify(next));
+    localStorage.setItem(pinKeyOf(me), JSON.stringify(next));
   };
 
   const hideRoom = (roomId: string) => {

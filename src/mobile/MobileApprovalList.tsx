@@ -110,13 +110,13 @@ export default function MobileApprovalList() {
     return list.filter((d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)).length;
   }, [byBox, me]);
 
-  // 로컬스토리지 키 설정
-  const STORAGE_KEY = 'workfit-approval-extra-tabs-v3';
+  // 로컬스토리지 키 설정 (사용자별 안전 격리)
+  const STORAGE_KEY = `workfit-approval-extra-tabs-v3-${me}`;
 
-  // 로컬스토리지에서 추가 활성화 탭 읽기
+  // 로컬스토리지에서 추가 활성화 탭 읽기 (레거시 키 호환 fallback)
   const [extraTabs, setExtraTabs] = useState<(ApprovalBox | '문서함')[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('workfit-approval-extra-tabs-v3');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];

@@ -8,7 +8,8 @@ import {
   List,
   Search,
   Loader2,
-  FolderOpen,
+  Folder,
+  Images,
 } from 'lucide-react';
 
 import { useGalleryDirectory } from '@/features/gw/gallery/useGalleryDirectory';
@@ -16,7 +17,6 @@ import type { GalleryFolder } from '@/domain/gallery/schema';
 import { toGalleryItem, type GalleryItem, type GalleryAlbum } from './types';
 import { GalleryFolderTree } from './components/GalleryFolderTree';
 import { GalleryBreadcrumb } from './components/GalleryBreadcrumb';
-import { SubFolderGrid } from './components/SubFolderGrid';
 import { FolderManageModal } from './components/FolderManageModal';
 import { FolderSelectModal } from './components/FolderSelectModal';
 import { PhotoUploadModal } from './components/PhotoUploadModal';
@@ -40,9 +40,7 @@ export default function GalleryScreen() {
     currentFolder,
     folderTree,
     breadcrumbs,
-    subFolders,
     currentPhotos,
-    photoCountMap,
     keyword,
     setKeyword,
     sortOrder,
@@ -153,7 +151,7 @@ export default function GalleryScreen() {
   };
 
   const handleDeleteFolder = async (folder: GalleryFolder) => {
-    if (confirm(`'${folder.name}' 폴더와 내부 하위 폴더 및 사진을 모두 삭제하시겠습니까?`)) {
+    if (confirm(`'${folder.name}' 카테고리와 내부 하위 분류 및 등록된 사진을 모두 삭제하시겠습니까?`)) {
       await deleteFolder(folder.id);
     }
   };
@@ -213,7 +211,7 @@ export default function GalleryScreen() {
       <GwHead
         icon="📷"
         name="회사 갤러리"
-        desc="사내 행사, 워크숍, 활동 사진을 등록하고 전사 직원과 공유하는 공용 갤러리입니다."
+        desc="사내 행사, 워크숍, 활동 사진을 카테고리별로 분류하여 전사 임직원과 공유하는 갤러리입니다."
         right={
           <div className="flex items-center gap-2">
             <Button
@@ -221,7 +219,7 @@ export default function GalleryScreen() {
               variant="secondary"
             >
               <FolderPlus size={14} className="text-amber-500" />
-              <span>새 폴더</span>
+              <span>카테고리 추가</span>
             </Button>
             <Button
               onClick={() => setIsUploadModalOpen(true)}
@@ -237,10 +235,10 @@ export default function GalleryScreen() {
       {/* ── 그룹웨어 표준 2단 레이아웃 (GwSplit) ── */}
       <GwSplit
         nav={
-          <aside className="flex flex-col gap-3 rounded-xl border border-border bg-panel p-4 shadow-sm">
-            <div>
-              <h2 className="text-sm font-extrabold text-navy">디렉토리 구조</h2>
-              <p className="mt-1 text-[11px] text-ink3">폴더를 선택하여 사진을 탐색하세요.</p>
+          <aside className="flex flex-col gap-2 rounded-2xl border border-border bg-panel p-3.5 shadow-xs">
+            <div className="px-1 pb-1">
+              <h2 className="text-sm font-extrabold text-navy">카테고리</h2>
+              <p className="mt-0.5 text-[11px] text-ink3">분류별로 사진을 모아보세요.</p>
             </div>
             <GalleryFolderTree
               folderTree={folderTree}
@@ -254,8 +252,8 @@ export default function GalleryScreen() {
           </aside>
         }
       >
-        {/* 우측 디렉토리 콘텐츠 영역 */}
-        <main className="flex flex-col min-w-0 rounded-xl border border-border bg-panel shadow-sm overflow-hidden">
+        {/* 우측 디렉토리 콘텐츠 영역: 오직 사진만 노출 */}
+        <main className="flex flex-col min-w-0 rounded-2xl border border-border bg-panel shadow-xs overflow-hidden">
           {/* 상단 브레드크럼 & 툴바(검색/정렬/뷰 모드) */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-panel px-4 py-2.5">
             <div className="flex-1 min-w-0">
@@ -285,7 +283,7 @@ export default function GalleryScreen() {
                 type="button"
                 onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
                 title={sortOrder === 'desc' ? '최신순 (클릭 시 오래된순)' : '오래된순 (클릭 시 최신순)'}
-                className="flex h-8 items-center gap-1 rounded-xl border border-border bg-panel px-2.5 text-[11.5px] font-semibold text-ink hover:bg-panel-alt transition-colors"
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-border bg-panel px-2.5 text-[11.5px] font-semibold text-ink hover:bg-panel-alt transition-colors"
               >
                 {sortOrder === 'desc' ? <ArrowDownWideNarrow size={13} /> : <ArrowUpNarrowWide size={13} />}
                 <span className="hidden sm:inline">{sortOrder === 'desc' ? '최신순' : '오래된순'}</span>
@@ -317,57 +315,67 @@ export default function GalleryScreen() {
             </div>
           </div>
 
-          {/* 메인 뷰포트 (하위 폴더 목록 + 사진 그리드) */}
-          <div className="p-6">
+          {/* 메인 뷰포트 (오직 사진만 노출) */}
+          <div className="p-5 sm:p-6 flex-1 flex flex-col">
             {isLoading ? (
-              <div className="flex h-64 flex-col items-center justify-center gap-3 text-ink3">
+              <div className="flex h-64 flex-col items-center justify-center gap-3 text-ink3 my-auto">
                 <Loader2 size={24} className="animate-spin text-teal" />
                 <span className="text-[13px] font-semibold">전사 갤러리 불러오는 중…</span>
               </div>
             ) : (
               <>
-                {/* 1. 현재 폴더의 직속 하위 폴더 그리드 */}
-                <SubFolderGrid
-                  subFolders={subFolders}
-                  photoCountMap={photoCountMap}
-                  onSelectFolder={(id) => setCurrentFolderId(id)}
-                  onCreateFolder={() => handleOpenCreateFolder(currentFolderId)}
-                  onEditFolder={(f) => handleOpenEditFolder(f)}
-                  onDeleteFolder={(f) => handleDeleteFolder(f)}
-                />
-
-                {/* 2. 사진 목록 헤더 및 다중 선택 모드 토글 */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-bold text-ink">
-                      {currentFolder ? currentFolder.name : '전체 사진'}
-                    </span>
-                    <span className="text-[11.5px] font-semibold text-ink3">
-                      ({galleryItems.length}장)
-                    </span>
+                {/* 사진 목록 헤더 및 다중 선택 모드 토글 */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/60">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="grid h-8 w-8 place-items-center rounded-xl bg-teal/10 text-teal shrink-0">
+                      {currentFolder ? <Folder size={17} className="text-amber-500" /> : <Images size={17} className="text-teal" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-ink truncate">
+                          {currentFolder ? currentFolder.name : '전체 사진 (전사 공용)'}
+                        </h3>
+                        <span className="text-[11px] font-semibold text-ink3 px-2 py-0.5 rounded-full bg-panel-alt border border-border/50 tabular-nums">
+                          {galleryItems.length}장
+                        </span>
+                      </div>
+                      {currentFolder?.description && (
+                        <p className="text-[11px] text-ink3 mt-0.5 truncate">
+                          {currentFolder.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {galleryItems.length > 0 && (
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {galleryItems.length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
                           if (isSelectionMode) handleCancelSelection();
                           else setIsSelectionMode(true);
                         }}
-                        className={`text-[11.5px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                        className={`text-[11.5px] font-bold px-3 py-1.5 rounded-xl border transition-all ${
                           isSelectionMode
-                            ? 'bg-teal text-white border-teal'
+                            ? 'bg-teal text-white border-teal shadow-xs'
                             : 'bg-panel border-border text-ink hover:bg-panel-alt'
                         }`}
                       >
                         {isSelectionMode ? '선택 취소' : '사진 선택'}
                       </button>
-                    </div>
-                  )}
+                    )}
+                    <Button
+                      onClick={() => setIsUploadModalOpen(true)}
+                      size="sm"
+                      variant="primary"
+                    >
+                      <Camera size={13} />
+                      <span>사진 업로드</span>
+                    </Button>
+                  </div>
                 </div>
 
-                {/* 3. 사진 그리드 또는 빈 상태 */}
+                {/* 사진 그리드 또는 빈 상태 */}
                 {galleryItems.length > 0 ? (
                   <PhotoGrid
                     activeTab="albums"
@@ -393,22 +401,34 @@ export default function GalleryScreen() {
                     canCreate={true}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-border rounded-2xl bg-panel/50">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-teal/10 text-teal mb-3">
-                      <FolderOpen size={24} />
+                  <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-border/80 rounded-3xl bg-panel-alt/20 my-auto">
+                    <div className="grid h-14 w-14 place-items-center rounded-2xl bg-teal/10 text-teal mb-3.5">
+                      <Camera size={26} className="stroke-[1.6]" />
                     </div>
-                    <h3 className="text-[14px] font-bold text-ink">이 폴더에 등록된 사진이 없습니다.</h3>
-                    <p className="text-[12px] text-ink3 mt-1 max-w-sm">
-                      상단의 [사진 업로드] 버튼을 눌러 소중한 행사 및 활동 사진을 등록해보세요.
+                    <h3 className="text-[14.5px] font-bold text-ink">
+                      {keyword
+                        ? `'${keyword}' 검색 결과와 일치하는 사진이 없습니다.`
+                        : currentFolder
+                        ? `'${currentFolder.name}' 폴더에 등록된 사진이 없습니다.`
+                        : '등록된 사진이 없습니다.'}
+                    </h3>
+                    <p className="text-[12px] text-ink3 mt-1.5 max-w-sm leading-relaxed">
+                      {keyword
+                        ? '다른 검색어로 다시 시도해보시거나 검색어를 초기화해보세요.'
+                        : '행사, 워크숍, 활동 사진을 업로드하여 임직원들과 공유해보세요.'}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setIsUploadModalOpen(true)}
-                      className="mt-4 flex items-center gap-1.5 rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:bg-teal/90 transition-all"
-                    >
-                      <Camera size={14} />
-                      <span>사진 업로드하기</span>
-                    </button>
+                    {!keyword && (
+                      <div className="mt-5">
+                        <Button
+                          onClick={() => setIsUploadModalOpen(true)}
+                          size="md"
+                          variant="primary"
+                        >
+                          <Camera size={14} />
+                          <span>사진 업로드하기</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

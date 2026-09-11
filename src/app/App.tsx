@@ -4,6 +4,7 @@ import AppShell from './shell/AppShell';
 import MobileApp from '@/mobile/MobileApp';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
+import { loadUserTheme } from '@/shared/lib/theme';
 
 /**
  * 화면 청크 로딩 실패 대응.
@@ -180,9 +181,9 @@ export default function App() {
       document.documentElement.style.setProperty('--font-scale', '1');
       return;
     }
-    const savedScale = localStorage.getItem('custom_font_scale') ?? '1.1875';
+    const savedScale = loadUserTheme(user?.id).fontScale;
     document.documentElement.style.setProperty('--font-scale', savedScale);
-  }, [isMobilePwa]);
+  }, [isMobilePwa, user?.id]);
 
   // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동.
   // 단, 모바일 PWA(/m)는 자체 흐름을 쓰므로 이 데스크톱 리다이렉트를 건너뛴다.

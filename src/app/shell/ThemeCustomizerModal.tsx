@@ -1,55 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '@/shared/ui/Modal';
+import { useAuth } from '@/app/auth/AuthProvider';
+import {
+  getContrastColor,
+  getSoftColor,
+  applyTheme,
+  loadUserTheme,
+  saveUserTheme,
+  DEFAULT_THEME_SETTINGS,
+} from '@/shared/lib/theme';
+
+export { getContrastColor, getSoftColor, applyTheme };
 
 export interface ThemeConfig {
   headerBg: string;
   pointColor: string;
   btnColor: string;
-}
-
-export function getContrastColor(hexColor: string): string {
-  const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-
-  // 상대 휘도(Luminance) 계산
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-  // 밝은 색상에는 어두운 글자색, 어두운 색상에는 밝은 글자색
-  return luminance > 0.6 ? '#1c2536' : '#ffffff';
-}
-
-export function getSoftColor(hexColor: string): string {
-  const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-
-  // 85%의 흰색과 혼합하여 soft 파스텔톤 생성
-  const nr = Math.round(r + (255 - r) * 0.85);
-  const ng = Math.round(g + (255 - g) * 0.85);
-  const nb = Math.round(b + (255 - b) * 0.85);
-
-  const toHex = (n: number) => String(n.toString(16)).padStart(2, '0');
-  return `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
-}
-
-export function applyTheme(headerBg: string, pointColor: string, btnColor: string) {
-  const headerText = getContrastColor(headerBg);
-  const pointText = getContrastColor(pointColor);
-  const pointSoft = getSoftColor(pointColor);
-  const btnText = getContrastColor(btnColor);
-
-  document.documentElement.style.setProperty('--color-header-bg', headerBg);
-  document.documentElement.style.setProperty('--color-header-text', headerText);
-
-  document.documentElement.style.setProperty('--color-teal-custom', pointColor);
-  document.documentElement.style.setProperty('--color-teal-text', pointText);
-  document.documentElement.style.setProperty('--color-teal-soft', pointSoft);
-
-  document.documentElement.style.setProperty('--color-navy-custom', btnColor);
-  document.documentElement.style.setProperty('--color-navy-text', btnText);
 }
 
 interface ThemeCustomizerModalProps {
@@ -58,31 +24,31 @@ interface ThemeCustomizerModalProps {
 }
 
 export function ThemeCustomizerModal({ open, onClose }: ThemeCustomizerModalProps) {
-  const [headerBg, setHeaderBg] = useState(() => localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe');
-  const [pointColor, setPointColor] = useState(() => localStorage.getItem('custom_theme_point_color') ?? '#99bbff');
-  const [btnColor, setBtnColor] = useState(() => localStorage.getItem('custom_theme_btn_color') ?? '#1243b5');
+  const { user } = useAuth();
+  const [headerBg, setHeaderBg] = useState(() => loadUserTheme(user?.id).headerBg);
+  const [pointColor, setPointColor] = useState(() => loadUserTheme(user?.id).pointColor);
+  const [btnColor, setBtnColor] = useState(() => loadUserTheme(user?.id).btnColor);
 
   const handleSave = () => {
-    localStorage.setItem('custom_theme_header_bg', headerBg);
-    localStorage.setItem('custom_theme_point_color', pointColor);
-    localStorage.setItem('custom_theme_btn_color', btnColor);
+    saveUserTheme({ headerBg, pointColor, btnColor }, user?.id);
     applyTheme(headerBg, pointColor, btnColor);
     onClose();
   };
 
   const handleReset = () => {
-    setHeaderBg('#dbeafe');
-    setPointColor('#99bbff');
-    setBtnColor('#1243b5');
+    setHeaderBg(DEFAULT_THEME_SETTINGS.headerBg);
+    setPointColor(DEFAULT_THEME_SETTINGS.pointColor);
+    setBtnColor(DEFAULT_THEME_SETTINGS.btnColor);
   };
 
   useEffect(() => {
     if (open) {
-      setHeaderBg(localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe');
-      setPointColor(localStorage.getItem('custom_theme_point_color') ?? '#99bbff');
-      setBtnColor(localStorage.getItem('custom_theme_btn_color') ?? '#1243b5');
+      const current = loadUserTheme(user?.id);
+      setHeaderBg(current.headerBg);
+      setPointColor(current.pointColor);
+      setBtnColor(current.btnColor);
     }
-  }, [open]);
+  }, [open, user?.id]);
 
   // 가독성 실시간 텍스트 색상 계산
   const headerTextColor = getContrastColor(headerBg);

@@ -12,7 +12,13 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
-import { applyTheme, getContrastColor } from '@/app/shell/ThemeCustomizerModal';
+import {
+  applyTheme,
+  getContrastColor,
+  loadUserTheme,
+  saveUserTheme,
+  DEFAULT_THEME_SETTINGS,
+} from '@/shared/lib/theme';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { userRepo } from '@/data/user/user.repo';
@@ -26,10 +32,10 @@ export default function SettingsScreen() {
   const { user: me } = useAuth();
   const [activeTab, setActiveTab] = useState<'theme' | 'notification' | 'proxy'>('theme');
 
-  // Theme states
-  const [headerBg, setHeaderBg] = useState(() => localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe');
-  const [pointColor, setPointColor] = useState(() => localStorage.getItem('custom_theme_point_color') ?? '#99bbff');
-  const [btnColor, setBtnColor] = useState(() => localStorage.getItem('custom_theme_btn_color') ?? '#1243b5');
+  // Theme states (사용자별 안전 격리)
+  const [headerBg, setHeaderBg] = useState(() => loadUserTheme(me?.id).headerBg);
+  const [pointColor, setPointColor] = useState(() => loadUserTheme(me?.id).pointColor);
+  const [btnColor, setBtnColor] = useState(() => loadUserTheme(me?.id).btnColor);
 
   // Notification states (mock)
   const [notiMute, setNotiMute] = useState(false);
@@ -37,8 +43,8 @@ export default function SettingsScreen() {
   const [notiChat, setNotiChat] = useState(true);
   const [notiApproval, setNotiApproval] = useState(true);
 
-  // Font scale states
-  const [fontScale, setFontScale] = useState(() => localStorage.getItem('custom_font_scale') ?? '1.1875');
+  // Font scale states (사용자별 안전 격리)
+  const [fontScale, setFontScale] = useState(() => loadUserTheme(me?.id).fontScale);
 
   // Absence / Proxy states
   const [users, setUsers] = useState<User[]>([]);
@@ -60,10 +66,11 @@ export default function SettingsScreen() {
 
   // Load theme, users, forms, process options, and absence config
   useEffect(() => {
-    setHeaderBg(localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe');
-    setPointColor(localStorage.getItem('custom_theme_point_color') ?? '#99bbff');
-    setBtnColor(localStorage.getItem('custom_theme_btn_color') ?? '#1243b5');
-    setFontScale(localStorage.getItem('custom_font_scale') ?? '1.1875');
+    const currentTheme = loadUserTheme(me?.id);
+    setHeaderBg(currentTheme.headerBg);
+    setPointColor(currentTheme.pointColor);
+    setBtnColor(currentTheme.btnColor);
+    setFontScale(currentTheme.fontScale);
 
     // Load users list for delegate selection
     userRepo.list().then((res) => {
@@ -94,21 +101,17 @@ export default function SettingsScreen() {
   };
 
   const handleSaveTheme = () => {
-    localStorage.setItem('custom_theme_header_bg', headerBg);
-    localStorage.setItem('custom_theme_point_color', pointColor);
-    localStorage.setItem('custom_theme_btn_color', btnColor);
-    localStorage.setItem('custom_font_scale', fontScale);
-    applyTheme(headerBg, pointColor, btnColor);
-    document.documentElement.style.setProperty('--font-scale', fontScale);
+    saveUserTheme({ headerBg, pointColor, btnColor, fontScale }, me?.id);
+    applyTheme(headerBg, pointColor, btnColor, fontScale);
     alert('설정이 성공적으로 저장되었습니다.');
   };
 
   const handleResetTheme = () => {
-    setHeaderBg('#dbeafe');
-    setPointColor('#99bbff');
-    setBtnColor('#1243b5');
-    setFontScale('1.1875');
-    document.documentElement.style.setProperty('--font-scale', '1.1875');
+    setHeaderBg(DEFAULT_THEME_SETTINGS.headerBg);
+    setPointColor(DEFAULT_THEME_SETTINGS.pointColor);
+    setBtnColor(DEFAULT_THEME_SETTINGS.btnColor);
+    setFontScale(DEFAULT_THEME_SETTINGS.fontScale);
+    document.documentElement.style.setProperty('--font-scale', DEFAULT_THEME_SETTINGS.fontScale);
   };
 
   const handleSaveAbsence = async () => {

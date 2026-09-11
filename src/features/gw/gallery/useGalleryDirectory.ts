@@ -250,7 +250,7 @@ export function useGalleryDirectory() {
         const file = params.files[i];
         const ext = file.name.split('.').pop() || 'jpg';
         const randomHex = Math.random().toString(36).substring(2, 8);
-        const storagePath = `gallery/${params.folderId}/${Date.now()}_${randomHex}.${ext}`;
+        const storagePath = `chat/gallery/${params.folderId}/${Date.now()}_${randomHex}.${ext}`;
 
         // Garage S3 / Appwrite Storage 업로드
         const fileUrl = await fileStorage.put(storagePath, file, {

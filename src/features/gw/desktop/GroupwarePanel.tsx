@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, X } from 'lucide-react';
+import { Bell, X, Settings2, RotateCcw, Check, ChevronLeft, ChevronRight, GripVertical, Lock } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useGwSummary } from '@/features/gw/useGwSummary';
@@ -12,6 +12,7 @@ import { isGwAppReady } from '@/app/shell/gw-screens';
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { Pill } from '@/shared/ui/Pill';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
+import { useQuickDockConfig, REQUIRED_MODULE_KEYS } from './useQuickDockConfig';
 
 /** 도크 패널 공용 카드(흰 배경 + 틸 액센트 바). */
 export function DockCard({ title, count, children }: { title: string; count?: string; children: ReactNode }) {
@@ -39,6 +40,11 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const markAllRead = useMarkAllNotificationsRead();
   const [showNotiPanel, setShowNotiPanel] = useState(false);
 
+  // 일반 모듈 순서 관리 및 편집 상태
+  const { normalOrder, moveNormalItem, resetNormalOrder } = useQuickDockConfig(user?.id);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
   /**
    * 메일 타일 배지 — 전 계정 받은메일함 안 읽은 수.
    *
@@ -56,21 +62,45 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
   const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
   const goDoc = (id: string) => { nav(`/gw/approval?doc=${id}`); onClose(); };
-  const rawApps = [
-    { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
-    { l: '일정관리', icon: '📅', to: 'calendar', hot: true },
-    { l: '메일', icon: '✉️', to: 'mail', badge: mailUnseen > 0 ? (mailUnseen > 99 ? '99+' : String(mailUnseen)) : undefined, hot: true },
-    { l: '자원예약', icon: '📦', to: 'resource' },
-    { l: '전자설문', icon: '📋', to: 'survey' },
-    { l: '게시판', icon: '📌', to: 'board' },
-    { l: '인명관리', icon: '👥', to: 'employee' },
-    { l: '프로젝트', icon: '📗', to: 'task' },
-    { l: '업무계획', icon: '🗓️', to: 'work-plan' },
-    { l: '근태·휴가', icon: '⏱️', to: 'commute' },
-    { l: '조직도', icon: '🏢', to: 'orgchart' },
-    { l: '회사 갤러리', icon: '🖼️', to: 'gallery' },
-  ];
-  const apps = useMemo(() => rawApps.filter((a) => canAccess('/gw/' + a.to)), [rawApps, canAccess]);
+
+  // 전체 모듈 정의: 필수 모듈 4종은 hot: true (상단 초록색 강조), 일반 모듈 8종은 hot: false
+  const rawApps = useMemo(
+    () => [
+      // 1. 필수 모듈 4종 (최상단 1행 고정)
+      { l: '전자결재', icon: '🖋️', to: 'approval', badge: summary.pendingCount ? String(summary.pendingCount) : undefined, hot: true },
+      { l: '메일', icon: '✉️', to: 'mail', badge: mailUnseen > 0 ? (mailUnseen > 99 ? '99+' : String(mailUnseen)) : undefined, hot: true },
+      { l: '업무계획', icon: '🗓️', to: 'work-plan', hot: true },
+      { l: '근태·휴가', icon: '⏱️', to: 'commute', hot: true },
+
+      // 2. 일반 모듈 8종 (2~3행 배치 & 사용자 순서 변경 가능)
+      { l: '일정관리', icon: '📅', to: 'calendar' },
+      { l: '게시판', icon: '📌', to: 'board' },
+      { l: '인명관리', icon: '👥', to: 'employee' },
+      { l: '회사 갤러리', icon: '🖼️', to: 'gallery' },
+      { l: '프로젝트', icon: '📗', to: 'task' },
+      { l: '자원예약', icon: '📦', to: 'resource' },
+      { l: '전자설문', icon: '📋', to: 'survey' },
+      { l: '조직도', icon: '🏢', to: 'orgchart' },
+    ],
+    [summary.pendingCount, mailUnseen]
+  );
+
+  type AppItem = (typeof rawApps)[number];
+
+  // 필수 모듈 4개 (항상 최상단 1행 고정)
+  const requiredApps = useMemo(() => {
+    return REQUIRED_MODULE_KEYS.map((key) => rawApps.find((a) => a.to === key)).filter(
+      (a): a is AppItem => a !== undefined && canAccess('/gw/' + a.to)
+    );
+  }, [rawApps, canAccess]);
+
+  // 일반 모듈 8개 (사용자 커스텀 순서 반영)
+  const normalApps = useMemo(() => {
+    return normalOrder
+      .map((key) => rawApps.find((a) => a.to === key))
+      .filter((a): a is AppItem => a !== undefined && canAccess('/gw/' + a.to));
+  }, [normalOrder, rawApps, canAccess]);
+
   const notices: [string, string][] = [
     ['[필독] 2분기 안전점검 일정 안내', '06.18'],
     ['하계 휴가 신청 마감 안내', '06.16'],
@@ -162,28 +192,206 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
 
       {/* 앱 타일 + 결재 + 공지 (스크롤) */}
       <div className="menu-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
-        <div className="grid grid-cols-4 gap-2">
-          {apps.map((a, i) => {
-            const enabled = isGwAppReady(a.to);
-            return (
+        {/* 상단 툴바: 빠른 실행 앱 타이틀 + 순서 편집/완료 버튼 */}
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] font-extrabold text-ink">빠른 실행 앱</span>
+            {isEditing && (
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-700">
+                순서 편집 중
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={resetNormalOrder}
+                  title="기본 순서로 초기화"
+                  className="flex items-center gap-1 rounded-md border border-border bg-panel px-2 py-1 text-[10px] font-bold text-ink2 hover:bg-panel-alt transition-colors"
+                >
+                  <RotateCcw size={11} />
+                  <span>초기화</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="flex items-center gap-1 rounded-md bg-teal px-2.5 py-1 text-[10.5px] font-bold text-white shadow-xs hover:opacity-90 transition-opacity"
+                >
+                  <Check size={12} />
+                  <span>완료</span>
+                </button>
+              </>
+            ) : (
               <button
-                key={i}
-                onClick={() => { if (enabled) go(a.to); }}
-                disabled={!enabled}
-                title={enabled ? a.l : `${a.l} (준비 중)`}
-                className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-shadow ${enabled
-                  ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
-                  : 'opacity-40 cursor-not-allowed filter grayscale'
-                  }`}
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-bold text-ink2 hover:bg-black/5 hover:text-ink transition-colors"
               >
-                <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold" style={{ background: enabled && a.hot ? CYAN : 'transparent', color: enabled && a.hot ? '#1c2536' : '#2a3344' }}>{a.l}</div>
-                <div className="grid flex-1 place-items-center pb-0.5">
-                  <MenuGlyph glyph={a.icon} size={22} className="text-ink" />
-                </div>
-                {enabled && a.badge && <span className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white" style={{ top: a.hot ? 4 : 5 }}>{a.badge}</span>}
+                <Settings2 size={12} />
+                <span>배치 편집</span>
               </button>
-            );
-          })}
+            )}
+          </div>
+        </div>
+
+        {/* ── 1. 필수 모듈 4개 (1행 고정 & 상단 초록색 강조 바) ── */}
+        <div className="flex flex-col gap-1.5">
+          {isEditing && (
+            <div className="flex items-center gap-1 px-0.5 text-[10px] font-bold text-ink3">
+              <Lock size={10} className="text-teal" />
+              <span>필수 모듈 (최상단 고정)</span>
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-2">
+            {requiredApps.map((a, i) => {
+              const enabled = isGwAppReady(a.to);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    if (!isEditing && enabled) go(a.to);
+                  }}
+                  disabled={!enabled || isEditing}
+                  title={enabled ? a.l : `${a.l} (준비 중)`}
+                  className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-all ${
+                    enabled && !isEditing
+                      ? 'hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
+                      : !enabled
+                      ? 'opacity-40 cursor-not-allowed filter grayscale'
+                      : 'opacity-70 cursor-default'
+                  }`}
+                >
+                  <div
+                    className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold flex items-center justify-between"
+                    style={{ background: CYAN, color: '#1c2536' }}
+                  >
+                    <span>{a.l}</span>
+                    {isEditing && <Lock size={9} className="opacity-60 shrink-0" />}
+                  </div>
+                  <div className="grid flex-1 place-items-center pb-0.5">
+                    <MenuGlyph glyph={a.icon} size={22} className="text-ink" />
+                  </div>
+                  {enabled && a.badge && !isEditing && (
+                    <span
+                      className="absolute right-1 grid h-[14px] min-w-[14px] place-items-center rounded-full border-[1.5px] border-white bg-[#ff5b5b] px-[3px] text-[8px] font-extrabold text-white"
+                      style={{ top: 4 }}
+                    >
+                      {a.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── 2. 일반 모듈 8개 (2~3행 배치 & 사용자 커스텀 순서) ── */}
+        <div className="flex flex-col gap-1.5">
+          {isEditing && (
+            <div className="flex items-center justify-between px-0.5 text-[10px] font-bold text-ink3">
+              <div className="flex items-center gap-1">
+                <GripVertical size={11} className="text-teal" />
+                <span>일반 모듈 (드래그 또는 화살표로 순서 변경)</span>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-2">
+            {normalApps.map((a, idx) => {
+              const enabled = isGwAppReady(a.to);
+              const isDragged = draggedIdx === idx;
+
+              return (
+                <div
+                  key={a.to}
+                  draggable={isEditing}
+                  onDragStart={(e) => {
+                    if (!isEditing) return;
+                    e.dataTransfer.setData('text/plain', String(idx));
+                    setDraggedIdx(idx);
+                  }}
+                  onDragOver={(e) => {
+                    if (isEditing) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (!isEditing) return;
+                    e.preventDefault();
+                    if (draggedIdx !== null && draggedIdx !== idx) {
+                      moveNormalItem(draggedIdx, idx);
+                    }
+                    setDraggedIdx(null);
+                  }}
+                  onDragEnd={() => setDraggedIdx(null)}
+                  onClick={() => {
+                    if (!isEditing && enabled) go(a.to);
+                  }}
+                  title={isEditing ? `${a.l} (드래그하여 이동)` : enabled ? a.l : `${a.l} (준비 중)`}
+                  className={`relative flex aspect-square flex-col overflow-hidden rounded-xl border border-[#dceddd] bg-panel shadow-[0_1px_5px_rgba(20,140,120,0.07)] transition-all select-none ${
+                    isEditing
+                      ? 'cursor-grab active:cursor-grabbing hover:border-teal'
+                      : enabled
+                      ? 'cursor-pointer hover:shadow-[0_2px_10px_rgba(20,140,120,0.18)]'
+                      : 'opacity-40 cursor-not-allowed filter grayscale'
+                  } ${isDragged ? 'ring-2 ring-teal ring-offset-1 opacity-50 scale-95' : ''}`}
+                >
+                  {/* 상단 라벨 */}
+                  <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold text-[#2a3344] flex items-center justify-between">
+                    <span className="truncate">{a.l}</span>
+                    {isEditing && (
+                      <GripVertical size={10} className="text-ink3 shrink-0 opacity-60" />
+                    )}
+                  </div>
+
+                  {/* 중앙 아이콘 */}
+                  <div className="grid flex-1 place-items-center pb-0.5">
+                    <MenuGlyph glyph={a.icon} size={22} className="text-ink" />
+                  </div>
+
+                  {/* 편집 모드일 때 하단 좌우 이동 화살표 버튼 */}
+                  {isEditing ? (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center justify-between border-t border-border/50 bg-panel-alt/40 px-1 py-0.5"
+                    >
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (idx > 0) moveNormalItem(idx, idx - 1);
+                        }}
+                        title="앞으로 이동"
+                        className={`rounded p-0.5 hover:bg-black/10 transition-colors ${
+                          idx === 0 ? 'opacity-20 cursor-not-allowed' : 'text-ink2'
+                        }`}
+                      >
+                        <ChevronLeft size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === normalApps.length - 1}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (idx < normalApps.length - 1) moveNormalItem(idx, idx + 1);
+                        }}
+                        title="뒤로 이동"
+                        className={`rounded p-0.5 hover:bg-black/10 transition-colors ${
+                          idx === normalApps.length - 1 ? 'opacity-20 cursor-not-allowed' : 'text-ink2'
+                        }`}
+                      >
+                        <ChevronRight size={11} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <DockCard title="결재 대기" count={summary.pendingCount ? String(summary.pendingCount) : undefined}>

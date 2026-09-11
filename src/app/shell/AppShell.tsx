@@ -9,7 +9,7 @@ import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock, requestOpenChatRoom } from './QuickDock';
 import { ToastFeed } from './ToastFeed';
-import { applyTheme } from './ThemeCustomizerModal';
+import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useToastNotificationsTrigger } from '@/features/notification/useNotifications';
 
@@ -66,11 +66,9 @@ export default function AppShell() {
   const [dockOpen, setDockOpen] = useState<string | null>(null);
 
   useEffect(() => {
-    const headerBg = localStorage.getItem('custom_theme_header_bg') ?? '#dbeafe';
-    const pointColor = localStorage.getItem('custom_theme_point_color') ?? '#99bbff';
-    const btnColor = localStorage.getItem('custom_theme_btn_color') ?? '#1243b5';
-    applyTheme(headerBg, pointColor, btnColor);
-  }, []);
+    const userTheme = loadUserTheme(user?.id);
+    applyTheme(userTheme.headerBg, userTheme.pointColor, userTheme.btnColor, userTheme.fontScale);
+  }, [user?.id]);
 
   // 데스크톱 알림 클릭 → SW 가 이 창에 postMessage → 메신저 도크를 해당 방으로 연다.
   useEffect(() => {
