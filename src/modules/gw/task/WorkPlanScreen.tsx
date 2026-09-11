@@ -24,6 +24,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
+import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
 
 const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -146,32 +147,116 @@ export default function WorkPlanScreen() {
       });
   }, [users, actor, actorScope, deptOrderMap, org]);
 
-  /** 고유 부서 목록 */
+  const { data: departmentMembers = [] } = useDepartmentMembers();
+
+  /** 고유 부서 목록 (조직도 공식 부서 + 로스터 부서 + 겸직 부서 종합) */
   const departments = useMemo(() => {
-    const list = Array.from(new Set(roster.map((u) => u.dept))).filter(Boolean);
+    const validOrgDepts = org.depts
+      .filter((d) => !d.name.includes('테스트'))
+      .map((d) => d.name);
+
+    const allDeptNames = new Set<string>(validOrgDepts);
+    roster.forEach((u) => allDeptNames.add(u.dept));
+    departmentMembers.forEach((dm) => {
+      if (dm.deptName && !dm.deptName.includes('테스트')) {
+        allDeptNames.add(dm.deptName);
+      }
+    });
+
+    const list = Array.from(allDeptNames).filter(Boolean);
     return list.sort((a, b) => {
       const orderA = deptOrderMap.get(a) ?? 9999;
       const orderB = deptOrderMap.get(b) ?? 9999;
       return orderA - orderB || a.localeCompare(b, 'ko');
     });
-  }, [roster, deptOrderMap]);
+  }, [org.depts, roster, departmentMembers, deptOrderMap]);
 
-  /** 부서 및 검색어 필터가 적용된 최종 열람 인원 */
+  /** 부서 및 검색어 필터가 적용된 최종 열람 인원 (본직 + 겸직 부서 동시 지원) */
   const scopedMembers = useMemo(() => {
     const kw = searchKeyword.trim().toLowerCase();
+
+    // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합)
+    if (deptFilter !== 'all' && deptFilter !== 'leaders') {
+      const matchedUsers: User[] = [];
+      const seenUserIds = new Set<string>();
+
+      // A. 해당 부서가 본직인 사용자
+      // (기술경영전략위원회 등 위원회 부서 선택 시에는 대표이사도 위원장으로서 To-Do 집계에 포함!)
+      users
+        .filter((u) => u.status === '사용')
+        .filter((u) => {
+          if (deptFilter.includes('위원회') && (u.position.includes('대표') || u.name.includes('대표'))) {
+            return true; // 위원회 뷰에서는 대표이사 포함
+          }
+          return !isExcludedFromRoster(u, actor);
+        })
+        .filter((u) => u.dept === deptFilter)
+        .forEach((u) => {
+          matchedUsers.push(u);
+          seenUserIds.add(u.id);
+        });
+
+      // B. 해당 부서에 '겸직(departmentMembers)'으로 소속된 사용자 (손승원 상무, 대표이사 등)
+      departmentMembers
+        .filter(
+          (dm) =>
+            !dm.isPrimary &&
+            (dm.deptName === deptFilter || org.depts.find((d) => d.id === dm.deptId)?.name === deptFilter),
+        )
+        .forEach((dm) => {
+          if (seenUserIds.has(dm.userId)) return;
+          const baseUser = users.find((u) => u.id === dm.userId);
+          if (!baseUser || baseUser.status !== '사용') return;
+
+          // 겸직 소속 인원 추가 (겸직 플래그 및 해당 부서 직책 반영)
+          matchedUsers.push({
+            ...baseUser,
+            dept: deptFilter,
+            jobTitle: dm.jobTitle || baseUser.jobTitle,
+            isConcurrent: true,
+          } as User & { isConcurrent: boolean });
+          seenUserIds.add(dm.userId);
+        });
+
+      // 부서 내 서열 정렬 (팀장/부서장/위원장 최우선 > 파트장/실장 > 직급 > 이름)
+      const sorted = matchedUsers.sort((a, b) => {
+        const isALeader =
+          a.jobTitle?.includes('팀장') ||
+          a.jobTitle?.includes('위원장') ||
+          a.jobTitle?.includes('대표') ||
+          a.jobTitle?.includes('소장') ||
+          a.jobTitle?.includes('부서장');
+        const isBLeader =
+          b.jobTitle?.includes('팀장') ||
+          b.jobTitle?.includes('위원장') ||
+          b.jobTitle?.includes('대표') ||
+          b.jobTitle?.includes('소장') ||
+          b.jobTitle?.includes('부서장');
+        if (isALeader && !isBLeader) return -1;
+        if (!isALeader && isBLeader) return 1;
+
+        const rankA = org.rankOf(a.position);
+        const rankB = org.rankOf(b.position);
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name, 'ko');
+      });
+
+      return sorted.filter((u) => {
+        if (!kw) return true;
+        return u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw);
+      });
+    }
+
+    // 2. 전체(all) 또는 팀장(leaders) 필터
     return roster.filter((user) => {
       let matchesDept = true;
-      if (deptFilter === 'all') {
-        matchesDept = true;
-      } else if (deptFilter === 'leaders') {
+      if (deptFilter === 'leaders') {
         matchesDept = user.dept !== actor?.dept && isLeaderPosition(user.position, user.jobTitle, user.id, org);
-      } else {
-        matchesDept = user.dept === deptFilter;
       }
       const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
       return matchesDept && matchesName;
     });
-  }, [roster, deptFilter, searchKeyword, actor?.dept, org]);
+  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor]);
 
   const savePlan = useCallback(
     async (date: string, content: string, existingPlanId?: string, shareToCalendar = true) => {

@@ -380,8 +380,13 @@ export function WorkPlanTeamWeeklyMatrix({
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-ink3 truncate">
-                            {member.dept} · {member.position}
+                          <div className="text-[10px] text-ink3 truncate flex items-center gap-1">
+                            <span>{member.dept} · {member.position}</span>
+                            {(member as any).isConcurrent && (
+                              <span className="rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                겸직
+                              </span>
+                            )}
                           </div>
 
                           {presenceMeta && (

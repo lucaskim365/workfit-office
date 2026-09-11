@@ -17,6 +17,7 @@ import { resolveWorkPlanScope, isLeaderPosition } from '@/features/auth/scopeHel
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
+import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
 import {
   useMyWorkPlans,
   useCreateWorkPlan,
@@ -165,18 +166,32 @@ function LocalCalendarScreen() {
   */
   const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
 
+  const { data: departmentMembers = [] } = useDepartmentMembers();
+
   const supervisorScope = useMemo<CalendarSupervisorScope>(() => {
     if (actorScope === 'ALL') {
       return { kind: 'all' };
     }
+    // 겸직하고 있는 부서 목록 (손승원 상무의 기술경영전략위원회, 경영기획팀 등)
+    const concDeptNames = departmentMembers
+      .filter((dm) => dm.userId === actor?.id && !dm.isPrimary)
+      .map((dm) => dm.deptName);
+
     if (actorScope === 'TEAM_AND_LEADERS') {
       const headed = (departmentsQuery.data ?? []).filter((dept) => dept.headUserId === actor?.id).map((dept) => dept.name);
-      const myDeptNames = headed.length > 0 ? headed : (actor?.dept ? [actor.dept] : []);
+      const myDeptNames = Array.from(new Set([
+        ...(headed.length > 0 ? headed : (actor?.dept ? [actor.dept] : [])),
+        ...concDeptNames,
+      ]));
       return { kind: 'depts', deptNames: myDeptNames };
     }
-    // 일반 팀원(사원): 본인 부서 팀원 및 팀장 일정 열람
-    return { kind: 'depts', deptNames: actor?.dept ? [actor.dept] : [] };
-  }, [actorScope, actor, departmentsQuery.data]);
+    // 일반 팀원(사원): 본인 본직 부서 및 겸직 부서 일정 열람
+    const myDepts = Array.from(new Set([
+      ...(actor?.dept ? [actor.dept] : []),
+      ...concDeptNames,
+    ]));
+    return { kind: 'depts', deptNames: myDepts };
+  }, [actorScope, actor, departmentsQuery.data, departmentMembers]);
 
   const activeTab = tab;
   const isTeam = activeTab === 'team';
@@ -199,32 +214,43 @@ function LocalCalendarScreen() {
     ? teamDeptSel
     : (actorScope === 'TEAM' ? (actor?.dept ?? ALL_DEPTS) : ALL_DEPTS);
 
-  /** 팀 일정의 소유자 목록: 업무계획의 조회 권한과 동일하게 매핑 */
+  /** 특정 부서에 소속된 모든 사용자 ID 목록 (본직 + 겸직 종합) */
+  const getDeptUserIds = useCallback((targetDeptName: string): string[] => {
+    const primaryUserIds = users.filter((u) => u.dept === targetDeptName && u.status === '사용').map((u) => u.id);
+    const concurrentUserIds = departmentMembers
+      .filter((dm) => !dm.isPrimary && (dm.deptName === targetDeptName || departmentsQuery.data?.find((d) => d.id === dm.deptId)?.name === targetDeptName))
+      .map((dm) => dm.userId);
+    return Array.from(new Set([...primaryUserIds, ...concurrentUserIds]));
+  }, [users, departmentMembers, departmentsQuery.data]);
+
+  /** 팀 일정의 소유자 목록: 업무계획의 조회 권한과 동일하게 매핑 (본직 + 겸직 지원) */
   const teamOwners = useMemo<string[] | null>(() => {
     if (!actor) return [];
 
-    // 1. 임원: 전체 부서 선택 시 null(전 직원), 특정 부서 선택 시 해당 부서원
+    // 1. 임원: 전체 부서 선택 시 null(전 직원), 특정 부서 선택 시 해당 부서원 (겸직자 포함)
     if (actorScope === 'ALL') {
       if (effectiveDeptSel === ALL_DEPTS) return null;
-      return users.filter((u) => u.dept === effectiveDeptSel && u.status === '사용').map((u) => u.id);
+      return getDeptUserIds(effectiveDeptSel);
     }
 
     // 2. 팀장: 전체일 때는 본인 부서원 + 타 부서 팀장급
     if (actorScope === 'TEAM_AND_LEADERS') {
       if (effectiveDeptSel !== ALL_DEPTS) {
-        return users.filter((u) => u.dept === effectiveDeptSel && u.status === '사용').map((u) => u.id);
+        return getDeptUserIds(effectiveDeptSel);
       }
-      return users
-        .filter((u) => u.status === '사용')
-        .filter((u) => u.dept === actor.dept || isLeaderPosition(u.position, u.jobTitle, u.id, org))
+      const myDeptUserIds = getDeptUserIds(actor.dept);
+      const leaderUserIds = users
+        .filter((u) => u.status === '사용' && isLeaderPosition(u.position, u.jobTitle, u.id, org))
         .map((u) => u.id);
+      return Array.from(new Set([...myDeptUserIds, ...leaderUserIds]));
     }
 
     // 3. 일반 사원(TEAM): 오직 본인 부서 소속 팀원들과 팀장의 일정만 조회!
-    return users
-      .filter((u) => u.status === '사용' && u.dept === actor.dept)
-      .map((u) => u.id);
-  }, [actor, actorScope, effectiveDeptSel, users, org]);
+    if (effectiveDeptSel !== ALL_DEPTS) {
+      return getDeptUserIds(effectiveDeptSel);
+    }
+    return getDeptUserIds(actor.dept);
+  }, [actor, actorScope, effectiveDeptSel, getDeptUserIds, users, org]);
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
