@@ -400,14 +400,27 @@ function VisualDiagramOrgChart({
               <table className="border-collapse text-center text-[11px] font-bold">
                 <tbody>
                   <tr className="bg-[#FCE4D6] text-slate-800">
-                    <td className="border-r border-[#DFA89B] px-4 py-1.5">등기임원</td>
-                    <td className="border-r border-[#DFA89B] px-4 py-1.5">{ceoUser.position}</td>
-                    <td
-                      onClick={() => onSelectUserId(ceoUser.id)}
-                      className="cursor-pointer px-6 py-1.5 text-slate-900 font-extrabold hover:bg-white/40 transition-colors"
-                    >
-                      {ceoUser.name}
-                    </td>
+                    {/* 실명이 별도로 등록된 경우: [대표이사] [성명] 2열 / 이름이 '대표이사'인 경우: [대표이사] 단독 표출 */}
+                    {ceoUser.name && ceoUser.name !== '대표이사' && ceoUser.name !== ceoUser.position ? (
+                      <>
+                        <td className="border-r border-[#DFA89B] px-5 py-1.5 font-bold">
+                          {ceoUser.position || '대표이사'}
+                        </td>
+                        <td
+                          onClick={() => onSelectUserId(ceoUser.id)}
+                          className="cursor-pointer px-6 py-1.5 text-slate-900 font-extrabold hover:bg-white/40 transition-colors"
+                        >
+                          {ceoUser.name}
+                        </td>
+                      </>
+                    ) : (
+                      <td
+                        onClick={() => onSelectUserId(ceoUser.id)}
+                        className="cursor-pointer px-8 py-1.5 text-slate-900 font-extrabold hover:bg-white/40 transition-colors"
+                      >
+                        대표이사
+                      </td>
+                    )}
                   </tr>
                 </tbody>
               </table>
