@@ -83,28 +83,55 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
       async loadAll() {
         const out: T[] = [];
         const PAGE = 100;
-        for (let offset = 0; ; offset += PAGE) {
-          const res = await dbs().listDocuments(APPWRITE_DATABASE_ID, coll, [Query.limit(PAGE), Query.offset(offset)]);
-          for (const row of res.documents as unknown as Record<string, unknown>[]) {
-            const m = fromRow(row);
-            if (m) out.push(m);
+        try {
+          for (let offset = 0; ; offset += PAGE) {
+            const res = await dbs().listDocuments(APPWRITE_DATABASE_ID, coll, [Query.limit(PAGE), Query.offset(offset)]);
+            for (const row of res.documents as unknown as Record<string, unknown>[]) {
+              const m = fromRow(row);
+              if (m) out.push(m);
+            }
+            if (res.documents.length < PAGE) break;
           }
-          if (res.documents.length < PAGE) break;
+          return out;
+        } catch (e: any) {
+          if (e?.code === 404) {
+            console.warn(`[crudBackend] Appwrite collection '${coll}' not found (404). Falling back to seed data.`);
+            return seed.slice();
+          }
+          throw e;
         }
-        return out;
       },
       async save(item: T) {
         const id = safeDocId(idOf(item)); // 한글 등 규격 밖 자연키는 결정적 해시 $id 로 매핑
         const row = toRow(item);
         try {
           await dbs().updateDocument(APPWRITE_DATABASE_ID, coll, id, row);
-        } catch (e) {
-          if ((e as { code?: number })?.code === 404) await dbs().createDocument(APPWRITE_DATABASE_ID, coll, id, row);
-          else throw e;
+        } catch (e: any) {
+          if (e?.code === 404) {
+            try {
+              await dbs().createDocument(APPWRITE_DATABASE_ID, coll, id, row);
+            } catch (createErr: any) {
+              if (createErr?.code === 404) {
+                console.warn(`[crudBackend] Appwrite collection '${coll}' not found (404) on create. Skipped remote write.`);
+                return;
+              }
+              throw createErr;
+            }
+          } else {
+            throw e;
+          }
         }
       },
       async remove(id: string) {
-        await dbs().deleteDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id));
+        try {
+          await dbs().deleteDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id));
+        } catch (e: any) {
+          if (e?.code === 404) {
+            console.warn(`[crudBackend] Appwrite collection or doc '${coll}/${id}' not found (404) on remove.`);
+            return;
+          }
+          throw e;
+        }
       },
     };
   }

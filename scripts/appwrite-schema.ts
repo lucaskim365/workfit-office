@@ -221,6 +221,28 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    id: 'departmentMembers',
+    name: '부서 소속 및 겸직',
+    attributes: [
+      S('id', 64, true),
+      S('userId', 64, true),
+      S('deptId', 64, true),
+      S('deptName', 128, true),
+      BOOL('isPrimary', false),
+      S('jobTitle', 64),
+      INT('order', false, 0),
+      S('assignedAt', 40),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      UQ('user_dept', ['userId', 'deptId']),
+      IX('userId', ['userId']),
+      IX('deptId', ['deptId']),
+      IX('user_primary', ['userId', 'isPrimary']),
+    ],
+  },
+  {
     id: 'companyInfo',
     name: '회사정보',
     attributes: [

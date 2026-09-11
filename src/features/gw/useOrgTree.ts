@@ -4,34 +4,34 @@ import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import { positionRepo } from '@/data/position/position.repo';
+import { departmentMemberRepo } from '@/data/departmentMember/departmentMember.repo';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
 
 /**
- * 조직 데이터 훅 — 부서(departments) + 사용자(users) + 인사마스터(employeeProfiles) 를 조합해
- * ① 부서 트리 ② 상급자 체인(자동 상신선 원천) ③ 부서장 을 도출한다.
- *
- * **자동 도출 원칙**: 부서 노드 집합은 실제 `employeeProfiles.dept` (및 user.dept) 값에서 도출하므로,
- * departments 마스터가 없거나 어긋나도 사용자가 있는 부서는 항상 표시된다.
- * 마스터가 있으면 계층(parentId)·부서장(headUserId)·정렬(order)을 덧씌우고,
- * 없으면 부서장은 직급 seniority(관리자>파트장>반장>담당>사원)로, 계층은 평면으로 도출한다.
- * 상급자 체인은 user.managerId 우선, 없으면 부서장으로 폴백.
- * ([[data-layer-pattern]] 파생상태 원칙)
+ * 조직 데이터 훅 — 부서(departments) + 사용자(users) + 인사마스터(employeeProfiles) + 소속/겸직(departmentMembers)를 조합해
+ * ① 부서 트리(겸직 포함) ② 상급자 체인 ③ 부서장을 도출한다.
  */
 const DEPTS_KEY = 'departments';
 const USERS_KEY = 'users';
 const PROFILES_KEY = 'employeeProfiles';
 const POSITIONS_KEY = 'positions';
+const DEPT_MEMBERS_KEY = 'departmentMembers';
 
 /** 직급 서열(작을수록 상위) — positions 마스터 미로드 시 폴백. */
 const POSITION_RANK_FALLBACK: Record<string, number> = { 대표이사: 1, 상무이사: 2, 이사: 3, 소장: 3, 부장: 4, 차장: 5, 과장: 6, 대리: 7, 연구원: 8, 사원: 9 };
 
+export interface OrgMemberUser extends User {
+  /** 겸직 여부 (본직이 아닌 추가 소속인 경우 true) */
+  isConcurrent?: boolean;
+}
+
 export interface OrgNode {
   dept: Department;
   children: OrgNode[];
-  /** 이 부서에 직접 소속된 사용자(user.dept === dept.name). */
-  members: User[];
+  /** 이 부서에 소속된 사용자 (본직 + 겸직자 포함) */
+  members: OrgMemberUser[];
 }
 
 export interface OrgTree {
@@ -52,6 +52,7 @@ export function useOrgTree() {
   const usersQ = useQuery({ queryKey: [USERS_KEY, null], queryFn: () => userRepo.list() });
   const profilesQ = useQuery({ queryKey: [PROFILES_KEY], queryFn: () => employeeProfileRepo.list() });
   const positionsQ = useQuery({ queryKey: [POSITIONS_KEY, null], queryFn: () => positionRepo.list() });
+  const deptMembersQ = useQuery({ queryKey: [DEPT_MEMBERS_KEY], queryFn: () => departmentMemberRepo.list() });
 
   const data = useMemo<OrgTree>(() => {
     const masters = deptsQ.data ?? [];
@@ -81,12 +82,36 @@ export function useOrgTree() {
     const usersById = new Map(users.map((u) => [u.id, u]));
     const masterByName = new Map(masters.map((d) => [d.name, d]));
 
-    // 부서별 소속 사용자.
-    const membersByDept = new Map<string, User[]>();
+    const deptMembers = deptMembersQ.data ?? [];
+
+    // 부서별 소속 사용자 (본직).
+    const membersByDept = new Map<string, OrgMemberUser[]>();
     for (const u of users) {
       const arr = membersByDept.get(u.dept) ?? [];
-      arr.push(u);
+      arr.push({ ...u, isConcurrent: false });
       membersByDept.set(u.dept, arr);
+    }
+
+    // 겸직(isPrimary === false) 소속자도 해당 부서 목록에 추가
+    for (const dm of deptMembers) {
+      if (dm.isPrimary) continue; // 본직은 이미 위에서 추가됨
+      const baseUser = usersById.get(dm.userId);
+      if (!baseUser) continue;
+
+      // 마스터 부서 매칭 (deptId 또는 deptName 기반으로 정확한 마스터 부서명 획득)
+      const targetDept = masters.find((d) => d.id === dm.deptId) || masters.find((d) => d.name === dm.deptName);
+      const deptName = targetDept?.name || dm.deptName;
+
+      const arr = membersByDept.get(deptName) ?? [];
+      if (!arr.some((m) => m.id === baseUser.id)) {
+        arr.push({
+          ...baseUser,
+          dept: deptName,
+          jobTitle: dm.jobTitle, // 겸직 부서에서의 직책
+          isConcurrent: true,
+        });
+        membersByDept.set(deptName, arr);
+      }
     }
 
     /** 부서의 부서장 — 1) 직책(팀장/본부장/소장) 2) 마스터 headUserId 3) 소속원 중 최상위 직급 */
@@ -195,7 +220,7 @@ export function useOrgTree() {
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
     return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
-  }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data]);
+  }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data, deptMembersQ.data]);
 
-  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading };
+  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading };
 }

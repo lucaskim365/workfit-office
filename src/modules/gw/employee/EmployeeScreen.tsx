@@ -9,6 +9,16 @@ import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import type { EmploymentStatus } from '@/domain/employee/schema';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
+import {
+  useDepartmentMembers,
+  useUpsertDepartmentMember,
+  useRemoveDepartmentMember,
+} from '@/features/departmentMember/useDepartmentMembers';
+import {
+  isCommitteeDept,
+  sanitizeJobTitle,
+  makeDepartmentMemberId,
+} from '@/domain/departmentMember/engine';
 
 interface OrgNode {
   id: string;
@@ -25,6 +35,9 @@ export default function EmployeeScreen() {
   const { data: positions = [] } = usePositions();
   const { data: jobTitles = [] } = useJobTitles();
   const upsertEmployeeProfile = useUpsertEmployeeProfile();
+  const { data: departmentMembers = [] } = useDepartmentMembers();
+  const upsertDeptMember = useUpsertDepartmentMember();
+  const removeDeptMember = useRemoveDepartmentMember();
 
   // 대분류 탭: 'list' (임직원 관리) | 'org' (조직도)
   const [activeTab, setActiveTab] = useState<'list' | 'org'>('list');
@@ -39,6 +52,10 @@ export default function EmployeeScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // 겸직 등록 폼 상태
+  const [newConcDeptId, setNewConcDeptId] = useState('');
+  const [newConcJobTitle, setNewConcJobTitle] = useState('팀원');
 
   // 조직도 선택 부서 상태
   const [selectedDept, setSelectedDept] = useState<string>('all');
@@ -69,12 +86,16 @@ export default function EmployeeScreen() {
       setNewEmpEmail('');
       return;
     }
+    const targetDeptName = u.dept && u.dept !== '미지정' ? u.dept : departments[0]?.name || '인사지원팀';
+    const targetDeptObj = departments.find((d) => d.name === targetDeptName);
+    const isComm = isCommitteeDept(targetDeptObj || targetDeptName);
+
     setNewEmpNo(u.empNo);
     setNewEmpName(u.name);
     setNewEmpEmail(u.email);
-    setNewEmpDept(u.dept && u.dept !== '미지정' ? u.dept : departments[0]?.name || '인사지원팀');
+    setNewEmpDept(targetDeptName);
     setNewEmpPos(u.position && u.position !== '사원' ? u.position : positions[0]?.name || '사원');
-    setNewEmpDuty(u.jobTitle || '팀원');
+    setNewEmpDuty(isComm ? '' : (u.jobTitle || '팀원'));
     setNewEmpPhone((u as any).phone || '');
     setNewEmpHireDate((u as any).hireDate || '');
     setNewEmpRrn((u as any).rrn || '');
@@ -183,6 +204,25 @@ export default function EmployeeScreen() {
     return employees.find((e) => e.id === selectedUserId || e.userId === selectedUserId) || null;
   }, [employees, selectedUserId]);
 
+  // 선택된 사원의 부서 소속 목록 (본직 + 겸직)
+  const selectedEmpMembers = useMemo(() => {
+    if (!selectedEmp) return [];
+    const list = departmentMembers.filter((m) => m.userId === selectedEmp.userId);
+    if (list.length > 0) return list;
+    return [
+      {
+        id: `fallback-${selectedEmp.userId}`,
+        userId: selectedEmp.userId,
+        deptId: 'dept-default',
+        deptName: selectedEmp.dept,
+        isPrimary: true,
+        jobTitle: selectedEmp.duty,
+        order: 1,
+        assignedAt: '',
+      },
+    ];
+  }, [departmentMembers, selectedEmp]);
+
   // 재직 상태별 카운트 계산
   const statusCounts = useMemo(() => {
     let total = employees.length;
@@ -288,7 +328,7 @@ export default function EmployeeScreen() {
     return { gender, birthDate };
   };
 
-  // 1. 임직원 인사 발령 제출 (신규 employeeProfiles 연동)
+  // 1. 임직원 인사 발령 제출 (신규 employeeProfiles & departmentMembers 연동)
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCreateUserId) {
@@ -307,6 +347,11 @@ export default function EmployeeScreen() {
       birthDate = parsed.birthDate;
     }
 
+    const targetDeptName = newEmpDept || departments[0]?.name || '인사지원팀';
+    const targetDept = departments.find((d) => d.name === targetDeptName) || departments[0];
+    const deptId = targetDept?.id || 'dept_default';
+    const finalDuty = sanitizeJobTitle(targetDept, newEmpDuty || '팀원');
+
     try {
       await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
@@ -314,9 +359,9 @@ export default function EmployeeScreen() {
           userId: targetUser.id,
           empNo: targetUser.empNo,
           name: targetUser.name,
-          dept: newEmpDept || departments[0]?.name || '인사지원팀',
+          dept: targetDeptName,
           position: newEmpPos || positions[0]?.name || '사원',
-          jobTitle: newEmpDuty || '팀원',
+          jobTitle: finalDuty,
           status: 'ACTIVE',
           phone: newEmpPhone.trim(),
           hireDate: newEmpHireDate,
@@ -328,6 +373,18 @@ export default function EmployeeScreen() {
           emergencyPhone: newEmpEmergencyPhone.trim(),
           education: newEmpEducation.trim(),
         },
+      });
+
+      // 주 소속(본직) departmentMember 생성
+      await upsertDeptMember.mutateAsync({
+        id: makeDepartmentMemberId(targetUser.id, deptId),
+        userId: targetUser.id,
+        deptId,
+        deptName: targetDept?.name || targetDeptName,
+        isPrimary: true,
+        jobTitle: finalDuty,
+        order: 1,
+        assignedAt: new Date().toISOString(),
       });
 
       setSelectedCreateUserId('');
@@ -366,10 +423,12 @@ export default function EmployeeScreen() {
     setEditEmpPersonalEmail(emp.personalEmail || '');
     setEditEmpEmergencyPhone(emp.emergencyPhone || '');
     setEditEmpEducation(emp.education || '');
+    setNewConcDeptId('');
+    setNewConcJobTitle('팀원');
     setIsEditModalOpen(true);
   };
 
-  // 3. 임직원 정보 편집 저장 제출 (신규 employeeProfiles 연동)
+  // 3. 임직원 정보 편집 저장 제출 (신규 employeeProfiles & departmentMembers 연동)
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserId || !editEmpName.trim()) return;
@@ -385,6 +444,9 @@ export default function EmployeeScreen() {
       if (parsed.birthDate) birthDate = parsed.birthDate;
     }
 
+    const targetDept = departments.find((d) => d.name === editEmpDept);
+    const finalDuty = sanitizeJobTitle(targetDept || editEmpDept, editEmpDuty);
+
     try {
       await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
@@ -394,7 +456,7 @@ export default function EmployeeScreen() {
           name: editEmpName.trim(),
           dept: editEmpDept || '미지정',
           position: editEmpPos || '사원',
-          jobTitle: editEmpDuty || '',
+          jobTitle: finalDuty,
           status: editEmpStatus,
           phone: editEmpPhone.trim(),
           hireDate: editEmpHireDate,
@@ -408,10 +470,76 @@ export default function EmployeeScreen() {
         },
       });
 
+      // 주소속 부서가 변경된 경우 기존 주소속 레코드 갱신/대체
+      if (targetDept) {
+        const userMembers = departmentMembers.filter((m) => m.userId === targetUser.id);
+        const prevPrimary = userMembers.find((m) => m.isPrimary);
+        if (prevPrimary && prevPrimary.deptId !== targetDept.id) {
+          await removeDeptMember.mutateAsync(prevPrimary.id);
+        }
+        await upsertDeptMember.mutateAsync({
+          id: makeDepartmentMemberId(targetUser.id, targetDept.id),
+          userId: targetUser.id,
+          deptId: targetDept.id,
+          deptName: targetDept.name,
+          isPrimary: true,
+          jobTitle: finalDuty,
+          order: 1,
+          assignedAt: prevPrimary?.assignedAt || new Date().toISOString(),
+        });
+      }
+
       setIsEditModalOpen(false);
       alert('임직원 인사 및 신상 정보가 성공적으로 반영되었습니다.');
     } catch (err: any) {
       alert(err.message || '수정 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 겸직 부서 추가 핸들러
+  const handleAddConcurrentAffiliation = async () => {
+    if (!selectedUserId || !newConcDeptId) return;
+    const targetDept = departments.find((d) => d.id === newConcDeptId);
+    if (!targetDept) return;
+
+    // 이미 본직 또는 겸직으로 소속되어 있는지 검증
+    const existing = departmentMembers.find(
+      (m) => m.userId === selectedUserId && m.deptId === targetDept.id
+    );
+    if (existing) {
+      alert('이미 소속되어 있는 부서입니다.');
+      return;
+    }
+
+    const sanitizedDuty = sanitizeJobTitle(targetDept, newConcJobTitle);
+    try {
+      await upsertDeptMember.mutateAsync({
+        id: makeDepartmentMemberId(selectedUserId, targetDept.id),
+        userId: selectedUserId,
+        deptId: targetDept.id,
+        deptName: targetDept.name,
+        isPrimary: false,
+        jobTitle: sanitizedDuty,
+        order: 99,
+        assignedAt: new Date().toISOString(),
+      });
+      setNewConcDeptId('');
+      setNewConcJobTitle('팀원');
+      alert(`'${targetDept.name}' 겸직이 성공적으로 등록되었습니다.`);
+    } catch (err: any) {
+      alert(err.message || '겸직 등록 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 겸직 부서 해제 핸들러
+  const handleRemoveConcurrentAffiliation = async (memberId: string, deptName: string) => {
+    if (confirm(`'${deptName}' 겸직 소속을 해제하시겠습니까?`)) {
+      try {
+        await removeDeptMember.mutateAsync(memberId);
+        alert(`'${deptName}' 겸직이 해제되었습니다.`);
+      } catch (err: any) {
+        alert(err.message || '겸직 해제 중 오류가 발생했습니다.');
+      }
     }
   };
 
@@ -612,7 +740,22 @@ export default function EmployeeScreen() {
                             {e.isPending ? (
                               <span className="text-amber-600 font-medium text-[11px]">발령대기 (미지정)</span>
                             ) : (
-                              e.dept
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>{e.dept}</span>
+                                {(() => {
+                                  const concCount = departmentMembers.filter(
+                                    (m) => m.userId === e.userId && !m.isPrimary
+                                  ).length;
+                                  if (concCount > 0) {
+                                    return (
+                                      <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                        +{concCount}겸직
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                             )}
                           </td>
                           <td className="py-2 px-3 text-[11.5px] text-ink2">{e.position}</td>
@@ -889,6 +1032,56 @@ export default function EmployeeScreen() {
                         <span className="mt-1 block font-mono font-semibold text-ink">{selectedEmp.phone || '-'}</span>
                       </div>
                     </div>
+
+                    {/* 소속 및 겸직 현황 섹션 */}
+                    <div className="mt-2 rounded-xl border border-border/80 bg-panel-alt/25 p-3.5">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11.5px] font-extrabold text-ink flex items-center gap-1.5">
+                          <span>🏢</span> 소속 및 겸직 현황
+                          <span className="rounded-full bg-teal-soft/60 px-1.5 py-0.2 text-[10px] font-bold text-teal">
+                            총 {selectedEmpMembers.length}개 소속
+                          </span>
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {selectedEmpMembers.map((m) => {
+                          const deptObj = departments.find((d) => d.id === m.deptId || d.name === m.deptName);
+                          const isComm = isCommitteeDept(deptObj || m.deptName);
+                          return (
+                            <div
+                              key={m.id}
+                              className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px]"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
+                                    m.isPrimary
+                                      ? 'bg-teal-soft text-teal border border-teal/20'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600'
+                                  }`}
+                                >
+                                  {m.isPrimary ? '주소속' : '겸직'}
+                                </span>
+                                <span className="font-bold text-ink">{m.deptName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {isComm ? (
+                                  <span className="rounded bg-panel-alt px-2 py-0.5 text-[10px] font-medium text-ink3 border border-border">
+                                    직책 없음 (위원회)
+                                  </span>
+                                ) : m.jobTitle ? (
+                                  <span className="rounded bg-teal-soft/20 px-2 py-0.5 text-[10.5px] font-bold text-teal border border-teal/20">
+                                    {m.jobTitle}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10.5px] text-ink3">팀원</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1052,7 +1245,16 @@ export default function EmployeeScreen() {
                   <label className="font-bold text-ink2">소속 부서 (발령)</label>
                   <select
                     value={newEmpDept}
-                    onChange={(e) => setNewEmpDept(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewEmpDept(val);
+                      const dObj = departments.find((d) => d.name === val);
+                      if (isCommitteeDept(dObj || val)) {
+                        setNewEmpDuty('');
+                      } else if (!newEmpDuty) {
+                        setNewEmpDuty('팀원');
+                      }
+                    }}
                     className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal"
                   >
                     {allDepts.map((d) => (
@@ -1080,17 +1282,27 @@ export default function EmployeeScreen() {
 
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-ink2">직책</label>
-                  <select
-                    value={newEmpDuty}
-                    onChange={(e) => setNewEmpDuty(e.target.value)}
-                    className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal"
-                  >
-                    {allJobTitles.map((j) => (
-                      <option key={j} value={j}>
-                        {j}
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const isComm = isCommitteeDept(departments.find((d) => d.name === newEmpDept) || newEmpDept);
+                    return (
+                      <select
+                        value={isComm ? '' : newEmpDuty}
+                        disabled={isComm}
+                        onChange={(e) => setNewEmpDuty(e.target.value)}
+                        className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal disabled:bg-panel-alt/50 disabled:text-ink3"
+                      >
+                        {isComm ? (
+                          <option value="">직책 없음 (위원회)</option>
+                        ) : (
+                          allJobTitles.map((j) => (
+                            <option key={j} value={j}>
+                              {j}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1265,10 +1477,19 @@ export default function EmployeeScreen() {
 
                   <div className="grid grid-cols-3 gap-2">
                     <div className="flex flex-col gap-1.5">
-                      <label className="font-bold text-ink2">소속 부서</label>
+                      <label className="font-bold text-ink2">소속 부서 (본직)</label>
                       <select
                         value={editEmpDept}
-                        onChange={(e) => setEditEmpDept(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditEmpDept(val);
+                          const dObj = departments.find((d) => d.name === val);
+                          if (isCommitteeDept(dObj || val)) {
+                            setEditEmpDuty('');
+                          } else if (!editEmpDuty) {
+                            setEditEmpDuty('팀원');
+                          }
+                        }}
                         className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal"
                       >
                         {allDepts.map((d) => (
@@ -1296,17 +1517,27 @@ export default function EmployeeScreen() {
 
                     <div className="flex flex-col gap-1.5">
                       <label className="font-bold text-ink2">직책</label>
-                      <select
-                        value={editEmpDuty}
-                        onChange={(e) => setEditEmpDuty(e.target.value)}
-                        className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal"
-                      >
-                        {allJobTitles.map((j) => (
-                          <option key={j} value={j}>
-                            {j}
-                          </option>
-                        ))}
-                      </select>
+                      {(() => {
+                        const isComm = isCommitteeDept(departments.find((d) => d.name === editEmpDept) || editEmpDept);
+                        return (
+                          <select
+                            value={isComm ? '' : editEmpDuty}
+                            disabled={isComm}
+                            onChange={(e) => setEditEmpDuty(e.target.value)}
+                            className="h-9.5 rounded-lg border border-border bg-panel px-2 text-[12px] outline-none focus:border-teal disabled:bg-panel-alt/50 disabled:text-ink3"
+                          >
+                            {isComm ? (
+                              <option value="">직책 없음 (위원회)</option>
+                            ) : (
+                              allJobTitles.map((j) => (
+                                <option key={j} value={j}>
+                                  {j}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -1353,6 +1584,123 @@ export default function EmployeeScreen() {
                         onChange={(e) => setEditEmpPhone(e.target.value)}
                         className="h-9 w-full rounded-lg border border-border bg-panel px-3 font-mono text-[12px] outline-none focus:border-teal"
                       />
+                    </div>
+                  </div>
+
+                  {/* 겸직 부서 관리 섹션 */}
+                  <div className="rounded-xl border border-border bg-panel-alt/25 p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11.5px] font-extrabold text-ink flex items-center gap-1">
+                        <span>🔀</span> 겸직 부서 관리
+                      </label>
+                      <span className="text-[10px] text-ink3">
+                        본직 외 추가로 소속될 부서와 직책을 지정합니다.
+                      </span>
+                    </div>
+
+                    {/* 현재 지정된 겸직 목록 */}
+                    <div className="space-y-1.5">
+                      {departmentMembers
+                        .filter((m) => m.userId === selectedEmp.userId && !m.isPrimary)
+                        .map((m) => {
+                          const deptObj = departments.find((d) => d.id === m.deptId || d.name === m.deptName);
+                          const isComm = isCommitteeDept(deptObj || m.deptName);
+                          return (
+                            <div
+                              key={m.id}
+                              className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-1.5 text-[11px]"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                  겸직
+                                </span>
+                                <span className="font-semibold text-ink">{m.deptName}</span>
+                                <span className="text-ink3 font-medium">
+                                  {isComm ? '(위원회 · 직책 없음)' : `[${m.jobTitle || '팀원'}]`}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveConcurrentAffiliation(m.id, m.deptName)}
+                                className="text-red hover:underline text-[10.5px] font-bold cursor-pointer"
+                              >
+                                해제
+                              </button>
+                            </div>
+                          );
+                        })}
+                      {departmentMembers.filter((m) => m.userId === selectedEmp.userId && !m.isPrimary).length === 0 && (
+                        <div className="py-2 text-center text-[10.5px] text-ink3">
+                          지정된 겸직 부서가 없습니다.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 신규 겸직 추가 폼 */}
+                    <div className="border-t border-border/60 pt-2.5 space-y-2">
+                      <div className="text-[10.5px] font-bold text-ink2">+ 새로운 겸직 부서 추가</div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={newConcDeptId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewConcDeptId(val);
+                            const dept = departments.find((d) => d.id === val);
+                            if (isCommitteeDept(dept)) {
+                              setNewConcJobTitle('');
+                            } else if (!newConcJobTitle) {
+                              setNewConcJobTitle('팀원');
+                            }
+                          }}
+                          className="h-8 flex-1 rounded-lg border border-border bg-panel px-2 text-[11px] outline-none focus:border-teal"
+                        >
+                          <option value="">부서 선택...</option>
+                          {departments
+                            .filter(
+                              (d) =>
+                                d.name !== editEmpDept &&
+                                !departmentMembers.some((m) => m.userId === selectedEmp.userId && (m.deptId === d.id || m.deptName === d.name))
+                            )
+                            .map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} {isCommitteeDept(d) ? '(위원회)' : ''}
+                              </option>
+                            ))}
+                        </select>
+
+                        {/* 직책 선택: 위원회 부서 선택 시 비활성화 & '직책 없음' 표시 */}
+                        {(() => {
+                          const selectedDeptObj = departments.find((d) => d.id === newConcDeptId);
+                          const isComm = isCommitteeDept(selectedDeptObj);
+                          return (
+                            <select
+                              value={isComm ? '' : newConcJobTitle}
+                              disabled={!newConcDeptId || isComm}
+                              onChange={(e) => setNewConcJobTitle(e.target.value)}
+                              className="h-8 w-28 rounded-lg border border-border bg-panel px-2 text-[11px] outline-none focus:border-teal disabled:bg-panel-alt/50 disabled:text-ink3"
+                            >
+                              {isComm ? (
+                                <option value="">직책 없음</option>
+                              ) : (
+                                allJobTitles.map((j) => (
+                                  <option key={j} value={j}>
+                                    {j}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          );
+                        })()}
+
+                        <button
+                          type="button"
+                          onClick={handleAddConcurrentAffiliation}
+                          disabled={!newConcDeptId}
+                          className="h-8 rounded-lg bg-teal px-3 text-[11px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                        >
+                          추가
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

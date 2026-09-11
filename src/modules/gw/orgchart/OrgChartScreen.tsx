@@ -271,15 +271,89 @@ function VisualDiagramOrgChart({
   // 1. 대표이사 / 최고경영진 (실제 DB에서 직급/부서 매칭)
   const ceoUser = validUsers.find((u) => u.position.includes('대표') || u.dept === '대표이사') ?? validUsers[0];
 
-  // 2. 직속 부서 및 위원회 (대표이사 직속, 기술경영전략위원회, 경영기획팀 등)
+  // 2. 전체 부서별 소속 멤버 맵 (겸직자 포함)
+  const deptMembersMap = useMemo(() => {
+    const map = new Map<string, typeof org.roots[0]['members']>();
+    const traverse = (node: typeof org.roots[0]) => {
+      map.set(node.dept.name, node.members);
+      node.children.forEach(traverse);
+    };
+    org.roots.forEach(traverse);
+    return map;
+  }, [org.roots]);
+
+  // 부서원 정렬 헬퍼 (팀장/부서장 최우선 > 파트장/실장 > 직급 서열 > 이름순)
+  const sortDeptMembers = (members: typeof org.roots[0]['members'], dept?: ReturnType<typeof useOrgTree>['depts'][0]) => {
+    return [...members].sort((a, b) => {
+      // 1. 부서장/팀장/소장 등 부서 리더 최우선
+      const isALeader =
+        (dept && dept.headUserId === a.id) ||
+        a.jobTitle?.includes('팀장') ||
+        a.jobTitle?.includes('부서장') ||
+        a.jobTitle?.includes('소장') ||
+        a.jobTitle?.includes('본부장') ||
+        a.jobTitle?.includes('위원장');
+      const isBLeader =
+        (dept && dept.headUserId === b.id) ||
+        b.jobTitle?.includes('팀장') ||
+        b.jobTitle?.includes('부서장') ||
+        b.jobTitle?.includes('소장') ||
+        b.jobTitle?.includes('본부장') ||
+        b.jobTitle?.includes('위원장');
+
+      if (isALeader && !isBLeader) return -1;
+      if (!isALeader && isBLeader) return 1;
+
+      // 2. 파트장/실장 등 중간 관리자
+      const isAMid = a.jobTitle?.includes('파트장') || a.jobTitle?.includes('실장');
+      const isBMid = b.jobTitle?.includes('파트장') || b.jobTitle?.includes('실장');
+      if (isAMid && !isBMid) return -1;
+      if (!isAMid && isBMid) return 1;
+
+      // 3. 직급 서열
+      const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
+      if (rankDiff !== 0) return rankDiff;
+
+      // 4. 이름 가나다순
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  };
+
+  // 위원회 멤버 전용 정렬 헬퍼 (1. 대표이사 -> 2. 부위원장 -> 3. 손승원 -> 4. 기타)
+  const sortCommitteeMembers = (members: typeof org.roots[0]['members']) => {
+    const getOrder = (m: typeof members[0]) => {
+      const name = m.name || '';
+      const pos = m.position || '';
+      const duty = m.jobTitle || '';
+
+      // 1순위: 대표이사 (이름, 직급, 직책)
+      if (name.includes('대표') || pos.includes('대표') || duty.includes('대표') || (duty.includes('위원장') && !duty.includes('부위원') && !name.includes('부위원'))) {
+        return 1;
+      }
+      // 2순위: 부위원장 (이름, 직급, 직책)
+      if (name.includes('부위원') || pos.includes('부위원') || duty.includes('부위원')) {
+        return 2;
+      }
+      // 3순위: 손승원
+      if (name.includes('손승원')) {
+        return 3;
+      }
+      // 4순위: 기타 임원 및 직급 순
+      return 10 + org.rankOf(m.position);
+    };
+
+    return [...members].sort((a, b) => getOrder(a) - getOrder(b) || a.name.localeCompare(b.name, 'ko'));
+  };
+
+  // 직속 부서 및 위원회 (대표이사 직속, 기술경영전략위원회, 경영기획팀 등)
   const committeeDept = validDepts.find((d) => d.name.includes('위원회'));
-  const committeeMembers = validUsers.filter((u) => u.dept === committeeDept?.name);
+  const committeeMembers = sortCommitteeMembers(deptMembersMap.get(committeeDept?.name ?? '') ?? []);
 
   const labDept = validDepts.find((d) => d.name.includes('연구소'));
-  const labMembers = validUsers.filter((u) => u.dept === labDept?.name);
+  const labMembers = sortDeptMembers(deptMembersMap.get(labDept?.name ?? '') ?? [], labDept);
 
   const planningDept = validDepts.find((d) => d.name.includes('경영기획'));
-  const planningMembers = validUsers.filter((u) => u.dept === planningDept?.name);
+  const planningMembers = sortDeptMembers(deptMembersMap.get(planningDept?.name ?? '') ?? [], planningDept);
 
   // 3. 주력 본부 (AX지능화본부 또는 사업본부)
   const hqDept = validDepts.find((d) => d.name.includes('본부')) ?? validDepts[0];
@@ -346,9 +420,9 @@ function VisualDiagramOrgChart({
 
         {/* 2. 중앙 척추 섹션: 기술경영전략위원회 + 우측 분기(연구소, 기획팀) */}
         <div className="relative w-full max-w-[860px] flex flex-col items-center">
-          {/* 기술경영전략위원회 박스 (그린 #E2EFDA) */}
+          {/* 기술경영전략위원회 박스 (그린 #E2EFDA, 직책칸 없이 '위원회 / 사용자명' 2열 표시) */}
           <div className="overflow-hidden rounded-md border border-[#A9D18E] shadow-xs">
-            <div className="bg-[#E2EFDA] border-b border-[#A9D18E] py-1 px-4 text-center text-[11px] font-extrabold text-slate-800">
+            <div className="bg-[#E2EFDA] border-b border-[#A9D18E] py-1 px-6 text-center text-[11px] font-extrabold text-slate-800">
               {committeeDept?.name ?? '기술경영전략위원회'}
             </div>
             <table className="border-collapse text-center text-[10.5px]">
@@ -360,14 +434,20 @@ function VisualDiagramOrgChart({
                       onClick={() => onSelectUserId(m.id)}
                       className="cursor-pointer hover:bg-teal-soft/30 transition-colors"
                     >
-                      <td className="border-r border-[#A9D18E] px-3.5 py-1 text-slate-700">{m.jobTitle || '위원'}</td>
-                      <td className="border-r border-[#A9D18E] px-3.5 py-1 text-slate-600">{m.position}</td>
-                      <td className="px-5 py-1 font-bold text-slate-900">{m.name}</td>
+                      <td className="border-r border-[#A9D18E] px-4 py-1 text-slate-700 font-medium">위원회</td>
+                      <td className="px-5 py-1 font-bold text-slate-900">
+                        <span>{m.name}</span>
+                        {m.isConcurrent && (
+                          <span className="ml-1.5 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                            겸직
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="px-6 py-2 text-ink3 text-[10px] italic">
+                    <td colSpan={2} className="px-6 py-2 text-ink3 text-[10px] italic">
                       소속 인원 없음
                     </td>
                   </tr>
@@ -399,7 +479,14 @@ function VisualDiagramOrgChart({
                         >
                           <td className="border-r border-[#A9D18E] px-2.5 py-0.5 text-slate-700">{m.jobTitle || '연구원'}</td>
                           <td className="border-r border-[#A9D18E] px-2.5 py-0.5 text-slate-600">{m.position}</td>
-                          <td className="px-3.5 py-0.5 font-bold text-slate-900">{m.name}</td>
+                          <td className="px-3.5 py-0.5 font-bold text-slate-900">
+                            <span>{m.name}</span>
+                            {m.isConcurrent && (
+                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                겸직
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (
@@ -432,7 +519,14 @@ function VisualDiagramOrgChart({
                         >
                           <td className="border-r border-[#A9D18E] px-2.5 py-0.5 text-slate-700">{m.jobTitle || '팀원'}</td>
                           <td className="border-r border-[#A9D18E] px-2.5 py-0.5 text-slate-600">{m.position}</td>
-                          <td className="px-3.5 py-0.5 font-bold text-slate-900">{m.name}</td>
+                          <td className="px-3.5 py-0.5 font-bold text-slate-900">
+                            <span>{m.name}</span>
+                            {m.isConcurrent && (
+                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                겸직
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (
@@ -487,9 +581,7 @@ function VisualDiagramOrgChart({
           {/* 팀 목록 그리드 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 items-start">
             {teamDepts.map((d) => {
-              const teamMembers = validUsers
-                .filter((u) => u.dept === d.name)
-                .sort((a, b) => org.rankOf(a.position) - org.rankOf(b.position) || a.name.localeCompare(b.name, 'ko'));
+              const teamMembers = sortDeptMembers(deptMembersMap.get(d.name) ?? [], d);
 
               return (
                 <div key={d.id} className="flex flex-col items-center">
@@ -509,7 +601,14 @@ function VisualDiagramOrgChart({
                             >
                               <td className="border-r border-[#8EA9DB] py-1 text-slate-700">{m.jobTitle || '팀원'}</td>
                               <td className="border-r border-[#8EA9DB] py-1 text-slate-600">{m.position}</td>
-                              <td className="py-1 font-bold text-slate-900">{m.name}</td>
+                              <td className="py-1 font-bold text-slate-900">
+                                <span>{m.name}</span>
+                                {m.isConcurrent && (
+                                  <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                    겸직
+                                  </span>
+                                )}
+                              </td>
                             </tr>
                           ))
                         ) : (
