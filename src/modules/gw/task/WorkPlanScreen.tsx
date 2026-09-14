@@ -66,7 +66,10 @@ export default function WorkPlanScreen() {
   const { userRoles } = usePermission();
   const org = useOrgTree();
   const usersQuery = useUsers();
-  const users = usersQuery.data ?? [];
+  // 실제 회사 운영 원칙: 퇴사자(status === '미사용' 또는 resignedAt)는 업무계획 로스터/부서원/일정에서 100% 원천 배제
+  const users = useMemo(() => {
+    return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
+  }, [usersQuery.data]);
   const [demoUserId, setDemoUserId] = useState('U009');
   const actor = authenticatedUser
     ?? users.find((user) => user.id === demoUserId)

@@ -19,7 +19,9 @@ function LocalProjectScreen() {
   const [demoUserId, setDemoUserId] = useState('U009');
   const usersQuery = useUsers();
   const departmentsQuery = useDepartments();
-  const users = usersQuery.data ?? [];
+  const users = useMemo(() => {
+    return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
+  }, [usersQuery.data]);
   const departments = departmentsQuery.data ?? [];
   const actor = authenticatedUser
     ?? users.find((user) => user.id === demoUserId)

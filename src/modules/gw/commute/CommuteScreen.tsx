@@ -460,6 +460,7 @@ export default function CommuteScreen() {
         userByEmpMap.get(normName(e.name)) ??
         userByEmpMap.get(String(e.empId));
       const hire = getHireDateForEmp(e.name, e.empId);
+      const isRetired = !e.active || u?.status === '미사용' || Boolean(u?.resignedAt);
       return {
         empId: e.empId,
         empNo: u?.empNo ? String(u.empNo) : String(e.empId),
@@ -467,6 +468,7 @@ export default function CommuteScreen() {
         dept: u?.dept || null,
         position: u?.position || null,
         hireDate: hire,
+        isRetired,
       };
     });
 
@@ -1142,10 +1144,12 @@ export default function CommuteScreen() {
       {showBatchSubstituteModal && (
         <BatchSubstituteHolidayModal
           adminName={user?.name || '관리자'}
-          employees={employees.map((e) => ({
-            ...e,
-            hireDate: getHireDateForEmp(e.name, e.empId),
-          }))}
+          employees={employees
+            .filter((e) => e.active)
+            .map((e) => ({
+              ...e,
+              hireDate: getHireDateForEmp(e.name, e.empId),
+            }))}
           onClose={() => setShowBatchSubstituteModal(false)}
         />
       )}

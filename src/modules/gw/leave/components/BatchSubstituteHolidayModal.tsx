@@ -25,6 +25,7 @@ interface BatchSubstituteHolidayModalProps {
     dept?: string | null;
     position?: string | null;
     hireDate?: string | null;
+    isRetired?: boolean;
   }>;
   onClose: () => void;
   onSuccess?: () => void;
@@ -83,17 +84,22 @@ export function BatchSubstituteHolidayModal({
     }
   };
 
-  // 사원 필터링
+  // 재직 사원 필터링 (퇴사자 원천 제외)
+  const activeEmployees = useMemo(() => {
+    return employees.filter((e) => !e.isRetired);
+  }, [employees]);
+
+  // 사원 검색 필터링
   const filteredEmployees = useMemo(() => {
-    if (!empSearch.trim()) return employees;
+    if (!empSearch.trim()) return activeEmployees;
     const q = empSearch.trim().toLowerCase();
-    return employees.filter(
+    return activeEmployees.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
         (e.dept || '').toLowerCase().includes(q) ||
         String(e.empId).includes(q),
     );
-  }, [employees, empSearch]);
+  }, [activeEmployees, empSearch]);
 
   const toggleEmp = (empId: number) => {
     setSelectedEmpIds((prev) =>

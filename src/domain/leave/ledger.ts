@@ -45,6 +45,8 @@ export interface LeaveLedgerEntry {
     createdAt: string;
   }>;
   adjustmentHistory: LeaveAdjustmentTransaction[];
+  /** 퇴사 여부 (기본값: false, 퇴사자는 기본 연차원장 화면에서 숨김) */
+  isRetired?: boolean;
 }
 
 export interface LeaveLedgerSummary {
@@ -79,6 +81,7 @@ export function buildLeaveLedger(
     dept?: string | null;
     position?: string | null;
     hireDate?: string | null;
+    isRetired?: boolean;
   }>,
   profiles: EmployeeProfile[] = [],
   approvalDocs: ApprovalDoc[] = [],
@@ -214,6 +217,7 @@ export function buildLeaveLedger(
       advanceStatus,
       leaveHistory: empLeaves.sort((a, b) => b.startDate.localeCompare(a.startDate)),
       adjustmentHistory: empAdjs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      isRetired: Boolean(emp.isRetired || profile?.status === 'RETIRED'),
     });
   }
 
