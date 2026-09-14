@@ -45,6 +45,14 @@ export interface TableDataPayload {
   cellFormulas: Record<string, CellFormula>;
 }
 
+export interface OtherTableOption {
+  key: string;
+  label: string;
+  cols: string[];
+  rows: Array<Record<string, string>>;
+  headerValues?: Record<string, string>;
+}
+
 interface TableDesignerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -52,6 +60,7 @@ interface TableDesignerModalProps {
   initialData: TableDataPayload;
   onApply: (data: TableDataPayload) => void;
   isDesignMode?: boolean;
+  otherTables?: OtherTableOption[];
 }
 
 type CalcType = 'none' | 'column_sum' | 'percentage' | 'operation' | 'custom';
@@ -62,6 +71,7 @@ export function TableDesignerModal({
   field,
   initialData,
   onApply,
+  otherTables = [],
 }: TableDesignerModalProps) {
   const [cols, setCols] = useState<string[]>(initialData.cols);
   const [rows, setRows] = useState<Array<Record<string, string>>>(initialData.rows);
@@ -138,7 +148,23 @@ export function TableDesignerModal({
     nextFormulas = cellFormulas,
     nextHeaders = headerValues
   ) => {
-    let res = recalculateTableFormulas(nextCols, nextRows, nextFormulas, nextHeaders);
+    const otherTablesContext: Record<string, { cols: string[]; rows: Array<Record<string, string>>; headerValues?: Record<string, string> }> = {};
+    if (otherTables && otherTables.length > 0) {
+      otherTables.forEach((t) => {
+        otherTablesContext[t.label] = {
+          cols: t.cols,
+          rows: t.rows,
+          headerValues: t.headerValues,
+        };
+        otherTablesContext[t.key] = {
+          cols: t.cols,
+          rows: t.rows,
+          headerValues: t.headerValues,
+        };
+      });
+    }
+
+    let res = recalculateTableFormulas(nextCols, nextRows, nextFormulas, nextHeaders, otherTablesContext);
     if (sumCell) {
       const copy = [...res];
       let sum = 0;
@@ -497,8 +523,7 @@ export function TableDesignerModal({
     if (
       selectedFormula.format?.startsWith('percent') ||
       expr.includes('* 100') ||
-      expr.includes('[소계') ||
-      expr.includes('[합계')
+      (expr.includes('/') && (expr.includes('[소계') || expr.includes('[합계')))
     ) {
       return 'percentage';
     }
@@ -604,10 +629,17 @@ export function TableDesignerModal({
   ) => {
     if (!selectedCell) return;
     const key = `${selectedCell.rIdx}:${selectedCell.col}`;
+    const formatOp = (token: string) => {
+      const trimmed = token.trim();
+      if (trimmed.startsWith('[') && (trimmed.includes('!') || trimmed.endsWith(']'))) {
+        return trimmed;
+      }
+      return `[${headerValues[trimmed] || trimmed}]`;
+    };
     const nextFormulas = {
       ...cellFormulas,
       [key]: {
-        expression: `=[${op1Title}] ${operator} [${op2Title}]`,
+        expression: `=${formatOp(op1Title)} ${operator} ${formatOp(op2Title)}`,
         format,
       },
     };
@@ -1533,67 +1565,156 @@ export function TableDesignerModal({
                 </div>
               )}
 
-              {currentCalcType === 'operation' && (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal/30 bg-teal-soft/15 px-4 py-2 text-[11.5px] animate-in fade-in duration-150">
-                  <span className="font-bold text-teal">계산식:</span>
-                  <select
-                    id="op-left"
-                    defaultValue={cols[0]}
-                    className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none"
-                    onChange={(e) => {
-                      const left = headerValues[e.target.value] || e.target.value;
-                      const op = (document.getElementById('op-symbol') as HTMLSelectElement)?.value || '-';
-                      const right = (document.getElementById('op-right') as HTMLSelectElement)?.value || cols[1] || cols[0];
-                      applyOperation(left, op, headerValues[right] || right);
-                    }}
-                  >
-                    {cols.map((c) => (
-                      <option key={c} value={c}>
-                        {headerValues[c] || c}
-                      </option>
-                    ))}
-                  </select>
+              {currentCalcType === 'operation' && (() => {
+                // 현재 선택된 셀의 연산식(A - B 등) 파싱
+                let parsedLeft = '';
+                let parsedOp = '-';
+                let parsedRight = '';
+                if (selectedFormula?.expression) {
+                  let expr = selectedFormula.expression.trim();
+                  if (expr.startsWith('=')) expr = expr.slice(1).trim();
+                  const match = expr.match(/^(.+?)\s*([+\-*/])\s*(.+)$/);
+                  if (match) {
+                    parsedLeft = match[1].trim();
+                    parsedOp = match[2];
+                    parsedRight = match[3].trim();
+                  }
+                }
 
-                  <select
-                    id="op-symbol"
-                    defaultValue="-"
-                    className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-bold text-ink outline-none"
-                    onChange={(e) => {
-                      const left = (document.getElementById('op-left') as HTMLSelectElement)?.value || cols[0];
-                      const op = e.target.value;
-                      const right = (document.getElementById('op-right') as HTMLSelectElement)?.value || cols[1] || cols[0];
-                      applyOperation(headerValues[left] || left, op, headerValues[right] || right);
-                    }}
-                  >
-                    <option value="-">- (차액)</option>
-                    <option value="+">+ (합산)</option>
-                    <option value="*">× (곱)</option>
-                    <option value="/">÷ (나눗셈)</option>
-                  </select>
+                const currentDefaultCol = cols[0] ? `[${headerValues[cols[0]] || cols[0]}]` : '';
+                const currentDefaultRight = cols[1] ? `[${headerValues[cols[1]] || cols[1]}]` : currentDefaultCol;
 
-                  <select
-                    id="op-right"
-                    defaultValue={cols[1] || cols[0]}
-                    className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none"
-                    onChange={(e) => {
-                      const left = (document.getElementById('op-left') as HTMLSelectElement)?.value || cols[0];
-                      const op = (document.getElementById('op-symbol') as HTMLSelectElement)?.value || '-';
-                      const right = headerValues[e.target.value] || e.target.value;
-                      applyOperation(headerValues[left] || left, op, right);
-                    }}
-                  >
-                    {cols.map((c) => (
-                      <option key={c} value={c}>
-                        {headerValues[c] || c}
-                      </option>
-                    ))}
-                  </select>
+                const selectedLeft = parsedLeft || currentDefaultCol;
+                const selectedOp = parsedOp || '-';
+                const selectedRight = parsedRight || currentDefaultRight;
 
-                  <span className="text-[10.5px] text-teal font-medium ml-auto">
-                    ✓ 두 열 사이의 차액 또는 연산 결과가 실시간으로 반영됩니다.
-                  </span>
-                </div>
-              )}
+                const renderOptions = () => (
+                  <>
+                    <optgroup label="📂 현재 표">
+                      {cols.map((c) => {
+                        const colTitle = headerValues[c] || c;
+                        const val = `[${colTitle}]`;
+                        return (
+                          <option key={val} value={val}>
+                            {colTitle}
+                          </option>
+                        );
+                      })}
+                      {rows.some((r) => Object.values(r).some((v) => typeof v === 'string' && v.includes('소계'))) &&
+                        cols.map((c) => {
+                          const colTitle = headerValues[c] || c;
+                          const val = `[소계:${colTitle}]`;
+                          return (
+                            <option key={val} value={val}>
+                              [소계] {colTitle}
+                            </option>
+                          );
+                        })}
+                      {rows.some((r) => Object.values(r).some((v) => typeof v === 'string' && v.includes('합계'))) &&
+                        cols.map((c) => {
+                          const colTitle = headerValues[c] || c;
+                          const val = `[합계:${colTitle}]`;
+                          return (
+                            <option key={val} value={val}>
+                              [합계] {colTitle}
+                            </option>
+                          );
+                        })}
+                    </optgroup>
+
+                    {otherTables && otherTables.length > 0 &&
+                      otherTables.map((t) => {
+                        const hasSub = t.rows?.some((r) =>
+                          Object.values(r).some((v) => typeof v === 'string' && v.includes('소계'))
+                        );
+                        const hasTotal = t.rows?.some((r) =>
+                          Object.values(r).some((v) => typeof v === 'string' && v.includes('합계'))
+                        );
+
+                        return (
+                          <optgroup key={t.key} label={`📊 [타 표] ${t.label}`}>
+                            {hasSub &&
+                              t.cols.map((c) => {
+                                const colTitle = t.headerValues?.[c] || c;
+                                const val = `[${t.label}]![소계:${colTitle}]`;
+                                return (
+                                  <option key={val} value={val}>
+                                    [${t.label}] [소계] ${colTitle}
+                                  </option>
+                                );
+                              })}
+                            {hasTotal &&
+                              t.cols.map((c) => {
+                                const colTitle = t.headerValues?.[c] || c;
+                                const val = `[${t.label}]![합계:${colTitle}]`;
+                                return (
+                                  <option key={val} value={val}>
+                                    [${t.label}] [합계] ${colTitle}
+                                  </option>
+                                );
+                              })}
+                            {t.cols.map((c) => {
+                              const colTitle = t.headerValues?.[c] || c;
+                              const val = `[${t.label}]![${colTitle}]`;
+                              return (
+                                <option key={val} value={val}>
+                                  [${t.label}] ${colTitle}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        );
+                      })}
+                  </>
+                );
+
+                const handleOpChange = () => {
+                  const leftEl = document.getElementById('op-left') as HTMLSelectElement;
+                  const opEl = document.getElementById('op-symbol') as HTMLSelectElement;
+                  const rightEl = document.getElementById('op-right') as HTMLSelectElement;
+                  if (!leftEl || !opEl || !rightEl) return;
+                  applyOperation(leftEl.value, opEl.value, rightEl.value);
+                };
+
+                return (
+                  <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-teal/30 bg-teal-soft/15 px-4 py-2 text-[11.5px] animate-in fade-in duration-150">
+                    <span className="font-bold text-teal">계산식:</span>
+                    <select
+                      id="op-left"
+                      value={selectedLeft}
+                      className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[200px]"
+                      onChange={handleOpChange}
+                    >
+                      {renderOptions()}
+                    </select>
+
+                    <select
+                      id="op-symbol"
+                      value={selectedOp}
+                      className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-bold text-ink outline-none"
+                      onChange={handleOpChange}
+                    >
+                      <option value="-">- (차액)</option>
+                      <option value="+">+ (합산)</option>
+                      <option value="*">× (곱)</option>
+                      <option value="/">÷ (나눗셈)</option>
+                    </select>
+
+                    <select
+                      id="op-right"
+                      value={selectedRight}
+                      className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[200px]"
+                      onChange={handleOpChange}
+                    >
+                      {renderOptions()}
+                    </select>
+
+                    <span className="text-[10.5px] text-teal font-medium ml-auto">
+                      ✓ 현재 표 및 타 표의 항목/소계 간 차액 및 연산이 실시간 반영됩니다.
+                    </span>
+                  </div>
+                );
+              })()}
 
               {currentCalcType === 'custom' && (
                 <div className="flex items-center gap-2 rounded-xl border border-teal/30 bg-teal-soft/15 px-4 py-2 text-[11.5px] animate-in fade-in duration-150">

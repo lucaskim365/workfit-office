@@ -6,6 +6,7 @@ import { ApprovalStampTable } from './ApprovalStampTable';
 import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { TableFieldEditor } from '../formFields/TableFieldEditor';
+import { cascadeRecalculateAllTables } from '../formFields/formulaEngine';
 import { SelectorDialog } from './DraftRecipientSection';
 import { calculateLeaveDays, isAnnualLeaveDeduction, isPartDayLeave } from '@/domain/leave/policy';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -878,10 +879,14 @@ export function ApprovalDraftDocumentSheet({
                         v={v}
                         isDesignMode={isDesignMode}
                         isHalf={isHalf}
+                        allFormValues={values}
+                        formFields={form?.fields}
                         set={(patch) => {
-                          setVals(patch);
+                          const tableFields = (form?.fields ?? []).filter((item) => item.type === '표');
+                          const cascadedPatch = cascadeRecalculateAllTables(tableFields, values, patch);
+                          setVals(cascadedPatch);
                           // 표 내 금액 합계가 있으면 메인 amount에도 연동
-                          const updatedVal = patch[f.key];
+                          const updatedVal = cascadedPatch[f.key] || patch[f.key];
                           if (typeof updatedVal === 'string' && updatedVal.includes('"rows"')) {
                             try {
                               const parsed = JSON.parse(updatedVal);

@@ -251,18 +251,141 @@ function evaluateArithmetic(expr: string): number {
   return evalStack.pop() ?? 0;
 }
 
+export type OtherTablesContext = Record<
+  string,
+  {
+    cols: string[];
+    rows: Array<Record<string, string>>;
+    headerValues?: Record<string, string>;
+  }
+>;
+
+/**
+ * 타 표의 셀/소계/합계 값 조회 헬퍼
+ */
+export function resolveOtherTableCell(
+  tableName: string,
+  targetRowOrCoord: string,
+  targetColName?: string,
+  otherTablesContext?: OtherTablesContext
+): number {
+  if (!otherTablesContext) return 0;
+  const cleanTName = tableName.trim().replace(/\s+/g, '').toLowerCase();
+
+  // 표 이름 또는 필드 키로 일치하는 표 탐색
+  const matchEntry = Object.entries(otherTablesContext).find(([k]) => {
+    const cleanK = k.trim().replace(/\s+/g, '').toLowerCase();
+    return cleanK === cleanTName || cleanK.includes(cleanTName) || cleanTName.includes(cleanK);
+  });
+  if (!matchEntry) return 0;
+
+  const otherTable = matchEntry[1];
+  const { cols: oCols, rows: oRows, headerValues: oHeaders } = otherTable;
+  if (!oRows || oRows.length === 0 || !oCols || oCols.length === 0) return 0;
+
+  const resolveOColKey = (title: string): string => {
+    const trimmed = title.trim();
+    if (oCols.includes(trimmed)) return trimmed;
+    if (oHeaders) {
+      const m = Object.keys(oHeaders).find((k) => oHeaders[k] === trimmed);
+      if (m && oCols.includes(m)) return m;
+    }
+    const partial = oCols.find((c) => c.includes(trimmed) || trimmed.includes(c));
+    if (partial) return partial;
+    return trimmed;
+  };
+
+  // 1. 행과 열이 모두 지정된 경우: [행라벨:열이름]
+  if (targetColName) {
+    const colKey = resolveOColKey(targetColName);
+    const rowToken = targetRowOrCoord.trim();
+    let rIdx = -1;
+    if (/^\d+$/.test(rowToken)) {
+      rIdx = parseInt(rowToken, 10);
+    } else if (rowToken.toUpperCase() === 'LAST') {
+      rIdx = oRows.length - 1;
+    } else {
+      const targetLabel = rowToken.toLowerCase();
+      rIdx = oRows.findIndex((r) =>
+        Object.values(r).some(
+          (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
+        )
+      );
+      if (rIdx === -1) {
+        rIdx = oRows.findIndex((r) =>
+          Object.values(r).some(
+            (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
+          )
+        );
+      }
+    }
+    if (rIdx >= 0 && rIdx < oRows.length) {
+      return parseCellNumber(oRows[rIdx][colKey]);
+    }
+    return 0;
+  }
+
+  // 2. 단일 셀 좌표인 경우: "D4" 등
+  const parsedCoord = coordToCell(targetRowOrCoord);
+  if (parsedCoord) {
+    const { rIdx, cIdx } = parsedCoord;
+    if (rIdx >= 0 && rIdx < oRows.length && cIdx >= 0 && cIdx < oCols.length) {
+      return parseCellNumber(oRows[rIdx][oCols[cIdx]]);
+    }
+    return 0;
+  }
+
+  // 3. 열 이름만 지정된 경우: [열이름] -> 소계/합계 행 우선 검색
+  const colKey = resolveOColKey(targetRowOrCoord);
+  if (oCols.includes(colKey)) {
+    let rIdx = oRows.findIndex((r) =>
+      Object.values(r).some(
+        (val) =>
+          typeof val === 'string' &&
+          (val.trim().includes('소계') || val.trim().includes('합계'))
+      )
+    );
+    if (rIdx === -1) rIdx = oRows.length - 1;
+    return parseCellNumber(oRows[rIdx][colKey]);
+  }
+
+  // 4. 행 라벨만 지정된 경우: [소계] -> 금액 열 우선 검색
+  const targetLabel = targetRowOrCoord.trim().toLowerCase();
+  const rIdx = oRows.findIndex((r) =>
+    Object.values(r).some(
+      (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
+    )
+  );
+  if (rIdx >= 0) {
+    const numCol =
+      oCols.find(
+        (c) =>
+          c.includes('금액') ||
+          c.includes('비용') ||
+          c.includes('원') ||
+          c.includes('합계')
+      ) || oCols[oCols.length - 1];
+    return parseCellNumber(oRows[rIdx][numCol]);
+  }
+
+  return 0;
+}
+
 /**
  * 테이블 전체 수식 일괄 실시간 재계산
  * - cols: 열 이름 배열 (예: ['구분', '비중', '금액', ...])
  * - rows: 행 데이터 배열
  * - cellFormulas: 키 "rIdx:colName" -> 수식 객체
+ * - headerValues: 헤더 표시 텍스트 맵
+ * - otherTablesContext: 문서 내 타 표 데이터 맵 (표 간 교차 참조용)
  * - 반환값: 수식 계산 결과가 반영된 새로운 rows 배열
  */
 export function recalculateTableFormulas(
   cols: string[],
   rows: Array<Record<string, string>>,
   cellFormulas?: Record<string, CellFormula>,
-  headerValues?: Record<string, string>
+  headerValues?: Record<string, string>,
+  otherTablesContext?: OtherTablesContext
 ): Array<Record<string, string>> {
   if (!cellFormulas || Object.keys(cellFormulas).length === 0 || rows.length === 0) {
     return rows;
@@ -309,7 +432,24 @@ export function recalculateTableFormulas(
     let expr = fInfo.expression.trim();
     if (expr.startsWith('=')) expr = expr.slice(1).trim();
 
-    // 0. SUM([열이름]) 처리: 지정된 열의 상단 모든 행 합산
+    // 0. 타 표 참조 처리 (Cross-Table Reference: 예: [매출구분]![소계:금액], [매출구분]!D4, [매출구분]![발주금액])
+    expr = expr.replace(/\[([^\]!]+)\]\s*!\s*\[([^\]]+)\]/g, (_m, rawTableName, rawInside) => {
+      const cleanInside = rawInside.trim();
+      if (cleanInside.includes(':')) {
+        const [rowToken, colToken] = cleanInside.split(':');
+        const val = resolveOtherTableCell(rawTableName, rowToken.trim(), colToken.trim(), otherTablesContext);
+        return String(val);
+      }
+      const val = resolveOtherTableCell(rawTableName, cleanInside, undefined, otherTablesContext);
+      return String(val);
+    });
+
+    expr = expr.replace(/\[([^\]!]+)\]\s*!\s*([A-Z]+\d+)/gi, (_m, rawTableName, coord) => {
+      const val = resolveOtherTableCell(rawTableName, coord, undefined, otherTablesContext);
+      return String(val);
+    });
+
+    // 1. SUM([열이름]) 처리: 지정된 열의 상단 모든 행 합산
     expr = expr.replace(/SUM\s*\(\s*\[([^\]]+)\]\s*\)/gi, (_m, rawColTitle) => {
       const actualCol = resolveColKey(rawColTitle);
       const cIdx = cols.indexOf(actualCol);
@@ -435,3 +575,87 @@ export function recalculateTableFormulas(
 
   return nextRows;
 }
+
+/**
+ * 서식 내 복수의 표 필드를 순회하며 타 표 교차 수식을 연쇄 실시간 재계산하는 헬퍼
+ */
+export function cascadeRecalculateAllTables(
+  tableFields: Array<{ key: string; label: string; placeholder?: string; options?: string[] }>,
+  currentVals: Record<string, any>,
+  patch: Record<string, any>
+): Record<string, any> {
+  const mergedVals = { ...currentVals, ...patch };
+  if (!tableFields || tableFields.length <= 1) return patch;
+
+  // 모든 표의 현재 파싱 데이터 구성
+  const allTablesData: Record<
+    string,
+    {
+      cols: string[];
+      rows: Array<Record<string, string>>;
+      cellFormulas?: Record<string, CellFormula>;
+      headerValues?: Record<string, string>;
+      raw: any;
+    }
+  > = {};
+
+  tableFields.forEach((tf) => {
+    const raw = mergedVals[tf.key] || tf.placeholder;
+    if (raw && typeof raw === 'string') {
+      try {
+        const p = JSON.parse(raw);
+        allTablesData[tf.key] = {
+          cols: p.cols || tf.options || [],
+          rows: p.rows || p.defaultRows || [],
+          cellFormulas: p.cellFormulas,
+          headerValues: p.headerValues,
+          raw: p,
+        };
+      } catch (e) {}
+    }
+  });
+
+  // 타 표 컨텍스트 맵 구성 (라벨 및 키 둘 다 매핑)
+  const buildContext = (): OtherTablesContext => {
+    const ctx: OtherTablesContext = {};
+    tableFields.forEach((tf) => {
+      const td = allTablesData[tf.key];
+      if (td) {
+        ctx[tf.label] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
+        ctx[tf.key] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
+      }
+    });
+    return ctx;
+  };
+
+  const finalPatch = { ...patch };
+
+  // 수식을 가진 다른 표들 연쇄 재계산
+  tableFields.forEach((tf) => {
+    const td = allTablesData[tf.key];
+    if (td && td.cellFormulas && Object.keys(td.cellFormulas).length > 0) {
+      const hasCrossFormula = Object.values(td.cellFormulas).some(
+        (f) => f.expression && f.expression.includes('!')
+      );
+      if (hasCrossFormula) {
+        const ctx = buildContext();
+        const nextRows = recalculateTableFormulas(
+          td.cols,
+          td.rows,
+          td.cellFormulas,
+          td.headerValues,
+          ctx
+        );
+        td.rows = nextRows;
+        finalPatch[tf.key] = JSON.stringify({
+          ...td.raw,
+          rows: nextRows,
+          defaultRows: nextRows,
+        });
+      }
+    }
+  });
+
+  return finalPatch;
+}
+

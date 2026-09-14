@@ -6,6 +6,7 @@ import {
   coordToCell,
   shiftFormulaCoordinates,
   recalculateTableFormulas,
+  cascadeRecalculateAllTables,
   formatCellValue,
   type CellFormula,
 } from './formulaEngine';
@@ -172,6 +173,102 @@ export function runFormulaEngineTests() {
     console.log('✓ 7. 총 소계 대비 각 비중(%) 및 [소계:금액] 라벨 참조 자동 계산 통과\n');
   }
 
+  // 8. 타 표 교차 참조 (Cross-Table Reference: 매출구분 소계 - 매입발주금액 = 매출이익)
+  {
+    // 타 표 1: 매출구분 표
+    const salesTable = {
+      cols: ['구분', '비중', '금액'],
+      rows: [
+        { 구분: 'SW', 비중: '61.3%', 금액: '60,000,000' },
+        { 구분: 'H/W', 비중: '38.7%', 금액: '37,826,000' },
+        { 구분: '소계', 비중: '100.0%', 금액: '97,826,000' },
+      ],
+    };
+
+    // 타 표 2: 매입발주 표
+    const purchaseTable = {
+      cols: ['구분', '발주예상일자', '발주 금액', '비고'],
+      rows: [
+        { 구분: '인건비', 발주예상일자: '2026-09-01', '발주 금액': '20,000,000', 비고: '' },
+        { 구분: 'H/W', 발주예상일자: '2026-09-05', '발주 금액': '40,326,000', 비고: '' },
+        { 구분: '매입발주 합계', 발주예상일자: '', '발주 금액': '60,326,000', 비고: '' },
+      ],
+    };
+
+    // 현재 표: 손익/이익 요약 표
+    const profitCols = ['항목', '금액', '비고'];
+    const profitRows = [
+      { 항목: '매출이익', 금액: '', 비고: '매출 소계 - 매입발주 합계' },
+    ];
+
+    const cellFormulas: Record<string, CellFormula> = {
+      '0:금액': {
+        expression: '=[매출구분]![소계:금액] - [매입발주]![합계:발주 금액]',
+        format: 'currency',
+      },
+    };
+
+    const otherTablesContext = {
+      매출구분: salesTable,
+      매입발주: purchaseTable,
+    };
+
+    const calculated = recalculateTableFormulas(
+      profitCols,
+      profitRows,
+      cellFormulas,
+      undefined,
+      otherTablesContext
+    );
+
+    // 97,826,000 - 60,326,000 = 37,500,000
+    assert.equal(calculated[0]['금액'], '37,500,000');
+    console.log('✓ 8. 타 표 교차 참조(Cross-Table Reference: 매출구분 소계 - 매입발주 합계 = 매출이익) 통과\n');
+  }
+
+  // 9. 복수 표 연쇄 실시간 재계산 (cascadeRecalculateAllTables)
+  {
+    const fields = [
+      { key: 'table_sales', label: '매출구분' },
+      { key: 'table_purchase', label: '매입발주' },
+      { key: 'table_profit', label: '손익요약' },
+    ];
+
+    const currentVals: Record<string, string> = {
+      table_sales: JSON.stringify({
+        cols: ['구분', '금액'],
+        rows: [{ 구분: '소계', 금액: '100,000,000' }],
+      }),
+      table_purchase: JSON.stringify({
+        cols: ['구분', '금액'],
+        rows: [{ 구분: '합계', 금액: '40,000,000' }],
+      }),
+      table_profit: JSON.stringify({
+        cols: ['항목', '금액'],
+        rows: [{ 항목: '매출이익', 금액: '' }],
+        cellFormulas: {
+          '0:금액': { expression: '=[매출구분]![소계:금액] - [매입발주]![합계:금액]', format: 'currency' },
+        },
+      }),
+    };
+
+    // 기안자가 매입발주 금액을 40,000,000 -> 30,000,000 으로 수정
+    const patch = {
+      table_purchase: JSON.stringify({
+        cols: ['구분', '금액'],
+        rows: [{ 구분: '합계', 금액: '30,000,000' }],
+      }),
+    };
+
+    const cascaded = cascadeRecalculateAllTables(fields, currentVals, patch);
+
+    // 손익요약의 매출이익이 자동으로 100,000,000 - 30,000,000 = 70,000,000 으로 재계산되어야 함
+    assert(cascaded.table_profit != null, 'table_profit이 연쇄 재계산되어야 함');
+    const profitParsed = JSON.parse(cascaded.table_profit);
+    assert.equal(profitParsed.rows[0]['금액'], '70,000,000');
+    console.log('✓ 9. 복수 표 연쇄 실시간 재계산(cascadeRecalculateAllTables: 매출이익 70,000,000 자동 갱신) 통과\n');
+  }
+
   console.log('🎉 모든 formulaEngine 테스트 통과!');
 }
 
@@ -179,3 +276,4 @@ export function runFormulaEngineTests() {
 if (process.argv[1]?.includes('formulaEngine.test.ts')) {
   runFormulaEngineTests();
 }
+

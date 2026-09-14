@@ -221,7 +221,7 @@ export function DynamicField({
       );
 
     case '표': {
-      return <TableFieldEditor field={field} v={v} set={set} />;
+      return <TableFieldEditor field={field} v={v} set={set} allFormValues={values} />;
     }
 
     case '텍스트':

@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { getCellMergeInfo, type CellMerge } from './utils';
-import { TableDesignerModal, type TableDataPayload } from './TableDesignerModal';
+import { TableDesignerModal, type TableDataPayload, type OtherTableOption } from './TableDesignerModal';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
-import { recalculateTableFormulas, type CellFormula } from './formulaEngine';
+import { recalculateTableFormulas, type CellFormula, type OtherTablesContext } from './formulaEngine';
 import { TableCellTextarea } from './TableCellTextarea';
 
 interface TableFieldEditorProps {
@@ -12,6 +12,8 @@ interface TableFieldEditorProps {
   set: (patch: Record<string, FieldValue>) => void;
   isDesignMode?: boolean;
   isHalf?: boolean;
+  allFormValues?: Record<string, FieldValue>;
+  formFields?: FormField[];
 }
 
 export function TableFieldEditor({
@@ -20,6 +22,8 @@ export function TableFieldEditor({
   set,
   isDesignMode = false,
   isHalf = false,
+  allFormValues,
+  formFields,
 }: TableFieldEditorProps) {
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
 
@@ -115,6 +119,59 @@ export function TableFieldEditor({
     cellFormulas,
   } = parsedData;
 
+  // 문서 내 다른 표들의 최신 데이터 파싱 및 컨텍스트 구성
+  const otherTables = useMemo<OtherTableOption[]>(() => {
+    if (!formFields || !Array.isArray(formFields)) return [];
+    const tableFields = formFields.filter((f) => f.type === '표' && f.key !== field.key);
+    return tableFields.map((f) => {
+      const rawVal = allFormValues?.[f.key] || f.placeholder;
+      let pCols: string[] =
+        f.options && f.options.length > 0 ? f.options : ['구분', '항목', '내용'];
+      let pRows: Array<Record<string, string>> = [];
+      let pHeaders: Record<string, string> = {};
+
+      if (rawVal && typeof rawVal === 'string') {
+        try {
+          const parsed = JSON.parse(rawVal);
+          if (Array.isArray(parsed.cols) && parsed.cols.length > 0) pCols = parsed.cols;
+          if (Array.isArray(parsed.rows)) pRows = parsed.rows;
+          else if (Array.isArray(parsed.defaultRows)) pRows = parsed.defaultRows;
+          if (parsed.headerValues) pHeaders = parsed.headerValues;
+        } catch (e) {}
+      }
+
+      return {
+        key: f.key,
+        label: f.label || f.key,
+        cols: pCols,
+        rows: pRows,
+        headerValues: pHeaders,
+      };
+    });
+  }, [formFields, allFormValues, field.key, field.placeholder]);
+
+  const otherTablesContext = useMemo<OtherTablesContext>(() => {
+    const ctx: OtherTablesContext = {};
+    otherTables.forEach((t) => {
+      ctx[t.label] = {
+        cols: t.cols,
+        rows: t.rows,
+        headerValues: t.headerValues,
+      };
+      ctx[t.key] = {
+        cols: t.cols,
+        rows: t.rows,
+        headerValues: t.headerValues,
+      };
+    });
+    return ctx;
+  }, [otherTables]);
+
+  // 실시간 수식 및 타 표 교차 참조가 반영된 유효 행 목록
+  const effectiveRows = useMemo(() => {
+    return recalculateTableFormulas(cols, rows, cellFormulas, headerValues, otherTablesContext);
+  }, [cols, rows, cellFormulas, headerValues, otherTablesContext]);
+
   // 50% 절반 너비 표일 때 고정 px로 인한 잘림을 원천 차단하고 비율(%)로 자동 변환
   const isHalfTable = isHalf || field.width === 'half';
   const getColWidth = (col: string, cIdx: number) => {
@@ -143,10 +200,10 @@ export function TableFieldEditor({
 
   // 셀 값 변경 (기안 모드)
   const handleCellChange = (rIdx: number, col: string, val: string) => {
-    const nextRows = rows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r));
+    const nextRows = effectiveRows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r));
 
     // 실시간 수식 및 합계 재계산
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues);
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {
@@ -181,8 +238,8 @@ export function TableFieldEditor({
       (acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }),
       {}
     );
-    const nextRows = [...rows, emptyRow];
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues);
+    const nextRows = [...effectiveRows, emptyRow];
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {
@@ -212,9 +269,9 @@ export function TableFieldEditor({
 
   // 행 삭제
   const handleDeleteRow = () => {
-    if (rows.length <= 1) return;
-    const nextRows = rows.slice(0, rows.length - 1);
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues);
+    if (effectiveRows.length <= 1) return;
+    const nextRows = effectiveRows.slice(0, effectiveRows.length - 1);
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {
@@ -307,7 +364,7 @@ export function TableFieldEditor({
             </tr>
 
             {/* 데이터 행 리스트 (직접 입력 가능 및 수식 자동 계산) */}
-            {rows.map((row, rIdx) => (
+            {effectiveRows.map((row, rIdx) => (
               <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]/80 transition-colors">
                 {cols.map((col, cIdx) => {
                   const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(rIdx, cIdx);
@@ -436,6 +493,7 @@ export function TableFieldEditor({
         initialData={parsedData}
         onApply={handleApplyDesigner}
         isDesignMode={isDesignMode}
+        otherTables={otherTables}
       />
     </div>
   );
