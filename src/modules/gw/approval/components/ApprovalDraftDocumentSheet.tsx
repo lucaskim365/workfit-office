@@ -376,9 +376,8 @@ export function ApprovalDraftDocumentSheet({
               if (next !== null && next.trim()) onUpdateDocTitle(next.trim());
             }
           }}
-          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${
-            isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
-          }`}
+          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
+            }`}
           title={isDesignMode ? '클릭하여 격식 문서명(인쇄) 수정' : undefined}
         >
           {docTitle}
@@ -391,11 +390,10 @@ export function ApprovalDraftDocumentSheet({
         {/* 실시간 연동 결재 직인 테이블 (디자인 모드 시 클릭하여 결재선 규칙 모달 호출) */}
         <div
           onClick={isDesignMode ? onStampTableClick : undefined}
-          className={`relative group ${
-            isDesignMode
-              ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 transition-all rounded p-1'
-              : ''
-          }`}
+          className={`relative group ${isDesignMode
+            ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 transition-all rounded p-1'
+            : ''
+            }`}
           title={isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : undefined}
         >
           {isDesignMode && (
@@ -551,11 +549,10 @@ export function ApprovalDraftDocumentSheet({
                   <button
                     type="button"
                     onClick={() => setIsPostApproval(!isPostApproval)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ml-2 shrink-0 ${
-                      isPostApproval
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-[#eee] text-[#666] hover:bg-[#e0e0e0]'
-                    }`}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ml-2 shrink-0 ${isPostApproval
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-[#eee] text-[#666] hover:bg-[#e0e0e0]'
+                      }`}
                     title="사전 결재 없이 긴급 선조치한 후 사후 승인을 요청합니다"
                   >
                     {isPostApproval ? '긴급후결 ✓' : '후결신청'}
@@ -667,11 +664,10 @@ export function ApprovalDraftDocumentSheet({
                       period__days: nextDays,
                     });
                   }}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                    isSel
-                      ? 'bg-teal text-white shadow-2xs'
-                      : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0]'
-                  }`}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${isSel
+                    ? 'bg-teal text-white shadow-2xs'
+                    : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0]'
+                    }`}
                 >
                   {item.label}
                 </button>
@@ -687,14 +683,12 @@ export function ApprovalDraftDocumentSheet({
         const isNoSubRemaining = subRemaining <= 0;
 
         return (
-          <div className={`mt-3 rounded-lg border p-3 text-[11.5px] transition-colors ${
-            isNoSubRemaining
-              ? 'border-rose-300 bg-rose-50/40'
-              : 'border-sky-300 bg-[#f0f7fc]'
-          }`}>
-            <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 ${
-              isNoSubRemaining ? 'border-rose-200/70' : 'border-sky-200/60'
+          <div className={`mt-3 rounded-lg border p-3 text-[11.5px] transition-colors ${isNoSubRemaining
+            ? 'border-rose-300 bg-rose-50/40'
+            : 'border-sky-300 bg-[#f0f7fc]'
             }`}>
+            <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 ${isNoSubRemaining ? 'border-rose-200/70' : 'border-sky-200/60'
+              }`}>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Calendar size={13} className={isNoSubRemaining ? 'text-rose-600' : 'text-sky-600'} />
                 <span className="font-bold text-[#222]">{me.name} 님의 대체휴무 현황:</span>
@@ -762,22 +756,18 @@ export function ApprovalDraftDocumentSheet({
                           period__days: item.days,
                         });
                       }}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
-                        isNoSubRemaining
-                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                          : isSel
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${isNoSubRemaining
+                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        : isSel
                           ? 'bg-sky-600 text-white shadow-2xs cursor-pointer'
                           : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0] cursor-pointer'
-                      }`}
+                        }`}
                     >
                       {item.label}
                     </button>
                   );
                 })}
               </div>
-              <span className="text-[10.5px] text-[#666]">
-                * 휴일근무 발생일 기준 선입선출(FIFO)로 자동 차감됩니다.
-              </span>
             </div>
           </div>
         );
@@ -801,9 +791,8 @@ export function ApprovalDraftDocumentSheet({
                 <div
                   key={blockIdx}
                   onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                  className={`space-y-1 transition-all rounded p-1.5 ${
-                    isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
-                  }`}
+                  className={`space-y-1 transition-all rounded p-1.5 ${isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
+                    }`}
                 >
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
@@ -840,9 +829,8 @@ export function ApprovalDraftDocumentSheet({
                 <div
                   key={blockIdx}
                   onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                  className={`space-y-1 transition-all rounded p-1.5 ${
-                    isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
-                  }`}
+                  className={`space-y-1 transition-all rounded p-1.5 ${isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
+                    }`}
                 >
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
@@ -877,7 +865,7 @@ export function ApprovalDraftDocumentSheet({
                                 setAmount(String(sum));
                               }
                             }
-                          } catch (e) {}
+                          } catch (e) { }
                         }
                       }}
                     />
@@ -904,19 +892,17 @@ export function ApprovalDraftDocumentSheet({
                     <tr key={f.key}>
                       <th
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
-                          isDesignMode
-                            ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
-                            : 'bg-[#f2f2f2] text-[#444]'
-                        }`}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${isDesignMode
+                          ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                          : 'bg-[#f2f2f2] text-[#444]'
+                          }`}
                       >
                         {f.label} {f.required && <span className="text-rose-500">*</span>}
                       </th>
                       <td
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
-                          isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
-                        }`}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                          }`}
                       >
                         <InlineFieldEditor
                           field={f}
@@ -928,19 +914,17 @@ export function ApprovalDraftDocumentSheet({
                       </td>
                       <th
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(next.key); }}
-                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
-                          isDesignMode
-                            ? 'cursor-pointer ' + (isNextSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
-                            : 'bg-[#f2f2f2] text-[#444]'
-                        }`}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${isDesignMode
+                          ? 'cursor-pointer ' + (isNextSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                          : 'bg-[#f2f2f2] text-[#444]'
+                          }`}
                       >
                         {next.label} {next.required && <span className="text-rose-500">*</span>}
                       </th>
                       <td
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(next.key); }}
-                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
-                          isDesignMode && isNextSelected ? 'bg-teal-soft/10' : ''
-                        }`}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${isDesignMode && isNextSelected ? 'bg-teal-soft/10' : ''
+                          }`}
                       >
                         <InlineFieldEditor
                           field={next}
@@ -958,19 +942,17 @@ export function ApprovalDraftDocumentSheet({
                     <tr key={f.key}>
                       <th
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
-                          isDesignMode
-                            ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
-                            : 'bg-[#f2f2f2] text-[#444]'
-                        }`}
+                        className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${isDesignMode
+                          ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                          : 'bg-[#f2f2f2] text-[#444]'
+                          }`}
                       >
                         {f.label} {f.required && <span className="text-rose-500">*</span>}
                       </th>
                       <td
                         onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
-                          isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
-                        }`}
+                        className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                          }`}
                       >
                         <InlineFieldEditor
                           field={f}
@@ -990,20 +972,18 @@ export function ApprovalDraftDocumentSheet({
                   <tr key={f.key}>
                     <th
                       onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                      className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${
-                        isDesignMode
-                          ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
-                          : 'bg-[#f2f2f2] text-[#444]'
-                      }`}
+                      className={`w-[80px] shrink-0 border border-[#bbb] px-2 py-1.5 text-left align-middle text-[11px] font-bold ${isDesignMode
+                        ? 'cursor-pointer ' + (isSelected ? 'bg-teal-soft text-teal font-extrabold ring-2 ring-teal' : 'bg-[#f2f2f2] text-[#444] hover:bg-teal-soft/30')
+                        : 'bg-[#f2f2f2] text-[#444]'
+                        }`}
                     >
                       {f.label} {f.required && <span className="text-rose-500">*</span>}
                     </th>
                     <td
                       colSpan={3}
                       onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                      className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${
-                        isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
-                      }`}
+                      className={`border border-[#bbb] px-2.5 py-1 text-left align-middle text-[#222] ${isDesignMode && isSelected ? 'bg-teal-soft/10' : ''
+                        }`}
                     >
                       <InlineFieldEditor
                         field={f}
@@ -1062,11 +1042,10 @@ export function ApprovalDraftDocumentSheet({
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`flex items-center justify-between border border-dashed rounded px-3 py-2 cursor-pointer transition-colors ${
-                  isDragActive
-                    ? 'border-teal bg-teal/5'
-                    : 'border-[#ccc] bg-[#fafafa] hover:bg-[#f0f0f0]'
-                }`}
+                className={`flex items-center justify-between border border-dashed rounded px-3 py-2 cursor-pointer transition-colors ${isDragActive
+                  ? 'border-teal bg-teal/5'
+                  : 'border-[#ccc] bg-[#fafafa] hover:bg-[#f0f0f0]'
+                  }`}
               >
                 <input
                   ref={fileInputRef}
@@ -1338,10 +1317,10 @@ function InlineFieldEditor({
             const currentLeaveType = String(values['leaveType'] || '');
             const days = newStart && newEnd
               ? calculateLeaveDays({
-                  leaveType: currentLeaveType,
-                  startDate: newStart,
-                  endDate: newEnd,
-                })
+                leaveType: currentLeaveType,
+                startDate: newStart,
+                endDate: newEnd,
+              })
               : 0;
             setVals({
               [field.key]: newStart,
@@ -1394,11 +1373,10 @@ function InlineFieldEditor({
               key={o}
               type="button"
               onClick={() => toggle(o)}
-              className={`rounded px-1.5 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer ${
-                picked.has(o)
-                  ? 'bg-teal text-white'
-                  : 'bg-[#eee] text-[#444] hover:bg-[#e2e2e2]'
-              }`}
+              className={`rounded px-1.5 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer ${picked.has(o)
+                ? 'bg-teal text-white'
+                : 'bg-[#eee] text-[#444] hover:bg-[#e2e2e2]'
+                }`}
             >
               {o}
             </button>
