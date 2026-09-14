@@ -6,12 +6,14 @@ interface CalendarRangePickerProps {
   start: string;
   end: string;
   onChange: (start: string, end: string) => void;
+  singleDateOnly?: boolean;
 }
 
 export function CalendarRangePicker({
   start,
   end,
   onChange,
+  singleDateOnly = false,
 }: CalendarRangePickerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,6 +40,11 @@ export function CalendarRangePicker({
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
   const handleDateClick = (dateStr: string) => {
+    if (singleDateOnly) {
+      onChange(dateStr, dateStr);
+      setOpen(false);
+      return;
+    }
     if (!start || (start && end)) {
       onChange(dateStr, '');
     } else {
@@ -102,8 +109,12 @@ export function CalendarRangePicker({
       >
         <span>
           {start
-            ? `${start} ~ ${end || '종료일 선택'}${daysLabel > 0 ? ` (${daysLabel}일)` : ''}`
-            : '기간을 선택하세요'}
+            ? singleDateOnly
+              ? start
+              : `${start} ~ ${end || '종료일 선택'}${daysLabel > 0 ? ` (${daysLabel}일)` : ''}`
+            : singleDateOnly
+              ? '날짜를 선택하세요'
+              : '기간을 선택하세요'}
         </span>
         <Calendar size={14} className="text-ink3" />
       </button>
@@ -140,8 +151,8 @@ export function CalendarRangePicker({
             {dateItems.map((item, idx) => {
               const { dateStr, day, currentMonth } = item;
               const isStart = start === dateStr;
-              const isEnd = end === dateStr;
-              const isWithinRange = start && end && dateStr >= start && dateStr <= end;
+              const isEnd = !singleDateOnly && end === dateStr;
+              const isWithinRange = !singleDateOnly && start && end && dateStr >= start && dateStr <= end;
 
               let btnClass = 'h-8 w-8 mx-auto grid place-items-center rounded-lg transition-all ';
               if (!currentMonth) {

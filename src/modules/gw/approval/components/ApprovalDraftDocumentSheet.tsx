@@ -7,7 +7,7 @@ import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { TableFieldEditor } from '../formFields/TableFieldEditor';
 import { SelectorDialog } from './DraftRecipientSection';
-import { calculateLeaveDays, isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { calculateLeaveDays, isAnnualLeaveDeduction, isPartDayLeave } from '@/domain/leave/policy';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
@@ -654,13 +654,17 @@ export function ApprovalDraftDocumentSheet({
                   key={item.type}
                   type="button"
                   onClick={() => {
+                    const isPart = isPartDayLeave(item.type);
+                    const curStart = (values['period'] as string) || '';
+                    const curEnd = isPart ? curStart : (values['period__end'] as string);
                     const nextDays = calculateLeaveDays({
                       leaveType: item.type,
-                      startDate: values['period'] as string,
-                      endDate: values['period__end'] as string,
+                      startDate: curStart,
+                      endDate: curEnd,
                     });
                     setVals({
                       leaveType: item.type,
+                      ...(isPart && curStart ? { period__end: curStart } : {}),
                       period__days: nextDays,
                     });
                   }}
@@ -751,8 +755,11 @@ export function ApprovalDraftDocumentSheet({
                       disabled={isNoSubRemaining}
                       onClick={() => {
                         if (isNoSubRemaining) return;
+                        const isPart = item.days < 1.0;
+                        const curStart = (values['period'] as string) || '';
                         setVals({
                           leaveType: '대체휴무',
+                          ...(isPart && curStart ? { period__end: curStart } : {}),
                           period__days: item.days,
                         });
                       }}
@@ -1309,22 +1316,28 @@ function InlineFieldEditor({
     case '기간': {
       const start = sv;
       const end = (values[field.key + '__end'] as string) ?? '';
+      const currentLeaveType = String(values['leaveType'] || '').trim();
+      const currentDays = Number(values['period__days'] ?? 1.0);
+      const isPart = isPartDayLeave(currentLeaveType) || (currentLeaveType === '대체휴무' && currentDays < 1.0);
+
       return (
         <CalendarRangePicker
           start={start}
-          end={end}
+          end={isPart ? start : end}
+          singleDateOnly={isPart}
           onChange={(newStart, newEnd) => {
-            const currentLeaveType = String(values['leaveType'] || '');
-            const days = newStart && newEnd
+            const actualEnd = isPart ? newStart : newEnd;
+            const days = newStart && actualEnd
               ? calculateLeaveDays({
                 leaveType: currentLeaveType,
                 startDate: newStart,
-                endDate: newEnd,
+                endDate: actualEnd,
+                rawDays: isPart ? currentDays : undefined,
               })
               : 0;
             setVals({
               [field.key]: newStart,
-              [field.key + '__end']: newEnd,
+              [field.key + '__end']: actualEnd,
               [field.key + '__days']: days,
             });
           }}
@@ -1340,10 +1353,16 @@ function InlineFieldEditor({
             const nextVal = e.target.value;
             const patch: Record<string, FieldValue> = { [field.key]: nextVal };
             if (field.key === 'leaveType') {
+              const isPart = isPartDayLeave(nextVal);
+              const curStart = (values['period'] as string) || '';
+              const curEnd = isPart ? curStart : (values['period__end'] as string);
+              if (isPart && curStart) {
+                patch['period__end'] = curStart;
+              }
               const nextDays = calculateLeaveDays({
                 leaveType: nextVal,
-                startDate: values['period'] as string,
-                endDate: values['period__end'] as string,
+                startDate: curStart,
+                endDate: curEnd,
               });
               patch['period__days'] = nextDays;
             }
