@@ -27,6 +27,7 @@ import {
   type CellFormula,
   type CellFormat,
 } from './formulaEngine';
+import { TableCellTextarea } from './TableCellTextarea';
 
 export interface TableDataPayload {
   cols: string[];
@@ -1204,7 +1205,7 @@ export function TableDesignerModal({
                           {isCalculated ? (
                             <div className="flex items-center justify-between w-full px-2 py-1.5">
                               <span
-                                className={`w-full font-bold text-teal font-mono ${
+                                className={`w-full font-bold text-teal font-mono whitespace-pre-wrap break-words ${
                                   isNumLike ? 'text-right' : 'text-left'
                                 }`}
                                 title={`수식: ${formulaInfo?.expression || '합계'}`}
@@ -1219,14 +1220,11 @@ export function TableDesignerModal({
                               </span>
                             </div>
                           ) : (
-                            <input
-                              type="text"
+                            <TableCellTextarea
                               value={cellVal}
-                              onChange={(e) => handleCellValChange(rIdx, col, e.target.value)}
+                              onChange={(val) => handleCellValChange(rIdx, col, val)}
                               placeholder={isNumLike ? '0' : ''}
-                              className={`w-full bg-transparent px-2 py-1.5 text-[11.5px] text-ink outline-none transition-colors rounded-none ${
-                                isNumLike ? 'text-right' : 'text-left'
-                              }`}
+                              className={isNumLike ? 'text-right' : 'text-left'}
                             />
                           )}
                         </td>

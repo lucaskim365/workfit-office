@@ -4,6 +4,7 @@ import { getCellMergeInfo, type CellMerge } from './utils';
 import { TableDesignerModal, type TableDataPayload } from './TableDesignerModal';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { recalculateTableFormulas, type CellFormula } from './formulaEngine';
+import { TableCellTextarea } from './TableCellTextarea';
 
 interface TableFieldEditorProps {
   field: FormField;
@@ -355,7 +356,7 @@ export function TableFieldEditor({
                           title={isDesignMode ? `수식으로 자동 계산됨 (${formulaInfo?.expression || '합산'})` : undefined}
                         >
                           <span
-                            className={`w-full font-medium ${
+                            className={`w-full font-medium whitespace-pre-wrap break-words ${
                               isDesignMode ? 'text-teal font-bold font-mono' : 'text-[#111] dark:text-ink'
                             } ${isNumLike ? 'text-right' : 'text-left'}`}
                           >
@@ -371,21 +372,17 @@ export function TableFieldEditor({
                           )}
                         </div>
                       ) : (
-                        <input
-                          type="text"
+                        <TableCellTextarea
                           value={cellVal}
-                          onChange={(e) => handleCellChange(rIdx, col, e.target.value)}
-                          onFocus={(e) => e.target.select()}
+                          onChange={(nextVal) => handleCellChange(rIdx, col, nextVal)}
                           onBlur={(e) => {
                             const raw = e.target.value.replace(/,/g, '').trim();
-                            if (isNumLike && !isPercent && raw !== '' && !isNaN(Number(raw))) {
+                            if (isNumLike && !isPercent && !raw.includes('\n') && raw !== '' && !isNaN(Number(raw))) {
                               handleCellChange(rIdx, col, Number(raw).toLocaleString('ko-KR'));
                             }
                           }}
                           placeholder={isNumLike ? '0' : ''}
-                          className={`w-full bg-transparent px-2 py-1.5 text-[11.5px] text-ink outline-none transition-colors hover:bg-teal-soft/10 focus:bg-white focus:ring-1 focus:ring-teal/70 rounded-none ${
-                            isNumLike ? 'text-right' : 'text-left'
-                          }`}
+                          className={isNumLike ? 'text-right' : 'text-left'}
                         />
                       )}
                     </td>
