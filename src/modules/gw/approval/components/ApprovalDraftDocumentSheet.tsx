@@ -682,81 +682,106 @@ export function ApprovalDraftDocumentSheet({
       )}
 
       {/* 6-1. 휴가원 전용: 대체휴무 현황 배너 & 대휴 구분 버튼 */}
-      {docCode === '휴가' && (selectedLeaveType === '대체휴무' || selectedLeaveType === 'SUBSTITUTE') && (
-        <div className="mt-3 rounded-lg border border-sky-300 bg-[#f0f7fc] p-3 text-[11.5px]">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200/60 pb-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Calendar size={13} className="text-sky-600" />
-              <span className="font-bold text-[#222]">{me.name} 님의 대체휴무 현황:</span>
-              <span className="text-[#666]">
-                총 발생 <strong>{leaveBalance?.substituteHoliday?.total ?? 0}일</strong>
-              </span>
-              <span className="text-[#888]">·</span>
-              <span className="text-[#666]">
-                사용 <strong>{leaveBalance?.substituteHoliday?.used ?? 0}일</strong>
-              </span>
-              {(leaveBalance?.substituteHoliday?.pending ?? 0) > 0 && (
-                <>
-                  <span className="text-[#888]">·</span>
-                  <span className="text-amber-700 font-medium">
-                    진행중 {leaveBalance.substituteHoliday.pending}일
-                  </span>
-                </>
-              )}
-              <span className="text-[#888]">·</span>
-              <span className={`font-extrabold ${(leaveBalance?.substituteHoliday?.remaining ?? 0) > 0 ? 'text-sky-700' : 'text-gray-500'}`}>
-                잔여 {leaveBalance?.substituteHoliday?.remaining ?? 0}일
-              </span>
-            </div>
-            {/* 만료 임박 또는 잔여 0일 알림 */}
-            {(leaveBalance?.substituteHoliday?.expiringSoonCount ?? 0) > 0 ? (
-              <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold border border-rose-200">
-                30일 이내 만료 예정: {leaveBalance.substituteHoliday.expiringSoonCount}건
-              </span>
-            ) : (leaveBalance?.substituteHoliday?.remaining ?? 0) <= 0 ? (
-              <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">
-                잔여 대휴 없음
-              </span>
-            ) : null}
-          </div>
+      {docCode === '휴가' && (selectedLeaveType === '대체휴무' || selectedLeaveType === 'SUBSTITUTE') && (() => {
+        const subRemaining = Number(leaveBalance?.substituteHoliday?.remaining ?? 0);
+        const isNoSubRemaining = subRemaining <= 0;
 
-          {/* 대체휴무 구분 인라인 칩 버튼 & 안내 문구 */}
-          <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-[#555] mr-1">대휴 구분:</span>
-              {[
-                { days: 1.0, label: '종일 대휴 (1.0일)' },
-                { days: 0.5, label: '반일 대휴 (0.5일)' },
-              ].map((item) => {
-                const currentDays = Number(values['period__days'] ?? 1.0);
-                const isSel = currentDays === item.days;
-                return (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setVals({
-                        leaveType: '대체휴무',
-                        period__days: item.days,
-                      });
-                    }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                      isSel
-                        ? 'bg-sky-600 text-white shadow-2xs'
-                        : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0]'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
+        return (
+          <div className={`mt-3 rounded-lg border p-3 text-[11.5px] transition-colors ${
+            isNoSubRemaining
+              ? 'border-rose-300 bg-rose-50/40'
+              : 'border-sky-300 bg-[#f0f7fc]'
+          }`}>
+            <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 ${
+              isNoSubRemaining ? 'border-rose-200/70' : 'border-sky-200/60'
+            }`}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Calendar size={13} className={isNoSubRemaining ? 'text-rose-600' : 'text-sky-600'} />
+                <span className="font-bold text-[#222]">{me.name} 님의 대체휴무 현황:</span>
+                <span className="text-[#666]">
+                  총 발생 <strong>{leaveBalance?.substituteHoliday?.total ?? 0}일</strong>
+                </span>
+                <span className="text-[#888]">·</span>
+                <span className="text-[#666]">
+                  사용 <strong>{leaveBalance?.substituteHoliday?.used ?? 0}일</strong>
+                </span>
+                {(leaveBalance?.substituteHoliday?.pending ?? 0) > 0 && (
+                  <>
+                    <span className="text-[#888]">·</span>
+                    <span className="text-amber-700 font-medium">
+                      진행중 {leaveBalance.substituteHoliday.pending}일
+                    </span>
+                  </>
+                )}
+                <span className="text-[#888]">·</span>
+                <span className={`font-extrabold ${subRemaining > 0 ? 'text-sky-700' : 'text-rose-600'}`}>
+                  잔여 {subRemaining}일
+                </span>
+              </div>
+              {/* 만료 임박 또는 잔여 0일 알림 */}
+              {(leaveBalance?.substituteHoliday?.expiringSoonCount ?? 0) > 0 ? (
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold border border-rose-200">
+                  30일 이내 만료 예정: {leaveBalance.substituteHoliday.expiringSoonCount}건
+                </span>
+              ) : isNoSubRemaining ? (
+                <span className="text-[10.5px] px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold border border-rose-300 animate-pulse">
+                  잔여 대체휴무 없음 (신청 불가)
+                </span>
+              ) : null}
             </div>
-            <span className="text-[10.5px] text-[#666]">
-              * 휴일근무 발생일 기준 선입선출(FIFO)로 자동 차감됩니다.
-            </span>
+
+            {/* 잔여 대체휴무 0일 시 신청 불가 강력 안내 */}
+            {isNoSubRemaining && (
+              <div className="mt-2 rounded bg-rose-100/70 border border-rose-200 px-2.5 py-1.5 text-[11px] text-rose-800 font-medium flex items-center gap-1.5">
+                <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+                <span>
+                  <strong>잔여 대체휴무가 없습니다.</strong> 대체휴무는 법률상 선사용이 불가하며, 휴일근무(특근) 발생 내역이 사전에 적립되어 있어야만 기안이 가능합니다.
+                </span>
+              </div>
+            )}
+
+            {/* 대체휴무 구분 인라인 칩 버튼 & 안내 문구 */}
+            <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-[#555] mr-1">대휴 구분:</span>
+                {[
+                  { days: 1.0, label: '종일 대휴 (1.0일)' },
+                  { days: 0.5, label: '반일 대휴 (0.5일)' },
+                ].map((item) => {
+                  const currentDays = Number(values['period__days'] ?? 1.0);
+                  const isSel = currentDays === item.days;
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      disabled={isNoSubRemaining}
+                      onClick={() => {
+                        if (isNoSubRemaining) return;
+                        setVals({
+                          leaveType: '대체휴무',
+                          period__days: item.days,
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                        isNoSubRemaining
+                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                          : isSel
+                          ? 'bg-sky-600 text-white shadow-2xs cursor-pointer'
+                          : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0] cursor-pointer'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-[10.5px] text-[#666]">
+                * 휴일근무 발생일 기준 선입선출(FIFO)로 자동 차감됩니다.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 7. 서식 동적 상세 블록 렌더링 (ApprovalDocumentView 규격과 100% 일치 + 인라인 편집) */}
       {blocks.length > 0 && (

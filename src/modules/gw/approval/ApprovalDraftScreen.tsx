@@ -865,11 +865,13 @@ function ApprovalDraftInner({
       if (!postApprovedById) return '선조치 구두/임시 승인자를 선택해 주세요.';
     }
 
-    if (code === '휴가') {
+    if (code === '휴가' || form?.code === '휴가') {
       const pStart = values['period'];
       const pEnd = values['period__end'];
-      const lType = String(values['leaveType'] || '연차');
+      const lType = String(values['leaveType'] || '연차').trim();
       const isPart = isHalfDayLeave(lType) || isQuarterDayLeave(lType);
+      const isSubLeave = lType.includes('대체휴무') || lType === 'SUBSTITUTE';
+
       const effectiveDays = calculateLeaveDays({
         leaveType: lType,
         startDate: pStart as string,
@@ -878,19 +880,23 @@ function ApprovalDraftInner({
         title,
       });
 
+      // 대체휴무 잔여일수 검증: 선사용 불가 (휴일근무 실적 사전 존재 필수)
+      if (isSubLeave) {
+        const subRemaining = Number(bal?.substituteHoliday?.remaining ?? 0);
+        if (subRemaining <= 0) {
+          return '보유하신 대체휴무 잔여 일수가 없습니다. (잔여: 0일)\n대체휴무는 법률상 선사용이 불가하며, 휴일근무 발생 내역이 사전에 적립되어 있어야만 신청하실 수 있습니다.';
+        }
+        if (effectiveDays > subRemaining) {
+          return `신청 가능한 잔여 대체휴무(${subRemaining}일)를 초과하였습니다. (잔여: ${subRemaining}일, 신청일수: ${effectiveDays}일)`;
+        }
+      }
+
       if (!pStart || (!isPart && !pEnd) || effectiveDays <= 0) {
         return '휴가 기간을 올바르게 입력하세요.';
       }
 
       // 연차 및 반차 잔여일수 검증: 선사용(Advance Leave) 정책에 따라 잔여 연차가 0이거나 부족하더라도 신청 허용
       // (초과 사용분은 향후 월별 발생 연차와 자동 상계 처리됨)
-
-      // 대체휴무 잔여일수 검증
-      if (lType === '대체휴무') {
-        if (effectiveDays > bal.substituteHoliday.remaining) {
-          return `신청 가능한 잔여 대체휴무(${bal.substituteHoliday.remaining}일)를 초과하였습니다. (신청일수: ${effectiveDays}일)`;
-        }
-      }
     }
 
     if (code === '외근') {
@@ -1025,7 +1031,10 @@ function ApprovalDraftInner({
 
   const onSaveDraft = async () => {
     const err = validate(false);
-    if (err) return setError(err);
+    if (err) {
+      alert(err);
+      return setError(err);
+    }
     setError('');
     try {
       await persistDraft();
@@ -1038,7 +1047,10 @@ function ApprovalDraftInner({
 
   const onSubmit = async () => {
     const err = validate(true);
-    if (err) return setError(err);
+    if (err) {
+      alert(err);
+      return setError(err);
+    }
     setError('');
     try {
       const id = await persistDraft();
@@ -1108,6 +1120,20 @@ function ApprovalDraftInner({
           )}
 
           <AutosaveIndicator at={autosavedAt} />
+          {/* 대체휴무 잔여 0일 시 상단 경고 뱃지 */}
+          {(() => {
+            const currentLType = String(values['leaveType'] || '').trim();
+            const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
+            const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
+            if (isSub && subRem <= 0) {
+              return (
+                <span className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600 border border-rose-200 shadow-2xs animate-pulse">
+                  잔여 대휴 0일 (상신 불가)
+                </span>
+              );
+            }
+            return null;
+          })()}
           {!isResubmit && (
             <button
               type="button"
@@ -1118,14 +1144,28 @@ function ApprovalDraftInner({
               임시저장
             </button>
           )}
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={busy || !canCreate}
-            className="rounded-lg bg-teal px-4 py-1.5 text-[12.5px] font-bold text-white hover:bg-teal-dark transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {busy ? '상신 중...' : isResubmit ? '재상신' : '상신 발송'}
-          </button>
+          {(() => {
+            const currentLType = String(values['leaveType'] || '').trim();
+            const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
+            const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
+            const isBlockedBySub = isSub && subRem <= 0;
+
+            return (
+              <button
+                type="button"
+                onClick={onSubmit}
+                disabled={busy || !canCreate || isBlockedBySub}
+                title={isBlockedBySub ? '보유하신 잔여 대체휴무가 없어 상신할 수 없습니다.' : undefined}
+                className={`rounded-lg px-4 py-1.5 text-[12.5px] font-bold text-white transition-colors shadow-xs ${
+                  isBlockedBySub
+                    ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                    : 'bg-teal hover:bg-teal-dark disabled:opacity-40 disabled:cursor-not-allowed'
+                }`}
+              >
+                {busy ? '상신 중...' : isResubmit ? '재상신' : '상신 발송'}
+              </button>
+            );
+          })()}
         </div>
       </header>
 
