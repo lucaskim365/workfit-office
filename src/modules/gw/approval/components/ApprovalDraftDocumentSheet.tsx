@@ -6,6 +6,7 @@ import { ApprovalStampTable } from './ApprovalStampTable';
 import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { TableFieldEditor } from '../formFields/TableFieldEditor';
+import { SelectFieldEditor } from '../formFields/SelectFieldEditor';
 import { cascadeRecalculateAllTables } from '../formFields/formulaEngine';
 import { SelectorDialog } from './DraftRecipientSection';
 import { calculateLeaveDays, isAnnualLeaveDeduction, isPartDayLeave } from '@/domain/leave/policy';
@@ -1396,15 +1397,17 @@ function InlineFieldEditor({
 
     case '선택':
       return (
-        <select
-          value={sv}
-          onChange={(e) => {
-            const nextVal = e.target.value;
-            const patch: Record<string, FieldValue> = { [field.key]: nextVal };
+        <SelectFieldEditor
+          field={field}
+          sv={sv}
+          set={setVals}
+          inp="w-full bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer border border-transparent focus:border-teal hover:border-[#ddd]"
+          onCustomChange={(nextVal) => {
             if (field.key === 'leaveType') {
               const isPart = isPartDayLeave(nextVal);
               const curStart = (values['period'] as string) || '';
               const curEnd = isPart ? curStart : (values['period__end'] as string);
+              const patch: Record<string, FieldValue> = {};
               if (isPart && curStart) {
                 patch['period__end'] = curStart;
               }
@@ -1414,18 +1417,10 @@ function InlineFieldEditor({
                 endDate: curEnd,
               });
               patch['period__days'] = nextDays;
+              setVals(patch);
             }
-            setVals(patch);
           }}
-          className="w-full bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer"
-        >
-          <option value="">선택</option>
-          {field.options?.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
+        />
       );
 
     case '다중선택': {

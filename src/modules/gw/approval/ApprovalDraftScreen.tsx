@@ -33,7 +33,7 @@ import {
   isHalfDayLeave,
   isQuarterDayLeave,
 } from '@/domain/leave/policy';
-import { X, AlertTriangle, GitFork, RefreshCw, Sparkles } from 'lucide-react';
+import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History } from 'lucide-react';
 import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
 import type { CellMerge } from './formFields/utils';
 
@@ -157,6 +157,9 @@ function ApprovalDraftInner({
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
     const initialVals = { ...(editDoc?.fieldValues ?? {}) };
+    if (editDoc?.body && !initialVals[RESERVED_BODY_KEY]) {
+      initialVals[RESERVED_BODY_KEY] = editDoc.body;
+    }
     if (editDoc?.docType === '휴가' && editDoc.form) {
       if (!initialVals['leaveType']) initialVals['leaveType'] = editDoc.form.leaveType;
       if (!initialVals['period']) initialVals['period'] = editDoc.form.startDate;
@@ -282,6 +285,34 @@ function ApprovalDraftInner({
   }, [code, forms, editDoc]);
 
   const hasManuallyEnteredValues = (): boolean => {
+    // 1. 사용자 입력(제목, 금액, 첨부, 관련문서)이 유의미하게 존재하는 경우 무조건 작성 중으로 판정
+    if (title.trim().length > 0) return true;
+    if (amount.trim().length > 0) return true;
+    if (attachments.length > 0) return true;
+    if (relatedDocs.length > 0) return true;
+
+    // 2. values 내부 필드 검사 (표나 텍스트가 조금이라도 입력되었는지 직접 확인)
+    const hasValues = Object.values(values).some((v) => {
+      if (v === null || v === undefined || v === '') return false;
+      if (typeof v === 'string') {
+        if (v.trim() === '') return false;
+        // 표 필드인 경우 기본 빈 행만 있는 게 아니라 실제 셀에 입력이 있는지 검사
+        if (v.includes('"rows"')) {
+          try {
+            const p = JSON.parse(v);
+            if (Array.isArray(p.rows)) {
+              return p.rows.some((r: any) =>
+                Object.values(r).some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '')
+              );
+            }
+          } catch {}
+        }
+        return true;
+      }
+      return true;
+    });
+    if (hasValues) return true;
+
     if (!initialStateRef.current) return false;
     const initialState = initialStateRef.current;
 
@@ -296,11 +327,6 @@ function ApprovalDraftInner({
     const relatedDocsChanged = JSON.stringify(relatedDocs) !== JSON.stringify(initialState.relatedDocs);
     const stepsChanged = JSON.stringify(steps) !== JSON.stringify(initialState.steps);
     const recipientsChanged = JSON.stringify(recipients) !== JSON.stringify(initialState.recipients);
-    /**
-     * 셀렉트 박스(공개범위·보존연한·문서보안)도 사용자가 만진 것이다.
-     * 예전에는 비교 대상에서 빠져 있어, 셀렉트만 바꾸면 "작성한 게 없다"로 판정돼
-     * **보관이 안 될 뿐 아니라 기존 보관본까지 지워졌고**, 이탈 경고도 뜨지 않았다.
-     */
     const securityChanged = securityLevel !== initialState.securityLevel;
     const visibilityChanged = visibility !== initialState.visibility;
     const preservationChanged = preservationPeriod !== initialState.preservationPeriod;
@@ -353,8 +379,88 @@ function ApprovalDraftInner({
     }
   };
 
+  const draftKey = `draft_autosave_${me.id}_${editDoc?.id ?? 'new'}`;
+  const activeKey = `draft_autosave_active_${me.id}_${editDoc?.id ?? 'new'}`;
+  const HISTORY_KEY = `draft_history_${me.id}`;
+
+  /**
+   * 브라우저 다중 버전 롤링 백업 (최근 20개 스냅샷 보관소)
+   * 1개 키 덮어쓰기나 예기치 않은 새로고침, 양식 변경 시에도 이전 버전을 영구 보존한다.
+   */
+  const saveToRollingHistory = (snapshotData: any, tag?: string) => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      let list: any[] = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) list = [];
+
+      const latest = list[0];
+      const isSameContent =
+        latest &&
+        latest.code === snapshotData.code &&
+        latest.title === snapshotData.title &&
+        JSON.stringify(latest.values) === JSON.stringify(snapshotData.values);
+
+      // 내용이 완전히 동일하다면 1분 이내에는 중복 등록을 건너뜀
+      if (isSameContent && !tag) {
+        if (Date.now() - latest.timestamp < 60 * 1000) return;
+      }
+
+      const entry = {
+        id: `hist_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        docId: snapshotData.docId ?? null,
+        code: snapshotData.code,
+        title: snapshotData.title,
+        timestamp: Date.now(),
+        values: snapshotData.values,
+        amount: snapshotData.amount,
+        securityLevel: snapshotData.securityLevel,
+        visibility: snapshotData.visibility,
+        preservationPeriod: snapshotData.preservationPeriod,
+        attachments: snapshotData.attachments,
+        relatedDocs: snapshotData.relatedDocs,
+        recipients: snapshotData.recipients,
+        steps: snapshotData.steps,
+        tag: tag || '자동 보관',
+      };
+
+      list.unshift(entry);
+      if (list.length > 20) {
+        list = list.slice(0, 20);
+      }
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+    } catch {
+      // LocalStorage Quota 초과 시 가장 오래된 항목 5개 삭제 후 복구 시도
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        let list: any[] = raw ? JSON.parse(raw) : [];
+        if (list.length > 5) {
+          list = list.slice(0, list.length - 5);
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+        }
+      } catch {}
+    }
+  };
+
   // 작성 중인 내용 폐기 후 새 양식 선택
   const handleDiscardAndChange = () => {
+    // 폐기 전 혹시 모를 실수를 대비하여 롤링 히스토리에 아카이빙
+    saveToRollingHistory(
+      {
+        docId: editDoc?.id ?? null,
+        code,
+        title,
+        values,
+        amount,
+        securityLevel,
+        visibility,
+        preservationPeriod,
+        attachments,
+        relatedDocs,
+        recipients,
+        steps,
+      },
+      '양식 변경 전 보관본'
+    );
     clearAutosave();
     setValues({});
     setTitle('');
@@ -377,28 +483,8 @@ function ApprovalDraftInner({
   /** 마지막으로 브라우저에 보관한 시각. 화면에 "마지막 보관 HH:MM:SS"로 보여 준다. */
   const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
 
-  /**
-   * **화면이 뜨는 순간의 보관본을 먼저 읽어 둔다.**
-   *
-   * 자동저장 effect 는 아직 아무것도 입력되지 않은 상태를 "작성한 게 없다"로 보고
-   * `clearAutosave()` 를 부른다. 그게 복구 검사보다 먼저 돌면 **지난 세션 보관본이
-   * 지워진 뒤에 복구를 시도**하게 된다. 실제로 "탭 닫았다 열면 아무것도 없다"는
-   * 증상이 여기서 나왔다.
-   *
-   * 그래서 렌더 전에 한 번 읽어 ref 에 담는다. 이후 누가 지우든 복구는 이 값을 쓴다.
-   */
   /** 마지막으로 실제 쓰기가 일어난 시각. 스로틀 간격 판정에 쓴다. */
   const lastSnapshotAtRef = useRef(0);
-
-  /**
-   * **보관 칸을 대상별로 나눈다.**
-   *
-   * 예전에는 사용자당 한 칸(`draft_autosave_{userId}`)이라 **새 기안과 문서 편집이 같은
-   * 칸을 썼다.** 편집 중 보관한 내용이 새 기안 칸을 덮어쓰고 그 반대도 일어났다.
-   * "새 상신을 눌렀는데 엉뚱한 내용이 뜬다", "편집하던 게 사라진다"가 모두 여기서 나왔다.
-   */
-  const draftKey = `draft_autosave_${me.id}_${editDoc?.id ?? 'new'}`;
-  const activeKey = `draft_autosave_active_${me.id}_${editDoc?.id ?? 'new'}`;
 
   const bootDraftRef = useRef<{ data: unknown; active: boolean } | null>(null);
   if (bootDraftRef.current === null) {
@@ -438,8 +524,8 @@ function ApprovalDraftInner({
 
     const hasContent = hasManuallyEnteredValues();
 
+    // 변경 사항이 없다면 추가 로컬 보관은 건너뜀 (기존 보관본을 함부로 삭제하지 않음)
     if (!hasContent) {
-      clearAutosave();
       return;
     }
 
@@ -454,9 +540,7 @@ function ApprovalDraftInner({
      * 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
      */
     const snapshot = () => {
-      localStorage.setItem(draftKey, JSON.stringify({
-        // 어느 문서를 쓰다 만 것인지 남긴다. 이게 없으면 신규 작성분과 수정 중이던
-        // 문서를 구분할 수 없어, 복구가 엉뚱한 문서에 붙을 위험 때문에 아예 막혀 있었다.
+      const payload = {
         docId: editDoc?.id ?? null,
         code,
         title,
@@ -466,16 +550,20 @@ function ApprovalDraftInner({
         visibility,
         preservationPeriod,
         attachments,
-        // 관련문서가 저장 목록에서 빠져 있었다 — 이탈 방지 감시에는 들어 있는데
-        // 정작 보관을 안 해서, 복구해도 관련문서만 사라졌다.
         relatedDocs,
         recipients,
         steps,
-        timestamp: Date.now()
-      }));
-      localStorage.setItem(activeKey, 'true');
-      lastSnapshotAtRef.current = Date.now();
-      setAutosavedAt(lastSnapshotAtRef.current);
+        timestamp: Date.now(),
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(payload));
+        localStorage.setItem(activeKey, 'true');
+        lastSnapshotAtRef.current = Date.now();
+        setAutosavedAt(lastSnapshotAtRef.current);
+        saveToRollingHistory(payload);
+      } catch (e) {
+        console.warn('로컬 스토리지 임시보관 실패:', e);
+      }
     };
 
     /**
@@ -509,7 +597,11 @@ function ApprovalDraftInner({
     document.addEventListener('visibilitychange', flushIfHidden);
 
     return () => {
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+        // 언마운트 시점에 대기 중인 변경사항이 있다면 즉시 동기 저장하여 유실 방지
+        snapshot();
+      }
       window.removeEventListener('blur', snapshot);
       window.removeEventListener('pagehide', snapshot);
       window.removeEventListener('beforeunload', snapshot);
@@ -556,6 +648,85 @@ function ApprovalDraftInner({
   const [showAutosaveRecoverModal, setShowAutosaveRecoverModal] = useState(false);
   const [pendingAutosaveData, setPendingAutosaveData] = useState<any>(null);
   const [autosaveFormName, setAutosaveFormName] = useState('');
+
+  // 로컬 임시 보관함 전체 조회/복구 모달 상태
+  const [showBackupHistoryModal, setShowBackupHistoryModal] = useState(false);
+
+  const getAvailableBackups = (): Array<{
+    key: string;
+    docId: string | null;
+    code: string;
+    title: string;
+    timestamp: number;
+    tag?: string;
+    data: any;
+  }> => {
+    const list: Array<{
+      key: string;
+      docId: string | null;
+      code: string;
+      title: string;
+      timestamp: number;
+      tag?: string;
+      data: any;
+    }> = [];
+    const seenSignatures = new Set<string>();
+
+    // 1. 활성 draftKey 검색
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('draft_autosave_') && !k.includes('active')) {
+          const raw = localStorage.getItem(k);
+          if (!raw) continue;
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              const sig = `${parsed.code}_${parsed.title}_${parsed.timestamp}`;
+              seenSignatures.add(sig);
+              list.push({
+                key: k,
+                docId: parsed.docId ?? null,
+                code: parsed.code || '기안',
+                title: parsed.title || '(제목 없음)',
+                timestamp: parsed.timestamp || 0,
+                tag: '현재 작성중',
+                data: parsed,
+              });
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // 2. 다중 버전 롤링 히스토리 검색
+    try {
+      const rawHist = localStorage.getItem(HISTORY_KEY);
+      if (rawHist) {
+        const histList = JSON.parse(rawHist);
+        if (Array.isArray(histList)) {
+          histList.forEach((h: any) => {
+            const sig = `${h.code}_${h.title}_${h.timestamp}`;
+            if (!seenSignatures.has(sig)) {
+              seenSignatures.add(sig);
+              list.push({
+                key: h.id || `hist_${h.timestamp}`,
+                docId: h.docId ?? null,
+                code: h.code || '기안',
+                title: h.title || '(제목 없음)',
+                timestamp: h.timestamp || 0,
+                tag: h.tag || '이전 보관본',
+                data: h,
+              });
+            }
+          });
+        }
+      }
+    } catch {}
+
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  };
 
   const [drawerOpen, setDrawerOpen] = useState(false); // 해상도 작을 때 결재선 Drawer
 
@@ -641,34 +812,15 @@ function ApprovalDraftInner({
   }, [code, forms, org.users, org.depts, me, editDoc]);
 
 
-  useEffect(() => {
-    if (editDoc) {
-      setCode(editDoc.docType);
-      setTitle(editDoc.title ?? '');
-      setSecurityLevel(editDoc.securityLevel ?? '일반');
-      setVisibility(editDoc.visibility ?? '부서');
-      setPreservationPeriod(editDoc.preservationPeriod ?? '5년');
-      setAmount(editDoc.amount != null ? String(editDoc.amount) : '');
-
-      const initialVals = { ...(editDoc.fieldValues ?? {}) };
-      if (editDoc.docType === '휴가' && editDoc.form) {
-        if (!initialVals['leaveType']) initialVals['leaveType'] = editDoc.form.leaveType;
-        if (!initialVals['period']) initialVals['period'] = editDoc.form.startDate;
-        if (!initialVals['period__end']) initialVals['period__end'] = editDoc.form.endDate;
-        if (!initialVals['period__days']) initialVals['period__days'] = editDoc.form.days;
-      }
-      setValues(initialVals);
-      setSteps(editDoc.steps ?? []);
-      setAttachments(editDoc.attachments ?? []);
-      setRelatedDocs(editDoc.relatedDocs ?? []);
-      setRecipients(editDoc.recipients ?? []);
-      setIsPostApproval(editDoc.isPostApproval ?? false);
-      setPostApprovalActionTaken(editDoc.postApprovalActionTaken ?? '');
-      setPostApprovalNecessity(editDoc.postApprovalNecessity ?? '');
-      if (editDoc.postApprovedAt) setPostApprovedAt(editDoc.postApprovedAt);
-      if (editDoc.postApprovedById) setPostApprovedById(editDoc.postApprovedById);
-    }
-  }, [editDoc]);
+  /**
+   * [중요: 외부 실시간 웹소켓 이벤트로 인한 작성 중 내용 덮어쓰기 방지]
+   * ApprovalDraftInner는 상위 ApprovalDraftScreen에서 `key={editDocId ?? 'new'}`로 감싸져 있어,
+   * 마운트 시점에 이미 useState 초기값으로 editDoc의 모든 필드가 완벽하게 주입됩니다.
+   * 예전에는 여기에 `useEffect(..., [editDoc])`가 존재하여 사내 다른 결재 문서가
+   * 상신/승인될 때마다 웹소켓 실시간 이벤트로 인해 사용자가 타이핑 중이던 모든 내용이
+   * 서버의 과거 데이터로 강제 롤백(덮어쓰기)되는 치명적인 데이터 소실 버그가 있었습니다.
+   * 따라서 마운트 이후 백그라운드 editDoc 참조 갱신으로 사용자 입력을 덮어쓰지 않습니다.
+   */
 
   // 이미 등록/저장된 기존 문서 편집이 아니라면, 새 기안 중에는 언제든 양식 변경 가능
   const canChangeForm = !editDoc;
@@ -1233,6 +1385,39 @@ function ApprovalDraftInner({
     return created.id;
   };
 
+  // 기존 임시저장 문서를 편집 중일 때, 변경사항이 있으면 60초마다 서버(DB)에 백그라운드 자동 저장
+  useEffect(() => {
+    if (!editDoc || editDoc.status !== '임시저장') return;
+
+    const interval = setInterval(async () => {
+      if (hasManuallyEnteredValues() && title.trim() && !busy) {
+        try {
+          const input = buildInput();
+          await save.mutateAsync({ id: editDoc.id, patch: input });
+          if (initialStateRef.current) {
+            initialStateRef.current = {
+              code,
+              title,
+              values: JSON.parse(JSON.stringify(values)),
+              amount,
+              attachments: JSON.parse(JSON.stringify(attachments)),
+              relatedDocs: JSON.parse(JSON.stringify(relatedDocs)),
+              steps: JSON.parse(JSON.stringify(steps)),
+              recipients: JSON.parse(JSON.stringify(recipients)),
+              securityLevel,
+              visibility,
+              preservationPeriod,
+            };
+          }
+        } catch {
+          // 백그라운드 자동 저장은 실패하더라도 사용자 작업을 방해하지 않음
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [editDoc?.id, editDoc?.status, busy, title, values, amount, attachments, relatedDocs, steps, recipients, code, securityLevel, visibility, preservationPeriod]);
+
   const onSaveDraft = async () => {
     const err = validate(false);
     if (err) {
@@ -1323,7 +1508,18 @@ function ApprovalDraftInner({
             </button>
           )}
 
-          <AutosaveIndicator at={autosavedAt} />
+          <div className="flex items-center gap-1.5">
+            <AutosaveIndicator at={autosavedAt} />
+            <button
+              type="button"
+              onClick={() => setShowBackupHistoryModal(true)}
+              className="flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-bold text-ink hover:border-teal hover:text-teal transition-all shadow-2xs cursor-pointer"
+              title="이 브라우저에 임시 보관된 기안 목록을 조회하고 복구합니다"
+            >
+              <History className="h-3 w-3 text-teal" />
+              <span>보관함</span>
+            </button>
+          </div>
           {/* 대체휴무 잔여 0일 시 상단 경고 뱃지 */}
           {(() => {
             const currentLType = String(values['leaveType'] || '').trim();
@@ -1591,11 +1787,159 @@ function ApprovalDraftInner({
             setPendingAutosaveData(null);
           }}
           onCancel={() => {
+            // 취소 클릭 시 데이터를 절대 삭제하지 않고 모달만 닫음 (우측 상단 [보관함]에 항상 보존)
             setShowAutosaveRecoverModal(false);
             setPendingAutosaveData(null);
-            clearAutosave();
           }}
         />
+      )}
+
+      {/* 로컬 임시 보관함 기록 조회 및 복구 모달 */}
+      {showBackupHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-border flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-soft text-teal">
+                  <History className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-ink">로컬 임시 보관함</h3>
+                  <p className="text-[11.5px] text-ink3">이 브라우저에 자동 보관된 기안 문서 기록입니다.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBackupHistoryModal(false)}
+                className="p-1.5 text-ink3 hover:bg-panel-alt rounded-lg cursor-pointer transition-colors"
+                title="닫기"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-2.5 my-2">
+              {(() => {
+                const backups = getAvailableBackups();
+                if (backups.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-[12.5px] text-ink3">
+                      현재 브라우저에 저장된 로컬 보관본이 없습니다.
+                    </div>
+                  );
+                }
+                return backups.map((b) => {
+                  const stamp = b.timestamp
+                    ? new Intl.DateTimeFormat('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      }).format(b.timestamp)
+                    : '알 수 없음';
+                  const formTitle = forms.find((f) => f.code === b.code)?.name || b.code;
+
+                  return (
+                    <div
+                      key={b.key}
+                      className="p-3.5 rounded-xl border border-border bg-panel hover:border-teal/50 transition-all flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="rounded bg-teal/10 px-2 py-0.5 text-[10.5px] font-bold text-teal">
+                            {formTitle}
+                          </span>
+                          {b.tag && (
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
+                                b.tag === '현재 작성중'
+                                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                                  : b.tag.includes('양식 변경')
+                                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                                  : 'bg-gray-100 text-gray-600 border border-gray-200'
+                              }`}
+                            >
+                              {b.tag}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-ink3 tabular-nums">{stamp}</span>
+                        </div>
+                        <div className="text-[13px] font-bold text-ink truncate">
+                          {b.title || '(제목 없음)'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm('이 보관본의 내용을 현재 화면으로 불러오시겠습니까?\n(현재 화면의 입력값이 덮어써집니다)')) {
+                              const data = b.data;
+                              if (data) {
+                                setCode(data.code || code);
+                                setTitle(data.title || '');
+                                setValues(data.values || {});
+                                setAmount(data.amount || '');
+                                if (data.securityLevel) setSecurityLevel(data.securityLevel);
+                                if (data.visibility) setVisibility(data.visibility);
+                                if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
+                                if (data.attachments) setAttachments(data.attachments);
+                                if (data.recipients) setRecipients(data.recipients);
+                                if (data.relatedDocs) setRelatedDocs(data.relatedDocs);
+                                if (data.steps) setSteps(data.steps);
+                              }
+                              setShowBackupHistoryModal(false);
+                            }
+                          }}
+                          className="rounded-lg bg-teal px-3 py-1.5 text-[11.5px] font-bold text-white shadow-xs hover:bg-teal-dark transition-all cursor-pointer"
+                        >
+                          불러오기
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm('이 보관 기록을 삭제하시겠습니까?')) {
+                              if (b.key.startsWith('draft_autosave_')) {
+                                localStorage.removeItem(b.key);
+                              } else {
+                                try {
+                                  const raw = localStorage.getItem(HISTORY_KEY);
+                                  if (raw) {
+                                    const arr = JSON.parse(raw);
+                                    const filtered = arr.filter((x: any) => (x.id || `hist_${x.timestamp}`) !== b.key);
+                                    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+                                  }
+                                } catch {}
+                              }
+                              setShowBackupHistoryModal((prev) => !prev);
+                              setTimeout(() => setShowBackupHistoryModal(true), 10);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-ink3 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="삭제"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            <div className="pt-3 border-t border-border flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowBackupHistoryModal(false)}
+                className="rounded-lg border border-border px-4 py-2 text-[12px] font-bold text-ink hover:bg-panel-alt transition-colors cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
 

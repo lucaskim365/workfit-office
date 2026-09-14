@@ -320,7 +320,14 @@ export function resolveOtherTableCell(
       }
     }
     if (rIdx >= 0 && rIdx < oRows.length) {
-      return parseCellNumber(oRows[rIdx][colKey]);
+      const val = parseCellNumber(oRows[rIdx][colKey]);
+      if (val !== 0) return val;
+      // 병합 셀이거나 해당 열에 값이 없는 경우 해당 행 내 다른 열에서 0이 아닌 숫자 탐색
+      for (const c of oCols) {
+        const altVal = parseCellNumber(oRows[rIdx][c]);
+        if (altVal !== 0) return altVal;
+      }
+      return 0;
     }
     return 0;
   }
@@ -532,11 +539,61 @@ export function recalculateTableFormulas(
           if (cellFormulas[depKey] && !stack.has(depKey)) {
             return String(evaluateCellFormula(depKey, new Set(stack)));
           }
-          return String(parseCellNumber(nextRows[r][actualCol]));
+          const directVal = parseCellNumber(nextRows[r][actualCol]);
+          if (directVal !== 0) return String(directVal);
+
+          // 병합 셀이거나 해당 열에 값이 없는 경우: 행 r 내 다른 열에서 수식(fx)이나 0이 아닌 값 탐색
+          for (const c of cols) {
+            const altKey = `${r}:${c}`;
+            if (cellFormulas[altKey] && !stack.has(altKey)) {
+              const altVal = evaluateCellFormula(altKey, new Set(stack));
+              if (altVal !== 0) return String(altVal);
+            }
+          }
+          for (const c of cols) {
+            const altVal = parseCellNumber(nextRows[r][c]);
+            if (altVal !== 0) return String(altVal);
+          }
+          return '0';
         }
         return '0';
       }
+
       const actualCol = resolveColKey(cleanToken);
+      const isKnownCol =
+        cols.includes(actualCol) ||
+        (headerValues && Object.values(headerValues).includes(cleanToken));
+
+      // 열 이름이 아니라 행 라벨인 경우 (예: [매입발주 금액])
+      if (!isKnownCol) {
+        const targetLabel = cleanToken.toLowerCase();
+        let r = nextRows.findIndex((row) =>
+          Object.values(row).some(
+            (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
+          )
+        );
+        if (r === -1) {
+          r = nextRows.findIndex((row) =>
+            Object.values(row).some(
+              (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
+            )
+          );
+        }
+        if (r >= 0 && r < nextRows.length) {
+          for (const c of cols) {
+            const depKey = `${r}:${c}`;
+            if (cellFormulas[depKey] && !stack.has(depKey)) {
+              return String(evaluateCellFormula(depKey, new Set(stack)));
+            }
+          }
+          for (const c of cols) {
+            const val = parseCellNumber(nextRows[r][c]);
+            if (val !== 0) return String(val);
+          }
+          return '0';
+        }
+      }
+
       const depKey = `${targetRowIdx}:${actualCol}`;
       if (cellFormulas[depKey] && !stack.has(depKey)) {
         return String(evaluateCellFormula(depKey, new Set(stack)));

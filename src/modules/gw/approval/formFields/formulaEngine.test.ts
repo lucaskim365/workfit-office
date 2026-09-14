@@ -269,6 +269,54 @@ export function runFormulaEngineTests() {
     console.log('✓ 9. 복수 표 연쇄 실시간 재계산(cascadeRecalculateAllTables: 매출이익 70,000,000 자동 갱신) 통과\n');
   }
 
+  // 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액의 병합된 셀 = 매출이익)
+  {
+    const otherTablesContext = {
+      매출구분: {
+        cols: ['구분', '비중', '금액'],
+        rows: [
+          { 구분: 'SW', 비중: '60%', 금액: '60,000,000' },
+          { 구분: 'HW', 비중: '40%', 금액: '40,000,000' },
+          { 구분: '소계', 비중: '100%', 금액: '100,000,000' },
+        ],
+      },
+    };
+
+    const cols = ['매입처', '발주예상일자', '발주 금액', '비고'];
+    const rows = [
+      { 매입처: '업체A', 발주예상일자: '2026-09-10', '발주 금액': '20,000,000', 비고: '' },
+      { 매입처: '업체B', 발주예상일자: '2026-09-15', '발주 금액': '10,000,000', 비고: '' },
+      // 5행: '매입발주 금액' 행 (발주예상일자 + 발주 금액이 병합되어 '발주예상일자'에 수식이 걸림)
+      { 매입처: '매입발주 금액', 발주예상일자: '', '발주 금액': '', 비고: '' },
+      // 6행: '매출이익' 행 (매출구분 소계 - 매입발주 금액)
+      { 매입처: '매출이익', 발주예상일자: '', '발주 금액': '', 비고: '' },
+    ];
+
+    // 2행(0-indexed)에 매입발주 금액 SUM이 걸려있음
+    const cellFormulas: Record<string, CellFormula> = {
+      '2:발주예상일자': { expression: '=SUM([발주 금액])', format: 'currency' },
+      // 3행에 [매출구분]![소계:금액] - [매입발주 금액:발주 금액] (병합된 다른 컬럼으로 참조해도 동작해야 함!)
+      '3:발주예상일자': { expression: '=[매출구분]![소계:금액] - [매입발주 금액:발주 금액]', format: 'currency' },
+    };
+
+    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas, undefined, otherTablesContext);
+
+    // 매입발주 금액은 30,000,000
+    assert.equal(recalculated[2]['발주예상일자'], '30,000,000');
+    // 매출이익은 100,000,000 - 30,000,000 = 70,000,000
+    assert.equal(recalculated[3]['발주예상일자'], '70,000,000');
+
+    // [매입발주 금액] 만으로 참조해도 동일하게 동작하는지 테스트
+    const cellFormulas2: Record<string, CellFormula> = {
+      '2:발주예상일자': { expression: '=SUM([발주 금액])', format: 'currency' },
+      '3:발주예상일자': { expression: '=[매출구분]![소계:금액] - [매입발주 금액]', format: 'currency' },
+    };
+    const recalculated2 = recalculateTableFormulas(cols, rows, cellFormulas2, undefined, otherTablesContext);
+    assert.equal(recalculated2[3]['발주예상일자'], '70,000,000');
+
+    console.log('✓ 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액 병합셀 = 매출이익) 통과\n');
+  }
+
   console.log('🎉 모든 formulaEngine 테스트 통과!');
 }
 

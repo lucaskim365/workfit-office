@@ -21,6 +21,7 @@ import {
   Percent,
   Zap,
   Sparkles,
+  MousePointerClick,
 } from 'lucide-react';
 import {
   recalculateTableFormulas,
@@ -104,6 +105,7 @@ export function TableDesignerModal({
       setSecretRows(initialData.secretRows || []);
       setCellFormulas(initialData.cellFormulas || {});
       setSelectedCell(null);
+      setPickingOperand(null);
     }
   }, [isOpen, initialData]);
 
@@ -113,6 +115,20 @@ export function TableDesignerModal({
     cIdx: number;
     col: string;
   } | null>(null);
+
+  // 연산식(A - B 등) 설정 시 표에서 직접 셀을 클릭하여 오퍼랜드로 선택하는 상태
+  const [pickingOperand, setPickingOperand] = useState<'left' | 'right' | null>(null);
+
+  // ESC 키로 셀 찍기 모드 취소
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pickingOperand) {
+        setPickingOperand(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pickingOperand]);
 
   // 열 이름 변경 인라인 편집 상태
   const [editingCol, setEditingCol] = useState<string | null>(null);
@@ -989,6 +1005,23 @@ export function TableDesignerModal({
         </div>
 
         {/* 3. 실물 1:1 위지윅 표 캔버스 */}
+        {pickingOperand && (
+          <div className="flex items-center justify-between px-6 py-2 bg-amber-500 text-white text-[11.5px] font-bold shadow-xs shrink-0 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2">
+              <MousePointerClick className="h-4 w-4 animate-bounce" />
+              <span>
+                🎯 [<strong>{pickingOperand === 'left' ? '첫 번째 값(A)' : '두 번째 값(B)'}</strong>]으로 사용할 셀을 아래 표에서 직접 클릭하세요! (병합 셀, 수식 셀 등 모두 가능)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPickingOperand(null)}
+              className="px-2.5 py-0.5 rounded bg-black/20 hover:bg-black/30 text-[10.5px] text-white transition-colors cursor-pointer"
+            >
+              선택 취소 (ESC)
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-auto p-6 bg-[#f8fafc]">
           <div className="rounded-xl border border-[#ccc] bg-white shadow-sm overflow-hidden inline-block min-w-full">
             <table className="w-full table-fixed border-collapse text-left text-[11.5px] border-none">
@@ -1225,10 +1258,47 @@ export function TableDesignerModal({
                           key={col}
                           rowSpan={rowSpan > 1 ? rowSpan : undefined}
                           colSpan={colSpan > 1 ? colSpan : undefined}
-                          onClick={() => setSelectedCell({ rIdx, cIdx, col })}
+                          onClick={() => {
+                            if (pickingOperand && selectedCell) {
+                              const targetRow = rows[rIdx];
+                              const labelCol = cols.find((c) => {
+                                const val = String(targetRow?.[c] ?? '').trim();
+                                return val.length > 0 && isNaN(Number(val.replace(/,/g, '')));
+                              });
+                              const rowLabel = labelCol ? String(targetRow[labelCol]).trim() : `${rIdx + 1}행`;
+                              const colTitle = headerValues[col] || col;
+                              const token = `[${rowLabel}:${colTitle}]`;
+
+                              let currentLeft = '';
+                              let currentOp = '-';
+                              let currentRight = '';
+                              const formulaInfo = cellFormulas[`${selectedCell.rIdx}:${selectedCell.col}`];
+                              if (formulaInfo?.expression) {
+                                let expr = formulaInfo.expression.trim();
+                                if (expr.startsWith('=')) expr = expr.slice(1).trim();
+                                const match = expr.match(/^(.+?)\s*([+\-*/])\s*(.+)$/);
+                                if (match) {
+                                  currentLeft = match[1].trim();
+                                  currentOp = match[2];
+                                  currentRight = match[3].trim();
+                                }
+                              }
+                              const defaultLeft = cols[0] ? `[${headerValues[cols[0]] || cols[0]}]` : '';
+                              const defaultRight = cols[1] ? `[${headerValues[cols[1]] || cols[1]}]` : defaultLeft;
+
+                              const nextLeft = pickingOperand === 'left' ? token : (currentLeft || defaultLeft);
+                              const nextRight = pickingOperand === 'right' ? token : (currentRight || defaultRight);
+                              applyOperation(nextLeft, currentOp || '-', nextRight);
+                              setPickingOperand(null);
+                              return;
+                            }
+                            setSelectedCell({ rIdx, cIdx, col });
+                          }}
                           className={`p-0 border border-[#eee] text-[#222] relative transition-all cursor-pointer ${
                             isSelected
                               ? 'ring-2 ring-teal ring-inset bg-teal-soft/25'
+                              : pickingOperand
+                              ? 'hover:ring-2 hover:ring-amber-500 hover:bg-amber-100/60 cursor-crosshair'
                               : isCalculated
                               ? 'bg-teal-soft/10 hover:bg-teal-soft/20'
                               : 'hover:bg-teal-soft/10'
@@ -1588,85 +1658,138 @@ export function TableDesignerModal({
                 const selectedOp = parsedOp || '-';
                 const selectedRight = parsedRight || currentDefaultRight;
 
-                const renderOptions = () => (
-                  <>
-                    <optgroup label="📂 현재 표">
-                      {cols.map((c) => {
-                        const colTitle = headerValues[c] || c;
-                        const val = `[${colTitle}]`;
-                        return (
-                          <option key={val} value={val}>
-                            {colTitle}
-                          </option>
-                        );
-                      })}
-                      {rows.some((r) => Object.values(r).some((v) => typeof v === 'string' && v.includes('소계'))) &&
-                        cols.map((c) => {
+                // 현재 표에서 텍스트 라벨이 있거나 수식이 설정된 행들 추출
+                const labeledRows = rows
+                  .map((r, rIdx) => {
+                    const labelCol = cols.find((c) => {
+                      const val = String(r[c] ?? '').trim();
+                      return val.length > 0 && isNaN(Number(val.replace(/,/g, '')));
+                    });
+                    const label = labelCol ? String(r[labelCol]).trim() : `${rIdx + 1}행`;
+                    return { rIdx, label, row: r };
+                  })
+                  .filter((lr) => {
+                    return (
+                      lr.label !== `${lr.rIdx + 1}행` ||
+                      cols.some((c) => !!cellFormulas[`${lr.rIdx}:${c}`])
+                    );
+                  });
+
+                const renderOptions = (currentVal?: string) => {
+                  const renderedValues = new Set<string>();
+
+                  const addOption = (val: string, label: string) => {
+                    renderedValues.add(val);
+                    return (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    );
+                  };
+
+                  return (
+                    <>
+                      {/* 1. 특정 행/셀 선택 (병합 셀, 수식 셀, 라벨 행 등) */}
+                      {labeledRows.length > 0 && (
+                        <optgroup label="📂 현재 표 - 특정 셀 (행/병합/수식)">
+                          {labeledRows.flatMap(({ rIdx, label }) => {
+                            const items: React.ReactNode[] = [];
+                            cols.forEach((col, cIdx) => {
+                              const { isMerged, isStart, colSpan } = getMergeInfo(rIdx, cIdx);
+                              if (isMerged && !isStart) return;
+
+                              const colTitle = headerValues[col] || col;
+                              const hasFx = !!cellFormulas[`${rIdx}:${col}`];
+                              const isCellMerged = isStart && colSpan > 1;
+
+                              const mergedColTitles = isCellMerged
+                                ? cols
+                                    .slice(cIdx, cIdx + colSpan)
+                                    .map((c) => headerValues[c] || c)
+                                    .join(' + ')
+                                : colTitle;
+
+                              const val = `[${label}:${colTitle}]`;
+                              const displayText = isCellMerged
+                                ? `[${label}] ▸ ${mergedColTitles} (병합)${hasFx ? ' ★[fx]' : ''}`
+                                : `[${label}] ▸ ${colTitle}${hasFx ? ' ★[fx]' : ''}`;
+
+                              items.push(addOption(val, displayText));
+                            });
+                            return items;
+                          })}
+                        </optgroup>
+                      )}
+
+                      {/* 2. 현재 행 기준 열 참조 (동일 행 내 연산용) */}
+                      <optgroup label="📋 현재 표 - 열 전체 (동일 행 기준)">
+                        {cols.map((c) => {
                           const colTitle = headerValues[c] || c;
-                          const val = `[소계:${colTitle}]`;
+                          const val = `[${colTitle}]`;
+                          return addOption(val, colTitle);
+                        })}
+                      </optgroup>
+
+                      {/* 3. 타 표 참조 */}
+                      {otherTables && otherTables.length > 0 &&
+                        otherTables.map((t) => {
+                          const hasSub = t.rows?.some((r) =>
+                            Object.values(r).some((v) => typeof v === 'string' && v.includes('소계'))
+                          );
+                          const hasTotal = t.rows?.some((r) =>
+                            Object.values(r).some((v) => typeof v === 'string' && v.includes('합계'))
+                          );
+
+                          const otherLabeledRows = (t.rows || [])
+                            .map((r, rIdx) => {
+                              const labelCol = t.cols.find((c) => {
+                                const val = String(r[c] ?? '').trim();
+                                return val.length > 0 && isNaN(Number(val.replace(/,/g, '')));
+                              });
+                              const label = labelCol ? String(r[labelCol]).trim() : '';
+                              return { rIdx, label };
+                            })
+                            .filter((lr) => lr.label && !lr.label.includes('소계') && !lr.label.includes('합계'));
+
                           return (
-                            <option key={val} value={val}>
-                              [소계] {colTitle}
-                            </option>
+                            <optgroup key={t.key} label={`📊 [타 표] ${t.label}`}>
+                              {hasSub &&
+                                t.cols.map((c) => {
+                                  const colTitle = t.headerValues?.[c] || c;
+                                  const val = `[${t.label}]![소계:${colTitle}]`;
+                                  return addOption(val, `[${t.label}] [소계] ${colTitle}`);
+                                })}
+                              {hasTotal &&
+                                t.cols.map((c) => {
+                                  const colTitle = t.headerValues?.[c] || c;
+                                  const val = `[${t.label}]![합계:${colTitle}]`;
+                                  return addOption(val, `[${t.label}] [합계] ${colTitle}`);
+                                })}
+                              {otherLabeledRows.map(({ label }) =>
+                                t.cols.map((c) => {
+                                  const colTitle = t.headerValues?.[c] || c;
+                                  const val = `[${t.label}]![${label}:${colTitle}]`;
+                                  return addOption(val, `[${t.label}] [${label}] ${colTitle}`);
+                                })
+                              )}
+                              {t.cols.map((c) => {
+                                const colTitle = t.headerValues?.[c] || c;
+                                const val = `[${t.label}]![${colTitle}]`;
+                                return addOption(val, `[${t.label}] ${colTitle}`);
+                              })}
+                            </optgroup>
                           );
                         })}
-                      {rows.some((r) => Object.values(r).some((v) => typeof v === 'string' && v.includes('합계'))) &&
-                        cols.map((c) => {
-                          const colTitle = headerValues[c] || c;
-                          const val = `[합계:${colTitle}]`;
-                          return (
-                            <option key={val} value={val}>
-                              [합계] {colTitle}
-                            </option>
-                          );
-                        })}
-                    </optgroup>
 
-                    {otherTables && otherTables.length > 0 &&
-                      otherTables.map((t) => {
-                        const hasSub = t.rows?.some((r) =>
-                          Object.values(r).some((v) => typeof v === 'string' && v.includes('소계'))
-                        );
-                        const hasTotal = t.rows?.some((r) =>
-                          Object.values(r).some((v) => typeof v === 'string' && v.includes('합계'))
-                        );
-
-                        return (
-                          <optgroup key={t.key} label={`📊 [타 표] ${t.label}`}>
-                            {hasSub &&
-                              t.cols.map((c) => {
-                                const colTitle = t.headerValues?.[c] || c;
-                                const val = `[${t.label}]![소계:${colTitle}]`;
-                                return (
-                                  <option key={val} value={val}>
-                                    [${t.label}] [소계] ${colTitle}
-                                  </option>
-                                );
-                              })}
-                            {hasTotal &&
-                              t.cols.map((c) => {
-                                const colTitle = t.headerValues?.[c] || c;
-                                const val = `[${t.label}]![합계:${colTitle}]`;
-                                return (
-                                  <option key={val} value={val}>
-                                    [${t.label}] [합계] ${colTitle}
-                                  </option>
-                                );
-                              })}
-                            {t.cols.map((c) => {
-                              const colTitle = t.headerValues?.[c] || c;
-                              const val = `[${t.label}]![${colTitle}]`;
-                              return (
-                                <option key={val} value={val}>
-                                  [${t.label}] ${colTitle}
-                                </option>
-                              );
-                            })}
-                          </optgroup>
-                        );
-                      })}
-                  </>
-                );
+                      {/* 현재 선택된 값이 위 옵션들에 없는 경우 (직접 입력 또는 특수 셀) */}
+                      {currentVal && !renderedValues.has(currentVal) && (
+                        <optgroup label="✨ 지정된 값">
+                          <option value={currentVal}>{currentVal}</option>
+                        </optgroup>
+                      )}
+                    </>
+                  );
+                };
 
                 const handleOpChange = () => {
                   const leftEl = document.getElementById('op-left') as HTMLSelectElement;
@@ -1677,16 +1800,33 @@ export function TableDesignerModal({
                 };
 
                 return (
-                  <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-teal/30 bg-teal-soft/15 px-4 py-2 text-[11.5px] animate-in fade-in duration-150">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-teal/30 bg-teal-soft/15 px-4 py-2 text-[11.5px] animate-in fade-in duration-150">
                     <span className="font-bold text-teal">계산식:</span>
-                    <select
-                      id="op-left"
-                      value={selectedLeft}
-                      className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[200px]"
-                      onChange={handleOpChange}
-                    >
-                      {renderOptions()}
-                    </select>
+
+                    {/* A 오퍼랜드 및 셀 찍기 */}
+                    <div className="flex items-center gap-1">
+                      <select
+                        id="op-left"
+                        value={selectedLeft}
+                        className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[210px]"
+                        onChange={handleOpChange}
+                      >
+                        {renderOptions(selectedLeft)}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setPickingOperand(pickingOperand === 'left' ? null : 'left')}
+                        className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+                          pickingOperand === 'left'
+                            ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                            : 'bg-white border border-border text-ink hover:bg-panel-alt'
+                        }`}
+                        title="표에서 셀을 직접 클릭하여 첫 번째 값(A)으로 지정"
+                      >
+                        <MousePointerClick className="h-3 w-3" />
+                        <span>{pickingOperand === 'left' ? '선택 중...' : '셀 찍기'}</span>
+                      </button>
+                    </div>
 
                     <select
                       id="op-symbol"
@@ -1700,17 +1840,33 @@ export function TableDesignerModal({
                       <option value="/">÷ (나눗셈)</option>
                     </select>
 
-                    <select
-                      id="op-right"
-                      value={selectedRight}
-                      className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[200px]"
-                      onChange={handleOpChange}
-                    >
-                      {renderOptions()}
-                    </select>
+                    {/* B 오퍼랜드 및 셀 찍기 */}
+                    <div className="flex items-center gap-1">
+                      <select
+                        id="op-right"
+                        value={selectedRight}
+                        className="rounded border border-border bg-white px-2 py-1 text-[11.5px] font-semibold text-ink outline-none max-w-[210px]"
+                        onChange={handleOpChange}
+                      >
+                        {renderOptions(selectedRight)}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setPickingOperand(pickingOperand === 'right' ? null : 'right')}
+                        className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+                          pickingOperand === 'right'
+                            ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                            : 'bg-white border border-border text-ink hover:bg-panel-alt'
+                        }`}
+                        title="표에서 셀을 직접 클릭하여 두 번째 값(B)으로 지정"
+                      >
+                        <MousePointerClick className="h-3 w-3" />
+                        <span>{pickingOperand === 'right' ? '선택 중...' : '셀 찍기'}</span>
+                      </button>
+                    </div>
 
                     <span className="text-[10.5px] text-teal font-medium ml-auto">
-                      ✓ 현재 표 및 타 표의 항목/소계 간 차액 및 연산이 실시간 반영됩니다.
+                      ✓ 표에서 직접 셀을 찍거나 드롭다운에서 병합/타표 셀을 선택하세요.
                     </span>
                   </div>
                 );
