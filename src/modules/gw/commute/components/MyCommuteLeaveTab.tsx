@@ -6,6 +6,7 @@ import { useLeave } from '@/features/gw/useLeave';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { calculateLeaveDays } from '@/domain/leave/policy';
 import { Button } from '@/shared/ui/Button';
 import {
   Calendar as CalendarIcon,
@@ -665,7 +666,15 @@ export function MyCommuteLeaveTab({
                         <td colSpan={5} className="p-6 text-center text-ink3">사용 완료된 연차가 없습니다.</td>
                       </tr>
                     ) : (
-                      annualLeaveHistoryDocs.map((d) => (
+                      annualLeaveHistoryDocs.map((d) => {
+                        const usedDays = calculateLeaveDays({
+                          leaveType: d.form?.leaveType,
+                          startDate: d.form?.startDate,
+                          endDate: d.form?.endDate,
+                          rawDays: d.form?.days,
+                          title: d.title,
+                        });
+                        return (
                         <tr key={d.id} className="hover:bg-panel-alt/30 transition-colors">
                           <td className="p-2 text-ink2 font-medium">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2">
@@ -673,7 +682,7 @@ export function MyCommuteLeaveTab({
                               {d.form?.leaveType}
                             </span>
                           </td>
-                          <td className="p-2 text-rose-500 font-extrabold">-{d.form?.days}일</td>
+                          <td className="p-2 text-rose-500 font-extrabold">-{usedDays}일</td>
                           <td className="p-2 text-ink truncate max-w-[240px]">{d.body || d.title}</td>
                           <td className="p-2 text-right">
                             <button
@@ -686,7 +695,7 @@ export function MyCommuteLeaveTab({
                             </button>
                           </td>
                         </tr>
-                      ))
+                      );})
                     )}
                   </tbody>
                 </table>

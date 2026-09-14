@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import { FileText } from 'lucide-react';
+import { calculateLeaveDays } from '@/domain/leave/policy';
 
 interface CommuteLeaveViewProps {
   month: string;
@@ -71,7 +72,13 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
                 const startDate = doc.form?.startDate;
                 const endDate = doc.form?.endDate || startDate;
                 const leaveType = doc.form?.leaveType || '연차';
-                const daysCount = doc.form?.daysCount || 1;
+                const daysCount = calculateLeaveDays({
+                  leaveType,
+                  startDate,
+                  endDate,
+                  rawDays: doc.form?.days,
+                  title: doc.title,
+                });
 
                 return (
                   <tr
