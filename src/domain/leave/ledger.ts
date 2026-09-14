@@ -1,14 +1,17 @@
-import {
-  calculateEmploymentPeriod,
-  calculateStatutoryEntitlement,
-  evaluateAdvanceLeaveOffset,
-  calculateFiscalYearEntitlement,
-  type AdvanceOffsetResult,
-} from './accrualEngine';
-import { normalizeLegacyLeaveDoc } from './legacyAdapter';
-import type { LeaveAdjustmentTransaction } from './adjustmentStore';
+/**
+ * 전사 임직원 연차 원장 빌더 (Leave Ledger Builder)
+ *
+ * 모든 연산은 단일 엔진인 calculateUserLeaveBalance(SSOT)에 위임하여
+ * 전사 연차 원장과 개인 연차 잔여의 100% 일치를 보장합니다.
+ *
+ * @see docs/연차휴가_산정_및_관리_정책_설계서.md
+ */
+
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
+import type { LeaveAdjustmentTransaction } from './adjustmentStore';
+import type { AdvanceOffsetResult } from './accrualEngine';
+import { calculateUserLeaveBalance, type UserLeaveBalance } from './userLeaveBalance';
 
 export interface LeaveLedgerEntry {
   empId?: number | null;
@@ -21,13 +24,14 @@ export interface LeaveLedgerEntry {
   serviceMonths: number;
   isUnderOneYear: boolean;
 
-  // 연차 일수 계산
+  // 연차 일수 계산 (SSOT)
   entitledDays: number; // 법정 발생 연차
   adjustedDays: number; // 수동 가감 (+/-)
   totalGrantedDays: number; // 총 부여 (발생 + 조정)
   usedDays: number; // 결재 승인 완료
   pendingDays: number; // 결재 진행 중
-  remainingDays: number; // 순 잔여 일수
+  remainingDays: number; // 확정 잔여 일수 (총부여 - 사용)
+  availableDays?: number; // 가용 잔여 일수 (총부여 - 사용 - 신청중)
   usageRate: number; // 소진율 (%)
 
   // 선사용/상계 상태
@@ -66,12 +70,13 @@ export interface BuildLedgerOptions {
   mode?: 'HIRE_DATE' | 'FISCAL_YEAR'; // 산정 방식 (기본값: HIRE_DATE 입사일 기준)
 }
 
-const norm = (s?: string | null) => (s || '').replace(/\s+/g, '');
+const norm = (s?: string | null) => (s || '').replace(/\s+/g, '').toLowerCase();
 
 /**
  * 전사 임직원 연차 원장 빌더 (순수 함수)
  *
- * DB 불변성을 유지하며, 사원 프로필 + 전자결재 내역 + 수동 가감 트랜잭션을 종합 결합합니다.
+ * DB 불변성을 유지하며, 사원 목록 + 프로필 + 결재 문서 + 수동 가감을 결합하여
+ * calculateUserLeaveBalance 단일 기준 함수를 통해 일괄 생성합니다.
  */
 export function buildLeaveLedger(
   employees: Array<{
@@ -89,7 +94,6 @@ export function buildLeaveLedger(
   options: BuildLedgerOptions = {},
 ): { entries: LeaveLedgerEntry[]; summary: LeaveLedgerSummary } {
   const refDate = options.referenceDate ?? new Date();
-  const refDateStr = refDate.toISOString().slice(0, 10);
   const mode = options.mode ?? 'HIRE_DATE';
 
   // 1. 프로필 맵 (이름/사번 기준 매핑)
@@ -99,56 +103,7 @@ export function buildLeaveLedger(
     if (p.empNo) profileMap.set(String(p.empNo), p);
   }
 
-  // 2. 가감 트랜잭션 맵
-  const adjMap = new Map<string, LeaveAdjustmentTransaction[]>();
-  for (const tx of adjustments) {
-    const key = norm(tx.empName);
-    if (!adjMap.has(key)) adjMap.set(key, []);
-    adjMap.get(key)!.push(tx);
-  }
-
-  // 3. 결재 문서 정규화 및 사원별 집계
-  const leaveDocsByEmp = new Map<
-    string,
-    Array<{
-      docId: string;
-      title: string;
-      leaveType: string;
-      startDate: string;
-      endDate: string;
-      daysCount: number;
-      status: '완료' | '진행중';
-      createdAt: string;
-    }>
-  >();
-
-  for (const doc of approvalDocs) {
-    if (doc.docType !== '휴가') continue;
-    if (doc.status !== '완료' && doc.status !== '진행중') continue;
-
-    const normalized = normalizeLegacyLeaveDoc(doc);
-    if (!normalized) continue;
-
-    const drafterKey = norm(normalized.drafterName);
-    if (!drafterKey) continue;
-
-    if (!leaveDocsByEmp.has(drafterKey)) {
-      leaveDocsByEmp.set(drafterKey, []);
-    }
-
-    leaveDocsByEmp.get(drafterKey)!.push({
-      docId: normalized.docId,
-      title: doc.title,
-      leaveType: normalized.leaveType,
-      startDate: normalized.startDate,
-      endDate: normalized.endDate,
-      daysCount: normalized.days,
-      status: normalized.status as '완료' | '진행중',
-      createdAt: normalized.createdAt || '',
-    });
-  }
-
-  // 4. 사원별 연차 원장 엔트리 생성
+  // 2. 사원별 연차 원장 엔트리 생성 (단일 계산 엔진에 위임)
   const entries: LeaveLedgerEntry[] = [];
 
   for (const emp of employees) {
@@ -156,88 +111,71 @@ export function buildLeaveLedger(
     if (!empName) continue;
     const key = norm(empName);
 
-    // 입사일 확정 (emp.hireDate 우선, 없으면 프로필 대조, 없으면 기본값)
     const profile = profileMap.get(key) ?? (emp.empNo ? profileMap.get(String(emp.empNo)) : undefined);
     const hireDate = (emp.hireDate || profile?.hireDate || '2026-01-01').slice(0, 10);
 
-    const period = calculateEmploymentPeriod(hireDate, refDateStr);
-
-    // 법정 발생 일수 계산
-    let entitledDays = 0;
-    if (mode === 'FISCAL_YEAR') {
-      const fy = calculateFiscalYearEntitlement(hireDate, refDate.getFullYear());
-      entitledDays = fy.regularGrantDays > 0 ? fy.regularGrantDays : fy.proRataGrantDays;
-    } else {
-      const statutory = calculateStatutoryEntitlement(hireDate, refDateStr);
-      entitledDays = statutory.totalStatutoryGranted;
-    }
-
-    // 수동 가감 합산
-    const empAdjs = adjMap.get(key) ?? [];
-    const adjustedDays = empAdjs.reduce((sum, tx) => sum + tx.deltaDays, 0);
-    const totalGrantedDays = Math.max(0, entitledDays + adjustedDays);
-
-    // 휴가 사용 일수 합산
-    const empLeaves = leaveDocsByEmp.get(key) ?? [];
-    let usedDays = 0;
-    let pendingDays = 0;
-
-    for (const l of empLeaves) {
-      if (l.status === '완료') {
-        usedDays += l.daysCount;
-      } else if (l.status === '진행중') {
-        pendingDays += l.daysCount;
-      }
-    }
-
-    // 순 잔여 일수
-    const remainingDays = Number((totalGrantedDays - usedDays - pendingDays).toFixed(2));
-    const usageRate = totalGrantedDays > 0 ? Math.min(100, Math.round((usedDays / totalGrantedDays) * 100)) : 0;
-
-    // 선사용 상계 평가 (1년 미만 신입사원 대상)
-    const advanceStatus = evaluateAdvanceLeaveOffset(hireDate, refDateStr, usedDays);
+    const balance: UserLeaveBalance = calculateUserLeaveBalance({
+      user: {
+        userId: profile?.userId,
+        empId: emp.empId,
+        empNo: emp.empNo || (profile?.empNo ? String(profile.empNo) : null),
+        name: empName,
+        dept: emp.dept || profile?.dept,
+        position: emp.position || profile?.position,
+        hireDate,
+        isRetired: Boolean(emp.isRetired || profile?.status === 'RETIRED'),
+      },
+      approvalDocs,
+      adjustments,
+      referenceDate: refDate,
+      mode,
+    });
 
     entries.push({
-      empId: emp.empId ?? null,
-      empNo: String(emp.empNo || profile?.empNo || '—'),
-      name: empName,
-      dept: emp.dept || profile?.dept || '소속 미지정',
-      position: emp.position || profile?.position || '사원',
-      hireDate,
-      serviceYears: period.fullYears,
-      serviceMonths: period.fullMonths,
-      isUnderOneYear: !period.isOverOneYear,
-      entitledDays,
-      adjustedDays,
-      totalGrantedDays,
-      usedDays,
-      pendingDays,
-      remainingDays,
-      usageRate,
-      advanceStatus,
-      leaveHistory: empLeaves.sort((a, b) => b.startDate.localeCompare(a.startDate)),
-      adjustmentHistory: empAdjs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      isRetired: Boolean(emp.isRetired || profile?.status === 'RETIRED'),
+      empId: balance.empId,
+      empNo: balance.empNo,
+      name: balance.name,
+      dept: balance.dept,
+      position: balance.position,
+      hireDate: balance.hireDate,
+      serviceYears: balance.serviceYears,
+      serviceMonths: balance.serviceMonths,
+      isUnderOneYear: balance.isUnderOneYear,
+      entitledDays: balance.entitledDays,
+      adjustedDays: balance.adjustedDays,
+      totalGrantedDays: balance.totalGrantedDays,
+      usedDays: balance.usedDays,
+      pendingDays: balance.pendingDays,
+      remainingDays: balance.remainingDays,
+      availableDays: balance.availableDays,
+      usageRate: balance.usageRate,
+      advanceStatus: balance.advanceStatus,
+      leaveHistory: balance.leaveHistory,
+      adjustmentHistory: balance.adjustmentHistory,
+      isRetired: balance.isRetired,
     });
   }
 
-  // 부서명 및 성명 순 정렬
+  // 3. 부서명 및 성명 순 정렬
   entries.sort((a, b) => {
     const deptCmp = a.dept.localeCompare(b.dept, 'ko');
     if (deptCmp !== 0) return deptCmp;
     return a.name.localeCompare(b.name, 'ko');
   });
 
-  // 5. 전사 요약 통계 집계
-  const totalEmployees = entries.length;
-  const totalEntitled = Number(entries.reduce((s, e) => s + e.entitledDays, 0).toFixed(2));
-  const totalAdjusted = Number(entries.reduce((s, e) => s + e.adjustedDays, 0).toFixed(2));
-  const totalGranted = Number(entries.reduce((s, e) => s + e.totalGrantedDays, 0).toFixed(2));
-  const totalUsed = Number(entries.reduce((s, e) => s + e.usedDays, 0).toFixed(2));
-  const totalPending = Number(entries.reduce((s, e) => s + e.pendingDays, 0).toFixed(2));
-  const totalRemaining = Number(entries.reduce((s, e) => s + e.remainingDays, 0).toFixed(2));
+  // 4. 전사 요약 통계 집계 (재직자 우선)
+  const activeEntries = entries.filter((e) => !e.isRetired);
+  const targetEntries = activeEntries.length > 0 ? activeEntries : entries;
+
+  const totalEmployees = targetEntries.length;
+  const totalEntitled = Number(targetEntries.reduce((s, e) => s + e.entitledDays, 0).toFixed(2));
+  const totalAdjusted = Number(targetEntries.reduce((s, e) => s + e.adjustedDays, 0).toFixed(2));
+  const totalGranted = Number(targetEntries.reduce((s, e) => s + e.totalGrantedDays, 0).toFixed(2));
+  const totalUsed = Number(targetEntries.reduce((s, e) => s + e.usedDays, 0).toFixed(2));
+  const totalPending = Number(targetEntries.reduce((s, e) => s + e.pendingDays, 0).toFixed(2));
+  const totalRemaining = Number(targetEntries.reduce((s, e) => s + e.remainingDays, 0).toFixed(2));
   const avgUsageRate = totalGranted > 0 ? Math.round((totalUsed / totalGranted) * 100) : 0;
-  const advanceEmployeeCount = entries.filter((e) => e.advanceStatus.isAdvanceUsed).length;
+  const advanceEmployeeCount = targetEntries.filter((e) => e.advanceStatus.isAdvanceUsed).length;
 
   const summary: LeaveLedgerSummary = {
     totalEmployees,
