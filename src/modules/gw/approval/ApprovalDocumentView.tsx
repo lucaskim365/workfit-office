@@ -641,7 +641,8 @@ export function ApprovalDocumentView({
                       if (cfg && typeof cfg === 'object') {
                         if (cfg.colWidths) colWidths = cfg.colWidths;
                         if (cfg.cols) cols = cfg.cols;
-                        if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
+                        if (Array.isArray(cfg.rows)) rows = cfg.rows;
+                        else if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
                         if (Array.isArray(cfg.merges)) merges = cfg.merges;
                         if (cfg.headerValues) headerValues = cfg.headerValues;
                         if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
@@ -703,9 +704,10 @@ export function ApprovalDocumentView({
                                 secretRows.includes(rIdx) ||
                                 secretCells.includes(`${rIdx}:${cIdx}`);
 
-                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율');
                               const cellVal = row[col] ?? '';
-                              let displayVal = isNumLike && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
+                              const isPercent = typeof cellVal === 'string' && cellVal.endsWith('%');
+                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율') || col.includes('비중') || isPercent;
+                              let displayVal = isNumLike && !isPercent && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
                                 ? Number(cellVal.replace(/,/g, '')).toLocaleString()
                                 : cellVal;
 

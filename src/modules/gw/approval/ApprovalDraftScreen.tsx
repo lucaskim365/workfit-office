@@ -33,7 +33,9 @@ import {
   isHalfDayLeave,
   isQuarterDayLeave,
 } from '@/domain/leave/policy';
-import { X, AlertTriangle, GitFork, RefreshCw } from 'lucide-react';
+import { X, AlertTriangle, GitFork, RefreshCw, Sparkles } from 'lucide-react';
+import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
+import type { CellMerge } from './formFields/utils';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -762,6 +764,208 @@ function ApprovalDraftInner({
     }
   }, [form, editDoc, org]);
 
+  // 서식 마스터에 최신 업데이트(수식, 셀 병합, 열 구성 등)가 있는지 검사하여 일괄 반영 버튼 노출 여부 결정
+  const hasFormMasterUpdates = useMemo(() => {
+    if (!form || !form.fields) return false;
+
+    for (const f of form.fields) {
+      if (f.type !== '표' || !f.placeholder) continue;
+
+      const currentRaw = values[f.key];
+      if (!currentRaw || typeof currentRaw !== 'string') continue;
+
+      let master: any = null;
+      let current: any = null;
+      try {
+        master = JSON.parse(f.placeholder);
+        current = JSON.parse(currentRaw);
+      } catch {
+        continue;
+      }
+      if (!master || !current) continue;
+
+      // 1. 수식 비교
+      const masterFormulas = master.cellFormulas || {};
+      const currentFormulas = current.cellFormulas || {};
+      if (JSON.stringify(masterFormulas) !== JSON.stringify(currentFormulas)) return true;
+
+      // 2. 셀 병합 비교
+      const masterMerges = master.merges || [];
+      const currentMerges = current.merges || [];
+      if (JSON.stringify(masterMerges) !== JSON.stringify(currentMerges)) return true;
+
+      // 3. 열 목록 비교
+      const masterCols = master.cols || [];
+      const currentCols = current.cols || [];
+      if (JSON.stringify(masterCols) !== JSON.stringify(currentCols)) return true;
+
+      // 4. 열 머리글 비교
+      const masterHeaders = master.headerValues || {};
+      const currentHeaders = current.headerValues || {};
+      if (JSON.stringify(masterHeaders) !== JSON.stringify(currentHeaders)) return true;
+
+      // 5. 합계 셀 비교
+      if (JSON.stringify(master.sumCell ?? null) !== JSON.stringify(current.sumCell ?? null)) return true;
+
+      // 6. 기본 행 개수 비교
+      const masterRows = (Array.isArray(master.rows) && master.rows.length > 0 ? master.rows : master.defaultRows) || [];
+      const currentRows = (Array.isArray(current.rows) && current.rows.length > 0 ? current.rows : current.defaultRows) || [];
+      if (masterRows.length > currentRows.length) return true;
+    }
+
+    return false;
+  }, [form, values]);
+
+  // 최신 서식 변경사항을 모든 표에 일괄 스마트 병합 적용
+  const handleApplyAllMasterUpdates = () => {
+    if (!form || !form.fields) return;
+
+    if (
+      !confirm(
+        '서식 마스터의 최신 변경사항(자동 계산 수식, 셀 병합, 열 구조 등)을 전체 표에 일괄 적용하시겠습니까?\n\n※ 이미 작성하신 셀 내용 및 입력값은 안전하게 보존됩니다.'
+      )
+    ) {
+      return;
+    }
+
+    const patch: Record<string, FieldValue> = {};
+
+    for (const f of form.fields) {
+      if (f.type !== '표' || !f.placeholder) continue;
+
+      let master: any = null;
+      try {
+        master = JSON.parse(f.placeholder);
+      } catch {
+        continue;
+      }
+      if (!master) continue;
+
+      const currentRaw = values[f.key];
+      let current: any = null;
+      if (currentRaw && typeof currentRaw === 'string') {
+        try {
+          current = JSON.parse(currentRaw);
+        } catch {}
+      }
+
+      const masterCols: string[] =
+        Array.isArray(master.cols) && master.cols.length > 0
+          ? master.cols
+          : current?.cols || ['구분', '항목', '내용'];
+      const masterColWidths: Record<string, string> = master.colWidths || current?.colWidths || {};
+      const masterMerges: CellMerge[] = Array.isArray(master.merges) ? master.merges : current?.merges || [];
+      const masterHeaderValues: Record<string, string> = master.headerValues || current?.headerValues || {};
+      const masterAmountCells: Array<{ rIdx: number; col: string }> = Array.isArray(master.amountCells)
+        ? master.amountCells
+        : master.amountCell
+        ? [master.amountCell]
+        : current?.amountCells || [];
+      const masterSumCell: { rIdx: number; col: string } | null =
+        master.sumCell !== undefined ? master.sumCell : current?.sumCell || null;
+      const masterSecretCols: string[] = Array.isArray(master.secretCols)
+        ? master.secretCols
+        : current?.secretCols || [];
+      const masterSecretCells: string[] = Array.isArray(master.secretCells)
+        ? master.secretCells
+        : current?.secretCells || [];
+      const masterSecretRows: number[] = Array.isArray(master.secretRows)
+        ? master.secretRows
+        : current?.secretRows || [];
+      const masterCellFormulas: Record<string, CellFormula> = master.cellFormulas || current?.cellFormulas || {};
+
+      const masterDefaultRows: Array<Record<string, string>> =
+        Array.isArray(master.rows) && master.rows.length > 0
+          ? master.rows
+          : Array.isArray(master.defaultRows) && master.defaultRows.length > 0
+          ? master.defaultRows
+          : [];
+
+      const currentRows: Array<Record<string, string>> =
+        Array.isArray(current?.rows) && current.rows.length > 0
+          ? current.rows
+          : Array.isArray(current?.defaultRows) && current.defaultRows.length > 0
+          ? current.defaultRows
+          : [];
+
+      let nextRows: Array<Record<string, string>> = [];
+      if (masterDefaultRows.length > 0) {
+        const maxLen = Math.max(currentRows.length, masterDefaultRows.length);
+        for (let i = 0; i < maxLen; i++) {
+          const userRow = currentRows[i] || {};
+          const mRow = masterDefaultRows[i] || {};
+          const mergedRow: Record<string, string> = {};
+          masterCols.forEach((c) => {
+            const userVal = userRow[c];
+            const mVal = mRow[c];
+            if (userVal !== undefined && userVal !== '') {
+              mergedRow[c] = String(userVal);
+            } else if (mVal !== undefined) {
+              mergedRow[c] = String(mVal);
+            } else {
+              mergedRow[c] = '';
+            }
+          });
+          nextRows.push(mergedRow);
+        }
+      } else if (currentRows.length > 0) {
+        nextRows = currentRows.map((r) => {
+          const mergedRow: Record<string, string> = {};
+          masterCols.forEach((c) => {
+            mergedRow[c] = r[c] !== undefined ? String(r[c]) : '';
+          });
+          return mergedRow;
+        });
+      } else {
+        nextRows = masterDefaultRows;
+      }
+
+      let recalculated = recalculateTableFormulas(
+        masterCols,
+        nextRows,
+        masterCellFormulas,
+        masterHeaderValues
+      );
+      if (masterSumCell) {
+        let sum = 0;
+        recalculated.forEach((r, idx) => {
+          masterCols.forEach((c) => {
+            if (masterSumCell.rIdx === idx && masterSumCell.col === c) return;
+            if (c.includes('금액') || masterAmountCells.some((ac) => ac.rIdx === idx && ac.col === c)) {
+              const num = Number(String(r[c] ?? '').replace(/[^0-9]/g, '')) || 0;
+              sum += num;
+            }
+          });
+        });
+        if (recalculated[masterSumCell.rIdx]) {
+          recalculated[masterSumCell.rIdx] = {
+            ...recalculated[masterSumCell.rIdx],
+            [masterSumCell.col]: sum > 0 ? String(sum) : '',
+          };
+        }
+      }
+
+      patch[f.key] = JSON.stringify({
+        cols: masterCols,
+        rows: recalculated,
+        defaultRows: recalculated,
+        tableWidth: '100%',
+        colWidths: masterColWidths,
+        merges: masterMerges,
+        headerValues: masterHeaderValues,
+        amountCells: masterAmountCells,
+        sumCell: masterSumCell,
+        secretCols: masterSecretCols,
+        secretCells: masterSecretCells,
+        secretRows: masterSecretRows,
+        cellFormulas: masterCellFormulas,
+      });
+    }
+
+    setVals(patch);
+    alert('모든 표에 최신 서식 양식(수식, 병합 등)이 성공적으로 반영되었습니다.\n작성된 데이터는 안전하게 보존되었습니다.');
+  };
+
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
   const buildInput = (): ApprovalDraftInput => {
@@ -1134,6 +1338,18 @@ function ApprovalDraftInner({
             }
             return null;
           })()}
+          {hasFormMasterUpdates && (
+            <button
+              type="button"
+              onClick={handleApplyAllMasterUpdates}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500 hover:text-white px-3.5 py-1.5 text-[12px] font-bold text-amber-700 dark:text-amber-400 transition-all shadow-2xs cursor-pointer animate-in fade-in"
+              title="서식 마스터의 최신 변경사항(자동 계산 수식, 셀 병합, 열 구조 등)을 전체 표에 일괄 적용합니다. 이미 작성하신 내용은 안전하게 보존됩니다."
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              <span>최신 서식 반영</span>
+            </button>
+          )}
           {!isResubmit && (
             <button
               type="button"

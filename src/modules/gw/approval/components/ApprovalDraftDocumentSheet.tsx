@@ -829,54 +829,98 @@ export function ApprovalDraftDocumentSheet({
 
             // B. 동적 행 그리드 블록 (table-field)
             if (block.type === 'table-field') {
-              const f = block.fields[0];
-              const v = values[f.key];
-              const isSelected = isDesignMode && selectedFieldKey === f.key;
-              return (
-                <div
-                  key={blockIdx}
-                  onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
-                  className={`space-y-1 transition-all rounded p-1.5 ${isDesignMode ? 'cursor-pointer ' + (isSelected ? 'ring-2 ring-teal bg-teal-soft/20 shadow-xs' : 'hover:ring-1 hover:ring-teal/40') : ''
+              const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
+
+              const renderTableFieldItem = (f: FormField) => {
+                const v = values[f.key];
+                const isSelected = isDesignMode && selectedFieldKey === f.key;
+                const hasLabel = !!(f.label && f.label.trim());
+
+                return (
+                  <div
+                    key={f.key}
+                    onClick={() => {
+                      if (isDesignMode) onSelectFieldKey?.(f.key);
+                    }}
+                    className={`flex flex-col rounded-lg border border-[#bbb] bg-white overflow-hidden transition-all min-w-0 ${
+                      isDesignMode
+                        ? 'cursor-pointer ' +
+                          (isSelected
+                            ? 'ring-2 ring-teal shadow-md'
+                            : 'hover:ring-1 hover:ring-teal/40')
+                        : ''
                     }`}
-                >
+                  >
+                    {hasLabel && (
+                      <div
+                        className={`text-[11.5px] font-bold py-1.5 px-3 border-b border-[#bbb] flex items-center justify-between transition-colors ${
+                          isSelected
+                            ? 'bg-teal text-white'
+                            : 'bg-[#f5f5f5] text-[#222]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1 font-bold">
+                          {f.label}
+                          {f.required && (
+                            <span className={isSelected ? 'text-rose-200' : 'text-rose-500'}>*</span>
+                          )}
+                        </span>
+                        {isSelected && (
+                          <span className="rounded bg-white/20 px-1.5 py-0.2 text-[9px] font-bold text-white">
+                            선택됨 (좌측에서 편집)
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="bg-white flex-1 overflow-x-auto">
+                      <TableFieldEditor
+                        field={f}
+                        v={v}
+                        isDesignMode={isDesignMode}
+                        isHalf={isHalf}
+                        set={(patch) => {
+                          setVals(patch);
+                          // 표 내 금액 합계가 있으면 메인 amount에도 연동
+                          const updatedVal = patch[f.key];
+                          if (typeof updatedVal === 'string' && updatedVal.includes('"rows"')) {
+                            try {
+                              const parsed = JSON.parse(updatedVal);
+                              const amtCol = parsed.cols?.find(
+                                (c: string) => c.includes('금액') || c.includes('비용')
+                              );
+                              if (amtCol && Array.isArray(parsed.rows)) {
+                                const sum = parsed.rows.reduce((acc: number, r: any) => {
+                                  const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
+                                  return acc + (isNaN(num) ? 0 : num);
+                                }, 0);
+                                if (sum > 0 && (!amount || amount === '0')) {
+                                  setAmount(String(sum));
+                                }
+                              }
+                            } catch (e) {}
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div key={blockIdx} className="space-y-1">
                   {showSectionHeader && (
                     <div className="text-[11px] font-bold text-teal mt-2.5">
                       {block.section}
                     </div>
                   )}
-                  {isSelected && (
-                    <div className="flex justify-end mb-1">
-                      <span className="rounded bg-teal px-1.5 py-0.2 text-[9px] font-bold text-white">
-                        선택됨 (좌측에서 편집)
-                      </span>
+                  {isHalf ? (
+                    <div className="grid grid-cols-2 gap-2.5 min-w-0">
+                      {block.fields.map((f) => renderTableFieldItem(f))}
+                      {block.fields.length === 1 && <div />}
                     </div>
+                  ) : (
+                    renderTableFieldItem(block.fields[0])
                   )}
-                  <div className="border border-[#bbb] p-2 bg-white">
-                    <TableFieldEditor
-                      field={f}
-                      v={v}
-                      set={(patch) => {
-                        setVals(patch);
-                        // 표 내 금액 합계가 있으면 메인 amount에도 연동
-                        const updatedVal = patch[f.key];
-                        if (typeof updatedVal === 'string' && updatedVal.includes('"rows"')) {
-                          try {
-                            const parsed = JSON.parse(updatedVal);
-                            const amtCol = parsed.cols?.find((c: string) => c.includes('금액') || c.includes('비용'));
-                            if (amtCol && Array.isArray(parsed.rows)) {
-                              const sum = parsed.rows.reduce((acc: number, r: any) => {
-                                const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
-                                return acc + (isNaN(num) ? 0 : num);
-                              }, 0);
-                              if (sum > 0 && (!amount || amount === '0')) {
-                                setAmount(String(sum));
-                              }
-                            }
-                          } catch (e) { }
-                        }
-                      }}
-                    />
-                  </div>
                 </div>
               );
             }

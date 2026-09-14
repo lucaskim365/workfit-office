@@ -270,9 +270,55 @@ export function ApprovalFormEditor({
     return dummySteps;
   }, [dummyMe, form.code, users, depts, org.positions, rules, dummySteps]);
 
-  const [previewValues, setPreviewValues] = useState<Record<string, FieldValue>>({});
+  const [previewValues, setPreviewValues] = useState<Record<string, FieldValue>>(() => {
+    const initial: Record<string, FieldValue> = {};
+    form.fields.forEach((f) => {
+      if (f.type === '표' && f.placeholder) {
+        initial[f.key] = f.placeholder;
+      }
+    });
+    return initial;
+  });
+
+  // form.fields가 바뀌면(필드 추가/삭제, placeholder 갱신 등) 표 초기 데이터를 다시 동기화
+  // 이렇게 해야 서식 편집 화면에서도 기안 작성 시와 동일한 표 구조가 표시됨
+  const fieldsFingerprint = useMemo(
+    () => form.fields.map((f) => `${f.key}:${f.type}:${f.placeholder || ''}`).join('|'),
+    [form.fields]
+  );
+
+  useEffect(() => {
+    const initial: Record<string, FieldValue> = {};
+    form.fields.forEach((f) => {
+      if (f.type === '표' && f.placeholder) {
+        initial[f.key] = f.placeholder;
+      }
+    });
+    // 표 필드는 항상 최신 placeholder로 덮어쓰되, 나머지 사용자 입력은 유지
+    setPreviewValues((prev) => {
+      const next = { ...prev };
+      for (const [key, val] of Object.entries(initial)) {
+        next[key] = val;
+      }
+      return next;
+    });
+  }, [form.id, fieldsFingerprint]);
+
   const setPreviewVals = (patch: Record<string, FieldValue>) => {
     setPreviewValues((prev) => ({ ...prev, ...patch }));
+    // 표(Table) 필드의 경우 위지윅에서 디자인한 테이블 구조, 행, 열, 수식(cellFormulas)을
+    // f.placeholder에 실시간 동기화하여 [서식 저장] 시 안전하게 영구 저장되도록 보장
+    let fieldsChanged = false;
+    const nextFields = form.fields.map((f) => {
+      if (f.type === '표' && patch[f.key] !== undefined) {
+        fieldsChanged = true;
+        return { ...f, placeholder: String(patch[f.key]) };
+      }
+      return f;
+    });
+    if (fieldsChanged) {
+      onChange({ ...form, fields: nextFields });
+    }
   };
 
   const formRulesCount = useMemo(() => {
@@ -903,14 +949,10 @@ export function ApprovalFormEditor({
                 A4
               </span>
               <span className="text-[12px] font-bold text-white">
-                실시간 A4 공문서 캔버스
-              </span>
-              <span className="rounded bg-teal-soft px-1.5 py-0.2 text-[9.5px] font-extrabold text-teal">
-                기안 화면과 100% 동일
+                A4 공문서 캔버스
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px] text-slate-300">
-              <span>캔버스 내 항목을 클릭하면 좌측에서 즉시 편집됩니다</span>
               <button
                 type="button"
                 onClick={() => window.print()}
