@@ -568,9 +568,9 @@ function ApprovalDraftInner({
 
     /**
      * 첫 변경은 즉시 저장하고, 그 뒤로는 최소 `SAVE_INTERVAL_MS` 간격을 지킨다.
-     * `localStorage` 쓰기는 동기이고 이 폼 크기면 밀리초 단위라 부담이 없다.
+     * 브라우저 로컬 스토리지에 5초 주기로 스로틀 저장한다.
      */
-    const SAVE_INTERVAL_MS = 1000;
+    const SAVE_INTERVAL_MS = 5000;
     const sinceLast = Date.now() - lastSnapshotAtRef.current;
     let timer: ReturnType<typeof setTimeout> | null = null;
     if (sinceLast >= SAVE_INTERVAL_MS) {
