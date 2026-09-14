@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, it, expect } from 'vitest';
 import { calculateUserLeaveBalance } from './userLeaveBalance';
 import { buildLeaveLedger } from './ledger';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
@@ -35,8 +34,8 @@ describe('calculateUserLeaveBalance (SSOT 연차 잔여 일원화 엔진)', () =
       referenceDate: new Date('2026-09-14'),
     });
 
-    assert.equal(result.usedDays, 0.5, '반차 건은 DB 저장값이 1일이라도 usedDays가 0.5일이어야 함');
-    assert.equal(result.remainingDays, result.totalGrantedDays - 0.5, '잔여 연차에서 정확히 0.5일만 차감되어야 함');
+    expect(result.usedDays).toBe(0.5);
+    expect(result.remainingDays).toBe(result.totalGrantedDays - 0.5);
   });
 
   it('TEST-02: 반반차 신청 건은 0.25일로 차감되어야 함', () => {
@@ -69,7 +68,7 @@ describe('calculateUserLeaveBalance (SSOT 연차 잔여 일원화 엔진)', () =
       referenceDate: new Date('2026-09-14'),
     });
 
-    assert.equal(result.usedDays, 0.25, '반반차는 usedDays가 0.25일이어야 함');
+    expect(result.usedDays).toBe(0.25);
   });
 
   it('TEST-03: 대체휴무 및 공가는 법정 연차 usedDays를 갉아먹지 않고 분리 집계되어야 함', () => {
@@ -118,8 +117,8 @@ describe('calculateUserLeaveBalance (SSOT 연차 잔여 일원화 엔진)', () =
       referenceDate: new Date('2026-09-14'),
     });
 
-    assert.equal(result.usedDays, 0, '대체휴무와 공가는 법정 연차 usedDays에 가산되지 않아야 함');
-    assert.equal(result.otherUsedDays, 1, '공가는 otherUsedDays에 1일 집계되어야 함');
+    expect(result.usedDays).toBe(0);
+    expect(result.otherUsedDays).toBe(1);
   });
 
   it('TEST-04: buildLeaveLedger(전사 원장)와 calculateUserLeaveBalance의 수치가 100% 동일해야 함', () => {
@@ -185,9 +184,9 @@ describe('calculateUserLeaveBalance (SSOT 연차 잔여 일원화 엔진)', () =
 
     const ledgerEntry = ledger.entries.find((e) => e.name === '허진욱')!;
 
-    assert.equal(singleBalance.usedDays, 1.0, '반차 2건 합산 = 1.0일 (단일 엔진)');
-    assert.equal(ledgerEntry.usedDays, 1.0, '전사 원장에서도 반차 2건 합산 = 1.0일');
-    assert.equal(singleBalance.remainingDays, ledgerEntry.remainingDays, '단일 엔진과 전사 원장의 잔여 연차가 완벽히 일치해야 함');
-    assert.equal(singleBalance.totalGrantedDays, ledgerEntry.totalGrantedDays, '총 부여 일수 일치');
+    expect(singleBalance.usedDays).toBe(1.0);
+    expect(ledgerEntry.usedDays).toBe(1.0);
+    expect(singleBalance.remainingDays).toBe(ledgerEntry.remainingDays);
+    expect(singleBalance.totalGrantedDays).toBe(ledgerEntry.totalGrantedDays);
   });
 });
