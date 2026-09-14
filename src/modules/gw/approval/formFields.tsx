@@ -6,13 +6,13 @@ import { User, X, Building2 } from 'lucide-react';
 import {
   END_SUFFIX,
   DAYS_SUFFIX,
-  daysBetween,
   type OrgLite,
 } from './formFields/utils';
 import { CalendarRangePicker } from './formFields/CalendarRangePicker';
 import { AutoResizeTextarea } from './formFields/AutoResizeTextarea';
 import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
+import { calculateLeaveDays } from '@/domain/leave/policy';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -158,7 +158,14 @@ export function DynamicField({
           start={start}
           end={end}
           onChange={(newStart, newEnd) => {
-            const days = newStart && newEnd ? daysBetween(newStart, newEnd) : 0;
+            const currentLeaveType = String(values['leaveType'] || '');
+            const days = newStart && newEnd
+              ? calculateLeaveDays({
+                  leaveType: currentLeaveType,
+                  startDate: newStart,
+                  endDate: newEnd,
+                })
+              : 0;
             set({
               [field.key]: newStart,
               [field.key + END_SUFFIX]: newEnd,

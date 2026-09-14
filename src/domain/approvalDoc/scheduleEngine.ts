@@ -1,5 +1,6 @@
 import type { ApprovalDoc } from './schema';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
+import { calculateLeaveDays } from '@/domain/leave/policy';
 
 /**
  * 전사 표준 일정/근태 연동 정보 규격 (Single Source of Truth)
@@ -60,13 +61,27 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
   if (category === 'LEAVE' && doc.form) {
     startDate = doc.form.startDate || '';
     endDate = doc.form.endDate || startDate;
-    days = doc.form.days ?? 1;
+    days = calculateLeaveDays({
+      leaveType: doc.form.leaveType || (fVals['leaveType'] as string),
+      startDate,
+      endDate,
+      rawDays: doc.form.days,
+      title: doc.title,
+    });
   }
 
   if (!startDate) {
     startDate = String(fVals['period'] || fVals['startDate'] || fVals['workDate'] || '');
     endDate = String(fVals['period__end'] || fVals['endDate'] || startDate);
-    days = Number(fVals['period__days']) || 1;
+    days = category === 'LEAVE'
+      ? calculateLeaveDays({
+          leaveType: String(fVals['leaveType'] || ''),
+          startDate,
+          endDate,
+          rawDays: Number(fVals['period__days']) || undefined,
+          title: doc.title,
+        })
+      : Number(fVals['period__days']) || 1;
   }
 
   if (!startDate) return null;

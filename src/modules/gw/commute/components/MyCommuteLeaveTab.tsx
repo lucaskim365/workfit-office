@@ -16,6 +16,8 @@ import {
   ExternalLink,
   ChevronRight,
   Info,
+  X,
+  CalendarCheck2,
 } from 'lucide-react';
 
 interface MyCommuteLeaveTabProps {
@@ -76,6 +78,7 @@ export function MyCommuteLeaveTab({
   // 하단 세부 탭 상태
   const [historyTab, setHistoryTab] = useState<'annual' | 'requests'>('annual');
   const [requestFilter, setRequestFilter] = useState<'전체' | '진행중' | '완료' | '반려'>('전체');
+  const [showSubModal, setShowSubModal] = useState(false);
 
   // 1. 오늘의 출퇴근 및 근무 상태
   const todayStr = today();
@@ -266,14 +269,28 @@ export function MyCommuteLeaveTab({
             <div className="flex justify-between text-[10.5px] text-ink3 font-medium">
               <span>사용 완료: <strong>{bal.used}일</strong></span>
               {bal.pending > 0 && <span className="text-amber font-bold">결재 대기: {bal.pending}일</span>}
-              <span>대체휴무: <strong>{bal.substituteHoliday.remaining}일</strong></span>
+              <button
+                type="button"
+                onClick={() => setShowSubModal(true)}
+                className="hover:text-teal hover:underline transition-colors group cursor-pointer"
+                title="내 대체휴무 상세 내역 보기"
+              >
+                <span>대체휴무: </span>
+                <strong className="text-teal group-hover:underline">{bal.substituteHoliday.remaining}일</strong>
+              </button>
             </div>
           </div>
 
           <div className="pt-2 border-t border-teal/20 flex items-center justify-between text-[10.5px] text-teal font-medium">
             <span>법정 발생 기준 적용</span>
             {bal.substituteHoliday.expiringSoonCount > 0 && (
-              <span className="text-amber font-bold">⚠️ 대휴 만료임박 {bal.substituteHoliday.expiringSoonCount}건</span>
+              <button
+                type="button"
+                onClick={() => setShowSubModal(true)}
+                className="text-amber font-bold hover:underline cursor-pointer"
+              >
+                ⚠️ 대휴 만료임박 {bal.substituteHoliday.expiringSoonCount}건
+              </button>
             )}
           </div>
         </div>
@@ -599,8 +616,13 @@ export function MyCommuteLeaveTab({
           {historyTab === 'annual' ? (
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-[12px] font-bold text-ink">연차 변동 상세 내역</span>
-                <span className="text-[11px] text-ink3">올해 연차 총 부여: <strong className="text-teal">{bal.grant}일</strong></span>
+                <span className="text-[12px] font-bold text-ink">연차·휴가 변동 상세 내역</span>
+                <span className="text-[11px] text-ink3">
+                  연차 총 부여: <strong className="text-teal">{bal.grant}일</strong>
+                  {bal.substituteHoliday.total > 0 && (
+                    <> · 대체휴무 총 부여: <strong className="text-teal">+{bal.substituteHoliday.total}일</strong> (잔여 {bal.substituteHoliday.remaining}일)</>
+                  )}
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-[11px]">
@@ -621,7 +643,24 @@ export function MyCommuteLeaveTab({
                       <td className="p-2 text-ink2">신년도 기본 연차 일수 자동 부여</td>
                       <td className="p-2 text-right text-ink3">—</td>
                     </tr>
-                    {annualLeaveHistoryDocs.length === 0 ? (
+                    {/* 관리자가 부여한 대체휴무 발생 내역 */}
+                    {bal.substituteHoliday.detailList.map((subItem) => (
+                      <tr key={`sub-${subItem.id}`} className="hover:bg-panel-alt/20 transition-colors">
+                        <td className="p-2 text-ink3 font-medium">{subItem.occurrenceDate}</td>
+                        <td className="p-2">
+                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-extrabold text-emerald-600 border border-emerald-500/25">
+                            대체휴무
+                          </span>
+                        </td>
+                        <td className="p-2 text-emerald-600 font-extrabold">+{subItem.days}일</td>
+                        <td className="p-2 text-ink">
+                          <span>{subItem.reason}</span>
+                          <span className="text-[10px] text-ink3 ml-2">(만료: ~{subItem.expirationDate})</span>
+                        </td>
+                        <td className="p-2 text-right text-[10.5px] text-ink3 font-medium">관리자 부여</td>
+                      </tr>
+                    ))}
+                    {annualLeaveHistoryDocs.length === 0 && bal.substituteHoliday.detailList.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-6 text-center text-ink3">사용 완료된 연차가 없습니다.</td>
                       </tr>
@@ -730,6 +769,110 @@ export function MyCommuteLeaveTab({
           )}
         </div>
       </section>
+
+      {/* 내 대체휴무 상세 내역 팝업 모달 */}
+      {showSubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between border-b border-border bg-panel-alt/50 px-5 py-4 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-8 w-8 place-items-center rounded-xl bg-teal/15 text-teal shadow-2xs">
+                  <CalendarCheck2 size={18} />
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-extrabold text-ink">내 대체휴무 상세 현황</h3>
+                  <p className="text-[11px] text-ink3">
+                    잔여: <strong className="text-teal">{bal.substituteHoliday.remaining}일</strong> / 
+                    사용: <strong>{bal.substituteHoliday.used}일</strong> / 
+                    총 발생: <strong>{bal.substituteHoliday.total}일</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSubModal(false)}
+                className="rounded-lg p-1.5 text-ink3 hover:bg-panel-alt hover:text-ink transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 목록 내용 */}
+            <div className="p-5 overflow-y-auto space-y-3">
+              {bal.substituteHoliday.detailList.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center text-xs text-ink3 space-y-1">
+                  <p>현재 부여된 대체휴무 내역이 없습니다.</p>
+                  <p className="text-[10.5px]">
+                    관리자가 휴일/공휴일 특근에 대한 대체휴무를 일괄 부여하면 여기에 자동으로 표시됩니다.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60 rounded-xl border border-border bg-panel overflow-hidden text-[11.5px]">
+                  {bal.substituteHoliday.detailList.map((item) => {
+                    const isAvailable = item.status === 'AVAILABLE';
+                    const isUsed = item.status === 'USED';
+                    const isExpired = item.status === 'EXPIRED';
+
+                    return (
+                      <div key={item.id} className="p-3.5 space-y-1.5 hover:bg-panel-alt/40 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-ink text-[12px]">{item.reason}</span>
+                            <span className="rounded bg-teal/15 px-1.5 py-0.5 text-[10px] font-extrabold text-teal">
+                              +{item.days}일
+                            </span>
+                          </div>
+                          <div>
+                            {isAvailable && (
+                              <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-extrabold text-emerald-600 border border-emerald-500/25">
+                                사용 가능
+                              </span>
+                            )}
+                            {isUsed && (
+                              <span className="rounded-md bg-panel-alt px-2 py-0.5 text-[10px] font-bold text-ink3 border border-border">
+                                사용 완료
+                              </span>
+                            )}
+                            {isExpired && (
+                              <span className="rounded-md bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold text-rose-500 border border-rose-500/25">
+                                기간 만료
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink3 pt-1">
+                          <div className="flex items-center gap-3">
+                            <span>발생일: <strong className="text-ink">{item.occurrenceDate}</strong></span>
+                            <span>만료일: <strong className="text-ink">{item.expirationDate}</strong></span>
+                          </div>
+                          <div className="flex items-center gap-2 font-medium">
+                            <span>사용: {item.used}일</span>
+                            {item.pending > 0 && <span className="text-amber font-bold">신청중: {item.pending}일</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-teal/20 bg-teal/5 p-3 text-[11px] text-ink2 leading-relaxed">
+                💡 <strong>대체휴무 사용 안내:</strong> 휴가 신청 시 휴가 종류를 [대체휴무]로 선택하면, 
+                가장 먼저 만료되는 대체휴무부터 <strong>선입선출(FIFO)</strong> 방식으로 자동 차감됩니다.
+              </div>
+            </div>
+
+            {/* 푸터 */}
+            <div className="border-t border-border bg-panel-alt/30 px-5 py-3 flex justify-end">
+              <Button size="sm" onClick={() => setShowSubModal(false)}>
+                확인
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

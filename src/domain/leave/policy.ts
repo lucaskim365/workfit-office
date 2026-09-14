@@ -181,8 +181,89 @@ export const QUARTER_LEAVE_SLOTS: readonly QuarterLeaveSlot[] = [
 ] as const;
 
 /** 연차 차감 대상 여부 판정 */
-export function isAnnualLeaveDeduction(leaveType: string): boolean {
+export function isAnnualLeaveDeduction(leaveType?: string | null): boolean {
+  if (!leaveType) return false;
   return ['연차', '오전반차', '오후반차', '반차', '반반차', 'ANNUAL', 'AM_HALF', 'PM_HALF', 'QUARTER'].includes(leaveType);
+}
+
+/** 반반차 여부 판별 (단일 기준) */
+export function isQuarterDayLeave(leaveType?: string | null, title?: string | null): boolean {
+  const t = (leaveType || '').trim();
+  const h = (title || '').trim();
+  if (t === '반반차' || t === 'QUARTER') return true;
+  if (h.includes('반반차')) return true;
+  return false;
+}
+
+/** 반차 여부 판별 (오전반차, 오후반차, 구버전 반차 통합) */
+export function isHalfDayLeave(leaveType?: string | null, title?: string | null): boolean {
+  if (isQuarterDayLeave(leaveType, title)) return false;
+  const t = (leaveType || '').trim();
+  const h = (title || '').trim();
+  if (t === '반차' || t === '오전반차' || t === '오후반차' || t === 'AM_HALF' || t === 'PM_HALF') return true;
+  if (h.includes('반차') || h.includes('오전반차') || h.includes('오후반차')) return true;
+  return false;
+}
+
+/** 부분 일차(반차/반반차) 여부 판별 */
+export function isPartDayLeave(leaveType?: string | null, title?: string | null): boolean {
+  return isHalfDayLeave(leaveType, title) || isQuarterDayLeave(leaveType, title);
+}
+
+export interface CalculateLeaveDaysOptions {
+  leaveType?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  rawDays?: number | null;
+  title?: string | null;
+}
+
+/**
+ * 단일 기준 휴가 일수 계산기 (SSOT)
+ *
+ * - 반차('반차', '오전반차', '오후반차')는 DB/폼에 잘못된 수치(예: 1.0일)가 기록되어 있어도
+ *   반드시 0.5일을 반환하여 왜곡을 원천 차단합니다.
+ * - 반반차는 반드시 0.25일을 반환합니다.
+ * - 종일 휴가는 기간(영업일) 또는 명시된 수치를 안전하게 반영합니다.
+ */
+export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
+  const { leaveType, startDate, endDate, rawDays, title } = options;
+
+  // 1. 반반차 최우선: 무조건 0.25일
+  if (isQuarterDayLeave(leaveType, title)) {
+    return 0.25;
+  }
+
+  // 2. 반차 최우선: DB에 1일로 잘못 저장된 레거시 데이터도 무조건 0.5일로 강제 보정
+  if (isHalfDayLeave(leaveType, title)) {
+    return 0.5;
+  }
+
+  // 3. 종일/기타 휴가: 명시된 수치가 양수이면 그대로 인정
+  if (typeof rawDays === 'number' && !isNaN(rawDays) && rawDays > 0) {
+    return rawDays;
+  }
+
+  // 4. 기간(시작일, 종료일) 기반 평일(영업일) 일수 계산
+  if (startDate) {
+    const end = endDate || startDate;
+    const s = new Date(startDate.slice(0, 10) + 'T00:00:00');
+    const e = new Date(end.slice(0, 10) + 'T00:00:00');
+    if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s <= e) {
+      let count = 0;
+      const cur = new Date(s);
+      while (cur <= e) {
+        const day = cur.getDay();
+        if (day !== 0 && day !== 6) {
+          count++;
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      return Math.max(1, count);
+    }
+  }
+
+  return 1.0;
 }
 
 /** 휴가 유형별 기본 시간대 반환 */
@@ -205,4 +286,5 @@ export function getDefaultTimeWindow(
   }
   return { startTime: '08:30', endTime: '17:30' };
 }
+
 

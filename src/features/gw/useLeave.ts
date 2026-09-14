@@ -1,18 +1,22 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { byRecent } from '@/domain/approvalDoc/engine';
-import type { ApprovalDoc, LeaveType } from '@/domain/approvalDoc/schema';
+import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import {
   calculateStatutoryEntitlement,
   evaluateAdvanceLeaveOffset,
   type StatutoryLeaveResult,
   type AdvanceOffsetResult,
 } from '@/domain/leave/accrualEngine';
+import { isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { normalizeLegacyLeaveDoc, type NormalizedLeaveRecord } from '@/domain/leave/legacyAdapter';
+import {
+  getSubstituteHolidaysForUser,
+  SUBSTITUTE_HOLIDAY_UPDATED_EVENT,
+} from '@/domain/leave/substituteHolidayStore';
 
 export const FALLBACK_ANNUAL_GRANT = 15;
-
-const DEDUCTS_ANNUAL = (t: LeaveType) => t === '연차' || t === '반차';
 
 export interface SubstituteHolidayItem {
   id: string;
@@ -34,23 +38,23 @@ export interface LeaveBalance {
   pending: number;
   /** 잔여 = 부여 − 사용. */
   remaining: number;
-  /** 병가·경조·공가 등 기타 승인완료 일수 합(부여 무관, 참고 표시). */
+  /** 연차 차감 제외 승인완료 휴가(공가·경조 등) 합. */
   otherUsed: number;
 
-  /** 법정 연차 상세 산정 결과 (1년 미만 월별 발생/소멸, 가산연차 등) */
+  /** 법정 연차 계산 상세 (입사일이 있는 경우) */
   statutory?: StatutoryLeaveResult;
-  /** 신입사원 연차 선사용(Advance Leave) 및 상계 분석 상태 */
+  /** 연차 선사용 및 상계 판정 (입사일 및 사용일수 기반) */
   advanceOffset?: AdvanceOffsetResult;
-  /** 임직원 실제 입사일 */
+  /** 입사일자 (YYYY-MM-DD) */
   hireDate?: string;
 
-  /** 대체휴무 요약 및 내역 */
+  /** 대체휴무(대휴) 현황 */
   substituteHoliday: {
-    total: number;       // 총 발생 (유효한 건들의 총합 + 이미 사용 완료된 건들의 총합)
-    used: number;        // 결재 완료된 대체휴무 사용량
-    pending: number;     // 진행 중인 대체휴무 신청량
-    remaining: number;   // 사용 가능 잔여 일수 (유효기간 내)
-    expiringSoonCount: number; // 30일 이내 만료 예정 건수
+    total: number;
+    used: number;
+    pending: number;
+    remaining: number;
+    expiringSoonCount: number;
     detailList: SubstituteHolidayItem[];
   };
 
@@ -59,12 +63,19 @@ export interface LeaveBalance {
   isLoading: boolean;
 }
 
-// 모의 대체휴무 발생 데이터 삭제됨
-const INITIAL_SUBSTITUTE_HOLIDAYS: Array<{ id: string; occurrenceDate: string; expirationDate: string; reason: string; days: number }> = [];
-
 export function useLeave(userId: string | undefined): LeaveBalance {
   const q = useAllApprovals();
   const profilesQ = useEmployeeProfiles();
+
+  // 대체휴무 실시간 동기화 상태 리스너
+  const [subUpdateVer, setSubUpdateVer] = useState(0);
+  useEffect(() => {
+    const onSubUpdate = () => setSubUpdateVer((v) => v + 1);
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+      return () => window.removeEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+    }
+  }, []);
 
   return useMemo(() => {
     const rows = q.data ?? [];
@@ -72,17 +83,32 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       ? rows.filter((d) => d.docType === '휴가' && d.drafterId === userId).sort(byRecent)
       : [];
 
-    const sumDays = (pred: (d: ApprovalDoc) => boolean) =>
-      mine.filter((d) => d.form && pred(d)).reduce((s, d) => s + (d.form?.days ?? 0), 0);
+    // 전사 단일 정규화 어댑터를 통해 기결재 및 신규 문서 일괄 정규화 (SSOT 보장)
+    const myNormalizedLeaves = mine
+      .map(normalizeLegacyLeaveDoc)
+      .filter((d): d is NormalizedLeaveRecord => d !== null);
 
-    // 연차/반차
-    const used = sumDays((d) => d.status === '완료' && DEDUCTS_ANNUAL(d.form!.leaveType));
-    const pending = sumDays((d) => d.status === '진행중' && DEDUCTS_ANNUAL(d.form!.leaveType));
-    const otherUsed = sumDays((d) => d.status === '완료' && !DEDUCTS_ANNUAL(d.form!.leaveType) && d.form!.leaveType !== '대체휴무');
+    // 연차/반차/반반차 (법정 연차 차감 대상)
+    const used = myNormalizedLeaves
+      .filter((d) => d.status === '완료' && isAnnualLeaveDeduction(d.leaveType))
+      .reduce((s, d) => s + d.days, 0);
+
+    const pending = myNormalizedLeaves
+      .filter((d) => d.status === '진행중' && isAnnualLeaveDeduction(d.leaveType))
+      .reduce((s, d) => s + d.days, 0);
+
+    const otherUsed = myNormalizedLeaves
+      .filter((d) => d.status === '완료' && !isAnnualLeaveDeduction(d.leaveType) && d.leaveType !== '대체휴무')
+      .reduce((s, d) => s + d.days, 0);
 
     // 대체휴무 실시간 결재 문서 집계
-    const approvedSubDays = sumDays((d) => d.status === '완료' && d.form!.leaveType === '대체휴무');
-    const pendingSubDays = sumDays((d) => d.status === '진행중' && d.form!.leaveType === '대체휴무');
+    const approvedSubDays = myNormalizedLeaves
+      .filter((d) => d.status === '완료' && d.leaveType === '대체휴무')
+      .reduce((s, d) => s + d.days, 0);
+
+    const pendingSubDays = myNormalizedLeaves
+      .filter((d) => d.status === '진행중' && d.leaveType === '대체휴무')
+      .reduce((s, d) => s + d.days, 0);
 
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -107,7 +133,10 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     let remainingApprovedToAllocate = approvedSubDays;
     let remainingPendingToAllocate = pendingSubDays;
 
-    const detailList: SubstituteHolidayItem[] = INITIAL_SUBSTITUTE_HOLIDAYS.map((item) => {
+    const userName = userProfile?.name ?? mine[0]?.drafterName;
+    const userSubHolidays = getSubstituteHolidaysForUser(userId, userName, hireDate);
+
+    const detailList: SubstituteHolidayItem[] = userSubHolidays.map((item) => {
       const isExpired = item.expirationDate < todayStr;
       
       let itemUsed = 0;
@@ -180,5 +209,5 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       myDocs: mine,
       isLoading: q.isLoading || profilesQ.isLoading,
     };
-  }, [q.data, q.isLoading, profilesQ.data, profilesQ.isLoading, userId]);
+  }, [q.data, q.isLoading, profilesQ.data, profilesQ.isLoading, userId, subUpdateVer]);
 }

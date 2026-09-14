@@ -1,11 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { LeaveLedgerEntry } from '@/domain/leave/ledger';
+import {
+  getSubstituteHolidaysForUser,
+  SUBSTITUTE_HOLIDAY_UPDATED_EVENT,
+} from '@/domain/leave/substituteHolidayStore';
 import {
   Search,
   Filter,
   SlidersHorizontal,
   Sparkles,
   Calendar,
+  CalendarPlus,
 } from 'lucide-react';
 
 interface LeaveLedgerTableProps {
@@ -13,6 +18,7 @@ interface LeaveLedgerTableProps {
   calculationMode: 'HIRE_DATE' | 'FISCAL_YEAR';
   onToggleCalculationMode: (mode: 'HIRE_DATE' | 'FISCAL_YEAR') => void;
   onOpenAdjustment: (entry: LeaveLedgerEntry) => void;
+  onOpenBatchSubstitute?: () => void;
   onSelectPerson?: (entry: LeaveLedgerEntry) => void;
   isAdmin: boolean;
 }
@@ -22,6 +28,7 @@ export function LeaveLedgerTable({
   calculationMode,
   onToggleCalculationMode,
   onOpenAdjustment,
+  onOpenBatchSubstitute,
   onSelectPerson,
   isAdmin,
 }: LeaveLedgerTableProps) {
@@ -29,6 +36,15 @@ export function LeaveLedgerTable({
   const [keyword, setKeyword] = useState('');
   const [onlyAdvance, setOnlyAdvance] = useState(false);
   const [onlyNegative, setOnlyNegative] = useState(false);
+  const [onlySubstitute, setOnlySubstitute] = useState(false);
+
+  // 대체휴무 실시간 반영 리스너
+  const [subUpdateVer, setSubUpdateVer] = useState(0);
+  useEffect(() => {
+    const onSubUpdate = () => setSubUpdateVer((v) => v + 1);
+    window.addEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+    return () => window.removeEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+  }, []);
 
   // 부서 목록 추출
   const deptList = useMemo(() => {
@@ -45,6 +61,10 @@ export function LeaveLedgerTable({
       if (selectedDept !== 'ALL' && e.dept !== selectedDept) return false;
       if (onlyAdvance && !e.advanceStatus.isAdvanceUsed) return false;
       if (onlyNegative && e.remainingDays >= 0) return false;
+      if (onlySubstitute) {
+        const subHolidays = getSubstituteHolidaysForUser(String(e.empId), e.name, e.hireDate);
+        if (subHolidays.length === 0) return false;
+      }
 
       if (keyword.trim()) {
         const q = keyword.trim().toLowerCase();
@@ -56,7 +76,7 @@ export function LeaveLedgerTable({
 
       return true;
     });
-  }, [entries, selectedDept, onlyAdvance, onlyNegative, keyword]);
+  }, [entries, selectedDept, onlyAdvance, onlyNegative, onlySubstitute, keyword, subUpdateVer]);
 
   return (
     <div className="space-y-3">
@@ -116,35 +136,60 @@ export function LeaveLedgerTable({
             >
               ⚠️ 마이너스 연차
             </button>
+            <button
+              type="button"
+              onClick={() => setOnlySubstitute((v) => !v)}
+              className={`rounded-lg border px-2.5 py-1 text-[10.5px] font-bold transition-all ${
+                onlySubstitute
+                  ? 'border-teal/40 bg-teal/15 text-teal'
+                  : 'border-border text-ink3 hover:bg-panel-alt'
+              }`}
+            >
+              📅 대체휴무 보유자
+            </button>
           </div>
         </div>
 
-        {/* 산정 기준 전환 토글 (입사일 vs 회계연도) */}
-        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt p-0.5 text-[11px] font-bold shadow-2xs">
-          <button
-            type="button"
-            onClick={() => onToggleCalculationMode('HIRE_DATE')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-all ${
-              calculationMode === 'HIRE_DATE'
-                ? 'bg-teal text-white shadow-2xs'
-                : 'text-ink3 hover:text-ink hover:bg-panel'
-            }`}
-          >
-            <Sparkles size={12} />
-            <span>입사일 기준 (법정 원칙)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleCalculationMode('FISCAL_YEAR')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-all ${
-              calculationMode === 'FISCAL_YEAR'
-                ? 'bg-teal text-white shadow-2xs'
-                : 'text-ink3 hover:text-ink hover:bg-panel'
-            }`}
-          >
-            <Calendar size={12} />
-            <span>회계연도 기준 (1/1 정기)</span>
-          </button>
+        {/* 우측 컨트롤: 대체휴무 일괄 부여 버튼 & 산정 기준 전환 토글 */}
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && onOpenBatchSubstitute && (
+            <button
+              type="button"
+              onClick={onOpenBatchSubstitute}
+              className="flex items-center gap-1.5 rounded-lg border border-teal/30 bg-teal/10 px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal hover:text-white transition-all shadow-2xs"
+            >
+              <CalendarPlus size={13} />
+              <span>대체휴무 일괄 부여</span>
+            </button>
+          )}
+
+          {/* 산정 기준 전환 토글 (입사일 vs 회계연도) */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt p-0.5 text-[11px] font-bold shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onToggleCalculationMode('HIRE_DATE')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-all ${
+                calculationMode === 'HIRE_DATE'
+                  ? 'bg-teal text-white shadow-2xs'
+                  : 'text-ink3 hover:text-ink hover:bg-panel'
+              }`}
+            >
+              <Sparkles size={12} />
+              <span>입사일 기준 (법정 원칙)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleCalculationMode('FISCAL_YEAR')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-all ${
+                calculationMode === 'FISCAL_YEAR'
+                  ? 'bg-teal text-white shadow-2xs'
+                  : 'text-ink3 hover:text-ink hover:bg-panel'
+              }`}
+            >
+              <Calendar size={12} />
+              <span>회계연도 기준 (1/1 정기)</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -162,6 +207,7 @@ export function LeaveLedgerTable({
                 <th className="p-3 text-right">사용</th>
                 <th className="p-3 text-right">신청중</th>
                 <th className="p-3 text-right">잔여 연차</th>
+                <th className="p-3 text-center">대체휴무</th>
                 <th className="p-3 text-center">선사용 / 상계 상태</th>
                 {isAdmin && <th className="p-3 text-center">관리</th>}
               </tr>
@@ -169,7 +215,7 @@ export function LeaveLedgerTable({
             <tbody className="divide-y divide-border/60">
               {filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 10 : 9} className="py-16 text-center text-xs text-ink3">
+                  <td colSpan={isAdmin ? 11 : 10} className="py-16 text-center text-xs text-ink3">
                     조건에 일치하는 임직원 연차 데이터가 없습니다.
                   </td>
                 </tr>
@@ -263,6 +309,36 @@ export function LeaveLedgerTable({
                           {e.remainingDays}일
                         </span>
                       </td>
+
+                      {/* 대체휴무 현황 */}
+                      {(() => {
+                        const subHolidays = getSubstituteHolidaysForUser(String(e.empId), e.name, e.hireDate);
+                        const totalSubGranted = subHolidays.reduce((s, h) => s + h.days, 0);
+                        const usedSubDays = e.leaveHistory
+                          .filter((h) => h.status === '완료' && h.leaveType === '대체휴무')
+                          .reduce((s, h) => s + h.daysCount, 0);
+                        const pendingSubDays = e.leaveHistory
+                          .filter((h) => h.status === '진행중' && h.leaveType === '대체휴무')
+                          .reduce((s, h) => s + h.daysCount, 0);
+                        const remainingSubDays = Math.max(0, totalSubGranted - usedSubDays - pendingSubDays);
+
+                        return (
+                          <td className="p-3 text-center tabular-nums">
+                            {totalSubGranted > 0 ? (
+                              <div className="inline-flex flex-col items-center">
+                                <span className="inline-block rounded-md bg-teal/15 px-2 py-0.5 text-[11px] font-extrabold text-teal border border-teal/25">
+                                  잔여 {remainingSubDays}일
+                                </span>
+                                <span className="text-[9.5px] text-ink3 mt-0.5">
+                                  총 {totalSubGranted}일 ({usedSubDays > 0 ? `사용 ${usedSubDays}일` : '미사용'})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-ink3/50 text-[10.5px]">—</span>
+                            )}
+                          </td>
+                        );
+                      })()}
 
                       {/* 선사용 / 상계 상태 */}
                       <td className="p-3 text-center">

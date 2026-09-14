@@ -27,7 +27,12 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
-import { getDefaultTimeWindow } from '@/domain/leave/policy';
+import {
+  getDefaultTimeWindow,
+  calculateLeaveDays,
+  isHalfDayLeave,
+  isQuarterDayLeave,
+} from '@/domain/leave/policy';
 import { X, AlertTriangle, GitFork, RefreshCw } from 'lucide-react';
 
 /**
@@ -166,11 +171,11 @@ function ApprovalDraftInner({
     }
     if (!editDoc && initialLeaveType) {
       initialVals['leaveType'] = initialLeaveType;
-      if (initialLeaveType === '오전반차' || initialLeaveType === '오후반차' || initialLeaveType === '반차') {
-        initialVals['period__days'] = 0.5;
-      } else if (initialLeaveType === '반반차') {
-        initialVals['period__days'] = 0.25;
-      }
+      initialVals['period__days'] = calculateLeaveDays({
+        leaveType: initialLeaveType,
+        startDate: initialVals['period'] as string,
+        endDate: initialVals['period__end'] as string,
+      });
     }
     return initialVals;
   });
@@ -764,13 +769,17 @@ function ApprovalDraftInner({
     if (code === '휴가') {
       const pStart = String(values['period'] || '');
       const lType = String(values['leaveType'] || '연차') as LeaveType;
-      const isHalf = lType === '오전반차' || lType === '오후반차' || lType === '반차';
-      const isQuarter = lType === '반반차';
-      const pEnd = isHalf || isQuarter ? pStart : String(values['period__end'] || pStart);
+      const isPart = isHalfDayLeave(lType) || isQuarterDayLeave(lType);
+      const isQuarter = isQuarterDayLeave(lType);
+      const pEnd = isPart ? pStart : String(values['period__end'] || pStart);
 
-      let pDays = Number(values['period__days']) || 0;
-      if (isHalf) pDays = 0.5;
-      else if (isQuarter) pDays = 0.25;
+      const pDays = calculateLeaveDays({
+        leaveType: lType,
+        startDate: pStart,
+        endDate: pEnd,
+        rawDays: Number(values['period__days']) || undefined,
+        title,
+      });
 
       const quarterSlot = isQuarter ? String(values['quarterSlot'] || 'PM2') : undefined;
       const timeWin = getDefaultTimeWindow(lType, quarterSlot);
@@ -860,20 +869,21 @@ function ApprovalDraftInner({
       const pStart = values['period'];
       const pEnd = values['period__end'];
       const lType = String(values['leaveType'] || '연차');
-      const isHalf = lType === '오전반차' || lType === '오후반차' || lType === '반차';
-      const isQuarter = lType === '반반차';
-      const effectiveDays = isHalf ? 0.5 : isQuarter ? 0.25 : (Number(values['period__days']) || 0);
+      const isPart = isHalfDayLeave(lType) || isQuarterDayLeave(lType);
+      const effectiveDays = calculateLeaveDays({
+        leaveType: lType,
+        startDate: pStart as string,
+        endDate: pEnd as string,
+        rawDays: Number(values['period__days']) || undefined,
+        title,
+      });
 
-      if (!pStart || (!isHalf && !isQuarter && !pEnd) || effectiveDays <= 0) {
+      if (!pStart || (!isPart && !pEnd) || effectiveDays <= 0) {
         return '휴가 기간을 올바르게 입력하세요.';
       }
 
-      // 연차 및 반차 잔여일수 검증
-      if (['연차', '오전반차', '오후반차', '반차', '반반차'].includes(lType)) {
-        if (effectiveDays > bal.remaining) {
-          return `신청 가능한 잔여 연차(${bal.remaining}일)를 초과하였습니다. (신청일수: ${effectiveDays}일)`;
-        }
-      }
+      // 연차 및 반차 잔여일수 검증: 선사용(Advance Leave) 정책에 따라 잔여 연차가 0이거나 부족하더라도 신청 허용
+      // (초과 사용분은 향후 월별 발생 연차와 자동 상계 처리됨)
 
       // 대체휴무 잔여일수 검증
       if (lType === '대체휴무') {

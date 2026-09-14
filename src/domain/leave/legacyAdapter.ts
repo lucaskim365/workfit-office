@@ -8,7 +8,7 @@
  */
 
 import type { ApprovalDoc, DocStatus } from '@/domain/approvalDoc/schema';
-import { getDefaultTimeWindow } from './policy';
+import { getDefaultTimeWindow, calculateLeaveDays } from './policy';
 
 export interface NormalizedLeaveRecord {
   docId: string;
@@ -73,17 +73,24 @@ export function normalizeLegacyLeaveDoc(doc: ApprovalDoc): NormalizedLeaveRecord
   const startDate = form?.startDate || fieldValues?.period || doc.createdAt?.slice(0, 10) || '';
   const endDate = form?.endDate || fieldValues?.period__end || startDate;
 
-  // 과거 수치(days)는 절대 임의 재계산하지 않고 보존
-  let days = 1.0;
-  if (typeof form?.days === 'number') {
-    days = form.days;
-  } else if (typeof (form as any)?.daysCount === 'number') {
-    days = (form as any).daysCount;
-  } else if (typeof fieldValues?.period__days === 'number') {
-    days = fieldValues.period__days;
-  } else if (rawLeaveType.includes('반차') || doc.title?.includes('반차')) {
-    days = 0.5;
-  }
+  // 단일 기준 휴가 일수 계산기(SSOT)를 통해 산출
+  // (반차/반반차는 DB에 1일로 잘못 기표된 레거시 데이터도 0.5일/0.25일로 자동 교정 보장)
+  const rawDays =
+    typeof form?.days === 'number'
+      ? form.days
+      : typeof (form as any)?.daysCount === 'number'
+      ? (form as any).daysCount
+      : typeof fieldValues?.period__days === 'number'
+      ? fieldValues.period__days
+      : undefined;
+
+  const days = calculateLeaveDays({
+    leaveType: rawLeaveType,
+    startDate,
+    endDate,
+    rawDays,
+    title: doc.title,
+  });
 
   // 시간대 및 신/구버전 판별
   let finalLeaveType = rawLeaveType;
