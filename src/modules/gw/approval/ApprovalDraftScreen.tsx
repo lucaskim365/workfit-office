@@ -25,6 +25,7 @@ import { DraftFormSelectModal } from './components/DraftFormSelectModal';
 import { FormChangeConfirmDialog } from './components/FormChangeConfirmDialog';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
+import { ApprovalDocumentView } from './ApprovalDocumentView';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
 import {
@@ -33,7 +34,7 @@ import {
   isHalfDayLeave,
   isQuarterDayLeave,
 } from '@/domain/leave/policy';
-import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History } from 'lucide-react';
+import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, CheckCircle2, ChevronRight, Eye, Trash2 } from 'lucide-react';
 import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
 import type { CellMerge } from './formFields/utils';
 
@@ -167,6 +168,7 @@ function ApprovalDraftInner({
       if (!initialVals['period__days']) initialVals['period__days'] = editDoc.form.days;
       if (!initialVals['substituteId'] && editDoc.form.substituteId) initialVals['substituteId'] = editDoc.form.substituteId;
       if (!initialVals['emergencyContact'] && editDoc.form.emergencyContact) initialVals['emergencyContact'] = editDoc.form.emergencyContact;
+      if (!initialVals[RESERVED_BODY_KEY] && (editDoc.form as any).reason) initialVals[RESERVED_BODY_KEY] = (editDoc.form as any).reason;
     }
     // URL 딥링크(근태/휴가 화면 등)에서 넘어온 날짜 및 유형 기본 바인딩
     if (!editDoc && initialDate) {
@@ -202,6 +204,25 @@ function ApprovalDraftInner({
   const [showSelectModal, setShowSelectModal] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
   const [isChangingFormSaving, setIsChangingFormSaving] = useState(false);
+
+  // 후결(사후 승인) 옵션
+  const [isPostApprovalSystemEnabled, setIsPostApprovalSystemEnabled] = useState(false);
+  const [isPostApproval, setIsPostApproval] = useState<boolean>(editDoc?.isPostApproval ?? false);
+  const [postApprovalReason] = useState<string>(editDoc?.postApprovalReason ?? '');
+  const [postApprovalActionTaken, setPostApprovalActionTaken] = useState<string>(editDoc?.postApprovalActionTaken ?? '');
+  const [postApprovalNecessity, setPostApprovalNecessity] = useState<string>(editDoc?.postApprovalNecessity ?? '');
+  const [postApprovalCostDetails] = useState<string>(editDoc?.postApprovalCostDetails ?? '');
+  const [postApprovalFollowup] = useState<string>(editDoc?.postApprovalFollowup ?? '');
+
+  const defaultPostApprovedAt = useMemo(() => {
+    if (editDoc?.postApprovedAt) return editDoc.postApprovedAt;
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+  }, [editDoc]);
+
+  const [postApprovedAt, setPostApprovedAt] = useState<string>(defaultPostApprovedAt);
+  const [postApprovedById, setPostApprovedById] = useState<string>(editDoc?.postApprovedById ?? me.id);
 
   useEffect(() => {
     approvalProcessRepo.isOptionEnabled('dept_agreement').then(setIsAgreementEnabled);
@@ -385,7 +406,8 @@ function ApprovalDraftInner({
 
   /**
    * 브라우저 다중 버전 롤링 백업 (최근 20개 스냅샷 보관소)
-   * 1개 키 덮어쓰기나 예기치 않은 새로고침, 양식 변경 시에도 이전 버전을 영구 보존한다.
+   * 1개 키 덮어쓰기나 예기치 않은 새로고침, 양식 변경 시에도 이전 버전을 보존한다.
+   * 자동 보관 시 최소 1분(60초) 간격을 지키고, 내용 변경이 있을 때만 새 스냅샷을 남긴다.
    */
   const saveToRollingHistory = (snapshotData: any, tag?: string) => {
     try {
@@ -394,15 +416,20 @@ function ApprovalDraftInner({
       if (!Array.isArray(list)) list = [];
 
       const latest = list[0];
+      const latestTimestamp = latest ? Number(latest.timestamp) || 0 : 0;
       const isSameContent =
         latest &&
         latest.code === snapshotData.code &&
         latest.title === snapshotData.title &&
         JSON.stringify(latest.values) === JSON.stringify(snapshotData.values);
 
-      // 내용이 완전히 동일하다면 1분 이내에는 중복 등록을 건너뜀
-      if (isSameContent && !tag) {
-        if (Date.now() - latest.timestamp < 60 * 1000) return;
+      // 자동 보관인 경우:
+      // 1) 내용이 이전 스냅샷과 완전히 같다면 중복 등록하지 않음
+      // 2) 이전 스냅샷 등록 후 최소 1분(60,000ms)이 경과하지 않았다면 스냅샷 도배 방지를 위해 건너뜀
+      if (!tag) {
+        if (isSameContent) return;
+        const MIN_HISTORY_INTERVAL_MS = 60 * 1000;
+        if (Date.now() - latestTimestamp < MIN_HISTORY_INTERVAL_MS) return;
       }
 
       const entry = {
@@ -486,6 +513,9 @@ function ApprovalDraftInner({
   /** 마지막으로 실제 쓰기가 일어난 시각. 스로틀 간격 판정에 쓴다. */
   const lastSnapshotAtRef = useRef(0);
 
+  /** 최신 작업 스냅샷 페이로드 (언마운트 및 이탈 보관용) */
+  const latestPayloadRef = useRef<any>(null);
+
   const bootDraftRef = useRef<{ data: unknown; active: boolean } | null>(null);
   if (bootDraftRef.current === null) {
     let data: unknown = null;
@@ -499,7 +529,10 @@ function ApprovalDraftInner({
     };
   }
 
+  const isDiscardedOrSubmittedRef = useRef(false);
+
   const clearAutosave = () => {
+    isDiscardedOrSubmittedRef.current = true;
     localStorage.removeItem(draftKey);
     localStorage.removeItem(activeKey);
     setAutosavedAt(null);
@@ -539,22 +572,29 @@ function ApprovalDraftInner({
      * 포커스 아웃(blur) 기준도 같은 이유로 쓰지 않는다. 한 칸에 오래 머무르면
      * 그 칸을 벗어난 적이 없어 한 번도 보관되지 않는다.
      */
+    const payload = {
+      docId: editDoc?.id ?? null,
+      code,
+      title,
+      values,
+      amount,
+      securityLevel,
+      visibility,
+      preservationPeriod,
+      attachments,
+      relatedDocs,
+      recipients,
+      steps,
+      isPostApproval,
+      postApprovalActionTaken,
+      postApprovalNecessity,
+      postApprovedAt,
+      postApprovedById,
+      timestamp: Date.now(),
+    };
+    latestPayloadRef.current = payload;
+
     const snapshot = () => {
-      const payload = {
-        docId: editDoc?.id ?? null,
-        code,
-        title,
-        values,
-        amount,
-        securityLevel,
-        visibility,
-        preservationPeriod,
-        attachments,
-        relatedDocs,
-        recipients,
-        steps,
-        timestamp: Date.now(),
-      };
       try {
         localStorage.setItem(draftKey, JSON.stringify(payload));
         localStorage.setItem(activeKey, 'true');
@@ -580,15 +620,7 @@ function ApprovalDraftInner({
     }
 
     /**
-     * 창을 떠날 때는 디바운스를 기다리지 않고 즉시 보관한다.
-     *
-     * **탭 종료가 특히 위험하다.** 정리(cleanup)에서 `clearTimeout` 이 돌기 때문에,
-     * 마지막으로 친 글자가 1초 안에 있었다면 그대로 사라진다. 실제로 "탭 닫았는데
-     * 저장이 안 된다"는 증상이 여기서 나왔다.
-     *
-     * `blur` 하나로는 부족하다 — 탭을 닫을 때 창 blur 는 보장되지 않는다.
-     * 브라우저가 페이지를 접는 순간 확실히 오는 것은 `pagehide` 와
-     * `visibilitychange`(hidden) 다. `localStorage` 쓰기는 동기라 이 시점에도 완료된다.
+     * 창을 떠나거나 탭을 닫을 때는 대기 없이 즉시 동기 보관
      */
     const flushIfHidden = () => { if (document.visibilityState === 'hidden') snapshot(); };
     window.addEventListener('blur', snapshot);
@@ -597,17 +629,32 @@ function ApprovalDraftInner({
     document.addEventListener('visibilitychange', flushIfHidden);
 
     return () => {
+      // ⚠️ 주의: 리렌더링마다 도는 클린업에서는 대기 타이머만 해제해야 함!
+      // 여기서 snapshot()을 동기 호출하면 키 입력할 때마다 저장이 발생함.
       if (timer) {
         clearTimeout(timer);
-        // 언마운트 시점에 대기 중인 변경사항이 있다면 즉시 동기 저장하여 유실 방지
-        snapshot();
       }
       window.removeEventListener('blur', snapshot);
       window.removeEventListener('pagehide', snapshot);
       window.removeEventListener('beforeunload', snapshot);
       document.removeEventListener('visibilitychange', flushIfHidden);
     };
-  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, steps, me.id, editDoc?.id]);
+  }, [code, title, values, amount, securityLevel, visibility, preservationPeriod, attachments, relatedDocs, recipients, steps, isPostApproval, postApprovalActionTaken, postApprovalNecessity, postApprovedAt, postApprovedById, me.id, editDoc?.id]);
+
+  // SPA 내부 라우팅 언마운트 시점에 대기 중이던 최신 변경사항 안전 저장
+  useEffect(() => {
+    return () => {
+      if (isDiscardedOrSubmittedRef.current) return;
+      if (!initialStateRef.current) return;
+      if (!hasManuallyEnteredValues()) return;
+      if (latestPayloadRef.current) {
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(latestPayloadRef.current));
+          localStorage.setItem(activeKey, 'true');
+        } catch {}
+      }
+    };
+  }, [draftKey, activeKey]);
 
   const hasCheckedAutosave = useRef(false);
 
@@ -651,6 +698,8 @@ function ApprovalDraftInner({
 
   // 로컬 임시 보관함 전체 조회/복구 모달 상태
   const [showBackupHistoryModal, setShowBackupHistoryModal] = useState(false);
+  const [selectedBackupKey, setSelectedBackupKey] = useState<string | null>(null);
+  const [backupHistoryVersion, setBackupHistoryVersion] = useState(0);
 
   const getAvailableBackups = (): Array<{
     key: string;
@@ -728,26 +777,12 @@ function ApprovalDraftInner({
     return list.sort((a, b) => b.timestamp - a.timestamp);
   };
 
+  const backups = useMemo(() => {
+    if (!showBackupHistoryModal) return [];
+    return getAvailableBackups();
+  }, [showBackupHistoryModal, backupHistoryVersion]);
+
   const [drawerOpen, setDrawerOpen] = useState(false); // 해상도 작을 때 결재선 Drawer
-
-  // 후결(사후 승인) 옵션
-  const [isPostApprovalSystemEnabled, setIsPostApprovalSystemEnabled] = useState(false);
-  const [isPostApproval, setIsPostApproval] = useState<boolean>(editDoc?.isPostApproval ?? false);
-  const [postApprovalReason] = useState<string>(editDoc?.postApprovalReason ?? '');
-  const [postApprovalActionTaken, setPostApprovalActionTaken] = useState<string>(editDoc?.postApprovalActionTaken ?? '');
-  const [postApprovalNecessity, setPostApprovalNecessity] = useState<string>(editDoc?.postApprovalNecessity ?? '');
-  const [postApprovalCostDetails] = useState<string>(editDoc?.postApprovalCostDetails ?? '');
-  const [postApprovalFollowup] = useState<string>(editDoc?.postApprovalFollowup ?? '');
-
-  const defaultPostApprovedAt = useMemo(() => {
-    if (editDoc?.postApprovedAt) return editDoc.postApprovedAt;
-    const now = new Date();
-    const tzOffset = now.getTimezoneOffset() * 60000;
-    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
-  }, [editDoc]);
-
-  const [postApprovedAt, setPostApprovedAt] = useState<string>(defaultPostApprovedAt);
-  const [postApprovedById, setPostApprovedById] = useState<string>(editDoc?.postApprovedById ?? me.id);
 
   useEffect(() => {
     approvalProcessRepo.isOptionEnabled('post_approval').then((enabled) => {
@@ -1771,7 +1806,7 @@ function ApprovalDraftInner({
           onConfirm={() => {
             if (pendingAutosaveData) {
               const data = pendingAutosaveData;
-              setCode(data.code);
+              if (!editDoc && data.code) setCode(data.code);
               setTitle(data.title || '');
               setValues(data.values || {});
               setAmount(data.amount || '');
@@ -1782,6 +1817,11 @@ function ApprovalDraftInner({
               if (data.recipients) setRecipients(data.recipients);
               if (data.relatedDocs) setRelatedDocs(data.relatedDocs);
               if (data.steps) setSteps(data.steps);
+              if (data.isPostApproval !== undefined) setIsPostApproval(Boolean(data.isPostApproval));
+              if (data.postApprovalActionTaken !== undefined) setPostApprovalActionTaken(data.postApprovalActionTaken || '');
+              if (data.postApprovalNecessity !== undefined) setPostApprovalNecessity(data.postApprovalNecessity || '');
+              if (data.postApprovedAt !== undefined) setPostApprovedAt(data.postApprovedAt || '');
+              if (data.postApprovedById !== undefined) setPostApprovedById(data.postApprovedById || '');
             }
             setShowAutosaveRecoverModal(false);
             setPendingAutosaveData(null);
@@ -1794,91 +1834,227 @@ function ApprovalDraftInner({
         />
       )}
 
-      {/* 로컬 임시 보관함 기록 조회 및 복구 모달 */}
-      {showBackupHistoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-border flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-soft text-teal">
-                  <History className="h-5 w-5" />
+      {/* 로컬 임시 보관함 기록 조회 및 실시간 미리보기(Preview) 2열 모달 */}
+      {showBackupHistoryModal && (() => {
+        const activeKey = (selectedBackupKey && backups.some((b) => b.key === selectedBackupKey))
+          ? selectedBackupKey
+          : (backups[0]?.key ?? null);
+        const selectedBackup = backups.find((b) => b.key === activeKey) ?? null;
+
+        const handleDeleteBackup = (e: React.MouseEvent, key: string) => {
+          e.stopPropagation();
+          if (!window.confirm('이 보관 기록을 삭제하시겠습니까?')) return;
+          if (key.startsWith('draft_autosave_')) {
+            localStorage.removeItem(key);
+            localStorage.removeItem(key.replace('draft_autosave_', 'draft_autosave_active_'));
+          } else {
+            try {
+              const raw = localStorage.getItem(HISTORY_KEY);
+              if (raw) {
+                const arr = JSON.parse(raw);
+                const filtered = arr.filter((x: any) => (x.id || `hist_${x.timestamp}`) !== key);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+              }
+            } catch {}
+          }
+          if (selectedBackupKey === key) {
+            setSelectedBackupKey(null);
+          }
+          setBackupHistoryVersion((v) => v + 1);
+        };
+
+        const selectedForm = forms.find((f) => f.code === selectedBackup?.code);
+
+        const previewDoc: ApprovalDoc | null = selectedBackup?.data ? {
+          id: selectedBackup.key,
+          docNo: editDoc?.docNo || '(임시 보관본)',
+          docType: selectedBackup.data.code || '기안',
+          status: '임시저장',
+          title: selectedBackup.data.title || '(제목 없음)',
+          drafterId: me.id,
+          drafterName: me.name,
+          drafterDept: me.dept || '',
+          drafterPos: me.position || '',
+          securityLevel: selectedBackup.data.securityLevel || '일반',
+          visibility: selectedBackup.data.visibility || '부서',
+          preservationPeriod: selectedBackup.data.preservationPeriod || '5년',
+          createdAt: new Date(selectedBackup.timestamp).toISOString(),
+          updatedAt: new Date(selectedBackup.timestamp).toISOString(),
+          steps: (selectedBackup.data.steps || []).map((s: any, idx: number) => ({
+            seq: s.seq ?? idx + 1,
+            kind: s.kind || s.type || '결재',
+            approverId: s.approverId || s.userId || '',
+            decision: s.decision || '대기',
+            comment: s.comment || '',
+            ...s,
+          })),
+          body: selectedBackup.data.values?.[RESERVED_BODY_KEY] || '',
+          fieldValues: selectedBackup.data.values || {},
+          form: (selectedBackup.data.code === '휴가' || selectedBackup.data.values?.leaveType) ? {
+            leaveType: selectedBackup.data.values?.leaveType || '연차',
+            startDate: selectedBackup.data.values?.period || '',
+            endDate: selectedBackup.data.values?.period__end || '',
+            days: Number(selectedBackup.data.values?.['period__days']) || 1,
+            substituteId: selectedBackup.data.values?.substituteId || '',
+            emergencyContact: selectedBackup.data.values?.emergencyContact || '',
+            reason: selectedBackup.data.values?.[RESERVED_BODY_KEY] || '',
+          } : undefined,
+          amount: selectedBackup.data.amount ? Number(selectedBackup.data.amount) : undefined,
+          attachments: selectedBackup.data.attachments || [],
+          recipients: selectedBackup.data.recipients || [],
+          relatedDocs: selectedBackup.data.relatedDocs || [],
+          isPostApproval: selectedBackup.data.isPostApproval,
+          postApprovalActionTaken: selectedBackup.data.postApprovalActionTaken,
+          postApprovalNecessity: selectedBackup.data.postApprovalNecessity,
+          postApprovedAt: selectedBackup.data.postApprovedAt,
+          postApprovedById: selectedBackup.data.postApprovedById,
+        } as unknown as ApprovalDoc : null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-5 animate-in fade-in duration-150">
+            <div className="w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-border flex flex-col h-[90vh] max-h-[900px] overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-panel shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-soft text-teal">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-[15px] font-bold text-ink flex items-center gap-2">
+                      로컬 임시 보관함
+                      <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-teal/10 text-teal">
+                        총 {backups.length}개 기록
+                      </span>
+                    </h3>
+                    <p className="text-[11.5px] text-ink3">저장된 작업 이력을 실제 결재 문서 양식으로 확인하고 원하는 버전을 복구합니다.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-[15px] font-bold text-ink">로컬 임시 보관함</h3>
-                  <p className="text-[11.5px] text-ink3">이 브라우저에 자동 보관된 기안 문서 기록입니다.</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupHistoryModal(false)}
+                  className="p-1.5 text-ink3 hover:bg-panel-alt rounded-lg cursor-pointer transition-colors"
+                  title="닫기"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowBackupHistoryModal(false)}
-                className="p-1.5 text-ink3 hover:bg-panel-alt rounded-lg cursor-pointer transition-colors"
-                title="닫기"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto py-3 space-y-2.5 my-2">
-              {(() => {
-                const backups = getAvailableBackups();
-                if (backups.length === 0) {
-                  return (
-                    <div className="py-12 text-center text-[12.5px] text-ink3">
-                      현재 브라우저에 저장된 로컬 보관본이 없습니다.
+              {/* Modal Body: 2 Columns */}
+              {backups.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-ink3 bg-panel-alt/20">
+                  <History className="h-12 w-12 text-ink3/40 mb-3" />
+                  <p className="text-[14px] font-bold text-ink">저장된 로컬 보관 기록이 없습니다.</p>
+                  <p className="text-[12px] text-ink3 mt-1">기안을 작성하시면 최소 1분 주기 및 변경 시점에 자동으로 안전하게 보관됩니다.</p>
+                </div>
+              ) : (
+                <div className="flex-1 flex min-h-0 overflow-hidden divide-x divide-border">
+                  {/* Left Column: Version History List (w-80) */}
+                  <div className="w-72 sm:w-80 shrink-0 flex flex-col bg-panel/20 overflow-hidden">
+                    <div className="p-3 border-b border-border/80 bg-panel/60 text-[11.5px] font-bold text-ink3 flex items-center justify-between">
+                      <span>버전 타임라인</span>
+                      <span>최근 20개</span>
                     </div>
-                  );
-                }
-                return backups.map((b) => {
-                  const stamp = b.timestamp
-                    ? new Intl.DateTimeFormat('ko-KR', {
-                        timeZone: 'Asia/Seoul',
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      }).format(b.timestamp)
-                    : '알 수 없음';
-                  const formTitle = forms.find((f) => f.code === b.code)?.name || b.code;
+                    <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+                      {backups.map((b) => {
+                        const isSelected = b.key === activeKey;
+                        const formTitle = forms.find((f) => f.code === b.code)?.name || b.code;
+                        const stamp = b.timestamp
+                          ? new Intl.DateTimeFormat('ko-KR', {
+                              timeZone: 'Asia/Seoul',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            }).format(b.timestamp)
+                          : '알 수 없음';
 
-                  return (
-                    <div
-                      key={b.key}
-                      className="p-3.5 rounded-xl border border-border bg-panel hover:border-teal/50 transition-all flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="rounded bg-teal/10 px-2 py-0.5 text-[10.5px] font-bold text-teal">
-                            {formTitle}
+                        return (
+                          <div
+                            key={b.key}
+                            onClick={() => setSelectedBackupKey(b.key)}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer text-left relative group ${
+                              isSelected
+                                ? 'border-teal bg-teal/5 ring-1 ring-teal/30 shadow-xs'
+                                : 'border-border bg-white hover:border-border-strong hover:bg-panel-alt/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                  isSelected ? 'bg-teal text-white' : 'bg-teal/10 text-teal'
+                                }`}>
+                                  {formTitle}
+                                </span>
+                                {b.tag && (
+                                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                                    b.tag === '현재 작성중'
+                                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                                      : b.tag.includes('양식 변경')
+                                      ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                                      : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                  }`}>
+                                    {b.tag}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteBackup(e, b.key)}
+                                className="p-1 rounded-md text-ink3 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="이 보관 기록 삭제"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className={`text-[12.5px] font-bold truncate mb-1 ${isSelected ? 'text-teal-dark' : 'text-ink'}`}>
+                              {b.title || '(제목 없음)'}
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-ink3 tabular-nums">
+                              <span>{stamp}</span>
+                              {isSelected && <ChevronRight className="h-3.5 w-3.5 text-teal" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Exact Document View Canvas */}
+                  {selectedBackup && previewDoc ? (
+                    <div className="flex-1 flex flex-col min-w-0 bg-[#878d90] overflow-hidden">
+                      {/* Top Action Header */}
+                      <div className="px-5 py-3 border-b border-border bg-white flex items-center justify-between gap-3 shrink-0 shadow-xs z-10">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-soft text-teal shrink-0">
+                            <Eye className="h-4 w-4" />
                           </span>
-                          {b.tag && (
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
-                                b.tag === '현재 작성중'
-                                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                                  : b.tag.includes('양식 변경')
-                                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                                  : 'bg-gray-100 text-gray-600 border border-gray-200'
-                              }`}
-                            >
-                              {b.tag}
-                            </span>
-                          )}
-                          <span className="text-[11px] text-ink3 tabular-nums">{stamp}</span>
+                          <div className="min-w-0">
+                            <div className="text-[13.5px] font-bold text-ink flex items-center gap-2">
+                              <span className="truncate">{selectedForm?.name || selectedBackup.code} 문서 미리보기</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-semibold shrink-0">실제 서식 원본</span>
+                            </div>
+                            <div className="text-[11px] text-ink3 tabular-nums">
+                              보관 시점: {new Intl.DateTimeFormat('ko-KR', {
+                                timeZone: 'Asia/Seoul',
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                              }).format(selectedBackup.timestamp)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[13px] font-bold text-ink truncate">
-                          {b.title || '(제목 없음)'}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+
                         <button
                           type="button"
                           onClick={() => {
                             if (window.confirm('이 보관본의 내용을 현재 화면으로 불러오시겠습니까?\n(현재 화면의 입력값이 덮어써집니다)')) {
-                              const data = b.data;
+                              const data = selectedBackup.data;
                               if (data) {
-                                setCode(data.code || code);
+                                if (!editDoc && data.code) setCode(data.code);
                                 setTitle(data.title || '');
                                 setValues(data.values || {});
                                 setAmount(data.amount || '');
@@ -1889,58 +2065,61 @@ function ApprovalDraftInner({
                                 if (data.recipients) setRecipients(data.recipients);
                                 if (data.relatedDocs) setRelatedDocs(data.relatedDocs);
                                 if (data.steps) setSteps(data.steps);
+                                if (data.isPostApproval !== undefined) setIsPostApproval(Boolean(data.isPostApproval));
+                                if (data.postApprovalActionTaken !== undefined) setPostApprovalActionTaken(data.postApprovalActionTaken || '');
+                                if (data.postApprovalNecessity !== undefined) setPostApprovalNecessity(data.postApprovalNecessity || '');
+                                if (data.postApprovedAt !== undefined) setPostApprovedAt(data.postApprovedAt || '');
+                                if (data.postApprovedById !== undefined) setPostApprovedById(data.postApprovedById || '');
                               }
                               setShowBackupHistoryModal(false);
                             }
                           }}
-                          className="rounded-lg bg-teal px-3 py-1.5 text-[11.5px] font-bold text-white shadow-xs hover:bg-teal-dark transition-all cursor-pointer"
+                          className="rounded-lg bg-teal hover:bg-teal-dark text-white px-4 py-2 text-[12px] font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                         >
-                          불러오기
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm('이 보관 기록을 삭제하시겠습니까?')) {
-                              if (b.key.startsWith('draft_autosave_')) {
-                                localStorage.removeItem(b.key);
-                              } else {
-                                try {
-                                  const raw = localStorage.getItem(HISTORY_KEY);
-                                  if (raw) {
-                                    const arr = JSON.parse(raw);
-                                    const filtered = arr.filter((x: any) => (x.id || `hist_${x.timestamp}`) !== b.key);
-                                    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
-                                  }
-                                } catch {}
-                              }
-                              setShowBackupHistoryModal((prev) => !prev);
-                              setTimeout(() => setShowBackupHistoryModal(true), 10);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg text-ink3 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="삭제"
-                        >
-                          <X className="h-3.5 w-3.5" />
+                          <CheckCircle2 className="h-4 w-4" />
+                          이 버전 불러오기
                         </button>
                       </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
 
-            <div className="pt-3 border-t border-border flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowBackupHistoryModal(false)}
-                className="rounded-lg border border-border px-4 py-2 text-[12px] font-bold text-ink hover:bg-panel-alt transition-colors cursor-pointer"
-              >
-                닫기
-              </button>
+                      {/* Actual Document View Sheet inside Canvas */}
+                      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 flex justify-center">
+                        <div className="w-full max-w-[800px] shadow-xl rounded-sm overflow-hidden bg-white border border-black/10 self-start">
+                          <ApprovalDocumentView
+                            doc={previewDoc}
+                            formOverride={selectedForm}
+                            currentUser={{ id: me.id, dept: me.dept }}
+                            isPreview={true}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-ink3 bg-panel-alt/30">
+                      <FileText className="h-10 w-10 text-ink3/40 mb-2" />
+                      <p className="text-[13px] font-medium">좌측 목록에서 보관 기록을 선택하세요.</p>
+                      <p className="text-[11.5px] text-ink3/80 mt-0.5">실제 결재 문서와 100% 동일한 양식으로 미리 볼 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="px-6 py-3 border-t border-border bg-panel flex items-center justify-between shrink-0">
+                <p className="text-[11.5px] text-ink3 hidden sm:block">
+                  ※ [이 버전 불러오기]를 누르면 현재 화면의 내용이 선택한 보관본으로 교체됩니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowBackupHistoryModal(false)}
+                  className="rounded-lg border border-border px-4 py-1.5 text-[12px] font-bold text-ink hover:bg-panel-alt transition-colors cursor-pointer ml-auto"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
 
       {showRelatedModal && (
