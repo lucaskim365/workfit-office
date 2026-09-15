@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine } from 'lucide-react';
+import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw } from 'lucide-react';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -119,6 +119,13 @@ export default function ApprovalScreen() {
       markRejectedDocAsRead(me, d.id);
       setReadRejectedIds((prev) => new Set(prev).add(d.id));
     }
+  };
+
+  const handleSelectDocById = (targetDocId: string) => {
+    setSelId(targetDocId);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('doc', targetDocId);
+    window.history.replaceState(null, '', nextUrl.toString());
   };
 
   // 반려함 문서 읽음(열람) 관리
@@ -906,6 +913,7 @@ export default function ApprovalScreen() {
                   me={me}
                   users={users}
                   onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
+                  onSelectDocId={handleSelectDocById}
                 />
 
               ) : (
@@ -968,13 +976,15 @@ function DocDetail({
   me,
   users,
   onEdit,
+  onSelectDocId,
 }: {
   doc: ApprovalDoc;
   me: string;
   users: User[];
   onEdit: (d: ApprovalDoc) => void;
+  onSelectDocId?: (id: string) => void;
 }) {
-
+  const navigate = useNavigate();
   const org = useOrgTree();
   const { isOperator, isAdmin } = usePermission();
   const canForwardPostRead = isOperator || isAdmin;
@@ -1624,7 +1634,49 @@ function DocDetail({
             <span>후열 전달 (공람)</span>
           </button>
         )}
-        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && !postReadStep && doc.status !== '완료' && (
+
+        {/* 취소 결재 관련 액션 및 상태 인디케이터 */}
+        {doc.status === '취소완료' && (
+          <span className="rounded-lg bg-rose-500/10 text-rose-600 border border-rose-500/30 px-3.5 py-1.5 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs">
+            <span>취소 완료됨</span>
+            {doc.cancelledByDocId && (
+              <button
+                type="button"
+                onClick={() => (onSelectDocId ? onSelectDocId(doc.cancelledByDocId!) : navigate(`/gw/approval?doc=${doc.cancelledByDocId}`))}
+                className="underline hover:text-rose-700 font-semibold cursor-pointer ml-1"
+                title="취소를 승인한 취소 기안 문서 보기"
+              >
+                (취소결재: {doc.cancelledByDocId})
+              </button>
+            )}
+          </span>
+        )}
+        {(doc.status === '완료' || doc.status === '시행대기') && doc.cancelDraftId && (
+          <span className="rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-3.5 py-1.5 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs">
+            <span>취소 결재 진행중</span>
+            <button
+              type="button"
+              onClick={() => (onSelectDocId ? onSelectDocId(doc.cancelDraftId!) : navigate(`/gw/approval?doc=${doc.cancelDraftId}`))}
+              className="underline hover:text-amber-800 dark:hover:text-amber-300 font-semibold cursor-pointer ml-1"
+              title="진행 중인 취소 기안 문서 보기"
+            >
+              (문서 바로가기)
+            </button>
+          </span>
+        )}
+        {(doc.status === '완료' || doc.status === '시행대기') && !doc.cancelDraftId && !doc.cancelledAt && doc.drafterId === me && (
+          <button
+            type="button"
+            onClick={() => navigate(`/gw/approval/new?type=취소신청&cancelTargetId=${doc.id}`)}
+            className="rounded-lg border border-red-500/50 bg-red-50 text-red-600 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400 px-3.5 py-2 text-[12.5px] font-bold hover:bg-red-500 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="기결재 완료된 문서의 효력을 취소하기 위한 취소 기안을 작성합니다"
+          >
+            <RotateCcw size={14} />
+            <span>취소 기안 작성</span>
+          </button>
+        )}
+
+        {mySeq == null && !canRecall && !canEditDraft && !canResubmit && !isInTrash && !postReadStep && doc.status !== '완료' && doc.status !== '취소완료' && (
           <span className="text-[11px] text-ink3">
             {doc.status === '진행중' ? '다른 결재자의 차례입니다.' : ''}
           </span>

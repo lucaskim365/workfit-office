@@ -155,6 +155,7 @@ export function calculateUserLeaveBalance(
   const normalizedLeaves: NormalizedLeaveRecord[] = [];
 
   for (const doc of approvalDocs) {
+    if (doc.cancelTargetDocId) continue; // 취소 기안 문서는 연차 차감 대상이 아님
     if (doc.docType !== '휴가') continue;
     if (doc.status !== '완료' && doc.status !== '진행중') continue;
 

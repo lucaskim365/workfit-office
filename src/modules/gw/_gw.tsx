@@ -129,6 +129,7 @@ const STATUS_TONE: Record<DocStatus, string> = {
   삭제: 'bg-red-500/12 text-red-500',
   시행대기: 'bg-teal/15 text-teal',
   시행반송: 'bg-red-500/12 text-red-500',
+  취소완료: 'bg-rose-500/12 text-rose-600',
 };
 
 export function StatusBadge({ status, label, className }: { status: DocStatus; label?: string; className?: string }) {

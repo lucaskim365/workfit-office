@@ -32,6 +32,7 @@ export const STATUS_BADGE: Record<string, { label: string; toneClass: string }> 
   삭제: { label: '삭제됨', toneClass: 'bg-rose-500/10 text-rose-500 border-rose-500/20' },
   시행대기: { label: '완료', toneClass: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold' },
   시행반송: { label: '반려', toneClass: 'bg-red-500/10 text-red-600 border-red-500/30 font-bold' },
+  취소완료: { label: '취소완료', toneClass: 'bg-rose-500/10 text-rose-600 border-rose-500/30 font-bold' },
 };
 
 /** 결재 단계 구분(종류)별 텍스트 색상 매핑 */

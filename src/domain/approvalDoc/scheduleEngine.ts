@@ -38,6 +38,9 @@ export interface StandardScheduleInfo {
  * doc.form 및 doc.fieldValues 모두에서 안전하게 추출하며, 기존 DB 문서(Read-Only)와 100% 하위 호환됩니다.
  */
 export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | null {
+  // 취소 기안 문서는 원문서의 일정을 취소하기 위한 결재 문서이므로 자체 일정을 생성하지 않음
+  if (doc.cancelTargetDocId) return null;
+
   const docType = doc.docType;
   let category: 'LEAVE' | 'OUTSIDE' | 'TRIP' | null = null;
 

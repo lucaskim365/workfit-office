@@ -20,7 +20,7 @@ import { z } from 'zod';
  */
 export const DOC_TYPES = ['기안', '품의', '지출결의', '휴가'] as const;
 /** 문서 상태(§4.4 상태머신). */
-export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제', '긴급 조치 사후 검토 반려', '시행대기', '시행반송'] as const;
+export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제', '긴급 조치 사후 검토 반려', '시행대기', '시행반송', '취소완료'] as const;
 /** 결재 구분 — 각 결재선 노드의 역할(§4.2). */
 export const STEP_KINDS = ['결재', '합의', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
@@ -234,6 +234,15 @@ export const approvalDocSchema = z.object({
   createdAt: z.string().nullable().default(null),
   submittedAt: z.string().nullable().default(null),
   completedAt: z.string().nullable().default(null),
+  /** 취소 결재 관련 메타데이터 */
+  /** 본 취소 기안문이 취소하려는 원문서 ID */
+  cancelTargetDocId: z.string().nullable().optional(),
+  /** 원문서 관점: 현재 진행 중인 취소 기안 문서 ID (중복 상신 락) */
+  cancelDraftId: z.string().nullable().optional(),
+  /** 원문서 관점: 최종 취소를 승인 완료한 취소 기안 문서 ID */
+  cancelledByDocId: z.string().nullable().optional(),
+  /** 원문서 관점: 취소 승인 완료 일시 (ISO string) */
+  cancelledAt: z.string().nullable().optional(),
 });
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;

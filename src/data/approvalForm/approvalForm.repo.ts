@@ -29,6 +29,7 @@ const backend = createCrudBackend<ApprovalForm>({
   idOf: (x) => x.id,
   seed: APPROVAL_FORM_SEED.map((x) => approvalFormSchema.parse(x)),
   jsonFields: ['fields'],
+  stripFields: ['allowedJobTitles', 'allowedUserIds', 'referenceDeptId', 'referenceUserId'],
 });
 
 const folderBackend = createCrudBackend<ApprovalFolder>({

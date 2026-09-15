@@ -269,6 +269,19 @@ const SEED_RAW: any[] = [
       f({ key: 'body', label: '경조 사유 및 전달 일시/장소', type: '장문', required: true }),
     ],
   },
+
+  // ── [공통] 취소신청서 ──
+  {
+    id: '취소신청', code: '취소신청', name: '취소신청서', icon: '🔄', docTitle: '취 소 신 청 서',
+    closing: '위와 같이 결재 취소를 신청하오니 재가하여 주시기 바랍니다.', active: true, order: 18, system: true, folderId: null,
+    fields: [
+      f({ key: 'cancelTargetDocNo', label: '대상 문서번호', type: '텍스트', required: true, width: 'half', placeholder: '취소 대상 문서번호' }),
+      f({ key: 'cancelTargetDocTitle', label: '대상 문서제목', type: '텍스트', required: true, width: 'half', placeholder: '취소 대상 문서제목' }),
+      f({ key: 'cancelCategory', label: '취소 구분', type: '선택', required: true, width: 'half', options: ['전체 취소', '일정 변경/재기안', '기안 착오', '기타'] }),
+      f({ key: 'originalDrafter', label: '원 기안자', type: '텍스트', width: 'half', placeholder: '원문서 기안자 성명' }),
+      f({ key: 'body', label: '취소 상세 사유', type: '장문', required: true, placeholder: '취소 사유를 구체적으로 작성해 주세요.' }),
+    ],
+  },
 ];
 
 export const APPROVAL_FORM_SEED: ApprovalForm[] = SEED_RAW.map((form) => ({

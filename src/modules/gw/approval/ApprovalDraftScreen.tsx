@@ -84,6 +84,8 @@ export default function ApprovalDraftScreen() {
 
   // 수정할 문서가 있는 경우 전체 목록 훅을 통해 단일 문서 도출
   const fetchedDoc = useApprovalDoc(editDocId);
+  const cancelTargetId = params.get('cancelTargetId') ?? undefined;
+  const cancelTargetDoc = useApprovalDoc(cancelTargetId);
 
   if (!user) {
     return (
@@ -111,11 +113,20 @@ export default function ApprovalDraftScreen() {
     );
   }
 
+  if (cancelTargetId && !cancelTargetDoc) {
+    return (
+      <div className="flex h-full items-center justify-center py-20 text-[13px] text-ink3">
+        취소 대상 문서를 불러오는 중…
+      </div>
+    );
+  }
+
   return (
     <ApprovalDraftInner
-      key={editDocId ?? 'new'}
+      key={editDocId ?? (cancelTargetId ? `cancel_${cancelTargetId}` : 'new')}
       me={user}
       editDoc={fetchedDoc ?? null}
+      cancelTargetDoc={cancelTargetDoc ?? null}
       fixedType={params.get('type') ?? undefined}
       initialDate={params.get('date')}
       initialLeaveType={params.get('leaveType')}
@@ -127,6 +138,7 @@ export default function ApprovalDraftScreen() {
 function ApprovalDraftInner({
   me,
   editDoc,
+  cancelTargetDoc,
   fixedType,
   initialDate,
   initialLeaveType,
@@ -134,6 +146,7 @@ function ApprovalDraftInner({
 }: {
   me: User;
   editDoc?: ApprovalDoc | null;
+  cancelTargetDoc?: ApprovalDoc | null;
   fixedType?: string;
   initialDate?: string | null;
   initialLeaveType?: string | null;
@@ -149,11 +162,11 @@ function ApprovalDraftInner({
     return org.depts.find((d) => d.name === me.dept)?.id;
   }, [org.depts, me.dept]);
 
-  const [code, setCode] = useState<string>(editDoc?.docType ?? fixedType ?? '기안');
-  const [title, setTitle] = useState(editDoc?.title ?? '');
-  const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? '일반');
-  const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? '부서');
-  const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? '5년');
+  const [code, setCode] = useState<string>(editDoc?.docType ?? (cancelTargetDoc ? '취소신청' : (fixedType ?? '기안')));
+  const [title, setTitle] = useState(editDoc?.title ?? (cancelTargetDoc ? `[취소 신청] ${cancelTargetDoc.title}` : ''));
+  const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? cancelTargetDoc?.securityLevel ?? '일반');
+  const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? cancelTargetDoc?.visibility ?? '부서');
+  const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? cancelTargetDoc?.preservationPeriod ?? '5년');
 
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
   const [values, setValues] = useState<Record<string, FieldValue>>(() => {
@@ -161,22 +174,30 @@ function ApprovalDraftInner({
     if (editDoc?.body && !initialVals[RESERVED_BODY_KEY]) {
       initialVals[RESERVED_BODY_KEY] = editDoc.body;
     }
-    if (editDoc?.docType === '휴가' && editDoc.form) {
-      if (!initialVals['leaveType']) initialVals['leaveType'] = editDoc.form.leaveType;
-      if (!initialVals['period']) initialVals['period'] = editDoc.form.startDate;
-      if (!initialVals['period__end']) initialVals['period__end'] = editDoc.form.endDate;
-      if (!initialVals['period__days']) initialVals['period__days'] = editDoc.form.days;
-      if (!initialVals['substituteId'] && editDoc.form.substituteId) initialVals['substituteId'] = editDoc.form.substituteId;
-      if (!initialVals['emergencyContact'] && editDoc.form.emergencyContact) initialVals['emergencyContact'] = editDoc.form.emergencyContact;
-      if (!initialVals[RESERVED_BODY_KEY] && (editDoc.form as any).reason) initialVals[RESERVED_BODY_KEY] = (editDoc.form as any).reason;
+    if (!editDoc && cancelTargetDoc) {
+      initialVals['cancelTargetDocNo'] = cancelTargetDoc.docNo;
+      initialVals['cancelTargetDocTitle'] = cancelTargetDoc.title;
+      initialVals['cancelCategory'] = '전체 취소';
+      initialVals['originalDrafter'] = cancelTargetDoc.drafterName || cancelTargetDoc.drafterId;
+      initialVals[RESERVED_BODY_KEY] = `[취소 사유]\n- ${cancelTargetDoc.title} 건에 대한 결재 취소를 신청합니다.\n\n[취소 상세 내용]\n- `;
+    }
+    const targetDocForForm = editDoc ?? cancelTargetDoc;
+    if (targetDocForForm?.docType === '휴가' && targetDocForForm.form) {
+      if (!initialVals['leaveType']) initialVals['leaveType'] = targetDocForForm.form.leaveType;
+      if (!initialVals['period']) initialVals['period'] = targetDocForForm.form.startDate;
+      if (!initialVals['period__end']) initialVals['period__end'] = targetDocForForm.form.endDate;
+      if (!initialVals['period__days']) initialVals['period__days'] = targetDocForForm.form.days;
+      if (!initialVals['substituteId'] && targetDocForForm.form.substituteId) initialVals['substituteId'] = targetDocForForm.form.substituteId;
+      if (!initialVals['emergencyContact'] && targetDocForForm.form.emergencyContact) initialVals['emergencyContact'] = targetDocForForm.form.emergencyContact;
+      if (!initialVals[RESERVED_BODY_KEY] && (targetDocForForm.form as any).reason) initialVals[RESERVED_BODY_KEY] = (targetDocForForm.form as any).reason;
     }
     // URL 딥링크(근태/휴가 화면 등)에서 넘어온 날짜 및 유형 기본 바인딩
-    if (!editDoc && initialDate) {
+    if (!editDoc && !cancelTargetDoc && initialDate) {
       if (!initialVals['period']) initialVals['period'] = initialDate;
       if (!initialVals['period__end']) initialVals['period__end'] = initialDate;
       if (!initialVals['period__days']) initialVals['period__days'] = 1;
     }
-    if (!editDoc && initialLeaveType) {
+    if (!editDoc && !cancelTargetDoc && initialLeaveType) {
       initialVals['leaveType'] = initialLeaveType;
       initialVals['period__days'] = calculateLeaveDays({
         leaveType: initialLeaveType,
@@ -188,10 +209,59 @@ function ApprovalDraftInner({
   });
 
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
-  const [steps, setSteps] = useState<ApprovalStep[]>(editDoc?.steps ?? []);
+  const [steps, setSteps] = useState<ApprovalStep[]>(() => {
+    if (editDoc?.steps && editDoc.steps.length > 0) return editDoc.steps;
+    if (cancelTargetDoc && cancelTargetDoc.steps.length > 0) {
+      // 원문서의 결재선 복제 (기안자 seq 1 제외, 결재 승인자들만 복제 후 seq 재정렬)
+      const approvers = cancelTargetDoc.steps
+        .filter((s) => s.seq > 1)
+        .map((s, idx) => ({
+          seq: idx + 2,
+          parallelGroup: s.parallelGroup,
+          executionType: s.executionType ?? ('sequential' as const),
+          kind: s.kind,
+          approverId: s.approverId,
+          delegatedFromId: null,
+          decision: '대기' as const,
+          decidedAt: null,
+          comment: '',
+        }));
+      if (approvers.length > 0) {
+        return [
+          {
+            seq: 1,
+            parallelGroup: null,
+            executionType: 'sequential' as const,
+            kind: '결재' as const,
+            approverId: me.id,
+            delegatedFromId: null,
+            decision: '승인' as const,
+            decidedAt: null,
+            comment: '',
+          },
+          ...approvers,
+        ];
+      }
+    }
+    return [];
+  });
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(editDoc?.attachments ?? []);
   const [attachmentRetention, setAttachmentRetention] = useState<string>((editDoc as any)?.attachmentRetention ?? 'permanent');
-  const [relatedDocs, setRelatedDocs] = useState<RelatedDoc[]>(editDoc?.relatedDocs ?? []);
+  const [relatedDocs, setRelatedDocs] = useState<RelatedDoc[]>(() => {
+    const list = [...(editDoc?.relatedDocs ?? [])];
+    if (!editDoc && cancelTargetDoc && !list.some((r) => r.docId === cancelTargetDoc.id)) {
+      list.push({
+        docId: cancelTargetDoc.id,
+        docNo: cancelTargetDoc.docNo,
+        title: cancelTargetDoc.title,
+        docType: cancelTargetDoc.docType,
+        drafterName: cancelTargetDoc.drafterName || cancelTargetDoc.drafterId,
+        drafterDept: cancelTargetDoc.drafterDept,
+        completedAt: cancelTargetDoc.completedAt,
+      });
+    }
+    return list;
+  });
 
   const [showRelatedModal, setShowRelatedModal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -366,18 +436,19 @@ function ApprovalDraftInner({
     );
   };
 
-  // URL 쿼리에 type이 없고 신규 기안으로 진입한 경우, 양식 선택 모달 자동 오픈
+  // URL 쿼리에 type이 없고 신규 기안으로 진입한 경우, 양식 선택 모달 자동 오픈 (취소신청 기안인 경우 모달 생략)
   useEffect(() => {
-    if (!editDoc && !fixedType && !initialDate && !initialLeaveType) {
+    if (!editDoc && !cancelTargetDoc && !fixedType && !initialDate && !initialLeaveType) {
       const urlParams = new URLSearchParams(window.location.search);
-      if (!urlParams.get('type')) {
+      if (!urlParams.get('type') && !urlParams.get('cancelTargetId')) {
         setShowSelectModal(true);
       }
     }
-  }, [editDoc, fixedType, initialDate, initialLeaveType]);
+  }, [editDoc, cancelTargetDoc, fixedType, initialDate, initialLeaveType]);
 
   // 상단 [양식 변경] 버튼 클릭 핸들러
   const handleClickChangeForm = () => {
+    if (cancelTargetDoc) return;
     if (hasManuallyEnteredValues()) {
       setShowChangeConfirm(true);
     } else {
@@ -590,6 +661,7 @@ function ApprovalDraftInner({
       postApprovalNecessity,
       postApprovedAt,
       postApprovedById,
+      cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
       timestamp: Date.now(),
     };
     latestPayloadRef.current = payload;
@@ -857,8 +929,8 @@ function ApprovalDraftInner({
    * 따라서 마운트 이후 백그라운드 editDoc 참조 갱신으로 사용자 입력을 덮어쓰지 않습니다.
    */
 
-  // 이미 등록/저장된 기존 문서 편집이 아니라면, 새 기안 중에는 언제든 양식 변경 가능
-  const canChangeForm = !editDoc;
+  // 이미 등록/저장된 기존 문서 편집이거나 취소 기안 작성 중에는 임의 양식 변경 제한
+  const canChangeForm = !editDoc && !cancelTargetDoc;
 
 
 
@@ -1236,6 +1308,7 @@ function ApprovalDraftInner({
       postApprovedAt: isPostApprovalSystemEnabled && isPostApproval ? postApprovedAt : null,
       postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
       postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
+      cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
     };
   };
 
@@ -1506,8 +1579,13 @@ function ApprovalDraftInner({
           </button>
           <div className="flex items-center gap-2.5">
             <h1 className="text-[15px] font-extrabold text-ink flex items-center gap-2">
-              <span>{isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : '기안 작성'}</span>
+              <span>{cancelTargetDoc ? '취소 결재(취소 기안) 작성' : isResubmit ? '반려 문서 수정·재상신' : editDoc ? '기안 문서 편집' : '기안 작성'}</span>
             </h1>
+            {cancelTargetDoc && (
+              <span className="flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1 text-[11px] font-extrabold text-rose-600 border border-rose-500/30">
+                취소 대상: {cancelTargetDoc.docNo}
+              </span>
+            )}
             <div className="flex items-center gap-1.5 rounded-lg bg-teal-soft/80 px-2.5 py-1 text-[11.5px] font-extrabold text-teal border border-teal/20 shadow-2xs">
               <span>{form?.icon || '📄'}</span>
               <span>{form?.name || code}</span>
@@ -1631,7 +1709,23 @@ function ApprovalDraftInner({
       {/* 기안 워크스페이스 본문 메인 레이아웃 (세로 완전 분리: 좌측 #878d90 공문서 캔버스 + 우측 세로 고정 결재선 사이드바) */}
       <div className="flex flex-1 w-full bg-[#878d90] min-h-[calc(100vh-53px)]">
         {/* 중앙 A4 문서 캔버스 (배경색 #878d90으로 백색 A4 용지와 완벽한 대비 및 세로 스크롤) */}
-        <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex justify-center bg-[#878d90] transition-colors">
+        <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex flex-col items-center bg-[#878d90] transition-colors">
+          {cancelTargetDoc && (
+            <div className="mx-auto mb-5 w-full max-w-[800px] rounded-xl border border-rose-500/40 bg-rose-50/95 dark:bg-zinc-900 p-4 text-[12px] text-rose-950 dark:text-rose-200 shadow-md backdrop-blur-xs flex items-center justify-between animate-fade-in">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-extrabold text-[13px] text-rose-700 dark:text-rose-400">
+                    [결재 취소 신청 모드] 대상 원문서: {cancelTargetDoc.title} ({cancelTargetDoc.docNo})
+                  </div>
+                  <div className="text-[11.5px] text-rose-800/90 dark:text-rose-300 mt-1 leading-relaxed">
+                    본 문서는 기결재 완료된 원문서의 효력을 취소하기 위한 취소 기안입니다.
+                    최종 결재 완료 시 원문서 상태는 <strong className="font-extrabold text-rose-600 underline">&apos;취소완료&apos;</strong>로 전이되며, 연동된 휴가 차감 일수 환원 및 캘린더 일정/휴가중 상태가 즉시 자동 취소됩니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <ApprovalDraftDocumentSheet
             form={form}
             docCode={code}
@@ -2144,7 +2238,7 @@ function ApprovalDraftInner({
 
       {/* 결재 양식 선택 모달 */}
       <DraftFormSelectModal
-        open={showSelectModal}
+        open={showSelectModal && !cancelTargetDoc}
         onClose={() => setShowSelectModal(false)}
         onSelect={handleSelectNewForm}
         currentCode={code}

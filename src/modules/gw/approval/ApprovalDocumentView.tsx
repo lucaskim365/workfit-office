@@ -23,13 +23,20 @@ let cachedLogoDataUrl: string | null = null;
  * 인쇄 시 `.approval-print` 만 노출(index.css). 테마 무관 백지·흑자 고정.
  */
 
-/** 서식 미로드/미정의 시 기본 4종 격식 폴백. */
-const FALLBACK_TITLE: Record<string, string> = { 기안: '기 안 서', 품의: '품 의 서', 지출결의: '지 출 결 의 서', 휴가: '휴 가 원' };
+/** 서식 미로드/미정의 시 기본 격식 폴백. */
+const FALLBACK_TITLE: Record<string, string> = {
+  기안: '기 안 서',
+  품의: '품 의 서',
+  지출결의: '지 출 결 의 서',
+  휴가: '휴 가 원',
+  취소신청: '취 소 신 청 서',
+};
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
   품의: '위와 같이 품의하오니 재가하여 주시기 바랍니다.',
   지출결의: '위와 같이 지출을 청구하오니 재가하여 주시기 바랍니다.',
   휴가: '위와 같이 휴가를 신청하오니 재가하여 주시기 바랍니다.',
+  취소신청: '위와 같이 결재 취소를 신청하오니 재가하여 주시기 바랍니다.',
 };
 
 function korDate(iso: string | null | undefined): string {
@@ -482,10 +489,52 @@ export function ApprovalDocumentView({
           <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
         </div>
 
+        {/* 취소 기안 문서 안내 배너 */}
+        {doc.cancelTargetDocId && (
+          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3.5 text-[12px] text-rose-900 print:border-rose-300 print:text-black">
+            <div className="flex items-center gap-2 font-bold text-rose-700 mb-1">
+              <AlertTriangle size={15} className="shrink-0" />
+              <span>[결재 취소 신청 문서]</span>
+            </div>
+            <div className="text-[11.5px] leading-relaxed text-[#444]">
+              ※ 본 문서는 기결재 완료된 원문서(문서번호: <strong className="font-semibold text-rose-700">{doc.cancelTargetDocId}</strong>)의 결재 취소를 요청하는 취소 기안입니다.
+              최종 결재 승인 시 원문서의 효력 및 연동(휴가 차감 일수 환원, 캘린더 일정 삭제, 메신저 상태 등)이 자동으로 취소 처리됩니다.
+            </div>
+          </div>
+        )}
+
+        {/* 취소 완료된 원문서 안내 배너 */}
+        {doc.status === '취소완료' && (
+          <div className="mb-4 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3.5 text-[12px] text-rose-900 print:border-rose-300 print:text-black">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-rose-700">
+                <AlertTriangle size={15} className="shrink-0" />
+                <span>[취소 완료된 결재 문서]</span>
+              </div>
+              <span className="text-[11px] font-semibold text-rose-600">
+                취소 승인 일시: {korDate(doc.cancelledAt)}
+              </span>
+            </div>
+            <div className="text-[11.5px] leading-relaxed text-[#444] mt-1">
+              본 문서는 취소 결재({doc.cancelledByDocId ? `문서번호: ${doc.cancelledByDocId}` : '취소 승인'})를 통해 공식적으로 취소 처리 완료되었습니다.
+              연동된 일정 및 휴가 차감 내역은 자동으로 환원/삭제되었습니다.
+            </div>
+          </div>
+        )}
+
         <div className="relative mb-5 flex items-start justify-between gap-4">
           <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-          {(doc.status === '완료' || doc.status === '시행대기') && (
-            <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+          {(doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
+            <div className="relative">
+              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+              {doc.status === '취소완료' && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">
+                    취소완료
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

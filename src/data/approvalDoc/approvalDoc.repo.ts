@@ -68,6 +68,10 @@ function migrateDoc(data: any): any {
     postApprovedAt: data.postApprovedAt ?? null,
     postApprovedById: data.postApprovedById ?? null,
     postApprovedByName: data.postApprovedByName ?? null,
+    cancelTargetDocId: data.cancelTargetDocId ?? null,
+    cancelDraftId: data.cancelDraftId ?? null,
+    cancelledByDocId: data.cancelledByDocId ?? null,
+    cancelledAt: data.cancelledAt ?? null,
     steps: Array.isArray(data.steps) ? data.steps.map((s: any) => ({
       ...s,
       kind: s.kind,
@@ -357,6 +361,52 @@ export interface ApprovalDraftInput {
   postApprovedById?: string | null;
   /** 후결 선조치 승인자 성명 */
   postApprovedByName?: string | null;
+  /** 취소 기안 시 대상 원문서 ID */
+  cancelTargetDocId?: string | null;
+}
+
+/** 취소 기안 문서 최종 승인(완료) 시 대상 원문서를 '취소완료' 상태로 전이 */
+async function handleCancelTargetOnComplete(next: ApprovalDoc): Promise<void> {
+  if (next.status !== '완료' || !next.cancelTargetDocId) return;
+  try {
+    const target = await getOrThrow(next.cancelTargetDocId);
+    target.status = '취소완료';
+    target.cancelledByDocId = next.id;
+    target.cancelledAt = next.completedAt ?? now();
+    target.cancelDraftId = null;
+    await persist(target);
+
+    // 원문서 기안자에게 취소 완료 알림 전송
+    try {
+      const { notificationRepo } = await import('@/data/notification/notification.repo');
+      await notificationRepo.create({
+        userId: target.drafterId,
+        type: '결재',
+        title: '결재 취소 완료',
+        text: `[${target.title}] 문서의 취소 결재가 최종 승인되어 해당 문서가 취소 처리되었습니다.`,
+        senderName: '전자결재 시스템',
+        linkUrl: `/gw/approval?doc=${target.id}`,
+      });
+    } catch (ne) {
+      console.error('취소 완료 알림 전송 실패:', ne);
+    }
+  } catch (err) {
+    console.error('취소 대상 원문서 상태 전이 실패:', err);
+  }
+}
+
+/** 취소 기안 문서 회수 또는 반려 시 대상 원문서의 cancelDraftId 락 해제 */
+async function handleCancelTargetOnAbort(doc: ApprovalDoc): Promise<void> {
+  if (!doc.cancelTargetDocId) return;
+  try {
+    const target = await getOrThrow(doc.cancelTargetDocId);
+    if (target.cancelDraftId === doc.id) {
+      target.cancelDraftId = null;
+      await persist(target);
+    }
+  } catch (err) {
+    console.error('취소 대상 원문서 락 해제 실패:', err);
+  }
 }
 
 export const approvalDocRepo = {
@@ -471,6 +521,7 @@ export const approvalDocRepo = {
       postApprovedAt: input.postApprovedAt ?? null,
       postApprovedById: input.postApprovedById ?? null,
       postApprovedByName: input.postApprovedByName ?? null,
+      cancelTargetDocId: input.cancelTargetDocId ?? null,
     });
 
     await persist(created);
@@ -517,6 +568,22 @@ export const approvalDocRepo = {
       }
       return s;
     });
+
+    // 취소 기안 상신 시: 대상 원문서 검증 및 cancelDraftId 락 설정
+    if (next.cancelTargetDocId) {
+      const target = await getOrThrow(next.cancelTargetDocId);
+      if (target.cancelledAt || (target.status as string) === '취소완료') {
+        throw new Error('이미 취소 처리 완료된 문서입니다.');
+      }
+      if (target.status !== '완료' && target.status !== '시행대기') {
+        throw new Error('결재 완료된 문서만 취소 결재를 상신할 수 있습니다.');
+      }
+      if (target.cancelDraftId && target.cancelDraftId !== next.id) {
+        throw new Error(`이미 다른 취소 결재(${target.cancelDraftId})가 진행 중입니다.`);
+      }
+      target.cancelDraftId = next.id;
+      await persist(target);
+    }
 
     await persist(next);
 
@@ -577,6 +644,7 @@ export const approvalDocRepo = {
     });
 
     await persist(next);
+    await handleCancelTargetOnComplete(next);
 
     // 알림 생성 연동
     try {
@@ -670,6 +738,7 @@ export const approvalDocRepo = {
 
     const next = applyDecision(docToProcess, seq, '반려', { at: now(), comment });
     await persist(next);
+    await handleCancelTargetOnAbort(next);
 
     // 알림 생성 연동
     try {
@@ -727,6 +796,7 @@ export const approvalDocRepo = {
     if (cur.drafterId !== userId) throw new Error('기안자만 회수할 수 있습니다');
     const next = recallDoc(cur);
     await persist(next);
+    await handleCancelTargetOnAbort(next);
 
     try {
       const { notificationRepo } = await import('@/data/notification/notification.repo');
@@ -776,6 +846,7 @@ export const approvalDocRepo = {
 
 
     await persist(next);
+    await handleCancelTargetOnComplete(next);
     return next;
   },
 

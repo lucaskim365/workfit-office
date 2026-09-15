@@ -264,9 +264,9 @@ export function getEffectiveRecipients(doc: ApprovalDoc): ApprovalRecipient[] {
   return list;
 }
 
-/** 수신함 판정: 완료(및 레거시 시행대기)된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 (레거시 시행처 포함) */
+/** 수신함 판정: 완료(및 레거시 시행대기, 취소완료)된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 (레거시 시행처 포함) */
 export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
-  if (doc.status !== '완료' && doc.status !== '시행대기') return false;
+  if (doc.status !== '완료' && doc.status !== '시행대기' && doc.status !== '취소완료') return false;
   const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
   const effectiveRecipients = getEffectiveRecipients(doc);
   const isCustomRecipient = effectiveRecipients.some((r) => {
@@ -281,9 +281,9 @@ export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptNam
   return isExecutorDrafter || isCustomRecipient;
 }
 
-/** 완료함 판정: 최종 완료된 문서(및 레거시 시행대기 문서) 중 내가 기안했거나 승인 결재한 문서 */
+/** 완료함 판정: 최종 완료된 문서(및 레거시 시행대기, 취소완료 문서) 중 내가 기안했거나 승인 결재한 문서 */
 export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
-  if (doc.status !== '완료' && doc.status !== '시행대기') return false;
+  if (doc.status !== '완료' && doc.status !== '시행대기' && doc.status !== '취소완료') return false;
   
   const isMyDraft = doc.drafterId === userId;
   const isMyApproved = doc.steps.some((s) => s.approverId === userId && s.decision === '승인');
@@ -311,7 +311,7 @@ export function matchesBox(
     case '임시':   return doc.drafterId === userId && doc.status === '임시저장';
     case '수신':   return isReceivedBoxMatch(doc, userId, userDeptName);
     case '참조':   return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
-    case '후열':   return (doc.status === '완료' || doc.status === '시행대기') && doc.steps.some((s) => s.delegatedFromId === userId);
+    case '후열':   return (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && doc.steps.some((s) => s.delegatedFromId === userId);
     case '완료':   return isCompletedBoxMatch(doc, userId);
     case '삭제':   return false;
   }
