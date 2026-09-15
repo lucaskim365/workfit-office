@@ -112,7 +112,7 @@ export default function CalendarEventModal({
     if (!attendeeSearch.trim()) return [];
     const kw = attendeeSearch.trim().toLowerCase();
     return allUsers
-      .filter((u) => u.status === '사용' && u.id !== actor.userId && !attendeeUserIds.includes(u.id))
+      .filter((u) => u.status === '사용' && !u.resignedAt && u.id !== actor.userId && !attendeeUserIds.includes(u.id))
       .filter((u) => u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw) || (u.position ?? '').toLowerCase().includes(kw))
       .slice(0, 8);
   }, [allUsers, attendeeSearch, attendeeUserIds, actor.userId]);

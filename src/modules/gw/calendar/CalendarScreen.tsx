@@ -102,7 +102,7 @@ function LocalCalendarScreen() {
   /** 팀 일정의 부서 필터. ALL_DEPTS면 범위 전체(관리자는 전 직원, 팀장은 맡은 부서 전부). */
   const [teamDeptSel, setTeamDeptSel] = useState(ALL_DEPTS);
   const usersQuery = useUsers();
-  const users = usersQuery.data ?? [];
+  const users = (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
   const actor = authenticatedUser
     ?? users.find((user) => user.id === demoUserId)
     ?? users.find((user) => user.status === '사용')

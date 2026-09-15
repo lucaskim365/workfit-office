@@ -37,7 +37,6 @@ export function LeaveLedgerTable({
   const [onlyAdvance, setOnlyAdvance] = useState(false);
   const [onlyNegative, setOnlyNegative] = useState(false);
   const [onlySubstitute, setOnlySubstitute] = useState(false);
-  const [showRetired, setShowRetired] = useState(false);
 
   // 대체휴무 실시간 반영 리스너
   const [subUpdateVer, setSubUpdateVer] = useState(0);
@@ -47,20 +46,20 @@ export function LeaveLedgerTable({
     return () => window.removeEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
   }, []);
 
-  // 부서 목록 추출 (기본: 재직자 부서 우선)
+  // 부서 목록 추출 (재직자 부서만 집계)
   const deptList = useMemo(() => {
     const set = new Set<string>();
     entries.forEach((e) => {
-      if (!showRetired && e.isRetired) return;
+      if (e.isRetired) return;
       if (e.dept) set.add(e.dept);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [entries, showRetired]);
+  }, [entries]);
 
-  // 필터링 적용 (기본: 퇴사자 자동 제외)
+  // 필터링 적용 (퇴사자 100% 원천 배제)
   const filteredEntries = useMemo(() => {
     return entries.filter((e) => {
-      if (!showRetired && e.isRetired) return false;
+      if (e.isRetired) return false;
       if (selectedDept !== 'ALL' && e.dept !== selectedDept) return false;
       if (onlyAdvance && !e.advanceStatus.isAdvanceUsed) return false;
       if (onlyNegative && e.remainingDays >= 0) return false;
@@ -79,7 +78,7 @@ export function LeaveLedgerTable({
 
       return true;
     });
-  }, [entries, showRetired, selectedDept, onlyAdvance, onlyNegative, onlySubstitute, keyword, subUpdateVer]);
+  }, [entries, selectedDept, onlyAdvance, onlyNegative, onlySubstitute, keyword, subUpdateVer]);
 
   return (
     <div className="space-y-3">
@@ -149,19 +148,6 @@ export function LeaveLedgerTable({
               }`}
             >
               📅 대체휴무 보유자
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowRetired((v) => !v)}
-              className={`rounded-lg border px-2.5 py-1 text-[10.5px] font-bold transition-all flex items-center gap-1 ${
-                showRetired
-                  ? 'border-gray-500/40 bg-gray-500/15 text-gray-700 dark:text-gray-300'
-                  : 'border-border text-ink3 hover:bg-panel-alt'
-              }`}
-              title="퇴사 처리된 임직원의 과거 연차 기록을 포함하여 조회합니다"
-            >
-              <span>👤 퇴사자 포함</span>
-              {showRetired && <span className="text-[10px] font-extrabold text-teal">✓</span>}
             </button>
           </div>
         </div>

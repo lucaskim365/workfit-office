@@ -189,5 +189,5 @@ export function buildLeaveLedger(
     advanceEmployeeCount,
   };
 
-  return { entries, summary };
+  return { entries: activeEntries, summary };
 }

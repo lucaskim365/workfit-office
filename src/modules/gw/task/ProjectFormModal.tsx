@@ -37,7 +37,7 @@ function dateToIso(value: string, endOfDay = false): string | null {
 }
 
 export default function ProjectFormModal({ open, actor, access, users, onClose, onCreated }: ProjectFormModalProps) {
-  const activeUsers = useMemo(() => users.filter((user) => user.status === '사용'), [users]);
+  const activeUsers = useMemo(() => users.filter((user) => user.status === '사용' && !user.resignedAt), [users]);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

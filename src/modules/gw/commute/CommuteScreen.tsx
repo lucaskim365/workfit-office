@@ -202,15 +202,22 @@ export default function CommuteScreen() {
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
 
-  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합
+  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (퇴사자 완전 배제)
   const employees = useMemo(() => {
-    const list = [...allEmployees.filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()) && !isNonAttendanceTarget({ name: row.name }))];
+    const list = [
+      ...allEmployees
+        .filter((row) => row.active !== false && !row.retireDate)
+        .filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()) && !isNonAttendanceTarget({ name: row.name })),
+    ];
     const existingNormNames = new Set(list.map((e) => normName(e.name)));
     const existingEmpIds = new Set(list.map((e) => e.empId));
 
     const isViewerTester = (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test');
 
     for (const u of allUsers) {
+      // 퇴사자(미사용, resignedAt 기록자) 100% 원천 배제
+      if (u.status === '미사용' || Boolean(u.resignedAt)) continue;
+
       const name = (u.name || '').trim();
       const nName = normName(name);
       if (!name || !nName || existingNormNames.has(nName) || NON_ATTENDANCE_NAMES.has(name) || NON_ATTENDANCE_NAMES.has(nName) || isNonAttendanceTarget(u)) continue;
@@ -236,8 +243,8 @@ export default function CommuteScreen() {
       list.push({
         empId,
         name,
-        active: u.status === '사용' && !u.resignedAt,
-        retireDate: u.resignedAt ?? null,
+        active: true,
+        retireDate: null,
       });
     }
 
@@ -351,7 +358,7 @@ export default function CommuteScreen() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [onlyAnomaly, setOnlyAnomaly] = useState<boolean>(false);
   const [keyword, setKeyword] = useState('');
-  const [showRetired, setShowRetired] = useState(false);
+  const showRetired = false;
 
   // 테스트 계정일 때: 테스트 부서/계정 제외 토글 상태
   const isViewerTester = useMemo(
@@ -518,10 +525,22 @@ export default function CommuteScreen() {
     return records;
   }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate, holidayMap]);
 
-  // 관제 대상 직원 필터링 (권한 범위 기반 및 비대상자 제외)
+  // 관제 대상 직원 필터링 (권한 범위 기반 및 비대상자/퇴사자 제외)
   const scopedEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const matchedUser = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
+      const profile = matchedUser ? profileByEmpMap.get(matchedUser.id) : undefined;
+
+      // 퇴사자 100% 원천 배제
+      if (
+        !emp.active ||
+        Boolean(emp.retireDate) ||
+        matchedUser?.status === '미사용' ||
+        Boolean(matchedUser?.resignedAt) ||
+        profile?.status === 'RETIRED'
+      ) {
+        return false;
+      }
 
       // 경영기술전략위원회 및 상무이사 이상 임원은 근태 관리 대상에서 제외
       if (isNonAttendanceTarget(matchedUser) || isNonAttendanceTarget({ name: emp.name })) {
@@ -985,17 +1004,6 @@ export default function CommuteScreen() {
             <AlertTriangle size={12} className={onlyAnomaly ? 'text-white' : 'text-rose-500'} />
             <span>확인 필요 ({kpiStats.totalAnomaly}건)</span>
           </button>
-
-          {/* 퇴직자 포함 토글 */}
-          <label className="flex items-center gap-1 text-[11px] text-ink3 cursor-pointer select-none ml-1">
-            <input
-              type="checkbox"
-              checked={showRetired}
-              onChange={(e) => setShowRetired(e.target.checked)}
-              className="rounded border-border"
-            />
-            <span>퇴직자 포함</span>
-          </label>
 
           {/* 테스트 계정으로 조회 시에만 노출되는 테스트 부서 제외 토글 */}
           {isViewerTester && (

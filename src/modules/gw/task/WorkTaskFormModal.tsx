@@ -49,7 +49,7 @@ export default function WorkTaskFormModal({ actor, project, tracks, tasks, users
    */
   const assignees = useMemo(() => {
     const members = users.filter((user) => project.memberUserIds.includes(user.id)
-      && (user.status === '사용' || user.id === task?.assigneeUserId));
+      && user.status === '사용' && !user.resignedAt);
     if (!isProjectAdmin(actor) || members.some((user) => user.id === actor.userId)) return members;
     const me = users.find((user) => user.id === actor.userId);
     return me ? [me, ...members] : members;
