@@ -281,9 +281,7 @@ export function useCompletedDocsForSelection(params: {
           return true;
         }
       }
-      // 5. 전사 공개 완료 문서
-      if (doc.visibility === '전사') return true;
-      // 6. 우리 부서 공개 완료 문서
+      // 5. 우리 부서 공개 완료 문서
       if (
         doc.visibility === '부서' &&
         ((userDeptId && doc.drafterDeptId === userDeptId) || (userDept && doc.drafterDept === userDept))

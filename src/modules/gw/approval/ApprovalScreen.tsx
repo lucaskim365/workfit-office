@@ -82,7 +82,6 @@ export default function ApprovalScreen() {
   const boxParam = params.get('box') as ApprovalBox | '문서함' | null;
 
   const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
-  const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
 
   const preds = useMemo(() => getPredecessorsOf(me), [me]);
 
@@ -185,36 +184,27 @@ export default function ApprovalScreen() {
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
     if (box === '문서함') {
-      if (docBoxFilter === 'dept') {
-        const myDeptName = userObj?.dept ?? '';
-        const myDeptObj = org.depts.find((d) => d.name === myDeptName);
-        const myDeptId = myDeptObj?.id ?? '';
-        return allDocs.filter((d) => {
-          if (d.status !== '완료') return false; // 결재 완료된 문서만 노출
-          const vis = d.visibility ?? '부서';
-          if (vis === '비공개') return false; // 비공개는 제외
+      const myDeptName = userObj?.dept ?? '';
+      const myDeptObj = org.depts.find((d) => d.name === myDeptName);
+      const myDeptId = myDeptObj?.id ?? '';
+      return allDocs.filter((d) => {
+        if (d.status !== '완료') return false; // 결재 완료된 문서만 노출
+        const vis = d.visibility ?? '부서';
+        if (vis === '비공개') return false; // 비공개는 제외
 
-          // drafterDeptId 가 비어있는 과거 레거시 기결재 문서는 기안자의 현재 부서 ID를 도출해 필터 대조
-          const drafterUser = org.userById(d.drafterId);
-          const drafterCurrentDeptName = drafterUser?.dept ?? '';
-          const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
-          const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
-          const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
+        // drafterDeptId 가 비어있는 과거 레거시 기결재 문서는 기안자의 현재 부서 ID를 도출해 필터 대조
+        const drafterUser = org.userById(d.drafterId);
+        const drafterCurrentDeptName = drafterUser?.dept ?? '';
+        const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
+        const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
+        const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
 
-          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
-        }).sort((a, b) => {
-          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return tB - tA;
-        });
-      } else {
-        return allDocs.filter((d) => d.status === '완료' && d.visibility === '전사') // 결재 완료된 문서만 노출
-          .sort((a, b) => {
-            const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return tB - tA;
-          });
-      }
+        return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
+      }).sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
     }
 
     if (box === '완료') {
@@ -271,7 +261,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, docBoxFilter, org, draftFilter]);
+  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, org, draftFilter]);
 
   // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
   const selDoc = useMemo(() => {
@@ -285,7 +275,7 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, docBoxFilter, rejectFilter, draftFilter]);
+  }, [box, doneFilter, todoFilter, rejectFilter, draftFilter]);
 
   // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화
   useEffect(() => {
@@ -321,7 +311,6 @@ export default function ApprovalScreen() {
           setDraftFilter('completed');
         } else {
           determinedBox = '문서함';
-          setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
         }
       } else if (targetDoc.status === '반려' || targetDoc.status === '긴급 조치 사후 검토 반려' || targetDoc.status === '시행반송') {
         if (isRejectedBoxMatch(targetDoc, me)) {
@@ -332,7 +321,6 @@ export default function ApprovalScreen() {
           setDraftFilter('rejected');
         } else {
           determinedBox = '문서함';
-          setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
         }
       } else if (targetDoc.status === '임시저장') {
         determinedBox = '임시';
@@ -346,7 +334,6 @@ export default function ApprovalScreen() {
         determinedBox = '수신';
       } else {
         determinedBox = '문서함';
-        setDocBoxFilter(targetDoc.visibility === '전사' ? 'all' : 'dept');
       }
     }
 
@@ -552,8 +539,7 @@ export default function ApprovalScreen() {
 
                       return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
-                    const companyDocsCount = allDocs.filter((d) => d.visibility === '전사').length;
-                    badgeCount = deptDocsCount + companyDocsCount;
+                    badgeCount = deptDocsCount;
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
@@ -780,25 +766,7 @@ export default function ApprovalScreen() {
                   </div>
                 )}
 
-                {box === '문서함' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['dept', 'all'] as const).map((f) => {
-                      const label = f === 'dept' ? '부서 문서' : '전사 문서';
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setDocBoxFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${docBoxFilter === f
-                            ? 'bg-teal text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+
 
 
                 {/* 목록 데이터 영역 */}

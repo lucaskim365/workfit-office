@@ -58,7 +58,7 @@ function migrateDoc(data: any): any {
     executionDepts: data.executionDepts ?? [],
     preservationPeriod: data.preservationPeriod ?? null,
     relatedDocs: data.relatedDocs ?? [],
-    visibility: data.visibility ?? '부서',
+    visibility: data.visibility === '전사' ? '부서' : (data.visibility ?? '부서'),
     isPostApproval: data.isPostApproval ?? false,
     postApprovalReason: data.postApprovalReason ?? null,
     postApprovalActionTaken: data.postApprovalActionTaken ?? null,
@@ -341,8 +341,8 @@ export interface ApprovalDraftInput {
   relatedDocs?: ApprovalDoc['relatedDocs'];
   /** 문서 보안 등급 ('일반' | '대외비' | '극비') */
   securityLevel?: '일반' | '대외비' | '극비';
-  /** 문서 공개 범위 ('전사' | '부서' | '비공개') */
-  visibility?: '전사' | '부서' | '비공개';
+  /** 문서 공개 범위 ('부서' | '비공개') */
+  visibility?: '부서' | '비공개';
   /** 긴급 선조치 사후 승인(후결) 여부 */
   isPostApproval?: boolean;
   /** 후결 긴급 사유 (종합) */

@@ -979,7 +979,7 @@ export function ApprovalFormEditor({
                 setAmount={() => {}}
                 securityLevel={form.securityLevel || '일반'}
                 setSecurityLevel={(v) => set({ securityLevel: v })}
-                visibility={form.visibility || '부서'}
+                visibility={form.visibility === '비공개' ? '비공개' : '부서'}
                 setVisibility={(v) => set({ visibility: v })}
                 preservationPeriod={form.preservationPeriod || '5년'}
                 setPreservationPeriod={(v) => set({ preservationPeriod: v })}

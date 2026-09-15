@@ -219,11 +219,11 @@ export function ApprovalDocumentView({
     const isSameDept = docDeptId
       ? docDeptId === myDeptId
       : doc.drafterDept === myDeptName;
-    if (vis === '부서' && !isSameDept) return false;
+    if (!isSameDept) return false;
 
-    // 물리적 보안등급 체크 (제5순위)
+    // 물리적 보안등급 체크 (제5순위): 동일 부서원 중 일반 등급 문서만 열람 가능
     const secLevel = doc.securityLevel ?? '일반';
-    if (secLevel === '일반') return true; // 일반 등급은 타 부서원도 전사 공개 탭 등에서 확인 가능
+    if (secLevel === '일반') return true;
 
     return false; // 그 외 대외비/극비 문서는 관계자/임원이 아니므로 열람 불가
   })();

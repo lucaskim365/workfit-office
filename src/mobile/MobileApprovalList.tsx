@@ -74,7 +74,6 @@ export default function MobileApprovalList() {
   const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [docBoxFilter, setDocBoxFilter] = useState<'dept' | 'all'>('dept');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
   const org = useOrgTree();
@@ -171,26 +170,19 @@ export default function MobileApprovalList() {
   };
 
   const docs = useMemo(() => {
-    // 5. 부서 문서함은 byBox에 키가 없으므로 별도 데이터 구성
     if (box === '문서함') {
       const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
       const myDeptId = myDeptObj?.id ?? '';
       const myDeptName = user?.dept ?? '';
 
       const allDocs = Object.values(byBox).flat();
-      if (docBoxFilter === 'dept') {
-        return allDocs.filter((d) => {
-          if (d.status !== '완료') return false;
-          if (d.visibility === '비공개') return false;
-          const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
-          const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
-          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
-        });
-      }
-      if (docBoxFilter === 'all') {
-        return allDocs.filter((d) => d.status === '완료' && d.visibility === '전사');
-      }
-      return [];
+      return allDocs.filter((d) => {
+        if (d.status !== '완료') return false;
+        if (d.visibility === '비공개') return false;
+        const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
+        const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
+        return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
+      });
     }
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
@@ -251,7 +243,7 @@ export default function MobileApprovalList() {
     }
 
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, docBoxFilter, rejectFilter, me, org, user?.dept]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, rejectFilter, me, org, user?.dept]);
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
@@ -319,7 +311,6 @@ export default function MobileApprovalList() {
                 setTodoFilter('pending');
                 setDraftFilter('all');
                 setDoneFilter('all');
-                setDocBoxFilter('dept');
                 setRejectFilter('all');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
@@ -443,25 +434,7 @@ export default function MobileApprovalList() {
         </div>
       )}
 
-      {box === '문서함' && (
-        <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['dept', 'all'] as const).map((f) => {
-            const label = f === 'dept' ? '부서 수신 문서' : '전사 공개 문서';
-            const active = docBoxFilter === f;
-            return (
-              <button
-                key={f}
-                onClick={() => setDocBoxFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all ${
-                  active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+
 
 
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>

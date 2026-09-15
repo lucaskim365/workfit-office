@@ -63,8 +63,8 @@ export interface ApprovalDraftDocumentSheetProps {
   setAmount: (v: string) => void;
   securityLevel: '일반' | '대외비' | '극비';
   setSecurityLevel: (v: '일반' | '대외비' | '극비') => void;
-  visibility: '전사' | '부서' | '비공개';
-  setVisibility: (v: '전사' | '부서' | '비공개') => void;
+  visibility: '부서' | '비공개';
+  setVisibility: (v: '부서' | '비공개') => void;
   preservationPeriod: string;
   setPreservationPeriod: (v: string) => void;
   isPostApproval: boolean;
@@ -542,7 +542,6 @@ export function ApprovalDraftDocumentSheet({
                   className="bg-transparent text-[11.5px] text-[#222] outline-none cursor-pointer flex-1"
                   disabled={docCode === '채용' || docCode === '인사'}
                 >
-                  <option value="전사">전사 공개</option>
                   <option value="부서">부서 공개</option>
                   <option value="비공개">비공개</option>
                 </select>

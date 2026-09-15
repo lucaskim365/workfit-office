@@ -35,8 +35,7 @@ export function RelatedDocSearchModal({
   const [keyword, setKeyword] = useState('');
   const [tempSelected, setTempSelected] = useState<ApprovalDoc[]>([]);
 
-  // 1. 필터 상태 추가
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'approver' | 'dept' | 'allCompany'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'approver' | 'dept'>('all');
   const [selectedDocType, setSelectedDocType] = useState('전체 서식');
   const [dateRange, setDateRange] = useState('전체');
   const [limit, setLimit] = useState<number | 'all'>(10);
@@ -70,8 +69,6 @@ export function RelatedDocSearchModal({
       list = list.filter(
         (d) => d.visibility === '부서' && ((userDeptId && d.drafterDeptId === userDeptId) || (userDept && d.drafterDept === userDept))
       );
-    } else if (scopeFilter === 'allCompany') {
-      list = list.filter((d) => d.visibility === '전사');
     }
 
     // ② 서식 분류 필터
@@ -194,7 +191,6 @@ export function RelatedDocSearchModal({
                 <option value="mine">내가 기안한 문서</option>
                 <option value="approver">내가 결재/합의한 문서</option>
                 <option value="dept">우리 부서 공개 문서</option>
-                <option value="allCompany">전사 공개 문서</option>
               </select>
             </div>
 

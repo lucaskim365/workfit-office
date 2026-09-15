@@ -111,7 +111,7 @@ export const approvalFormSchema = z.object({
   /** 기본 보안 등급 */
   securityLevel: z.enum(['일반', '대외비', '극비']).nullable().optional(),
   /** 기본 공개 범위 */
-  visibility: z.enum(['전사', '부서', '비공개']).nullable().optional(),
+  visibility: z.enum(['부서', '비공개']).nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

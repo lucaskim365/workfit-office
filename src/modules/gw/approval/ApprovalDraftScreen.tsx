@@ -165,7 +165,7 @@ function ApprovalDraftInner({
   const [code, setCode] = useState<string>(editDoc?.docType ?? (cancelTargetDoc ? '취소신청' : (fixedType ?? '기안')));
   const [title, setTitle] = useState(editDoc?.title ?? (cancelTargetDoc ? `[취소 신청] ${cancelTargetDoc.title}` : ''));
   const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? cancelTargetDoc?.securityLevel ?? '일반');
-  const [visibility, setVisibility] = useState<'전사' | '부서' | '비공개'>(editDoc?.visibility ?? cancelTargetDoc?.visibility ?? '부서');
+  const [visibility, setVisibility] = useState<'부서' | '비공개'>(editDoc?.visibility === '비공개' || cancelTargetDoc?.visibility === '비공개' ? '비공개' : '부서');
   const [preservationPeriod, setPreservationPeriod] = useState<string>(editDoc?.preservationPeriod ?? cancelTargetDoc?.preservationPeriod ?? '5년');
 
   const [amount, setAmount] = useState<string>(editDoc?.amount != null ? String(editDoc.amount) : '');
@@ -872,7 +872,7 @@ function ApprovalDraftInner({
       setVisibility('부서');
     } else {
       setSecurityLevel('일반');
-      setVisibility('전사');
+      setVisibility('부서');
     }
   }, [code]);
 
@@ -1905,7 +1905,7 @@ function ApprovalDraftInner({
               setValues(data.values || {});
               setAmount(data.amount || '');
               if (data.securityLevel) setSecurityLevel(data.securityLevel);
-              if (data.visibility) setVisibility(data.visibility);
+              if (data.visibility) setVisibility(data.visibility === '비공개' ? '비공개' : '부서');
               if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
               if (data.attachments) setAttachments(data.attachments);
               if (data.recipients) setRecipients(data.recipients);
@@ -1970,7 +1970,7 @@ function ApprovalDraftInner({
           drafterDept: me.dept || '',
           drafterPos: me.position || '',
           securityLevel: selectedBackup.data.securityLevel || '일반',
-          visibility: selectedBackup.data.visibility || '부서',
+          visibility: selectedBackup.data.visibility === '비공개' ? '비공개' : '부서',
           preservationPeriod: selectedBackup.data.preservationPeriod || '5년',
           createdAt: new Date(selectedBackup.timestamp).toISOString(),
           updatedAt: new Date(selectedBackup.timestamp).toISOString(),
@@ -2153,7 +2153,7 @@ function ApprovalDraftInner({
                                 setValues(data.values || {});
                                 setAmount(data.amount || '');
                                 if (data.securityLevel) setSecurityLevel(data.securityLevel);
-                                if (data.visibility) setVisibility(data.visibility);
+                                if (data.visibility) setVisibility(data.visibility === '비공개' ? '비공개' : '부서');
                                 if (data.preservationPeriod) setPreservationPeriod(data.preservationPeriod);
                                 if (data.attachments) setAttachments(data.attachments);
                                 if (data.recipients) setRecipients(data.recipients);
