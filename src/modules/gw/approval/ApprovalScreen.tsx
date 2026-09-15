@@ -41,6 +41,7 @@ import { DocTypeIcon } from './components/DocTypeIcon';
 import { useUsers } from '@/features/user/useUsers';
 
 import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
+import { RecallConfirmModal } from './components/RecallConfirmModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { DraftFormSelectModal } from './components/DraftFormSelectModal';
 import { absenceRepo } from '@/data/absence/absence.repo';
@@ -997,6 +998,7 @@ function DocDetail({
   const confirmPostReadM = useConfirmPostRead();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRecallModal, setShowRecallModal] = useState(false);
   const [approveComment, setApproveComment] = useState('');
   const [err, setErr] = useState('');
 
@@ -1054,7 +1056,26 @@ function DocDetail({
     };
   }, [doc, me]);
   const iAmDrafter = doc.drafterId === me;
-  const canRecall = iAmDrafter && doc.status === '진행중' && !doc.steps.some((s) => s.kind !== '참조' && s.decision === '승인');
+  const canRecall = iAmDrafter && doc.status === '진행중';
+  const approvedApprovers = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { name: string; position: string | null; dept: string | null }[] = [];
+    for (const s of doc.steps) {
+      if (s.kind !== '참조' && s.decision === '승인') {
+        if (!seen.has(s.approverId)) {
+          seen.add(s.approverId);
+          const u = users.find((user) => user.id === s.approverId);
+          list.push({
+            name: s.approverName || u?.name || s.approverId,
+            position: s.approverPos || u?.position || null,
+            dept: s.approverDept || u?.dept || null,
+          });
+        }
+      }
+    }
+    return list;
+  }, [doc.steps, users]);
+  const hasApprovedSteps = approvedApprovers.length > 0;
   const canResubmit = iAmDrafter && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '회수' || doc.status === '시행반송');
   const canEditDraft = iAmDrafter && doc.status === '임시저장';
   const isInTrash = iAmDrafter && doc.status === '삭제';
@@ -1586,7 +1607,18 @@ function DocDetail({
             <button onClick={() => setShowApproveModal(true)} disabled={busy} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50">승인</button>
           </>
         )}
-        {canRecall && <button onClick={() => run(() => recallM.mutateAsync({ id: doc.id, userId: me }))} disabled={busy} className="rounded-lg border border-border-hi px-3.5 py-2 text-[12.5px] font-bold text-ink2 hover:border-amber hover:text-amber disabled:opacity-50">회수</button>}
+        {canRecall && (
+          <button
+            type="button"
+            onClick={() => setShowRecallModal(true)}
+            disabled={busy}
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-[12.5px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+            title={hasApprovedSteps ? '이미 승인한 결재자가 있는 문서를 사유 입력 후 회수합니다' : '상신한 문서를 회수합니다'}
+          >
+            <RotateCcw size={14} />
+            <span>{hasApprovedSteps ? '결재 회수' : '회수'}</span>
+          </button>
+        )}
         {canEditDraft && (
           <>
             <button onClick={toTrash} disabled={busy} className="rounded-lg border border-red-500/50 px-3.5 py-2 text-[12.5px] font-bold text-red-500 hover:bg-red-500/5 disabled:opacity-50">삭제</button>
@@ -1786,6 +1818,21 @@ function DocDetail({
             handleConfirmApprove();
           }}
           onClose={() => setShowApproveModal(false)}
+        />
+      )}
+
+      {/* 결재 문서 회수 확인/사유 입력 모달 */}
+      {showRecallModal && (
+        <RecallConfirmModal
+          open={showRecallModal}
+          docTitle={doc.title}
+          approvedApprovers={approvedApprovers}
+          busy={busy}
+          onConfirm={async (reason) => {
+            await run(() => recallM.mutateAsync({ id: doc.id, userId: me, reason }));
+            setShowRecallModal(false);
+          }}
+          onClose={() => setShowRecallModal(false)}
         />
       )}
     </div>

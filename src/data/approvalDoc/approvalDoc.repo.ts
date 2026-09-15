@@ -790,19 +790,47 @@ export const approvalDocRepo = {
     return next;
   },
 
-  /** 회수 — 승인 전 진행중 문서를 기안자가 상신 취소(엔진 위임). */
-  async recall(id: string, userId: string): Promise<ApprovalDoc> {
+  /** 회수 — 진행중 문서를 기안자가 상신 취소(엔진 위임). */
+  async recall(id: string, userId: string, reason?: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
     if (cur.drafterId !== userId) throw new Error('기안자만 회수할 수 있습니다');
-    const next = recallDoc(cur);
+    
+    // 이미 승인을 완료했던 타 결재자 목록 추출 (알림 통보용, 중복 제거)
+    const approvedApproverIds = Array.from(
+      new Set(
+        cur.steps
+          .filter((s) => s.kind !== '참조' && s.decision === '승인' && s.approverId !== userId)
+          .map((s) => s.approverId)
+      )
+    );
+
+    const next = recallDoc(cur, { reason, userId, allowMidRecall: true });
     await persist(next);
     await handleCancelTargetOnAbort(next);
 
     try {
       const { notificationRepo } = await import('@/data/notification/notification.repo');
       await notificationRepo.removePendingRequests(next.id);
+
+      if (approvedApproverIds.length > 0) {
+        const users = await userRepo.list();
+        const drafter = users.find((u) => u.id === userId);
+        const drafterName = drafter?.name || cur.drafterName || '기안자';
+        const reasonText = reason ? ` (사유: ${reason})` : '';
+
+        for (const approverId of approvedApproverIds) {
+          await notificationRepo.create({
+            userId: approverId,
+            type: '결재',
+            title: '결재 회수 알림',
+            text: `${drafterName}님이 '${cur.title}' 문서를 회수하였습니다.${reasonText}`,
+            senderName: drafterName,
+            linkUrl: `/gw/approval?doc=${cur.id}`,
+          });
+        }
+      }
     } catch (e) {
-      console.error('회수 알림 정리 실패:', e);
+      console.error('회수 알림 처리 실패:', e);
     }
 
     return next;

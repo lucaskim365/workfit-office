@@ -130,7 +130,8 @@ export function useDecideStep() {
 export function useRecallApproval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, userId }: { id: string; userId: string }) => approvalDocRepo.recall(id, userId),
+    mutationFn: ({ id, userId, reason }: { id: string; userId: string; reason?: string }) =>
+      approvalDocRepo.recall(id, userId, reason),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }

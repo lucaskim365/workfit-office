@@ -243,6 +243,10 @@ export const approvalDocSchema = z.object({
   cancelledByDocId: z.string().nullable().optional(),
   /** 원문서 관점: 취소 승인 완료 일시 (ISO string) */
   cancelledAt: z.string().nullable().optional(),
+  /** 결재 진행 중 회수 관련 메타데이터 */
+  recallReason: z.string().nullable().optional().default(null),
+  recalledAt: z.string().nullable().optional().default(null),
+  recalledBy: z.string().nullable().optional().default(null),
 });
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;

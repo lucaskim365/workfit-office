@@ -326,12 +326,25 @@ export function byRecent(a: ApprovalDoc, b: ApprovalDoc): number {
   return (b.submittedAt ?? b.createdAt ?? '').localeCompare(a.submittedAt ?? a.createdAt ?? '');
 }
 
-/** 회수 — 아직 아무도 승인하지 않은 진행중 문서를 기안자가 상신 취소. */
-export function recall(doc: ApprovalDoc): ApprovalDoc {
+/** 회수 — 진행중 문서를 기안자가 상신 취소. 중간 결재자가 승인한 경우 사유 입력 기반으로 회수 허용. */
+export function recall(
+  doc: ApprovalDoc,
+  options?: { reason?: string | null; userId?: string | null; allowMidRecall?: boolean },
+): ApprovalDoc {
   if (doc.status !== '진행중') throw new ApprovalError('진행중 문서만 회수할 수 있습니다');
   const anyApproved = doc.steps.filter(isBlocking).some((s) => s.decision === '승인');
-  if (anyApproved) throw new ApprovalError('이미 승인이 진행돼 회수할 수 없습니다');
-  return { ...doc, status: '회수', currentSeq: 0 };
+  if (anyApproved && !options?.allowMidRecall) {
+    throw new ApprovalError('이미 승인이 진행돼 회수할 수 없습니다');
+  }
+  const now = new Date().toISOString();
+  return {
+    ...doc,
+    status: '회수',
+    currentSeq: 0,
+    recallReason: options?.reason ?? doc.recallReason ?? null,
+    recalledAt: now,
+    recalledBy: options?.userId ?? doc.recalledBy ?? null,
+  };
 }
 
 // ── 후임자 업무/권한 승계 판별 헬퍼 ──

@@ -12,8 +12,8 @@ import logoImg from '@/assets/logo.png';
 import { useUsers } from '@/features/user/useUsers';
 import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { RelatedDocDetailModal } from './RelatedDocDetailModal';
+import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
-import { ShieldAlert, Lock, AlertTriangle } from 'lucide-react';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -518,6 +518,31 @@ export function ApprovalDocumentView({
             <div className="text-[11.5px] leading-relaxed text-[#444] mt-1">
               본 문서는 취소 결재({doc.cancelledByDocId ? `문서번호: ${doc.cancelledByDocId}` : '취소 승인'})를 통해 공식적으로 취소 처리 완료되었습니다.
               연동된 일정 및 휴가 차감 내역은 자동으로 환원/삭제되었습니다.
+            </div>
+          </div>
+        )}
+
+        {/* 회수된 문서 안내 배너 */}
+        {doc.status === '회수' && (
+          <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-[12px] text-amber-900 print:border-amber-300 print:text-black">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-amber-700">
+                <RotateCcw size={15} className="shrink-0" />
+                <span>[회수된 결재 문서]</span>
+              </div>
+              {doc.recalledAt && (
+                <span className="text-[11px] font-semibold text-amber-600">
+                  회수 일시: {korDate(doc.recalledAt)}
+                </span>
+              )}
+            </div>
+            <div className="text-[11.5px] leading-relaxed text-[#444] mt-1">
+              본 문서는 기안자에 의해 회수되었습니다. 내용 수정 후 [편집] 및 [재상신]이 가능합니다.
+              {doc.recallReason && (
+                <div className="mt-1 font-semibold text-amber-800">
+                  • 회수 사유: {doc.recallReason}
+                </div>
+              )}
             </div>
           </div>
         )}
