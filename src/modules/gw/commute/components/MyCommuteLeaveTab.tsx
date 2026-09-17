@@ -6,7 +6,7 @@ import { useLeave } from '@/features/gw/useLeave';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { calculateLeaveDays } from '@/domain/leave/policy';
+import { calculateLeaveDays, getLeaveBadgeLabel, isAnnualLeaveDeduction } from '@/domain/leave/policy';
 import { Button } from '@/shared/ui/Button';
 import {
   Calendar as CalendarIcon,
@@ -133,7 +133,7 @@ export function MyCommuteLeaveTab({
   const goDoc = (d: ApprovalDoc) => nav(`/gw/approval?doc=${d.docNo || d.id}`);
 
   const annualLeaveHistoryDocs = useMemo(() => {
-    return bal.myDocs.filter((d) => d.status === '완료' && (d.form?.leaveType === '연차' || d.form?.leaveType === '반차' || d.form?.leaveType === '대체휴무'));
+    return bal.myDocs.filter((d) => d.status === '완료' && (isAnnualLeaveDeduction(d.form?.leaveType) || d.form?.leaveType === '대체휴무'));
   }, [bal.myDocs]);
 
   const filteredRequests = useMemo(() => {
@@ -180,27 +180,27 @@ export function MyCommuteLeaveTab({
               </div>
             ) : todayRecord?.status === 'leave' ? (
               <div className="py-1">
-                <div className="text-[18px] font-extrabold text-emerald-600 flex items-center gap-1.5">
-                  <span>🏖️</span>
+                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
+                  <CalendarCheck2 size={16} className="text-teal" />
                   <span>{todayRecord.leaveName || '휴가 중'}</span>
                 </div>
-                <div className="text-[11px] text-emerald-700/80">승인된 휴가 일정이 적용되었습니다.</div>
+                <div className="text-[11px] text-ink3">승인된 휴가 일정이 적용되었습니다.</div>
               </div>
             ) : todayRecord?.status === 'outside' ? (
               <div className="py-1">
-                <div className="text-[18px] font-extrabold text-blue-600 flex items-center gap-1.5">
-                  <span>🏃</span>
+                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
+                  <Briefcase size={16} className="text-teal" />
                   <span>{todayRecord.outsideName || '외근 중'}</span>
                 </div>
-                <div className="text-[11px] text-blue-700/80">승인된 외근 일정이 적용되어 정상 인정됩니다.</div>
+                <div className="text-[11px] text-ink3">승인된 외근 일정이 적용되어 정상 인정됩니다.</div>
               </div>
             ) : todayRecord?.status === 'trip' ? (
               <div className="py-1">
-                <div className="text-[18px] font-extrabold text-purple-600 flex items-center gap-1.5">
-                  <span>🚗</span>
+                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
+                  <Briefcase size={16} className="text-teal" />
                   <span>{todayRecord.tripName || '출장 중'}</span>
                 </div>
-                <div className="text-[11px] text-purple-700/80">승인된 출장 일정이 적용되어 정상 인정됩니다.</div>
+                <div className="text-[11px] text-ink3">승인된 출장 일정이 적용되어 정상 인정됩니다.</div>
               </div>
             ) : isWeekend(todayStr) ? (
               <div className="py-1">
@@ -209,7 +209,7 @@ export function MyCommuteLeaveTab({
               </div>
             ) : (
               <div className="py-1">
-                <div className="text-[18px] font-extrabold text-amber">미체크 / 출근 전</div>
+                <div className="text-[18px] font-extrabold text-ink">미체크 / 출근 전</div>
                 <div className="text-[11px] text-ink3">CAPS 출입 리더기에 태그해 주세요.</div>
               </div>
             )}
@@ -221,7 +221,7 @@ export function MyCommuteLeaveTab({
               <button
                 type="button"
                 onClick={() => nav(`/gw/approval/new?type=외근&date=${todayStr}`)}
-                className="text-[10.5px] font-bold text-blue-600 hover:underline"
+                className="text-[10.5px] font-bold text-ink2 hover:text-teal hover:underline"
               >
                 외근 신청
               </button>
@@ -229,7 +229,7 @@ export function MyCommuteLeaveTab({
               <button
                 type="button"
                 onClick={() => nav(`/gw/approval/new?type=국내출장&date=${todayStr}`)}
-                className="text-[10.5px] font-bold text-purple-600 hover:underline"
+                className="text-[10.5px] font-bold text-ink2 hover:text-teal hover:underline"
               >
                 출장 신청
               </button>
@@ -238,10 +238,10 @@ export function MyCommuteLeaveTab({
         </div>
 
         {/* 카드 2: 내 연차 잔여 & 휴가 신청 퀵 액션 */}
-        <div className="rounded-xl border border-teal/30 bg-teal/5 p-4 shadow-2xs flex flex-col justify-between relative overflow-hidden">
+        <div className="rounded-xl border border-border bg-panel p-4 shadow-2xs flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11.5px] font-bold text-teal flex items-center gap-1.5">
-              <span>🏖️</span>
+            <span className="text-[11.5px] font-bold text-ink2 flex items-center gap-1.5">
+              <CalendarCheck2 size={14} className="text-teal" />
               <span>내 연차 현황</span>
             </span>
             {canCreateLeave && (
@@ -453,29 +453,29 @@ export function MyCommuteLeaveTab({
 
                     <div className="mt-auto space-y-1">
                       {/* 휴가 상태인 경우 */}
-                      {row.status === 'leave' ? (
-                        <div className="rounded-md bg-emerald-500/15 p-1 text-center border border-emerald-500/30">
-                          <div className="text-[10px] font-extrabold text-emerald-600 flex items-center justify-center gap-1">
-                            <span>🏖️</span>
-                            <span className="truncate">{row.leaveName || '연차'}</span>
+                      {row.status === 'leave' ? (() => {
+                        const badge = getLeaveBadgeLabel(row.leaveName);
+                        return (
+                          <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
+                            <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
+                              <span className="truncate">{badge.label}</span>
+                            </div>
+                            <div className="text-[8.5px] font-medium text-ink3">{badge.tooltip}</div>
                           </div>
-                          <div className="text-[8.5px] font-medium text-emerald-700/80">승인 완료</div>
-                        </div>
-                      ) : row.status === 'outside' ? (
-                        <div className="rounded-md bg-blue-500/15 p-1 text-center border border-blue-500/30">
-                          <div className="text-[10px] font-extrabold text-blue-600 flex items-center justify-center gap-1">
-                            <span>🏃</span>
+                        );
+                      })() : row.status === 'outside' ? (
+                        <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
+                          <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
                             <span className="truncate">{row.outsideName || '외근'}</span>
                           </div>
-                          <div className="text-[8.5px] font-medium text-blue-700/80">승인 완료</div>
+                          <div className="text-[8.5px] font-medium text-ink3">승인 완료</div>
                         </div>
                       ) : row.status === 'trip' ? (
-                        <div className="rounded-md bg-purple-500/15 p-1 text-center border border-purple-500/30">
-                          <div className="text-[10px] font-extrabold text-purple-600 flex items-center justify-center gap-1">
-                            <span>🚗</span>
+                        <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
+                          <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
                             <span className="truncate">{row.tripName || '출장'}</span>
                           </div>
-                          <div className="text-[8.5px] font-medium text-purple-700/80">승인 완료</div>
+                          <div className="text-[8.5px] font-medium text-ink3">승인 완료</div>
                         </div>
                       ) : row.inAt || row.outAt ? (
                         /* 출퇴근 기록이 있는 경우 */
@@ -552,17 +552,20 @@ export function MyCommuteLeaveTab({
                       <td className="p-2 text-ink2 font-medium">{hourText(row.totalMin)}</td>
                       <td className="p-2 text-ink2">{row.lateMin > 0 ? `${row.lateMin}분` : '—'}</td>
                       <td className="p-2">
-                        {row.status === 'leave' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-600">
-                            🏖️ {row.leaveName || '휴가'}
-                          </span>
-                        ) : row.status === 'outside' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-2 py-0.5 text-[9.5px] font-extrabold text-blue-600">
-                            🏃 {row.outsideName || '외근'}
+                        {row.status === 'leave' ? (() => {
+                          const badge = getLeaveBadgeLabel(row.leaveName);
+                          return (
+                            <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2" title={badge.tooltip}>
+                              {badge.label}
+                            </span>
+                          );
+                        })() : row.status === 'outside' ? (
+                          <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2">
+                            {row.outsideName || '외근'}
                           </span>
                         ) : row.status === 'trip' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-purple-500/15 px-2 py-0.5 text-[9.5px] font-extrabold text-purple-600">
-                            🚗 {row.tripName || '출장'}
+                          <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2">
+                            {row.tripName || '출장'}
                           </span>
                         ) : row.status === 'normal' ? (
                           <span className="rounded bg-teal/15 px-2 py-0.5 text-[9.5px] font-bold text-teal">정상 출근</span>
@@ -678,9 +681,14 @@ export function MyCommuteLeaveTab({
                         <tr key={d.id} className="hover:bg-panel-alt/30 transition-colors">
                           <td className="p-2 text-ink2 font-medium">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2">
-                            <span className="rounded bg-panel-alt px-1.5 py-0.5 font-bold text-ink">
-                              {d.form?.leaveType}
-                            </span>
+                            {(() => {
+                              const badge = getLeaveBadgeLabel(d.form?.leaveType, d.title);
+                              return (
+                                <span className="rounded bg-panel-alt border border-border px-1.5 py-0.5 font-bold text-ink2" title={badge.tooltip}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="p-2 text-rose-500 font-extrabold">-{usedDays}일</td>
                           <td className="p-2 text-ink truncate max-w-[240px]">{d.body || d.title}</td>
@@ -746,7 +754,16 @@ export function MyCommuteLeaveTab({
                           className="hover:bg-panel-alt/30 transition-colors cursor-pointer"
                         >
                           <td className="p-2 text-ink3 font-mono">{d.docNo || d.id.slice(0, 8)}</td>
-                          <td className="p-2 font-bold text-ink">{d.form?.leaveType || '휴가'}</td>
+                          <td className="p-2 font-bold text-ink">
+                            {(() => {
+                              const badge = getLeaveBadgeLabel(d.form?.leaveType, d.title);
+                              return (
+                                <span className="rounded bg-panel-alt border border-border px-1.5 py-0.5 text-[10px] font-bold text-ink2" title={badge.tooltip}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="p-2 text-ink2">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2 font-extrabold text-ink tabular-nums">{d.form?.days}일</td>
                           <td className="p-2">

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 
 /**
  * 근태 조회 도메인 — CAPS 인제스트가 저장하는 Firestore 문서(서버 계약 §5)의 클라이언트 뷰.
@@ -89,11 +90,24 @@ export interface CommuteMonthSummary {
 }
 
 export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummary {
+  let leaveDays = 0;
+  for (const row of rows) {
+    if (row.status === 'leave') {
+      leaveDays += 1;
+    } else if (row.leaveName) {
+      if (isQuarterDayLeave(row.leaveName)) {
+        leaveDays += 0.25;
+      } else if (isHalfDayLeave(row.leaveName)) {
+        leaveDays += 0.5;
+      }
+    }
+  }
+
   return {
     workDays: rows.filter((row) => row.inAt !== null || row.outAt !== null).length,
     lateDays: rows.filter((row) => row.status === 'late').length,
     absentDays: rows.filter((row) => row.status === 'absent').length,
-    leaveDays: rows.filter((row) => row.status === 'leave').length,
+    leaveDays,
     totalMin: rows.reduce((sum, row) => sum + (row.totalMin ?? 0), 0),
     overMinTotal: 0,
   };

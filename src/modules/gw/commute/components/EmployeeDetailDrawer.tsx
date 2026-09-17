@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { CommutePersonRow } from '../types';
 import { X, Calendar, Building } from 'lucide-react';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
+import { getLeaveBadgeLabel } from '@/domain/leave/policy';
 import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
 import { COMMUTE_STATUS_TONES } from '@/data/commute/commute.fixture';
 
@@ -101,21 +102,21 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
               <div className="text-[10px] font-bold text-ink3">근무시간</div>
               <div className="mt-1 text-sm font-extrabold text-teal">{hourText(summary.totalMin)}</div>
             </div>
-            <div className={`rounded-lg border p-2 text-center ${summary.lateDays > 0 ? 'border-amber/30 bg-amber/10' : 'border-border bg-panel-alt/40'}`}>
+            <div className="rounded-lg border border-border bg-panel-alt/40 p-2 text-center">
               <div className="text-[10px] font-bold text-ink3">지각</div>
-              <div className={`mt-1 text-sm font-extrabold ${summary.lateDays > 0 ? 'text-amber font-black' : 'text-ink'}`}>
+              <div className={`mt-1 text-sm font-extrabold ${summary.lateDays > 0 ? 'text-amber-700 dark:text-amber-400 font-black' : 'text-ink'}`}>
                 {summary.lateDays}회
               </div>
             </div>
-            <div className={`rounded-lg border p-2 text-center ${summary.absentDays > 0 ? 'border-rose-500/30 bg-rose-500/10' : 'border-border bg-panel-alt/40'}`}>
+            <div className="rounded-lg border border-border bg-panel-alt/40 p-2 text-center">
               <div className="text-[10px] font-bold text-ink3">결근</div>
-              <div className={`mt-1 text-sm font-extrabold ${summary.absentDays > 0 ? 'text-rose-500 font-black' : 'text-ink'}`}>
+              <div className={`mt-1 text-sm font-extrabold ${summary.absentDays > 0 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-ink'}`}>
                 {summary.absentDays}일
               </div>
             </div>
-            <div className={`rounded-lg border p-2 text-center ${summary.leaveDays > 0 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-panel-alt/40'}`}>
+            <div className="rounded-lg border border-border bg-panel-alt/40 p-2 text-center">
               <div className="text-[10px] font-bold text-ink3">휴가</div>
-              <div className="mt-1 text-sm font-extrabold text-emerald-600">{summary.leaveDays}일</div>
+              <div className="mt-1 text-sm font-extrabold text-ink">{summary.leaveDays}일</div>
             </div>
           </div>
         </div>
@@ -144,7 +145,7 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
             type="button"
             onClick={() => setFilterType('anomaly')}
             className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
-              filterType === 'anomaly' ? 'bg-rose-500 text-white' : 'text-rose-600 hover:bg-rose-500/10'
+              filterType === 'anomaly' ? 'bg-rose-600 text-white' : 'text-ink2 hover:bg-panel-alt'
             }`}
           >
             이상 근태 ({person.anomalyCount})
@@ -153,7 +154,7 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
             type="button"
             onClick={() => setFilterType('leave')}
             className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
-              filterType === 'leave' ? 'bg-emerald-600 text-white' : 'text-emerald-600 hover:bg-emerald-500/10'
+              filterType === 'leave' ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'
             }`}
           >
             휴가 ({summary.leaveDays})
@@ -176,21 +177,27 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
                   <div className="flex items-center gap-2">
                     <span
                       className={`font-extrabold w-12 tabular-nums ${
-                        holiday || rec.date.endsWith('일') ? 'text-rose-500' : weekend ? 'text-blue-500' : 'text-ink'
+                        holiday || rec.date.endsWith('일') ? 'text-rose-500/90' : weekend ? 'text-blue-500/90' : 'text-ink'
                       }`}
                     >
                       {rec.date.slice(5).replace('-', '/')}
                     </span>
                     {holiday && (
-                      <span className="rounded bg-rose-500/15 px-1 py-0.2 text-[9px] font-bold text-rose-600">
+                      <span className="rounded bg-rose-500/10 border border-rose-500/20 px-1 py-0.2 text-[9px] font-bold text-rose-600 dark:text-rose-400">
                         {holiday}
                       </span>
                     )}
-                    {rec.leaveName && (
-                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-600">
-                        🏖️ {rec.leaveName}
-                      </span>
-                    )}
+                    {rec.leaveName && (() => {
+                      const badge = getLeaveBadgeLabel(rec.leaveName);
+                      return (
+                        <span
+                          className="rounded bg-panel-alt border border-border px-1.5 py-0.2 text-[9.5px] font-bold text-ink2"
+                          title={badge.tooltip}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex items-center gap-3">

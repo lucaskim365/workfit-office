@@ -580,6 +580,14 @@ export default function CommuteScreen() {
 
   // 전사 직원들의 한 달치 데이터 매트릭스 구성
   const allPersonRows = useMemo(() => {
+    // CAPS DB 사번과 사원명 매핑 (CAPS ID와 워크핏 사번 불일치 시 실데이터 누락 방지)
+    const capsEmpIdByName = new Map<string, number>();
+    for (const ce of allEmployees) {
+      capsEmpIdByName.set(ce.name.trim(), ce.empId);
+      const n = normName(ce.name);
+      if (n) capsEmpIdByName.set(n, ce.empId);
+    }
+
     const rawByEmp = new Map<number, Map<string, CommuteRecord>>();
     for (const row of monthAllQuery.data ?? []) {
       if (!rawByEmp.has(row.empId)) rawByEmp.set(row.empId, new Map());
@@ -595,7 +603,9 @@ export default function CommuteScreen() {
       const u = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
       const hireDate = getHireDateForEmp(emp.name, emp.empId);
       const personLeaveMap = globalLeaveMap.get(emp.name.trim()) ?? globalLeaveMap.get(normName(emp.name)) ?? new Map();
-      const rawMap = rawByEmp.get(emp.empId);
+      
+      const capsId = capsEmpIdByName.get(emp.name.trim()) ?? capsEmpIdByName.get(normName(emp.name));
+      const rawMap = rawByEmp.get(emp.empId) ?? (capsId !== undefined ? rawByEmp.get(capsId) : undefined);
 
       const records: CommuteRecord[] = [];
       const recordsMap = new Map<string, CommuteRecord>();
@@ -867,7 +877,6 @@ export default function CommuteScreen() {
             label="정상 출근"
             value={`${kpiStats.totalPresent}건`}
             sub="당월 누적 출근"
-            tone="border-teal/25 bg-teal/8"
             onClick={() => {
               setStatusFilter('present');
               setOnlyAnomaly(false);
@@ -877,7 +886,7 @@ export default function CommuteScreen() {
           <StatCard
             label="지각"
             value={`${kpiStats.totalLate}건`}
-            tone={kpiStats.totalLate > 0 ? 'border-amber/25 bg-amber/8' : undefined}
+            sub="규정 시각 초과"
             onClick={() => {
               setStatusFilter('late');
               setOnlyAnomaly(false);
@@ -887,7 +896,7 @@ export default function CommuteScreen() {
           <StatCard
             label="결근"
             value={`${kpiStats.totalAbsent}건`}
-            tone={kpiStats.totalAbsent > 0 ? 'border-rose-500/20 bg-rose-500/6' : undefined}
+            sub="미승인 결근"
             onClick={() => {
               setStatusFilter('absent');
               setOnlyAnomaly(false);
@@ -898,17 +907,21 @@ export default function CommuteScreen() {
             label="휴가"
             value={`${kpiStats.totalLeave}건`}
             sub="승인 완료 건수"
-            tone="border-emerald-500/25 bg-emerald-500/8"
             onClick={() => {
               handleAdminTabChange('leave');
             }}
             active={adminTab === 'leave'}
           />
           <StatCard
-            label="⚠️ 확인 필요"
-            value={`${kpiStats.totalAnomaly}건`}
+            label="이상 근태"
+            value={
+              kpiStats.totalAnomaly > 0 ? (
+                <span className="text-rose-600 dark:text-rose-400">{kpiStats.totalAnomaly}건</span>
+              ) : (
+                `${kpiStats.totalAnomaly}건`
+              )
+            }
             sub="지각 · 결근 · 미기록"
-            tone="border-rose-500/40 bg-rose-500/12 ring-1 ring-rose-500/25"
             onClick={() => {
               setOnlyAnomaly((prev) => !prev);
               setStatusFilter('ALL');

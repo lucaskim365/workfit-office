@@ -210,6 +210,32 @@ export function isPartDayLeave(leaveType?: string | null, title?: string | null)
   return isHalfDayLeave(leaveType, title) || isQuarterDayLeave(leaveType, title);
 }
 
+/**
+ * 휴가 배지 표준 라벨 (단일화 기준)
+ * - 오전반차 / 오후반차 -> '반차' (툴팁에 오전/오후 표기)
+ * - 반반차 -> '반반'
+ * - 기타 -> 원본 휴가명
+ */
+export function getLeaveBadgeLabel(leaveType?: string | null, title?: string | null): {
+  label: string;
+  tooltip: string;
+} {
+  if (isQuarterDayLeave(leaveType, title)) {
+    return { label: '반반', tooltip: leaveType?.trim() || '반반차' };
+  }
+  if (isHalfDayLeave(leaveType, title)) {
+    const raw = (leaveType || '').trim();
+    const detail = raw.includes('오전') || (title || '').includes('오전')
+      ? '오전반차'
+      : raw.includes('오후') || (title || '').includes('오후')
+      ? '오후반차'
+      : '반차';
+    return { label: '반차', tooltip: detail };
+  }
+  const clean = (leaveType || '연차').trim();
+  return { label: clean, tooltip: clean };
+}
+
 export interface CalculateLeaveDaysOptions {
   leaveType?: string | null;
   startDate?: string | null;

@@ -1,5 +1,6 @@
 import type { CommutePolicy } from '@/domain/commutePolicy/schema';
 import type { CommuteRecord, CommuteStatus } from '@/domain/commute/schema';
+import { isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 
 /**
  * 대한민국 법정 공휴일 (고정 및 2025~2027 대체공휴일/명절 포함)
@@ -258,7 +259,13 @@ export function evaluateCommuteRecord(
     };
   }
 
-  // 2. 출근 또는 퇴근 한쪽만 있는 경우 (미기록 또는 외근/출장 보정)
+  // 2. 출근 또는 퇴근 한쪽만 있는 경우 (미기록 또는 외근/출장/오후반차 보정)
+  const isLeaveHalf = isHalfDayLeave(approvedLeave?.leaveType, approvedLeave?.docTitle);
+  const isLeaveQuarter = isQuarterDayLeave(approvedLeave?.leaveType, approvedLeave?.docTitle);
+  const rawLeaveStr = `${approvedLeave?.leaveType || ''} ${approvedLeave?.docTitle || ''}`;
+  const isPmHalf = isLeaveHalf && (rawLeaveStr.includes('오후') || !rawLeaveStr.includes('오전'));
+  const isAmHalf = isLeaveHalf && rawLeaveStr.includes('오전');
+
   if (inAt && !outAt) {
     if (approvedLeave && (approvedLeave.category === 'OUTSIDE' || approvedLeave.category === 'TRIP')) {
       const status: CommuteStatus = approvedLeave.category === 'OUTSIDE' ? 'outside' : 'trip';
@@ -275,6 +282,24 @@ export function evaluateCommuteRecord(
         status,
         outsideName: status === 'outside' ? approvedLeave.leaveType : undefined,
         tripName: status === 'trip' ? approvedLeave.leaveType : undefined,
+        holidayName: holiday ?? undefined,
+      };
+    }
+
+    // 오후반차인 경우 오전 근무 후 퇴근 태그 누락이더라도 정상 근무(4시간)로 인정
+    if (isPmHalf) {
+      return {
+        empId,
+        date,
+        inAt,
+        outAt: null,
+        basicMin: 8 * 60,
+        overMin: 0,
+        nightMin: 0,
+        lateMin: 0,
+        totalMin: 8 * 60,
+        status: 'normal',
+        leaveName: approvedLeave?.leaveType,
         holidayName: holiday ?? undefined,
       };
     }
@@ -315,6 +340,24 @@ export function evaluateCommuteRecord(
       };
     }
 
+    // 오전반차인 경우 오후 출근 태그 누락 후 정상 퇴근 시 인정
+    if (isAmHalf) {
+      return {
+        empId,
+        date,
+        inAt: null,
+        outAt,
+        basicMin: 8 * 60,
+        overMin: 0,
+        nightMin: 0,
+        lateMin: 0,
+        totalMin: 8 * 60,
+        status: 'normal',
+        leaveName: approvedLeave?.leaveType,
+        holidayName: holiday ?? undefined,
+      };
+    }
+
     return {
       empId,
       date,
@@ -334,7 +377,10 @@ export function evaluateCommuteRecord(
   const inMin = timeToMinutes(inAt)!;
   const outMin = timeToMinutes(outAt)!;
 
-  const policyStartMin = timeToMinutes(policy.workStartTime)!;
+  // 오전반차인 경우 출근 기준 시각을 점심 종료 시각(breakEndTime, 기본 13:00)으로 시프트
+  const policyStartMin = isAmHalf
+    ? (timeToMinutes(policy.breakEndTime) ?? 780)
+    : timeToMinutes(policy.workStartTime)!;
   const policyLateThreshold = policyStartMin + (policy.lateGraceMin || 0);
 
   // 3. 지각(late) 판정 (주말/공휴일 출근 시는 휴일근무로 처리)
@@ -353,7 +399,14 @@ export function evaluateCommuteRecord(
   const effectiveInMin = Math.max(inMin, earlyLimitMin);
   const stayMin = Math.max(0, outMin - effectiveInMin);
   const breakMin = stayMin >= 240 ? policy.breakMin : 0;
-  const totalMin = Math.max(0, stayMin - breakMin);
+  let totalMin = Math.max(0, stayMin - breakMin);
+
+  // 반차(240분) 또는 반반차(120분) 인정 가산 (최대 8시간 480분)
+  if (isLeaveHalf) {
+    totalMin = Math.min(8 * 60, totalMin + 240);
+  } else if (isLeaveQuarter) {
+    totalMin = Math.min(8 * 60, totalMin + 120);
+  }
   const basicMin = totalMin;
   const overMin = 0;
 

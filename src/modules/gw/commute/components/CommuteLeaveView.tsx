@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
-import { FileText } from 'lucide-react';
-import { calculateLeaveDays } from '@/domain/leave/policy';
+import { FileText, CalendarCheck2 } from 'lucide-react';
+import { calculateLeaveDays, getLeaveBadgeLabel } from '@/domain/leave/policy';
 
 interface CommuteLeaveViewProps {
   month: string;
@@ -28,7 +28,7 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs">
       <div className="flex flex-wrap items-center justify-between border-b border-border bg-panel-alt/50 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-base">🏖️</span>
+          <CalendarCheck2 size={16} className="text-teal" />
           <h3 className="text-xs font-extrabold text-ink">
             전사 승인 휴가 현황 ({month.slice(0, 4)}년 {Number(month.slice(5))}월 총 {leaveDocs.length}건)
           </h3>
@@ -94,9 +94,17 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
                     </td>
                     <td className="p-3 text-ink2">{doc.drafterDept || matchedPerson?.dept || '—'}</td>
                     <td className="p-3 text-center">
-                      <span className="inline-block rounded-md bg-emerald-500/12 px-2 py-0.5 text-[10px] font-extrabold text-emerald-600 border border-emerald-500/25">
-                        {leaveType}
-                      </span>
+                      {(() => {
+                        const badge = getLeaveBadgeLabel(leaveType, doc.title);
+                        return (
+                          <span
+                            className="inline-block rounded-md bg-panel-alt border border-border px-2 py-0.5 text-[10px] font-bold text-ink2"
+                            title={badge.tooltip}
+                          >
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="p-3 text-center tabular-nums font-bold text-ink">
                       {daysCount}일

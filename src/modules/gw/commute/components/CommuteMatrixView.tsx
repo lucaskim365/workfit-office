@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import { getKoreanHoliday } from '@/domain/commute/engine';
+import { getLeaveBadgeLabel } from '@/domain/leave/policy';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { Building2 } from 'lucide-react';
 
@@ -13,21 +14,43 @@ interface CommuteMatrixViewProps {
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
+const timeOfHM = (iso?: string | null): string => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+  } catch {
+    // fallback
+  }
+  const match = iso.match(/T(\d{2}:\d{2})/);
+  if (match) return match[1];
+  if (iso.length >= 16) return iso.slice(11, 16);
+  return '';
+};
+
 function CellStatusBadge({ status, leaveName, holidayName }: { status: string; leaveName?: string; holidayName?: string }) {
   if (status === 'unknown') {
     return <span className="text-[10px] text-ink3/40 font-mono">—</span>;
   }
   if (status === 'leave') {
+    const badge = getLeaveBadgeLabel(leaveName);
     return (
-      <span className="inline-flex items-center justify-center rounded bg-emerald-500/15 px-1 py-0.2 text-[9px] font-extrabold text-emerald-600" title={leaveName || '휴가'}>
-        🏖️
+      <span
+        className="inline-flex items-center justify-center rounded bg-panel-alt border border-border px-1 py-0.2 text-[9px] font-bold text-ink2"
+        title={badge.tooltip}
+      >
+        {badge.label}
       </span>
     );
   }
   if (status === 'off') {
     if (holidayName && holidayName !== '주말 휴무') {
       return (
-        <span className="text-[8.5px] font-bold text-rose-500 truncate max-w-[28px] inline-block" title={holidayName}>
+        <span className="text-[8.5px] font-semibold text-rose-500/90 truncate max-w-[28px] inline-block" title={holidayName}>
           휴
         </span>
       );
@@ -35,41 +58,52 @@ function CellStatusBadge({ status, leaveName, holidayName }: { status: string; l
     return <span className="text-[9px] text-ink3/30">—</span>;
   }
   if (status === 'present' || status === 'normal') {
+    if (leaveName) {
+      const badge = getLeaveBadgeLabel(leaveName);
+      return (
+        <span
+          className="inline-flex items-center justify-center rounded bg-panel-alt border border-teal/40 px-1 py-0.2 text-[9px] font-bold text-teal"
+          title={`${badge.tooltip} (출근 완료)`}
+        >
+          {badge.label}
+        </span>
+      );
+    }
     return (
-      <span className="inline-flex items-center justify-center font-black text-[10px] text-teal" title="정상 출근">
+      <span className="inline-flex items-center justify-center font-bold text-[10px] text-teal/80" title="정상 출근">
         ●
       </span>
     );
   }
   if (status === 'holiday_work') {
     return (
-      <span className="inline-flex items-center justify-center rounded bg-indigo-500/20 px-1 py-0.2 text-[9px] font-bold text-indigo-600" title="휴일근무">
+      <span className="inline-flex items-center justify-center rounded bg-panel-alt border border-border px-1 py-0.2 text-[9px] font-medium text-ink2" title="휴일근무">
         휴근
       </span>
     );
   }
   if (status === 'late') {
     return (
-      <span className="inline-flex items-center justify-center rounded bg-amber/20 px-1 py-0.2 text-[9.5px] font-black text-amber" title="지각">
-        △
+      <span className="inline-flex items-center justify-center rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.2 text-[9px] font-bold text-amber-700 dark:text-amber-400" title="지각">
+        지각
       </span>
     );
   }
   if (status === 'absent') {
     return (
-      <span className="inline-flex items-center justify-center font-bold text-[10px] text-rose-500" title="결근">
-        ✕
+      <span className="inline-flex items-center justify-center rounded bg-rose-500/10 border border-rose-500/25 px-1 py-0.2 text-[9px] font-bold text-rose-600 dark:text-rose-400" title="결근">
+        결근
       </span>
     );
   }
   if (status === 'missing_in' || status === 'missing_out') {
     return (
-      <span className="inline-flex items-center justify-center rounded bg-orange-500/20 px-1 py-0.2 text-[9.5px] font-black text-orange-600" title="출/퇴근 미기록">
-        ❓
+      <span className="inline-flex items-center justify-center rounded bg-stone-500/10 border border-stone-500/25 px-1 py-0.2 text-[9px] font-medium text-stone-600 dark:text-stone-400" title="출/퇴근 미기록">
+        미체크
       </span>
     );
   }
-  return <span className="text-[9px] text-ink3/50 font-mono">—</span>;
+  return <span className="text-[9px] text-ink3/40 font-mono">—</span>;
 }
 
 /** 조직도 트리(roots)를 전위 순회하여 부서명 순서 리스트 도출 */
@@ -166,13 +200,14 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
           <Building2 size={13} className="text-teal" />
           <span>전사 부서별 근태 ({deptGroups.length}개 부서 · 총 {rows.length}명)</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 text-[9.5px] font-semibold">
+        <div className="flex flex-wrap items-center gap-2 text-[9.5px] font-semibold text-ink2">
           <span className="flex items-center gap-1"><span className="text-teal font-black">●</span> 정상</span>
-          <span className="flex items-center gap-1"><span className="text-amber font-black">△</span> 지각</span>
-          <span className="flex items-center gap-1"><span className="text-rose-600 font-black">✕</span> 결근</span>
-          <span className="flex items-center gap-1"><span>🏖️</span> 휴가</span>
-          <span className="flex items-center gap-1"><span className="text-orange-600 font-black">❓</span> 미기록</span>
-          <span className="flex items-center gap-1"><span className="text-ink3">—</span> 휴무/미체크</span>
+          <span className="flex items-center gap-1"><span className="rounded bg-panel-alt border border-border px-1 py-0.2 text-[8.5px] font-bold text-ink2">반차</span> (오전/오후)</span>
+          <span className="flex items-center gap-1"><span className="rounded bg-panel-alt border border-border px-1 py-0.2 text-[8.5px] font-bold text-ink2">반반</span> (2h)</span>
+          <span className="flex items-center gap-1"><span className="rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.2 text-[8.5px] font-bold text-amber-700 dark:text-amber-400">지각</span></span>
+          <span className="flex items-center gap-1"><span className="rounded bg-rose-500/10 border border-rose-500/25 px-1 py-0.2 text-[8.5px] font-bold text-rose-600 dark:text-rose-400">결근</span></span>
+          <span className="flex items-center gap-1"><span className="rounded bg-stone-500/10 border border-stone-500/25 px-1 py-0.2 text-[8.5px] font-medium text-stone-600 dark:text-stone-400">미체크</span></span>
+          <span className="flex items-center gap-1"><span className="text-ink3 font-mono">—</span> 휴무</span>
         </div>
       </div>
 
@@ -187,13 +222,13 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
               {daysInMonth.map(({ dateStr, dayNum, isSun, isSat, holiday }) => (
                 <th
                   key={dateStr}
-                  className={`px-1 py-2 text-center min-w-[30px] border-r border-border/40 ${
-                    holiday || isSun ? 'bg-rose-500/8 text-rose-500' : isSat ? 'bg-blue-500/8 text-blue-500' : ''
+                  className={`px-0.5 py-1.5 text-center min-w-[46px] border-r border-border/40 ${
+                    holiday || isSun ? 'bg-rose-500/5 text-rose-500/90' : isSat ? 'bg-blue-500/5 text-blue-500/90' : ''
                   }`}
                   title={holiday ? `${dayNum}일 (${holiday})` : `${dayNum}일`}
                 >
-                  <div className="font-extrabold">{dayNum}</div>
-                  <div className="text-[8px] font-medium opacity-80">
+                  <div className="font-extrabold text-[11px]">{dayNum}</div>
+                  <div className="text-[8.5px] font-medium opacity-80">
                     {isSun ? '일' : isSat ? '토' : ''}
                   </div>
                 </th>
@@ -222,10 +257,10 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
                     <td className="sticky left-0 z-20 bg-panel-alt px-3 py-2 border-r border-border min-w-[150px] shadow-xs">
                       <div className="flex items-center justify-between">
                         <span className="font-extrabold text-[12px] text-ink flex items-center gap-1.5">
-                          <span>🏢</span>
+                          <Building2 size={13} className="text-teal" />
                           <span>{group.dept}</span>
                         </span>
-                        <span className="rounded bg-teal/15 px-1.5 py-0.2 text-[9.5px] font-extrabold text-teal border border-teal/20">
+                        <span className="rounded bg-panel px-1.5 py-0.2 text-[9.5px] font-bold text-ink2 border border-border">
                           {group.memberCount}명
                         </span>
                       </div>
@@ -241,17 +276,17 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
                           출근 누적: <strong className="text-ink font-bold">{group.presentCount}일</strong>
                         </span>
                         {group.lateCount > 0 && (
-                          <span className="rounded bg-amber/15 px-1.5 py-0.2 text-[9.5px] font-bold text-amber">
+                          <span className="rounded bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.2 text-[9.5px] font-bold text-amber-700 dark:text-amber-400">
                             지각 {group.lateCount}건
                           </span>
                         )}
                         {group.leaveCount > 0 && (
-                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.2 text-[9.5px] font-bold text-emerald-600">
+                          <span className="rounded bg-panel border border-border px-1.5 py-0.2 text-[9.5px] font-bold text-ink2">
                             휴가 {group.leaveCount}건
                           </span>
                         )}
                         {group.anomalyCount > 0 && (
-                          <span className="rounded bg-rose-500/15 px-1.5 py-0.2 text-[9.5px] font-extrabold text-rose-600 border border-rose-500/25">
+                          <span className="rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.2 text-[9.5px] font-extrabold text-rose-600 dark:text-rose-400">
                             이상 {group.anomalyCount}건
                           </span>
                         )}
@@ -295,11 +330,13 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
                       {daysInMonth.map(({ dateStr, isSun, isSat, holiday }) => {
                         const record = row.recordsMap.get(dateStr);
                         const status = record?.status ?? 'unknown';
+                        const inTime = timeOfHM(record?.inAt);
+                        const outTime = timeOfHM(record?.outAt);
 
                         return (
                           <td
                             key={dateStr}
-                            className={`px-0.5 py-1 text-center border-r border-border/30 tabular-nums ${
+                            className={`px-0.5 py-1 text-center border-r border-border/30 tabular-nums select-none ${
                               holiday || isSun ? 'bg-rose-500/4' : isSat ? 'bg-blue-500/4' : ''
                             }`}
                             title={
@@ -308,11 +345,38 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
                                 : `${dateStr}`
                             }
                           >
-                            <CellStatusBadge
-                              status={status}
-                              leaveName={record?.leaveName}
-                              holidayName={record?.holidayName}
-                            />
+                            <div className="flex flex-col items-center justify-center min-h-[50px] gap-0.5">
+                              {/* 상단: 출근 시각 (지각 시 앰버 강조) */}
+                              <span
+                                className={`text-[10px] font-mono leading-none tracking-tight tabular-nums h-[11px] ${
+                                  status === 'late' && inTime
+                                    ? 'text-amber-700 dark:text-amber-400 font-extrabold'
+                                    : inTime
+                                    ? 'text-ink font-semibold'
+                                    : 'text-ink3/40'
+                                }`}
+                              >
+                                {inTime || '\u00A0'}
+                              </span>
+
+                              {/* 중앙: 상태 뱃지 (●, 반차, 지각, 결근, — 등) */}
+                              <div className="flex items-center justify-center my-0.5">
+                                <CellStatusBadge
+                                  status={status}
+                                  leaveName={record?.leaveName}
+                                  holidayName={record?.holidayName}
+                                />
+                              </div>
+
+                              {/* 하단: 퇴근 시각 */}
+                              <span
+                                className={`text-[10px] font-mono leading-none tracking-tight tabular-nums h-[11px] ${
+                                  outTime ? 'text-ink font-semibold' : 'text-ink3/40'
+                                }`}
+                              >
+                                {outTime || '\u00A0'}
+                              </span>
+                            </div>
                           </td>
                         );
                       })}
