@@ -3,7 +3,6 @@ import { CalendarEventError, type CalendarEventActor } from '@/data/calendarEven
 import {
   CALENDAR_VISIBILITIES,
   CALENDAR_VISIBILITY_LABELS,
-  CALENDAR_EVENT_TYPES,
   CALENDAR_EVENT_TYPE_LABELS,
   type CalendarEvent,
   type CalendarEventDraft,
@@ -23,6 +22,12 @@ import { Modal } from '@/shared/ui/Modal';
 import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { Users, X, ShieldAlert, Sparkles, UserPlus } from 'lucide-react';
+
+/**
+ * 캘린더에서 직접 등록 가능한 일정 유형.
+ * 외근·출장(OUTSIDE), 휴가·부재(VACATION)는 전자결재 승인을 통해서만 공인·등록되므로 등록 목록에서 제거합니다.
+ */
+const CREATABLE_EVENT_TYPES: CalendarEventType[] = ['GENERAL', 'MEETING', 'COMPANY_EVENT'];
 
 interface CalendarEventModalProps {
   actor: CalendarEventActor;
@@ -70,11 +75,14 @@ export default function CalendarEventModal({
   const usersQuery = useUsers();
   const allUsers = usersQuery.data ?? [];
 
+  /** 전자결재 승인 건 연동 여부 (CAL-APPR- 로 시작하는 가상 합성 일정) */
+  const isApprovalEvent = Boolean(event?.id?.startsWith('CAL-APPR-'));
+
   /*
-    공유는 보여주기까지다. 남의 일정은 열어서 볼 수만 있다 — 저장을 눌러도 저장소가
-    소유자가 아니라며 막으므로, 고칠 수 있는 것처럼 보이게 두면 안 된다.
+    공유는 보여주기까지다. 남의 일정 및 전자결재 연동 일정은 열어서 볼 수만 있다.
+    결재 연동 일정은 결재 문서에서 취소해야 하므로 캘린더에서 직접 수정/삭제하지 못하게 막는다.
   */
-  const canEdit = !event || event.ownerUserId === actor.userId;
+  const canEdit = !isApprovalEvent && (!event || event.ownerUserId === actor.userId);
   const [title, setTitle] = useState(event?.title ?? initialTitle ?? '');
   const [date, setDate] = useState(event?.date ?? initialDate);
   const [allDay, setAllDay] = useState(event?.allDay ?? true);
@@ -195,7 +203,9 @@ export default function CalendarEventModal({
       open
       onClose={() => !pending && onClose()}
       title={
-        !canEdit
+        isApprovalEvent
+          ? `${CALENDAR_EVENT_TYPE_LABELS[eventType]?.label ?? '전자결재 일정'} 상세`
+          : !canEdit
           ? '공유받은 일정'
           : event
           ? `${CALENDAR_EVENT_TYPE_LABELS[eventType]?.label ?? '일정'} 수정`
@@ -225,21 +235,31 @@ export default function CalendarEventModal({
       }
     >
       <fieldset disabled={!canEdit} className="contents">
-        {!canEdit && (
+        {isApprovalEvent ? (
+          <div className="mb-4 rounded-lg border border-teal/30 bg-teal-soft/10 px-3.5 py-2.5 text-[11px] leading-relaxed text-ink2">
+            <strong className="font-bold text-teal">전자결재 승인 연동 일정</strong>
+            <p className="text-[10.5px] text-ink3 mt-0.5">
+              이 일정은 전자결재(외근·출장·휴가)로 승인되어 자동 등록되었습니다. 일정 취소 및 변경은 전자결재 문서(취소 기안 등)를 통해 진행해주세요.
+            </p>
+          </div>
+        ) : !canEdit && (
           <div className="mb-4 rounded-lg border border-border bg-ink3/5 px-3 py-2 text-[10.5px] leading-relaxed text-ink2">
             {ownerName ? <strong className="font-bold">{ownerName}</strong> : '다른 사용자'}님이 공유한 일정입니다.
             <span className="text-ink3"> 내용은 볼 수 있고 고치는 것은 등록한 사람만 할 수 있습니다.</span>
           </div>
         )}
         <form id="calendar-event-form" onSubmit={submit} className="space-y-4">
-          {/* 1. 일정 유형 선택 칩 */}
+          {/* 1. 일정 유형 선택 칩 (외근·출장, 휴가는 전자결재 전용이므로 신규 등록 목록에서 제외) */}
           <Field label="일정 유형" required>
             <div className="flex flex-wrap gap-1.5">
-              {CALENDAR_EVENT_TYPES.map((typeKey) => {
+              {(isApprovalEvent || !CREATABLE_EVENT_TYPES.includes(eventType)
+                ? [eventType]
+                : CREATABLE_EVENT_TYPES
+              ).map((typeKey) => {
                 const meta = CALENDAR_EVENT_TYPE_LABELS[typeKey];
                 const isSelected = eventType === typeKey;
                 const isCompany = typeKey === 'COMPANY_EVENT';
-                const isLocked = isCompany && !canManageCompanyEvent;
+                const isLocked = (isCompany && !canManageCompanyEvent) || isApprovalEvent;
 
                 return (
                   <button
@@ -261,13 +281,15 @@ export default function CalendarEventModal({
                     }`}
                     title={
                       isLocked
-                        ? '사내행사는 운영자(OPERATOR) 또는 임원(EXEC)만 등록 가능합니다.'
+                        ? isApprovalEvent
+                          ? '전자결재 승인 일정은 유형을 변경할 수 없습니다.'
+                          : '사내행사는 운영자(OPERATOR) 또는 임원(EXEC)만 등록 가능합니다.'
                         : meta.label
                     }
                   >
                     <span>{meta.icon}</span>
                     <span>{meta.label}</span>
-                    {isLocked && <ShieldAlert size={12} className="text-amber-500 ml-0.5" />}
+                    {isCompany && !canManageCompanyEvent && <ShieldAlert size={12} className="text-amber-500 ml-0.5" />}
                   </button>
                 );
               })}

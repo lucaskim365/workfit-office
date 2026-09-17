@@ -24,7 +24,6 @@ export interface TagColorPreset {
   label: string;
   badgeClass: string;
   dotColor: string;
-  bgPreview: string;
 }
 
 export const TAG_COLOR_PRESETS: TagColorPreset[] = [
@@ -33,63 +32,54 @@ export const TAG_COLOR_PRESETS: TagColorPreset[] = [
     label: '블루',
     badgeClass: 'bg-blue-500/10 text-blue-600 border border-blue-500/30 dark:text-blue-400',
     dotColor: 'bg-blue-500',
-    bgPreview: 'bg-blue-500',
   },
   {
     id: 'purple',
     label: '퍼플',
     badgeClass: 'bg-purple-500/10 text-purple-600 border border-purple-500/30 dark:text-purple-400',
     dotColor: 'bg-purple-500',
-    bgPreview: 'bg-purple-500',
   },
   {
     id: 'teal',
     label: '틸/청록',
     badgeClass: 'bg-teal-500/10 text-teal-600 border border-teal-500/30 dark:text-teal-400',
     dotColor: 'bg-teal-500',
-    bgPreview: 'bg-teal-500',
   },
   {
     id: 'amber',
     label: '오렌지/앰버',
     badgeClass: 'bg-amber-500/10 text-amber-600 border border-amber-500/30 dark:text-amber-400',
     dotColor: 'bg-amber-500',
-    bgPreview: 'bg-amber-500',
   },
   {
     id: 'rose',
     label: '로즈/레드',
     badgeClass: 'bg-rose-500/10 text-rose-600 border border-rose-500/30 dark:text-rose-400',
     dotColor: 'bg-rose-500',
-    bgPreview: 'bg-rose-500',
   },
   {
     id: 'emerald',
     label: '에메랄드/그린',
     badgeClass: 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 dark:text-emerald-400',
     dotColor: 'bg-emerald-500',
-    bgPreview: 'bg-emerald-500',
   },
   {
     id: 'indigo',
     label: '인디고',
     badgeClass: 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/30 dark:text-indigo-400',
     dotColor: 'bg-indigo-500',
-    bgPreview: 'bg-indigo-500',
   },
   {
     id: 'pink',
     label: '핑크',
     badgeClass: 'bg-pink-500/10 text-pink-600 border border-pink-500/30 dark:text-pink-400',
     dotColor: 'bg-pink-500',
-    bgPreview: 'bg-pink-500',
   },
   {
     id: 'slate',
     label: '그레이',
     badgeClass: 'bg-slate-500/10 text-slate-600 border border-slate-500/30 dark:text-slate-400',
     dotColor: 'bg-slate-500',
-    bgPreview: 'bg-slate-500',
   },
 ];
 
@@ -102,7 +92,7 @@ export interface WorkPlanCustomTag {
 
 const DEFAULT_CUSTOM_TAGS: WorkPlanCustomTag[] = [
   {
-    tag: '외근·출장',
+    tag: '미팅',
     colorId: 'blue',
     badgeClass: 'bg-blue-500/10 text-blue-600 border border-blue-500/30 dark:text-blue-400',
     dotColor: 'bg-blue-500',

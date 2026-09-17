@@ -232,11 +232,11 @@ export interface WorkPlanTemplate {
 
 export const WORK_PLAN_TEMPLATES: WorkPlanTemplate[] = [
   {
-    id: 'tpl-outside',
-    name: '외근·출장 일정',
-    desc: '고객사 미팅 및 현장 방문 계획',
+    id: 'tpl-meeting-client',
+    name: '고객사 미팅 및 협의',
+    desc: '고객사 미팅 및 협의 사항 정리',
     icon: '🔵',
-    content: '- [ ] [외근·출장] 외부 고객사 방문 및 미팅\n- [ ] [보고] 미팅 결과 정리 및 피드백 공유',
+    content: '- [ ] [미팅] 고객사 온·오프라인 미팅 및 요구사항 청취\n- [ ] [보고] 미팅 결과 정리 및 피드백 공유',
   },
   {
     id: 'tpl-meeting',

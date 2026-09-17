@@ -25,18 +25,19 @@ export function isWorkPlanDerivedEvent(event: CalendarEvent): boolean {
 }
 
 /**
- * 캘린더 공유 대상이 되는 대표적인 태그 목록
+ * 캘린더 공유 대상이 되는 대표적인 업무 태그 목록 (외근·출장·휴가는 전자결재 전용이므로 제외)
  */
-export const SHAREABLE_TAGS = ['외근·출장', '외근', '출장', '회의', '미팅', '보고', '프로젝트', '마감'];
+export const SHAREABLE_TAGS = ['회의', '미팅', '보고', '프로젝트', '마감', '행사'];
 
 export function isShareableTag(tag?: string): boolean {
   if (!tag) return false;
+  // 외근·출장, 휴가는 전자결재 전용이므로 업무계획에서 캘린더 이벤트로 직접 우회 생성하지 않음
+  if (tag.includes('외근') || tag.includes('출장') || tag.includes('휴가')) return false;
   return SHAREABLE_TAGS.some((st) => tag.includes(st));
 }
 
 export function mapWorkPlanTagToCalendarEventType(tag?: string): CalendarEventType {
   if (!tag) return 'GENERAL';
-  if (tag.includes('외근') || tag.includes('출장')) return 'OUTSIDE';
   if (tag.includes('회의') || tag.includes('미팅')) return 'MEETING';
   return 'GENERAL';
 }

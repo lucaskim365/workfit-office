@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
@@ -15,6 +15,7 @@ import {
   isWorkPlanDerivedEvent,
 } from '@/domain/workPlan/workPlanCalendarBridge';
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
+import { useAuth } from '@/app/auth/AuthProvider';
 import { WorkPlanConfigModal } from './WorkPlanConfigModal';
 import {
   CheckSquare,
@@ -26,6 +27,8 @@ import {
   Plus,
   RefreshCw,
   AlertCircle,
+  ChevronDown,
+  Settings,
 } from 'lucide-react';
 
 const TIME_OPTIONS = [
@@ -56,12 +59,28 @@ export function WorkPlanEditorModal({
   onSave,
   onDelete,
 }: WorkPlanEditorModalProps) {
+  const { user } = useAuth();
   const [content, setContent] = useState(initialContent);
   const [shareToCalendar, setShareToCalendar] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [entryTab, setEntryTab] = useState<'schedule' | 'todo'>('schedule');
+  const [entryTab, setEntryTab] = useState<'schedule' | 'todo'>('todo');
   const [configModalTab, setConfigModalTab] = useState<'templates' | 'tags' | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const templateMenuRef = useRef<HTMLDivElement>(null);
+
+  // 드롭다운 바깥 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(e.target as Node)) {
+        setShowTemplateMenu(false);
+      }
+    };
+    if (showTemplateMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showTemplateMenu]);
 
   // 시간 일정 등록 상태
   const [eventTitle, setEventTitle] = useState('');
@@ -198,64 +217,10 @@ export function WorkPlanEditorModal({
         width={680}
       >
         <div className="space-y-4">
-          {/* 상단 툴바: 캘린더 불러오기 & 루틴 템플릿 */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-            <div className="flex items-center gap-2">
-              {/* 🔄 캘린더 일정 불러오기 버튼 (멱등성 보장) */}
-              <button
-                type="button"
-                onClick={handleImportCalendar}
-                className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/30 px-3 py-1.5 text-[11.5px] font-bold text-teal hover:bg-teal-soft/60 transition-all cursor-pointer shadow-2xs"
-                title="캘린더에 등록된 내 일정(회의/외근 등)을 중복 없이 가져옵니다."
-              >
-                <RefreshCw size={12} className={availableCalendarCount > 0 ? 'animate-spin-once text-teal' : ''} />
-                <span>캘린더 일정 불러오기</span>
-                {availableCalendarCount > 0 && (
-                  <span className="rounded-full bg-teal px-1.5 py-0.2 text-[9.5px] text-white">
-                    +{availableCalendarCount}
-                  </span>
-                )}
-              </button>
-
-              {/* 루틴 템플릿 관리 버튼 */}
-              <button
-                type="button"
-                onClick={() => setConfigModalTab('templates')}
-                className="flex items-center gap-1 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-[11px] font-medium text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
-                title="자주 쓰는 루틴 템플릿"
-              >
-                <Sparkles size={12} className="text-amber-500" />
-                <span>루틴 템플릿</span>
-              </button>
-
-              {templates.slice(0, 2).map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => handleApplyTemplate(tpl.content)}
-                  className="hidden sm:inline-flex items-center gap-1 rounded-md border border-border/80 bg-panel px-2 py-1 text-[10.5px] font-medium text-ink2 hover:border-teal hover:text-teal transition-all cursor-pointer"
-                  title={tpl.desc}
-                >
-                  <span>{tpl.icon}</span>
-                  <span>{tpl.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* 시간 일정 vs 일반 업무 탭 전환 세그먼트 */}
+          {/* 상단 툴바: 좌측(일반업무/시간일정 세그먼트) + 우측(캘린더 불러오기 & 루틴 템플릿 드롭다운) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
+            {/* 좌측: 일반 업무 vs 시간 일정 탭 전환 세그먼트 */}
             <div className="flex items-center rounded-lg border border-border bg-panel-alt p-0.5">
-              <button
-                type="button"
-                onClick={() => setEntryTab('schedule')}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-bold transition-all cursor-pointer ${
-                  entryTab === 'schedule'
-                    ? 'bg-panel text-blue-600 dark:text-blue-400 shadow-2xs'
-                    : 'text-ink3 hover:text-ink2'
-                }`}
-              >
-                <Clock size={13} />
-                <span>시간 일정</span>
-              </button>
               <button
                 type="button"
                 onClick={() => setEntryTab('todo')}
@@ -268,6 +233,135 @@ export function WorkPlanEditorModal({
                 <CheckSquare size={13} />
                 <span>일반 업무</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setEntryTab('schedule')}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-bold transition-all cursor-pointer ${
+                  entryTab === 'schedule'
+                    ? 'bg-panel text-blue-600 dark:text-blue-400 shadow-2xs'
+                    : 'text-ink3 hover:text-ink2'
+                }`}
+              >
+                <Clock size={13} />
+                <span>시간 일정</span>
+              </button>
+            </div>
+
+            {/* 우측 정렬: 캘린더 불러오기 & 루틴 템플릿 드롭다운 */}
+            <div className="ml-auto flex items-center gap-2 relative" ref={templateMenuRef}>
+              {/* 🔄 캘린더 일정 불러오기 버튼 (멱등성 보장) */}
+              <button
+                type="button"
+                onClick={handleImportCalendar}
+                className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/30 px-2.5 py-1.5 text-[11.5px] font-bold text-teal hover:bg-teal-soft/60 transition-all cursor-pointer shadow-2xs"
+                title="캘린더에 등록된 내 일정(회의 등)을 중복 없이 가져옵니다."
+              >
+                <RefreshCw size={12} className={availableCalendarCount > 0 ? 'animate-spin-once text-teal' : ''} />
+                <span>캘린더 일정 불러오기</span>
+                {availableCalendarCount > 0 && (
+                  <span className="rounded-full bg-teal px-1.5 py-0.2 text-[9.5px] text-white">
+                    +{availableCalendarCount}
+                  </span>
+                )}
+              </button>
+
+              {/* ✨ 루틴 템플릿 드롭다운 토글 버튼 (전자결재 '내 결재선'과 동일한 UX 패턴) */}
+              <button
+                type="button"
+                onClick={() => setShowTemplateMenu((prev) => !prev)}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold transition-all cursor-pointer shadow-2xs ${
+                  showTemplateMenu
+                    ? 'border-amber-500 bg-amber-500 text-white shadow-xs'
+                    : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+                }`}
+                title="자주 쓰는 루틴 템플릿 목록"
+              >
+                <Sparkles size={12} className={showTemplateMenu ? 'text-white' : 'text-amber-500'} />
+                <span>루틴 템플릿 ({templates.length})</span>
+                <ChevronDown
+                  size={12}
+                  className={showTemplateMenu ? 'rotate-180 transition-transform' : 'transition-transform'}
+                />
+              </button>
+
+              {/* 전자결재 '내 결재선'과 동일한 형태의 루틴 템플릿 드롭다운 스마트 카드 */}
+              {showTemplateMenu && (
+                <div className="absolute right-0 top-10 z-50 w-80 rounded-xl border border-amber-500/30 bg-panel p-3 shadow-xl space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <div>
+                      <div className="text-[12px] font-bold text-ink flex items-center gap-1.5">
+                        <Sparkles size={13} className="text-amber-500" />
+                        <span>루틴 템플릿 (자주 쓰는 계획)</span>
+                      </div>
+                      <div className="text-[10px] text-ink3 mt-0.5">
+                        {user?.name || '사용자'}님 맞춤 루틴 ({templates.length}개)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplateMenu(false)}
+                      className="text-ink3 hover:text-ink text-[12px] p-0.5 rounded hover:bg-panel-alt transition-colors cursor-pointer"
+                      title="닫기"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* 템플릿 목록 */}
+                  <div className="max-h-60 overflow-y-auto space-y-1.5 pr-0.5">
+                    {templates.length === 0 ? (
+                      <div className="py-4 text-center text-[11.5px] text-ink3 leading-relaxed border border-dashed border-border rounded-lg bg-panel-alt/40">
+                        등록된 루틴 템플릿이 없습니다.<br />
+                        하단의 '템플릿 / 태그 관리'에서 등록해 보세요.
+                      </div>
+                    ) : (
+                      templates.map((tpl) => (
+                        <div
+                          key={tpl.id}
+                          className="group flex items-center justify-between rounded-lg border border-border bg-panel-alt/40 p-2 hover:border-amber-500/50 hover:bg-panel transition-all"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11.5px] font-bold text-ink group-hover:text-amber-600 dark:group-hover:text-amber-400 truncate flex items-center gap-1">
+                              <span>{tpl.icon}</span>
+                              <span className="truncate">{tpl.name}</span>
+                            </div>
+                            {tpl.desc && (
+                              <div className="text-[10px] text-ink3 truncate mt-0.5">
+                                {tpl.desc}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleApplyTemplate(tpl.content);
+                              setShowTemplateMenu(false);
+                            }}
+                            className="rounded-md bg-amber-500/20 px-2 py-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-colors cursor-pointer shrink-0 ml-1.5"
+                          >
+                            적용
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* 하단: 템플릿 및 태그 관리 모달 링크 (우측 하단 배치) */}
+                  <div className="border-t border-border pt-2 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTemplateMenu(false);
+                        setConfigModalTab('templates');
+                      }}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-ink2 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
+                    >
+                      <Settings size={12} className="text-amber-500" />
+                      <span>루틴 템플릿 / 태그 관리</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -327,7 +421,7 @@ export function WorkPlanEditorModal({
 
                 {/* 태그 선택 버튼 */}
                 <div className="flex items-center gap-1">
-                  {['회의', '외근·출장', '미팅', '보고', '행사'].map((tag) => (
+                  {['회의', '미팅', '보고', '행사'].map((tag) => (
                     <button
                       key={tag}
                       type="button"

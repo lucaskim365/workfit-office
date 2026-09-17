@@ -293,7 +293,7 @@ function LocalCalendarScreen() {
           startTime: isAllDay ? null : s.startTime!,
           endTime: isAllDay ? null : s.endTime!,
           memo: `전자결재 승인 건: ${s.docTitle}\n사유: ${s.body || '—'}`,
-          visibility: 'TEAM',
+          visibility: 'COMPANY',
           eventType,
           attendeeUserIds: [],
           deptId: null,
@@ -832,7 +832,11 @@ function LocalCalendarScreen() {
           initialEventType={modalTarget.initialEventType}
           initialAttendees={modalTarget.initialAttendees}
           myProjects={myProjects}
-          deptName={actor?.dept ?? null}
+          deptName={
+            modalTarget.event?.ownerUserId
+              ? (users.find((u) => u.id === modalTarget.event?.ownerUserId)?.dept ?? actor?.dept ?? null)
+              : (actor?.dept ?? null)
+          }
           ownerName={ownerNameOf(modalTarget.event)}
           onClose={() => setModalTarget(null)}
           onSaved={(saved) => {
