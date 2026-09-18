@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Search, Pin, Bell } from 'lucide-react';
+import { LayoutGrid, Search, Pin, Bell } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -133,13 +133,13 @@ export default function MobileChatList() {
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
         <div className="ml-auto flex items-center gap-1.5">
-          {/* 전자결재 버튼 (미결재 건수 뱃지) */}
+          {/* 그룹웨어 전체 모듈 메뉴 버튼 (미결재 건수 뱃지 유지) */}
           <button
-            onClick={() => nav('/m/approval')}
-            title="전자결재"
-            className="relative grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all"
+            onClick={() => nav('/m/modules')}
+            title="그룹웨어 메뉴"
+            className="relative grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white"
           >
-            <ClipboardCheck size={19} strokeWidth={2} />
+            <LayoutGrid size={19} strokeWidth={2} />
             {pendingApprovals > 0 && (
               <span
                 className="absolute -right-0.5 -top-0.5 grid h-[16px] min-w-[16px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white shadow-xs"

@@ -38,13 +38,15 @@ export interface SystemScreenDef {
 export const SYSTEM_SCREENS: SystemScreenDef[] = [
   // 1. 그룹웨어 모듈 (13개)
   { id: 'S_GW_APPROVAL', name: '전자결재', url: '/gw/approval', category: 'GW', desc: '기안, 결재, 결재함 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_GW_COMMUTE', name: '근태관리', url: '/gw/commute', category: 'GW', desc: '출퇴근 기록 및 근태 현황', supportedActions: ['access', 'create', 'update'] },
+  { id: 'S_GW_COMMUTE', name: '근태관리', url: '/gw/commute', category: 'GW', desc: '출퇴근 기록 및 개인 근태 현황', supportedActions: ['access', 'create', 'update'] },
+  { id: 'S_GW_COMMUTE_ADMIN', name: '근태/휴가 관제 센터', url: '/gw/commute/admin', category: 'GW', desc: '전사/부서 임직원 실시간 출퇴근, 이상근태(지각) 및 연차 대장 관제', supportedActions: ['access', 'update'] },
   { id: 'S_GW_LEAVE', name: '휴가관리', url: '/gw/leave', category: 'GW', desc: '연차/휴가 신청 및 잔여일수 조회', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_BOARD', name: '사내게시판', url: '/gw/board', category: 'GW', desc: '공지사항 및 전사 게시판', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_CALENDAR', name: '일정관리', url: '/gw/calendar', category: 'GW', desc: '개인/부서/전사 캘린더', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_MAIL', name: '사내메일', url: '/gw/mail', category: 'GW', desc: '웹메일 송수신 및 메일함', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_TASK', name: '프로젝트', url: '/gw/task', category: 'GW', desc: '칸반/목록 프로젝트 배정 및 진행 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_GW_WORK_PLAN', name: '업무계획', url: '/gw/work-plan', category: 'GW', desc: '주간/월간 업무 보고 및 계획', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_GW_WORK_PLAN', name: '내 업무계획 (To-Do)', url: '/gw/work-plan', category: 'GW', desc: '일일 업무 보고 및 개인 To-Do 계획', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_GW_WORK_PLAN_ADMIN', name: '팀·전사 업무 종합 현황', url: '/gw/work-plan/admin', category: 'GW', desc: '팀원/전사원 주간 To-Do 매트릭스 및 진척률 모니터링', supportedActions: ['access', 'update'] },
   { id: 'S_GW_RESOURCE', name: '자원예약', url: '/gw/resource', category: 'GW', desc: '회의실, 법인차량, 비품 예약', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_SURVEY', name: '전자설문', url: '/gw/survey', category: 'GW', desc: '사내 설문조사 생성 및 응답', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_EMPLOYEE', name: '인명관리', url: '/gw/employee', category: 'GW', desc: '임직원 연락처 및 프로필 검색', supportedActions: ['access', 'create', 'update', 'delete'] },

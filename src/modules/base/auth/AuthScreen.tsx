@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import {
   SYSTEM_SCREENS,
@@ -6,6 +7,7 @@ import {
   type RoleGroup,
   type PermCategoryId,
   type ActionPermission,
+  type SystemScreenDef,
 } from '@/domain/roleGroup/schema';
 import { useRoleGroups, useSaveRoleGroup, useDeleteRoleGroup } from '@/features/roleGroup/useRoleGroups';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -221,7 +223,7 @@ export default function AuthScreen() {
     if (!confirm(`[${selectedGroup.name} (${selectedGroup.code})] 그룹을 완전히 삭제하시겠습니까?`)) {
       return;
     }
-    deleteGroup.mutate(selectedGroup.code, {
+    deleteGroup.mutate(selectedGroup.id || selectedGroup.code, {
       onSuccess: () => {
         setIsCreatingNew(false);
         setCurrentDraft(null);
@@ -253,10 +255,37 @@ export default function AuthScreen() {
     return list.filter((g: RoleGroup) => g.code.toLowerCase().includes(q) || g.name.toLowerCase().includes(q));
   }, [effectiveGroups, isCreatingNew, currentDraft, search]);
 
+  // 일반 메뉴 목록: 관제 메뉴(팀·전사 종합현황, 근태관제센터)는 제외하고 하단 독립 섹션으로 분리
   const visibleScreens = useMemo(() => {
-    if (selectedCat === 'ALL') return SYSTEM_SCREENS;
-    return SYSTEM_SCREENS.filter((s) => s.category === selectedCat);
+    const base = SYSTEM_SCREENS.filter(
+      (s) => s.id !== 'S_GW_COMMUTE_ADMIN' && s.id !== 'S_GW_WORK_PLAN_ADMIN'
+    );
+    if (selectedCat === 'ALL') return base;
+    return base.filter((s) => s.category === selectedCat);
   }, [selectedCat]);
+
+  // 카테고리별 섹션 그룹핑
+  const groupedScreens = useMemo(() => {
+    const groups: { category: (typeof PERM_CATEGORIES)[number]; screens: SystemScreenDef[] }[] = [];
+    PERM_CATEGORIES.forEach((cat) => {
+      const screens = visibleScreens.filter((s) => s.category === cat.id);
+      if (screens.length > 0) {
+        groups.push({ category: cat, screens });
+      }
+    });
+    return groups;
+  }, [visibleScreens]);
+
+  const isCategoryAllChecked = (catId: PermCategoryId) => {
+    const screens = SYSTEM_SCREENS.filter(
+      (s) => s.category === catId && s.id !== 'S_GW_COMMUTE_ADMIN' && s.id !== 'S_GW_WORK_PLAN_ADMIN'
+    );
+    if (screens.length === 0) return false;
+    return screens.every((s) => {
+      const perm = selectedGroup.menuPermissions?.[s.id] || selectedGroup.menuPermissions?.[s.url];
+      return perm?.access === true;
+    });
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -707,86 +736,205 @@ export default function AuthScreen() {
                   <table className="w-full border-collapse text-left text-[11.5px]">
                     <thead>
                       <tr className="border-b border-border bg-panel-alt/70 text-ink2 font-bold text-[11px]">
-                        <th className="px-3 py-2 w-32">모듈 구분</th>
-                        <th className="px-3 py-2">화면명 (URL)</th>
-                        <th className="px-2 py-2 text-center w-16">접근</th>
-                        <th className="px-2 py-2 text-center w-20">작성/수정</th>
-                        <th className="px-2 py-2 text-center w-16">삭제</th>
-                        <th className="px-3 py-2 text-center w-20">행 일괄</th>
+                        <th className="px-3.5 py-2.5">화면명 (URL)</th>
+                        <th className="px-2 py-2.5 text-center w-16">접근</th>
+                        <th className="px-2 py-2.5 text-center w-20">작성/수정</th>
+                        <th className="px-2 py-2.5 text-center w-16">삭제</th>
+                        <th className="px-3 py-2.5 text-center w-24">행 일괄</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {visibleScreens.map((s) => {
-                        const supported = s.supportedActions || ['access', 'create', 'update', 'delete'];
-                        const perm = selectedGroup.code === 'ADMIN'
-                          ? { access: true, create: true, update: true, delete: true }
-                          : (selectedGroup.menuPermissions?.[s.id] ||
-                             selectedGroup.menuPermissions?.[s.url] || { ...DEFAULT_ACTIONS });
-                        const isAllChecked = supported.every((act) => perm[act]);
-                        const catLabel = PERM_CATEGORIES.find((c) => c.id === s.category)?.name || s.category;
+                      {groupedScreens.map(({ category, screens }) => {
                         const isAdmin = selectedGroup.code === 'ADMIN';
-                        const isWriteSupported = supported.includes('create') || supported.includes('update');
-                        const isWriteChecked = perm.create || perm.update;
+                        const isCatAll = isCategoryAllChecked(category.id);
 
                         return (
-                          <tr key={s.id} className="hover:bg-panel-alt/50 transition-colors">
-                            <td className="px-3 py-2 font-semibold text-ink3">{catLabel}</td>
-                            <td className="px-3 py-2">
-                              <div className="font-bold text-ink">{s.name}</div>
-                              <div className="text-[10px] font-mono text-ink3">{s.url}</div>
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              {supported.includes('access') ? (
-                                <Checkbox
-                                  disabled={isAdmin}
-                                  checked={perm.access}
-                                  onChange={(c) => updatePermission(s.id, { access: c })}
-                                />
-                              ) : (
-                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              {isWriteSupported ? (
-                                <Checkbox
-                                  disabled={isAdmin}
-                                  checked={isWriteChecked}
-                                  onChange={(c) => updatePermission(s.id, { create: c, update: c })}
-                                />
-                              ) : (
-                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              {supported.includes('delete') ? (
-                                <Checkbox
-                                  disabled={isAdmin}
-                                  checked={perm.delete}
-                                  onChange={(c) => updatePermission(s.id, { delete: c })}
-                                />
-                              ) : (
-                                <span className="text-ink4 font-mono text-[11px] select-none">-</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <button
-                                type="button"
-                                disabled={isAdmin}
-                                onClick={() => setRowAll(s.id, !isAllChecked)}
-                                className={`rounded px-2 py-0.5 text-[10.5px] font-bold transition-colors ${
-                                  isAdmin
-                                    ? 'opacity-40 cursor-not-allowed text-ink3'
-                                    : isAllChecked
-                                    ? 'bg-teal-soft text-teal hover:bg-teal-soft/80'
-                                    : 'border border-border text-ink3 hover:bg-panel-alt'
-                                }`}
-                              >
-                                {isAllChecked ? '전체 해제' : '전체 선택'}
-                              </button>
-                            </td>
-                          </tr>
+                          <React.Fragment key={category.id}>
+                            {/* 모듈 그룹 헤더 행 */}
+                            <tr className="bg-panel-alt/90 border-t-2 border-b border-border/80 sticky top-0 z-10">
+                              <td colSpan={5} className="px-3.5 py-2 bg-panel-alt/95 backdrop-blur-xs">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-2 w-2 rounded-full bg-teal" />
+                                    <span className="text-[12px] font-extrabold text-ink">{category.name}</span>
+                                    <span className="text-[11px] text-ink3 font-medium">({screens.length}개 메뉴)</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={isAdmin}
+                                    onClick={() => setCategoryAll(category.id, !isCatAll)}
+                                    className="text-[11px] font-bold text-teal hover:underline cursor-pointer disabled:opacity-40"
+                                  >
+                                    모듈 일괄 {isCatAll ? '해제' : '선택'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* 해당 모듈의 세부 화면 목록 (들여쓰기 적용) */}
+                            {screens.map((s) => {
+                              const supported = s.supportedActions || ['access', 'create', 'update', 'delete'];
+                              const perm = isAdmin
+                                ? { access: true, create: true, update: true, delete: true }
+                                : (selectedGroup.menuPermissions?.[s.id] ||
+                                   selectedGroup.menuPermissions?.[s.url] || { ...DEFAULT_ACTIONS });
+                              const isAllChecked = supported.every((act) => perm[act]);
+                              const isWriteSupported = supported.includes('create') || supported.includes('update');
+                              const isWriteChecked = perm.create || perm.update;
+
+                              return (
+                                <tr key={s.id} className="hover:bg-panel-alt/50 transition-colors">
+                                  {/* 들여쓰기된 화면 정보 */}
+                                  <td className="px-3.5 py-2.5 pl-6">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-ink3/50 text-[11px] font-mono mt-0.5 select-none">↳</span>
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-ink text-[12px]">{s.name}</span>
+                                          {s.desc && (
+                                            <span className="text-[10.5px] text-ink3 hidden sm:inline">
+                                              — {s.desc}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[10px] font-mono text-ink3">{s.url}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* 접근 체크박스 */}
+                                  <td className="px-2 py-2 text-center">
+                                    {supported.includes('access') ? (
+                                      <Checkbox
+                                        disabled={isAdmin}
+                                        checked={perm.access}
+                                        onChange={(c) => updatePermission(s.id, { access: c })}
+                                      />
+                                    ) : (
+                                      <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                                    )}
+                                  </td>
+
+                                  {/* 작성/수정 체크박스 */}
+                                  <td className="px-2 py-2 text-center">
+                                    {isWriteSupported ? (
+                                      <Checkbox
+                                        disabled={isAdmin}
+                                        checked={isWriteChecked}
+                                        onChange={(c) => updatePermission(s.id, { create: c, update: c })}
+                                      />
+                                    ) : (
+                                      <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                                    )}
+                                  </td>
+
+                                  {/* 삭제 체크박스 */}
+                                  <td className="px-2 py-2 text-center">
+                                    {supported.includes('delete') ? (
+                                      <Checkbox
+                                        disabled={isAdmin}
+                                        checked={perm.delete}
+                                        onChange={(c) => updatePermission(s.id, { delete: c })}
+                                      />
+                                    ) : (
+                                      <span className="text-ink4 font-mono text-[11px] select-none">-</span>
+                                    )}
+                                  </td>
+
+                                  {/* 행 일괄 선택 버튼 */}
+                                  <td className="px-3 py-2 text-center">
+                                    <button
+                                      type="button"
+                                      disabled={isAdmin}
+                                      onClick={() => setRowAll(s.id, !isAllChecked)}
+                                      className={`rounded px-2 py-0.5 text-[10.5px] font-bold transition-colors ${
+                                        isAdmin
+                                          ? 'opacity-40 cursor-not-allowed text-ink3'
+                                          : isAllChecked
+                                          ? 'bg-teal-soft text-teal hover:bg-teal-soft/80'
+                                          : 'border border-border text-ink3 hover:bg-panel-alt'
+                                      }`}
+                                    >
+                                      {isAllChecked ? '해제' : '선택'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
                         );
                       })}
+                      {/* 전사 관제 및 특수 직무 권한 위임 섹션 (테이블 내 모듈 그룹으로 일체화) */}
+                      <tr className="bg-amber-500/10 border-t-2 border-b border-amber-500/30 sticky top-0 z-10">
+                        <td colSpan={5} className="px-3.5 py-2 bg-amber-50/90 dark:bg-amber-950/40">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="text-amber-600 shrink-0" size={15} />
+                              <span className="text-[12px] font-extrabold text-ink">전사 관제 및 특수 직무 권한 위임 (예외 권한)</span>
+                              <span className="text-[11px] text-ink3 font-medium">(2개 메뉴)</span>
+                            </div>
+                            <span className="text-[10.5px] text-amber-700 dark:text-amber-400 font-medium">
+                              💡 팀장·임원은 직책에 의해 자동 부여됨 (비직책자 인사/감사팀 위임 전용)
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* 1. 근태·휴가 전사 관제 센터 */}
+                      <tr className="hover:bg-panel-alt/50 transition-colors">
+                        <td className="px-3.5 py-2.5 pl-6">
+                          <div className="flex items-start gap-2">
+                            <span className="text-ink3/50 text-[11px] font-mono mt-0.5 select-none">↳</span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-ink text-[12px]">근태·휴가 전사 관제 센터</span>
+                                <span className="text-[10.5px] text-ink3 hidden sm:inline">
+                                  — 전 임직원의 실시간 출퇴근, 지각/이상근태 현황 및 연차·휴가 대장 열람/관리
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-mono text-ink3">/gw/commute/admin</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <Checkbox
+                            disabled={selectedGroup.code === 'ADMIN'}
+                            checked={selectedGroup.code === 'ADMIN' || (selectedGroup.menuPermissions?.['S_GW_COMMUTE_ADMIN']?.access ?? false)}
+                            onChange={(c) => updatePermission('S_GW_COMMUTE_ADMIN', { access: c, update: c })}
+                          />
+                        </td>
+                        <td colSpan={3} className="px-3 py-2 text-center text-[11px] text-ink3">
+                          <span className="rounded bg-panel-alt px-2 py-0.5 font-medium text-ink2">단일 권한 (체크 시 전사 관제 활성화)</span>
+                        </td>
+                      </tr>
+
+                      {/* 2. 팀·전사 업무 종합 현황 */}
+                      <tr className="hover:bg-panel-alt/50 transition-colors">
+                        <td className="px-3.5 py-2.5 pl-6">
+                          <div className="flex items-start gap-2">
+                            <span className="text-ink3/50 text-[11px] font-mono mt-0.5 select-none">↳</span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-ink text-[12px]">팀·전사 업무 종합 현황</span>
+                                <span className="text-[10.5px] text-ink3 hidden sm:inline">
+                                  — 전 임직원의 주간 To-Do 매트릭스 및 진척률 실시간 모니터링
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-mono text-ink3">/gw/work-plan/admin</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <Checkbox
+                            disabled={selectedGroup.code === 'ADMIN'}
+                            checked={selectedGroup.code === 'ADMIN' || (selectedGroup.menuPermissions?.['S_GW_WORK_PLAN_ADMIN']?.access ?? false)}
+                            onChange={(c) => updatePermission('S_GW_WORK_PLAN_ADMIN', { access: c, update: c })}
+                          />
+                        </td>
+                        <td colSpan={3} className="px-3 py-2 text-center text-[11px] text-ink3">
+                          <span className="rounded bg-panel-alt px-2 py-0.5 font-medium text-ink2">단일 권한 (체크 시 전사 모니터링 활성화)</span>
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>

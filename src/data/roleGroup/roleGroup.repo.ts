@@ -18,9 +18,12 @@ const groupBackend = createCrudBackend<RoleGroup>({
       console.error('Failed to parse roleGroup:', p.error);
       return null;
     }
-    return p.data;
+    return {
+      ...p.data,
+      id: (raw as any)?.$id || (raw as any)?.id || p.data.id,
+    };
   },
-  idOf: (x) => x.code,
+  idOf: (x: any) => x.id || x.$id || x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
   jsonFields: ['members', 'menuPermissions'],
   firestoreEncode: encodeForFirestore,
@@ -148,6 +151,7 @@ export const roleGroupRepo = {
     });
     const menuPermJson = JSON.stringify(normalizedPerms);
     const basePayload: any = {
+      ...((group.id || (group as any).$id) ? { id: group.id || (group as any).$id } : {}),
       code: parsed.code,
       name: parsed.name,
       desc: parsed.desc ?? '',
@@ -220,11 +224,39 @@ export const roleGroupRepo = {
     }
   },
 
-  async remove(code: string): Promise<void> {
-    await groupBackend.remove(code);
+  async remove(codeOrId: string): Promise<void> {
+    const norm = (codeOrId || '').trim().toUpperCase();
+    
+    // 1. Appwrite DB에서 해당 문서의 실제 $id 및 roleCode 탐색
+    const allGroups = await groupBackend.loadAll().catch(() => []);
+    const target = allGroups.find(
+      (g) =>
+        g.code.toUpperCase() === norm ||
+        g.id === codeOrId ||
+        (g as any).$id === codeOrId
+    );
+
+    const docId = (target as any)?.$id || target?.id || codeOrId;
+    const roleCode = target?.code || codeOrId;
+
+    // 2. 실제 Appwrite 문서 삭제
+    try {
+      await groupBackend.remove(docId);
+    } catch (err) {
+      console.warn(`[roleGroupRepo] remove failed for docId '${docId}':`, err);
+    }
+
+    // 만약 docId와 roleCode가 다르면 roleCode로도 삭제 시도 (양방향 커버)
+    if (docId !== roleCode) {
+      await groupBackend.remove(roleCode).catch(() => {});
+    }
+
+    // 3. 관계 테이블(roleMappings)에서도 매핑 삭제
     try {
       const allMappings = await mappingBackend.loadAll();
-      const targetMappings = allMappings.filter((m) => m.roleCode === code);
+      const targetMappings = allMappings.filter(
+        (m) => m.roleCode.toUpperCase() === roleCode.toUpperCase()
+      );
       for (const m of targetMappings) {
         const id = m.id || (m as any).$id;
         if (id) await mappingBackend.remove(id);

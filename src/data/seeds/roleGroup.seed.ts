@@ -54,11 +54,27 @@ const financeAdminPermissions = () => {
   return map;
 };
 
-/** 4. 일반 사원 권한 (그룹웨어 모듈 중심 기본 사용) */
-const userPermissions = () => {
+/** 4. 부서장/팀장 권한 (그룹웨어 전체 + 근태 관제 + 업무계획 종합) */
+const leaderPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
     const isGw = s.category === 'GW';
+    map[s.id] = {
+      access: isGw,
+      create: isGw,
+      update: isGw,
+      delete: false,
+    };
+  });
+  return map;
+};
+
+/** 5. 일반 사원 권한 (그룹웨어 모듈 중심 기본 사용 - 관리자 전용 관제 메뉴 제외) */
+const userPermissions = () => {
+  const map: Record<string, any> = {};
+  SYSTEM_SCREENS.forEach((s) => {
+    const isAdminScreen = s.id === 'S_GW_COMMUTE_ADMIN' || s.id === 'S_GW_WORK_PLAN_ADMIN';
+    const isGw = s.category === 'GW' && !isAdminScreen;
     map[s.id] = {
       access: isGw,
       create: isGw,
@@ -78,6 +94,9 @@ export function getDefaultPermissionsForGroup(code: string, name = ''): Record<s
   }
   if (c === 'EXEC' || c === 'OPERATOR' || n.includes('임원') || n.includes('운영') || n.includes('경영')) {
     return execPermissions();
+  }
+  if (c === 'LEADER' || n.includes('팀장') || n.includes('부서장')) {
+    return leaderPermissions();
   }
   if (c === 'FINANCE_ADMIN' || c === 'FINANCE' || c === 'QC_USER' || n.includes('재무') || n.includes('회계')) {
     return financeAdminPermissions();
@@ -115,6 +134,20 @@ export const ROLE_GROUP_SEED: RoleGroup[] = [
       { name: '손승원', code: 'swson' },
     ],
     permissions: matrix((_, ci) => ci < 6),
+  },
+  {
+    id: 'LEADER',
+    code: 'LEADER',
+    name: '부서장/팀장',
+    use: true,
+    isSystem: false,
+    desc: '그룹웨어 전 기능과 소속 부서원 근태 관제 및 팀원 업무계획 종합 모니터링 권한을 갖는 부서 책임자 그룹입니다.',
+    userIds: [],
+    deptIds: [],
+    positionRanks: [],
+    menuPermissions: leaderPermissions(),
+    members: [],
+    permissions: matrix((_, ci) => ci < 4),
   },
   {
     id: 'FINANCE',

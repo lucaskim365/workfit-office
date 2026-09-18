@@ -8,6 +8,20 @@ import MobileChatThread from './MobileChatThread';
 import MobileNewRoom from './MobileNewRoom';
 import MobileApprovalList from './MobileApprovalList';
 import MobileApprovalDetail from './MobileApprovalDetail';
+import MobileModuleLauncher from './MobileModuleLauncher';
+import MobileCommuteScreen from './MobileCommuteScreen';
+import MobileCommuteAdminScreen from './MobileCommuteAdminScreen';
+import MobileCalendarScreen from './MobileCalendarScreen';
+import MobileTaskScreen from './MobileTaskScreen';
+import MobileWorkPlanAdminScreen from './MobileWorkPlanAdminScreen';
+import MobileContactScreen from './MobileContactScreen';
+import MobileBoardScreen from './MobileBoardScreen';
+import MobileMailScreen from './MobileMailScreen';
+import MobileResourceScreen from './MobileResourceScreen';
+import MobileSurveyScreen from './MobileSurveyScreen';
+import MobileGalleryScreen from './MobileGalleryScreen';
+import MobileProjectScreen from './MobileProjectScreen';
+import MobileOrgChartScreen from './MobileOrgChartScreen';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 
 /**
@@ -76,10 +90,29 @@ export default function MobileApp() {
         ) : (
           <Routes>
             <Route index element={<MobileChatList />} />
+            <Route path="modules" element={<MobileModuleLauncher />} />
             <Route path="new" element={<MobileNewRoom />} />
             <Route path="room/:roomId" element={<MobileChatThread />} />
             <Route path="approval" element={<MobileApprovalList />} />
             <Route path="approval/:id" element={<MobileApprovalDetail />} />
+            
+            {/* 모바일 핵심 모듈 라우트 */}
+            <Route path="commute" element={<MobileCommuteScreen />} />
+            <Route path="commute-admin" element={<MobileCommuteAdminScreen />} />
+            <Route path="calendar" element={<MobileCalendarScreen />} />
+            <Route path="task" element={<MobileTaskScreen />} />
+            <Route path="work-plan-admin" element={<MobileWorkPlanAdminScreen />} />
+            <Route path="contacts" element={<MobileContactScreen />} />
+
+            {/* 전사 모듈 모바일 전용 화면 라우트 */}
+            <Route path="board" element={<MobileBoardScreen />} />
+            <Route path="resource" element={<MobileResourceScreen />} />
+            <Route path="mail" element={<MobileMailScreen />} />
+            <Route path="survey" element={<MobileSurveyScreen />} />
+            <Route path="gallery" element={<MobileGalleryScreen />} />
+            <Route path="project" element={<MobileProjectScreen />} />
+            <Route path="orgchart" element={<MobileOrgChartScreen />} />
+
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
         )}
