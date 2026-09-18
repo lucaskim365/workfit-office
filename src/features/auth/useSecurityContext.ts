@@ -37,26 +37,49 @@ export function useSecurityContext(): SecurityContext {
     );
   }, [user, myGroups]);
 
-  // 3. 임원(EXECUTIVE) 판정
+  // 3. 직급/직책 마스터 객체 조회 (SSOT: positions)
+  const userPosDef = useMemo(() => {
+    if (!user?.position) return null;
+    return (org.positions || []).find((p) => p.name === user.position) as any;
+  }, [user?.position, org.positions]);
+
+  // 4. 임원(EXECUTIVE) 판정 (코드화된 마스터 플래그 기반)
+  // ⚠️ 최고관리자(isSuperAdmin)라도 비임원인 개발팀은 임원으로 판정하지 않음 (전사 관제 자동 노출 방지)
   const isExecutive = useMemo(() => {
     if (!user) return false;
-    if (isSuperAdmin) return true;
 
     // A. 역할 그룹에 EXEC/OPERATOR 가 포함된 경우
     if (roles.includes('EXEC') || roles.includes('EXECUTIVE') || roles.includes('OPERATOR')) {
       return true;
     }
 
-    // B. 직급 또는 직책에 임원 명칭이 포함된 경우
+    // B. 직급 마스터 공식 플래그 (isExecutiveRole)
+    if (userPosDef && typeof userPosDef.isExecutiveRole === 'boolean') {
+      return userPosDef.isExecutiveRole;
+    }
+
+    // C. 마스터 미매칭 시의 하위 호환 폴백
     const pos = (user.position || '').trim();
     const title = ((user as any).jobTitle || '').trim();
     return EXEC_KEYWORDS.some((kw) => pos.includes(kw) || title.includes(kw));
-  }, [user, isSuperAdmin, roles]);
+  }, [user, roles, userPosDef]);
 
-  // 4. 부서장/팀장(LEADER) 판정 및 관리 부서 목록
+  // 5. 부서장/팀장(LEADER) 판정 및 관리 부서 목록 (겸직 assignments 포괄)
   const managedDepts = useMemo(() => {
     if (!user) return [];
-    return (org.depts || []).filter((d) => d.headUserId === user.id);
+    // 1) 기본 조직도 상의 부서장 매핑
+    const orgHeadDepts = (org.depts || []).filter((d) => d.headUserId === user.id);
+    
+    // 2) 다중 소속(겸직) assignments 중 HEAD 역할 부서 추가
+    const assignmentHeadDeptIds = (user.assignments || [])
+      .filter((a) => a.role === 'HEAD')
+      .map((a) => a.deptId);
+    
+    const extraDepts = (org.depts || []).filter(
+      (d) => assignmentHeadDeptIds.includes(d.id) && !orgHeadDepts.some((od) => od.id === d.id)
+    );
+
+    return [...orgHeadDepts, ...extraDepts];
   }, [user, org.depts]);
 
   const isLeader = useMemo(() => {
@@ -64,64 +87,95 @@ export function useSecurityContext(): SecurityContext {
     if (roles.includes('LEADER')) return true;
     if (managedDepts.length > 0) return true;
 
+    // 직급 마스터 공식 플래그 (isLeaderRole / isDeptHead)
+    if (userPosDef) {
+      if (userPosDef.isLeaderRole === true || userPosDef.isDeptHead === true) {
+        return true;
+      }
+    }
+
+    // 하위 호환 폴백 (마스터 미등록 직급)
     const pos = (user.position || '').trim().toLowerCase();
     const title = ((user as any).jobTitle || '').trim().toLowerCase();
     const name = (user.name || '').trim().toLowerCase();
 
-    if (name.includes('부서장') || name.includes('팀장') || user.id === 'testb') return true;
+    if (name.includes('부서장') || name.includes('팀장')) return true;
     return LEADER_KEYWORDS.some((kw) => pos.includes(kw) || title.includes(kw));
-  }, [user, roles, managedDepts]);
+  }, [user, roles, managedDepts, userPosDef]);
 
-  // 5. 조직 관계(OrgRelationship) 헬퍼
+  // 6. 조직 관계(OrgRelationship) 헬퍼 (주부서 + 겸직부서 통합 지원)
   const organization: OrgRelationship = useMemo(() => {
     const userDept = (user?.dept || '').trim();
     const managedDeptNames = managedDepts.map((d) => d.name);
+
+    // 겸직 부서 목록
+    const userAllDepts = new Set<string>();
+    if (userDept) userAllDepts.add(userDept);
+    if (user?.assignments) {
+      user.assignments.forEach((a) => {
+        if (a.deptName) userAllDepts.add(a.deptName.trim());
+        const d = (org.depts || []).find((od) => od.id === a.deptId);
+        if (d?.name) userAllDepts.add(d.name.trim());
+      });
+    }
 
     return {
       managedDeptNames,
       isDeptHead: (targetDept?: string | null) => {
         if (!targetDept) return managedDeptNames.includes(userDept);
         const norm = targetDept.trim();
-        return managedDeptNames.includes(norm) || (norm === userDept && isLeader);
+        return managedDeptNames.includes(norm) || (userAllDepts.has(norm) && isLeader);
       },
       isSameDept: (targetDept?: string | null) => {
-        if (!targetDept || !userDept) return false;
-        return targetDept.trim() === userDept;
+        if (!targetDept || userAllDepts.size === 0) return false;
+        return userAllDepts.has(targetDept.trim());
       },
     };
-  }, [user?.dept, managedDepts, isLeader]);
+  }, [user?.dept, user?.assignments, managedDepts, isLeader, org.depts]);
 
-  // 6. 메뉴별 접근 및 액션 권한
+  // 7. 메뉴별 접근 및 액션 권한
+  const HR_ADMIN_SCREENS = useMemo(() => new Set([
+    'S_GW_COMMUTE_ADMIN',
+    'S_GW_WORK_PLAN_ADMIN',
+    '/gw/commute/admin',
+    '/gw/work-plan/admin',
+  ]), []);
+
   const canMenuAccess = useCallback(
     (urlOrId: string): boolean => {
       if (!user || user.status === '미사용') return false;
-      if (isSuperAdmin) return true;
 
       const targetScreen = SYSTEM_SCREENS.find((s) => s.id === urlOrId || s.url === urlOrId);
       const screenId = targetScreen?.id || urlOrId;
+      const isHrAdmin = HR_ADMIN_SCREENS.has(screenId) || (targetScreen?.url ? HR_ADMIN_SCREENS.has(targetScreen.url) : false);
+
+      // IT 최고관리자(isSuperAdmin)라도 전사 인사/근태 관제 메뉴는 자동 프리패스되지 않음 (임원/팀장/인사위임자 전용)
+      if (isSuperAdmin && !isHrAdmin) return true;
 
       return myGroups.some((g) => {
         const perm = g.menuPermissions?.[screenId] ?? g.menuPermissions?.[targetScreen?.url || ''];
         return perm?.access === true;
       });
     },
-    [user, isSuperAdmin, myGroups]
+    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS]
   );
 
   const canMenuAction = useCallback(
     (urlOrId: string, action: keyof ActionPermission): boolean => {
       if (!user || user.status === '미사용') return false;
-      if (isSuperAdmin) return true;
 
       const targetScreen = SYSTEM_SCREENS.find((s) => s.id === urlOrId || s.url === urlOrId);
       const screenId = targetScreen?.id || urlOrId;
+      const isHrAdmin = HR_ADMIN_SCREENS.has(screenId) || (targetScreen?.url ? HR_ADMIN_SCREENS.has(targetScreen.url) : false);
+
+      if (isSuperAdmin && !isHrAdmin) return true;
 
       return myGroups.some((g) => {
         const perm = g.menuPermissions?.[screenId] ?? g.menuPermissions?.[targetScreen?.url || ''];
         return perm?.[action] === true;
       });
     },
-    [user, isSuperAdmin, myGroups]
+    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS]
   );
 
   return {

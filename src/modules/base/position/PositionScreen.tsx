@@ -9,7 +9,7 @@ import type { JobTitle } from '@/domain/jobTitle/schema';
  * 직급/직책 관리 (기준정보) — 직급명·서열(rank)·부서책임자 여부 및 직책(대표/임원/팀장/팀원) CRUD.
  * 탭을 전환하여 직급과 직책을 각각 독립적으로 관리할 수 있습니다.
  */
-const BLANK_POS: Position = { id: '', name: '', rank: 5, isDeptHead: false };
+const BLANK_POS: Position = { id: '', name: '', rank: 5, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false };
 const BLANK_JOB: JobTitle = { id: '', name: '' };
 
 export default function PositionScreen() {
@@ -278,14 +278,32 @@ export default function PositionScreen() {
                     className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal"
                   />
                 </Field>
-                <label className="flex items-center gap-2 text-[12.5px] text-ink2">
-                  <input
-                    type="checkbox"
-                    checked={selPos.isDeptHead}
-                    onChange={(e) => setSelPos({ ...selPos, isDeptHead: e.target.checked })}
-                  />{' '}
-                  부서 책임자 직급(팀장 등)
-                </label>
+                <div className="space-y-1.5 pt-1">
+                  <label className="flex items-center gap-2 text-[12.5px] text-ink2">
+                    <input
+                      type="checkbox"
+                      checked={selPos.isDeptHead}
+                      onChange={(e) => setSelPos({ ...selPos, isDeptHead: e.target.checked })}
+                    />{' '}
+                    부서 책임자 직급(팀장 등)
+                  </label>
+                  <label className="flex items-center gap-2 text-[12.5px] text-ink2">
+                    <input
+                      type="checkbox"
+                      checked={selPos.isLeaderRole ?? false}
+                      onChange={(e) => setSelPos({ ...selPos, isLeaderRole: e.target.checked })}
+                    />{' '}
+                    리더/책임자 권한 자동 부여 (isLeaderRole)
+                  </label>
+                  <label className="flex items-center gap-2 text-[12.5px] text-ink2">
+                    <input
+                      type="checkbox"
+                      checked={selPos.isExecutiveRole ?? false}
+                      onChange={(e) => setSelPos({ ...selPos, isExecutiveRole: e.target.checked })}
+                    />{' '}
+                    임원/경영진 권한 자동 부여 (isExecutiveRole)
+                  </label>
+                </div>
                 {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
                 <div className="flex justify-end gap-2 pt-1">
                   <button

@@ -16,8 +16,12 @@ import { dbDriver } from '@/shared/lib/dbDriver';
  *                   Appwrite 속성은 스칼라/스칼라배열만 가능하므로 중첩은 문자열로.
  *  - firestoreEncode/Decode : Firestore 전용 코덱(중첩 배열 제약 회피 — authRole/roleGroup).
  */
+export { Query } from '@/shared/lib/appwrite';
+
 export interface CrudBackend<T> {
   loadAll(): Promise<T[]>;
+  /** 서버 사이드 쿼리 조건(Query.equal 등)을 백엔드에 직접 주입하여 조회 */
+  loadWithQueries(queries?: string[]): Promise<T[]>;
   save(item: T): Promise<void>;
   remove(id: string): Promise<void>;
 }
@@ -81,11 +85,15 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
     const dbs = () => databases!;
     return {
       async loadAll() {
+        return this.loadWithQueries([]);
+      },
+      async loadWithQueries(queries: string[] = []) {
         const out: T[] = [];
         const PAGE = 100;
         try {
           for (let offset = 0; ; offset += PAGE) {
-            const res = await dbs().listDocuments(APPWRITE_DATABASE_ID, coll, [Query.limit(PAGE), Query.offset(offset)]);
+            const fullQueries = [...queries, Query.limit(PAGE), Query.offset(offset)];
+            const res = await dbs().listDocuments(APPWRITE_DATABASE_ID, coll, fullQueries);
             for (const row of res.documents as unknown as Record<string, unknown>[]) {
               const m = fromRow(row);
               if (m) out.push(m);
@@ -148,6 +156,9 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
         }
         return out;
       },
+      async loadWithQueries(_queries?: string[]) {
+        return this.loadAll();
+      },
       async save(item: T) {
         const payload = firestoreEncode ? firestoreEncode(item) : (item as Record<string, unknown>);
         await setDoc(doc(db!, coll, idOf(item)), payload as Record<string, unknown>);
@@ -162,6 +173,9 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
   let mem: T[] = seed.slice();
   return {
     async loadAll() {
+      return mem;
+    },
+    async loadWithQueries(_queries?: string[]) {
       return mem;
     },
     async save(item: T) {

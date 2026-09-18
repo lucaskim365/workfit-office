@@ -5,6 +5,7 @@ import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
 import { positionRepo } from '@/data/position/position.repo';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { roleGroupAuditRepo } from '@/data/roleGroupAudit/roleGroupAudit.repo';
 
 /**
  * 역할그룹 Repository — DB 접근을 캡슐화하는 계층.
@@ -139,9 +140,20 @@ export const roleGroupRepo = {
     return mappingBackend.loadAll();
   },
 
-  /** 등록/수정(upsert) - 그룹 마스터(메타) 및 관계 매핑(SSOT) 원자적 분리 저장 */
+  /** 등록/수정(upsert) - 그룹 마스터(메타) 및 관계 매핑(SSOT) 원자적 분리 저장 + 감사 인터셉터 */
   async save(group: RoleGroup): Promise<void> {
     const parsed = roleGroupSchema.parse(group);
+
+    // 0. 감사 로그(Audit) 생성을 위한 이전 상태 스냅샷 조회
+    let existingGroup: RoleGroup | null = null;
+    try {
+      const allGroups = await groupBackend.loadAll().catch(() => []);
+      existingGroup = allGroups.find(
+        (g) => g.code === parsed.code || g.id === group.id || (g as any).$id === group.id
+      ) ?? null;
+    } catch {
+      /* ignore */
+    }
 
     // 1. 35개 단일 표준 Screen ID 키로만 정규화하여 저장
     const normalizedPerms: Record<string, any> = {};
@@ -222,6 +234,42 @@ export const roleGroupRepo = {
     } catch (err) {
       console.warn('Failed to sync roleMappings relation table:', err);
     }
+
+    // 3. 감사 로그(Audit Log) 인터셉터 자동 기록 (Diff 분석)
+    try {
+      const diff: Record<string, { before: any; after: any }> = {};
+      const compareFields = ['name', 'desc', 'use', 'userIds', 'deptIds', 'positionRanks', 'menuPermissions'] as const;
+      
+      const beforeObj: any = existingGroup ?? {};
+      const afterObj: any = {
+        name: parsed.name,
+        desc: parsed.desc,
+        use: parsed.use,
+        userIds: parsed.userIds,
+        deptIds: parsed.deptIds,
+        positionRanks: parsed.positionRanks,
+        menuPermissions: normalizedPerms,
+      };
+
+      for (const field of compareFields) {
+        const b = beforeObj[field];
+        const a = afterObj[field];
+        if (JSON.stringify(b) !== JSON.stringify(a)) {
+          diff[field] = { before: b ?? null, after: a ?? null };
+        }
+      }
+
+      const action = existingGroup ? 'UPDATE' : 'CREATE';
+      void roleGroupAuditRepo.record({
+        roleGroupId: group.id || parsed.code,
+        roleCode: parsed.code,
+        roleName: parsed.name,
+        action,
+        diff,
+      });
+    } catch (auditErr) {
+      console.warn('[roleGroupRepo] Audit interceptor error on save:', auditErr);
+    }
   },
 
   async remove(codeOrId: string): Promise<void> {
@@ -263,6 +311,25 @@ export const roleGroupRepo = {
       }
     } catch (err) {
       console.warn('Failed to clean up roleMappings on remove:', err);
+    }
+
+    // 4. 감사 로그(Audit Log) 인터셉터 자동 기록 (DELETE)
+    try {
+      const diff: Record<string, { before: any; after: any }> = {};
+      if (target) {
+        Object.entries(target).forEach(([k, v]) => {
+          diff[k] = { before: v, after: null };
+        });
+      }
+      void roleGroupAuditRepo.record({
+        roleGroupId: docId,
+        roleCode,
+        roleName: target?.name || roleCode,
+        action: 'DELETE',
+        diff,
+      });
+    } catch (auditErr) {
+      console.warn('[roleGroupRepo] Audit interceptor error on remove:', auditErr);
     }
   },
 };

@@ -7,14 +7,14 @@ import type { Position } from '@/domain/position/schema';
  * user.seed 의 position 문자열과 매칭되며, 동적 결재선 룰 엔진의 직급 서열 비교에 사용.
  */
 export const POSITION_SEED: Position[] = [
-  { id: 'P01', name: '대표이사', rank: 1, isDeptHead: true },
-  { id: 'P02', name: '상무이사', rank: 2, isDeptHead: true },
-  { id: 'P03', name: '이사', rank: 3, isDeptHead: true },
-  { id: 'P04', name: '소장', rank: 3, isDeptHead: true },
-  { id: 'P05', name: '부장', rank: 4, isDeptHead: false },
-  { id: 'P06', name: '차장', rank: 5, isDeptHead: false },
-  { id: 'P07', name: '과장', rank: 6, isDeptHead: false },
-  { id: 'P08', name: '대리', rank: 7, isDeptHead: false },
-  { id: 'P09', name: '연구원', rank: 8, isDeptHead: false },
-  { id: 'P10', name: '사원', rank: 9, isDeptHead: false },
+  { id: 'P01', name: '대표이사', rank: 1, isDeptHead: true, isLeaderRole: true, isExecutiveRole: true },
+  { id: 'P02', name: '상무이사', rank: 2, isDeptHead: true, isLeaderRole: true, isExecutiveRole: true },
+  { id: 'P03', name: '이사', rank: 3, isDeptHead: true, isLeaderRole: true, isExecutiveRole: true },
+  { id: 'P04', name: '소장', rank: 3, isDeptHead: true, isLeaderRole: true, isExecutiveRole: false },
+  { id: 'P05', name: '부장', rank: 4, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
+  { id: 'P06', name: '차장', rank: 5, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
+  { id: 'P07', name: '과장', rank: 6, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
+  { id: 'P08', name: '대리', rank: 7, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
+  { id: 'P09', name: '연구원', rank: 8, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
+  { id: 'P10', name: '사원', rank: 9, isDeptHead: false, isLeaderRole: false, isExecutiveRole: false },
 ];

@@ -52,8 +52,27 @@ export const userSchema = z.object({
    * 스키마에 명시해 웹 저장 시에도 보존되도록 함(과거엔 파싱에서 탈락).
    */
   fcmToken: z.string().default(''),
+  /**
+   * 다중 소속(겸직) 확장 스키마 (User.dept 단일 구조의 점진적 확장 대비).
+   */
+  assignments: z.array(
+    z.object({
+      deptId: z.string(),
+      deptName: z.string().optional(),
+      role: z.enum(['HEAD', 'MEMBER']).default('MEMBER'),
+      isPrimary: z.boolean().default(false),
+    })
+  ).optional(),
 });
 
+export const userAssignmentSchema = z.object({
+  deptId: z.string(),
+  deptName: z.string().optional(),
+  role: z.enum(['HEAD', 'MEMBER']).default('MEMBER'),
+  isPrimary: z.boolean().default(false),
+});
+
+export type UserAssignment = z.infer<typeof userAssignmentSchema>;
 export type User = z.infer<typeof userSchema>;
 
 /** 폼 입력값(시스템 필드 제외). default 없이 정의해 RHF 입력/출력 타입 일치. */

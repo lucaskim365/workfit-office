@@ -16,7 +16,8 @@ export const workPlanPolicy = {
    */
   canAccessWorkPlanAdmin(context: SecurityContext): boolean {
     if (!context.user) return false;
-    if (context.isSuperAdmin || context.isExecutive) return true;
+    // ⚠️ 최고관리자(isSuperAdmin)라도 비임원/비팀장인 개발자는 전사 업무 종합 모니터링 자동 오픈에서 제외 (임원/팀장/인사위임자 전용)
+    if (context.isExecutive) return true;
     if (context.isLeader || context.organization.isDeptHead(context.dept)) return true;
     return (
       context.canMenuAccess('S_GW_WORK_PLAN_ADMIN') ||

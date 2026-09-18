@@ -17,7 +17,8 @@ export const commutePolicy = {
    */
   canAccessCommuteAdmin(context: SecurityContext): boolean {
     if (!context.user) return false;
-    if (context.isSuperAdmin || context.isExecutive) return true;
+    // ⚠️ 최고관리자(isSuperAdmin)라도 비임원/비팀장인 개발자는 전사 인사/근태 관제 자동 오픈에서 제외 (임원/팀장/인사위임자 전용)
+    if (context.isExecutive) return true;
     if (context.isLeader || context.organization.isDeptHead(context.dept)) return true;
     return (
       context.canMenuAccess('S_GW_COMMUTE_ADMIN') ||

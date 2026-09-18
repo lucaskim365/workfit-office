@@ -6,11 +6,17 @@ const C = PERM_COLS.length;
 const matrix = (fn: (mi: number, ci: number) => boolean): boolean[][] =>
   Array.from({ length: M }, (_, mi) => Array.from({ length: C }, (_, ci) => fn(mi, ci)));
 
-/** 1. 최고 관리자 (전사 전권) */
+/** 1. 최고 관리자 (IT/시스템 전권 - 단, 전사 인사/근태 관제는 임원/팀장/인사담당자 전용으로 기본 제외) */
 const adminPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
-    map[s.id] = { access: true, create: true, update: true, delete: true };
+    const isHrAdminScreen = s.id === 'S_GW_COMMUTE_ADMIN' || s.id === 'S_GW_WORK_PLAN_ADMIN';
+    map[s.id] = {
+      access: !isHrAdminScreen,
+      create: !isHrAdminScreen,
+      update: !isHrAdminScreen,
+      delete: !isHrAdminScreen,
+    };
   });
   return map;
 };

@@ -17,6 +17,10 @@ export const positionSchema = z.object({
   rank: z.number().int().min(1),
   /** 부서 책임자 직급 여부(팀장·공장장 등 판정 보조). */
   isDeptHead: z.boolean().default(false),
+  /** 리더/책임자 직책 여부 (텍스트 키워드 휴리스틱 대체) */
+  isLeaderRole: z.boolean().default(false),
+  /** 임원/경영진 직무 여부 (텍스트 키워드 휴리스틱 대체) */
+  isExecutiveRole: z.boolean().default(false),
 });
 
 export type Position = z.infer<typeof positionSchema>;

@@ -1,6 +1,8 @@
-import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { createCrudBackend, Query } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { workPlanSchema, type WorkPlan, type WorkPlanDraft } from '@/domain/workPlan/schema';
+import { workPlanPolicy } from '@/domain/security/policy/workPlanPolicy';
+import type { SecurityContext } from '@/domain/security/types';
 
 export interface WorkPlanActor {
   userId: string;
@@ -93,6 +95,29 @@ export const workPlanRepo = {
     if (!actor.active) return [];
     const rows = await loadAll();
     return sortPlans(byRange(rows.filter((row) => row.ownerUserId === actor.userId), filter).map(clonePlan));
+  },
+
+  /**
+   * 보안 컨텍스트의 DataScope를 백엔드 쿼리에 직접 주입하여 조회 (Server-Side Query Injection)
+   */
+  async listByScope(context: SecurityContext, filter?: WorkPlanFilter): Promise<WorkPlan[]> {
+    validateFilter(filter);
+    if (!context.user || context.user.status === '미사용') return [];
+
+    const scope = workPlanPolicy.getScope(context);
+    const queries: string[] = [];
+
+    // 1. 날짜 범위 쿼리 주입
+    if (filter?.from) queries.push(Query.greaterThanEqual('date', filter.from));
+    if (filter?.to) queries.push(Query.lessThanEqual('date', filter.to));
+
+    // 2. 스코프별 서버 쿼리 주입
+    if (scope === 'MY_ONLY') {
+      queries.push(Query.equal('ownerUserId', context.userId));
+    }
+
+    const rows = await backend.loadWithQueries(queries);
+    return sortPlans(byRange(rows, filter).map(clonePlan));
   },
 
   /**
