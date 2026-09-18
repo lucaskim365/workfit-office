@@ -319,15 +319,22 @@ function VisualDiagramOrgChart({
     });
   };
 
-  // 위원회 멤버 전용 정렬 헬퍼 (1. 대표이사 -> 2. 부위원장 -> 3. 손승원 -> 4. 기타)
+  // 위원회 멤버 전용 정렬 헬퍼 (1. 위원장/대표이사 -> 2. 부위원장 -> 3. 손승원 -> 4. 기타)
   const sortCommitteeMembers = (members: typeof org.roots[0]['members']) => {
     const getOrder = (m: typeof members[0]) => {
       const name = m.name || '';
       const pos = m.position || '';
       const duty = m.jobTitle || '';
 
-      // 1순위: 대표이사 (이름, 직급, 직책)
-      if (name.includes('대표') || pos.includes('대표') || duty.includes('대표') || (duty.includes('위원장') && !duty.includes('부위원') && !name.includes('부위원'))) {
+      // 1순위: 위원장 (이름, 직급, 직책) 또는 대표이사
+      if (
+        name === '위원장' ||
+        pos === '위원장' ||
+        duty === '위원장' ||
+        (!name.includes('부위원') && !pos.includes('부위원') && !duty.includes('부위원') && (
+          name.includes('대표') || pos.includes('대표') || duty.includes('대표') || duty.includes('위원장')
+        ))
+      ) {
         return 1;
       }
       // 2순위: 부위원장 (이름, 직급, 직책)
@@ -347,7 +354,28 @@ function VisualDiagramOrgChart({
 
   // 직속 부서 및 위원회 (대표이사 직속, 기술경영전략위원회, 경영기획팀 등)
   const committeeDept = validDepts.find((d) => d.name.includes('위원회'));
-  const committeeMembers = sortCommitteeMembers(deptMembersMap.get(committeeDept?.name ?? '') ?? []);
+  const rawCommitteeMembers = deptMembersMap.get(committeeDept?.name ?? '') ?? [];
+  const committeeMembers = useMemo(() => {
+    const list = [...rawCommitteeMembers];
+    const hasChairman = list.some(
+      (m) => m.name === '위원장' || m.position === '위원장' || m.jobTitle === '위원장'
+    );
+    // 실제 위원장 계정이 없는 경우 조직도 상 표시를 위해 가상 위원장 엔트리 추가
+    if (!hasChairman) {
+      list.unshift({
+        id: 'virtual-chairman',
+        name: '위원장',
+        position: '위원장',
+        jobTitle: '위원장',
+        dept: committeeDept?.name ?? '기술경영전략위원회',
+        email: '',
+        isConcurrent: false,
+        status: '사용',
+        isVirtual: true,
+      } as any);
+    }
+    return sortCommitteeMembers(list);
+  }, [rawCommitteeMembers, committeeDept?.name]);
 
   const labDept = validDepts.find((d) => d.name.includes('연구소'));
   const labMembers = sortDeptMembers(deptMembersMap.get(labDept?.name ?? '') ?? [], labDept);
@@ -441,23 +469,26 @@ function VisualDiagramOrgChart({
             <table className="border-collapse text-center text-[10.5px]">
               <tbody className="divide-y divide-[#A9D18E]/60 bg-white/60 dark:bg-panel">
                 {committeeMembers.length > 0 ? (
-                  committeeMembers.map((m) => (
-                    <tr
-                      key={m.id}
-                      onClick={() => onSelectUserId(m.id)}
-                      className="cursor-pointer hover:bg-teal-soft/30 transition-colors"
-                    >
-                      <td className="border-r border-[#A9D18E] px-4 py-1 text-slate-700 font-medium">위원회</td>
-                      <td className="px-5 py-1 font-bold text-slate-900">
-                        <span>{m.name}</span>
-                        {m.isConcurrent && (
-                          <span className="ml-1.5 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
-                            겸직
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  committeeMembers.map((m: any) => {
+                    const isVirtual = m.isVirtual || m.id === 'virtual-chairman';
+                    return (
+                      <tr
+                        key={m.id}
+                        onClick={isVirtual ? undefined : () => onSelectUserId(m.id)}
+                        className={isVirtual ? 'cursor-default select-none' : 'cursor-pointer hover:bg-teal-soft/30 transition-colors'}
+                      >
+                        <td className="border-r border-[#A9D18E] px-4 py-1 text-slate-700 font-medium">위원회</td>
+                        <td className="px-5 py-1 font-bold text-slate-900">
+                          <span>{m.name}</span>
+                          {m.isConcurrent && !isVirtual && (
+                            <span className="ml-1.5 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                              겸직
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={2} className="px-6 py-2 text-ink3 text-[10px] italic">

@@ -187,7 +187,14 @@ function VerticalVisualOrgChart({
       const pos = m.position || '';
       const duty = m.jobTitle || '';
 
-      if (name.includes('대표') || pos.includes('대표') || duty.includes('대표') || (duty.includes('위원장') && !duty.includes('부위원') && !name.includes('부위원'))) {
+      if (
+        name === '위원장' ||
+        pos === '위원장' ||
+        duty === '위원장' ||
+        (!name.includes('부위원') && !pos.includes('부위원') && !duty.includes('부위원') && (
+          name.includes('대표') || pos.includes('대표') || duty.includes('대표') || duty.includes('위원장')
+        ))
+      ) {
         return 1;
       }
       if (name.includes('부위원') || pos.includes('부위원') || duty.includes('부위원')) {
@@ -204,7 +211,27 @@ function VerticalVisualOrgChart({
 
   // 대표이사 직속 기구
   const committeeDept = validDepts.find((d) => d.name.includes('위원회'));
-  const committeeMembers = sortCommitteeMembers(deptMembersMap.get(committeeDept?.name ?? '') ?? []);
+  const rawCommitteeMembers = deptMembersMap.get(committeeDept?.name ?? '') ?? [];
+  const committeeMembers = useMemo(() => {
+    const list = [...rawCommitteeMembers];
+    const hasChairman = list.some(
+      (m) => m.name === '위원장' || m.position === '위원장' || m.jobTitle === '위원장'
+    );
+    if (!hasChairman) {
+      list.unshift({
+        id: 'virtual-chairman',
+        name: '위원장',
+        position: '위원장',
+        jobTitle: '위원장',
+        dept: committeeDept?.name ?? '기술경영전략위원회',
+        email: '',
+        isConcurrent: false,
+        status: '사용',
+        isVirtual: true,
+      } as any);
+    }
+    return sortCommitteeMembers(list);
+  }, [rawCommitteeMembers, committeeDept?.name]);
 
   const labDept = validDepts.find((d) => d.name.includes('연구소'));
   const labMembers = sortDeptMembers(deptMembersMap.get(labDept?.name ?? '') ?? [], labDept);
@@ -286,24 +313,29 @@ function VerticalVisualOrgChart({
                 <span className="text-[10px] text-slate-600 font-semibold">{committeeMembers.length}명</span>
               </div>
               <div className="divide-y divide-[#A9D18E]/40">
-                {committeeMembers.map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => onSelectUserId(m.id)}
-                    className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer active:scale-99 transition-all"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-600 font-medium">위원</span>
-                      <span className="text-[12px] font-extrabold text-slate-900">{m.name}</span>
-                      {m.isConcurrent && (
-                        <span className="rounded bg-slate-100 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
-                          겸직
-                        </span>
-                      )}
+                {committeeMembers.map((m: any) => {
+                  const isVirtual = m.isVirtual || m.id === 'virtual-chairman';
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={isVirtual ? undefined : () => onSelectUserId(m.id)}
+                      className={`flex items-center justify-between px-3 py-2 ${
+                        isVirtual ? 'cursor-default select-none' : 'hover:bg-slate-50 cursor-pointer active:scale-99 transition-all'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-600 font-medium">위원</span>
+                        <span className="text-[12px] font-extrabold text-slate-900">{m.name}</span>
+                        {m.isConcurrent && !isVirtual && (
+                          <span className="rounded bg-slate-100 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
+                            겸직
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-ink3 font-medium">{m.position}</span>
                     </div>
-                    <span className="text-[11px] text-ink3 font-medium">{m.position}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
