@@ -110,23 +110,45 @@ export default function MobileCommuteAdminScreen() {
       const outAt = timeOf(rec?.outAt);
       const totalMin = rec?.totalMin ?? 0;
 
+      // 퇴근 기준 시각 판정:
+      // 기본 정규 퇴근 시간은 18:00 (오후반차인 경우 13:00)
+      const isPmHalf = approvedLeaveType?.includes('오후') || approvedLeaveType?.includes('반차');
+      const targetEndMinutes = isPmHalf ? 13 * 60 : 18 * 60;
+
+      let isActualOff = false;
+      if (outAt) {
+        const [outHh, outMm] = outAt.split(':').map(Number);
+        const outMinutes = (outHh || 0) * 60 + (outMm || 0);
+
+        if (selectedDateStr < todayStr) {
+          // 과거 날짜: 이미 종료된 날짜이므로 태그가 있으면 퇴근으로 처리
+          isActualOff = true;
+        } else {
+          // 오늘 날짜: 퇴근 기준 시각(18:00, 오후반차 시 13:00) 이상으로 찍힌 경우에만 실제 퇴근으로 인정!
+          isActualOff = outMinutes >= targetEndMinutes;
+        }
+      }
+
       let statusText = '미출근';
       let statusTone: 'normal' | 'late' | 'leave' | 'outside' | 'absent' = 'absent';
 
-      if (approvedLeaveType) {
+      if (approvedLeaveType && !inAt) {
         statusText = approvedLeaveType;
         statusTone = 'leave';
       } else if (inAt) {
         const [hh, mm] = inAt.split(':').map(Number);
         const isLate = hh > 9 || (hh === 9 && mm > 10);
 
-        if (outAt) {
+        if (isActualOff) {
           statusText = isLate ? '지각/퇴근' : '정상 퇴근';
           statusTone = isLate ? 'late' : 'normal';
         } else {
           statusText = isLate ? '지각 근무중' : '정상 근무중';
           statusTone = isLate ? 'late' : 'normal';
         }
+      } else if (approvedLeaveType) {
+        statusText = approvedLeaveType;
+        statusTone = 'leave';
       } else if (userPresence?.status === 'OUTSIDE') {
         statusText = '외근/출장';
         statusTone = 'outside';
@@ -139,6 +161,7 @@ export default function MobileCommuteAdminScreen() {
         position: u.position,
         inAt,
         outAt,
+        isActualOff,
         totalMin,
         statusText,
         statusTone,
@@ -331,7 +354,7 @@ export default function MobileCommuteAdminScreen() {
                     <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-ink3 font-mono">
                       <span>출근: {item.inAt || '—'}</span>
                       <span>·</span>
-                      <span>퇴근: {item.outAt || (item.inAt ? '근무 중' : '—')}</span>
+                      <span>퇴근: {item.isActualOff ? item.outAt : item.inAt ? '근무 중' : '—'}</span>
                     </div>
                   </div>
                 </div>
