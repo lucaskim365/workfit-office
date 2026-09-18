@@ -15,6 +15,13 @@ import type { UserPresenceStatus } from '@/domain/userPresence/schema';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
+const timeOf = (iso: string | null | undefined): string => {
+  if (!iso) return '—';
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '—';
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+};
+
 /**
  * 모바일 PWA 개인 출퇴근·휴가 화면 (모든 임직원 공통 기본 화면)
  */
@@ -62,8 +69,8 @@ export default function MobileCommuteScreen() {
     return monthRows.find((r) => r.date === todayStr);
   }, [monthRows, todayStr]);
 
-  const checkInTime = todayRecord?.inAt ? todayRecord.inAt.slice(11, 16) : null;
-  const checkOutTime = todayRecord?.outAt ? todayRecord.outAt.slice(11, 16) : null;
+  const checkInTime = todayRecord?.inAt ? timeOf(todayRecord.inAt) : null;
+  const checkOutTime = todayRecord?.outAt ? timeOf(todayRecord.outAt) : null;
 
   // 원클릭 상태 전환 핸들러
   const handleQuickStatus = async (newStatus: UserPresenceStatus, defaultMsg?: string) => {
@@ -250,7 +257,7 @@ export default function MobileCommuteScreen() {
                     )}
                   </div>
                   <div className="text-[11px] text-ink3 mt-0.5">
-                    출근 {row.inAt ? row.inAt.slice(11, 16) : '—'} · 퇴근 {row.outAt ? row.outAt.slice(11, 16) : '—'}
+                    출근 {timeOf(row.inAt)} · 퇴근 {timeOf(row.outAt)}
                   </div>
                 </div>
 

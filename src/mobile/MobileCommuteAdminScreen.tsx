@@ -18,6 +18,13 @@ import MobileCommonHeader from './MobileCommonHeader';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
+const timeOf = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+};
+
 type FilterTab = 'all' | 'anomaly' | 'leave';
 
 export default function MobileCommuteAdminScreen() {
@@ -99,8 +106,8 @@ export default function MobileCommuteAdminScreen() {
       const approvedLeaveType = leaveByUserName.get(normName);
       const userPresence = presenceMap[u.id];
 
-      const inAt = rec?.inAt ? rec.inAt.slice(11, 16) : null;
-      const outAt = rec?.outAt ? rec.outAt.slice(11, 16) : null;
+      const inAt = timeOf(rec?.inAt);
+      const outAt = timeOf(rec?.outAt);
       const totalMin = rec?.totalMin ?? 0;
 
       let statusText = '미출근';

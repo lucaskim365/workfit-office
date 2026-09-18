@@ -15,6 +15,7 @@ import {
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useResources } from '@/features/resource/useResources';
 import { useReservations, useCreateReservation } from '@/features/resource/useReservations';
+import { formatResourceTime } from '@/modules/gw/resource/resourceDate';
 import MobileCommonHeader from './MobileCommonHeader';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -234,8 +235,8 @@ export default function MobileResourceScreen() {
                     </div>
                   ) : (
                     resReservations.map((r) => {
-                      const startTime = r.startAt.slice(11, 16);
-                      const endTime = r.endAt.slice(11, 16);
+                      const startTime = formatResourceTime(r.startAt);
+                      const endTime = formatResourceTime(r.endAt);
 
                       return (
                         <div
