@@ -467,7 +467,7 @@ export function WorkPlanTeamMonthlyMatrix({
           {onOpenConfig && (
             <button
               type="button"
-              onClick={onOpenConfig}
+              onClick={onOpenConfig}
               className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
             >
               <Settings size={12} className="text-ink3" />
