@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { buildCalendarMonth, calendarToday, isValidCalendarDate, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent, CalendarEventType } from '@/domain/calendarEvent/schema';
@@ -19,25 +19,12 @@ import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { scheduleChip } from '@/domain/commute/statusDisplay';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
-import {
-  useMyWorkPlans,
-  useAllWorkPlans,
-  useUpdateWorkPlan,
-} from '@/features/workPlan/useWorkPlans';
-import {
-  parseWorkPlanItems,
-  calculatePlanProgress,
-  toggleWorkPlanItem,
-  getWorkPlanTagMeta,
-} from '@/domain/workPlan/engine';
-import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
+import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
-import { CheckCircle2, ListTodo, ExternalLink } from 'lucide-react';
-import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
@@ -387,16 +374,9 @@ function LocalCalendarScreen() {
     });
   }, [rawEvents, isTeam, scopeFilter, actor, deptId, access.projectIds]);
 
-  const workActor = useMemo(
-    () => ({ userId: actor?.id ?? '__anonymous__', active: actor?.status === '사용' }),
-    [actor],
-  );
-  const myWorkPlansQuery = useMyWorkPlans(workActor, range);
   /** 현재 월의 연도 기준 공휴일 조회 */
   const holidaysQuery = useHolidays(month.slice(0, 4));
   const holidays = holidaysQuery.data ?? [];
-  const updateWorkPlan = useUpdateWorkPlan();
-  const { tagMap } = useWorkPlanConfig();
   /** 업무계획의 전사 공통 중요 일정(__COMPANY__) — 날짜별 내용 */
   const allWorkPlansQuery = useAllWorkPlans(range, true);
   const importantByDate = useMemo(() => {
@@ -416,33 +396,7 @@ function LocalCalendarScreen() {
     [visibleEvents, selectedDate],
   );
 
-  /** 선택한 날짜의 내 업무 계획 */
-  const selectedDayWorkPlan = useMemo(
-    () => (myWorkPlansQuery.data ?? []).find((plan) => plan.date === selectedDate),
-    [myWorkPlansQuery.data, selectedDate],
-  );
-
-  const selectedDayTodos = useMemo(
-    () => (selectedDayWorkPlan ? parseWorkPlanItems(selectedDayWorkPlan.content) : []),
-    [selectedDayWorkPlan],
-  );
-
-  const selectedDayProgress = useMemo(
-    () => (selectedDayWorkPlan ? calculatePlanProgress(selectedDayWorkPlan.content) : null),
-    [selectedDayWorkPlan],
-  );
-
-  const handleToggleTodo = useCallback(async (idx: number) => {
-    if (!selectedDayWorkPlan || !actor) return;
-    const nextContent = toggleWorkPlanItem(selectedDayWorkPlan.content, idx);
-    await updateWorkPlan.mutateAsync({
-      actor: { userId: actor.id, active: actor.status === '사용' },
-      id: selectedDayWorkPlan.id,
-      draft: { date: selectedDayWorkPlan.date, content: nextContent },
-    });
-  }, [selectedDayWorkPlan, actor, updateWorkPlan]);
-
-  const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading || myWorkPlansQuery.isLoading;
+  const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading;
 
   const queryError = usersQuery.error ?? eventsQuery.error;
 
@@ -503,14 +457,14 @@ function LocalCalendarScreen() {
       {notice && <div aria-live="polite" className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">{notice}</div>}
 
       {/*
-        2열 레이아웃: 좌측(선택한 날의 상세 일정 + 내 To-Do) / 우측(월간 캘린더).
+        2열 레이아웃: 좌측(선택한 날짜 카드 + 상세 일정) / 우측(월간 캘린더).
         화면 배율(body zoom)을 따라가도록 뷰포트 대신 컨테이너 폭으로 나눈다.
         좌측은 좁게 두고 달력에 폭을 몰아 줘 칸 안의 중요 일정이 잘리지 않게 한다.
       */}
       <div className="@container mt-5">
-      <div className="flex flex-col items-start gap-4 @min-[860px]:flex-row">
-        {/* ── 좌측 패널: 선택한 날의 상세 일정 & 내 업무계획(To-Do) ── */}
-        <aside className="w-full shrink-0 space-y-3.5 @min-[860px]:w-[250px] @min-[1200px]:w-[280px]">
+      <div className="flex flex-col items-start gap-4 @min-[860px]:flex-row @min-[860px]:items-stretch">
+        {/* ── 좌측 패널: 선택한 날의 상세 일정 ── */}
+        <aside className="flex w-full shrink-0 flex-col gap-3.5 @min-[860px]:w-[250px] @min-[1200px]:w-[280px]">
           {/* 선택일 헤더 카드 */}
           <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -546,9 +500,10 @@ function LocalCalendarScreen() {
             </div>
           </div>
 
-          {/* 섹션 1: 선택한 날의 상세 일정 목록 */}
-          <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
-            <div className="mb-2.5 flex items-center justify-between border-b border-border/60 pb-2">
+          {/* 선택한 날의 상세 일정 목록 — 데스크톱에서는 달력 높이까지 늘어나고 목록은 안에서 스크롤한다 */}
+          <div className="relative rounded-xl border border-border bg-panel shadow-sm @min-[860px]:min-h-[200px] @min-[860px]:flex-1">
+            <div className="flex flex-col p-3.5 @min-[860px]:absolute @min-[860px]:inset-0">
+            <div className="mb-2.5 flex shrink-0 items-center justify-between border-b border-border/60 pb-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-[12.5px] font-extrabold text-ink">상세 일정</span>
                 <span className="rounded-full bg-panel-alt px-1.5 py-0.2 text-[10px] font-bold text-ink3">
@@ -562,7 +517,7 @@ function LocalCalendarScreen() {
                 <p className="text-[11px] font-medium text-ink3">등록된 일정이 없습니다.</p>
               </div>
             ) : (
-              <ul className="divide-y divide-border/60 max-h-[260px] overflow-y-auto pr-0.5">
+              <ul className="max-h-[260px] divide-y divide-border/60 overflow-y-auto pr-0.5 @min-[860px]:max-h-none @min-[860px]:min-h-0 @min-[860px]:flex-1">
                 {selectedDayEvents.map((event) => {
                   const owner = isTeam ? teamLabelOf(event) : ownerNameOf(event);
                   const masked = isTeam && isMaskedForSupervisor(actor.id, event);
@@ -619,89 +574,7 @@ function LocalCalendarScreen() {
                 })}
               </ul>
             )}
-          </div>
-
-          {/* 섹션 2: 내 오늘의 업무계획 (To-Do) */}
-          <div className="rounded-xl border border-teal/30 bg-teal-soft/10 p-3.5 shadow-sm">
-            <div className="mb-2.5 flex items-center justify-between border-b border-teal/20 pb-2">
-              <div className="flex items-center gap-1.5">
-                <ListTodo size={14} className="text-teal" />
-                <span className="text-[12.5px] font-extrabold text-ink">내 업무계획 (To-Do)</span>
-              </div>
-              <Link
-                to={`/gw/work-plan?date=${selectedDate}`}
-                className="flex items-center gap-0.5 text-[10.5px] font-bold text-teal hover:underline"
-                title="업무계획 화면으로 이동"
-              >
-                <span>업무계획</span>
-                <ExternalLink size={10} />
-              </Link>
             </div>
-
-            {/* To-Do 진행률 게이지 */}
-            {selectedDayProgress && (
-              <div className="mb-2.5 flex items-center justify-between text-[10.5px]">
-                <span className="text-ink3 font-medium">
-                  진행률: {selectedDayProgress.completed}/{selectedDayProgress.total}건
-                </span>
-                <span className="font-bold text-teal">{selectedDayProgress.percent}%</span>
-              </div>
-            )}
-
-            {/* To-Do 체크리스트 항목들 */}
-            {selectedDayTodos.length === 0 ? (
-              <div className="py-4 text-center text-[11px] text-ink3 font-medium">
-                작성된 업무계획이 없습니다.
-                <Link to={`/gw/work-plan?date=${selectedDate}`} className="mt-1 block text-[10.5px] font-bold text-teal hover:underline">
-                  업무계획에서 작성하기
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-1 max-h-[220px] overflow-y-auto pr-0.5">
-                {selectedDayTodos.map((item, idx) => {
-                  if (!item.text && !item.tag && !item.isChecklist) return null;
-                  const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
-
-                  return (
-                    <div
-                      key={idx}
-                      className="group flex items-start gap-1.5 rounded-md p-1 hover:bg-white/60 dark:hover:bg-panel-alt/60 transition-colors"
-                    >
-                      {item.isChecklist ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleToggleTodo(idx)}
-                          className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors ${
-                            item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel hover:border-teal'
-                          }`}
-                          title={item.completed ? '완료 취소' : '완료 체크'}
-                        >
-                          {item.completed && <CheckCircle2 size={11} />}
-                        </button>
-                      ) : (
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink3" />
-                      )}
-
-                      <div className="min-w-0 flex-1 leading-snug">
-                        {tagMeta && (
-                          <span className={`mr-1 inline-block rounded px-1 py-0.2 text-[9px] font-bold ${tagMeta.badgeClass}`}>
-                            {tagMeta.tag}
-                          </span>
-                        )}
-                        <span
-                          className={`text-[11px] break-words cursor-pointer ${
-                            item.completed ? 'line-through text-ink3' : 'font-medium text-ink'
-                          }`}
-                          onClick={() => void handleToggleTodo(idx)}
-                        >
-                          <WorkPlanInlineText text={item.text} />
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </aside>
 
