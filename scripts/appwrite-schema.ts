@@ -586,9 +586,9 @@ const COLLECTIONS: CollectionDef[] = [
   },
   {
     id: 'bizVendorProjects',
-    name: '거래처-사업 연결',
+    name: '도입기업-사업 연결',
     /*
-      사업관리 › 거래처 정보. 거래처(vendors.code) ↔ 사업(workProjects.id) 연결표.
+      사업관리 › 도입기업 정보. 도입기업(vendors.code) ↔ 사업(workProjects.id) 연결표.
       $id = `${vendorCode}__${projectId}` 라 같은 연결은 두 번 생기지 않는다. role = 발주처·매입처·외주.
       vendors·workProjects 에는 칸을 더하지 않는다 — 연결은 전부 여기에만 있다.
     */
