@@ -1,4 +1,5 @@
-import { loadAppwriteConfig } from './appwrite-dev-env';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DEFAULT_GENERAL_TAGS } from '../src/domain/workPlan/tag';
 
 /**
@@ -6,14 +7,32 @@ import { DEFAULT_GENERAL_TAGS } from '../src/domain/workPlan/tag';
  * 하나라도 있으면 아무것도 하지 않고 끝낸다(기존 태그를 건드리지 않는다).
  * 사용: npx tsx scripts/provision-work-plan-tags.ts [--prod]
  */
+/** appwrite-schema.ts와 같은 방식 — 프로세스 환경변수 우선, 없으면 .env.local. */
+function readEnv(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  const p = resolve(process.cwd(), '.env.local');
+  if (!existsSync(p)) return undefined;
+  for (const line of readFileSync(p, 'utf8').split('\n')) {
+    const m = line.match(new RegExp(`^${key}\\s*=\\s*"?([^"\\n]*)"?`));
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}
+
 async function main() {
   const isProd = process.argv.includes('--prod');
-  const config = loadAppwriteConfig('workfit', isProd);
-  if (!config?.apiKey) {
-    console.error('No API key found in env');
+  const endpoint = (readEnv('APPWRITE_ENDPOINT') ?? readEnv('VITE_APPWRITE_ENDPOINT'))?.replace(/\/$/, '');
+  const projectId = isProd
+    ? '6a6bf85e002acb7f71d6'
+    : (readEnv('APPWRITE_PROJECT_ID') ?? readEnv('VITE_APPWRITE_PROJECT_ID'));
+  const DB = readEnv('APPWRITE_DATABASE_ID') ?? readEnv('VITE_APPWRITE_DATABASE_ID') ?? 'workfit';
+  const apiKey = isProd
+    ? (readEnv('APPWRITE_API_KEY_PROD') ?? readEnv('APPWRITE_API_KEY'))
+    : (readEnv('APPWRITE_API_KEY') ?? readEnv('APPWRITE_API_KEY_DEV'));
+  if (!endpoint || !projectId || !apiKey) {
+    console.error('Appwrite 접속 정보(endpoint/project/API key)를 찾을 수 없습니다.');
     process.exit(1);
   }
-  const { endpoint, projectId, apiKey, databaseId: DB } = config;
   console.log(`[work-plan-tags-provision] ${endpoint} / project=${projectId} / db=${DB}`);
 
   const HEADERS = {
