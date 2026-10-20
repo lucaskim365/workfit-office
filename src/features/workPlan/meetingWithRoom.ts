@@ -32,18 +32,18 @@ export interface MeetingSaveInput {
 }
 
 export const ROOM_ROLLBACK_MESSAGE = '회의실 예약은 남아 있습니다. 자원예약에서 취소해 주세요.';
+/** 방을 바꿔 회의는 새 방으로 저장됐는데 이전 방 예약을 취소하지 못했을 때. */
+export const OLD_ROOM_LEFT_MESSAGE = '이전 회의실 예약은 남아 있습니다. 자원예약에서 취소해 주세요.';
 
-/** 회의 저장이 실패했는데 잡아 둔 예약을 되돌리지도 못했다 — 예약이 남아 회의실이 막혀 있다. */
+/** 잡아 둔 예약을 되돌리지 못했다 — 예약이 남아 회의실이 막혀 있다. */
 export class RoomRollbackError extends Error {
-  constructor(public readonly reservationId: string, public readonly cause?: unknown) {
-    super(ROOM_ROLLBACK_MESSAGE);
+  constructor(public readonly reservationId: string, public readonly cause?: unknown, message = ROOM_ROLLBACK_MESSAGE) {
+    super(message);
     this.name = 'RoomRollbackError';
   }
 }
 
 const DEFAULT_PURPOSE = '회의';
-/** 예약 제목 한도 — 회의 제목 검증은 회의 저장이 따로 한다. */
-const RESERVATION_TITLE_MAX = 100;
 
 /** 회의 날짜·시각(회의실 시간대 기준) → 예약 시각(ISO). */
 export function toReservationWindow(date: string, startTime: string, endTime: string): { startAt: string; endAt: string } {
@@ -105,7 +105,7 @@ function createRoomReservation(actors: MeetingActors, roomId: string, input: Mee
   return reservationRepo.create(actors.user, {
     resourceId: roomId,
     requesterDeptId: actors.calendar.deptId ?? null,
-    title: draft.title.trim().slice(0, RESERVATION_TITLE_MAX),
+    title: draft.title.trim(),
     purpose: input.purpose.trim() || DEFAULT_PURPOSE,
     ...meetingWindow(draft),
     quantity: 1,
@@ -126,11 +126,14 @@ async function rollbackReservation(actors: MeetingActors, reservationId: string,
 }
 
 /**
- * 수정 내용이 회의 규칙을 통과하는지 예약을 건드리기 전에 본다 — 예약 시간을 옮긴 뒤 회의가
- * 검증에 걸리면 둘이 어긋난다. 실제 저장 검증은 repo가 한 번 더 한다.
+ * 회의 내용이 일정 규칙을 통과하는지 예약을 건드리기 전에 본다 — 잘못된 회의로 방을 잡거나,
+ * 예약 시간을 옮긴 뒤 회의가 검증에 걸려 둘이 어긋나지 않게. 실제 저장 검증은 repo가 한 번 더 한다.
+ * 새 회의(`current` 없음)는 저장 때 채워질 id·소유자·시각을 임시값으로 넣어 본다.
  */
-function assertMeetingValid(current: CalendarEvent, draft: CalendarEventDraft): void {
-  const parsed = calendarEventSchema.safeParse({ ...current, ...draft });
+function assertMeetingValid(actors: MeetingActors, current: CalendarEvent | null, draft: CalendarEventDraft): void {
+  const now = new Date().toISOString();
+  const base = current ?? { id: 'CAL-00000000-0000', ownerUserId: actors.calendar.userId, createdAt: now, updatedAt: now, reminded: false };
+  const parsed = calendarEventSchema.safeParse({ ...base, ...draft });
   if (!parsed.success) {
     throw new CalendarEventError('INVALID_INPUT', parsed.error.issues[0]?.message || '입력값을 확인하세요.');
   }
@@ -140,6 +143,7 @@ async function createMeeting(actors: MeetingActors, input: MeetingSaveInput): Pr
   if (!input.roomId) {
     return calendarEventRepo.create(actors.calendar, { ...input.draft, reservationId: null });
   }
+  assertMeetingValid(actors, null, input.draft);
   const reservation = await createRoomReservation(actors, input.roomId, input);
   try {
     return await calendarEventRepo.create(actors.calendar, {
@@ -163,19 +167,19 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
 
   // 방 해제 — 바꿀 수 있는 예약이면 취소하고 연결을 끊는다. 지난·반려 예약은 그대로 둔다.
   if (!roomId) {
-    assertMeetingValid(current, { ...draft, reservationId: null });
+    assertMeetingValid(actors, current, { ...draft, reservationId: null });
     if (linked && changeable) {
       await reservationRepo.cancel(actors.user, linked.id, '회의실 해제', actors.isAdmin);
     }
     return calendarEventRepo.update(actors.calendar, eventId, { ...draft, reservationId: null });
   }
 
-  // 같은 방 — 바꿀 수 있는 예약이면 시간만 맞춘다(겹치면 회의도 저장하지 않음). 아니면 예약은 그대로.
-  if (linked && linked.resourceId === roomId) {
+  // 같은 방, 살아 있는 예약 — 시간만 맞춘다(겹치면 회의도 저장하지 않음).
+  if (linked && changeable && linked.resourceId === roomId) {
     const patch: CalendarEventDraft = { ...draft, location: linked.resourceNameSnapshot, reservationId: linked.id };
-    assertMeetingValid(current, patch);
-    const window = changeable ? meetingWindow(draft) : null;
-    if (!window || sameWindow(linked, window)) {
+    assertMeetingValid(actors, current, patch);
+    const window = meetingWindow(draft);
+    if (sameWindow(linked, window)) {
       return calendarEventRepo.update(actors.calendar, eventId, patch);
     }
     const previous = { startAt: linked.startAt, endAt: linked.endAt };
@@ -194,8 +198,12 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
     }
   }
 
-  // 새로 고른 방(처음 고름·방 변경·반려 뒤 다른 방) — 새 예약 → 회의 저장 → 옛 예약 취소.
-  assertMeetingValid(current, { ...draft, reservationId: null });
+  /*
+    새 예약이 필요한 경우 — 처음 고름·방 변경, 또는 연결 예약이 바꿀 수 없는 상태(반려·취소·지남)인데
+    방을 고름(같은 방이라도 다시 신청). 새 예약 → 회의 저장 → 살아 있던 옛 예약 취소.
+    닫힌 옛 예약은 건드리지 않는다.
+  */
+  assertMeetingValid(actors, current, { ...draft, reservationId: null });
   const reservation = await createRoomReservation(actors, roomId, input);
   let updated: CalendarEvent;
   try {
@@ -213,7 +221,7 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
     } catch (error) {
       // 회의는 새 방으로 저장됐지만 옛 방 예약이 남았다.
       console.error('이전 회의실 예약 취소 실패:', error);
-      throw new RoomRollbackError(linked.id, error);
+      throw new RoomRollbackError(linked.id, error, OLD_ROOM_LEFT_MESSAGE);
     }
   }
   return updated;
