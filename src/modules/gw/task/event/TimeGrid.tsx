@@ -33,7 +33,9 @@ interface TimeGridProps {
 }
 
 /** 한 시간 높이(rem). 좌표 계산은 비율만 쓰므로 body zoom 과 무관하다 */
-const HOUR_REM = 3;
+const HOUR_REM = 2;
+/** 기본으로 보이는 시간 수(08:00~19:00) */
+const VISIBLE_HOURS = 11;
 /** 마운트 시 맨 위에 올 시각(분) */
 const INITIAL_TOP = 8 * 60;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -103,6 +105,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
   };
 
   const begin = (e: ReactPointerEvent, kind: Drag['kind']) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const minute = minuteAt(e.clientY);
     dragRef.current = { kind, startMinute: minute, base: value };
@@ -168,7 +171,8 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
         <div className={`h-4 flex-1 rounded ${allDay ? 'bg-blue' : 'bg-panel-alt'}`} />
       </div>
 
-      <div ref={scrollRef} className="relative h-[24rem] overflow-y-auto">
+      <div ref={scrollRef} className="relative overflow-y-auto"
+        style={{ height: `${VISIBLE_HOURS * HOUR_REM}rem` }}>
         <div className="relative flex" style={{ height: `${24 * HOUR_REM}rem` }}>
           <div className="relative w-12 shrink-0">
             {hours.slice(1).map((h) => (
@@ -214,7 +218,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
 
             {value && !allDay && (
               <div
-                className="absolute inset-x-1 z-10 flex flex-col overflow-hidden rounded border border-blue bg-blue px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
+                className="absolute inset-x-1 z-10 flex flex-col rounded border border-blue bg-blue px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
                 style={{
                   top: pct(value.start),
                   height: pct(value.end - value.start),
@@ -224,23 +228,17 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
                   e.stopPropagation();
                   if (mode === 'desktop') begin(e, 'move');
                 }}
-                onPointerMove={onMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
               >
                 <span className="truncate">
                   {toHHmm(value.start)}~{value.end >= DAY_END ? '24:00' : toHHmm(value.end)} · {durationLabel(value)}
                 </span>
                 <div
-                  className="absolute inset-x-0 bottom-0 flex h-3 cursor-ns-resize items-end justify-center"
+                  className={`absolute inset-x-0 flex cursor-ns-resize items-end justify-center ${mode === 'touch' ? '-bottom-2 h-5' : 'bottom-0 h-3'}`}
                   style={{ touchAction: 'none' }}
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     begin(e, 'resize');
                   }}
-                  onPointerMove={onMove}
-                  onPointerUp={endDrag}
-                  onPointerCancel={endDrag}
                 >
                   <span className="mb-0.5 h-0.5 w-6 rounded bg-white/80" />
                 </div>
