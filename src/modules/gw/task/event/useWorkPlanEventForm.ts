@@ -27,6 +27,7 @@ import {
   applySubType,
   initialCreateState,
   initialStateFromEntry,
+  linkedRoomState,
   meetingPurpose,
   switchKind,
   toItemDraft,
@@ -43,7 +44,6 @@ import {
 export type { EventFormState, EventKind, EventTarget } from './eventFormMapping';
 
 export const ROOM_RELEASED_MESSAGE = '고른 시간에 이미 예약된 회의실이라 선택을 해제했습니다.';
-const ROOM_LOADING_MESSAGE = '회의실 정보를 불러오는 중입니다. 잠시 후 다시 저장하세요.';
 const ROOM_REQUIRED_MESSAGE = '회의실을 고르세요.';
 const NOT_EDITABLE_MESSAGE = '고칠 수 없는 일정입니다.';
 const MEETING_ROOM_FILTER = { typeCode: 'ROOM', status: 'ACTIVE' } as const;
@@ -69,6 +69,7 @@ function reservationRangeOf(date: string): { from: string; to: string } | null {
  * 업무계획 일정 창(PC 창·모바일 시트 공용)의 상태·검증·저장.
  * 종류별 저장소: 일반 = workPlanItems, 회의 = calendarEvents(+회의실 예약), 외근·출장 = outsideWorks.
  * save()/remove()는 던지지 않는다 — 실패하면 `error`를 채우고 false(창 유지).
+ * 처음 상태는 처음 한 번만 만든다 — 다른 칸·일정을 열 때는 호출부가 `key`를 바꿔 다시 마운트해야 한다.
  */
 export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: string | null): {
   state: EventFormState;
@@ -108,6 +109,18 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   );
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // 같은 틱에 두 번 눌러도 한 번만 — state는 다음 렌더까지 안 바뀌어서 ref로 막는다
+  const inFlight = useRef(false);
+  const begin = (): boolean => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setSaving(true);
+    return true;
+  };
+  const end = () => {
+    inFlight.current = false;
+    setSaving(false);
+  };
 
   const calendarActor = useMemo<CalendarEventActor>(
     () => ({ userId: actor.id, active: actor.status === '사용', deptId }),
@@ -141,17 +154,22 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     enabled: Boolean(linkedId),
   });
   const linked = linkedQuery.data ?? null;
-  const linkedPending = Boolean(linkedId) && linkedQuery.isPending;
-  const linkedApplied = useRef(false);
+  // 한 번 읽어 반영하면(성공) 그 뒤 다시 읽기 실패는 저장을 막지 않는다
+  const [linkedResolved, setLinkedResolved] = useState(!linkedId);
+  const linkedRead = linkedRoomState({
+    status: linkedQuery.isPending ? 'pending' : linkedQuery.isError ? 'error' : 'success',
+    reservation: linked,
+  });
+  const linkedBlock = linkedResolved ? null : linkedRead.blockReason;
   useEffect(() => {
-    if (!linkedId || linkedApplied.current || linkedQuery.isPending) return;
-    linkedApplied.current = true;
+    if (!linkedId || linkedResolved || linkedQuery.isPending || linkedQuery.isError) return;
+    setLinkedResolved(true);
+    const decided = linkedRoomState({ status: 'success', reservation: linkedQuery.data ?? null });
     setState((prev) => {
       if (prev.locationMode !== 'room' || prev.roomId) return prev;
-      // 예약을 못 찾으면 적혀 있던 장소 글로 연다
-      return linked ? { ...prev, roomId: linked.resourceId } : { ...prev, locationMode: 'text' };
+      return { ...prev, locationMode: decided.mode, roomId: decided.roomId };
     });
-  }, [linkedId, linkedQuery.isPending, linked]);
+  }, [linkedId, linkedResolved, linkedQuery.isPending, linkedQuery.isError, linkedQuery.data]);
 
   // 회의실 목록·그날 예약 — 회의일 때만
   const isMeetingKind = state.kind === 'MEETING';
@@ -261,15 +279,15 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   };
 
   const join = async (meeting: CalendarEvent): Promise<boolean> => {
+    if (!begin()) return false;
     setError('');
-    setSaving(true);
     try {
       await joinMeeting.mutateAsync({ actor: calendarActor, id: meeting.id });
       return true;
     } catch (caught) {
       return fail(errorMessage(caught, '회의에 합류하지 못했습니다.'));
     } finally {
-      setSaving(false);
+      end();
     }
   };
 
@@ -287,7 +305,11 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   const saveMeetingForm = async (): Promise<boolean> => {
     if (target.mode === 'edit' && !event) return fail(NOT_EDITABLE_MESSAGE);
     const roomMode = state.locationMode === 'room';
-    if (roomMode && linkedPending) return fail(ROOM_LOADING_MESSAGE);
+    if (roomMode && linkedBlock) {
+      // 읽기 실패면 다음 저장 때 쓸 수 있게 다시 읽는다
+      if (linkedQuery.isError) void linkedQuery.refetch();
+      return fail(linkedBlock);
+    }
     if (roomMode && !state.roomId) return fail(ROOM_REQUIRED_MESSAGE);
     const roomName = roomMode
       ? (roomsQuery.data ?? []).find((room) => room.id === state.roomId)?.name
@@ -321,9 +343,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   };
 
   const save = async (): Promise<boolean> => {
-    if (readOnly || saving) return false;
+    if (readOnly || !begin()) return false;
     setError('');
-    setSaving(true);
     try {
       if (state.kind === 'ITEM') return await saveItem();
       if (state.kind === 'MEETING') return await saveMeetingForm();
@@ -331,14 +352,13 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     } catch (caught) {
       return fail(errorMessage(caught, '저장하지 못했습니다.'));
     } finally {
-      setSaving(false);
+      end();
     }
   };
 
   const removeEntry = async (): Promise<boolean> => {
-    if (saving) return false;
+    if (!begin()) return false;
     setError('');
-    setSaving(true);
     try {
       if (item) {
         await removeItem.mutateAsync({ actor: itemActor, id: item.id });
@@ -357,7 +377,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     } catch (caught) {
       return fail(errorMessage(caught, '삭제하지 못했습니다.'));
     } finally {
-      setSaving(false);
+      end();
     }
   };
 

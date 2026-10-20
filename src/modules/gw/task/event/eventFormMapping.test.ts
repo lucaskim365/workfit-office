@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { fromOutsideWork } from '@/domain/outsideWork/view';
+import type { Reservation } from '@/domain/reservation/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
@@ -10,6 +11,7 @@ import {
   applySubType,
   initialCreateState,
   initialStateFromEntry,
+  linkedRoomState,
   switchKind,
   toItemDraft,
   toMeetingDraft,
@@ -281,4 +283,29 @@ test('프로젝트 공유 회의를 고쳐도 공개 범위·프로젝트를 그
   assert.equal(validateMeetingDraft(draft, ME), null);
   const company = toMeetingDraft({ ...s, visibility: 'COMPANY' }, { organizerId: ME, deptId: null, roomName: null, projectId: 'PRJ-1' });
   assert.equal(company.projectId, null);
+});
+
+// ── 연결 예약 읽기 결과 → 회의실 칸 ─────────────────────────────────
+
+test('연결 예약 — 읽는 중이면 회의실 모드 유지, 저장 막음', () => {
+  assert.deepEqual(linkedRoomState({ status: 'pending', reservation: null }), {
+    mode: 'room', roomId: null, blockReason: '회의실 정보를 불러오는 중입니다. 잠시 후 다시 저장하세요.',
+  });
+});
+
+test('연결 예약 — 읽기 실패면 회의실 모드 유지(방 해제 금지), 저장 막음', () => {
+  assert.deepEqual(linkedRoomState({ status: 'error', reservation: null }), {
+    mode: 'room', roomId: null, blockReason: '회의실 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
+  });
+});
+
+test('연결 예약 — 읽었는데 없으면 장소 글 모드', () => {
+  assert.deepEqual(linkedRoomState({ status: 'success', reservation: null }), { mode: 'text', roomId: null, blockReason: null });
+});
+
+test('연결 예약 — 찾으면 그 회의실 선택', () => {
+  assert.deepEqual(
+    linkedRoomState({ status: 'success', reservation: { resourceId: 'R1' } as Reservation }),
+    { mode: 'room', roomId: 'R1', blockReason: null },
+  );
 });

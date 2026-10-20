@@ -3,6 +3,7 @@ import { MEETING_DEFAULT_VISIBILITY } from '@/domain/calendarEvent/meeting';
 import { calendarEventSchema, type CalendarEventDraft, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import { OUTSIDE_WORK_SUBTYPES, outsideWorkSchema, type OutsideWorkDraft } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { Reservation } from '@/domain/reservation/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { workPlanItemSchema, type WorkPlanItemDraft } from '@/domain/workPlan/item';
@@ -184,6 +185,24 @@ export function applySubType(state: EventFormState, subType: string, policy: Sub
   }
   if (subType === '시간 외근') return { ...state, subType, allDay: false };
   return { ...state, subType, allDay: true, range: null };
+}
+
+export const ROOM_LOADING_MESSAGE = '회의실 정보를 불러오는 중입니다. 잠시 후 다시 저장하세요.';
+export const ROOM_LOAD_FAILED_MESSAGE = '회의실 정보를 불러오지 못했습니다. 다시 시도해 주세요.';
+
+/**
+ * 고치는 회의의 연결 예약 읽기 결과 → 회의실 칸. 읽는 중·읽기 실패면 회의실 모드를 지키고 저장을 막는다 —
+ * 방 없이 저장하면 saveMeeting이 연결 예약을 해제해 버리기 때문. 읽었는데 없을 때만 장소 글로 연다.
+ */
+export function linkedRoomState(read: { status: 'pending' | 'error' | 'success'; reservation: Reservation | null }): {
+  mode: 'text' | 'room';
+  roomId: string | null;
+  blockReason: string | null;
+} {
+  if (read.status === 'pending') return { mode: 'room', roomId: null, blockReason: ROOM_LOADING_MESSAGE };
+  if (read.status === 'error') return { mode: 'room', roomId: null, blockReason: ROOM_LOAD_FAILED_MESSAGE };
+  if (!read.reservation) return { mode: 'text', roomId: null, blockReason: null };
+  return { mode: 'room', roomId: read.reservation.resourceId, blockReason: null };
 }
 
 /**
