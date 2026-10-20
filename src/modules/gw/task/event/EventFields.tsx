@@ -47,10 +47,12 @@ interface EventFieldsProps {
    * 'more' = [자세히] 안의 나머지 칸. 기본 'all'(PC 창, 한 번에 전부).
    */
   part?: 'all' | 'main' | 'more';
+  /** 제목(행선지) 칸에 처음 포커스 — 기본 켬(PC). 모바일은 새 일정일 때만(키보드가 바로 뜨므로) */
+  autoFocusTitle?: boolean;
 }
 
 /** 일정 창 왼쪽 입력 — 종류(일반·회의·외근·출장)마다 칸이 다르다. */
-export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all' }: EventFieldsProps) {
+export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true }: EventFieldsProps) {
   const { state, set, readOnly } = form;
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
@@ -72,7 +74,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
               maxLength={200}
               placeholder="행선지"
               disabled={readOnly}
-              autoFocus={!readOnly}
+              autoFocus={autoFocusTitle && !readOnly}
               onChange={(e) => set('destination', e.target.value)}
             />
           ) : (
@@ -83,7 +85,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
               maxLength={100}
               placeholder={isMeeting ? '회의 제목' : '제목'}
               disabled={readOnly}
-              autoFocus={!readOnly}
+              autoFocus={autoFocusTitle && !readOnly}
               onChange={(e) => set('title', e.target.value)}
             />
           )}

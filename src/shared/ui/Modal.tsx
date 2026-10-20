@@ -10,6 +10,8 @@ interface ModalProps {
   width?: number;
   /** 본문 안쪽 여백 없이 — 도구 막대·나뉜 칸처럼 본문이 가장자리까지 닿는 창 */
   flush?: boolean;
+  /** 겹침 층(z-index 클래스). 기본 'z-50'. 모바일 앱 틀(z-[100]) 위에 띄울 때 'z-[110]' */
+  zClass?: string;
   children: ReactNode;
 }
 
@@ -18,7 +20,7 @@ interface ModalProps {
  * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이는 화면의 88%.
  * (body zoom 배율이 vh 에 한 번 더 곱해지므로 --font-scale 로 나눠 실제 화면 기준으로 맞춘다)
  */
-export function Modal({ open, onClose, title, footer, width = 480, flush = false, children }: ModalProps) {
+export function Modal({ open, onClose, title, footer, width = 480, flush = false, zClass = 'z-50', children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -32,7 +34,7 @@ export function Modal({ open, onClose, title, footer, width = 480, flush = false
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-navy-deep/45 p-4 backdrop-blur-[1px]"
+      className={`fixed inset-0 ${zClass} grid place-items-center bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
       onMouseDown={onClose}
     >
       <div

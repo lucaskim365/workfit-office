@@ -15,10 +15,10 @@ import {
 } from '@/features/workPlan/useWorkPlans';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { quickDefaultRange } from '@/domain/workPlan/timeGrid';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { WorkPlanEventModal } from './event/WorkPlanEventModal';
-import type { EventKind, EventTarget } from './event/eventFormMapping';
+import type { EventTarget } from './event/eventFormMapping';
+import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
@@ -30,11 +30,6 @@ import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
 
-/** 본인 칸은 모든 종류, 다른 사람 칸은 회의 초대만 */
-const OWN_CELL_KINDS: EventKind[] = ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'];
-const OTHER_CELL_KINDS: EventKind[] = ['MEETING'];
-/** 오늘이 아닌 날의 새 일정 기본 시간 09:00~09:30 */
-const DEFAULT_CREATE_RANGE = { start: 540, end: 570 };
 const EMPTY_CELL: DayCell = { entries: [], legacyMemo: null };
 const emptyCellOf = () => EMPTY_CELL;
 
@@ -229,44 +224,17 @@ export default function WorkPlanScreen() {
   /** 칸 더블클릭·[+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30 */
   const handleCreate = (date: string, member: User) => {
     if (!actor) return;
-    openEventModal({
-      mode: 'create',
-      date,
-      owner: member,
-      allowed: member.id === actor.id ? OWN_CELL_KINDS : OTHER_CELL_KINDS,
-      initialRange: date === today ? quickDefaultRange(new Date()) : DEFAULT_CREATE_RANGE,
-    });
+    openEventModal(createTarget(date, member, actor, today, new Date()));
   };
 
-  /**
-   * 칩 클릭 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
-   * 결재 건·동행 외근은 기존 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창으로.
-   */
+  /** 칩 클릭 — 수정·보기 일정 창, 결재·동행 외근 상세, 회의 외 캘린더 일정 창([[entryRouting]]) */
   const handleOpenEntry = (entry: DayEntry) => {
     if (!actor) return;
-    const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
-    switch (entry.source) {
-      case 'ITEM':
-        openEventModal({ mode: mode(entry.item?.ownerUserId === actor.id), entry });
-        return;
-      case 'MEETING':
-        openEventModal({ mode: mode(entry.event?.ownerUserId === actor.id), entry });
-        return;
-      case 'CALENDAR':
-        if (entry.event) setCalendarEvent(entry.event);
-        return;
-      case 'OUTSIDE':
-        if (entry.companionOf) {
-          if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
-          return;
-        }
-        openEventModal({ mode: mode(entry.outside?.self?.ownerUserId === actor.id), entry });
-        return;
-      case 'APPROVAL':
-        // 휴가는 사유 비공개라 상세가 없다
-        if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
-        return;
-    }
+    const route = routeEntry(entry, actor, actorActive);
+    if (!route) return;
+    if ('sheet' in route) openEventModal(route.sheet);
+    else if ('calendar' in route) setCalendarEvent(route.calendar);
+    else setOutsideDetail(route.outside);
   };
 
   const loading = usersQuery.isLoading;

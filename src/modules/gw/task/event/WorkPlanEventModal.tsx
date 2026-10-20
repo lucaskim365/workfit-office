@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, ChevronDown, MapPin, Plane, Repeat, Users, type LucideIcon } from 'lucide-react';
+import { Bell, Check, ChevronDown, Repeat } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
-import { resolveTag, selectableGeneralTags } from '@/domain/workPlan/tag';
+import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { EventFields, type EventForm } from './EventFields';
-import { dateLabel, dotClassOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { FIXED_KINDS, dateLabel, dotClassOf, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { kindEnabled } from './entryRouting';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
@@ -23,12 +24,6 @@ interface WorkPlanEventModalProps {
   onClose: () => void;
   onSaved: (message: string) => void;
 }
-
-const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
-  { kind: 'MEETING', label: '회의', Icon: Users },
-  { kind: 'OUTSIDE', label: '외근', Icon: MapPin },
-  { kind: 'TRIP', label: '출장', Icon: Plane },
-];
 
 /**
  * 업무계획 일정 창(PC) — 팀즈 일정 창을 우리 양식에 맞춘 것.
@@ -186,19 +181,14 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
     return () => document.removeEventListener('mousedown', onDown);
   }, [menuOpen]);
 
-  /** 새 일정은 허용 목록 안, 수정은 같은 출처 안(외근↔출장, 일반 태그끼리)만 */
-  const enabled = (kind: EventKind): boolean => {
-    if (readOnly) return false;
-    if (target.mode === 'create') return target.allowed.includes(kind);
-    return kind === state.kind || (isOutsideKind(kind) && isOutsideKind(state.kind));
-  };
+  const enabled = (kind: EventKind) => kindEnabled(kind, target, state.kind, readOnly);
 
   const segClass = (active: boolean) =>
     `inline-flex items-center gap-1.5 border-r border-border px-3 py-1.5 text-[11.5px] font-semibold transition-colors last:border-r-0 disabled:cursor-not-allowed disabled:opacity-45 ${
       active ? 'bg-blue-soft text-blue' : 'text-ink2 hover:bg-panel-alt'
     }`;
 
-  const currentTag = state.kind === 'ITEM' && state.tagId ? resolveTag(tags, state.tagId) : null;
+  const currentTag = generalTagOf(tags, state.kind, state.tagId);
 
   const pickTag = (tagId: string) => {
     form.set('tagId', tagId);

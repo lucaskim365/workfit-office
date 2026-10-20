@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
+import { MapPin, Plane, Users, type LucideIcon } from 'lucide-react';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { resolveTag, selectableGeneralTags, type WorkPlanTag } from '@/domain/workPlan/tag';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import type { EventForm } from './EventFields';
 import { entriesToBlocks, type TimeGridBlock } from './TimeGrid';
@@ -26,6 +28,23 @@ export function dateLabel(date: string): string {
   if (!isValidCalendarDate(date)) return '';
   const [y, m, d] = date.split('-').map(Number);
   return `${m}월 ${d}일 (${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
+}
+
+/** 도구 막대의 고정 종류 버튼(일반 ▾ 앞) */
+export const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
+  { kind: 'MEETING', label: '회의', Icon: Users },
+  { kind: 'OUTSIDE', label: '외근', Icon: MapPin },
+  { kind: 'TRIP', label: '출장', Icon: Plane },
+];
+
+/**
+ * [일반 ▾] 버튼에 보일 태그 — 일반 항목일 때 고른 태그(지운 태그면 '기타'),
+ * 아직 못 골랐으면(새 일정에서 태그를 읽는 중 등) 첫 일반 태그.
+ */
+export function generalTagOf(tags: WorkPlanTag[], kind: EventKind, tagId: string): { name: string; colorId: string } | null {
+  if (kind !== 'ITEM') return null;
+  if (tagId && tags.length > 0) return resolveTag(tags, tagId);
+  return selectableGeneralTags(tags)[0] ?? null;
 }
 
 /** 일반 태그 색 점 */

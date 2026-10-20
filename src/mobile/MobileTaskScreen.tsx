@@ -25,7 +25,6 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { quickDefaultRange } from '@/domain/workPlan/timeGrid';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
@@ -33,15 +32,13 @@ import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDeta
 import { chipLook, timeRangeOf } from '@/modules/gw/task/components/entryChipLook';
 import { MobileWorkPlanEventSheet } from '@/modules/gw/task/event/MobileWorkPlanEventSheet';
 import { WorkPlanTagManager } from '@/modules/gw/task/event/WorkPlanTagManager';
-import type { EventKind, EventTarget } from '@/modules/gw/task/event/eventFormMapping';
+import type { EventTarget } from '@/modules/gw/task/event/eventFormMapping';
+import { createTarget, routeEntry } from '@/modules/gw/task/event/entryRouting';
 import MobileCommonHeader from './MobileCommonHeader';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-/** 본인은 모든 종류, 다른 사람은 회의 초대만 */
-const OWN_KINDS: EventKind[] = ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'];
-const OTHER_KINDS: EventKind[] = ['MEETING'];
-/** 오늘이 아닌 날의 새 일정 기본 시간 09:00~09:30 */
-const DEFAULT_CREATE_RANGE = { start: 540, end: 570 };
+/** 모바일 앱 틀(z-[100]) 위에 띄우는 공통 창 층 */
+const MOBILE_MODAL_Z = 'z-[110]';
 
 /** 'YYYY-MM-DD' 에 일수를 더한다(시간대 이동 없이 UTC 날짜 계산) */
 function shiftDate(date: string, days: number): string {
@@ -151,45 +148,18 @@ function MobileTaskBody({ actor }: { actor: User }) {
     setSheet((prev) => ({ key: (prev?.key ?? 0) + 1, target }));
   };
 
-  /** [+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30 */
+  /** [+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30. 다른 사람이면 회의 초대만 */
   const handleCreate = (member: User) => {
-    openSheet({
-      mode: 'create',
-      date: selectedDate,
-      owner: member,
-      allowed: member.id === actor.id ? OWN_KINDS : OTHER_KINDS,
-      initialRange: selectedDate === today ? quickDefaultRange(new Date()) : DEFAULT_CREATE_RANGE,
-    });
+    openSheet(createTarget(selectedDate, member, actor, today, new Date()));
   };
 
-  /**
-   * 항목 탭 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
-   * 결재 건·동행 외근은 기존 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창으로(PC와 같은 규칙).
-   */
+  /** 항목 탭 — PC 표와 같은 규칙([[entryRouting]]) */
   const handleOpenEntry = (entry: DayEntry) => {
-    const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
-    switch (entry.source) {
-      case 'ITEM':
-        openSheet({ mode: mode(entry.item?.ownerUserId === actor.id), entry });
-        return;
-      case 'MEETING':
-        openSheet({ mode: mode(entry.event?.ownerUserId === actor.id), entry });
-        return;
-      case 'CALENDAR':
-        if (entry.event) setCalendarEvent(entry.event);
-        return;
-      case 'OUTSIDE':
-        if (entry.companionOf) {
-          if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
-          return;
-        }
-        openSheet({ mode: mode(entry.outside?.self?.ownerUserId === actor.id), entry });
-        return;
-      case 'APPROVAL':
-        // 휴가는 사유 비공개라 상세가 없다
-        if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
-        return;
-    }
+    const route = routeEntry(entry, actor, actorActive);
+    if (!route) return;
+    if ('sheet' in route) openSheet(route.sheet);
+    else if ('calendar' in route) setCalendarEvent(route.calendar);
+    else setOutsideDetail(route.outside);
   };
 
   const myCell = cellOf(actor.id, selectedDate);
@@ -367,6 +337,7 @@ function MobileTaskBody({ actor }: { actor: User }) {
       {/* 회의 외 캘린더 일정(사내행사 등) — 캘린더 일정 창 그대로 */}
       {calendarEvent && (
         <CalendarEventModal
+          zClass={MOBILE_MODAL_Z}
           actor={{ userId: actor.id, active: actorActive, deptId }}
           initialDate={calendarEvent.date}
           event={calendarEvent}
@@ -391,6 +362,7 @@ function MobileTaskBody({ actor }: { actor: User }) {
 
       {outsideDetail && (
         <OutsideWorkDetailModal
+          zClass={MOBILE_MODAL_Z}
           view={outsideDetail.view}
           viewer={{ userId: actor.id, active: actorActive, dept: actor.dept }}
           users={usersQuery.data ?? []}

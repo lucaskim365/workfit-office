@@ -63,6 +63,8 @@ interface CalendarEventModalProps {
   onClose: () => void;
   onSaved: (event: CalendarEvent) => void;
   onRemoved: (event: CalendarEvent) => void;
+  /** 창 겹침 층 — 모바일 앱 틀 위에 띄울 때만 넘긴다(기본 공통 Modal 값) */
+  zClass?: string;
 }
 
 /** 범위별 한 줄 설명. 고르기 전에 누가 보게 되는지 알려준다. */
@@ -88,6 +90,7 @@ export default function CalendarEventModal({
   onClose,
   onSaved,
   onRemoved,
+  zClass,
 }: CalendarEventModalProps) {
   const { isOperator, isExecutive, isSuperAdmin } = usePermission();
   const { user } = useAuth();
@@ -294,6 +297,7 @@ export default function CalendarEventModal({
   return (
     <Modal
       open
+      zClass={zClass}
       onClose={() => !pending && onClose()}
       title={
         isApprovalEvent

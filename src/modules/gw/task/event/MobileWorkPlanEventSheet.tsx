@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, Check, ChevronDown, ChevronUp, MapPin, MoreHorizontal, Plane, Repeat, Users, X, type LucideIcon } from 'lucide-react';
+import { Bell, Check, ChevronDown, ChevronUp, MoreHorizontal, Repeat, X } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
-import { resolveTag, selectableGeneralTags } from '@/domain/workPlan/tag';
+import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { EventFields, type EventForm } from './EventFields';
-import { dateLabel, dotClassOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { FIXED_KINDS, dateLabel, dotClassOf, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { kindEnabled } from './entryRouting';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
@@ -23,12 +24,6 @@ interface MobileWorkPlanEventSheetProps {
   onClose: () => void;
   onSaved: (message: string) => void;
 }
-
-const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
-  { kind: 'MEETING', label: '회의', Icon: Users },
-  { kind: 'OUTSIDE', label: '외근', Icon: MapPin },
-  { kind: 'TRIP', label: '출장', Icon: Plane },
-];
 
 /**
  * 업무계획 일정 창(모바일) — 전체 화면. 이동 중 빠른 입력이 기본이고 기능은 PC 창과 같다(같은 훅·같은 저장).
@@ -66,6 +61,8 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
     ownerName: owner.name,
     outsideSelfId: entry?.outside?.self?.id ?? null,
     onJoin: (meeting: Parameters<typeof join>[0]) => void join(meeting),
+    // 키보드가 바로 뜨므로 새 일정일 때만
+    autoFocusTitle: target.mode === 'create',
   };
 
   return createPortal(
@@ -271,19 +268,14 @@ function KindRow({ form, target }: { form: EventForm; target: EventTarget }) {
   const generalTags = selectableGeneralTags(tags);
   const [tagsOpen, setTagsOpen] = useState(false);
 
-  /** 새 일정은 허용 목록 안, 수정은 같은 출처 안(외근↔출장, 일반 태그끼리)만 */
-  const enabled = (kind: EventKind): boolean => {
-    if (readOnly) return false;
-    if (target.mode === 'create') return target.allowed.includes(kind);
-    return kind === state.kind || (isOutsideKind(kind) && isOutsideKind(state.kind));
-  };
+  const enabled = (kind: EventKind) => kindEnabled(kind, target, state.kind, readOnly);
 
   const cellClass = (active: boolean) =>
     `flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1 py-2 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
       active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 active:bg-panel-alt'
     }`;
 
-  const currentTag = state.kind === 'ITEM' && state.tagId ? resolveTag(tags, state.tagId) : null;
+  const currentTag = generalTagOf(tags, state.kind, state.tagId);
 
   const pickTag = (tagId: string) => {
     form.set('tagId', tagId);
