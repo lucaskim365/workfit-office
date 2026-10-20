@@ -423,6 +423,7 @@ export default function WorkPlanScreen() {
       <WorkPlanConfigModal
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}
+        canEdit={canEditRosterOrder}
       />
 
       {/* 전사 공통 중요 일정 등록/수정 모달 */}

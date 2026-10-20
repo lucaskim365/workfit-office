@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertTagNameAvailable, resolveTag, selectableGeneralTags, WorkPlanTagError, type WorkPlanTag } from './tag';
+import { assertTagNameAvailable, resolveTag, selectableGeneralTags, swapOrderPair, WorkPlanTagError, type WorkPlanTag } from './tag';
 
 const tag = (over: Partial<WorkPlanTag> = {}): WorkPlanTag => ({
   id: 'WT-0001', name: '보고', colorId: 'teal', order: 0, hidden: false, ...over,
@@ -42,4 +42,26 @@ test('선택 목록은 숨김 제외·순서대로', () => {
     tag({ id: 'WT-0001', name: '다', order: 0 }),
   ]);
   assert.deepEqual(list.map((t) => t.id), ['WT-0001', 'WT-0002', 'WT-0003']);
+});
+
+test('순서 바꿈 — 이웃과 order를 맞바꾼다', () => {
+  const list = [tag({ id: 'WT-0001', order: 1 }), tag({ id: 'WT-0002', name: '교육', order: 5 })];
+  assert.deepEqual(swapOrderPair(list, 1, 'up'), [
+    { id: 'WT-0002', order: 1 },
+    { id: 'WT-0001', order: 5 },
+  ]);
+  assert.deepEqual(swapOrderPair(list, 0, 'down'), [
+    { id: 'WT-0001', order: 5 },
+    { id: 'WT-0002', order: 1 },
+  ]);
+});
+
+test('순서 바꿈 — 맨 끝이면 없음, order가 같으면 옮기는 쪽에 한 칸 차이', () => {
+  const list = [tag({ id: 'WT-0001', order: 0 }), tag({ id: 'WT-0002', name: '교육', order: 0 })];
+  assert.equal(swapOrderPair(list, 0, 'up'), null);
+  assert.equal(swapOrderPair(list, 1, 'down'), null);
+  assert.deepEqual(swapOrderPair(list, 1, 'up'), [
+    { id: 'WT-0002', order: -1 },
+    { id: 'WT-0001', order: 0 },
+  ]);
 });

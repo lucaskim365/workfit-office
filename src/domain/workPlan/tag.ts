@@ -72,3 +72,32 @@ export function selectableGeneralTags(tags: WorkPlanTag[]): WorkPlanTag[] {
     .filter((tag) => !tag.hidden)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ko'));
 }
+
+/** 관리 화면의 일반 태그 정렬 — 숨긴 태그 포함, order 오름차순, 같으면 이름순. */
+export function sortGeneralTags(tags: WorkPlanTag[]): WorkPlanTag[] {
+  return [...tags].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ko'));
+}
+
+/**
+ * 위/아래로 한 칸 옮길 때 바꿀 order 두 건. 이웃과 order를 맞바꾸고,
+ * 둘의 order가 같으면 옮기는 쪽이 앞서도록 한 칸 차이를 둔다. 맨 끝이면 null.
+ */
+export function swapOrderPair(
+  sorted: WorkPlanTag[],
+  index: number,
+  direction: 'up' | 'down',
+): Array<{ id: string; order: number }> | null {
+  const neighborIndex = direction === 'up' ? index - 1 : index + 1;
+  const current = sorted[index];
+  const neighbor = sorted[neighborIndex];
+  if (!current || !neighbor) return null;
+  if (current.order !== neighbor.order) {
+    return [
+      { id: current.id, order: neighbor.order },
+      { id: neighbor.id, order: current.order },
+    ];
+  }
+  return direction === 'up'
+    ? [{ id: current.id, order: current.order - 1 }, { id: neighbor.id, order: neighbor.order }]
+    : [{ id: current.id, order: current.order + 1 }, { id: neighbor.id, order: neighbor.order }];
+}
