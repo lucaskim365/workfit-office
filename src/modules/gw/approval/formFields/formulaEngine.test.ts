@@ -299,7 +299,9 @@ export function runFormulaEngineTests() {
       '3:발주예상일자': { expression: '=[매출구분]![소계:금액] - [매입발주 금액:발주 금액]', format: 'currency' },
     };
 
-    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas, undefined, otherTablesContext);
+    // '매입발주 금액' 행의 발주예상일자~발주 금액 두 칸이 병합되어 있음
+    const merges = [{ startRow: 2, startCol: 1, rowSpan: 1, colSpan: 2 }];
+    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas, undefined, otherTablesContext, merges);
 
     // 매입발주 금액은 30,000,000
     assert.equal(recalculated[2]['발주예상일자'], '30,000,000');
@@ -315,6 +317,35 @@ export function runFormulaEngineTests() {
     assert.equal(recalculated2[3]['발주예상일자'], '70,000,000');
 
     console.log('✓ 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액 병합셀 = 매출이익) 통과\n');
+  }
+
+  // 11. 여러 열의 위-아래 셀 계산 — 한 열에만 값을 넣어도 다른 열 수식에 값이 번지지 않아야 함
+  {
+    const cols = ['구분', '1월', '2월'];
+    const rows = [
+      { 구분: '매출', '1월': '100', '2월': '' },
+      { 구분: '매입', '1월': '', '2월': '' },
+      { 구분: '차액', '1월': '', '2월': '' },
+    ];
+    const cellFormulas: Record<string, CellFormula> = {
+      '2:1월': { expression: '=[매출:1월] - [매입:1월]', format: 'number' },
+      '2:2월': { expression: '=[매출:2월] - [매입:2월]', format: 'number' },
+    };
+    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas);
+    assert.equal(recalculated[2]['1월'], '100');
+    assert.equal(recalculated[2]['2월'], '0');
+
+    // 타 표 참조도 빈 칸은 0
+    const ctx = { 월별: { cols, rows } };
+    const other = recalculateTableFormulas(
+      ['항목', '값'],
+      [{ 항목: '2월 매출', 값: '' }],
+      { '0:값': { expression: '=[월별]![매출:2월]', format: 'number' } },
+      undefined,
+      ctx
+    );
+    assert.equal(other[0]['값'], '0');
+    console.log('✓ 11. 여러 열 위-아래 셀 계산 — 빈 칸이 다른 열 값으로 대체되지 않음 통과\n');
   }
 
   console.log('🎉 모든 formulaEngine 테스트 통과!');

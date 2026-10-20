@@ -129,6 +129,7 @@ export function TableFieldEditor({
         f.options && f.options.length > 0 ? f.options : ['구분', '항목', '내용'];
       let pRows: Array<Record<string, string>> = [];
       let pHeaders: Record<string, string> = {};
+      let pMerges: CellMerge[] = [];
 
       if (rawVal && typeof rawVal === 'string') {
         try {
@@ -137,6 +138,7 @@ export function TableFieldEditor({
           if (Array.isArray(parsed.rows)) pRows = parsed.rows;
           else if (Array.isArray(parsed.defaultRows)) pRows = parsed.defaultRows;
           if (parsed.headerValues) pHeaders = parsed.headerValues;
+          if (Array.isArray(parsed.merges)) pMerges = parsed.merges;
         } catch (e) {}
       }
 
@@ -146,6 +148,7 @@ export function TableFieldEditor({
         cols: pCols,
         rows: pRows,
         headerValues: pHeaders,
+        merges: pMerges,
       };
     });
   }, [formFields, allFormValues, field.key, field.placeholder]);
@@ -157,11 +160,13 @@ export function TableFieldEditor({
         cols: t.cols,
         rows: t.rows,
         headerValues: t.headerValues,
+        merges: t.merges,
       };
       ctx[t.key] = {
         cols: t.cols,
         rows: t.rows,
         headerValues: t.headerValues,
+        merges: t.merges,
       };
     });
     return ctx;
@@ -169,8 +174,8 @@ export function TableFieldEditor({
 
   // 실시간 수식 및 타 표 교차 참조가 반영된 유효 행 목록
   const effectiveRows = useMemo(() => {
-    return recalculateTableFormulas(cols, rows, cellFormulas, headerValues, otherTablesContext);
-  }, [cols, rows, cellFormulas, headerValues, otherTablesContext]);
+    return recalculateTableFormulas(cols, rows, cellFormulas, headerValues, otherTablesContext, merges);
+  }, [cols, rows, cellFormulas, headerValues, otherTablesContext, merges]);
 
   // 50% 절반 너비 표일 때 고정 px로 인한 잘림을 원천 차단하고 비율(%)로 자동 변환
   const isHalfTable = isHalf || field.width === 'half';
@@ -203,7 +208,7 @@ export function TableFieldEditor({
     const nextRows = effectiveRows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r));
 
     // 실시간 수식 및 합계 재계산
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext, merges);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {
@@ -239,7 +244,7 @@ export function TableFieldEditor({
       {}
     );
     const nextRows = [...effectiveRows, emptyRow];
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext, merges);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {
@@ -271,7 +276,7 @@ export function TableFieldEditor({
   const handleDeleteRow = () => {
     if (effectiveRows.length <= 1) return;
     const nextRows = effectiveRows.slice(0, effectiveRows.length - 1);
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
+    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext, merges);
     if (sumCell) {
       let sum = 0;
       recalculated.forEach((r, idx) => {

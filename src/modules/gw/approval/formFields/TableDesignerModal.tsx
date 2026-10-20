@@ -27,6 +27,7 @@ import {
   recalculateTableFormulas,
   type CellFormula,
   type CellFormat,
+  type OtherTablesContext,
 } from './formulaEngine';
 import { TableCellTextarea } from './TableCellTextarea';
 
@@ -52,6 +53,7 @@ export interface OtherTableOption {
   cols: string[];
   rows: Array<Record<string, string>>;
   headerValues?: Record<string, string>;
+  merges?: CellMerge[];
 }
 
 interface TableDesignerModalProps {
@@ -162,25 +164,28 @@ export function TableDesignerModal({
     nextCols = cols,
     nextRows = rows,
     nextFormulas = cellFormulas,
-    nextHeaders = headerValues
+    nextHeaders = headerValues,
+    nextMerges = merges
   ) => {
-    const otherTablesContext: Record<string, { cols: string[]; rows: Array<Record<string, string>>; headerValues?: Record<string, string> }> = {};
+    const otherTablesContext: OtherTablesContext = {};
     if (otherTables && otherTables.length > 0) {
       otherTables.forEach((t) => {
         otherTablesContext[t.label] = {
           cols: t.cols,
           rows: t.rows,
           headerValues: t.headerValues,
+          merges: t.merges,
         };
         otherTablesContext[t.key] = {
           cols: t.cols,
           rows: t.rows,
           headerValues: t.headerValues,
+          merges: t.merges,
         };
       });
     }
 
-    let res = recalculateTableFormulas(nextCols, nextRows, nextFormulas, nextHeaders, otherTablesContext);
+    let res = recalculateTableFormulas(nextCols, nextRows, nextFormulas, nextHeaders, otherTablesContext, nextMerges);
     if (sumCell) {
       const copy = [...res];
       let sum = 0;
@@ -267,7 +272,7 @@ export function TableDesignerModal({
       }
     }
 
-    const recalculated = runRecalc(cols, nextRows, nextFormulas, headerValues);
+    const recalculated = runRecalc(cols, nextRows, nextFormulas, headerValues, nextMerges);
     setRows(recalculated);
     if (selectedCell && selectedCell.rIdx === fromIdx) {
       setSelectedCell({ ...selectedCell, rIdx: toIdx });
@@ -792,7 +797,8 @@ export function TableDesignerModal({
       masterCols,
       nextRows,
       masterCellFormulas,
-      masterHeaderValues
+      masterHeaderValues,
+      masterMerges
     );
 
     setCols(masterCols);

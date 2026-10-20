@@ -7,7 +7,21 @@
  * - 순환 참조(Circular Reference) 방지 및 안전한 토큰 파서
  */
 
+import type { CellMerge } from './utils';
+
 export type CellFormat = 'currency' | 'percent1' | 'percent2' | 'number';
+
+/** 병합 블록 안의 칸이면 병합 대표(왼쪽 위) 칸 좌표로 바꿔 줌 — 병합이 아니면 그대로 */
+function toMergeAnchor(rIdx: number, cIdx: number, merges?: CellMerge[]): { rIdx: number; cIdx: number } {
+  const m = (merges || []).find(
+    (mg) =>
+      rIdx >= mg.startRow &&
+      rIdx < mg.startRow + mg.rowSpan &&
+      cIdx >= mg.startCol &&
+      cIdx < mg.startCol + mg.colSpan
+  );
+  return m ? { rIdx: m.startRow, cIdx: m.startCol } : { rIdx, cIdx };
+}
 
 export interface CellFormula {
   expression: string; // 예: "=SUM(D18:D26)", "=D27 - H27", "=(D18 / D27) * 100", "=SUM(ABOVE)"
@@ -257,6 +271,7 @@ export type OtherTablesContext = Record<
     cols: string[];
     rows: Array<Record<string, string>>;
     headerValues?: Record<string, string>;
+    merges?: CellMerge[];
   }
 >;
 
@@ -280,7 +295,7 @@ export function resolveOtherTableCell(
   if (!matchEntry) return 0;
 
   const otherTable = matchEntry[1];
-  const { cols: oCols, rows: oRows, headerValues: oHeaders } = otherTable;
+  const { cols: oCols, rows: oRows, headerValues: oHeaders, merges: oMerges } = otherTable;
   if (!oRows || oRows.length === 0 || !oCols || oCols.length === 0) return 0;
 
   const resolveOColKey = (title: string): string => {
@@ -320,14 +335,11 @@ export function resolveOtherTableCell(
       }
     }
     if (rIdx >= 0 && rIdx < oRows.length) {
-      const val = parseCellNumber(oRows[rIdx][colKey]);
-      if (val !== 0) return val;
-      // 병합 셀이거나 해당 열에 값이 없는 경우 해당 행 내 다른 열에서 0이 아닌 숫자 탐색
-      for (const c of oCols) {
-        const altVal = parseCellNumber(oRows[rIdx][c]);
-        if (altVal !== 0) return altVal;
-      }
-      return 0;
+      // 병합 블록 안의 칸을 가리키면 대표 칸 값을 씀. 빈 칸은 0 (다른 열 값으로 대체하지 않음)
+      const cIdx = oCols.indexOf(colKey);
+      if (cIdx === -1) return parseCellNumber(oRows[rIdx][colKey]);
+      const anchor = toMergeAnchor(rIdx, cIdx, oMerges);
+      return parseCellNumber(oRows[anchor.rIdx]?.[oCols[anchor.cIdx]]);
     }
     return 0;
   }
@@ -392,7 +404,8 @@ export function recalculateTableFormulas(
   rows: Array<Record<string, string>>,
   cellFormulas?: Record<string, CellFormula>,
   headerValues?: Record<string, string>,
-  otherTablesContext?: OtherTablesContext
+  otherTablesContext?: OtherTablesContext,
+  merges?: CellMerge[]
 ): Array<Record<string, string>> {
   if (!cellFormulas || Object.keys(cellFormulas).length === 0 || rows.length === 0) {
     return rows;
@@ -533,28 +546,20 @@ export function recalculateTableFormulas(
             );
           }
         }
-        const actualCol = resolveColKey(cName);
+        let actualCol = resolveColKey(cName);
         if (r >= 0 && r < nextRows.length) {
+          // 병합 블록 안의 칸을 가리키면 대표 칸으로. 빈 칸은 0 (다른 열 값으로 대체하지 않음)
+          const cIdx = cols.indexOf(actualCol);
+          if (cIdx !== -1) {
+            const anchor = toMergeAnchor(r, cIdx, merges);
+            r = anchor.rIdx;
+            actualCol = cols[anchor.cIdx];
+          }
           const depKey = `${r}:${actualCol}`;
           if (cellFormulas[depKey] && !stack.has(depKey)) {
             return String(evaluateCellFormula(depKey, new Set(stack)));
           }
-          const directVal = parseCellNumber(nextRows[r][actualCol]);
-          if (directVal !== 0) return String(directVal);
-
-          // 병합 셀이거나 해당 열에 값이 없는 경우: 행 r 내 다른 열에서 수식(fx)이나 0이 아닌 값 탐색
-          for (const c of cols) {
-            const altKey = `${r}:${c}`;
-            if (cellFormulas[altKey] && !stack.has(altKey)) {
-              const altVal = evaluateCellFormula(altKey, new Set(stack));
-              if (altVal !== 0) return String(altVal);
-            }
-          }
-          for (const c of cols) {
-            const altVal = parseCellNumber(nextRows[r][c]);
-            if (altVal !== 0) return String(altVal);
-          }
-          return '0';
+          return String(parseCellNumber(nextRows[r][actualCol]));
         }
         return '0';
       }
@@ -652,6 +657,7 @@ export function cascadeRecalculateAllTables(
       rows: Array<Record<string, string>>;
       cellFormulas?: Record<string, CellFormula>;
       headerValues?: Record<string, string>;
+      merges?: CellMerge[];
       raw: any;
     }
   > = {};
@@ -666,6 +672,7 @@ export function cascadeRecalculateAllTables(
           rows: p.rows || p.defaultRows || [],
           cellFormulas: p.cellFormulas,
           headerValues: p.headerValues,
+          merges: Array.isArray(p.merges) ? p.merges : undefined,
           raw: p,
         };
       } catch (e) {}
@@ -678,8 +685,8 @@ export function cascadeRecalculateAllTables(
     tableFields.forEach((tf) => {
       const td = allTablesData[tf.key];
       if (td) {
-        ctx[tf.label] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
-        ctx[tf.key] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
+        ctx[tf.label] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues, merges: td.merges };
+        ctx[tf.key] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues, merges: td.merges };
       }
     });
     return ctx;
@@ -701,7 +708,8 @@ export function cascadeRecalculateAllTables(
           td.rows,
           td.cellFormulas,
           td.headerValues,
-          ctx
+          ctx,
+          td.merges
         );
         td.rows = nextRows;
         finalPatch[tf.key] = JSON.stringify({

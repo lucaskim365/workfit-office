@@ -1209,7 +1209,9 @@ function ApprovalDraftInner({
         masterCols,
         nextRows,
         masterCellFormulas,
-        masterHeaderValues
+        masterHeaderValues,
+        undefined,
+        masterMerges
       );
       if (masterSumCell) {
         let sum = 0;
