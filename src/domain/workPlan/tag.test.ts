@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertTagNameAvailable, resolveTag, selectableGeneralTags, swapOrderPair, WorkPlanTagError, type WorkPlanTag } from './tag';
+import { assertTagNameAvailable, resolveTag, selectableGeneralTags, reorderGeneralTags, WorkPlanTagError, type WorkPlanTag } from './tag';
 
 const tag = (over: Partial<WorkPlanTag> = {}): WorkPlanTag => ({
   id: 'WT-0001', name: '보고', colorId: 'teal', order: 0, hidden: false, ...over,
@@ -44,24 +44,30 @@ test('선택 목록은 숨김 제외·순서대로', () => {
   assert.deepEqual(list.map((t) => t.id), ['WT-0001', 'WT-0002', 'WT-0003']);
 });
 
-test('순서 바꿈 — 이웃과 order를 맞바꾼다', () => {
+test('순서 바꿈 — 이웃과 맞바꾸고 1..n으로 다시 매긴다', () => {
   const list = [tag({ id: 'WT-0001', order: 1 }), tag({ id: 'WT-0002', name: '교육', order: 5 })];
-  assert.deepEqual(swapOrderPair(list, 1, 'up'), [
+  assert.deepEqual(reorderGeneralTags(list, 'WT-0002', 'up'), [
     { id: 'WT-0002', order: 1 },
-    { id: 'WT-0001', order: 5 },
-  ]);
-  assert.deepEqual(swapOrderPair(list, 0, 'down'), [
-    { id: 'WT-0001', order: 5 },
-    { id: 'WT-0002', order: 1 },
+    { id: 'WT-0001', order: 2 },
   ]);
 });
 
-test('순서 바꿈 — 맨 끝이면 없음, order가 같으면 옮기는 쪽에 한 칸 차이', () => {
-  const list = [tag({ id: 'WT-0001', order: 0 }), tag({ id: 'WT-0002', name: '교육', order: 0 })];
-  assert.equal(swapOrderPair(list, 0, 'up'), null);
-  assert.equal(swapOrderPair(list, 1, 'down'), null);
-  assert.deepEqual(swapOrderPair(list, 1, 'up'), [
-    { id: 'WT-0002', order: -1 },
-    { id: 'WT-0001', order: 0 },
-  ]);
+test('순서 바꿈 — order가 셋 이상 겹쳐도 겹치지 않게 푼다', () => {
+  const list = [
+    tag({ id: 'WT-0001', name: 'a', order: 0 }),
+    tag({ id: 'WT-0002', name: 'b', order: 0 }),
+    tag({ id: 'WT-0003', name: 'c', order: 1 }),
+  ];
+  const changes = reorderGeneralTags(list, 'WT-0002', 'up')!;
+  const final = new Map(list.map((t) => [t.id, t.order]));
+  for (const c of changes) final.set(c.id, c.order);
+  assert.deepEqual([...final.entries()].sort((x, y) => x[1] - y[1]).map(([k]) => k), ['WT-0002', 'WT-0001', 'WT-0003']);
+  assert.equal(new Set(final.values()).size, 3);
+});
+
+test('순서 바꿈 — 맨 끝이거나 없는 태그면 null', () => {
+  const list = [tag({ id: 'WT-0001', order: 1 }), tag({ id: 'WT-0002', name: '교육', order: 2 })];
+  assert.equal(reorderGeneralTags(list, 'WT-0001', 'up'), null);
+  assert.equal(reorderGeneralTags(list, 'WT-0002', 'down'), null);
+  assert.equal(reorderGeneralTags(list, 'WT-9999', 'up'), null);
 });

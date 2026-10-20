@@ -79,25 +79,21 @@ export function sortGeneralTags(tags: WorkPlanTag[]): WorkPlanTag[] {
 }
 
 /**
- * 위/아래로 한 칸 옮길 때 바꿀 order 두 건. 이웃과 order를 맞바꾸고,
- * 둘의 order가 같으면 옮기는 쪽이 앞서도록 한 칸 차이를 둔다. 맨 끝이면 null.
+ * 한 칸 옮긴 뒤 order를 1..n으로 다시 매긴다. 바뀌는 태그만 돌려주고, 맨 끝이거나 못 찾으면 null.
+ * order가 같게 겹쳐 있던 태그도 이 때 한 번에 풀린다.
  */
-export function swapOrderPair(
-  sorted: WorkPlanTag[],
-  index: number,
+export function reorderGeneralTags(
+  tags: WorkPlanTag[],
+  id: string,
   direction: 'up' | 'down',
 ): Array<{ id: string; order: number }> | null {
-  const neighborIndex = direction === 'up' ? index - 1 : index + 1;
-  const current = sorted[index];
-  const neighbor = sorted[neighborIndex];
-  if (!current || !neighbor) return null;
-  if (current.order !== neighbor.order) {
-    return [
-      { id: current.id, order: neighbor.order },
-      { id: neighbor.id, order: current.order },
-    ];
-  }
-  return direction === 'up'
-    ? [{ id: current.id, order: current.order - 1 }, { id: neighbor.id, order: neighbor.order }]
-    : [{ id: current.id, order: current.order + 1 }, { id: neighbor.id, order: neighbor.order }];
+  const sorted = sortGeneralTags(tags);
+  const index = sorted.findIndex((tag) => tag.id === id);
+  const target = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || target < 0 || target >= sorted.length) return null;
+  [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+  return sorted
+    .map((tag, i) => ({ id: tag.id, order: i + 1, changed: tag.order !== i + 1 }))
+    .filter((row) => row.changed)
+    .map(({ id: rowId, order }) => ({ id: rowId, order }));
 }

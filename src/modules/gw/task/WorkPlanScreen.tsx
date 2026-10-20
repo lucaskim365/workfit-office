@@ -419,7 +419,7 @@ export default function WorkPlanScreen() {
       {/* 전 직원 정렬 순서 편집(관리자 전용) */}
       <RosterOrderModal open={isOrderOpen} onClose={() => setIsOrderOpen(false)} />
 
-      {/* 루틴 템플릿 및 태그 관리 모달 */}
+      {/* 업무계획 태그 관리 모달 */}
       <WorkPlanConfigModal
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}

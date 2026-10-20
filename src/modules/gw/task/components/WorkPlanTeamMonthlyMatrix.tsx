@@ -467,12 +467,11 @@ export function WorkPlanTeamMonthlyMatrix({
           {onOpenConfig && (
             <button
               type="button"
-              onClick={onOpenConfig}
-              title="루틴 템플릿과 태그를 추가·수정·삭제합니다"
+              onClick={onOpenConfig}
               className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
             >
               <Settings size={12} className="text-ink3" />
-              <span>루틴 편집</span>
+              <span>태그 관리</span>
             </button>
           )}
         </div>

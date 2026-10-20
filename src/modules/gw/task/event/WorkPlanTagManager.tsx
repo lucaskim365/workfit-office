@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { TextField } from '@/shared/ui/form/TextField';
@@ -7,7 +8,7 @@ import { useSaveWorkPlanTag, useWorkPlanTags } from '@/features/workPlan/useWork
 import {
   FIXED_WORK_PLAN_TAGS,
   sortGeneralTags,
-  swapOrderPair,
+  reorderGeneralTags,
   type WorkPlanTag,
 } from '@/domain/workPlan/tag';
 
@@ -48,13 +49,14 @@ interface GeneralRowProps {
   count: number;
   busy: boolean;
   error: string | null;
+  onEdit: () => void;
   onRename: (tag: WorkPlanTag, name: string) => void;
   onColor: (tag: WorkPlanTag, colorId: string) => void;
   onHidden: (tag: WorkPlanTag) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
 }
 
-function GeneralRow({ tag, index, count, busy, error, onRename, onColor, onHidden, onMove }: GeneralRowProps) {
+function GeneralRow({ tag, index, count, busy, error, onEdit, onRename, onColor, onHidden, onMove }: GeneralRowProps) {
   const [name, setName] = useState(tag.name);
   useEffect(() => setName(tag.name), [tag.name]);
 
@@ -77,13 +79,19 @@ function GeneralRow({ tag, index, count, busy, error, onRename, onColor, onHidde
           invalid={!!error}
           aria-label="태그 이름"
           className="w-32"
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            onEdit();
+          }}
           onBlur={commitName}
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
         />
-        <ColorSwatches value={tag.colorId} disabled={busy} onChange={(colorId) => onColor(tag, colorId)} />
+        <ColorSwatches value={tag.colorId} disabled={busy} onChange={(colorId) => {
+            onEdit();
+            onColor(tag, colorId);
+          }} />
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" size="sm" aria-label="위로" disabled={busy || index === 0} onClick={() => onMove(index, 'up')}>
             <ChevronUp size={14} />
@@ -110,6 +118,7 @@ function GeneralRow({ tag, index, count, busy, error, onRename, onColor, onHidde
 /** 업무계획 태그 관리 — 고정 태그는 읽기 전용, 일반 태그는 바꾸는 즉시 공용 목록에 저장한다. */
 export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
   const { data: tags = [] } = useWorkPlanTags();
+  const queryClient = useQueryClient();
   const save = useSaveWorkPlanTag();
   const busy = save.isPending;
   const sorted = sortGeneralTags(tags);
@@ -145,14 +154,18 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
     void run(tag.id, () => save.mutateAsync({ id: tag.id, draft: draftOf(tag, { hidden: !tag.hidden }) }));
 
   const move = (index: number, direction: 'up' | 'down') => {
-    const pair = swapOrderPair(sorted, index, direction);
-    if (!pair) return;
-    void run(sorted[index].id, async () => {
-      for (const { id, order } of pair) {
-        const target = sorted.find((tag) => tag.id === id);
-        if (target) await save.mutateAsync({ id, draft: draftOf(target, { order }) });
-      }
-    });
+    const changes = reorderGeneralTags(sorted, sorted[index].id, direction);
+    if (!changes) return;
+    void (async () => {
+      const ok = await run(sorted[index].id, async () => {
+        for (const { id, order } of changes) {
+          const target = sorted.find((tag) => tag.id === id);
+          if (target) await save.mutateAsync({ id, draft: draftOf(target, { order }) });
+        }
+      });
+      // 일부만 저장됐을 수 있으니 서버 상태로 다시 맞춘다.
+      if (!ok) await queryClient.invalidateQueries({ queryKey: ['workPlanTags'] });
+    })();
   };
 
   const add = async () => {
@@ -170,7 +183,9 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
           <li key={tag.id} className="flex items-center gap-2 py-2">
             <span className={`h-3 w-3 shrink-0 rounded-full ${dotClass(tag.colorId)}`} />
             <span className="text-[13px] font-medium text-ink">{tag.name}</span>
-            <Lock size={12} className="text-ink3" aria-label="고정" />
+            <span role="img" aria-label="고정" className="inline-flex">
+              <Lock size={12} className="text-ink3" />
+            </span>
           </li>
         ))}
       </ul>
@@ -185,6 +200,7 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
               count={sorted.length}
               busy={busy}
               error={rowError?.key === tag.id ? rowError.message : null}
+              onEdit={() => setRowError(null)}
               onRename={rename}
               onColor={recolor}
               onHidden={toggleHidden}
