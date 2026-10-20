@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { buildCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import { RESOURCE_UTC_OFFSET } from '@/domain/reservation/time';
 import type { User } from '@/domain/user/schema';
 import { indexDayEntries, type DayCell, type DayEntryInput } from '@/domain/workPlan/dayEntries';
@@ -12,9 +13,28 @@ import { useWorkPlanItems, useWorkPlanTags } from '@/features/workPlan/useWorkPl
 import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo를 깨지 않게 한 개만 둔다 */
+const NO_PLANS: WorkPlan[] = [];
+
+/** 달력 월 화면에 보이는 날짜 — 그 달 날짜가 하루라도 든 주(월~일)만. 업무계획 표·모바일이 같은 범위를 쓴다. */
+export function monthGridDates(month: string): string[] {
+  let cells: Array<{ date: string; inCurrentMonth: boolean }>;
+  try {
+    cells = buildCalendarMonth(month);
+  } catch {
+    return [];
+  }
+  const dates: string[] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    const chunk = cells.slice(i, i + 7);
+    if (chunk.some((c) => c.inCurrentMonth)) dates.push(...chunk.map((c) => c.date));
+  }
+  return dates;
+}
 
 interface DayEntryIndexOptions {
-  actor: User;
+  /** 로그인 사용자 — 아직 없으면 조회하지 않는다 */
+  actor: User | null;
   deptId?: string | null;
   /** 칸을 만들 사람 — 결재 기안자를 이름으로 잇는 데도 쓴다 */
   members: User[];
@@ -33,15 +53,15 @@ export function useDayEntryIndex({ actor, deptId, members, dates }: DayEntryInde
   const from = dates[0] ?? '';
   const to = dates[dates.length - 1] ?? '';
   const range = useMemo(() => ({ from, to }), [from, to]);
-  const enabled = Boolean(from && to);
+  const enabled = Boolean(from && to && actor);
 
   const plansQuery = useAllWorkPlans(range, enabled);
   const itemsQuery = useWorkPlanItems(range, enabled);
   const tagsQuery = useWorkPlanTags();
   const approvalsQuery = useAllApprovals();
   const calendarActor = useMemo(
-    () => ({ userId: actor.id, active: actor.status === '사용', deptId }),
-    [actor.id, actor.status, deptId],
+    () => ({ userId: actor?.id ?? '__anonymous__', active: actor?.status === '사용', deptId }),
+    [actor?.id, actor?.status, deptId],
   );
   const calendarEventsQuery = useCalendarEvents(calendarActor, range, enabled);
   // 결재 없이 직접 등록한 외근·출장 (전사 공개)
@@ -80,5 +100,5 @@ export function useDayEntryIndex({ actor, deptId, members, dates }: DayEntryInde
     dates,
   ]);
 
-  return { cellOf, workPlans: plansQuery.data ?? [] };
+  return { cellOf, workPlans: plansQuery.data ?? NO_PLANS };
 }

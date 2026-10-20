@@ -8,7 +8,6 @@ import {
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
@@ -67,13 +66,17 @@ interface WorkPlanTeamMonthlyMatrixProps {
   actor: User;
   todayStr: string;
   members: User[];
-  deptId?: string | null;
   /** 칸 더블클릭·[+] → 그 날짜·그 사람으로 새 일정. 없으면(사용 중이 아닌 계정) 진입점도 없다. */
   onCreate?: (date: string, member: User) => void;
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
-  /** 칸 조회 함수가 바뀔 때마다 알린다 — 일정 창 시간표가 같은 결과를 쓴다 */
-  onCellIndexChange?: (cellOf: (userId: string, date: string) => DayCell) => void;
+  /** 보고 있는 달(YYYY-MM) — 화면이 들고 칸 조립 범위로도 쓴다 */
+  month: string;
+  onMonthChange: (month: string) => void;
+  /** 화면이 만든 칸 조회([[useDayEntryIndex]]) — 표는 받아서 그리기만 한다 */
+  cellOf: (userId: string, date: string) => DayCell;
+  /** 예전 글 원본 — 전사 공통 일정 줄에 쓴다 */
+  workPlans: WorkPlan[];
   onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
   onOpenConfig?: () => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
@@ -84,16 +87,20 @@ export function WorkPlanTeamMonthlyMatrix({
   actor,
   todayStr,
   members,
-  deptId,
+  month,
+  onMonthChange,
+  cellOf,
+  workPlans: monthlyPlans,
   onCreate,
   onOpenEntry,
-  onCellIndexChange,
   onOpenCompanySchedule,
   onOpenConfig,
   filters,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
-  const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
+  const currentMonth = month;
+  const setCurrentMonth = (next: string | ((prev: string) => string)) =>
+    onMonthChange(typeof next === 'function' ? next(month) : next);
   const currentWeekRef = useRef<HTMLTableRowElement | null>(null);
   /** 이번 주차에서 로그인한 사용자의 행. 업무계획 대상이 아니면 비어 있다. */
   const myCurrentWeekRowRef = useRef<HTMLTableRowElement>(null);
@@ -182,13 +189,7 @@ export function WorkPlanTeamMonthlyMatrix({
     return list;
   }, [currentMonth, todayStr, holidayMap]);
 
-  // 전체 날짜 목록 (데이터 쿼리용)
-  const allDays = useMemo(() => weeks.flatMap((w) => w.days), [weeks]);
-
-  const dayStrings = useMemo(() => allDays.map((d) => d.dateStr), [allDays]);
-  // 2. 칸에 모을 원본 — 일반 항목·회의/공인 일정·외근출장·결재 일정·이전 글·연결 예약
-  const { cellOf, workPlans: monthlyPlans } = useDayEntryIndex({ actor, deptId, members, dates: dayStrings });
-
+  // 2. 칸 목록은 화면이 만들어 내려 준다(cellOf) — 같은 범위는 monthGridDates(month)
   // 전사 공통 중요 일정 맵 (__COMPANY__)
   const companyPlansMap = useMemo(() => {
     const map = new Map<string, WorkPlan>();
@@ -197,10 +198,6 @@ export function WorkPlanTeamMonthlyMatrix({
     }
     return map;
   }, [monthlyPlans]);
-
-  useEffect(() => {
-    onCellIndexChange?.(cellOf);
-  }, [cellOf, onCellIndexChange]);
 
   /**
    * 한 사람의 한 주에서 여러 날에 걸친 외근·출장 — 칸을 가로지르는 막대로 그린다.

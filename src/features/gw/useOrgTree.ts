@@ -222,5 +222,7 @@ export function useOrgTree() {
     return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
   }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data, deptMembersQ.data]);
 
-  return { ...data, isLoading: deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading };
+  const isLoading = deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading;
+  // 같은 데이터면 같은 객체 — 받는 쪽 memo(정렬 기준·인원 목록 등)가 매 렌더 다시 돌지 않게
+  return useMemo(() => ({ ...data, isLoading }), [data, isLoading]);
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -14,7 +14,8 @@ import {
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
-import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { monthGridDates, useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { WorkPlanEventModal } from './event/WorkPlanEventModal';
 import type { EventTarget } from './event/eventFormMapping';
@@ -29,9 +30,10 @@ import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
+import type { DepartmentMember } from '@/domain/departmentMember/schema';
 
-const EMPTY_CELL: DayCell = { entries: [], legacyMemo: null };
-const emptyCellOf = () => EMPTY_CELL;
+/** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo(인원 목록 → 칸 조립)를 깨지 않게 한 개만 둔다 */
+const NO_DEPARTMENT_MEMBERS: DepartmentMember[] = [];
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -66,8 +68,6 @@ export default function WorkPlanScreen() {
 
   /** 업무계획 일정 창 — 새 일정·수정·보기 공용. key는 대상이 바뀔 때마다 새로 띄우기 위한 것. */
   const [eventModal, setEventModal] = useState<{ key: number; target: EventTarget } | null>(null);
-  /** 표가 만든 칸 조회 — 일정 창 시간표가 같은 결과를 쓴다 */
-  const [cellIndex, setCellIndex] = useState<{ cellOf: (userId: string, date: string) => DayCell }>({ cellOf: emptyCellOf });
   /** 회의 외 캘린더 일정(사내행사 등) 상세 */
   const [calendarEvent, setCalendarEvent] = useState<CalendarEvent | null>(null);
   /** 결재 완료 외근·출장과 동행 외근 상세 — 수정은 등록 본인이 일정 창으로 */
@@ -123,7 +123,7 @@ export default function WorkPlanScreen() {
       .sort(compareRoster);
   }, [users, actor, actorScope, org, compareRoster]);
 
-  const { data: departmentMembers = [] } = useDepartmentMembers();
+  const departmentMembers = useDepartmentMembers().data ?? NO_DEPARTMENT_MEMBERS;
 
   /** 고유 부서 목록 (소속 인원이 1명 이상 있는 부서만 자동 표시 & 조직도 배치순 정렬) */
   const departments = useMemo(() => {
@@ -211,9 +211,10 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
-  const handleCellIndexChange = useCallback((cellOf: (userId: string, date: string) => DayCell) => {
-    setCellIndex({ cellOf });
-  }, []);
+  /** 보고 있는 달 — 칸 조립(표·일정 창 시간표 공용)을 여기서 한 번 하고 표에 내려 준다 */
+  const [month, setMonth] = useState(() => (initialDate ?? today).slice(0, 7));
+  const monthDates = useMemo(() => monthGridDates(month), [month]);
+  const { cellOf, workPlans } = useDayEntryIndex({ actor, deptId, members: scopedMembers, dates: monthDates });
 
   const actorActive = actor?.status === '사용';
 
@@ -277,10 +278,12 @@ export default function WorkPlanScreen() {
         actor={actor}
         todayStr={initialDate ?? today}
         members={scopedMembers}
-        deptId={deptId}
+        month={month}
+        onMonthChange={setMonth}
+        cellOf={cellOf}
+        workPlans={workPlans}
         onCreate={actorActive ? handleCreate : undefined}
         onOpenEntry={handleOpenEntry}
-        onCellIndexChange={handleCellIndexChange}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={(
@@ -342,7 +345,7 @@ export default function WorkPlanScreen() {
           actor={actor}
           deptId={deptId}
           users={users}
-          cellOf={cellIndex.cellOf}
+          cellOf={cellOf}
           onClose={() => setEventModal(null)}
           onSaved={setNotice}
         />
