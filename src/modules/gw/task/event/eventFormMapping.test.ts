@@ -8,7 +8,11 @@ import type { User } from '@/domain/user/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
 import {
+  applyAllDayToggle,
+  applyDateChange,
+  applyRangeChange,
   applySubType,
+  roomDayBlocks,
   initialCreateState,
   initialStateFromEntry,
   linkedRoomState,
@@ -308,4 +312,97 @@ test('연결 예약 — 찾으면 그 회의실 선택', () => {
     linkedRoomState({ status: 'success', reservation: { resourceId: 'R1' } as Reservation }),
     { mode: 'room', roomId: 'R1', blockReason: null },
   );
+});
+
+// ── 시간·날짜·종일 바꾸기(PC 창·모바일 시트 공용) ─────────────────────────────────
+
+test('시간 바꾸기 — 일반·회의·출장은 종일을 끈다', () => {
+  for (const kind of ['ITEM', 'MEETING', 'TRIP'] as const) {
+    const s = applyRangeChange(createState({ kind, allDay: true, subType: kind === 'TRIP' ? '국내출장' : '' }), { start: 600, end: 660 });
+    assert.equal(s.allDay, false);
+    assert.deepEqual(s.range, { start: 600, end: 660 });
+    if (kind === 'TRIP') assert.equal(s.subType, '국내출장');
+  }
+});
+
+test('시간 바꾸기 — 외근은 세부 구분을 시간 외근으로 맞춘다', () => {
+  for (const sub of ['종일 외근', '오전 외근', '오후 외근', '시간 외근']) {
+    const s = applyRangeChange(createState({ kind: 'OUTSIDE', subType: sub, allDay: sub === '종일 외근' }), { start: 840, end: 900 });
+    assert.equal(s.subType, '시간 외근');
+    assert.equal(s.allDay, false);
+    assert.deepEqual(s.range, { start: 840, end: 900 });
+  }
+});
+
+test('날짜 바꾸기 — 종료일이 앞서면 같이 옮기고, 뒤면 그대로', () => {
+  const later = applyDateChange(createState({ date: D, endDate: D }), '2026-10-23');
+  assert.equal(later.date, '2026-10-23');
+  assert.equal(later.endDate, '2026-10-23');
+  const kept = applyDateChange(createState({ date: D, endDate: '2026-10-25' }), '2026-10-22');
+  assert.equal(kept.endDate, '2026-10-25');
+});
+
+test('날짜 바꾸기 — 빈 값이면 그대로', () => {
+  const s = createState();
+  assert.equal(applyDateChange(s, ''), s);
+});
+
+test('종일 바꾸기 — 외근은 종일 외근 ↔ 시간 외근', () => {
+  const on = applyAllDayToggle(createState({ kind: 'OUTSIDE', subType: '시간 외근', allDay: false, range: { start: 600, end: 660 } }), true, POLICY);
+  assert.equal(on.subType, '종일 외근');
+  assert.equal(on.allDay, true);
+  assert.equal(on.range, null);
+  const off = applyAllDayToggle(createState({ kind: 'OUTSIDE', subType: '종일 외근', allDay: true }), false, POLICY);
+  assert.equal(off.subType, '시간 외근');
+  assert.equal(off.allDay, false);
+});
+
+test('종일 바꾸기 — 일반·출장은 종일 값만', () => {
+  const item = applyAllDayToggle(createState({ allDay: false, range: { start: 600, end: 660 } }), true, POLICY);
+  assert.equal(item.allDay, true);
+  assert.deepEqual(item.range, { start: 600, end: 660 });
+  const trip = applyAllDayToggle(createState({ kind: 'TRIP', subType: '해외출장', allDay: true }), false, POLICY);
+  assert.equal(trip.allDay, false);
+  assert.equal(trip.subType, '해외출장');
+});
+
+test('종일 바꾸기 — 회의는 종일이 없다', () => {
+  const s = createState({ kind: 'MEETING', allDay: false });
+  assert.equal(applyAllDayToggle(s, true, POLICY), s);
+});
+
+// ── 고른 회의실의 그날 예약 → 시간표 블록 ─────────────────────────────────
+
+const rsv = (patch: Partial<Reservation>): Reservation =>
+  ({ id: 'RS-1', resourceId: 'R1', title: '주간회의', status: 'CONFIRMED', startAt: '', endAt: '', ...patch }) as Reservation;
+
+test('회의실 블록 — 회의실 시간대(+09:00) 기준 분, 대기·확정만, 다른 방·연결 예약 제외', () => {
+  const blocks = roomDayBlocks([
+    rsv({ id: 'A', startAt: '2026-10-21T01:00:00.000Z', endAt: '2026-10-21T02:30:00.000Z' }), // 10:00~11:30
+    rsv({ id: 'B', status: 'PENDING', startAt: '2026-10-21T05:00:00.000Z', endAt: '2026-10-21T06:00:00.000Z' }),
+    rsv({ id: 'C', status: 'CANCELLED', startAt: '2026-10-21T03:00:00.000Z', endAt: '2026-10-21T04:00:00.000Z' }),
+    rsv({ id: 'D', resourceId: 'R2', startAt: '2026-10-21T03:00:00.000Z', endAt: '2026-10-21T04:00:00.000Z' }),
+    rsv({ id: 'E', startAt: '2026-10-21T07:00:00.000Z', endAt: '2026-10-21T08:00:00.000Z' }),
+  ], 'R1', D, 'E');
+  assert.deepEqual(blocks.map((b) => [b.key, b.start, b.end, b.tone]), [
+    ['room-A', 600, 690, 'room'],
+    ['room-B', 840, 900, 'room'],
+  ]);
+  assert.equal(blocks[0].label, '회의실 예약 · 주간회의');
+});
+
+test('회의실 블록 — 날을 넘는 예약은 그날 안으로 자르고, 다른 날은 뺀다', () => {
+  const blocks = roomDayBlocks([
+    rsv({ id: 'X', startAt: '2026-10-20T14:00:00.000Z', endAt: '2026-10-20T16:00:00.000Z' }), // 10-20 23:00 ~ 10-21 01:00
+    rsv({ id: 'Y', startAt: '2026-10-21T14:00:00.000Z', endAt: '2026-10-21T16:00:00.000Z' }), // 10-21 23:00 ~ 10-22 01:00
+    rsv({ id: 'Z', startAt: '2026-10-22T01:00:00.000Z', endAt: '2026-10-22T02:00:00.000Z' }),
+  ], 'R1', D, null);
+  assert.deepEqual(blocks.map((b) => [b.key, b.start, b.end]), [
+    ['room-X', 0, 60],
+    ['room-Y', 1380, 1440],
+  ]);
+});
+
+test('회의실 블록 — 날짜가 올바르지 않으면 빈 목록', () => {
+  assert.deepEqual(roomDayBlocks([rsv({ startAt: '2026-10-21T01:00:00.000Z', endAt: '2026-10-21T02:00:00.000Z' })], 'R1', '', null), []);
 });

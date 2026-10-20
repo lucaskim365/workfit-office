@@ -3,7 +3,7 @@ import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, UserPlus, Users, X } fr
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
-import { DAY_END, durationLabel, toHHmm, toMinutes, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import { DAY_END, durationLabel, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useOutsideSchedulesOf } from '@/features/outsideWork/useOutsideWorks';
 import { MemberPicker } from '@/modules/gw/task/MemberPicker';
@@ -22,26 +22,6 @@ const textareaClass =
 
 const titleClass =
   'w-full border-0 border-b-2 border-border-hi bg-transparent px-0.5 py-1.5 text-[15px] font-bold text-ink outline-none transition-colors placeholder:font-semibold placeholder:text-ink3 focus:border-blue';
-
-/**
- * 시간 바꾸기(왼쪽 시각 칸·오른쪽 시간표 공용) — 종일을 끄고, 외근이면 '시간 외근'으로 맞춘다
- * (근태 판정이 세부 구분을 보므로 시각과 구분이 어긋나지 않게).
- */
-export function applyRange(form: EventForm, range: MinuteRange) {
-  form.set('range', range);
-  if (form.state.kind === 'OUTSIDE') {
-    if (form.state.subType !== '시간 외근') form.setSubType('시간 외근');
-  } else if (form.state.allDay) {
-    form.set('allDay', false);
-  }
-}
-
-/** 날짜 바꾸기 — 여러 날 외근·출장은 종료일이 시작일보다 앞서지 않게 */
-export function applyDate(form: EventForm, date: string) {
-  if (!date) return;
-  form.set('date', date);
-  if (form.state.endDate < date) form.set('endDate', date);
-}
 
 function Row({ icon, label, children }: { icon?: ReactNode; label?: string; children: ReactNode }) {
   return (
@@ -229,21 +209,13 @@ function TimeFields({ form }: { form: EventForm }) {
     if (!value) return;
     const start = toMinutes(value);
     const length = range ? range.end - range.start : DEFAULT_LENGTH;
-    applyRange(form, { start, end: Math.min(start + Math.max(length, 1), DAY_END) });
+    form.setRange({ start, end: Math.min(start + Math.max(length, 1), DAY_END) });
   };
   const onEnd = (value: string) => {
     if (!value) return;
     const end = toMinutes(value);
-    applyRange(form, { start: range?.start ?? Math.max(end - DEFAULT_LENGTH, 0), end });
+    form.setRange({ start: range?.start ?? Math.max(end - DEFAULT_LENGTH, 0), end });
   };
-  const onAllDay = (checked: boolean) => {
-    if (state.kind === 'OUTSIDE') {
-      form.setSubType(checked ? '종일 외근' : '시간 외근');
-      return;
-    }
-    set('allDay', checked);
-  };
-
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <TextField
@@ -252,7 +224,7 @@ function TimeFields({ form }: { form: EventForm }) {
         value={state.date}
         disabled={readOnly}
         className="w-[140px]"
-        onChange={(e) => applyDate(form, e.target.value)}
+        onChange={(e) => form.setDate(e.target.value)}
       />
       {isOutside && (
         <>
@@ -299,7 +271,7 @@ function TimeFields({ form }: { form: EventForm }) {
             className="accent-teal"
             checked={state.allDay}
             disabled={readOnly}
-            onChange={(e) => onAllDay(e.target.checked)}
+            onChange={(e) => form.setAllDay(e.target.checked)}
           />
           종일
         </label>
@@ -370,6 +342,12 @@ function AttendeeField({ form, actor, users }: { form: EventForm; actor: User; u
             }}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}
+            onKeyDown={(e) => {
+              // 검색 목록만 닫는다(창의 ESC 닫기까지 가지 않게)
+              if (e.key !== 'Escape' || !open || !keyword.trim()) return;
+              e.nativeEvent.stopPropagation();
+              setOpen(false);
+            }}
           />
         )}
         {!readOnly && <UserPlus size={13} className="mr-1 shrink-0 text-ink3" />}
@@ -408,17 +386,17 @@ function CompanionField({ form, actor, users, nameOf }: { form: EventForm; actor
   const { state, set, readOnly } = form;
   const [showPicker, setShowPicker] = useState(false);
   const pickable = useMemo(() => users.filter((u) => u.id !== actor.id), [users, actor.id]);
-  const names = state.companionIds.map(nameOf).filter(Boolean);
+  const companions = state.companionIds.map((id) => ({ id, name: nameOf(id) })).filter((c) => c.name);
 
   return (
     <div className="flex flex-col gap-1.5 pt-1">
       <div className="flex flex-wrap items-center gap-1">
-        {names.map((name, i) => (
-          <span key={`${name}-${i}`} className="rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold text-blue">
+        {companions.map(({ id, name }) => (
+          <span key={id} className="rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold text-blue">
             {name}
           </span>
         ))}
-        {names.length === 0 && readOnly && <span className="text-[11.5px] text-ink3">없음</span>}
+        {companions.length === 0 && readOnly && <span className="text-[11.5px] text-ink3">없음</span>}
         {!readOnly && (
           <Button size="sm" variant="accent" onClick={() => setShowPicker((v) => !v)}>
             {showPicker ? '닫기' : '동행자 선택'}

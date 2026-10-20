@@ -10,7 +10,7 @@ import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
-import { toHHmm } from '@/domain/workPlan/timeGrid';
+import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { usePermission } from '@/features/auth/usePermission';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { CALENDAR_EVENTS_KEY, useCalendarEvents, useJoinMeeting } from '@/features/calendar/useCalendarEvents';
@@ -24,11 +24,15 @@ import {
   useWorkPlanTags,
 } from '@/features/workPlan/useWorkPlanItems';
 import {
+  applyAllDayToggle,
+  applyDateChange,
+  applyRangeChange,
   applySubType,
   initialCreateState,
   initialStateFromEntry,
   linkedRoomState,
   meetingPurpose,
+  roomDayBlocks,
   switchKind,
   toItemDraft,
   toMeetingDraft,
@@ -40,6 +44,7 @@ import {
   type EventKind,
   type EventTarget,
 } from './eventFormMapping';
+import type { TimeGridBlock } from './TimeGrid';
 
 export type { EventFormState, EventKind, EventTarget } from './eventFormMapping';
 
@@ -77,6 +82,12 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   setKind: (kind: EventKind) => void;
   /** 외근·출장 세부 구분 — 고르면 시간을 맞춘다(오전·오후·시간·종일) */
   setSubType: (subType: string) => void;
+  /** 시간 바꾸기(시각 칸·시간표) — 종일을 끄고 외근이면 '시간 외근'으로 */
+  setRange: (range: MinuteRange) => void;
+  /** 날짜 바꾸기 — 종료일이 앞서지 않게 */
+  setDate: (date: string) => void;
+  /** 종일 켜고 끄기 — 외근은 '종일 외근' ↔ '시간 외근' */
+  setAllDay: (allDay: boolean) => void;
   /** 고를 수 있는 공개 범위 — 이 창엔 프로젝트 고르기가 없어 프로젝트 공유는 기존 회의일 때만 */
   visibilityOptions: CalendarVisibility[];
   readOnly: boolean;
@@ -84,6 +95,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   join: (e: CalendarEvent) => Promise<boolean>;
   /** 회의실 고르기 목록 — 고른 시간에 비어 있는지 */
   rooms: Array<{ resource: Resource; available: boolean }>;
+  /** 고른 회의실의 그날 예약(시간표에 흐리게 겹칠 것) */
+  roomBlocks: TimeGridBlock[];
   error: string;
   saving: boolean;
   save: () => Promise<boolean>;
@@ -200,6 +213,12 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     [roomsQuery.data, availability],
   );
 
+  const pickedRoomId = state.kind === 'MEETING' && state.locationMode === 'room' ? state.roomId : null;
+  const roomBlocks = useMemo(
+    () => (pickedRoomId ? roomDayBlocks(reservationsQuery.data ?? [], pickedRoomId, formDate, linkedId) : []),
+    [pickedRoomId, reservationsQuery.data, formDate, linkedId],
+  );
+
   // 고른 방이 바뀐 시간에 차 있으면 선택을 풀고 이유를 보여 준다
   useEffect(() => {
     if (readOnly || state.kind !== 'MEETING' || state.locationMode !== 'room' || !state.roomId) return;
@@ -238,6 +257,30 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     (subType: string) => {
       if (readOnly) return;
       setState((prev) => applySubType(prev, subType, policy));
+    },
+    [readOnly, policy],
+  );
+
+  const setRange = useCallback(
+    (range: MinuteRange) => {
+      if (readOnly) return;
+      setState((prev) => applyRangeChange(prev, range));
+    },
+    [readOnly],
+  );
+
+  const setDate = useCallback(
+    (date: string) => {
+      if (readOnly) return;
+      setState((prev) => applyDateChange(prev, date));
+    },
+    [readOnly],
+  );
+
+  const setAllDay = useCallback(
+    (allDay: boolean) => {
+      if (readOnly) return;
+      setState((prev) => applyAllDayToggle(prev, allDay, policy));
     },
     [readOnly, policy],
   );
@@ -386,11 +429,15 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     set,
     setKind,
     setSubType,
+    setRange,
+    setDate,
+    setAllDay,
     visibilityOptions,
     readOnly,
     similarMeetings,
     join,
     rooms,
+    roomBlocks,
     error,
     saving,
     save,

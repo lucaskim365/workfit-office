@@ -4,10 +4,12 @@ import { calendarEventSchema, type CalendarEventDraft, type CalendarVisibility }
 import { OUTSIDE_WORK_SUBTYPES, outsideWorkSchema, type OutsideWorkDraft } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { Reservation } from '@/domain/reservation/schema';
+import { RESOURCE_UTC_OFFSET } from '@/domain/reservation/time';
 import type { User } from '@/domain/user/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { workPlanItemSchema, type WorkPlanItemDraft } from '@/domain/workPlan/item';
-import { toHHmm, toMinutes, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import { DAY_END, toHHmm, toMinutes, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import type { TimeGridBlock } from './TimeGrid';
 
 /*
   업무계획 일정 창의 순수 변환 — 창 상태 ↔ 저장 초안. 훅(useWorkPlanEventForm)은 이것만 써서
@@ -185,6 +187,53 @@ export function applySubType(state: EventFormState, subType: string, policy: Sub
   }
   if (subType === '시간 외근') return { ...state, subType, allDay: false };
   return { ...state, subType, allDay: true, range: null };
+}
+
+/**
+ * 시간 바꾸기(왼쪽 시각 칸·시간표 공용) — 종일을 끄고, 외근이면 세부 구분을 '시간 외근'으로 맞춘다
+ * (근태 판정이 세부 구분을 보므로 시각과 구분이 어긋나지 않게). 출장은 세부 구분에 시간이 없어 그대로.
+ */
+export function applyRangeChange(state: EventFormState, range: MinuteRange): EventFormState {
+  if (state.kind === 'OUTSIDE') return { ...state, range, allDay: false, subType: '시간 외근' };
+  return { ...state, range, allDay: false };
+}
+
+/** 날짜 바꾸기 — 여러 날 외근·출장은 종료일이 시작일보다 앞서지 않게. 빈 값이면 그대로. */
+export function applyDateChange(state: EventFormState, date: string): EventFormState {
+  if (!date) return state;
+  return { ...state, date, endDate: state.endDate < date ? date : state.endDate };
+}
+
+/** 종일 켜고 끄기 — 외근은 '종일 외근' ↔ '시간 외근'(세부 구분 시간 규칙), 회의는 종일이 없다. */
+export function applyAllDayToggle(state: EventFormState, allDay: boolean, policy: SubTypePolicy): EventFormState {
+  if (state.kind === 'MEETING') return state;
+  if (state.kind === 'OUTSIDE') return applySubType(state, allDay ? '종일 외근' : '시간 외근', policy);
+  return { ...state, allDay };
+}
+
+const OCCUPYING_RESERVATION: readonly Reservation['status'][] = ['PENDING', 'CONFIRMED'];
+
+/**
+ * 고른 회의실의 그날 예약 → 시간표 블록(대기·확정만). 분은 회의실 시간대 기준이고 날을 넘으면 그날 안으로 자른다.
+ * `ignoreReservationId` = 고치는 회의의 연결 예약(자기 자신은 겹쳐 보이지 않게).
+ */
+export function roomDayBlocks(
+  reservations: Reservation[],
+  roomId: string,
+  date: string,
+  ignoreReservationId: string | null,
+): TimeGridBlock[] {
+  const dayStart = new Date(`${date}T00:00:00${RESOURCE_UTC_OFFSET}`).getTime();
+  if (Number.isNaN(dayStart)) return [];
+  const blocks: TimeGridBlock[] = [];
+  for (const row of reservations) {
+    if (row.resourceId !== roomId || row.id === ignoreReservationId || !OCCUPYING_RESERVATION.includes(row.status)) continue;
+    const start = Math.max((new Date(row.startAt).getTime() - dayStart) / 60000, 0);
+    const end = Math.min((new Date(row.endAt).getTime() - dayStart) / 60000, DAY_END);
+    if (!(end > start)) continue;
+    blocks.push({ key: `room-${row.id}`, start, end, label: `회의실 예약 · ${row.title}`, tone: 'room' });
+  }
+  return blocks.sort((a, b) => a.start - b.start);
 }
 
 export const ROOM_LOADING_MESSAGE = '회의실 정보를 불러오는 중입니다. 잠시 후 다시 저장하세요.';
