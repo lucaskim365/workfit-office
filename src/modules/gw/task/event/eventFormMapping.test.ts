@@ -69,6 +69,23 @@ test('일반이 없으면 허용 목록 첫 값으로 시작하고, 외근은 �
   assert.equal(s.allDay, true);
 });
 
+test('새 일정에 처음 시간 구간을 주면 그 시간으로 시작한다(종일 아님)', () => {
+  const s = initialCreateState(
+    { mode: 'create', date: D, owner: SELF, allowed: ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'], initialRange: { start: 540, end: 570 } },
+    ME,
+    'WT-0001',
+  );
+  assert.deepEqual(s.range, { start: 540, end: 570 });
+  assert.equal(s.allDay, false);
+  const meeting = initialCreateState(
+    { mode: 'create', date: D, owner: OTHER, allowed: ['MEETING'], initialRange: { start: 600, end: 630 } },
+    ME,
+    'WT-0001',
+  );
+  assert.deepEqual(meeting.range, { start: 600, end: 630 });
+  assert.equal(meeting.allDay, false);
+});
+
 test('일반 항목 수정 — 항목 값으로 채운다', () => {
   const item: WorkPlanItem = {
     id: 'WI-20261021-0001', ownerUserId: ME, date: D, allDay: false, startTime: '09:30', endTime: '11:00',

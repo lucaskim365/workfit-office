@@ -1,11 +1,10 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
 import { calendarToday, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
-import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -14,34 +13,30 @@ import {
   useRemoveWorkPlan,
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
-import { cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
-import { toggleWorkPlanItem, mergeCheckedMeta } from '@/domain/workPlan/engine';
-import { toEditableText } from '@/domain/workPlan/richText';
-import type { Editor } from '@tiptap/react';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { quickDefaultRange } from '@/domain/workPlan/timeGrid';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
-import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
+import { WorkPlanEventModal } from './event/WorkPlanEventModal';
+import type { EventKind, EventTarget } from './event/eventFormMapping';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
-import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
-import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
-import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
 
-const WEEKDAY_NAMES_SUN0 = ['일', '월', '화', '수', '목', '금', '토'];
-
-function dayTitle(date: string): string {
-  const [year, month, day] = date.split('-').map(Number);
-  const weekday = WEEKDAY_NAMES_SUN0[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
-  return `${year}년 ${month}월 ${day}일 (${weekday})`;
-}
+/** 본인 칸은 모든 종류, 다른 사람 칸은 회의 초대만 */
+const OWN_CELL_KINDS: EventKind[] = ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'];
+const OTHER_CELL_KINDS: EventKind[] = ['MEETING'];
+/** 오늘이 아닌 날의 새 일정 기본 시간 09:00~09:30 */
+const DEFAULT_CREATE_RANGE = { start: 540, end: 570 };
+const EMPTY_CELL: DayCell = { entries: [], legacyMemo: null };
+const emptyCellOf = () => EMPTY_CELL;
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -74,19 +69,14 @@ export default function WorkPlanScreen() {
     }
   }, [searchParams, setSearchParams]);
 
-  const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan; targetUser?: User } | null>(null);
-  const [editingContent, setEditingContent] = useState<string>('');
-  const [isSavingPlan, setIsSavingPlan] = useState<boolean>(false);
-  /** 칸 편집기(Tiptap) — 리본 서식 버튼이 명령을 보낸다. */
-  const [cellEditor, setCellEditor] = useState<Editor | null>(null);
-  /** 같은 칸 저장이 겹치지 않게(Ctrl+Enter 직후 blur 등) 진행 중 여부를 동기적으로 들고 있는다. */
-  const savingCellRef = useRef(false);
-  /** 회의 등록·상세 창 — 회의는 캘린더 일정 1건 + 참석자(업무계획 본문에 쓰지 않는다). */
-  const [meetingModal, setMeetingModal] = useState<{ date: string; event?: CalendarEvent } | null>(null);
-  /** 외근·출장 상세(결재 완료·직접 등록 공용)와 직접 등록·수정 창 */
-  const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
-  const [outsideForm, setOutsideForm] = useState<{ date: string; work?: OutsideWork } | null>(null);
-  const [conflictError, setConflictError] = useState<string | null>(null);
+  /** 업무계획 일정 창 — 새 일정·수정·보기 공용. key는 대상이 바뀔 때마다 새로 띄우기 위한 것. */
+  const [eventModal, setEventModal] = useState<{ key: number; target: EventTarget } | null>(null);
+  /** 표가 만든 칸 조회 — 일정 창 시간표가 같은 결과를 쓴다 */
+  const [cellIndex, setCellIndex] = useState<{ cellOf: (userId: string, date: string) => DayCell }>({ cellOf: emptyCellOf });
+  /** 회의 외 캘린더 일정(사내행사 등) 상세 */
+  const [calendarEvent, setCalendarEvent] = useState<CalendarEvent | null>(null);
+  /** 결재 완료 외근·출장과 동행 외근 상세 — 수정은 등록 본인이 일정 창으로 */
+  const [outsideDetail, setOutsideDetail] = useState<{ view: OutsideScheduleView; entry: DayEntry } | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
@@ -108,13 +98,6 @@ export default function WorkPlanScreen() {
     () => ({ userId: actor?.id ?? '__anonymous__', deptId, active: actor?.status === '사용' }),
     [actor, deptId],
   );
-  const userEventsQuery = useCalendarEvents(calendarActor, undefined, Boolean(actor));
-  const userEvents = userEventsQuery.data ?? [];
-
-  const editingDateEvents = useMemo(() => {
-    if (!editingTarget) return [];
-    return userEvents.filter((ev) => ev.date === editingTarget.date);
-  }, [userEvents, editingTarget]);
 
   // ── 부서 및 검색 필터 ──
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -233,66 +216,58 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
-  const savePlan = useCallback(
-    async (
-      date: string,
-      content: string,
-      existingPlanId?: string,
-      targetUser?: User,
-      expectedUpdatedAt?: string,
-    ) => {
-      if (!actor) return;
-      const actorParam = { userId: actor.id, active: actor.status === '사용' };
-      const ownerId = targetUser?.id || actor.id;
+  const handleCellIndexChange = useCallback((cellOf: (userId: string, date: string) => DayCell) => {
+    setCellIndex({ cellOf });
+  }, []);
 
-      if (!content.trim()) {
-        if (existingPlanId) {
-          await removePlan(existingPlanId, date, ownerId);
-        }
+  const actorActive = actor?.status === '사용';
+
+  const openEventModal = (target: EventTarget) => {
+    setEventModal((prev) => ({ key: (prev?.key ?? 0) + 1, target }));
+  };
+
+  /** 칸 더블클릭·[+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30 */
+  const handleCreate = (date: string, member: User) => {
+    if (!actor) return;
+    openEventModal({
+      mode: 'create',
+      date,
+      owner: member,
+      allowed: member.id === actor.id ? OWN_CELL_KINDS : OTHER_CELL_KINDS,
+      initialRange: date === today ? quickDefaultRange(new Date()) : DEFAULT_CREATE_RANGE,
+    });
+  };
+
+  /**
+   * 칩 클릭 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
+   * 결재 건·동행 외근은 기존 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창으로.
+   */
+  const handleOpenEntry = (entry: DayEntry) => {
+    if (!actor) return;
+    const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
+    switch (entry.source) {
+      case 'ITEM':
+        openEventModal({ mode: mode(entry.item?.ownerUserId === actor.id), entry });
         return;
-      }
-
-      await (existingPlanId
-        ? update.mutateAsync({
-            actor: actorParam,
-            id: existingPlanId,
-            draft: { date, content },
-            expectedUpdatedAt,
-          })
-        : create.mutateAsync({
-            actor: actorParam,
-            draft: { date, content, ownerUserId: ownerId },
-          }));
-      setNotice('업무계획을 저장했습니다.');
-    },
-    [actor, create, update],
-  );
-
-  const removePlan = useCallback(
-    async (planId: string, date?: string, targetUserId?: string) => {
-      if (!actor) return;
-      const ownerId = targetUserId || actor.id;
-      await cleanupWorkPlanCalendarEvents(
-        { userId: ownerId, active: true, deptId },
-        planId,
-        date,
-      );
-      await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
-      setNotice('업무계획을 삭제했습니다.');
-    },
-    [actor, remove, deptId],
-  );
-
-  const handleToggleItem = useCallback(
-    async (plan: WorkPlan, itemIdx: number) => {
-      // 진행도 체크는 오직 본인의 업무계획만 가능
-      if (!actor || plan.ownerUserId !== actor.id) return;
-      const nextContent = toggleWorkPlanItem(plan.content, itemIdx);
-      const targetUser = users.find((u) => u.id === plan.ownerUserId);
-      await savePlan(plan.date, nextContent, plan.id, targetUser, plan.updatedAt);
-    },
-    [actor?.id, users, savePlan],
-  );
+      case 'MEETING':
+        openEventModal({ mode: mode(entry.event?.ownerUserId === actor.id), entry });
+        return;
+      case 'CALENDAR':
+        if (entry.event) setCalendarEvent(entry.event);
+        return;
+      case 'OUTSIDE':
+        if (entry.companionOf) {
+          if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
+          return;
+        }
+        openEventModal({ mode: mode(entry.outside?.self?.ownerUserId === actor.id), entry });
+        return;
+      case 'APPROVAL':
+        // 휴가는 사유 비공개라 상세가 없다
+        if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
+        return;
+    }
+  };
 
   const loading = usersQuery.isLoading;
 
@@ -304,7 +279,7 @@ export default function WorkPlanScreen() {
       <GwHead
         icon="🗓️"
         name="업무계획"
-        desc="팀 주간 종합 계획: 전 팀원의 한 주간 업무 계획(To-Do)을 종합 조회하고, 요일별 업무 등록 및 진행 상황을 공유합니다."
+        desc="팀원의 업무·회의·외근 일정을 날짜별로 함께 봅니다."
         right={
           <div className="flex items-center gap-2">
             {!authenticatedUser && (
@@ -329,84 +304,16 @@ export default function WorkPlanScreen() {
         </div>
       )}
 
-      {/* ── 메인 뷰: 월간 종합 뷰 (엑셀 셀 직접 입력 지원) ── */}
+      {/* ── 메인 뷰: 월간 종합 뷰 ── */}
       <WorkPlanTeamMonthlyMatrix
         actor={actor}
         todayStr={initialDate ?? today}
         members={scopedMembers}
         deptId={deptId}
-        activeEditing={
-          editingTarget
-            ? { date: editingTarget.date, userId: editingTarget.targetUser?.id ?? actor.id }
-            : null
-        }
-        editingContent={editingContent}
-        onEditingContentChange={setEditingContent}
-        onSaveEditing={async () => {
-          if (!editingTarget || savingCellRef.current) return;
-          const currentTarget = editingTarget;
-          const contentToSave = editingContent;
-          // 아무것도 고치지 않고 칸을 벗어났으면 저장하지 않는다 — 불필요한 갱신과 동시 수정 충돌을 줄인다.
-          if (currentTarget.plan && contentToSave.trim() === toEditableText(currentTarget.plan.content).trim()) {
-            setEditingTarget((prev) => (prev?.date === currentTarget.date && prev?.targetUser?.id === currentTarget.targetUser?.id ? null : prev));
-            return;
-          }
-          savingCellRef.current = true;
-          setIsSavingPlan(true);
-          setConflictError(null);
-          try {
-            if (!contentToSave.trim()) {
-              if (currentTarget.plan) {
-                await removePlan(currentTarget.plan.id, currentTarget.date, currentTarget.targetUser?.id);
-              }
-            } else {
-              // 준수 텍스트 + 기존 체크 메타 병합하여 저장 (편집 중 케크 상태 보존)
-              const mergedContent = currentTarget.plan
-                ? mergeCheckedMeta(contentToSave.trim(), currentTarget.plan.content)
-                : contentToSave.trim();
-              await savePlan(
-                currentTarget.date,
-                mergedContent,
-                currentTarget.plan?.id,
-                currentTarget.targetUser,
-                currentTarget.plan?.updatedAt,
-              );
-            }
-            // 저장 완료 후, 사용자가 다른 셀을 이미 클릭해 편집 대상이 변경되었으면 닫지 않음
-            setEditingTarget((prev) =>
-              prev?.date === currentTarget.date && prev?.targetUser?.id === currentTarget.targetUser?.id
-                ? null
-                : prev,
-            );
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : '';
-            if (
-              msg.includes('먼저 수정') ||
-              msg.includes('먼저 등록') ||
-              (err as { code?: string })?.code === 'CONFLICT'
-            ) {
-              setConflictError(
-                msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
-              );
-            } else {
-              alert(msg || '저장 중 오류가 발생했습니다.');
-            }
-          } finally {
-            savingCellRef.current = false;
-            setIsSavingPlan(false);
-          }
-        }}
-        onOpenEditor={(date, plan, member) => {
-          setEditingTarget({ date, plan, targetUser: member });
-          // 체크 메타(__c__)는 편집기에서 - [x] 표기로 풀어 보여 준다
-          setEditingContent(plan ? toEditableText(plan.content) : '');
-          setConflictError(null);
-        }}
+        onCreate={actorActive ? handleCreate : undefined}
+        onOpenEntry={handleOpenEntry}
+        onCellIndexChange={handleCellIndexChange}
         onOpenConfig={() => setIsConfigOpen(true)}
-        onToggleItem={handleToggleItem}
-        onEditorReady={setCellEditor}
-        onOpenMeeting={(event) => setMeetingModal({ date: event.date, event })}
-        onOpenOutside={setOutsideDetail}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={(
           <>
@@ -454,137 +361,58 @@ export default function WorkPlanScreen() {
             )}
           </>
         )}
-        // 편집 리본 — 상단 고정 바 바로 아래에 붙는다
-        editingToolbar={editingTarget ? (
-        <WorkPlanOfficeRibbonToolbar
-          dateTitle={
-            editingTarget.targetUser && editingTarget.targetUser.id !== actor.id
-              ? `${editingTarget.targetUser.name}(${editingTarget.targetUser.position || '팀원'}) · ${dayTitle(editingTarget.date)}`
-              : dayTitle(editingTarget.date)
-          }
-          targetUser={editingTarget.targetUser}
-          actor={actor}
-          content={editingContent}
-          onContentChange={setEditingContent}
-          editor={cellEditor}
-          onAddMeeting={() => setMeetingModal({ date: editingTarget.date })}
-          // 내 칸을 편집할 때만 — 외근·출장은 본인만 등록한다. 시작일은 편집 중인 칸의 날짜.
-          onAddOutside={actor.status === '사용' && (!editingTarget.targetUser || editingTarget.targetUser.id === actor.id)
-            ? () => setOutsideForm({ date: editingTarget.date })
-            : undefined}
-          todayEvents={editingDateEvents}
-          isSaving={isSavingPlan}
-          conflictError={conflictError}
-          onSave={async (forceOverwrite) => {
-            if (!editingTarget) return;
-            setIsSavingPlan(true);
-            setConflictError(null);
-            try {
-              if (!editingContent.trim()) {
-                if (editingTarget.plan) {
-                  await removePlan(editingTarget.plan.id, editingTarget.date, editingTarget.targetUser?.id);
-                } else {
-                  await savePlan(
-                    editingTarget.date,
-                    '',
-                    undefined,
-                    editingTarget.targetUser,
-                    undefined,
-                  );
-                }
-              } else {
-                await savePlan(
-                  editingTarget.date,
-                  editingContent.trim(),
-                  editingTarget.plan?.id,
-                  editingTarget.targetUser,
-                  forceOverwrite ? undefined : editingTarget.plan?.updatedAt,
-                );
-              }
-              setEditingTarget(null);
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : '';
-              if (
-                msg.includes('먼저 수정') ||
-                msg.includes('먼저 등록') ||
-                (err as { code?: string })?.code === 'CONFLICT'
-              ) {
-                setConflictError(
-                  msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
-                );
-              } else {
-                alert(msg || '저장 중 오류가 발생했습니다.');
-              }
-            } finally {
-              setIsSavingPlan(false);
-            }
-          }}
-          onDelete={
-            editingTarget.plan
-              ? async () => {
-                  if (!window.confirm('이 날짜의 업무계획을 삭제하시겠습니까? (연동된 캘린더 일정도 함께 정리됩니다)')) return;
-                  setIsSavingPlan(true);
-                  try {
-                    await removePlan(editingTarget.plan!.id, editingTarget.date, editingTarget.targetUser?.id);
-                    setEditingTarget(null);
-                  } finally {
-                    setIsSavingPlan(false);
-                  }
-                }
-              : undefined
-          }
-        />
-        ) : null}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }
       />
 
-      {/* 회의 등록·상세 */}
-      {meetingModal && (
+      {/* 업무계획 일정 창 — 일반·회의·외근·출장 */}
+      {eventModal && (
+        <WorkPlanEventModal
+          key={eventModal.key}
+          target={eventModal.target}
+          actor={actor}
+          deptId={deptId}
+          users={users}
+          cellOf={cellIndex.cellOf}
+          onClose={() => setEventModal(null)}
+          onSaved={setNotice}
+        />
+      )}
+
+      {/* 회의 외 캘린더 일정(사내행사 등) — 캘린더 일정 창 그대로 */}
+      {calendarEvent && (
         <CalendarEventModal
           actor={calendarActor}
-          initialDate={meetingModal.date}
-          event={meetingModal.event}
-          initialEventType="MEETING"
+          initialDate={calendarEvent.date}
+          event={calendarEvent}
           myProjects={[]}
           deptName={actor.dept || null}
           ownerName={
-            meetingModal.event && meetingModal.event.ownerUserId !== actor.id
-              ? users.find((u) => u.id === meetingModal.event!.ownerUserId)?.name ?? null
+            calendarEvent.ownerUserId !== actor.id
+              ? users.find((u) => u.id === calendarEvent.ownerUserId)?.name ?? null
               : null
           }
-          onClose={() => setMeetingModal(null)}
+          onClose={() => setCalendarEvent(null)}
           onSaved={() => {
-            setMeetingModal(null);
-            setNotice('회의를 저장했습니다. 참석자 칸과 캘린더에 함께 표시됩니다.');
+            setCalendarEvent(null);
+            setNotice('일정을 저장했습니다.');
           }}
           onRemoved={() => {
-            setMeetingModal(null);
-            setNotice('회의를 삭제했습니다.');
+            setCalendarEvent(null);
+            setNotice('일정을 삭제했습니다.');
           }}
         />
       )}
 
       {outsideDetail && (
         <OutsideWorkDetailModal
-          view={outsideDetail}
-          viewer={{ userId: actor.id, active: actor.status === '사용', dept: actor.dept }}
+          view={outsideDetail.view}
+          viewer={{ userId: actor.id, active: actorActive, dept: actor.dept }}
           users={users}
           onClose={() => setOutsideDetail(null)}
-          onEdit={(view) => view.self && setOutsideForm({ date: view.startDate, work: view.self })}
-        />
-      )}
-
-      {outsideForm && (
-        <OutsideWorkFormModal
-          key={outsideForm.work?.id ?? `new-${outsideForm.date}`}
-          actor={{ userId: actor.id, active: actor.status === '사용' }}
-          initialDate={outsideForm.date}
-          work={outsideForm.work}
-          users={users}
-          onClose={() => setOutsideForm(null)}
-          onSaved={() => setNotice('외근·출장을 저장했습니다. 업무계획·캘린더와 근태·근무 상태에 반영됩니다.')}
+          // 등록 본인만 수정 버튼이 보인다 — 동행 칸에서 열었어도 본인 칸 기준으로 일정 창을 연다
+          onEdit={() => openEventModal({ mode: 'edit', entry: { ...outsideDetail.entry, companionOf: undefined } })}
         />
       )}
 

@@ -19,7 +19,8 @@ import type { TimeGridBlock } from './TimeGrid';
 export type EventKind = 'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP';
 
 export type EventTarget =
-  | { mode: 'create'; date: string; owner: User; allowed: EventKind[] } // 남의 칸이면 ['MEETING']
+  // 남의 칸이면 allowed = ['MEETING']. initialRange = 처음 시간 구간(주면 종일 아님으로 시작)
+  | { mode: 'create'; date: string; owner: User; allowed: EventKind[]; initialRange?: MinuteRange }
   | { mode: 'edit'; entry: DayEntry } // ITEM·MEETING·OUTSIDE(본인 등록)
   | { mode: 'view'; entry: DayEntry };
 
@@ -84,7 +85,7 @@ export function initialCreateState(
 ): EventFormState {
   const kind: EventKind = target.allowed.includes('ITEM') ? 'ITEM' : target.allowed[0] ?? 'ITEM';
   const base = blankState(target.date);
-  return {
+  const start: EventFormState = {
     ...base,
     kind,
     tagId: firstTagId,
@@ -92,6 +93,7 @@ export function initialCreateState(
     subType: isOutsideKind(kind) ? OUTSIDE_WORK_SUBTYPES[kind][0] : '',
     attendeeIds: target.owner.id !== actorId ? [target.owner.id] : [],
   };
+  return target.initialRange ? applyRangeChange(start, { ...target.initialRange }) : start;
 }
 
 function fromOutsideView(view: OutsideScheduleView, date: string): EventFormState {
