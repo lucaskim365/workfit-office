@@ -1,3 +1,4 @@
+import type { CommutePolicy } from '@/domain/commutePolicy/schema';
 import { MEETING_DEFAULT_VISIBILITY } from '@/domain/calendarEvent/meeting';
 import { calendarEventSchema, type CalendarEventDraft, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import { OUTSIDE_WORK_SUBTYPES, outsideWorkSchema, type OutsideWorkDraft } from '@/domain/outsideWork/schema';
@@ -165,26 +166,43 @@ export function initialStateFromEntry(entry: DayEntry, linkedRoomId: string | nu
   return { ...blankState(''), title: entry.title };
 }
 
+/** 외근 오전·오후를 나누는 시각 — 기존 등록 창(OutsideWorkFormModal)과 같은 값. */
+const MIDDAY = '13:00';
+
+export type SubTypePolicy = Pick<CommutePolicy, 'workStartTime' | 'workEndTime'>;
+
+/**
+ * 세부 구분을 고르면 시간을 맞춘다(기존 등록 창 pickSubType과 같은 규칙) —
+ * 오전 = 근무 시작~13:00, 오후 = 13:00~근무 끝, 시간 외근 = 시간 일정(구간 유지), 그 밖(종일·출장) = 종일.
+ */
+export function applySubType(state: EventFormState, subType: string, policy: SubTypePolicy): EventFormState {
+  if (subType === '오전 외근') {
+    return { ...state, subType, allDay: false, range: { start: toMinutes(policy.workStartTime), end: toMinutes(MIDDAY) } };
+  }
+  if (subType === '오후 외근') {
+    return { ...state, subType, allDay: false, range: { start: toMinutes(MIDDAY), end: toMinutes(policy.workEndTime) } };
+  }
+  if (subType === '시간 외근') return { ...state, subType, allDay: false };
+  return { ...state, subType, allDay: true, range: null };
+}
+
 /**
  * 종류 바꾸기. 새 일정은 허용 목록 안에서만, 수정은 같은 출처 안에서만(외근↔출장),
  * 보기는 바꾸지 않는다. 바꿀 수 없으면 같은 상태 객체를 그대로 돌려준다.
+ * 외근·출장 구분이 바뀌면 세부 구분을 첫 값으로 고르고 그 시간 규칙을 따른다.
  */
 export function switchKind(
   state: EventFormState,
   next: EventKind,
   rule: { mode: EventTarget['mode']; allowed: EventKind[] },
+  policy: SubTypePolicy,
 ): EventFormState {
   if (state.kind === next || rule.mode === 'view') return state;
   if (rule.mode === 'create' && !rule.allowed.includes(next)) return state;
   if (rule.mode === 'edit' && !(isOutsideKind(state.kind) && isOutsideKind(next))) return state;
-  return {
-    ...state,
-    kind: next,
-    // 외근·출장 세부 구분은 구분이 바뀌면 첫 값으로
-    subType: isOutsideKind(next) ? OUTSIDE_WORK_SUBTYPES[next][0] : state.subType,
-    // 회의는 시각이 필수
-    allDay: next === 'MEETING' ? false : state.allDay,
-  };
+  if (isOutsideKind(next)) return applySubType({ ...state, kind: next }, OUTSIDE_WORK_SUBTYPES[next][0], policy);
+  // 회의는 시각이 필수
+  return { ...state, kind: next, allDay: next === 'MEETING' ? false : state.allDay };
 }
 
 function timesOf(state: EventFormState): { startTime: string | null; endTime: string | null } {
@@ -203,10 +221,13 @@ export function toItemDraft(state: EventFormState): WorkPlanItemDraft {
   };
 }
 
-/** 회의 초안 — 종일 없음, 참석자에서 주최자 제외. 회의실이면 장소 = 방 이름(저장 때 예약 이름으로 맞춰진다). */
+/**
+ * 회의 초안 — 종일 없음, 참석자에서 주최자 제외. 회의실이면 장소 = 방 이름(저장 때 예약 이름으로 맞춰진다).
+ * `projectId` = 고치는 회의의 기존 프로젝트(이 창엔 프로젝트 고르기가 없어 프로젝트 공유 회의는 그대로 둔다).
+ */
 export function toMeetingDraft(
   state: EventFormState,
-  ctx: { organizerId: string; deptId: string | null; roomName: string | null },
+  ctx: { organizerId: string; deptId: string | null; roomName: string | null; projectId: string | null },
 ): CalendarEventDraft {
   const { startTime, endTime } = timesOf({ ...state, allDay: false });
   return {
@@ -220,7 +241,7 @@ export function toMeetingDraft(
     eventType: 'MEETING',
     attendeeUserIds: [...new Set(state.attendeeIds)].filter((id) => id !== ctx.organizerId),
     deptId: state.visibility === 'TEAM' ? ctx.deptId ?? null : null,
-    projectId: null,
+    projectId: state.visibility === 'PROJECT' ? ctx.projectId : null,
     location: state.locationMode === 'text' ? state.locationText.trim() || null : ctx.roomName,
   };
 }

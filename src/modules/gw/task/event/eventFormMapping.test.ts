@@ -7,6 +7,7 @@ import type { User } from '@/domain/user/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
 import {
+  applySubType,
   initialCreateState,
   initialStateFromEntry,
   switchKind,
@@ -30,6 +31,8 @@ const createState = (patch: Partial<EventFormState> = {}): EventFormState => ({
   ...initialCreateState({ mode: 'create', date: D, owner: SELF, allowed: ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'] }, ME, 'WT-0001'),
   ...patch,
 });
+
+const POLICY = { workStartTime: '09:00', workEndTime: '18:00' };
 
 const entryBase = { key: 'k', allDay: false, startTime: '09:00', endTime: '10:00', title: 't', tag: null, roomStatus: null } as const;
 
@@ -118,32 +121,32 @@ test('외근·출장 수정 — 등록 원본으로 채운다', () => {
 
 test('새 일정 — 허용 안 된 종류로는 못 바꾼다', () => {
   const s = initialCreateState({ mode: 'create', date: D, owner: OTHER, allowed: ['MEETING'] }, ME, 'WT-0001');
-  assert.equal(switchKind(s, 'OUTSIDE', { mode: 'create', allowed: ['MEETING'] }).kind, 'MEETING');
+  assert.equal(switchKind(s, 'OUTSIDE', { mode: 'create', allowed: ['MEETING'] }, POLICY).kind, 'MEETING');
 });
 
 test('외근↔출장 바꾸면 세부 구분이 첫 값으로 바뀐다', () => {
   const rule = { mode: 'create' as const, allowed: ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'] as const };
-  const out = switchKind(createState(), 'OUTSIDE', { ...rule, allowed: [...rule.allowed] });
+  const out = switchKind(createState(), 'OUTSIDE', { ...rule, allowed: [...rule.allowed] }, POLICY);
   assert.equal(out.subType, '종일 외근');
-  const trip = switchKind(out, 'TRIP', { ...rule, allowed: [...rule.allowed] });
+  const trip = switchKind(out, 'TRIP', { ...rule, allowed: [...rule.allowed] }, POLICY);
   assert.equal(trip.subType, '국내출장');
 });
 
 test('수정 — 회의는 다른 종류로 못 바꾸고, 외근은 출장으로 바꿀 수 있다', () => {
   const meeting = createState({ kind: 'MEETING' });
-  assert.equal(switchKind(meeting, 'ITEM', { mode: 'edit', allowed: [] }).kind, 'MEETING');
+  assert.equal(switchKind(meeting, 'ITEM', { mode: 'edit', allowed: [] }, POLICY).kind, 'MEETING');
   const out = createState({ kind: 'OUTSIDE', subType: '오전 외근' });
-  assert.equal(switchKind(out, 'MEETING', { mode: 'edit', allowed: [] }).kind, 'OUTSIDE');
-  const trip = switchKind(out, 'TRIP', { mode: 'edit', allowed: [] });
+  assert.equal(switchKind(out, 'MEETING', { mode: 'edit', allowed: [] }, POLICY).kind, 'OUTSIDE');
+  const trip = switchKind(out, 'TRIP', { mode: 'edit', allowed: [] }, POLICY);
   assert.equal(trip.kind, 'TRIP');
   assert.equal(trip.subType, '국내출장');
   const item = createState();
-  assert.equal(switchKind(item, 'MEETING', { mode: 'edit', allowed: [] }).kind, 'ITEM');
+  assert.equal(switchKind(item, 'MEETING', { mode: 'edit', allowed: [] }, POLICY).kind, 'ITEM');
 });
 
 test('보기 — 아무것도 바꾸지 않는다', () => {
   const out = createState({ kind: 'OUTSIDE' });
-  assert.equal(switchKind(out, 'TRIP', { mode: 'view', allowed: [] }), out);
+  assert.equal(switchKind(out, 'TRIP', { mode: 'view', allowed: [] }, POLICY), out);
 });
 
 // ── 회의 초안 ─────────────────────────────────
@@ -153,7 +156,7 @@ test('회의 초안 — 시각은 구간에서, 참석자에서 주최자 제외
     kind: 'MEETING', title: '기획 회의', range: { start: 600, end: 690 }, attendeeIds: [ME, 'U012', 'U013'],
     locationMode: 'text', locationText: '  2층 라운지 ', memo: ' 안건 ',
   });
-  const draft = toMeetingDraft(s, { organizerId: ME, deptId: 'D01', roomName: null });
+  const draft = toMeetingDraft(s, { organizerId: ME, deptId: 'D01', roomName: null, projectId: null });
   assert.equal(draft.allDay, false);
   assert.equal(draft.startTime, '10:00');
   assert.equal(draft.endTime, '11:30');
@@ -169,24 +172,24 @@ test('회의 초안 — 시각은 구간에서, 참석자에서 주최자 제외
 });
 
 test('회의 초안 — 빈 장소는 null, 회의실이면 방 이름, 부서 공유면 부서', () => {
-  const blank = toMeetingDraft(createState({ kind: 'MEETING', locationText: '   ' }), { organizerId: ME, deptId: null, roomName: null });
+  const blank = toMeetingDraft(createState({ kind: 'MEETING', locationText: '   ' }), { organizerId: ME, deptId: null, roomName: null, projectId: null });
   assert.equal(blank.location, null);
   const room = toMeetingDraft(
     createState({ kind: 'MEETING', locationMode: 'room', roomId: 'R1', locationText: '무시', visibility: 'TEAM' }),
-    { organizerId: ME, deptId: 'D01', roomName: '대회의실' },
+    { organizerId: ME, deptId: 'D01', roomName: '대회의실', projectId: null },
   );
   assert.equal(room.location, '대회의실');
   assert.equal(room.deptId, 'D01');
 });
 
 test('회의 초안 — 24시 끝은 23:59, 시간 없으면 검증 실패', () => {
-  const late = toMeetingDraft(createState({ kind: 'MEETING', title: '야간', range: { start: 1410, end: 1440 } }), { organizerId: ME, deptId: null, roomName: null });
+  const late = toMeetingDraft(createState({ kind: 'MEETING', title: '야간', range: { start: 1410, end: 1440 } }), { organizerId: ME, deptId: null, roomName: null, projectId: null });
   assert.equal(late.startTime, '23:30');
   assert.equal(late.endTime, '23:59');
-  const noTime = toMeetingDraft(createState({ kind: 'MEETING', title: '회의' }), { organizerId: ME, deptId: null, roomName: null });
+  const noTime = toMeetingDraft(createState({ kind: 'MEETING', title: '회의' }), { organizerId: ME, deptId: null, roomName: null, projectId: null });
   assert.equal(noTime.startTime, null);
   assert.equal(validateMeetingDraft(noTime, ME), '시간 일정에는 시작·종료 시각이 필요합니다.');
-  const noTitle = toMeetingDraft(createState({ kind: 'MEETING', range: { start: 600, end: 630 } }), { organizerId: ME, deptId: null, roomName: null });
+  const noTitle = toMeetingDraft(createState({ kind: 'MEETING', range: { start: 600, end: 630 } }), { organizerId: ME, deptId: null, roomName: null, projectId: null });
   assert.equal(validateMeetingDraft(noTitle, ME), '일정 제목을 입력하세요.');
 });
 
@@ -227,4 +230,55 @@ test('일반 항목 검증 — 태그·제목·시간', () => {
   assert.equal(validateItemDraft(toItemDraft(createState({ tagId: '', title: 'a', range: { start: 0, end: 30 } })), ME, ME), '태그를 고르세요.');
   assert.equal(validateItemDraft(toItemDraft(createState({ range: { start: 0, end: 30 } })), ME, ME), '제목을 입력하세요.');
   assert.equal(validateItemDraft(toItemDraft(createState({ title: 'a' })), ME, ME), '시간 항목에는 시작·종료 시각이 필요합니다.');
+});
+
+// ── 세부 구분 → 시간 ─────────────────────────────────
+
+test('세부 구분 — 오전 외근은 근무 시작~13:00', () => {
+  const s = applySubType(createState({ kind: 'OUTSIDE', allDay: true }), '오전 외근', POLICY);
+  assert.equal(s.subType, '오전 외근');
+  assert.equal(s.allDay, false);
+  assert.deepEqual(s.range, { start: 540, end: 780 });
+});
+
+test('세부 구분 — 오후 외근은 13:00~근무 끝', () => {
+  const s = applySubType(createState({ kind: 'OUTSIDE', allDay: true }), '오후 외근', POLICY);
+  assert.equal(s.allDay, false);
+  assert.deepEqual(s.range, { start: 780, end: 1080 });
+});
+
+test('세부 구분 — 시간 외근은 시간 일정, 구간은 그대로', () => {
+  const s = applySubType(createState({ kind: 'OUTSIDE', allDay: true, range: { start: 600, end: 660 } }), '시간 외근', POLICY);
+  assert.equal(s.allDay, false);
+  assert.deepEqual(s.range, { start: 600, end: 660 });
+});
+
+test('세부 구분 — 종일 외근·출장은 종일, 구간 없음', () => {
+  for (const sub of ['종일 외근', '국내출장', '해외출장']) {
+    const s = applySubType(createState({ kind: 'OUTSIDE', allDay: false, range: { start: 600, end: 660 } }), sub, POLICY);
+    assert.equal(s.allDay, true);
+    assert.equal(s.range, null);
+  }
+});
+
+test('종류를 외근·출장으로 바꾸면 첫 세부 구분의 시간 규칙을 따른다', () => {
+  const all = ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'] as Array<'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP'>;
+  const s = switchKind(createState({ range: { start: 600, end: 660 } }), 'OUTSIDE', { mode: 'create', allowed: all }, POLICY);
+  assert.equal(s.subType, '종일 외근');
+  assert.equal(s.allDay, true);
+  assert.equal(s.range, null);
+});
+
+// ── 프로젝트 공유 회의 ─────────────────────────────────
+
+test('프로젝트 공유 회의를 고쳐도 공개 범위·프로젝트를 그대로 둔다', () => {
+  const ev = meetingEvent({ visibility: 'PROJECT', projectId: 'PRJ-1' });
+  const s = initialStateFromEntry({ ...entryBase, source: 'MEETING', event: ev } as DayEntry, null);
+  assert.equal(s.visibility, 'PROJECT');
+  const draft = toMeetingDraft(s, { organizerId: ME, deptId: null, roomName: null, projectId: ev.projectId });
+  assert.equal(draft.visibility, 'PROJECT');
+  assert.equal(draft.projectId, 'PRJ-1');
+  assert.equal(validateMeetingDraft(draft, ME), null);
+  const company = toMeetingDraft({ ...s, visibility: 'COMPANY' }, { organizerId: ME, deptId: null, roomName: null, projectId: 'PRJ-1' });
+  assert.equal(company.projectId, null);
 });

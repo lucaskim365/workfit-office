@@ -5,12 +5,14 @@ import { reservationRepo } from '@/data/reservation/reservation.repo';
 import { resourceRepo } from '@/data/resource/resource.repo';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { findSimilarMeetings } from '@/domain/calendarEvent/meeting';
-import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import type { CalendarEvent, CalendarVisibility } from '@/domain/calendarEvent/schema';
+import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { toHHmm } from '@/domain/workPlan/timeGrid';
 import { usePermission } from '@/features/auth/usePermission';
+import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { CALENDAR_EVENTS_KEY, useCalendarEvents, useJoinMeeting } from '@/features/calendar/useCalendarEvents';
 import { useCreateOutsideWork, useRemoveOutsideWork, useUpdateOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { RESERVATION_KEY } from '@/features/resource/useReservations';
@@ -22,6 +24,7 @@ import {
   useWorkPlanTags,
 } from '@/features/workPlan/useWorkPlanItems';
 import {
+  applySubType,
   initialCreateState,
   initialStateFromEntry,
   meetingPurpose,
@@ -71,6 +74,10 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   state: EventFormState;
   set: <K extends keyof EventFormState>(k: K, v: EventFormState[K]) => void;
   setKind: (kind: EventKind) => void;
+  /** 외근·출장 세부 구분 — 고르면 시간을 맞춘다(오전·오후·시간·종일) */
+  setSubType: (subType: string) => void;
+  /** 고를 수 있는 공개 범위 — 이 창엔 프로젝트 고르기가 없어 프로젝트 공유는 기존 회의일 때만 */
+  visibilityOptions: CalendarVisibility[];
   readOnly: boolean;
   similarMeetings: CalendarEvent[];
   join: (e: CalendarEvent) => Promise<boolean>;
@@ -83,6 +90,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
 } {
   const queryClient = useQueryClient();
   const { isSuperAdmin } = usePermission();
+  const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const readOnly = target.mode === 'view';
   const entry = target.mode === 'create' ? null : target.entry;
   const event = entry?.event ?? null;
@@ -203,9 +211,28 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   const setKind = useCallback(
     (kind: EventKind) => {
       if (readOnly) return;
-      setState((prev) => switchKind(prev, kind, { mode: target.mode, allowed }));
+      setState((prev) => switchKind(prev, kind, { mode: target.mode, allowed }, policy));
     },
-    [readOnly, target.mode, allowed],
+    [readOnly, target.mode, allowed, policy],
+  );
+
+  const setSubType = useCallback(
+    (subType: string) => {
+      if (readOnly) return;
+      setState((prev) => applySubType(prev, subType, policy));
+    },
+    [readOnly, policy],
+  );
+
+  const keepsProject = event?.visibility === 'PROJECT';
+  const visibilityOptions = useMemo<CalendarVisibility[]>(
+    () => [
+      'COMPANY',
+      ...(deptId ? (['TEAM'] as const) : []),
+      'PRIVATE',
+      ...(keepsProject ? (['PROJECT'] as const) : []),
+    ],
+    [deptId, keepsProject],
   );
 
   const set = useCallback(
@@ -215,9 +242,13 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
         setKind(v as EventKind);
         return;
       }
+      if (k === 'subType') {
+        setSubType(v as string);
+        return;
+      }
       setState((prev) => ({ ...prev, [k]: v }));
     },
-    [readOnly, setKind],
+    [readOnly, setKind, setSubType],
   );
 
   const invalidate = (...keys: string[]) => {
@@ -262,7 +293,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
       ? (roomsQuery.data ?? []).find((room) => room.id === state.roomId)?.name
         ?? (linked?.resourceId === state.roomId ? linked.resourceNameSnapshot : null)
       : null;
-    const draft = toMeetingDraft(state, { organizerId: actor.id, deptId, roomName });
+    const draft = toMeetingDraft(state, { organizerId: actor.id, deptId, roomName, projectId: event?.projectId ?? null });
     const invalid = validateMeetingDraft(draft, actor.id);
     if (invalid) return fail(invalid);
     try {
@@ -334,6 +365,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     state,
     set,
     setKind,
+    setSubType,
+    visibilityOptions,
     readOnly,
     similarMeetings,
     join,
