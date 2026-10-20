@@ -42,54 +42,73 @@ interface EventFieldsProps {
   /** 고치는 외근·출장 원본 id — 겹침 경고에서 자기 자신을 뺀다 */
   outsideSelfId: string | null;
   onJoin: (meeting: CalendarEvent) => void;
+  /**
+   * 나눠 그리기(모바일 시트) — 'main' = 처음 보이는 칸(제목·날짜·시간, 회의 참석자, 경고),
+   * 'more' = [자세히] 안의 나머지 칸. 기본 'all'(PC 창, 한 번에 전부).
+   */
+  part?: 'all' | 'main' | 'more';
 }
 
 /** 일정 창 왼쪽 입력 — 종류(일반·회의·외근·출장)마다 칸이 다르다. */
-export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin }: EventFieldsProps) {
+export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all' }: EventFieldsProps) {
   const { state, set, readOnly } = form;
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+  const main = part !== 'more';
+  const more = part !== 'main';
+  // 나눠 그릴 때(모바일)는 날짜·시각을 두 줄로, 외근·출장 종료일은 [자세히]로
+  const split = part !== 'all';
 
   return (
     <div className="flex flex-col gap-3.5">
-      <Row label={isOutside ? '행선지' : '제목'}>
-        {isOutside ? (
-          <input
-            aria-label="행선지"
-            className={titleClass}
-            value={state.destination}
-            maxLength={200}
-            placeholder="행선지"
-            disabled={readOnly}
-            autoFocus={!readOnly}
-            onChange={(e) => set('destination', e.target.value)}
-          />
-        ) : (
-          <input
-            aria-label="제목"
-            className={titleClass}
-            value={state.title}
-            maxLength={100}
-            placeholder={isMeeting ? '회의 제목' : '제목'}
-            disabled={readOnly}
-            autoFocus={!readOnly}
-            onChange={(e) => set('title', e.target.value)}
-          />
-        )}
-      </Row>
+      {main && (
+        <Row label={isOutside ? '행선지' : '제목'}>
+          {isOutside ? (
+            <input
+              aria-label="행선지"
+              className={titleClass}
+              value={state.destination}
+              maxLength={200}
+              placeholder="행선지"
+              disabled={readOnly}
+              autoFocus={!readOnly}
+              onChange={(e) => set('destination', e.target.value)}
+            />
+          ) : (
+            <input
+              aria-label="제목"
+              className={titleClass}
+              value={state.title}
+              maxLength={100}
+              placeholder={isMeeting ? '회의 제목' : '제목'}
+              disabled={readOnly}
+              autoFocus={!readOnly}
+              onChange={(e) => set('title', e.target.value)}
+            />
+          )}
+        </Row>
+      )}
 
-      {isMeeting && (
+      {main && isMeeting && (
         <Row icon={<Users size={15} />} label="참석자">
           <AttendeeField form={form} actor={actor} users={users} />
         </Row>
       )}
 
-      <Row icon={<Clock size={15} />} label="날짜·시간">
-        <TimeFields form={form} />
-      </Row>
+      {main && (
+        <Row icon={<Clock size={15} />} label="날짜·시간">
+          <TimeFields form={form} stacked={split} showEndDate={!split} />
+        </Row>
+      )}
 
-      {isMeeting && (
+      {more && split && isOutside && (
+        <Row icon={<Clock size={15} />} label="종료일">
+          <EndDateField form={form} />
+        </Row>
+      )}
+
+      {more && isMeeting && (
         <Row icon={<MapPin size={15} />} label="장소">
           <RoomPicker
             mode={state.locationMode}
@@ -104,13 +123,13 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      {isOutside && (
+      {more && isOutside && (
         <Row icon={<Users size={15} />} label="동행자">
           <CompanionField form={form} actor={actor} users={users} nameOf={nameOf} />
         </Row>
       )}
 
-      {isOutside && (
+      {more && isOutside && (
         <Row icon={<AlignLeft size={15} />} label="목적">
           <textarea
             aria-label="목적"
@@ -125,20 +144,22 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      <Row icon={isOutside ? <span className="w-[15px]" /> : <AlignLeft size={15} />} label="세부 내용">
-        <textarea
-          aria-label={isMeeting ? '세부 내용·안건' : '메모'}
-          className={`${textareaClass} min-h-[84px]`}
-          value={state.memo}
-          maxLength={state.kind === 'ITEM' ? 1000 : 2000}
-          rows={4}
-          placeholder={isMeeting ? '세부 내용 · 안건' : '메모'}
-          disabled={readOnly}
-          onChange={(e) => set('memo', e.target.value)}
-        />
-      </Row>
+      {more && (
+        <Row icon={isOutside ? <span className="w-[15px]" /> : <AlignLeft size={15} />} label="세부 내용">
+          <textarea
+            aria-label={isMeeting ? '세부 내용·안건' : '메모'}
+            className={`${textareaClass} min-h-[84px]`}
+            value={state.memo}
+            maxLength={state.kind === 'ITEM' ? 1000 : 2000}
+            rows={4}
+            placeholder={isMeeting ? '세부 내용 · 안건' : '메모'}
+            disabled={readOnly}
+            onChange={(e) => set('memo', e.target.value)}
+          />
+        </Row>
+      )}
 
-      {isMeeting && (
+      {more && isMeeting && (
         <Row icon={<Eye size={15} />} label="공개 범위">
           <div className="w-44">
             <SelectField
@@ -152,7 +173,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      {isOutside && (
+      {more && isOutside && (
         <Row icon={<Car size={15} />} label="교통수단·연락처">
           <div className="grid grid-cols-2 gap-2">
             <TextField
@@ -175,7 +196,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      {isOutside && !readOnly && (
+      {main && isOutside && !readOnly && (
         <OutsideOverlapWarning
           ownerId={ownerId}
           ownerName={ownerName}
@@ -185,7 +206,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         />
       )}
 
-      {isMeeting && form.similarMeetings.length > 0 && (
+      {main && isMeeting && form.similarMeetings.length > 0 && (
         <SimilarMeetings meetings={form.similarMeetings} actorId={actor.id} nameOf={nameOf} saving={form.saving} onJoin={onJoin} />
       )}
     </div>
@@ -198,7 +219,27 @@ function visibilityOptionsOf(options: CalendarVisibility[], current: CalendarVis
   return list.map((value) => ({ value, label: CALENDAR_VISIBILITY_LABELS[value] }));
 }
 
-function TimeFields({ form }: { form: EventForm }) {
+/** 외근·출장 종료일 */
+function EndDateField({ form }: { form: EventForm }) {
+  const { state, set, readOnly } = form;
+  return (
+    <TextField
+      type="date"
+      aria-label="종료일"
+      value={state.endDate}
+      min={state.date}
+      disabled={readOnly}
+      className="w-[140px]"
+      onChange={(e) => e.target.value && set('endDate', e.target.value)}
+    />
+  );
+}
+
+/**
+ * 날짜·시각 칸. `stacked` = 날짜 줄과 시각 줄을 나눈다(좁은 화면),
+ * `showEndDate` = 외근·출장 종료일을 함께 둔다(모바일은 [자세히]로 뺀다).
+ */
+function TimeFields({ form, stacked = false, showEndDate = true }: { form: EventForm; stacked?: boolean; showEndDate?: boolean }) {
   const { state, set, readOnly } = form;
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
@@ -216,8 +257,8 @@ function TimeFields({ form }: { form: EventForm }) {
     const end = toMinutes(value);
     form.setRange({ start: range?.start ?? Math.max(end - DEFAULT_LENGTH, 0), end });
   };
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
+  const dates = (
+    <>
       <TextField
         type="date"
         aria-label={isOutside ? '시작일' : '날짜'}
@@ -226,7 +267,7 @@ function TimeFields({ form }: { form: EventForm }) {
         className="w-[140px]"
         onChange={(e) => form.setDate(e.target.value)}
       />
-      {isOutside && (
+      {isOutside && showEndDate && (
         <>
           <span className="text-ink3">~</span>
           <TextField
@@ -240,42 +281,61 @@ function TimeFields({ form }: { form: EventForm }) {
           />
         </>
       )}
-      {showTimes && (
-        <>
-          <TextField
-            type="time"
-            aria-label="시작 시각"
-            value={range ? toHHmm(range.start) : ''}
-            disabled={readOnly}
-            className="w-[108px]"
-            onChange={(e) => onStart(e.target.value)}
-          />
-          <ArrowRight size={13} className="text-ink3" />
-          <TextField
-            type="time"
-            aria-label="종료 시각"
-            value={range ? toHHmm(range.end) : ''}
-            disabled={readOnly}
-            className="w-[108px]"
-            onChange={(e) => onEnd(e.target.value)}
-          />
-          {range && range.end > range.start && (
-            <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
-          )}
-        </>
+    </>
+  );
+  const times = showTimes && (
+    <>
+      <TextField
+        type="time"
+        aria-label="시작 시각"
+        value={range ? toHHmm(range.start) : ''}
+        disabled={readOnly}
+        className="w-[108px]"
+        onChange={(e) => onStart(e.target.value)}
+      />
+      <ArrowRight size={13} className="text-ink3" />
+      <TextField
+        type="time"
+        aria-label="종료 시각"
+        value={range ? toHHmm(range.end) : ''}
+        disabled={readOnly}
+        className="w-[108px]"
+        onChange={(e) => onEnd(e.target.value)}
+      />
+      {range && range.end > range.start && (
+        <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
       )}
-      {!isMeeting && (
-        <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
-          <input
-            type="checkbox"
-            className="accent-teal"
-            checked={state.allDay}
-            disabled={readOnly}
-            onChange={(e) => form.setAllDay(e.target.checked)}
-          />
-          종일
-        </label>
-      )}
+    </>
+  );
+  const allDayToggle = !isMeeting && (
+    <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
+      <input
+        type="checkbox"
+        className="accent-teal"
+        checked={state.allDay}
+        disabled={readOnly}
+        onChange={(e) => form.setAllDay(e.target.checked)}
+      />
+      종일
+    </label>
+  );
+
+  if (stacked) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {dates}
+          {allDayToggle}
+        </div>
+        {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {dates}
+      {times}
+      {allDayToggle}
     </div>
   );
 }

@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ChevronDown, MapPin, Plane, Repeat, Users, type LucideIcon } from 'lucide-react';
-import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
-import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
-import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import type { DayCell } from '@/domain/workPlan/dayEntries';
 import { resolveTag, selectableGeneralTags } from '@/domain/workPlan/tag';
-import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { EventFields, type EventForm } from './EventFields';
-import { TimeGrid, entriesToBlocks, type TimeGridBlock } from './TimeGrid';
+import { dateLabel, dotClassOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
 interface WorkPlanEventModalProps {
@@ -26,44 +24,11 @@ interface WorkPlanEventModalProps {
   onSaved: (message: string) => void;
 }
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-const SAVED_MESSAGE: Record<EventKind, string> = {
-  ITEM: '업무를 저장했습니다.',
-  MEETING: '회의를 저장했습니다.',
-  OUTSIDE: '외근·출장을 저장했습니다.',
-  TRIP: '외근·출장을 저장했습니다.',
-};
-
 const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
   { kind: 'MEETING', label: '회의', Icon: Users },
   { kind: 'OUTSIDE', label: '외근', Icon: MapPin },
   { kind: 'TRIP', label: '출장', Icon: Plane },
 ];
-
-const isOutsideKind = (kind: EventKind) => kind === 'OUTSIDE' || kind === 'TRIP';
-
-function dateLabel(date: string): string {
-  if (!isValidCalendarDate(date)) return '';
-  const [y, m, d] = date.split('-').map(Number);
-  return `${m}월 ${d}일 (${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
-}
-
-const dotClassOf = (colorId: string) => TAG_COLOR_PRESETS.find((p) => p.id === colorId)?.dotColor ?? 'bg-slate-500';
-
-/** 같은 일정이 여러 사람 칸에 나와도 한 번만 — 원본 id 기준 */
-function sourceIdOf(entry: DayEntry): string {
-  return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;
-}
-
-/** 일정 주인 — 새 일정은 칸 주인, 기존 일정은 등록한 사람 */
-function ownerOf(target: EventTarget, users: User[]): { id: string; name: string } {
-  if (target.mode === 'create') return { id: target.owner.id, name: target.owner.name };
-  const entry = target.entry;
-  const id = entry.item?.ownerUserId ?? entry.event?.ownerUserId ?? entry.outside?.ownerUserId ?? entry.schedule?.drafterId ?? '';
-  const name = users.find((u) => u.id === id)?.name ?? entry.outside?.ownerName ?? entry.schedule?.drafterName ?? '';
-  return { id, name };
-}
 
 /**
  * 업무계획 일정 창(PC) — 팀즈 일정 창을 우리 양식에 맞춘 것.
@@ -73,65 +38,10 @@ function ownerOf(target: EventTarget, users: User[]): { id: string; name: string
 export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved }: WorkPlanEventModalProps) {
   const form = useWorkPlanEventForm(target, actor, deptId);
   const { state, readOnly } = form;
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const owner = useMemo(() => ownerOf(target, users), [target, users]);
   const entry = target.mode === 'create' ? null : target.entry;
-
-  const editingSourceId = entry ? sourceIdOf(entry) : null;
-  const blocks = useMemo(() => {
-    // 회의면 참석자도 — 새 회의는 주최자(나)가 칸 주인과 다를 수 있어 나도 넣는다
-    const people = [
-      owner.id,
-      ...(state.kind === 'MEETING' ? [...(target.mode === 'create' ? [actor.id] : []), ...state.attendeeIds] : []),
-    ].filter(Boolean);
-    const seen = new Set<string>(editingSourceId ? [editingSourceId] : []);
-    const result: TimeGridBlock[] = [];
-    for (const id of [...new Set(people)]) {
-      const name = users.find((u) => u.id === id)?.name ?? (id === owner.id ? owner.name : '');
-      const entries = cellOf(id, state.date).entries.filter((e) => {
-        const sourceId = sourceIdOf(e);
-        if (seen.has(sourceId)) return false;
-        seen.add(sourceId);
-        return true;
-      });
-      result.push(...entriesToBlocks(entries, name || undefined));
-    }
-    result.push(...form.roomBlocks);
-    return result;
-  }, [owner, target.mode, actor.id, state.kind, state.attendeeIds, state.date, users, cellOf, editingSourceId, form.roomBlocks]);
-
-  const save = async () => {
-    const kind = state.kind;
-    if (await form.save()) {
-      onSaved(SAVED_MESSAGE[kind]);
-      onClose();
-    }
-  };
-
-  const join = async (meeting: CalendarEvent) => {
-    if (await form.join(meeting)) {
-      onSaved('회의에 참석자로 합류했습니다.');
-      onClose();
-    }
-  };
-
-  const leave = async () => {
-    if (!form.leave) return;
-    if (await form.leave()) {
-      onSaved('회의 참석을 취소했습니다.');
-      onClose();
-    }
-  };
-
-  const remove = async () => {
-    if (!form.remove) return;
-    if (await form.remove()) {
-      onSaved('일정을 삭제했습니다.');
-      onClose();
-    } else {
-      setConfirmingDelete(false);
-    }
-  };
+  const blocks = useEventBlocks(form, target, actor, users, cellOf, owner);
+  const { save, join, leave, remove, confirmingDelete, setConfirmingDelete } = useEventActions(form, onSaved, onClose);
 
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
   const when = isOutsideKind(state.kind) && state.endDate > state.date

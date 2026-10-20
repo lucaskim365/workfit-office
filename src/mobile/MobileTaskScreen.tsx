@@ -1,215 +1,117 @@
-import { useState, useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  CheckSquare,
-  Square,
-  Plus,
   Calendar,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Trash2,
-  Users,
+  ChevronUp,
+  Plus,
+  Tags,
   User as UserIcon,
+  UserPlus,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
-import {
-  useMyWorkPlans,
-  useAllWorkPlans,
-  useCreateWorkPlan,
-  useUpdateWorkPlan,
-} from '@/features/workPlan/useWorkPlans';
-import {
-  parseWorkPlanItems,
-  calculatePlanProgress,
-  toggleWorkPlanItem,
-  removeWorkPlanItem,
-  addWorkPlanItem,
-  getWorkPlanTagMeta,
-} from '@/domain/workPlan/engine';
-import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
-import MobileCommonHeader from './MobileCommonHeader';
-import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
-import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
-import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
-import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { useDepartments } from '@/features/department/useDepartments';
 import { resolveDeptId } from '@/domain/department/engine';
-import { isMeeting } from '@/domain/calendarEvent/meeting';
+import { buildCalendarMonth, calendarToday, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
-import { useOutsideSchedulesOf, useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
-import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
+import type { OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { User } from '@/domain/user/schema';
+import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { quickDefaultRange } from '@/domain/workPlan/timeGrid';
+import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
+import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
-import { fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
-import type { OutsideWork } from '@/domain/outsideWork/schema';
+import { chipLook, timeRangeOf } from '@/modules/gw/task/components/entryChipLook';
+import { MobileWorkPlanEventSheet } from '@/modules/gw/task/event/MobileWorkPlanEventSheet';
+import { WorkPlanTagManager } from '@/modules/gw/task/event/WorkPlanTagManager';
+import type { EventKind, EventTarget } from '@/modules/gw/task/event/eventFormMapping';
+import MobileCommonHeader from './MobileCommonHeader';
 
-const pad = (n: number) => String(n).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+/** 본인은 모든 종류, 다른 사람은 회의 초대만 */
+const OWN_KINDS: EventKind[] = ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'];
+const OTHER_KINDS: EventKind[] = ['MEETING'];
+/** 오늘이 아닌 날의 새 일정 기본 시간 09:00~09:30 */
+const DEFAULT_CREATE_RANGE = { start: 540, end: 570 };
 
-function formatDate(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** 'YYYY-MM-DD' 에 일수를 더한다(시간대 이동 없이 UTC 날짜 계산) */
+function shiftDate(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+function dateTitleOf(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return `${y}년 ${m}월 ${d}일 (${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
 }
 
 export default function MobileTaskScreen() {
   const { user } = useAuth();
-  const { userRoles } = usePermission();
+  const usersQuery = useUsers();
+  if (!user) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden" style={{ background: '#f2f8fc' }}>
+        <MobileCommonHeader title="업무계획" />
+        <div className="grid flex-1 place-items-center text-[12px] font-semibold text-ink3">
+          {usersQuery.isLoading ? '불러오는 중…' : '사용자 정보를 불러올 수 없습니다.'}
+        </div>
+      </div>
+    );
+  }
+  return <MobileTaskBody actor={user} />;
+}
+
+/**
+ * 모바일 업무계획 — 날짜를 고르면 그 날 항목(일반·회의·외근·출장·결재·캘린더 일정)을 시간순으로.
+ * [+] → 전체 화면 일정 창(PC와 같은 저장·같은 규칙). 다른 사람에게는 회의 초대만.
+ */
+function MobileTaskBody({ actor }: { actor: User }) {
+  const { userRoles, isSuperAdmin, canAction } = usePermission();
+  const canManageTags = isSuperAdmin || canAction('S_GW_WORK_PLAN_ADMIN', 'update');
   const org = useOrgTree();
   const usersQuery = useUsers();
-  const { tagMap } = useWorkPlanConfig();
+  const departmentsQuery = useDepartments();
+  const deptId = useMemo(
+    () => resolveDeptId(departmentsQuery.data ?? [], actor.dept),
+    [departmentsQuery.data, actor.dept],
+  );
+  const actorActive = actor.status === '사용';
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
-  const selectedDateStr = useMemo(() => formatDate(selectedDate), [selectedDate]);
-
-  const [newTodoText, setNewTodoText] = useState('');
-  const [selectedTag, setSelectedTag] = useState('');
-  const [teamInputText, setTeamInputText] = useState<Record<string, string>>({});
+  const today = calendarToday();
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const [view, setView] = useState<'me' | 'team'>('me');
   const [deptFilter, setDeptFilter] = useState<string>('all');
 
-  const workActor = useMemo(
-    () => ({ userId: user?.id ?? '__anonymous__', active: user?.status === '사용' }),
-    [user],
+  // 업무계획 로스터 원칙 — 퇴사자(미사용·퇴사일)는 빼고
+  const users = useMemo(
+    () => (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt),
+    [usersQuery.data],
+  );
+  const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
+
+  // 정책상 열람 가능한 팀원 목록 (본인 제외)
+  const teamMembers = useMemo(
+    () =>
+      users
+        .filter((u) => u.id !== actor.id)
+        .filter((u) => canViewWorkPlan(actor, u, actorScope, org))
+        .sort((a, b) => {
+          const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
+          if (rankDiff !== 0) return rankDiff;
+          return a.name.localeCompare(b.name, 'ko');
+        }),
+    [users, actor, actorScope, org],
   );
 
-  // 1. 내 업무계획 쿼리
-  const myWorkPlansQuery = useMyWorkPlans(workActor);
-  const myWorkPlans = myWorkPlansQuery.data ?? [];
-
-  const createPlan = useCreateWorkPlan();
-  const updatePlan = useUpdateWorkPlan();
-
-  // 회의 — 업무계획 본문이 아니라 캘린더 일정 1건 + 참석자로 등록한다(웹 업무계획과 같은 규칙).
-  const departmentsQuery = useDepartments();
-  const calendarActor = useMemo(
-    () => ({ userId: user?.id ?? '__anonymous__', active: user?.status === '사용', deptId: resolveDeptId(departmentsQuery.data ?? [], user?.dept) }),
-    [user, departmentsQuery.data],
-  );
-  const dayEventsQuery = useCalendarEvents(calendarActor, { from: selectedDateStr, to: selectedDateStr }, Boolean(user));
-  const myMeetings = useMemo(
-    () => (dayEventsQuery.data ?? []).filter(
-      (e) => isMeeting(e) && (e.ownerUserId === user?.id || e.attendeeUserIds.includes(user?.id ?? '')),
-    ),
-    [dayEventsQuery.data, user],
-  );
-  const [meetingModal, setMeetingModal] = useState<{ event?: CalendarEvent } | null>(null);
-
-  // 외근·출장 — 결재 완료 건과 직접 등록 건(웹 업무계획과 같은 규칙). 등록은 결재 없이 본인이 바로 한다.
-  const myOutsideAll = useOutsideSchedulesOf(user?.id ?? '__anonymous__', user?.name ?? '');
-  // 내가 동행자로 지정된 다른 사람의 등록도 함께 보인다(웹 업무계획 동행 칩과 같은 규칙)
-  const outsideWorksQuery = useOutsideWorks({ from: selectedDateStr, to: selectedDateStr }, Boolean(user));
-  const myOutside = useMemo(() => {
-    const userName = (id: string) => (usersQuery.data ?? []).find((u) => u.id === id)?.name;
-    const asCompanion = (outsideWorksQuery.data ?? [])
-      .filter((w) => w.ownerUserId !== user?.id && w.companionUserIds.includes(user?.id ?? ''))
-      .map((w) => fromOutsideWork(w, userName));
-    return [...myOutsideAll, ...asCompanion].filter((v) => v.startDate <= selectedDateStr && selectedDateStr <= v.endDate);
-  }, [myOutsideAll, outsideWorksQuery.data, selectedDateStr, user, usersQuery.data]);
-  const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
-  const [outsideForm, setOutsideForm] = useState<{ work?: OutsideWork } | null>(null);
-
-  // 선택 날짜의 내 업무계획
-  const myTodayPlan = useMemo(() => {
-    return myWorkPlans.find((p) => p.date === selectedDateStr);
-  }, [myWorkPlans, selectedDateStr]);
-
-  const myRawContent = myTodayPlan?.content ?? '';
-  const myParsedItems = useMemo(() => parseWorkPlanItems(myRawContent), [myRawContent]);
-  const myProgress = useMemo(() => calculatePlanProgress(myRawContent), [myRawContent]);
-
-  // 2. 팀원 목록 및 팀원 업무계획 쿼리
-  const allUsers = useMemo(() => {
-    return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
-  }, [usersQuery.data]);
-
-  const actorScope = useMemo(() => {
-    return resolveWorkPlanScope(user, userRoles, org);
-  }, [user, userRoles, org]);
-
-  // 정책상 열람 가능한 팀원 목록 (본인 제외, 같은 부서/팀원 등)
-  const teamMembers = useMemo(() => {
-    if (!user) return [];
-    return allUsers
-      .filter((u) => u.id !== user.id)
-      .filter((u) => canViewWorkPlan(user, u, actorScope, org))
-      .sort((a, b) => {
-        const rankDiff = org.rankOf(a.position) - org.rankOf(b.position);
-        if (rankDiff !== 0) return rankDiff;
-        return a.name.localeCompare(b.name, 'ko');
-      });
-  }, [allUsers, user, actorScope, org]);
-
-  // 해당 날짜 전체 업무계획 쿼리 (팀원들의 계획 포함)
-  const allPlansQuery = useAllWorkPlans(
-    { from: selectedDateStr, to: selectedDateStr },
-    teamMembers.length > 0,
-  );
-  const teamPlans = allPlansQuery.data ?? [];
-
-  // 사용자 ID -> 오늘 날짜의 업무계획 맵
-  const teamPlansMap = useMemo(() => {
-    const map = new Map<string, typeof teamPlans[0]>();
-    teamPlans.forEach((plan) => {
-      if (plan.date === selectedDateStr) {
-        map.set(plan.ownerUserId, plan);
-      }
-    });
-    return map;
-  }, [teamPlans, selectedDateStr]);
-
-  // ── 내 업무 To-Do 완료 토글 ──
-  const handleToggleMyTodo = async (idx: number) => {
-    const nextContent = toggleWorkPlanItem(myRawContent, idx);
-    if (myTodayPlan) {
-      await updatePlan.mutateAsync({
-        actor: workActor,
-        id: myTodayPlan.id,
-        draft: { date: myTodayPlan.date, content: nextContent },
-      });
-    } else {
-      await createPlan.mutateAsync({
-        actor: workActor,
-        draft: { date: selectedDateStr, content: nextContent },
-      });
-    }
-  };
-
-  // ── 내 업무 To-Do 삭제 ──
-  const handleRemoveMyTodo = async (idx: number) => {
-    const nextContent = removeWorkPlanItem(myRawContent, idx);
-    if (myTodayPlan) {
-      await updatePlan.mutateAsync({
-        actor: workActor,
-        id: myTodayPlan.id,
-        draft: { date: myTodayPlan.date, content: nextContent },
-      });
-    }
-  };
-
-  // ── 내 업무 신규 To-Do 추가 ──
-  const handleAddMyTodo = async () => {
-    const text = newTodoText.trim();
-    if (!text) return;
-
-    const nextContent = addWorkPlanItem(myRawContent, text, selectedTag || undefined);
-
-    if (myTodayPlan) {
-      await updatePlan.mutateAsync({
-        actor: workActor,
-        id: myTodayPlan.id,
-        draft: { date: myTodayPlan.date, content: nextContent },
-      });
-    } else {
-      await createPlan.mutateAsync({
-        actor: workActor,
-        draft: { date: selectedDateStr, content: nextContent },
-      });
-    }
-
-    setNewTodoText('');
-  };
-
-  // 고유 부서 목록
   const deptList = useMemo(() => {
     const s = new Set<string>();
     teamMembers.forEach((m) => {
@@ -218,334 +120,177 @@ export default function MobileTaskScreen() {
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [teamMembers]);
 
-  // 부서 필터가 적용된 대상 멤버 목록
-  const displayedMembers = useMemo(() => {
-    if (deptFilter === 'all') return teamMembers;
-    return teamMembers.filter((m) => m.dept === deptFilter);
-  }, [teamMembers, deptFilter]);
+  const displayedMembers = useMemo(
+    () => (deptFilter === 'all' ? teamMembers : teamMembers.filter((m) => m.dept === deptFilter)),
+    [teamMembers, deptFilter],
+  );
 
-  // ── 팀원 업무 To-Do 삭제 ──
-  const handleRemoveTeamTodo = async (member: (typeof teamMembers)[0], idx: number) => {
-    const plan = teamPlansMap.get(member.id);
-    if (!plan) return;
-    const nextContent = removeWorkPlanItem(plan.content, idx);
-    await updatePlan.mutateAsync({
-      actor: workActor,
-      id: plan.id,
-      draft: { date: plan.date, content: nextContent },
-    });
-  };
-
-  // ── 팀원 업무 신규 To-Do 추가 ──
-  const handleAddTeamTodo = async (member: (typeof teamMembers)[0]) => {
-    const text = (teamInputText[member.id] || '').trim();
-    if (!text) return;
-
-    const plan = teamPlansMap.get(member.id);
-    const currentContent = plan?.content ?? '';
-    const nextContent = addWorkPlanItem(currentContent, text);
-
-    if (plan) {
-      await updatePlan.mutateAsync({
-        actor: workActor,
-        id: plan.id,
-        draft: { date: plan.date, content: nextContent },
-      });
-    } else {
-      await createPlan.mutateAsync({
-        actor: workActor,
-        draft: { date: selectedDateStr, content: nextContent, ownerUserId: member.id },
-      });
+  // 칸 조립 — 고른 날의 달 전체(일정 창 시간표에서 날짜를 옮겨도 겹쳐 보이게, PC 표와 같은 범위)
+  const month = selectedDate.slice(0, 7);
+  const dates = useMemo(() => {
+    try {
+      return buildCalendarMonth(month).map((c) => c.date);
+    } catch {
+      return [];
     }
+  }, [month]);
+  const members = useMemo(() => [actor, ...teamMembers], [actor, teamMembers]);
+  const { cellOf } = useDayEntryIndex({ actor, deptId, members, dates });
 
-    setTeamInputText((prev) => ({ ...prev, [member.id]: '' }));
+  /** 일정 창 — 새 일정·수정·보기 공용. key는 대상이 바뀔 때마다 새로 띄우기 위한 것. */
+  const [sheet, setSheet] = useState<{ key: number; target: EventTarget } | null>(null);
+  /** 회의 외 캘린더 일정(사내행사 등) 상세 */
+  const [calendarEvent, setCalendarEvent] = useState<CalendarEvent | null>(null);
+  /** 결재 완료 외근·출장과 동행 외근 상세 */
+  const [outsideDetail, setOutsideDetail] = useState<{ view: OutsideScheduleView; entry: DayEntry } | null>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const openSheet = (target: EventTarget) => {
+    setNotice('');
+    setSheet((prev) => ({ key: (prev?.key ?? 0) + 1, target }));
   };
 
-  // ── 날짜 이동 핸들러 ──
-  const handlePrevDay = () => {
-    setSelectedDate((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() - 1);
-      return d;
+  /** [+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30 */
+  const handleCreate = (member: User) => {
+    openSheet({
+      mode: 'create',
+      date: selectedDate,
+      owner: member,
+      allowed: member.id === actor.id ? OWN_KINDS : OTHER_KINDS,
+      initialRange: selectedDate === today ? quickDefaultRange(new Date()) : DEFAULT_CREATE_RANGE,
     });
   };
 
-  const handleNextDay = () => {
-    setSelectedDate((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() + 1);
-      return d;
-    });
+  /**
+   * 항목 탭 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
+   * 결재 건·동행 외근은 기존 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창으로(PC와 같은 규칙).
+   */
+  const handleOpenEntry = (entry: DayEntry) => {
+    const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
+    switch (entry.source) {
+      case 'ITEM':
+        openSheet({ mode: mode(entry.item?.ownerUserId === actor.id), entry });
+        return;
+      case 'MEETING':
+        openSheet({ mode: mode(entry.event?.ownerUserId === actor.id), entry });
+        return;
+      case 'CALENDAR':
+        if (entry.event) setCalendarEvent(entry.event);
+        return;
+      case 'OUTSIDE':
+        if (entry.companionOf) {
+          if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
+          return;
+        }
+        openSheet({ mode: mode(entry.outside?.self?.ownerUserId === actor.id), entry });
+        return;
+      case 'APPROVAL':
+        // 휴가는 사유 비공개라 상세가 없다
+        if (entry.outside) setOutsideDetail({ view: entry.outside, entry });
+        return;
+    }
   };
 
-  const handleToday = () => {
-    setSelectedDate(new Date());
-  };
-
-  const dateTitle = useMemo(() => {
-    const y = selectedDate.getFullYear();
-    const m = selectedDate.getMonth() + 1;
-    const d = selectedDate.getDate();
-    const day = WEEKDAYS[selectedDate.getDay()];
-    return `${y}년 ${m}월 ${d}일 (${day})`;
-  }, [selectedDate]);
+  const myCell = cellOf(actor.id, selectedDate);
 
   return (
-    <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
-      <MobileCommonHeader title="업무계획" subtitle={dateTitle} />
+    <div className="relative flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
+      <MobileCommonHeader
+        title="업무계획"
+        subtitle={dateTitleOf(selectedDate)}
+        rightAction={canManageTags ? (
+          <button
+            type="button"
+            onClick={() => setTagManagerOpen(true)}
+            aria-label="태그 관리"
+            className="grid h-8.5 w-8.5 place-items-center rounded-xl text-white/90 transition-all hover:bg-white/10 hover:text-white active:scale-95"
+          >
+            <Tags size={18} />
+          </button>
+        ) : undefined}
+      />
 
-      {/* 1. 상단 날짜 이동 툴바 */}
-      <div className="flex items-center justify-between border-b border-border/70 bg-white px-3 py-2 shadow-2xs shrink-0">
+      {/* 날짜 이동 */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border/70 bg-white px-3 py-2 shadow-2xs">
         <button
           type="button"
-          onClick={handlePrevDay}
-          className="grid h-8 w-8 place-items-center rounded-xl hover:bg-panel-alt transition-colors text-ink2"
-          title="이전 날"
+          onClick={() => setSelectedDate((d) => shiftDate(d, -1))}
+          className="grid h-8 w-8 place-items-center rounded-xl text-ink2 transition-colors hover:bg-panel-alt"
+          aria-label="이전 날"
         >
           <ChevronLeft size={18} />
         </button>
-
-        <button
-          type="button"
-          onClick={handleToday}
-          className="text-[13px] font-bold text-ink hover:text-teal transition-colors flex items-center gap-1.5"
-        >
+        <label className="relative flex items-center gap-1.5 text-[13px] font-bold text-ink">
           <Calendar size={14} className="text-teal" />
-          <span>{dateTitle}</span>
-        </button>
-
+          <span>{dateTitleOf(selectedDate)}</span>
+          {/* 날짜를 눌러 바로 고른다 */}
+          <input
+            type="date"
+            aria-label="날짜 선택"
+            value={selectedDate}
+            onChange={(e) => isValidCalendarDate(e.target.value) && setSelectedDate(e.target.value)}
+            className="absolute inset-0 opacity-0"
+          />
+        </label>
         <button
           type="button"
-          onClick={handleNextDay}
-          className="grid h-8 w-8 place-items-center rounded-xl hover:bg-panel-alt transition-colors text-ink2"
-          title="다음 날"
+          onClick={() => setSelectedDate((d) => shiftDate(d, 1))}
+          className="grid h-8 w-8 place-items-center rounded-xl text-ink2 transition-colors hover:bg-panel-alt"
+          aria-label="다음 날"
         >
           <ChevronRight size={18} />
         </button>
       </div>
 
-      {/* 2. 전체 스크롤 본문: 최상단 내 업무 편집 + 그 아래 팀원 업무 계획 */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
-        {/* ── [섹션 1: 최상단 내 업무 계획 편집 & 추가] ── */}
-        <div className="rounded-2xl border border-teal/40 bg-white p-4 shadow-xs space-y-3">
-          {/* 내 업무 헤더 & 달성률 */}
-          <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="grid h-6 w-6 place-items-center rounded-lg bg-teal-soft/40 text-teal">
-                <CheckSquare size={14} />
-              </span>
-              <span className="text-[13px] font-black text-ink">내 업무 계획</span>
-              <span className="rounded bg-teal-soft/30 px-1.5 py-0.2 text-[10px] font-bold text-teal">
-                {user?.dept || '내 부서'}
-              </span>
-            </div>
-
-            {myProgress && myProgress.total > 0 && (
-              <span className="text-[11px] font-extrabold text-teal">
-                {myProgress.completed}/{myProgress.total}건
-              </span>
-            )}
-          </div>
-
-          {/* 진행률 바 */}
-          {myProgress && myProgress.total > 0 && (
-            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-teal transition-all duration-300"
-                style={{ width: `${myProgress.percent}%` }}
-              />
-            </div>
-          )}
-
-          {/* 내 회의(주최·참석) + 회의 등록 */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-purple-700">회의 {myMeetings.length > 0 ? `${myMeetings.length}건` : ''}</span>
-              <button
-                type="button"
-                onClick={() => setMeetingModal({})}
-                className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2.5 py-0.5 text-[10.5px] font-bold text-purple-700 active:scale-95"
-              >
-                + 회의 등록
-              </button>
-            </div>
-            {myMeetings.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setMeetingModal({ event: m })}
-                className="flex w-full items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-2.5 py-1.5 text-left active:scale-[0.99]"
-              >
-                <span className="min-w-0 truncate text-[11.5px] font-bold text-ink">{m.title.replace(/^[(회의|미팅)]s*/, '')}</span>
-                <span className="shrink-0 text-[10px] text-ink3">
-                  {m.allDay ? '종일' : `${m.startTime}~${m.endTime}`} · {m.ownerUserId === user?.id ? '주최' : '참석'}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* 내 외근·출장(결재 완료 + 직접 등록) + 등록 */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-blue-700">외근·출장 {myOutside.length > 0 ? `${myOutside.length}건` : ''}</span>
-              {user?.status === '사용' && (
-                <button
-                  type="button"
-                  onClick={() => setOutsideForm({})}
-                  className="rounded-full border border-blue-500/40 bg-blue-500/10 px-2.5 py-0.5 text-[10.5px] font-bold text-blue-700 active:scale-95"
-                >
-                  + 외근·출장 등록
-                </button>
-              )}
-            </div>
-            {myOutside.map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                onClick={() => setOutsideDetail(v)}
-                className="flex w-full items-center justify-between gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5 text-left active:scale-[0.99]"
-              >
-                <span className="min-w-0 truncate text-[11.5px] font-bold text-ink">
-                  [{v.ownerUserId !== user?.id ? '동행' : v.category === 'TRIP' ? '출장' : '외근'}] {v.subType}{v.ownerUserId !== user?.id && v.ownerName ? ` · ${v.ownerName}` : ''}{v.destination ? ` (${v.destination})` : ''}
-                </span>
-                <span className="shrink-0 text-[10px] text-ink3">
-                  {v.startDate === v.endDate ? (v.startTime && v.endTime ? `${v.startTime}~${v.endTime}` : '종일') : `${v.startDate.slice(5)}~${v.endDate.slice(5)}`}
-                  {v.source === 'APPROVAL' ? ' · 결재' : ''}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* 신규 할 일 추가 입력 폼 */}
-          <div className="rounded-xl bg-slate-50 p-2.5 border border-border/60 space-y-2">
-            {/* 태그 선택 칩 */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-              {['회의', '미팅', '보고', '집중', '마감', '외근'].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setSelectedTag(selectedTag === t ? '' : t)}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-all shrink-0 ${
-                    selectedTag === t
-                      ? 'bg-teal text-white shadow-2xs'
-                      : 'bg-white text-ink3 border border-border/80 hover:border-teal'
-                  }`}
-                >
-                  +{t}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                value={newTodoText}
-                onChange={(e) => setNewTodoText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddMyTodo();
-                  }
-                }}
-                placeholder="오늘의 할 일 추가 (Enter 또는 +)"
-                className="flex-1 rounded-xl border border-border bg-white px-3 py-2 text-[12px] text-ink outline-none focus:border-teal placeholder:text-ink3 shadow-2xs"
-              />
-
-              <button
-                type="button"
-                onClick={handleAddMyTodo}
-                disabled={!newTodoText.trim()}
-                className="grid h-8.5 w-8.5 place-items-center rounded-xl bg-teal text-white shadow-2xs hover:opacity-90 disabled:opacity-40 active:scale-95 transition-all shrink-0"
-              >
-                <Plus size={18} strokeWidth={2.2} />
-              </button>
-            </div>
-          </div>
-
-          {/* 내 To-Do 항목 목록 */}
-          <div className="space-y-1.5 pt-1">
-            {myParsedItems.length === 0 ? (
-              <div className="py-4 text-center text-ink3 text-[11.5px] italic">
-                등록된 할 일이 없습니다. 위 입력창에서 추가해보세요.
-              </div>
-            ) : (
-              myParsedItems.map((item, idx) => {
-                const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-2 rounded-xl bg-slate-50/70 p-2.5 border border-border/60 hover:bg-slate-50 transition-colors"
-                  >
-                    <div
-                      onClick={() => handleToggleMyTodo(idx)}
-                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
-                    >
-                      <button
-                        type="button"
-                        className={`grid h-5 w-5 shrink-0 place-items-center rounded-lg border transition-all ${
-                          item.completed
-                            ? 'border-teal bg-teal text-white shadow-2xs'
-                            : 'border-border-hi bg-white hover:border-teal'
-                        }`}
-                      >
-                        {item.completed ? (
-                          <CheckSquare size={13} strokeWidth={2.5} />
-                        ) : (
-                          <Square size={13} className="text-slate-300" />
-                        )}
-                      </button>
-
-                      {tagMeta && (
-                        <span
-                          className={`shrink-0 rounded px-1.5 py-0.2 text-[9.5px] font-bold ${tagMeta.badgeClass}`}
-                        >
-                          {item.tag}
-                        </span>
-                      )}
-
-                      <span
-                        className={`text-[12px] font-medium truncate ${
-                          item.completed ? 'line-through text-ink3' : 'text-ink'
-                        }`}
-                      >
-                        <WorkPlanInlineText text={item.text} />
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMyTodo(idx)}
-                      className="p-1 text-ink3 hover:text-rose-500 transition-colors shrink-0"
-                      title="삭제"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
+      {/* 나 / 팀원 전환 */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/70 bg-white px-3 py-2">
+        <div className="grid flex-1 grid-cols-2 gap-1 rounded-xl bg-panel-alt p-1" role="tablist" aria-label="보기">
+          {([['me', '나'], ['team', `팀원 ${teamMembers.length}명`]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={`rounded-lg py-1.5 text-[12px] font-bold transition-colors ${
+                view === key ? 'bg-white text-ink shadow-2xs' : 'text-ink3'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+        {selectedDate !== today && (
+          <button
+            type="button"
+            onClick={() => setSelectedDate(today)}
+            className="shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-[11.5px] font-bold text-ink2 active:bg-panel-alt"
+          >
+            오늘
+          </button>
+        )}
+      </div>
 
-        {/* ── [섹션 2: 팀원들의 업무 계획 (To-Do 현황 & 자유 편집)] ── */}
-        <div className="space-y-3">
-          {/* 팀 섹션 헤더 */}
-          <div className="flex items-center justify-between px-0.5">
-            <div className="flex items-center gap-1.5">
-              <span className="grid h-6 w-6 place-items-center rounded-lg bg-indigo-500/10 text-indigo-600">
-                <Users size={14} />
-              </span>
-              <span className="text-[13px] font-black text-ink">팀 업무 현황</span>
-              <span className="rounded-full bg-slate-200 px-2 py-0.2 text-[10px] font-bold text-slate-700">
-                {displayedMembers.length}명
-              </span>
-            </div>
+      {notice && (
+        <div aria-live="polite" className="shrink-0 border-b border-teal/20 bg-teal-soft/25 px-4 py-2 text-[11.5px] font-semibold text-teal">
+          {notice}
+        </div>
+      )}
 
+      <div className="flex-1 overflow-y-auto p-3.5">
+        {view === 'me' ? (
+          <div className="rounded-2xl border border-teal/40 bg-white p-3.5 shadow-xs">
+            <DayList cell={myCell} onOpen={handleOpenEntry} />
+          </div>
+        ) : (
+          <div className="space-y-3">
             {deptList.length > 1 && (
               <select
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
-                className="rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-bold text-ink outline-none shadow-2xs"
+                aria-label="부서 필터"
+                className="w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] font-bold text-ink shadow-2xs outline-none"
               >
                 <option value="all">전체 부서 ({teamMembers.length}명)</option>
                 {deptList.map((d) => (
@@ -555,202 +300,230 @@ export default function MobileTaskScreen() {
                 ))}
               </select>
             )}
-          </div>
 
-          {/* 팀원 카드 목록 */}
-          {displayedMembers.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/80 bg-white/70 p-8 text-center text-ink3">
-              <UserIcon size={24} className="mx-auto mb-1 text-ink3/40" />
-              <p className="text-[12px] font-bold text-ink">표시할 팀원이 없습니다.</p>
-            </div>
-          ) : (
-            displayedMembers.map((member) => {
-              const plan = teamPlansMap.get(member.id);
-              const raw = plan?.content ?? '';
-              const items = parseWorkPlanItems(raw);
-              const progress = calculatePlanProgress(raw);
-
-              return (
-                <div
-                  key={member.id}
-                  className="rounded-2xl border border-border/80 bg-white p-3.5 shadow-2xs space-y-2.5"
-                >
-                  {/* 팀원 프로필 & 달성률 */}
-                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="grid h-7 w-7 place-items-center rounded-full bg-slate-700 text-[10.5px] font-black text-white shrink-0">
-                        {member.name.slice(-2)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[12.5px] font-black text-ink">{member.name}</span>
-                          <BirthdayMark userId={member.id} />
-                          <span className="text-[10.5px] text-ink3">{member.position}</span>
-                          {member.jobTitle && (
-                            <span className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-semibold text-slate-600">
-                              {member.jobTitle}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+            {displayedMembers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/80 bg-white/70 p-8 text-center text-ink3">
+                <UserIcon size={24} className="mx-auto mb-1 text-ink3/40" />
+                <p className="text-[12px] font-bold text-ink">표시할 팀원이 없습니다.</p>
+              </div>
+            ) : (
+              displayedMembers.map((member) => (
+                <div key={member.id} className="rounded-2xl border border-border/80 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex items-center gap-2 border-b border-border/50 pb-2">
+                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-700 text-[10.5px] font-black text-white">
+                      {member.name.slice(-2)}
                     </div>
-
-                    {progress && progress.total > 0 ? (
-                      <span className="text-[10.5px] font-extrabold text-indigo-600">
-                        {progress.completed}/{progress.total}건
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-ink3 font-medium">To-Do 없음</span>
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                      <span className="truncate text-[12.5px] font-black text-ink">{member.name}</span>
+                      <BirthdayMark userId={member.id} />
+                      <span className="shrink-0 text-[10.5px] text-ink3">{member.position}</span>
+                    </div>
+                    {actorActive && (
+                      <button
+                        type="button"
+                        onClick={() => handleCreate(member)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-purple-500/40 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-700 active:scale-95"
+                      >
+                        <UserPlus size={12} />
+                        회의 초대
+                      </button>
                     )}
                   </div>
-
-                  {/* 팀원 미니 진행률 바 */}
-                  {progress && progress.total > 0 && (
-                    <div className="h-1 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                        style={{ width: `${progress.percent}%` }}
-                      />
-                    </div>
-                  )}
-
-                  {/* 팀원의 To-Do 항목 목록 (타인 업무는 체크 토글 불가 — 작성 및 삭제만 가능) */}
-                  <div className="space-y-1">
-                    {items.length === 0 ? (
-                      <div className="py-2 text-center text-[11px] text-ink3 italic">
-                        등록된 업무 계획이 없습니다. 아래에서 할 일을 추가해보세요.
-                      </div>
-                    ) : (
-                      items.map((it, idx) => {
-                        const tagMeta = it.tag ? getWorkPlanTagMeta(it.tag, tagMap) : null;
-                        return (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-1.5 py-1 px-1 rounded-lg hover:bg-slate-50 transition-colors"
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <button
-                                type="button"
-                                disabled
-                                className={`grid h-4.5 w-4.5 shrink-0 place-items-center rounded border opacity-90 cursor-default ${
-                                  it.completed
-                                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-2xs'
-                                    : 'border-slate-300 bg-white'
-                                }`}
-                                title="다른 사람의 진행도는 변경할 수 없습니다."
-                              >
-                                {it.completed ? (
-                                  <CheckSquare size={12} strokeWidth={2.5} />
-                                ) : (
-                                  <Square size={12} className="text-slate-200" />
-                                )}
-                              </button>
-
-                              {tagMeta && (
-                                <span
-                                  className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${tagMeta.badgeClass}`}
-                                >
-                                  {it.tag}
-                                </span>
-                              )}
-
-                              <span
-                                className={`text-[11.5px] truncate font-medium ${
-                                  it.completed ? 'line-through text-ink3 opacity-70' : 'text-slate-800'
-                                }`}
-                              >
-                                <WorkPlanInlineText text={it.text} />
-                              </span>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTeamTodo(member, idx)}
-                              className="p-1 text-ink3/60 hover:text-rose-500 transition-colors shrink-0"
-                              title="삭제"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* 팀원 업무 신규 To-Do 추가 인라인 폼 */}
-                  <div className="flex items-center gap-1.5 pt-2 border-t border-border/40">
-                    <input
-                      type="text"
-                      value={teamInputText[member.id] || ''}
-                      onChange={(e) =>
-                        setTeamInputText((prev) => ({ ...prev, [member.id]: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddTeamTodo(member);
-                        }
-                      }}
-                      placeholder={`${member.name}님에게 할 일 추가 (Enter 또는 +)`}
-                      className="flex-1 rounded-lg border border-border/70 bg-slate-50/80 px-2.5 py-1.5 text-[11px] text-ink outline-none focus:border-indigo-500 focus:bg-white placeholder:text-ink3 shadow-2xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAddTeamTodo(member)}
-                      disabled={!teamInputText[member.id]?.trim()}
-                      className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-600 text-white shadow-2xs hover:opacity-90 disabled:opacity-30 active:scale-95 transition-all shrink-0"
-                      title="할 일 추가"
-                    >
-                      <Plus size={14} strokeWidth={2.5} />
-                    </button>
-                  </div>
+                  <DayList cell={cellOf(member.id, selectedDate)} onOpen={handleOpenEntry} />
                 </div>
-              );
-            })
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
+        {/* 아래 [+] 버튼에 마지막 항목이 가리지 않게 */}
+        {view === 'me' && actorActive && <div className="h-16" />}
       </div>
-      {meetingModal && user && (
-        <CalendarEventModal
-          actor={calendarActor}
-          initialDate={selectedDateStr}
-          event={meetingModal.event}
-          initialEventType="MEETING"
-          myProjects={[]}
-          deptName={user.dept || null}
-          ownerName={
-            meetingModal.event && meetingModal.event.ownerUserId !== user.id
-              ? (usersQuery.data ?? []).find((u) => u.id === meetingModal.event!.ownerUserId)?.name ?? null
-              : null
-          }
-          onClose={() => setMeetingModal(null)}
-          onSaved={() => setMeetingModal(null)}
-          onRemoved={() => setMeetingModal(null)}
+
+      {view === 'me' && actorActive && (
+        <button
+          type="button"
+          onClick={() => handleCreate(actor)}
+          aria-label="새 일정"
+          className="absolute right-4 z-10 grid h-13 w-13 place-items-center rounded-full bg-teal text-white shadow-lg active:scale-95"
+          style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
+          <Plus size={24} strokeWidth={2.4} />
+        </button>
+      )}
+
+      {sheet && (
+        <MobileWorkPlanEventSheet
+          key={sheet.key}
+          target={sheet.target}
+          actor={actor}
+          deptId={deptId}
+          users={users}
+          cellOf={cellOf}
+          onClose={() => setSheet(null)}
+          onSaved={setNotice}
         />
       )}
-      {outsideDetail && user && (
-        <OutsideWorkDetailModal
-          view={outsideDetail}
-          viewer={{ userId: user.id, active: user.status === '사용', dept: user.dept }}
-          users={usersQuery.data ?? []}
-          onClose={() => setOutsideDetail(null)}
-          onEdit={(view) => {
-            if (!view.self) return;
-            setOutsideDetail(null);
-            setOutsideForm({ work: view.self });
+
+      {/* 회의 외 캘린더 일정(사내행사 등) — 캘린더 일정 창 그대로 */}
+      {calendarEvent && (
+        <CalendarEventModal
+          actor={{ userId: actor.id, active: actorActive, deptId }}
+          initialDate={calendarEvent.date}
+          event={calendarEvent}
+          myProjects={[]}
+          deptName={actor.dept || null}
+          ownerName={
+            calendarEvent.ownerUserId !== actor.id
+              ? users.find((u) => u.id === calendarEvent.ownerUserId)?.name ?? null
+              : null
+          }
+          onClose={() => setCalendarEvent(null)}
+          onSaved={() => {
+            setCalendarEvent(null);
+            setNotice('일정을 저장했습니다.');
+          }}
+          onRemoved={() => {
+            setCalendarEvent(null);
+            setNotice('일정을 삭제했습니다.');
           }}
         />
       )}
-      {outsideForm && user && (
-        <OutsideWorkFormModal
-          key={outsideForm.work?.id ?? `new-${selectedDateStr}`}
-          actor={{ userId: user.id, active: user.status === '사용' }}
-          initialDate={selectedDateStr}
-          work={outsideForm.work}
+
+      {outsideDetail && (
+        <OutsideWorkDetailModal
+          view={outsideDetail.view}
+          viewer={{ userId: actor.id, active: actorActive, dept: actor.dept }}
           users={usersQuery.data ?? []}
-          onClose={() => setOutsideForm(null)}
+          onClose={() => setOutsideDetail(null)}
+          // 등록 본인만 수정 버튼이 보인다 — 동행 칸에서 열었어도 본인 칸 기준으로 일정 창을 연다
+          onEdit={() => {
+            const entry = { ...outsideDetail.entry, companionOf: undefined };
+            setOutsideDetail(null);
+            openSheet({ mode: 'edit', entry });
+          }}
         />
       )}
+
+      {tagManagerOpen && (
+        <FullSheet title="태그 관리" onClose={() => setTagManagerOpen(false)}>
+          <WorkPlanTagManager canEdit={canManageTags} />
+        </FullSheet>
+      )}
     </div>
+  );
+}
+
+/** 그 날 항목 목록 — 시간순(조립 결과 순서 그대로) + 이전 메모(읽기 전용) */
+function DayList({ cell, onOpen }: { cell: DayCell; onOpen: (entry: DayEntry) => void }) {
+  if (cell.entries.length === 0 && !cell.legacyMemo) {
+    return <div className="py-4 text-center text-[11.5px] text-ink3">일정이 없습니다.</div>;
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {cell.entries.map((entry) => (
+        <EntryRow key={entry.key} entry={entry} onOpen={onOpen} />
+      ))}
+      {cell.legacyMemo && <LegacyMemo text={cell.legacyMemo} divided={cell.entries.length > 0} />}
+    </div>
+  );
+}
+
+/** 항목 한 줄 — 시간 + `[태그] 제목`. 결재 휴가는 상세가 없어 누르지 않는다. */
+function EntryRow({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
+  const { label, badgeClass } = chipLook(entry);
+  const openable = !(entry.source === 'APPROVAL' && !entry.outside);
+  const body = (
+    <>
+      <span className="w-[76px] shrink-0 text-[11px] font-semibold text-ink3">{timeRangeOf(entry)}</span>
+      <span className={`flex min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 py-1.5 text-[12px] font-bold ${badgeClass}`}>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {entry.roomStatus === 'PENDING' && (
+          <span className="shrink-0 rounded bg-amber-soft px-1 text-[10px] font-bold text-amber">대기</span>
+        )}
+        {entry.roomStatus === 'REJECTED' && (
+          <span className="shrink-0 rounded bg-danger/10 px-1 text-[10px] font-bold text-danger">회의실 반려</span>
+        )}
+        {entry.outside?.source === 'APPROVAL' && (
+          <Check size={11} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
+        )}
+      </span>
+    </>
+  );
+  if (!openable) return <div className="flex items-center gap-2">{body}</div>;
+  return (
+    <button type="button" onClick={() => onOpen(entry)} className="flex w-full items-center gap-2 text-left active:opacity-70">
+      {body}
+    </button>
+  );
+}
+
+/** 이전 메모 — 예전 자유 글(서식 제거). 읽기 전용, 4줄 넘으면 접어 둔다. */
+function LegacyMemo({ text, divided }: { text: string; divided: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || expanded) return;
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [text, expanded]);
+
+  return (
+    <div className={divided ? 'mt-1 border-t border-border/50 pt-2' : ''}>
+      <div className="mb-0.5 text-[10.5px] font-bold text-ink3">이전 메모</div>
+      <div
+        ref={ref}
+        className={`whitespace-pre-line break-words text-[11.5px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-4'}`}
+      >
+        {text}
+      </div>
+      {(overflowing || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-ink3"
+        >
+          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          {expanded ? '접기' : '더보기'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 전체 화면 시트 — 닫기 · 제목 + 스크롤 본문 */
+function FullSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return createPortal(
+    // 모바일 앱 틀(가운데 최대 480px)과 같은 폭으로 화면 전체를 덮는다
+    <div className="fixed inset-0 z-[110] flex justify-center bg-black/10">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="flex h-full w-full max-w-[480px] flex-col bg-panel"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <header className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2">
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-lg text-ink2 active:bg-panel-alt"
+          >
+            <X size={20} />
+          </button>
+          <h2 className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">{title}</h2>
+        </header>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+        >
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

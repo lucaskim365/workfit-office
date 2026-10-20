@@ -5,20 +5,11 @@ import {
   buildCalendarMonth,
   moveCalendarMonth,
 } from '@/domain/calendarEvent/calendarDate';
-import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
-import { useAllApprovals } from '@/features/gw/useApprovals';
-import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
-import { scheduleChip, STATUS_TONES } from '@/domain/commute/statusDisplay';
-import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
-import type { CalendarEventType } from '@/domain/calendarEvent/schema';
-import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
-import { indexDayEntries, type DayCell, type DayEntry, type DayEntryInput } from '@/domain/workPlan/dayEntries';
-import { RESOURCE_UTC_OFFSET } from '@/domain/reservation/time';
-import { useWorkPlanItems, useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
-import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
-import { useReservations } from '@/features/resource/useReservations';
+import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
+import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
   ChevronRight,
@@ -193,67 +184,19 @@ export function WorkPlanTeamMonthlyMatrix({
 
   // 전체 날짜 목록 (데이터 쿼리용)
   const allDays = useMemo(() => weeks.flatMap((w) => w.days), [weeks]);
-  const monthStartDate = allDays[0]?.dateStr ?? `${currentMonth}-01`;
-  const monthEndDate = allDays[allDays.length - 1]?.dateStr ?? `${currentMonth}-31`;
 
-  // 2. 월간 전체 사용자 업무계획 조회 — 전사 공통 일정 줄과 이전 메모에 쓴다
-  const monthlyPlansQuery = useAllWorkPlans({ from: monthStartDate, to: monthEndDate }, true);
+  const dayStrings = useMemo(() => allDays.map((d) => d.dateStr), [allDays]);
+  // 2. 칸에 모을 원본 — 일반 항목·회의/공인 일정·외근출장·결재 일정·이전 글·연결 예약
+  const { cellOf, workPlans: monthlyPlans } = useDayEntryIndex({ actor, deptId, members, dates: dayStrings });
 
   // 전사 공통 중요 일정 맵 (__COMPANY__)
   const companyPlansMap = useMemo(() => {
     const map = new Map<string, WorkPlan>();
-    for (const plan of monthlyPlansQuery.data ?? []) {
+    for (const plan of monthlyPlans) {
       if (plan.ownerUserId === '__COMPANY__') map.set(plan.date, plan);
     }
     return map;
-  }, [monthlyPlansQuery.data]);
-
-  // 3. 칸에 모을 원본 — 일반 항목·회의/공인 일정·외근출장·결재 일정·이전 글·연결 예약
-  const itemsQuery = useWorkPlanItems({ from: monthStartDate, to: monthEndDate });
-  const tagsQuery = useWorkPlanTags();
-  const approvalsQuery = useAllApprovals();
-  const calendarActor = useMemo(
-    () => ({ userId: actor.id, active: actor.status === '사용', deptId }),
-    [actor.id, actor.status, deptId],
-  );
-  const calendarEventsQuery = useCalendarEvents(calendarActor, { from: monthStartDate, to: monthEndDate });
-  // 결재 없이 직접 등록한 외근·출장 (전사 공개)
-  const outsideWorksQuery = useOutsideWorks({ from: monthStartDate, to: monthEndDate });
-  // 회의의 연결 예약 상태(대기·반려) — 예약 시각은 ISO(UTC)라 앞뒤 하루씩 넉넉히 읽는다
-  const reservationRange = useMemo(() => {
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const from = new Date(`${monthStartDate}T00:00:00${RESOURCE_UTC_OFFSET}`).getTime();
-    const to = new Date(`${monthEndDate}T00:00:00${RESOURCE_UTC_OFFSET}`).getTime();
-    if (Number.isNaN(from) || Number.isNaN(to)) return undefined;
-    return { from: new Date(from - DAY_MS).toISOString(), to: new Date(to + 2 * DAY_MS).toISOString() };
-  }, [monthStartDate, monthEndDate]);
-  const reservationsQuery = useReservations(reservationRange);
-
-  const dayStrings = useMemo(() => allDays.map((d) => d.dateStr), [allDays]);
-  /** (사람, 날짜) → 칸 목록. 한 번 훑어 만들고 칸마다 조회만 한다. */
-  const cellOf = useMemo(() => {
-    const input: DayEntryInput = {
-      items: itemsQuery.data ?? [],
-      tags: tagsQuery.data ?? [],
-      events: calendarEventsQuery.data ?? [],
-      outsideWorks: outsideWorksQuery.data ?? [],
-      approvedSchedules: extractApprovedSchedules(approvalsQuery.data ?? []),
-      legacyPlans: monthlyPlansQuery.data ?? [],
-      reservations: reservationsQuery.data ?? [],
-      members: members.map((m) => ({ id: m.id, name: m.name })),
-    };
-    return indexDayEntries(input, dayStrings);
-  }, [
-    itemsQuery.data,
-    tagsQuery.data,
-    calendarEventsQuery.data,
-    outsideWorksQuery.data,
-    approvalsQuery.data,
-    monthlyPlansQuery.data,
-    reservationsQuery.data,
-    members,
-    dayStrings,
-  ]);
+  }, [monthlyPlans]);
 
   useEffect(() => {
     onCellIndexChange?.(cellOf);
@@ -716,59 +659,6 @@ export function WorkPlanTeamMonthlyMatrix({
 const SPAN_LANE_HEIGHT = 20;
 /** 칸 안쪽 여백(p-2)과 같은 값 */
 const CELL_PADDING = 8;
-
-/** 회의(및 회의 외 캘린더 일정) 칩 색 — 기존 보라 그대로 */
-const MEETING_CHIP_CLASS = 'bg-purple-500/15 text-purple-700 border-purple-500/30 dark:text-purple-400';
-/** 모르는·지운 태그 */
-const FALLBACK_TAG_CHIP_CLASS = 'bg-slate-500/10 text-slate-600 border border-slate-500/30 dark:text-slate-400';
-const CALENDAR_CHIP_TAG: Record<CalendarEventType, string> = {
-  GENERAL: '회의',
-  MEETING: '회의',
-  COMPANY_EVENT: '사내행사',
-  OUTSIDE: '외근',
-  VACATION: '휴가',
-};
-
-/** 칩 글(`[태그] 제목`)과 색 — 일반은 태그 색, 회의는 보라, 외근·결재는 근태와 같은 표준 정의([[statusDisplay]]) */
-function chipLook(entry: DayEntry): { label: string; badgeClass: string } {
-  switch (entry.source) {
-    case 'ITEM': {
-      const tag = entry.tag;
-      const preset = tag && !tag.unknown ? TAG_COLOR_PRESETS.find((p) => p.id === tag.colorId) : undefined;
-      return { label: `[${tag?.name ?? '일반'}] ${entry.title}`, badgeClass: preset?.badgeClass ?? FALLBACK_TAG_CHIP_CLASS };
-    }
-    case 'MEETING':
-      return { label: `[회의] ${entry.title}`, badgeClass: MEETING_CHIP_CLASS };
-    case 'CALENDAR':
-      return {
-        label: `[${entry.event ? CALENDAR_CHIP_TAG[entry.event.eventType] : '회의'}] ${entry.title}`,
-        badgeClass: MEETING_CHIP_CLASS,
-      };
-    case 'OUTSIDE': {
-      const view = entry.outside;
-      const chip = scheduleChip({ category: view?.category ?? 'OUTSIDE', subType: view?.subType });
-      // 동행자 칸은 '동행 · 등록자' 표시(근태에는 반영하지 않는다)
-      const label = entry.companionOf
-        ? `[동행] ${chip.label} · ${view?.ownerName ?? ''} (${entry.title})`
-        : `[${chip.short}] ${chip.label} (${entry.title})`;
-      return { label, badgeClass: STATUS_TONES[chip.kind].badge };
-    }
-    case 'APPROVAL': {
-      const s = entry.schedule;
-      if (!s) return { label: entry.title, badgeClass: FALLBACK_TAG_CHIP_CLASS };
-      const chip = scheduleChip(s);
-      const tag = s.category === 'LEAVE' ? '휴가' : chip.short;
-      return {
-        label: `[${tag}] ${chip.label}${s.category !== 'LEAVE' && s.destination ? ` (${s.destination})` : ''}`,
-        badgeClass: STATUS_TONES[chip.kind].badge,
-      };
-    }
-  }
-}
-
-const timeOf = (entry: DayEntry) => (entry.allDay || !entry.startTime ? '종일' : entry.startTime);
-const timeRangeOf = (entry: DayEntry) =>
-  entry.allDay || !entry.startTime ? '종일' : entry.endTime ? `${entry.startTime}~${entry.endTime}` : entry.startTime;
 
 /** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
