@@ -8,6 +8,8 @@ interface ModalProps {
   title?: ReactNode;
   footer?: ReactNode;
   width?: number;
+  /** 본문 안쪽 여백 없이 — 도구 막대·나뉜 칸처럼 본문이 가장자리까지 닿는 창 */
+  flush?: boolean;
   children: ReactNode;
 }
 
@@ -16,7 +18,7 @@ interface ModalProps {
  * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이는 화면의 88%.
  * (body zoom 배율이 vh 에 한 번 더 곱해지므로 --font-scale 로 나눠 실제 화면 기준으로 맞춘다)
  */
-export function Modal({ open, onClose, title, footer, width = 480, children }: ModalProps) {
+export function Modal({ open, onClose, title, footer, width = 480, flush = false, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -52,7 +54,7 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
             </button>
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${flush ? '' : 'px-5 py-4'}`}>{children}</div>
         {footer && (
           <div className="flex justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>
         )}
