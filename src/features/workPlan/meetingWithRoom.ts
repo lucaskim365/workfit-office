@@ -44,6 +44,8 @@ export class RoomRollbackError extends Error {
 }
 
 const DEFAULT_PURPOSE = '회의';
+/** 같은 방이라도 다시 신청하는 예약 상태 — 방을 못 쓰게 끝난 예약(회의가 아직 앞이면). */
+const REQUESTABLE_AGAIN: readonly Reservation['status'][] = ['REJECTED', 'CANCELLED', 'EXPIRED'];
 
 /** 회의 날짜·시각(회의실 시간대 기준) → 예약 시각(ISO). */
 export function toReservationWindow(date: string, startTime: string, endTime: string): { startAt: string; endAt: string } {
@@ -165,21 +167,35 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
   const linked = current.reservationId ? await reservationRepo.get(current.reservationId) : null;
   const changeable = linked ? isReservationChangeable(linked) : false;
 
-  // 방 해제 — 바꿀 수 있는 예약이면 취소하고 연결을 끊는다. 지난·반려 예약은 그대로 둔다.
+  // 방 해제 — 회의를 먼저 저장하고, 바꿀 수 있는 예약이면 취소한다. 지난·반려 예약은 그대로 둔다.
   if (!roomId) {
     assertMeetingValid(actors, current, { ...draft, reservationId: null });
+    const updated = await calendarEventRepo.update(actors.calendar, eventId, { ...draft, reservationId: null });
     if (linked && changeable) {
-      await reservationRepo.cancel(actors.user, linked.id, '회의실 해제', actors.isAdmin);
+      try {
+        await reservationRepo.cancel(actors.user, linked.id, '회의실 해제', actors.isAdmin);
+      } catch (error) {
+        // 회의는 방 없이 저장됐지만 옛 방 예약이 남았다.
+        console.error('이전 회의실 예약 취소 실패:', error);
+        throw new RoomRollbackError(linked.id, error, OLD_ROOM_LEFT_MESSAGE);
+      }
     }
-    return calendarEventRepo.update(actors.calendar, eventId, { ...draft, reservationId: null });
+    return updated;
   }
 
-  // 같은 방, 살아 있는 예약 — 시간만 맞춘다(겹치면 회의도 저장하지 않음).
-  if (linked && changeable && linked.resourceId === roomId) {
+  const window = meetingWindow(draft);
+  /*
+    같은 방 — 반려·취소·만료된 예약이고 회의가 아직 앞이면 아래에서 새로 신청한다.
+    그 밖(살아 있는 예약, 이미 시작했거나 끝난 예약, 지난 회의)은 연결을 그대로 두고,
+    시작 전 살아 있는 예약만 시간을 맞춘다(겹치면 회의도 저장하지 않음).
+  */
+  const requestAgain = linked !== null
+    && REQUESTABLE_AGAIN.includes(linked.status)
+    && new Date(window.startAt).getTime() > Date.now();
+  if (linked && linked.resourceId === roomId && !requestAgain) {
     const patch: CalendarEventDraft = { ...draft, location: linked.resourceNameSnapshot, reservationId: linked.id };
     assertMeetingValid(actors, current, patch);
-    const window = meetingWindow(draft);
-    if (sameWindow(linked, window)) {
+    if (!changeable || sameWindow(linked, window)) {
       return calendarEventRepo.update(actors.calendar, eventId, patch);
     }
     const previous = { startAt: linked.startAt, endAt: linked.endAt };
@@ -188,6 +204,7 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
       return await calendarEventRepo.update(actors.calendar, eventId, patch);
     } catch (error) {
       // 회의는 옛 시간 그대로라 예약 시간도 되돌린다. 못 되돌리면 새 시간에 방이 막혀 있다.
+      // 승인 필요 방은 되돌린 뒤 다시 승인 대기(PENDING)가 된다 — 자원예약 시간 변경 규칙 그대로.
       try {
         await reservationRepo.reschedule(actors.user, linked.id, previous, actors.isAdmin);
       } catch (rollbackError) {
@@ -199,8 +216,8 @@ async function updateMeeting(actors: MeetingActors, eventId: string, input: Meet
   }
 
   /*
-    새 예약이 필요한 경우 — 처음 고름·방 변경, 또는 연결 예약이 바꿀 수 없는 상태(반려·취소·지남)인데
-    방을 고름(같은 방이라도 다시 신청). 새 예약 → 회의 저장 → 살아 있던 옛 예약 취소.
+    새 예약이 필요한 경우 — 처음 고름·방 변경, 또는 같은 방인데 반려·취소·만료된 예약(회의가 앞)이라
+    다시 신청. 새 예약 → 회의 저장 → 살아 있던 옛 예약 취소.
     닫힌 옛 예약은 건드리지 않는다.
   */
   assertMeetingValid(actors, current, { ...draft, reservationId: null });

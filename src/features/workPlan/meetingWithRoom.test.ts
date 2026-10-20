@@ -70,6 +70,17 @@ const meeting = (date: string, over: Partial<CalendarEventDraft> = {}): Calendar
   ...over,
 });
 
+/** 일부러 실패를 넣는 테스트에서 오류 로그를 숨긴다. */
+async function quietly<T>(work: () => Promise<T>): Promise<T> {
+  const original = console.error;
+  console.error = () => {};
+  try {
+    return await work();
+  } finally {
+    console.error = original;
+  }
+}
+
 const meetingsTitled = async (date: string, title: string) =>
   (await calendarEventRepo.list(calendarActor, { from: date, to: date })).filter((row) => row.title === title);
 
@@ -183,7 +194,7 @@ test('되돌리기 실패 시 RoomRollbackError', async () => {
     reservationRepo.cancel = async () => { throw new Error('네트워크 오류'); };
     calendarEventRepo.create = async () => { throw new Error('저장소 오류'); };
     await assert.rejects(
-      () => saveMeeting(actors, { draft: meeting(date), roomId: instant.id, purpose: '' }),
+      () => quietly(() => saveMeeting(actors, { draft: meeting(date), roomId: instant.id, purpose: '' })),
       (error) => error instanceof RoomRollbackError && error.message === '회의실 예약은 남아 있습니다. 자원예약에서 취소해 주세요.',
     );
   } finally {
@@ -327,7 +338,7 @@ test('방 변경 후 이전 예약 취소 실패는 이전 예약이 남았다�
   try {
     reservationRepo.cancel = async () => { throw new Error('네트워크 오류'); };
     await assert.rejects(
-      () => saveMeeting(actors, { eventId: created.id, draft: meeting(date), roomId: spare.id, purpose: '' }),
+      () => quietly(() => saveMeeting(actors, { eventId: created.id, draft: meeting(date), roomId: spare.id, purpose: '' })),
       (error) => error instanceof RoomRollbackError
         && error.message === '이전 회의실 예약은 남아 있습니다. 자원예약에서 취소해 주세요.'
         && error.reservationId === created.reservationId,
@@ -366,4 +377,103 @@ test('roomAvailability: 겹치는 방 false, 자기 예약은 무시', async () 
 
   const after = roomAvailability([instant], reservations, toReservationWindow(date, '11:00', '12:00'));
   assert.equal(after.get(instant.id), true);
+});
+
+test('종일 회의에는 회의실을 잡지 않는다', async () => {
+  const { instant } = await testRooms();
+  await assert.rejects(
+    () => saveMeeting(actors, { draft: meeting(futureDate(26), { title: '종일 회의', allDay: true, startTime: null, endTime: null }), roomId: instant.id, purpose: '' }),
+    (error) => error instanceof ReservationError && error.code === 'INVALID_INPUT',
+  );
+  assert.equal((await meetingsTitled(futureDate(26), '종일 회의')).length, 0);
+});
+
+test('이미 시작한 예약은 같은 방으로 고쳐도 회의만 저장하고 연결 유지', async () => {
+  const { instant } = await testRooms();
+  const date = futureDate(27);
+  const created = await saveMeeting(actors, { draft: meeting(date), roomId: instant.id, purpose: '' });
+  const countBefore = (await reservationRepo.list({ resourceId: instant.id })).length;
+  const originalGet = reservationRepo.get;
+  try {
+    // 예약 시작이 이미 지난 상태(확정, 진행 중)로 보이게 한다.
+    reservationRepo.get = async (id) => {
+      const row = await originalGet(id);
+      return row && { ...row, startAt: new Date(Date.now() - 30 * 60_000).toISOString() };
+    };
+    const updated = await saveMeeting(actors, { eventId: created.id, draft: meeting(date, { memo: '진행 중 메모' }), roomId: instant.id, purpose: '' });
+    assert.equal(updated.memo, '진행 중 메모');
+    assert.equal(updated.reservationId, created.reservationId);
+  } finally {
+    reservationRepo.get = originalGet;
+  }
+  assert.equal((await reservationRepo.list({ resourceId: instant.id })).length, countBefore);
+  assert.equal((await reservationRepo.get(created.reservationId!))?.status, 'CONFIRMED');
+});
+
+test('반려된 예약이라도 회의가 지난 시간이면 새로 신청하지 않는다', async () => {
+  const { approval } = await testRooms();
+  const date = futureDate(28);
+  const created = await saveMeeting(actors, { draft: meeting(date), roomId: approval.id, purpose: '' });
+  await reservationRepo.reject(roomManager, created.reservationId!, '사용 불가');
+  const countBefore = (await reservationRepo.list({ resourceId: approval.id })).length;
+  const past = futureDate(-1);
+  const updated = await saveMeeting(actors, { eventId: created.id, draft: meeting(past, { memo: '지난 회의 기록' }), roomId: approval.id, purpose: '' });
+  assert.equal(updated.memo, '지난 회의 기록');
+  assert.equal(updated.reservationId, created.reservationId);
+  assert.equal((await reservationRepo.list({ resourceId: approval.id })).length, countBefore);
+  assert.equal((await reservationRepo.get(created.reservationId!))?.status, 'REJECTED');
+});
+
+test('회의 수정이 실패하면 옮긴 예약 시간을 되돌린다', async () => {
+  const { instant } = await testRooms();
+  const date = futureDate(29);
+  const created = await saveMeeting(actors, { draft: meeting(date), roomId: instant.id, purpose: '' });
+  const originalUpdate = calendarEventRepo.update;
+  try {
+    calendarEventRepo.update = async () => { throw new Error('저장소 오류'); };
+    await assert.rejects(
+      () => saveMeeting(actors, { eventId: created.id, draft: meeting(date, { startTime: '14:00', endTime: '15:00' }), roomId: instant.id, purpose: '' }),
+      /저장소 오류/,
+    );
+  } finally {
+    calendarEventRepo.update = originalUpdate;
+  }
+  const reservation = await reservationRepo.get(created.reservationId!);
+  assert.deepEqual({ startAt: reservation?.startAt, endAt: reservation?.endAt }, toReservationWindow(date, '10:00', '11:00'));
+  assert.equal(reservation?.status, 'CONFIRMED');
+  assert.equal((await calendarEventRepo.get(calendarActor, created.id))?.startTime, '10:00');
+});
+
+test('바꿀 수 없는 예약이 걸린 회의 삭제는 회의만 지운다', async () => {
+  const { approval } = await testRooms();
+  const date = futureDate(30);
+  const created = await saveMeeting(actors, { draft: meeting(date), roomId: approval.id, purpose: '' });
+  await reservationRepo.reject(roomManager, created.reservationId!, '사용 불가');
+  const original = reservationRepo.cancel;
+  try {
+    reservationRepo.cancel = async () => { throw new Error('취소하면 안 됨'); };
+    await removeMeeting(actors, created);
+  } finally {
+    reservationRepo.cancel = original;
+  }
+  assert.equal(await calendarEventRepo.get(calendarActor, created.id), null);
+  assert.equal((await reservationRepo.get(created.reservationId!))?.status, 'REJECTED');
+});
+
+test('방 해제 후 예약 취소 실패는 회의를 저장하고 이전 예약이 남았다고 알린다', async () => {
+  const { instant } = await testRooms();
+  const date = futureDate(31);
+  const created = await saveMeeting(actors, { draft: meeting(date), roomId: instant.id, purpose: '' });
+  const original = reservationRepo.cancel;
+  try {
+    reservationRepo.cancel = async () => { throw new Error('네트워크 오류'); };
+    await assert.rejects(
+      () => quietly(() => saveMeeting(actors, { eventId: created.id, draft: meeting(date, { location: null }), roomId: null, purpose: '' })),
+      (error) => error instanceof RoomRollbackError && error.message === '이전 회의실 예약은 남아 있습니다. 자원예약에서 취소해 주세요.',
+    );
+  } finally {
+    reservationRepo.cancel = original;
+  }
+  assert.equal((await calendarEventRepo.get(calendarActor, created.id))?.reservationId, null);
+  await reservationRepo.cancel(host, created.reservationId!, '테스트 정리');
 });
