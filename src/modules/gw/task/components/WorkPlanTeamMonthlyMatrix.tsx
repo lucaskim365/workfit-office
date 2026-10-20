@@ -771,21 +771,12 @@ const timeOf = (entry: DayEntry) => (entry.allDay || !entry.startTime ? '종일'
 const timeRangeOf = (entry: DayEntry) =>
   entry.allDay || !entry.startTime ? '종일' : entry.endTime ? `${entry.startTime}~${entry.endTime}` : entry.startTime;
 
-/** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). */
+/** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
   const { label, badgeClass } = chipLook(entry);
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen(entry);
-      }}
-      // 칩을 두 번 눌러도 새 일정 창이 뜨지 않게
-      onDoubleClick={(e) => e.stopPropagation()}
-      title={`${label} (${timeRangeOf(entry)})`}
-      className={`flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs cursor-pointer hover:brightness-95 ${badgeClass}`}
-    >
+  const openable = !(entry.source === 'APPROVAL' && !entry.outside);
+  const body = (
+    <>
       <span className="shrink-0 text-[8px] font-normal opacity-80">{timeOf(entry)}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {entry.roomStatus === 'PENDING' && (
@@ -797,6 +788,29 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
       {entry.outside?.source === 'APPROVAL' && (
         <Check size={8} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
       )}
+    </>
+  );
+  const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs ${badgeClass}`;
+  if (!openable) {
+    return (
+      <div title={`${label} (${timeRangeOf(entry)})`} className={chipClass}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(entry);
+      }}
+      // 칩을 두 번 눌러도 새 일정 창이 뜨지 않게
+      onDoubleClick={(e) => e.stopPropagation()}
+      title={`${label} (${timeRangeOf(entry)})`}
+      className={`${chipClass} cursor-pointer hover:brightness-95`}
+    >
+      {body}
     </button>
   );
 }

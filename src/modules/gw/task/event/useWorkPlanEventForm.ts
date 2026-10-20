@@ -13,7 +13,7 @@ import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { usePermission } from '@/features/auth/usePermission';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
-import { CALENDAR_EVENTS_KEY, useCalendarEvents, useJoinMeeting } from '@/features/calendar/useCalendarEvents';
+import { CALENDAR_EVENTS_KEY, useCalendarEvents, useJoinMeeting, useLeaveMeeting } from '@/features/calendar/useCalendarEvents';
 import { useCreateOutsideWork, useRemoveOutsideWork, useUpdateOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { RESERVATION_KEY } from '@/features/resource/useReservations';
 import { removeMeeting, roomAvailability, saveMeeting, toReservationWindow, type MeetingActors } from '@/features/workPlan/meetingWithRoom';
@@ -93,6 +93,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   readOnly: boolean;
   similarMeetings: CalendarEvent[];
   join: (e: CalendarEvent) => Promise<boolean>;
+  /** 보기 중인 회의의 참석 취소 — 내가 참석자(주최자 아님)일 때만 */
+  leave: (() => Promise<boolean>) | null;
   /** 회의실 고르기 목록 — 고른 시간에 비어 있는지 */
   rooms: Array<{ resource: Resource; available: boolean }>;
   /** 고른 회의실의 그날 예약(시간표에 흐리게 겹칠 것) */
@@ -152,6 +154,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   const updateOutside = useUpdateOutsideWork();
   const removeOutside = useRemoveOutsideWork();
   const joinMeeting = useJoinMeeting();
+  const leaveMeeting = useLeaveMeeting();
 
   // 태그가 늦게 오면 새 일반 항목의 태그를 첫 일반 태그로 채운다
   useEffect(() => {
@@ -334,6 +337,22 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     }
   };
 
+  const leaveEntry = async (): Promise<boolean> => {
+    if (!event || !begin()) return false;
+    setError('');
+    try {
+      await leaveMeeting.mutateAsync({ actor: calendarActor, id: event.id });
+      return true;
+    } catch (caught) {
+      return fail(errorMessage(caught, '회의 참석을 취소하지 못했습니다.'));
+    } finally {
+      end();
+    }
+  };
+  const canLeave = Boolean(
+    actor.status === '사용' && event && event.eventType === 'MEETING' && event.ownerUserId !== actor.id && event.attendeeUserIds.includes(actor.id),
+  );
+
   const saveItem = async (): Promise<boolean> => {
     const ownerId = target.mode === 'create' ? target.owner.id : item?.ownerUserId;
     if (!ownerId || (target.mode === 'edit' && !item)) return fail(NOT_EDITABLE_MESSAGE);
@@ -436,6 +455,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     readOnly,
     similarMeetings,
     join,
+    leave: canLeave ? leaveEntry : null,
     rooms,
     roomBlocks,
     error,

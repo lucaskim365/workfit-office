@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ChevronDown, MapPin, Plane, Repeat, Users, type LucideIcon } from 'lucide-react';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
+import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
@@ -114,6 +115,14 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     }
   };
 
+  const leave = async () => {
+    if (!form.leave) return;
+    if (await form.leave()) {
+      onSaved('회의 참석을 취소했습니다.');
+      onClose();
+    }
+  };
+
   const remove = async () => {
     if (!form.remove) return;
     if (await form.remove()) {
@@ -130,8 +139,18 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     : dateLabel(state.date);
   const subtitle = [owner.name, when].filter(Boolean).join(' · ');
 
+  // 보기 중인 회의 — 참석자는 참석 취소, 주최자도 참석자도 아니면 합류
+  const viewedMeeting = entry?.source === 'MEETING' ? entry.event ?? null : null;
   const footer = readOnly ? (
-    <Button onClick={onClose}>닫기</Button>
+    <>
+      {form.leave && (
+        <Button variant="secondary" disabled={form.saving} onClick={() => void leave()}>참석 취소</Button>
+      )}
+      {viewedMeeting && canJoinMeeting(actor.id, viewedMeeting) && actor.status === '사용' && (
+        <Button variant="accent" disabled={form.saving} onClick={() => void join(viewedMeeting)}>참석자로 합류</Button>
+      )}
+      <Button onClick={onClose}>닫기</Button>
+    </>
   ) : (
     <>
       {form.remove && (

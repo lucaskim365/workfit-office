@@ -1,4 +1,3 @@
-import { calendarEventRepo, type CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { parseWorkPlanItems } from './engine';
 
@@ -24,34 +23,8 @@ export function isWorkPlanDerivedEvent(event: CalendarEvent): boolean {
   본문에 '회의'·'미팅' 글자만 있어도 일정이 생기고, 같은 회의가 참석자 수만큼·동시 저장 횟수만큼
   중복 생성됐다. 회의는 [회의 등록]으로 캘린더 일정 1건 + 참석자로 만드는 구조로 바꾼다
   (docs/업무계획_고도화_및_회의연동_개선안.md). 이미 만들어진 연동 일정은 [WP-SYNC:…] 태그로
-  식별해 업무계획 삭제 시 정리만 한다.
+  식별해 칸 표시에서 뺀다(지우지 않는다).
 */
-
-/**
- * 업무계획 삭제 시 해당 계획에서 생성된 모든 캘린더 일정을 일괄 삭제하는 헬퍼
- */
-export async function cleanupWorkPlanCalendarEvents(
-  actor: CalendarEventActor,
-  planId: string,
-  date?: string,
-): Promise<void> {
-  if (!actor.active) return;
-
-  try {
-    const filter = date ? { from: date, to: date } : undefined;
-    const existingEvents = await calendarEventRepo.list(actor, filter);
-    const toDelete = existingEvents.filter((e) => {
-      const parsed = parseWpSyncTag(e.memo);
-      return parsed && parsed.planId === planId;
-    });
-
-    for (const ev of toDelete) {
-      await calendarEventRepo.remove(actor, ev.id);
-    }
-  } catch (error) {
-    console.error('[workPlanCalendarBridge] 캘린더 정리 중 오류 발생:', error);
-  }
-}
 
 /**
  * 캘린더 이벤트 목록을 현재 업무계획 마크다운 텍스트에 멱등(Idempotent)하게 병합합니다.
