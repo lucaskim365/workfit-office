@@ -62,6 +62,10 @@ export const calendarEventSchema = z.object({
    * (오늘 날짜만 훑음) 밖이라 실제로 다시 보내지지 않는다.
    */
   reminded: z.boolean().default(false),
+  /** 회의 장소 — 직접 적은 글(회의실 예약 시 방 이름). 예전 일정에는 없어 null로 읽는다. */
+  location: z.string().trim().max(100).nullable().default(null),
+  /** 이 회의가 잡은 회의실 예약 id. 예약 없는 일정은 null. */
+  reservationId: z.string().max(64).nullable().default(null),
 }).superRefine((value, ctx) => {
   if (value.allDay && (value.startTime !== null || value.endTime !== null)) {
     ctx.addIssue({ code: 'custom', path: ['startTime'], message: '종일 일정에는 시작·종료 시각을 지정할 수 없습니다.' });
@@ -88,8 +92,11 @@ export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarVisibility = (typeof CALENDAR_VISIBILITIES)[number];
 export type CalendarEventDraft = Omit<
   CalendarEvent,
-  'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded' | 'eventType' | 'attendeeUserIds'
+  'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded' | 'eventType' | 'attendeeUserIds' | 'location' | 'reservationId'
 > & {
   eventType?: CalendarEventType;
   attendeeUserIds?: string[];
+  /** 안 넣으면 repo update가 기존 값을 유지한다(기존 창은 이 칸을 모른다). */
+  location?: string | null;
+  reservationId?: string | null;
 };

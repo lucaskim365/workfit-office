@@ -126,6 +126,8 @@ export default function MobileCalendarScreen() {
           deptId: null,
           projectId: null,
           reminded: false,
+          location: null,
+          reservationId: null,
           createdAt: s.startDate,
           updatedAt: s.startDate,
         });
@@ -166,6 +168,8 @@ export default function MobileCalendarScreen() {
           deptId: null,
           projectId: null,
           reminded: true,
+          location: null,
+          reservationId: null,
           createdAt: w.createdAt,
           updatedAt: w.updatedAt,
         });

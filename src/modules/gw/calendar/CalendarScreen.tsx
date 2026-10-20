@@ -310,6 +310,8 @@ function LocalCalendarScreen() {
           deptId: null,
           projectId: null,
           reminded: true,
+          location: null,
+          reservationId: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -345,6 +347,8 @@ function LocalCalendarScreen() {
           deptId: null,
           projectId: null,
           reminded: true,
+          location: null,
+          reservationId: null,
           createdAt: w.createdAt,
           updatedAt: w.updatedAt,
         });
