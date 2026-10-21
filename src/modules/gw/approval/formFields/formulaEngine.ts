@@ -179,7 +179,58 @@ export function shiftFormulaCoordinates(
   return result;
 }
 
-/** 안전한 사칙연산 수식 평가기 (토큰 기반, eval 배제) */
+/** 수식 오류 칸 표시 */
+export const FORMULA_ERROR = '#오류';
+
+/** 잘못된 수식(괄호 불일치·없는 함수·빠진 피연산자 등) */
+class FormulaError extends Error {}
+
+/** 부동소수 오차 제거 — 소수 10자리에서 반올림 */
+export function roundResult(n: number): number {
+  return Number(n.toFixed(10));
+}
+
+/** 수식 안에 다시 끼워 넣을 숫자 문자열 (지수 표기 회피) */
+function numToExpr(n: number): string {
+  if (!Number.isFinite(n)) throw new FormulaError();
+  const s = Math.abs(n) < 1e21 ? n.toFixed(10).replace(/\.?0+$/, '') : String(n);
+  return n < 0 ? `(${s})` : s;
+}
+
+const FUNCTIONS: Record<string, (args: number[]) => number> = {
+  SUM: (a) => a.reduce((x, y) => x + y, 0),
+  AVERAGE: (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0),
+  MIN: (a) => (a.length ? Math.min(...a) : 0),
+  MAX: (a) => (a.length ? Math.max(...a) : 0),
+  ROUND: (a) => {
+    if (a.length < 1 || a.length > 2) throw new FormulaError();
+    const f = Math.pow(10, Math.trunc(a[1] ?? 0));
+    return Math.round(a[0] * f) / f;
+  },
+};
+
+/** 셀 주소가 모두 숫자로 바뀐 식에서 함수·괄호를 안쪽부터 풀고 사칙연산 계산 */
+function evaluateExpression(expr: string): number {
+  let e = expr;
+  const inner = /([A-Za-z]*)\s*\(([^()]*)\)/;
+  for (let m = e.match(inner); m; m = e.match(inner)) {
+    const name = m[1].toUpperCase();
+    let val: number;
+    if (name) {
+      const fn = FUNCTIONS[name];
+      if (!fn) throw new FormulaError();
+      const args = m[2].trim() === '' ? [] : m[2].split(',').map((a) => evaluateArithmetic(a));
+      val = fn(args);
+    } else {
+      if (m[2].includes(',')) throw new FormulaError();
+      val = evaluateArithmetic(m[2]);
+    }
+    e = e.slice(0, m.index) + numToExpr(val) + e.slice((m.index ?? 0) + m[0].length);
+  }
+  return evaluateArithmetic(e);
+}
+
+/** 안전한 사칙연산 수식 평가기 (토큰 기반, eval 배제) — 잘못된 식은 FormulaError */
 function evaluateArithmetic(expr: string): number {
   const tokens: string[] = [];
   const cleanExpr = expr.replace(/\s+/g, '');
@@ -209,9 +260,10 @@ function evaluateArithmetic(expr: string): number {
       }
       tokens.push(numStr);
     } else {
-      i++;
+      throw new FormulaError();
     }
   }
+  if (tokens.length === 0) throw new FormulaError();
 
   // Shunting-yard 알고리즘을 이용한 RPN 변환 및 계산
   const outputQueue: (number | string)[] = [];
@@ -237,12 +289,17 @@ function evaluateArithmetic(expr: string): number {
       while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') {
         outputQueue.push(operatorStack.pop()!);
       }
+      if (operatorStack.length === 0) throw new FormulaError(); // 닫는 괄호 짝 없음
       operatorStack.pop(); // '(' 제거
+    } else {
+      throw new FormulaError();
     }
   }
 
   while (operatorStack.length > 0) {
-    outputQueue.push(operatorStack.pop()!);
+    const op = operatorStack.pop()!;
+    if (op === '(') throw new FormulaError(); // 여는 괄호 짝 없음
+    outputQueue.push(op);
   }
 
   // RPN 계산
@@ -251,8 +308,9 @@ function evaluateArithmetic(expr: string): number {
     if (typeof item === 'number') {
       evalStack.push(item);
     } else {
-      const b = evalStack.pop() ?? 0;
-      const a = evalStack.pop() ?? 0;
+      if (evalStack.length < 2) throw new FormulaError(); // 피연산자 빠짐
+      const b = evalStack.pop()!;
+      const a = evalStack.pop()!;
       let res = 0;
       if (item === '+') res = a + b;
       else if (item === '-') res = a - b;
@@ -262,7 +320,8 @@ function evaluateArithmetic(expr: string): number {
     }
   }
 
-  return evalStack.pop() ?? 0;
+  if (evalStack.length !== 1) throw new FormulaError();
+  return evalStack[0];
 }
 
 export type OtherTablesContext = Record<
@@ -458,15 +517,15 @@ export function recalculateTableFormulas(
       if (cleanInside.includes(':')) {
         const [rowToken, colToken] = cleanInside.split(':');
         const val = resolveOtherTableCell(rawTableName, rowToken.trim(), colToken.trim(), otherTablesContext);
-        return String(val);
+        return numToExpr(val);
       }
       const val = resolveOtherTableCell(rawTableName, cleanInside, undefined, otherTablesContext);
-      return String(val);
+      return numToExpr(val);
     });
 
     expr = expr.replace(/\[([^\]!]+)\]\s*!\s*([A-Z]+\d+)/gi, (_m, rawTableName, coord) => {
       const val = resolveOtherTableCell(rawTableName, coord, undefined, otherTablesContext);
-      return String(val);
+      return numToExpr(val);
     });
 
     // 1. SUM([열이름]) 처리: 지정된 열의 상단 모든 행 합산
@@ -481,7 +540,7 @@ export function recalculateTableFormulas(
           sum += parseCellNumber(nextRows[r][actualCol]);
         }
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 1. SUM(ABOVE) 처리: 현재 셀 위의 모든 행 합산
@@ -490,7 +549,7 @@ export function recalculateTableFormulas(
       for (let r = 0; r < targetRowIdx; r++) {
         sum += getCellValue(r, targetColIdx);
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 2. SUM(범위) 처리: 예) SUM(D18:D26)
@@ -516,7 +575,7 @@ export function recalculateTableFormulas(
           }
         }
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 3. [열이름] 또는 [행:열이름] 명시적 참조 치환
@@ -557,9 +616,9 @@ export function recalculateTableFormulas(
           }
           const depKey = `${r}:${actualCol}`;
           if (cellFormulas[depKey] && !stack.has(depKey)) {
-            return String(evaluateCellFormula(depKey, new Set(stack)));
+            return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
           }
-          return String(parseCellNumber(nextRows[r][actualCol]));
+          return numToExpr(parseCellNumber(nextRows[r][actualCol]));
         }
         return '0';
       }
@@ -588,12 +647,12 @@ export function recalculateTableFormulas(
           for (const c of cols) {
             const depKey = `${r}:${c}`;
             if (cellFormulas[depKey] && !stack.has(depKey)) {
-              return String(evaluateCellFormula(depKey, new Set(stack)));
+              return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
             }
           }
           for (const c of cols) {
             const val = parseCellNumber(nextRows[r][c]);
-            if (val !== 0) return String(val);
+            if (val !== 0) return numToExpr(val);
           }
           return '0';
         }
@@ -601,27 +660,42 @@ export function recalculateTableFormulas(
 
       const depKey = `${targetRowIdx}:${actualCol}`;
       if (cellFormulas[depKey] && !stack.has(depKey)) {
-        return String(evaluateCellFormula(depKey, new Set(stack)));
+        return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
       }
-      return String(parseCellNumber(nextRows[targetRowIdx][actualCol]));
+      return numToExpr(parseCellNumber(nextRows[targetRowIdx][actualCol]));
+    });
+
+    // 3-1. SUM 외 함수 인자의 범위(A1:C1)를 셀 목록(A1,B1,C1)으로 펼침
+    expr = expr.replace(/([A-Z]+)(\d+)\s*:\s*([A-Z]+)(\d+)/gi, (_m, c1, r1, c2, r2) => {
+      let startCol = letterToColIndex(c1.toUpperCase());
+      let endCol = letterToColIndex(c2.toUpperCase());
+      let startRow = parseInt(r1, 10);
+      let endRow = parseInt(r2, 10);
+      if (startRow > endRow) [startRow, endRow] = [endRow, startRow];
+      if (startCol > endCol) [startCol, endCol] = [endCol, startCol];
+      const refs: string[] = [];
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) refs.push(`${colIndexToLetter(c)}${r}`);
+      }
+      return refs.join(',');
     });
 
     // 4. 단일 셀 참조 치환: 예) D27, H27
     expr = expr.replace(/([A-Z]+)(\d+)/gi, (_m, colStr, rowStr) => {
-      const c = letterToColIndex(colStr);
+      const c = letterToColIndex(colStr.toUpperCase());
       const r = parseInt(rowStr, 10) - 1;
       if (r < 0 || r >= nextRows.length || c < 0 || c >= cols.length) return '0';
 
       const depColName = cols[c];
       const depKey = `${r}:${depColName}`;
       if (cellFormulas[depKey] && !stack.has(depKey)) {
-        return String(evaluateCellFormula(depKey, new Set(stack)));
+        return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
       }
-      return String(getCellValue(r, c));
+      return numToExpr(getCellValue(r, c));
     });
 
-    // 5. 사칙연산 평가
-    return evaluateArithmetic(expr);
+    // 5. 함수·괄호·사칙연산 평가
+    return evaluateExpression(expr);
   };
 
   // 모든 수식 셀을 차례대로 평가하여 적용
@@ -629,9 +703,13 @@ export function recalculateTableFormulas(
     const [rIdxStr, colName] = key.split(':');
     const rIdx = parseInt(rIdxStr, 10);
     if (rIdx >= 0 && rIdx < nextRows.length && cols.includes(colName)) {
-      const calculatedVal = evaluateCellFormula(key);
       const fInfo = cellFormulas[key];
-      nextRows[rIdx][colName] = formatCellValue(calculatedVal, fInfo?.format);
+      try {
+        nextRows[rIdx][colName] = formatCellValue(roundResult(evaluateCellFormula(key)), fInfo?.format);
+      } catch (e) {
+        if (!(e instanceof FormulaError)) throw e;
+        nextRows[rIdx][colName] = FORMULA_ERROR;
+      }
     }
   });
 

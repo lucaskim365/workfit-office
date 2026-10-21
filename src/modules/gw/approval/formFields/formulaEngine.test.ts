@@ -348,6 +348,37 @@ export function runFormulaEngineTests() {
     console.log('✓ 11. 여러 열 위-아래 셀 계산 — 빈 칸이 다른 열 값으로 대체되지 않음 통과\n');
   }
 
+  // 12~14. 함수·반올림·오류
+  {
+    const c = ['A', 'B', 'C', 'D'];
+    const r = [{ A: '10', B: '4', C: '3', D: '' }];
+    const calc = (e: string) =>
+      recalculateTableFormulas(c, r, { '0:D': { expression: e, format: 'number' } })[0].D;
+    assert.equal(calc('=AVERAGE(A1:C1)'), '5.6666666667');
+    assert.equal(calc('=MIN(A1:C1)'), '3');
+    assert.equal(calc('=MAX(A1:C1)'), '10');
+    assert.equal(calc('=ROUND(A1/C1, 1)'), '3.3');
+    assert.equal(calc('=sum(a1:c1)*2'), '34');
+    console.log('✓ 12. AVERAGE·MIN·MAX·ROUND·소문자 함수 통과');
+
+    assert.equal(calc('=SUM(A1:C1)*0.1'), '1.7');
+    console.log('✓ 13. 소수 오차 반올림 통과');
+
+    // 0으로 나누기는 예전처럼 0 (빈 서식의 비율 칸이 오류로 보이지 않도록)
+    assert.equal(calc('=A1/0'), '0');
+    assert.equal(calc('=(A1+B1'), '#오류');
+    assert.equal(calc('=FOO(A1)'), '#오류');
+    assert.equal(calc('=A1+'), '#오류');
+    assert.equal(calc('=ROUND((A1+B1)/C1, 2)'), '4.67');
+    // 오류 칸을 참조하는 수식도 오류
+    const chained = recalculateTableFormulas(c, r, {
+      '0:C': { expression: '=FOO(A1)', format: 'number' },
+      '0:D': { expression: '=C1+1', format: 'number' },
+    });
+    assert.equal(chained[0].D, '#오류');
+    console.log('✓ 14. invalid formulas show error 통과\n');
+  }
+
   console.log('🎉 모든 formulaEngine 테스트 통과!');
 }
 
