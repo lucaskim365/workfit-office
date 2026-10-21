@@ -50,6 +50,24 @@ export function notificationPermission(): NotificationPermission | 'unsupported'
   return Notification.permission;
 }
 
+/** 이 기기의 마지막 토큰 — 로그아웃할 때 내 기기 목록에서 빼는 데 쓴다. */
+const DEVICE_TOKEN_KEY = 'workfit.fcm-token';
+function rememberDeviceToken(token: string): void {
+  try { localStorage.setItem(DEVICE_TOKEN_KEY, token); } catch { /* 저장 제한 환경 */ }
+}
+
+/**
+ * 로그아웃 — 이 기기 토큰을 그 계정의 기기 목록에서 뺀다(로그아웃한 기기로 알림이 가지 않게).
+ * 실패해도 로그아웃은 막지 않는다.
+ */
+export async function releasePushTokenOnSignOut(userId: string): Promise<void> {
+  let token = '';
+  try { token = localStorage.getItem(DEVICE_TOKEN_KEY) ?? ''; } catch { return; }
+  if (!userId || !token) return;
+  try { await userRepo.removeFcmToken(userId, token); }
+  catch (e) { console.warn('[push] 로그아웃 기기 토큰 정리 실패', e); }
+}
+
 async function registerPushServiceWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { updateViaCache: 'none' });
   // 화면을 다시 열지 않아도 최신 표시 코드를 설치한다. 실패해도 기존 푸시는 유지한다.
@@ -77,6 +95,7 @@ export async function enablePushForUser(userId: string): Promise<{ ok: boolean; 
     if (!token) return { ok: false, error: '토큰 발급 실패(null)' };
 
     await userRepo.updateFcmToken(userId, token);
+    rememberDeviceToken(token);
     console.log('[push] 토큰 저장 완료', token.slice(0, 20) + '…');
     return { ok: true };
   } catch (e) {
@@ -100,7 +119,10 @@ export async function syncPushToken(userId: string): Promise<void> {
     const swReg = await registerPushServiceWorker();
     signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
-    if (token) await userRepo.updateFcmToken(userId, token);
+    if (token) {
+      await userRepo.updateFcmToken(userId, token);
+      rememberDeviceToken(token);
+    }
   } catch (e) {
     console.warn('[push] 토큰 동기화 실패', e);
   }

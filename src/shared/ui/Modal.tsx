@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -16,6 +16,13 @@ interface ModalProps {
  * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이는 화면의 88%.
  * (body zoom 배율이 vh 에 한 번 더 곱해지므로 --font-scale 로 나눠 실제 화면 기준으로 맞춘다)
  */
+/**
+ * 모달이 뜰 층(z-index 클래스). 모달은 body에 붙으므로, 자기보다 높은 층에 떠 있는 화면
+ * (PWA 셸은 z-[100]) 안에서 열면 그 뒤에 깔린다. 그런 화면은 이 값으로 층을 올려 준다.
+ */
+const ModalLayerContext = createContext('z-50');
+export const ModalLayerProvider = ModalLayerContext.Provider;
+
 export function Modal({ open, onClose, title, footer, width = 480, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -26,18 +33,19 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const layer = useContext(ModalLayerContext);
   if (!open) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-navy-deep/45 p-4 backdrop-blur-[1px]"
+      className={`fixed inset-0 ${layer} flex items-center justify-center bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
       onMouseDown={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         style={{ width }}
-        className="flex max-h-[calc(88vh/var(--font-scale,1))] w-full flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-[0_20px_60px_rgba(16,24,48,0.32)]"
+        className="flex max-h-[calc(88vh/var(--font-scale,1))] w-full max-w-full flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-[0_20px_60px_rgba(16,24,48,0.32)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {title && (
@@ -54,7 +62,7 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
         )}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>
         )}
       </div>
     </div>,

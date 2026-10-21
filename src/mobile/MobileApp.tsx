@@ -28,6 +28,7 @@ import MobileProfileScreen from './MobileProfileScreen';
 import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 import { ReloginDialog } from '@/app/auth/ReloginDialog';
+import { ModalLayerProvider } from '@/shared/ui/Modal';
 
 /**
  * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
@@ -106,6 +107,8 @@ export default function MobileApp() {
   }, [user]);
 
   return (
+    // 웹 공용 모달(일정·외근 창 등)이 이 셸(z-[100]) 뒤에 깔리지 않도록 층을 올린다
+    <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
       <div
@@ -156,5 +159,6 @@ export default function MobileApp() {
         onDismissToday={() => setShowGuide(false)}
       />
     </div>
+    </ModalLayerProvider>
   );
 }

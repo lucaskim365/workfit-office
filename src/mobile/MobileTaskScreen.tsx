@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom';
+import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useState, useMemo } from 'react';
 import {
   CheckSquare,
@@ -48,6 +50,13 @@ import type { OutsideWork } from '@/domain/outsideWork/schema';
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 'YYYY-MM-DD' → 그 날 0시(로컬). 올바르지 않으면 null */
+function parseDateParam(value: string | null): Date | null {
+  if (!value || !isValidCalendarDate(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function formatDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -59,7 +68,9 @@ export default function MobileTaskScreen() {
   const usersQuery = useUsers();
   const { tagMap } = useWorkPlanConfig();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  // 캘린더 등에서 ?date=YYYY-MM-DD로 들어오면 그 날짜로 연다
+  const [searchParams] = useSearchParams();
+  const [selectedDate, setSelectedDate] = useState<Date>(() => parseDateParam(searchParams.get('date')) ?? new Date());
   const selectedDateStr = useMemo(() => formatDate(selectedDate), [selectedDate]);
 
   const [newTodoText, setNewTodoText] = useState('');

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { releasePushTokenOnSignOut } from '@/shared/lib/messaging';
 import { authRepo } from '@/data/auth/auth.repo';
 import { userRepo } from '@/data/user/user.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
@@ -111,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOutUser() {
+    // 이 기기로 이 계정 알림이 계속 오지 않게 기기 목록에서 뺀다(기다리지 않음)
+    if (user?.id) void releasePushTokenOnSignOut(user.id);
     localStorage.removeItem(SESSION_KEY);
     clearWiddyToken();
     if (typeof window !== 'undefined') {

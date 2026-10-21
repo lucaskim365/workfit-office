@@ -23,7 +23,28 @@ const backend = createCrudBackend<User>({
   },
   idOf: (u) => u.id,
   seed: USER_SEED.map((u) => userSchema.parse(u)),
+  // 기기 토큰 목록은 토큰 전용 함수(patchPushTokens)로만 쓴다. 프로필 저장 등이 옛 목록으로 덮어쓰지 않게 하고,
+  // DB에 칸이 아직 없을 때도 일반 저장이 깨지지 않게 한다.
+  stripFields: ['fcmTokens'],
 });
+
+/** Appwrite가 "없는 칸"이라 거절한 오류인가 (fcmTokens 칸 추가 전) */
+function isUnknownAttributeError(error: unknown): boolean {
+  return error instanceof Error && /unknown attribute/i.test(error.message);
+}
+
+/**
+ * 토큰 칸만 부분 저장. DB에 fcmTokens 칸이 아직 없으면 예전 단일 칸만 저장한다
+ * (스키마 반영 전에 앱이 먼저 배포돼도 알림 연결이 깨지지 않게).
+ */
+async function patchPushTokens(userId: string, fcmTokens: string[], fcmToken: string): Promise<void> {
+  try {
+    await backend.patch(userId, { fcmTokens, fcmToken });
+  } catch (error) {
+    if (!isUnknownAttributeError(error)) throw error;
+    await backend.patch(userId, { fcmToken });
+  }
+}
 
 export interface UserFilter {
   dept?: string;
@@ -55,6 +76,7 @@ import { assertAccountStatusEdit } from '@/domain/user/accountStatus';
 import { isDuplicateEmpNo, nextEmpNo } from '@/domain/user/empNo';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
+import { hasPushToken, withPushToken, withoutPushToken } from '@/domain/user/pushTokens';
 
 registerTestAccountSource(() => backend.loadAll());
 
@@ -180,8 +202,9 @@ export const userRepo = {
     const target = all.find((u) => u.id === userId);
     if (!target) throw new Error('사용자를 찾을 수 없습니다.');
 
-    // 1) 계정 비활성화 + 퇴사 기록 + 푸시 토큰 무효화.
+    // 1) 계정 비활성화 + 퇴사 기록 + 푸시 토큰 무효화(모든 기기).
     await this.save({ ...target, status: '미사용', resignedAt: nowLocalIso(), fcmToken: '' });
+    await patchPushTokens(userId, [], '');
 
     // 2) 상급자 체인 재연결(대상을 상급자로 둔 직원 → 대상의 상급자).
     const reports = all.filter((u) => u.managerId === userId && u.id !== userId);
@@ -192,23 +215,40 @@ export const userRepo = {
     return { reconnectedReports: reports.length };
   },
 
-  /** FCM 푸시 토큰 저장(웹 PWA·모바일 공용 users.fcmToken). 서버 트리거가 이 토큰으로 발송.
-   *  같은 브라우저/기기에서 다른 계정으로 로그인하면 그 기기의 단일 FCM 토큰이 여러 계정에
-   *  남아 중복·오배송이 생긴다. 이를 막기 위해, 저장 전에 **같은 토큰을 가진 다른 계정의
-   *  토큰을 회수**해 하나의 FCM 토큰이 한 계정에만 매핑되도록 한다(최근 로그인 우선). */
+  /** 이 기기의 FCM 푸시 토큰을 내 기기 목록(users.fcmTokens)에 추가한다. 서버 함수가 목록 전부로 발송.
+   *  예전 단일 칸(fcmToken)에도 가장 최근 기기 토큰을 같이 둔다 — 서버 함수 전환기 동안 지금처럼 동작.
+   *
+   *  같은 기기에서 다른 계정으로 로그인하면 그 기기 토큰이 여러 계정에 남아 오배송이 생긴다.
+   *  그래서 같은 토큰을 가진 **다른 계정에서는 뺀다**(최근 로그인 우선).
+   *  토큰 칸만 부분 저장하고, 내 것을 먼저 저장한다. 다른 계정 정리는 일부가 실패해도 넘어간다
+   *  (한 기기로 여러 계정에 로그인했던 사람만 알림 연결이 실패하던 문제). */
   async updateFcmToken(userId: string, token: string): Promise<void> {
+    if (!token) return;
     const all = await this.listIncludingTestAccounts();
     const existing = all.find((u) => u.id === userId);
     if (!existing) return;
 
-    // 다른 계정이 쥐고 있던 동일 토큰 회수(빈 토큰은 대상 아님)
-    if (token) {
-      const stale = all.filter((u) => u.id !== userId && u.fcmToken === token);
-      await Promise.all(stale.map((u) => this.save({ ...u, fcmToken: '' })));
-    }
+    const mine = withPushToken(existing, token);
+    const unchanged = existing.fcmToken === token && mine.join() === existing.fcmTokens.join();
+    if (!unchanged) await patchPushTokens(userId, mine, token);
 
-    if (existing.fcmToken === token) return; // 현재 계정 토큰 동일 → 저장 생략
-    await this.save({ ...existing, fcmToken: token });
+    const stale = all.filter((u) => u.id !== userId && hasPushToken(u, token));
+    const results = await Promise.allSettled(stale.map((u) => {
+      const next = withoutPushToken(u, token);
+      return patchPushTokens(u.id, next.fcmTokens, next.fcmToken);
+    }));
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.warn(`[push] ${stale[i].id} 계정의 이전 토큰 회수 실패`, r.reason);
+    });
+  },
+
+  /** 로그아웃한 기기의 토큰을 내 목록에서 뺀다 — 로그아웃한 기기로 알림이 가지 않게. */
+  async removeFcmToken(userId: string, token: string): Promise<void> {
+    if (!token) return;
+    const existing = (await this.listIncludingTestAccounts()).find((u) => u.id === userId);
+    if (!existing || !hasPushToken(existing, token)) return;
+    const next = withoutPushToken(existing, token);
+    await patchPushTokens(userId, next.fcmTokens, next.fcmToken);
   },
 
   async removeMany(ids: Array<string | number>): Promise<void> {
