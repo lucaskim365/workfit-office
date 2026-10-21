@@ -86,6 +86,7 @@ export function ApprovalLineBuilder({
   amount,
   docData,
   bottomSlot,
+  ruleMode,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
@@ -95,6 +96,11 @@ export function ApprovalLineBuilder({
   docData?: Record<string, any> | null;
   bottomSlot?: React.ReactNode;
   isAgreementEnabled?: boolean;
+  /**
+   * 결재선 규칙 설정용 — 사람 대신 '직속 상급자' 같은 역할도 고를 수 있게 한다.
+   * approverId 에 역할 토큰(roles[].token) 또는 사용자 ID 가 들어간다. 자동 결재선·내 결재선·참조자 칸은 숨김.
+   */
+  ruleMode?: { roles: Array<{ token: string; label: string; desc: string }> };
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
@@ -153,8 +159,11 @@ export function ApprovalLineBuilder({
   const allowedParallelKinds = allowedKinds;
   const shownKind = (k: StepKind): StepKind => (k === '합의' ? '합의' : '결재');
 
-  const nameOf = (id: string) => org.userById(id)?.name ?? id;
+  const roleOf = (id: string) => ruleMode?.roles.find((r) => r.token === id);
+  const nameOf = (id: string) => roleOf(id)?.label ?? org.userById(id)?.name ?? id;
   const deptPosOf = (id: string) => {
+    const role = roleOf(id);
+    if (role) return role.desc;
     const u = org.userById(id);
     return u ? `${u.dept} · ${u.position}` : '';
   };
@@ -377,6 +386,8 @@ export function ApprovalLineBuilder({
 
   return (
     <div>
+      {!ruleMode && (
+      <>
       {/* 상단 3방식 툴바 */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <button
@@ -576,6 +587,9 @@ export function ApprovalLineBuilder({
             )}
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       {/* [1] 결재선 노드 리스트 (그룹 단위 렌더링) — 매끄러운 1->2->3 타임라인 */}
@@ -782,6 +796,8 @@ export function ApprovalLineBuilder({
         </button>
       </div>
 
+      {!ruleMode && (
+      <>
       {/* [2] 참조자 전용 분리 섹션 */}
       <div className="mt-4 rounded-xl border border-border bg-panel-alt/30 p-3">
         <div className="flex items-center justify-between mb-1.5">
@@ -840,6 +856,9 @@ export function ApprovalLineBuilder({
         )}
       </div>
 
+      </>
+      )}
+
       {dupWarn && (
         <p className="mt-2 text-[10.5px] text-amber flex items-center gap-1">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -871,7 +890,8 @@ export function ApprovalLineBuilder({
               </button>
             </div>
             <UserPickList
-              users={users.filter((u) => u.status === '사용' && canDesignate(u))}
+              roles={ruleMode?.roles}
+              users={users.filter((u) => u.status === '사용' && (ruleMode ? true : canDesignate(u)))}
               org={org}
               onPick={pick}
               isMultiSelect={picker.mode === 'add-ref' || (picker.mode === 'add-to-group' && picker.groupIndex === -1)}
@@ -888,19 +908,21 @@ export function ApprovalLineBuilder({
 
 /** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트 (단일/다중 선택 지원). */
 function UserPickList({
+  roles,
   users,
   org,
   onPick,
   isMultiSelect = false,
   minSelectCount = 1,
 }: {
+  roles?: Array<{ token: string; label: string; desc: string }>;
   users: User[];
   org: ReturnType<typeof useOrgTree>;
   onPick: (ids: string | string[]) => void;
   isMultiSelect?: boolean;
   minSelectCount?: number;
 }) {
-  const [tab, setTab] = useState<'org' | 'list'>('org');
+  const [tab, setTab] = useState<'role' | 'org' | 'list'>(roles ? 'role' : 'org');
   const [q, setQ] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const kw = q.trim().toLowerCase();
@@ -934,6 +956,15 @@ function UserPickList({
       {/* 탭 & 검색창 */}
       <div className="border-b border-border p-3 space-y-2 shrink-0">
         <div className="flex gap-1 rounded-lg bg-panel-alt p-1">
+          {roles && (
+            <button
+              type="button"
+              onClick={() => setTab('role')}
+              className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${tab === 'role' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`}
+            >
+              역할
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setTab('org')}
@@ -971,6 +1002,24 @@ function UserPickList({
               <UserPickItem key={u.id} user={u} onPick={toggleSelect} isSelected={selectedIds.includes(u.id)} isMulti={isMultiSelect} />
             ))}
             {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">검색 결과가 없습니다.</div>}
+          </div>
+        ) : tab === 'role' && roles ? (
+          /* 역할(직속 상급자·부서장 등) — 결재선 규칙 설정 전용 */
+          <div className="space-y-0.5">
+            {roles.map((r) => {
+              const on = selectedIds.includes(r.token);
+              return (
+                <button
+                  key={r.token}
+                  type="button"
+                  onClick={() => toggleSelect(r.token)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${on ? 'bg-teal-soft/50' : 'hover:bg-panel-alt'}`}
+                >
+                  <span className="text-[12px] font-semibold text-ink">{r.label}</span>
+                  <span className="ml-2 truncate text-[10.5px] text-ink3">{r.desc}</span>
+                </button>
+              );
+            })}
           </div>
         ) : tab === 'org' ? (
           /* 조직도 트리 뷰 */
