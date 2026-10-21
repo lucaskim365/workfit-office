@@ -97,18 +97,13 @@ export function formatCellValue(num: number, format?: CellFormat): string {
   }
 }
 
-/**
- * 행/열 추가·삭제 시 수식 내부의 좌표 및 범위를 엑셀과 동일하게 자동 리인덱싱(Re-indexing)
- */
-export function shiftFormulaCoordinates(
-  expression: string,
-  action: {
-    type: 'row_add' | 'row_del' | 'col_add' | 'col_del';
-    atIndex: number; // 0-based 추가/삭제된 위치
-  }
-): string {
-  if (!expression) return expression;
+export type ShiftAction = {
+  type: 'row_add' | 'row_del' | 'col_add' | 'col_del';
+  atIndex: number; // 0-based 추가/삭제된 위치
+};
 
+/** 괄호 없는 수식 조각의 A1 좌표·범위 이동 */
+function shiftPlainCoordinates(expression: string, action: ShiftAction): string {
   // 1. 범위 표현식 먼저 변환: 예) D18:D26
   let result = expression.replace(/([A-Z]+)(\d+):([A-Z]+)(\d+)/gi, (_match, c1, r1, c2, r2) => {
     let startCol = letterToColIndex(c1);
@@ -177,6 +172,57 @@ export function shiftFormulaCoordinates(
   });
 
   return result;
+}
+
+/** 괄호 참조 안쪽 "2:금액" 형태의 숫자 행 이동 — 지워진 행이면 null, 라벨·LAST는 그대로 */
+function shiftBracketRow(inside: string, action: ShiftAction): string | null {
+  const m = inside.match(/^(\s*)(\d+)(\s*:.*)$/s);
+  if (!m || (action.type !== 'row_add' && action.type !== 'row_del')) return inside;
+  let r = parseInt(m[2], 10);
+  if (action.type === 'row_add') {
+    if (r >= action.atIndex) r += 1;
+  } else {
+    if (r === action.atIndex) return null;
+    if (r > action.atIndex) r -= 1;
+  }
+  return `${m[1]}${r}${m[3]}`;
+}
+
+// 타 표 참조 [표]![..] / [표]!D4, 같은 표 괄호 참조 [..]
+const BRACKET_SEGMENT = /\[([^\]!]+)\]\s*!\s*(?:\[([^\]]*)\]|([A-Z]+\d+))|\[([^\]]*)\]/gi;
+
+/**
+ * 행/열 추가·삭제 시 수식 내부의 좌표 및 범위를 엑셀과 동일하게 자동 리인덱싱(Re-indexing)
+ * - 같은 표의 A1 좌표·범위와 [2:금액] 숫자 행 참조를 이동
+ * - 괄호 안 열 제목과 타 표 참조는 건드리지 않음 (타 표는 shiftCrossTableRefs)
+ */
+export function shiftFormulaCoordinates(expression: string, action: ShiftAction): string {
+  if (!expression) return expression;
+  const kept: string[] = [];
+  const masked = expression.replace(BRACKET_SEGMENT, (seg, _t, _ti, _tc, inside) => {
+    let out = seg;
+    if (inside !== undefined) {
+      const shifted = shiftBracketRow(inside, action);
+      out = shifted === null ? '#REF!' : `[${shifted}]`;
+    }
+    kept.push(out);
+    return `\u0000${kept.length - 1}\u0000`;
+  });
+  return shiftPlainCoordinates(masked, action).replace(/\u0000(\d+)\u0000/g, (_m, i) => kept[Number(i)]);
+}
+
+/** 다른 표(tableNames 중 하나)에 행/열이 추가·삭제됐을 때 이 수식의 [표]!… 참조를 이동 */
+export function shiftCrossTableRefs(expression: string, tableNames: string[], action: ShiftAction): string {
+  if (!expression) return expression;
+  return expression.replace(BRACKET_SEGMENT, (seg, table, crossInside, crossCoord) => {
+    if (table === undefined || !tableNames.includes(table.trim())) return seg;
+    if (crossCoord !== undefined) {
+      const shifted = shiftPlainCoordinates(crossCoord, action);
+      return shifted.includes('#REF!') ? '#REF!' : `[${table}]!${shifted}`;
+    }
+    const shifted = shiftBracketRow(crossInside, action);
+    return shifted === null ? '#REF!' : `[${table}]![${shifted}]`;
+  });
 }
 
 /** 수식 오류 칸 표시 */

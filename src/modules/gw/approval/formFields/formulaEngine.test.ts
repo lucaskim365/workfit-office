@@ -5,6 +5,7 @@ import {
   cellToCoord,
   coordToCell,
   shiftFormulaCoordinates,
+  shiftCrossTableRefs,
   recalculateTableFormulas,
   cascadeRecalculateAllTables,
   formatCellValue,
@@ -377,6 +378,32 @@ export function runFormulaEngineTests() {
     });
     assert.equal(chained[0].D, '#오류');
     console.log('✓ 14. invalid formulas show error 통과\n');
+  }
+
+  // 15. 같은 표 괄호 숫자 행 참조 이동, 괄호 안 열 제목·타 표 참조는 그대로
+  {
+    assert.equal(
+      shiftFormulaCoordinates('=[2:금액] - [소계:금액] + D3', { type: 'row_add', atIndex: 0 }),
+      '=[3:금액] - [소계:금액] + D4'
+    );
+    assert.equal(shiftFormulaCoordinates('=[매출]!D4 + D4', { type: 'row_add', atIndex: 0 }), '=[매출]!D4 + D5');
+    assert.equal(shiftFormulaCoordinates('=[Q1] + A1', { type: 'row_add', atIndex: 0 }), '=[Q1] + A2');
+    assert.equal(shiftFormulaCoordinates('=[2:금액]', { type: 'row_del', atIndex: 2 }), '=#REF!');
+    console.log('✓ 15. 괄호 숫자 행 참조 이동 통과');
+  }
+
+  // 16. 타 표 참조 이동
+  {
+    assert.equal(
+      shiftCrossTableRefs('=[매출]!D4 + [매입]!D4', ['매출'], { type: 'row_add', atIndex: 0 }),
+      '=[매출]!D5 + [매입]!D4'
+    );
+    assert.equal(shiftCrossTableRefs('=[매출]![2:금액]', ['매출'], { type: 'row_del', atIndex: 2 }), '=#REF!');
+    assert.equal(
+      shiftCrossTableRefs('=[매출]![소계:금액] + [매출]![1:금액] + A1', ['매출'], { type: 'row_add', atIndex: 0 }),
+      '=[매출]![소계:금액] + [매출]![2:금액] + A1'
+    );
+    console.log('✓ 16. 타 표 참조 이동 통과\n');
   }
 
   console.log('🎉 모든 formulaEngine 테스트 통과!');
