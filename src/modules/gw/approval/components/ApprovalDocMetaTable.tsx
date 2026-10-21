@@ -45,8 +45,9 @@ export function ApprovalDocMetaTable({
   isAmountInDetails: boolean;
   amountLabel: string;
 }) {
-  // 서식 설정 — 결재 완료 문서에서는 자동 정보 표를 숨김(제목은 유지)
+  // 서식 설정 — 결재 완료 문서에서는 자동 정보 표와 제목을 모두 숨김(대외 문서용)
   const hideAutoInfo = !!form?.hideDocInfoOnComplete && doc.status === '완료';
+  if (hideAutoInfo) return null;
   return (
     <>
       {!hideAutoInfo && (

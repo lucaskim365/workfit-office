@@ -905,7 +905,7 @@ export function ApprovalFormEditor({
                   />
                   <span>
                     <span className="font-semibold text-ink">결재 완료 문서에서 상단 기본 정보 숨김</span>
-                    <span className="block text-[10.5px] text-ink3">문서번호·기안부서·기안자·기안일·결재 완료일·보존연한 표 — 제목은 그대로 보입니다</span>
+                    <span className="block text-[10.5px] text-ink3">문서번호·기안부서·기안자·기안일·결재 완료일·보존연한과 제목</span>
                   </span>
                 </label>
               </div>
