@@ -6,7 +6,8 @@ import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
-import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
+import { fieldText } from '@/modules/gw/approval/formFields';
+import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
@@ -699,136 +700,15 @@ export function ApprovalDocumentView({
               if (block.type === 'table-field') {
                 const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
 
-                const renderTableOnly = (f: FormField) => {
-                  const val = doc.fieldValues[f.key];
-                  const defaultCols = ['구분', '항목', '내용'];
-                  const defaultRows: Array<Record<string, string>> = [
-                    { '구분': '', '항목': '', '내용': '' },
-                    { '구분': '', '항목': '', '내용': '' },
-                    { '구분': '', '항목': '', '내용': '' }
-                  ];
-                  let cols: string[] = [...defaultCols];
-                  let rows: Array<Record<string, string>> = [...defaultRows];
-                  let colWidths: Record<string, string> = {};
-                  let merges: CellMerge[] = [];
-                  let headerValues: Record<string, string> = {};
-                  let secretCols: string[] = [];
-                  let secretCells: string[] = [];
-                  let secretRows: number[] = [];
-
-                  if (f.placeholder) {
-                    try {
-                      const cfg = JSON.parse(f.placeholder);
-                      if (cfg && typeof cfg === 'object') {
-                        if (cfg.colWidths) colWidths = cfg.colWidths;
-                        if (cfg.cols) cols = cfg.cols;
-                        if (Array.isArray(cfg.rows)) rows = cfg.rows;
-                        else if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
-                        if (Array.isArray(cfg.merges)) merges = cfg.merges;
-                        if (cfg.headerValues) headerValues = cfg.headerValues;
-                        if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
-                        if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
-                        if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
-                      }
-                    } catch (e) { }
-                  }
-
-                  try {
-                    if (typeof val === 'string' && val) {
-                      const parsed = JSON.parse(val);
-                      if (parsed && typeof parsed === 'object') {
-                        if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-                          cols = parsed.cols;
-                          rows = parsed.rows;
-                          colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
-                          if (Array.isArray(parsed.merges)) merges = parsed.merges;
-                          if (parsed.headerValues) headerValues = parsed.headerValues;
-                          if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
-                          if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
-                          if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
-                        }
-                      }
-                    }
-                  } catch (e) { }
-
-                  return (
-                    <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
-                      <colgroup>
-                        {cols.map((col, cIdx) => (
-                          <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
-                        ))}
-                      </colgroup>
-                      <tbody>
-                        {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
-                        <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                          {cols.map((col, cIdx) => {
-                            const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
-                            if (isMerged && !isStart) return null;
-                            return (
-                              <th
-                                key={col}
-                                rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                colSpan={colSpan > 1 ? colSpan : undefined}
-                                className="p-2 border border-[#eee] font-bold text-[#555]"
-                              >
-                                {headerValues[col] !== undefined ? headerValues[col] : col}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                        {rows.map((row, rIdx) => (
-                          <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                            {cols.map((col, cIdx) => {
-                              const isCellSecret =
-                                f.isSecret ||
-                                secretCols.includes(col) ||
-                                secretRows.includes(rIdx) ||
-                                secretCells.includes(`${rIdx}:${cIdx}`);
-
-                              const cellVal = row[col] ?? '';
-                              const isPercent = typeof cellVal === 'string' && cellVal.endsWith('%');
-                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율') || col.includes('비중') || isPercent;
-                              let displayVal = isNumLike && !isPercent && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
-                                ? Number(cellVal.replace(/,/g, '')).toLocaleString()
-                                : cellVal;
-
-                              if (isCellSecret && isMaskingActive) {
-                                displayVal = maskValue(displayVal, true);
-                              }
-
-                              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
-
-                              if (isMerged && !isStart) return null;
-
-                              const isCellBlurred = isCellSecret && isMaskingActive;
-
-                              return (
-                                <td
-                                  key={col}
-                                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                  colSpan={colSpan > 1 ? colSpan : undefined}
-                                  title={isCellBlurred ? "보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                                  className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap break-words leading-relaxed ${isNumLike ? 'text-right' : 'text-left'} ${isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
-                                    }`}
-                                >
-
-                                  {displayVal || '—'}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                        {rows.length === 0 && (
-                          <tr>
-                            <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
-                              등록된 데이터가 없습니다.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  );
-                };
+                const renderTableOnly = (f: FormField) => (
+                  <SheetView
+                    sheet={resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options)}
+                    allSecret={f.isSecret}
+                    isMaskingActive={isMaskingActive}
+                    maskValue={maskValue}
+                    minWidth={isHalf ? 'auto' : '500px'}
+                  />
+                );
 
                 return (
                   <div key={blockIdx} className={`space-y-1 ${isHalf ? 'print-avoid-break' : ''}`}>
