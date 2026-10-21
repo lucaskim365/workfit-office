@@ -237,9 +237,15 @@ export function roundResult(n: number): number {
 }
 
 /** 수식 안에 다시 끼워 넣을 숫자 문자열 (지수 표기 회피) */
-function numToExpr(n: number): string {
+/** 숫자 → 식 글자 (지수 표기 회피, 괄호 없음) */
+function numText(n: number): string {
   if (!Number.isFinite(n)) throw new FormulaError();
-  const s = Math.abs(n) < 1e21 ? n.toFixed(10).replace(/\.?0+$/, '') : String(n);
+  return Math.abs(n) < 1e21 ? n.toFixed(10).replace(/\.?0+$/, '') : String(n);
+}
+
+/** 수식 안에 다시 끼워 넣을 숫자 (음수는 괄호로 감쌈) */
+function numToExpr(n: number): string {
+  const s = numText(n);
   return n < 0 ? `(${s})` : s;
 }
 
@@ -259,7 +265,9 @@ const FUNCTIONS: Record<string, (args: number[]) => number> = {
 function evaluateExpression(expr: string): number {
   let e = expr;
   const inner = /([A-Za-z]*)\s*\(([^()]*)\)/;
+  let guard = 0;
   for (let m = e.match(inner); m; m = e.match(inner)) {
+    if (++guard > 500) throw new FormulaError(); // 어떤 식이든 멈추지 않도록
     const name = m[1].toUpperCase();
     let val: number;
     if (name) {
@@ -271,7 +279,9 @@ function evaluateExpression(expr: string): number {
       if (m[2].includes(',')) throw new FormulaError();
       val = evaluateArithmetic(m[2]);
     }
-    e = e.slice(0, m.index) + numToExpr(val) + e.slice((m.index ?? 0) + m[0].length);
+    // 괄호를 풀어 낸 값은 괄호 없이 넣는다 — 음수를 다시 괄호로 감싸면 같은 괄호를 끝없이 다시 풂
+    // ('2*-5', '3--5'처럼 연산자 뒤 음수는 계산기가 처리)
+    e = e.slice(0, m.index) + numText(val) + e.slice((m.index ?? 0) + m[0].length);
   }
   return evaluateArithmetic(e);
 }

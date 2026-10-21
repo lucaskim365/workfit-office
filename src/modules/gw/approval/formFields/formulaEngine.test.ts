@@ -364,6 +364,24 @@ export function runFormulaEngineTests() {
     console.log('✓ 16. 타 표 참조 이동 통과\n');
   }
 
+  // 17. 음수 결과 — A1-A2 가 음수여도 멈추지 않고 계산 (괄호 무한 반복 버그)
+  {
+    const c = ['A', 'B'];
+    const r = [{ A: '3', B: '' }, { A: '10', B: '' }];
+    const calc = (e: string) =>
+      recalculateTableFormulas(c, r, { '0:B': { expression: e, format: 'number' } })[0].B;
+    assert.equal(calc('=A1-A2'), '-7');
+    assert.equal(calc('=(A1-A2)*2'), '-14');
+    assert.equal(calc('=ROUND(A1-A2, 0) + 1'), '-6');
+    assert.equal(calc('=SUM(A1:A2) - (A2*2)'), '-7');
+    const chained = recalculateTableFormulas(c, r, {
+      '0:B': { expression: '=A1-A2', format: 'number' },
+      '1:B': { expression: '=B1*2', format: 'number' },
+    });
+    assert.equal(chained[1].B, '-14');
+    console.log('✓ 17. 음수 결과 계산 통과\n');
+  }
+
   console.log('🎉 모든 formulaEngine 테스트 통과!');
 }
 
