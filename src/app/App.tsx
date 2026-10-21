@@ -64,7 +64,6 @@ const GwApproval = lazy(() => import('@/modules/gw/approval/ApprovalScreen'));
 const GwApprovalDraft = lazy(() => import('@/modules/gw/approval/ApprovalDraftScreen'));
 const GwLeave = lazy(() => import('@/modules/gw/leave/LeaveScreen'));
 const GwBoard = lazy(() => import('@/modules/gw/board/BoardScreen'));
-const GwDocument = lazy(() => import('@/modules/gw/document/DocumentScreen'));
 const GwCommunity = lazy(() => import('@/modules/gw/community/CommunityScreen'));
 const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
 const GwCalendar = lazy(() => import('@/modules/gw/calendar/CalendarScreen'));
@@ -99,6 +98,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 사업관리
   '/biz/vendor': lazy(() => import('@/modules/biz/vendor/BizVendorScreen')),
   '/biz/project': lazy(() => import('@/modules/biz/project/BizProjectScreen')),
+  '/biz/po': lazy(() => import('@/modules/biz/po/BizPoScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
   '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
   // 시스템 관리
@@ -226,7 +226,7 @@ export default function App() {
       <Route path="/gw/approval" element={<ProtectedRoute url="/gw/approval"><GwApproval /></ProtectedRoute>} />
       <Route path="/gw/leave" element={<ProtectedRoute url="/gw/leave"><GwLeave /></ProtectedRoute>} />
       <Route path="/gw/board" element={<ProtectedRoute url="/gw/board"><GwBoard /></ProtectedRoute>} />
-      <Route path="/gw/document" element={<ProtectedRoute url="/gw/document"><GwDocument /></ProtectedRoute>} />
+      {/* 문서관리 — 보류(2026-10-21). 경로는 /gw/:app 준비 중 화면으로 */}
       <Route path="/gw/community" element={<ProtectedRoute url="/gw/community"><GwCommunity /></ProtectedRoute>} />
       <Route path="/gw/employee" element={<ProtectedRoute url="/gw/employee"><GwEmployee /></ProtectedRoute>} />
       <Route path="/gw/calendar" element={<ProtectedRoute url="/gw/calendar"><GwCalendar /></ProtectedRoute>} />
