@@ -690,7 +690,7 @@ export function SheetEditor({ isOpen, onClose, title, initial, others, labels, s
           onPaste={onGridPaste}
           className="relative flex-1 overflow-auto bg-[#f7f7f8] outline-none"
         >
-          <table className="border-collapse bg-white text-[12px]" style={{ tableLayout: 'fixed' }}>
+          <table className={`border-collapse bg-white text-[12px] ${editing ? '' : 'select-none'}`} style={{ tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '40px' }} />
               {cols.map((col) => (

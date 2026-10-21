@@ -237,7 +237,9 @@ export function TableFieldEditor({
 
       {/* 동적 행 추가 / 행 삭제 버튼 */}
       <div className="mt-1.5 flex items-center justify-between text-[11px]">
-        <span className="text-ink3 font-medium text-[10.5px]">{rows.length}개 행</span>
+        <span className="text-ink3 font-medium text-[10.5px]">
+          {effective.legacyHeaderRow ? rows.length - 1 : rows.length}개 행
+        </span>
         <div className="flex items-center gap-1.5">
           {rows.length > 1 && (
             <button
