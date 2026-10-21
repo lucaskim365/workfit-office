@@ -370,6 +370,12 @@ function evaluateArithmetic(expr: string): number {
   return evalStack[0];
 }
 
+/** from 행부터 조건에 맞는 첫 행 번호 (없으면 -1) — 예전 제목 행(0번)을 라벨 검색에서 빼기 위함 */
+function findRowFrom<T>(rows: T[], from: number, pred: (row: T) => boolean): number {
+  for (let i = Math.max(0, from); i < rows.length; i++) if (pred(rows[i])) return i;
+  return -1;
+}
+
 export type OtherTablesContext = Record<
   string,
   {
@@ -377,6 +383,7 @@ export type OtherTablesContext = Record<
     rows: Array<Record<string, string>>;
     headerValues?: Record<string, string>;
     merges?: CellMerge[];
+    firstDataRow?: number; // 예전 제목 행을 0번 행으로 내린 표면 1
   }
 >;
 
@@ -401,6 +408,7 @@ export function resolveOtherTableCell(
 
   const otherTable = matchEntry[1];
   const { cols: oCols, rows: oRows, headerValues: oHeaders, merges: oMerges } = otherTable;
+  const oFrom = otherTable.firstDataRow ?? 0;
   if (!oRows || oRows.length === 0 || !oCols || oCols.length === 0) return 0;
 
   const resolveOColKey = (title: string): string => {
@@ -426,13 +434,13 @@ export function resolveOtherTableCell(
       rIdx = oRows.length - 1;
     } else {
       const targetLabel = rowToken.toLowerCase();
-      rIdx = oRows.findIndex((r) =>
+      rIdx = findRowFrom(oRows, oFrom, (r) =>
         Object.values(r).some(
           (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
         )
       );
       if (rIdx === -1) {
-        rIdx = oRows.findIndex((r) =>
+        rIdx = findRowFrom(oRows, oFrom, (r) =>
           Object.values(r).some(
             (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
           )
@@ -462,7 +470,7 @@ export function resolveOtherTableCell(
   // 3. 열 이름만 지정된 경우: [열이름] -> 소계/합계 행 우선 검색
   const colKey = resolveOColKey(targetRowOrCoord);
   if (oCols.includes(colKey)) {
-    let rIdx = oRows.findIndex((r) =>
+    let rIdx = findRowFrom(oRows, oFrom, (r) =>
       Object.values(r).some(
         (val) =>
           typeof val === 'string' &&
@@ -475,7 +483,7 @@ export function resolveOtherTableCell(
 
   // 4. 행 라벨만 지정된 경우: [소계] -> 금액 열 우선 검색
   const targetLabel = targetRowOrCoord.trim().toLowerCase();
-  const rIdx = oRows.findIndex((r) =>
+  const rIdx = findRowFrom(oRows, oFrom, (r) =>
     Object.values(r).some(
       (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
     )
@@ -510,8 +518,11 @@ export function recalculateTableFormulas(
   cellFormulas?: Record<string, CellFormula>,
   headerValues?: Record<string, string>,
   otherTablesContext?: OtherTablesContext,
-  merges?: CellMerge[]
+  merges?: CellMerge[],
+  opts?: { firstDataRow?: number }
 ): Array<Record<string, string>> {
+  // 예전 제목 행을 0번 행으로 내린 표: 위쪽 합산·행 라벨 검색에서 제목 행 제외
+  const firstDataRow = opts?.firstDataRow ?? 0;
   if (!cellFormulas || Object.keys(cellFormulas).length === 0 || rows.length === 0) {
     return rows;
   }
@@ -579,7 +590,7 @@ export function recalculateTableFormulas(
       const actualCol = resolveColKey(rawColTitle);
       const cIdx = cols.indexOf(actualCol);
       let sum = 0;
-      for (let r = 0; r < targetRowIdx; r++) {
+      for (let r = firstDataRow; r < targetRowIdx; r++) {
         if (cIdx !== -1) {
           sum += getCellValue(r, cIdx);
         } else {
@@ -592,7 +603,7 @@ export function recalculateTableFormulas(
     // 1. SUM(ABOVE) 처리: 현재 셀 위의 모든 행 합산
     expr = expr.replace(/SUM\s*\(\s*ABOVE\s*\)/gi, () => {
       let sum = 0;
-      for (let r = 0; r < targetRowIdx; r++) {
+      for (let r = firstDataRow; r < targetRowIdx; r++) {
         sum += getCellValue(r, targetColIdx);
       }
       return numToExpr(sum);
@@ -638,13 +649,13 @@ export function recalculateTableFormulas(
         } else {
           // 행 라벨 검색 (예: '소계', '합계')
           const targetLabel = trimmedRStr.toLowerCase();
-          r = nextRows.findIndex((row) =>
+          r = findRowFrom(nextRows, firstDataRow, (row) =>
             Object.values(row).some(
               (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
             )
           );
           if (r === -1) {
-            r = nextRows.findIndex((row) =>
+            r = findRowFrom(nextRows, firstDataRow, (row) =>
               Object.values(row).some(
                 (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
               )
@@ -677,13 +688,13 @@ export function recalculateTableFormulas(
       // 열 이름이 아니라 행 라벨인 경우 (예: [매입발주 금액])
       if (!isKnownCol) {
         const targetLabel = cleanToken.toLowerCase();
-        let r = nextRows.findIndex((row) =>
+        let r = findRowFrom(nextRows, firstDataRow, (row) =>
           Object.values(row).some(
             (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
           )
         );
         if (r === -1) {
-          r = nextRows.findIndex((row) =>
+          r = findRowFrom(nextRows, firstDataRow, (row) =>
             Object.values(row).some(
               (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
             )
