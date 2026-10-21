@@ -7,7 +7,6 @@ import {
   shiftFormulaCoordinates,
   shiftCrossTableRefs,
   recalculateTableFormulas,
-  cascadeRecalculateAllTables,
   formatCellValue,
   type CellFormula,
 } from './formulaEngine';
@@ -227,48 +226,7 @@ export function runFormulaEngineTests() {
     console.log('✓ 8. 타 표 교차 참조(Cross-Table Reference: 매출구분 소계 - 매입발주 합계 = 매출이익) 통과\n');
   }
 
-  // 9. 복수 표 연쇄 실시간 재계산 (cascadeRecalculateAllTables)
-  {
-    const fields = [
-      { key: 'table_sales', label: '매출구분' },
-      { key: 'table_purchase', label: '매입발주' },
-      { key: 'table_profit', label: '손익요약' },
-    ];
-
-    const currentVals: Record<string, string> = {
-      table_sales: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '소계', 금액: '100,000,000' }],
-      }),
-      table_purchase: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '합계', 금액: '40,000,000' }],
-      }),
-      table_profit: JSON.stringify({
-        cols: ['항목', '금액'],
-        rows: [{ 항목: '매출이익', 금액: '' }],
-        cellFormulas: {
-          '0:금액': { expression: '=[매출구분]![소계:금액] - [매입발주]![합계:금액]', format: 'currency' },
-        },
-      }),
-    };
-
-    // 기안자가 매입발주 금액을 40,000,000 -> 30,000,000 으로 수정
-    const patch = {
-      table_purchase: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '합계', 금액: '30,000,000' }],
-      }),
-    };
-
-    const cascaded = cascadeRecalculateAllTables(fields, currentVals, patch);
-
-    // 손익요약의 매출이익이 자동으로 100,000,000 - 30,000,000 = 70,000,000 으로 재계산되어야 함
-    assert(cascaded.table_profit != null, 'table_profit이 연쇄 재계산되어야 함');
-    const profitParsed = JSON.parse(cascaded.table_profit);
-    assert.equal(profitParsed.rows[0]['금액'], '70,000,000');
-    console.log('✓ 9. 복수 표 연쇄 실시간 재계산(cascadeRecalculateAllTables: 매출이익 70,000,000 자동 갱신) 통과\n');
-  }
+  // 9. 복수 표 연쇄 재계산은 sheetModel.test.ts 6번으로 이동
 
   // 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액의 병합된 셀 = 매출이익)
   {

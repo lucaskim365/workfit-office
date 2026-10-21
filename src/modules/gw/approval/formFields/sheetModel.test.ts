@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { recalculateTableFormulas, type CellFormula } from './formulaEngine';
-import { normalizeTablePayload, serializeSheet, sheetSignature, recalculateSheet, type SheetPayload } from './sheetModel';
+import { normalizeTablePayload, serializeSheet, sheetSignature, recalculateSheet, cascadeRecalculateAllTables, type SheetPayload } from './sheetModel';
 
 /** 예전 TableFieldEditor 합계 칸 규칙(열 키에 '금액' + amountCells 합) */
 function legacySum(
@@ -133,6 +133,31 @@ export function runSheetModelTests() {
     assert.equal(sheetSignature(base), sheetSignature(valueChanged));
     assert.notEqual(sheetSignature(base), sheetSignature(styleChanged));
     console.log('✓ 5. signature ignores values 통과\n');
+  }
+
+  // 6. 복수 표 연쇄 재계산 — 예전 형식 표들, 결과는 새 형식(제목 행이 0번)
+  {
+    const fields = [
+      { key: 'table_sales', label: '매출구분' },
+      { key: 'table_purchase', label: '매입발주' },
+      { key: 'table_profit', label: '손익요약' },
+    ];
+    const currentVals: Record<string, string> = {
+      table_sales: JSON.stringify({ cols: ['구분', '금액'], rows: [{ 구분: '소계', 금액: '100,000,000' }] }),
+      table_purchase: JSON.stringify({ cols: ['구분', '금액'], rows: [{ 구분: '합계', 금액: '40,000,000' }] }),
+      table_profit: JSON.stringify({
+        cols: ['항목', '금액'],
+        rows: [{ 항목: '매출이익', 금액: '' }],
+        cellFormulas: { '0:금액': { expression: '=[매출구분]![소계:금액] - [매입발주]![합계:금액]', format: 'currency' } },
+      }),
+    };
+    const patch = { table_purchase: JSON.stringify({ cols: ['구분', '금액'], rows: [{ 구분: '합계', 금액: '30,000,000' }] }) };
+    const cascaded = cascadeRecalculateAllTables(fields, currentVals, patch);
+    assert.equal(cascaded.table_purchase, patch.table_purchase, '직접 바꾼 표는 그대로');
+    const profit = normalizeTablePayload(cascaded.table_profit);
+    assert.equal(profit.rows[1]['금액'], '70,000,000');
+    assert.equal(cascaded.table_sales, undefined, '타 표 수식 없는 표는 건드리지 않음');
+    console.log('✓ 6. 복수 표 연쇄 재계산 통과\n');
   }
 
   console.log('🎉 모든 sheetModel 테스트 통과!');

@@ -7,7 +7,7 @@ import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { TableFieldEditor } from '../formFields/TableFieldEditor';
 import { SelectFieldEditor } from '../formFields/SelectFieldEditor';
-import { cascadeRecalculateAllTables } from '../formFields/formulaEngine';
+import { cascadeRecalculateAllTables, normalizeTablePayload } from '../formFields/sheetModel';
 import { SelectorDialog } from './DraftRecipientSection';
 import {
   calculateLeaveDays,
@@ -939,21 +939,19 @@ export function ApprovalDraftDocumentSheet({
                           // 표 내 금액 합계가 있으면 메인 amount에도 연동
                           const updatedVal = cascadedPatch[f.key] || patch[f.key];
                           if (typeof updatedVal === 'string' && updatedVal.includes('"rows"')) {
-                            try {
-                              const parsed = JSON.parse(updatedVal);
-                              const amtCol = parsed.cols?.find(
-                                (c: string) => c.includes('금액') || c.includes('비용')
-                              );
-                              if (amtCol && Array.isArray(parsed.rows)) {
-                                const sum = parsed.rows.reduce((acc: number, r: any) => {
-                                  const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
-                                  return acc + (isNaN(num) ? 0 : num);
-                                }, 0);
-                                if (sum > 0 && (!amount || amount === '0')) {
-                                  setAmount(String(sum));
-                                }
+                            // 예전 표 제목 행(0번)은 합계에서 제외
+                            const sheet = normalizeTablePayload(updatedVal);
+                            const amtCol = sheet.cols.find((c) => c.includes('금액') || c.includes('비용'));
+                            if (amtCol) {
+                              const sum = sheet.rows.reduce((acc, r, idx) => {
+                                if (sheet.legacyHeaderRow && idx === 0) return acc;
+                                const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
+                                return acc + (isNaN(num) ? 0 : num);
+                              }, 0);
+                              if (sum > 0 && (!amount || amount === '0')) {
+                                setAmount(String(sum));
                               }
-                            } catch (e) {}
+                            }
                           }
                         }}
                       />

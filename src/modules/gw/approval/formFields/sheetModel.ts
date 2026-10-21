@@ -207,3 +207,41 @@ export function recalculateSheet(p: SheetPayload, others?: Record<string, SheetP
   }
   return { ...p, rows };
 }
+
+/**
+ * 문서 안 여러 표를 돌며 타 표 참조 수식([표]!…)이 있는 표를 연쇄 재계산
+ * - 반환: patch + 다시 계산된 표들(새 형식으로 저장)
+ */
+export function cascadeRecalculateAllTables(
+  tableFields: Array<{ key: string; label: string; placeholder?: string; options?: string[] }>,
+  currentVals: Record<string, any>,
+  patch: Record<string, any>
+): Record<string, any> {
+  if (!tableFields || tableFields.length <= 1) return patch;
+  const merged = { ...currentVals, ...patch };
+
+  const sheets: Record<string, SheetPayload> = {};
+  tableFields.forEach((tf) => {
+    const raw = merged[tf.key] || tf.placeholder;
+    if (raw && typeof raw === 'string') sheets[tf.key] = normalizeTablePayload(raw, tf.options);
+  });
+
+  const contextFor = (selfKey: string): Record<string, SheetPayload> => {
+    const ctx: Record<string, SheetPayload> = {};
+    tableFields.forEach((tf) => {
+      if (tf.key === selfKey || !sheets[tf.key]) return;
+      ctx[tf.label] = sheets[tf.key];
+      ctx[tf.key] = sheets[tf.key];
+    });
+    return ctx;
+  };
+
+  const finalPatch = { ...patch };
+  tableFields.forEach((tf) => {
+    const s = sheets[tf.key];
+    if (!s || !Object.values(s.cellFormulas).some((f) => f.expression?.includes('!'))) return;
+    sheets[tf.key] = recalculateSheet(s, contextFor(tf.key));
+    finalPatch[tf.key] = serializeSheet(sheets[tf.key]);
+  });
+  return finalPatch;
+}
