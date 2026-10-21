@@ -52,7 +52,7 @@ const ROLE_PRESETS: RolePreset[] = [
     icon: '🏛️',
     resolver: 'PARENT_DEPT_HEAD',
     defaultArg: '1',
-    defaultKind: '전결',
+    defaultKind: '결재',
   },
   {
     label: '대표이사 (CEO)',
@@ -60,7 +60,7 @@ const ROLE_PRESETS: RolePreset[] = [
     icon: '👑',
     resolver: 'ROLE_CEO',
     defaultArg: null,
-    defaultKind: '전결',
+    defaultKind: '결재',
   },
   {
     label: '특정 부서장',
@@ -68,7 +68,7 @@ const ROLE_PRESETS: RolePreset[] = [
     icon: '👥',
     resolver: 'SPECIFIC_DEPT_HEAD',
     defaultArg: '',
-    defaultKind: '검토',
+    defaultKind: '결재',
   },
   {
     label: '특정 사용자',
@@ -554,19 +554,24 @@ export function ApprovalRouteRuleEditor({
                   {/* 결재 구분 (결재 vs 합의 vs 전결 vs 참조) + 순서 이동/삭제 */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     {s.kind !== '참조' && (
-                      <select
-                        value={s.parallelGroup ?? ''}
-                        onChange={(e) => setStep(idx, { parallelGroup: e.target.value || null })}
-                        title="같은 병렬 그룹의 단계는 동시에 진행됩니다"
-                        className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none cursor-pointer ${
-                          s.parallelGroup ? 'border-amber-500/40 bg-amber-500/10 text-amber-700' : 'border-border bg-panel text-ink3'
+                      <label
+                        title="같은 병렬 그룹 번호를 준 단계들은 동시에 결재합니다"
+                        className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold ${
+                          s.parallelGroup ? 'border-amber-500/40 bg-amber-500/10 text-amber-700' : 'border-border bg-panel text-ink2'
                         }`}
                       >
-                        <option value="">순차</option>
-                        {['1', '2', '3', '4'].map((g) => (
-                          <option key={g} value={g}>병렬 그룹 {g}</option>
-                        ))}
-                      </select>
+                        <span>병렬 그룹</span>
+                        <select
+                          value={s.parallelGroup ?? ''}
+                          onChange={(e) => setStep(idx, { parallelGroup: e.target.value || null })}
+                          className="bg-transparent font-bold outline-none cursor-pointer"
+                        >
+                          <option value="">없음</option>
+                          {['1', '2', '3', '4'].map((g) => (
+                            <option key={g} value={g}>{g}</option>
+                          ))}
+                        </select>
+                      </label>
                     )}
                     <select
                       value={s.kind}
@@ -587,9 +592,8 @@ export function ApprovalRouteRuleEditor({
                     >
                       <option value="결재">결재</option>
                       <option value="합의">합의</option>
-                      <option value="참조">참조</option>
-                      {/* 예전 규칙에 저장된 값은 그대로 보이게(새로 고를 수는 없음) */}
-                      {(s.kind === '전결' || s.kind === '검토') && <option value={s.kind}>{s.kind} (기존)</option>}
+                      {/* 예전 규칙에 저장된 값은 그대로 보이게(새로 고를 수는 없음). 참조자는 서식 설정의 기본 참조자에서 지정 */}
+                      {(s.kind === '전결' || s.kind === '검토' || s.kind === '참조') && <option value={s.kind}>{s.kind} (기존)</option>}
                     </select>
 
                     {/* 위/아래 이동 */}
