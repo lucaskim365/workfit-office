@@ -158,7 +158,7 @@ export function serializeSheet(p: SheetPayload): string {
   return JSON.stringify({ ...p, defaultRows: p.rows });
 }
 
-/** 구조(열·행 수, 수식, 병합, 서식, 비공개) 해시 — 칸 값은 제외 */
+/** 구조(열·행 수, 수식, 병합, 서식, 비공개, 예전 제목·합계 칸) 해시 — 칸 값은 제외 */
 export function sheetSignature(p: SheetPayload): string {
   const text = JSON.stringify([
     p.cols,
@@ -169,6 +169,8 @@ export function sheetSignature(p: SheetPayload): string {
     p.secretCols,
     p.secretCells,
     p.secretRows,
+    p.headerValues ?? null,
+    p.sumCell ?? null,
   ]);
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
@@ -244,4 +246,38 @@ export function cascadeRecalculateAllTables(
     finalPatch[tf.key] = serializeSheet(sheets[tf.key]);
   });
   return finalPatch;
+}
+
+/**
+ * 기안 중인 표에 서식 마스터의 새 변경이 있는지
+ * - baseSig가 있으면(새 문서) 작성 시작 때 서식 구조와 지금 서식 구조 비교 — 기안자가 바꾼 틀은 무관
+ * - 없으면(예전 문서) 행 수를 뺀 구조 비교 + 서식 기본 행이 더 많을 때
+ */
+export function hasMasterUpdate(masterRaw: string, currentRaw: unknown, fallbackCols?: string[]): boolean {
+  const master = normalizeTablePayload(masterRaw, fallbackCols);
+  if (typeof currentRaw !== 'string' || !currentRaw) return false;
+  const current = normalizeTablePayload(currentRaw, master.cols);
+  if (current.baseSig) return sheetSignature(master) !== current.baseSig;
+  const noRows = (p: SheetPayload) => sheetSignature({ ...p, rows: [] });
+  return noRows(master) !== noRows(current) || master.rows.length > current.rows.length;
+}
+
+/** 서식 마스터 구조로 바꾸고 입력한 값은 같은 행·열 칸에 보존 (예전 제목 행은 서식 것) */
+export function applyMasterToCurrent(masterRaw: string, currentRaw: unknown, fallbackCols?: string[]): SheetPayload {
+  const master = normalizeTablePayload(masterRaw, fallbackCols);
+  const current = typeof currentRaw === 'string' && currentRaw ? normalizeTablePayload(currentRaw, master.cols) : null;
+  const userRows = current?.rows ?? [];
+  const len = Math.max(master.rows.length, userRows.length);
+  const rows: Array<Record<string, string>> = [];
+  for (let i = 0; i < len; i++) {
+    const row: Record<string, string> = {};
+    master.cols.forEach((c) => {
+      const mVal = master.rows[i]?.[c];
+      const uVal = userRows[i]?.[c];
+      const keepMaster = master.legacyHeaderRow && i === 0;
+      row[c] = !keepMaster && uVal !== undefined && uVal !== '' ? String(uVal) : String(mVal ?? '');
+    });
+    rows.push(row);
+  }
+  return recalculateSheet({ ...master, rows, baseSig: sheetSignature(master) });
 }

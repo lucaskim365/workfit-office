@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { recalculateTableFormulas, type CellFormula } from './formulaEngine';
-import { normalizeTablePayload, serializeSheet, sheetSignature, recalculateSheet, cascadeRecalculateAllTables, type SheetPayload } from './sheetModel';
+import { normalizeTablePayload, serializeSheet, sheetSignature, recalculateSheet, cascadeRecalculateAllTables, hasMasterUpdate, applyMasterToCurrent, type SheetPayload } from './sheetModel';
 
 /** 예전 TableFieldEditor 합계 칸 규칙(열 키에 '금액' + amountCells 합) */
 function legacySum(
@@ -21,6 +21,10 @@ function legacySum(
   const next = rows.map((r) => ({ ...r }));
   next[sumCell.rIdx] = { ...next[sumCell.rIdx], [sumCell.col]: sum > 0 ? String(sum) : '' };
   return next;
+}
+
+function insertRowForTest(p: SheetPayload): SheetPayload {
+  return { ...p, rows: [...p.rows, Object.fromEntries(p.cols.map((c) => [c, '']))] };
 }
 
 export function runSheetModelTests() {
@@ -158,6 +162,44 @@ export function runSheetModelTests() {
     assert.equal(profit.rows[1]['금액'], '70,000,000');
     assert.equal(cascaded.table_sales, undefined, '타 표 수식 없는 표는 건드리지 않음');
     console.log('✓ 6. 복수 표 연쇄 재계산 통과\n');
+  }
+
+  // 7. 서식 마스터 업데이트 감지
+  {
+    const master = JSON.stringify({ cols: ['구분', '금액'], headerValues: { 구분: '구분', 금액: '금액' }, rows: [{ 구분: '', 금액: '' }] });
+    const sameDoc = JSON.stringify({ cols: ['구분', '금액'], headerValues: { 구분: '구분', 금액: '금액' }, rows: [{ 구분: 'a', 금액: '10' }, { 구분: 'b', 금액: '20' }] });
+    assert.equal(hasMasterUpdate(master, sameDoc), false, '예전 문서: 값·행 추가만 다르면 안내 없음');
+    const headerChanged = JSON.stringify({ cols: ['구분', '금액'], headerValues: { 구분: '구분', 금액: '공급가액' }, rows: [{ 구분: '', 금액: '' }] });
+    assert.equal(hasMasterUpdate(headerChanged, sameDoc), true, '예전 문서: 제목이 바뀌면 안내');
+
+    // 새 문서: baseSig 기준 — 기안자가 틀을 바꿔도 서식이 그대로면 안내 없음
+    const base = normalizeTablePayload(master);
+    const drafted = { ...insertRowForTest(base), baseSig: sheetSignature(base), cellStyles: { '1:구분': { bold: true } } };
+    assert.equal(hasMasterUpdate(master, serializeSheet(drafted)), false);
+    assert.equal(hasMasterUpdate(headerChanged, serializeSheet(drafted)), true);
+    console.log('✓ 7. 서식 마스터 업데이트 감지 통과');
+  }
+
+  // 8. 서식 마스터 반영 — 입력 값 유지, 제목은 서식 것, baseSig 갱신
+  {
+    const master = JSON.stringify({
+      cols: ['구분', '금액'],
+      headerValues: { 구분: '구분', 금액: '공급가액' },
+      rows: [{ 구분: 'SW', 금액: '' }, { 구분: '소계', 금액: '' }],
+      cellFormulas: { '1:금액': { expression: '=SUM(ABOVE)', format: 'number' } },
+    });
+    const doc = JSON.stringify({
+      cols: ['구분', '금액'],
+      headerValues: { 구분: '구분', 금액: '금액' },
+      rows: [{ 구분: '', 금액: '700' }, { 구분: '소계', 금액: '' }],
+    });
+    const out = applyMasterToCurrent(master, doc);
+    assert.equal(out.rows[0]['금액'], '공급가액');
+    assert.equal(out.rows[1]['구분'], 'SW');
+    assert.equal(out.rows[1]['금액'], '700');
+    assert.equal(out.rows[2]['금액'], '700');
+    assert.equal(out.baseSig, sheetSignature(normalizeTablePayload(master)));
+    console.log('✓ 8. 서식 마스터 반영 통과\n');
   }
 
   console.log('🎉 모든 sheetModel 테스트 통과!');
