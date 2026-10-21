@@ -27,6 +27,7 @@ import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
+import { useDepartments } from '@/features/department/useDepartments';
 import { PurchaseOrderArchive } from './PurchaseOrderArchive';
 
 export default function DocumentScreen() {
@@ -43,6 +44,27 @@ export default function DocumentScreen() {
   } = useDocument();
 
   const [searchParams] = useSearchParams();
+
+  // 부서별 문서함 — 조직도의 실제 부서를 트리 순서(상위 → 하위, 같은 층은 정렬순서)로
+  const { data: departments = [] } = useDepartments();
+  const deptFolders = useMemo(() => {
+    const byParent = new Map<string | null, typeof departments>();
+    departments.forEach((d) => {
+      const key = d.parentId && departments.some((p) => p.id === d.parentId) ? d.parentId : null;
+      byParent.set(key, [...(byParent.get(key) ?? []), d]);
+    });
+    const out: Array<{ id: string; name: string; depth: number }> = [];
+    const walk = (parentId: string | null, depth: number) => {
+      [...(byParent.get(parentId) ?? [])]
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+        .forEach((d) => {
+          out.push({ id: d.id, name: d.name, depth });
+          walk(d.id, depth + 1);
+        });
+    };
+    walk(null, 0);
+    return out;
+  }, [departments]);
 
   // 로그인 세션 가공 및 권한 식별
   const CURRENT_USER = useMemo(() => {
@@ -350,14 +372,10 @@ export default function DocumentScreen() {
             </span>
           </button>
           <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
-            {[
-              '경영기획팀',
-              '품질심사팀',
-              'AX PMO팀',
-              '데이터플랫폼 개발팀'
-            ].map((deptName) => (
+            {deptFolders.map(({ id, name: deptName, depth }) => (
               <button
-                key={deptName}
+                key={id}
+                style={{ paddingLeft: 8 + depth * 10 }}
                 onClick={() => {
                   setActiveCategory('dept');
                   setActiveSubCategory(deptName);
