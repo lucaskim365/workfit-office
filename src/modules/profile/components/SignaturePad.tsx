@@ -131,7 +131,8 @@ export default function SignaturePad({ onSave, onCancel, saving = false }: Signa
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative w-[300px]">
+      {/* 좁은 휴대폰 화면에서도 넘치지 않게 최대 300px 안에서 줄어든다(좌표는 실제 크기 비율로 환산). */}
+      <div className="relative w-full max-w-[300px]">
         <canvas
           ref={canvasRef}
           width={300}
@@ -144,7 +145,7 @@ export default function SignaturePad({ onSave, onCancel, saving = false }: Signa
           onTouchMove={drawTouch}
           onTouchEnd={stopDrawingTouch}
           className="block touch-none rounded-lg border border-border-hi bg-panel-alt cursor-crosshair"
-          style={{ width: '300px', height: '150px' }}
+          style={{ width: '100%', aspectRatio: '2 / 1' }}
         />
         {/* 점선 십자 가이드라인 그리드 (pointer-events-none 적용으로 마우스 드래그 방해 차단) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">

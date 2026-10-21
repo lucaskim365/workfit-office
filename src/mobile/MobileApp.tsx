@@ -24,6 +24,7 @@ import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
 import MobileGalleryScreen from './MobileGalleryScreen';
 import MobileOrgChartScreen from './MobileOrgChartScreen';
+import MobileProfileScreen from './MobileProfileScreen';
 import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 import { ReloginDialog } from '@/app/auth/ReloginDialog';
@@ -141,6 +142,7 @@ export default function MobileApp() {
             <Route path="gallery" element={<MobileGalleryScreen />} />
             <Route path="project" element={<MobileComingSoon title="프로젝트" icon="📗" desc="전사 프로젝트 협업 및 진행 관리 기능으로, 개발 로드맵에 따라 순차 오픈 예정입니다." />} />
             <Route path="orgchart" element={<MobileOrgChartScreen />} />
+            <Route path="profile" element={<MobileProfileScreen />} />
 
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
