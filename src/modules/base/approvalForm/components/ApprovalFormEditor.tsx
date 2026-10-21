@@ -904,8 +904,8 @@ export function ApprovalFormEditor({
                     className="mt-0.5 accent-teal"
                   />
                   <span>
-                    <span className="font-semibold text-ink">결재 완료 문서에서 상단 기본 정보 숨김</span>
-                    <span className="block text-[10.5px] text-ink3">문서번호·기안부서·기안자·기안일·결재 완료일·보존연한과 제목</span>
+                    <span className="font-semibold text-ink">대외 문서 — 결재 완료 문서는 서식 본문만 표시</span>
+                    <span className="block text-[10.5px] text-ink3">상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명을 숨깁니다 (발주서 보관함·PDF 포함)</span>
                   </span>
                 </label>
               </div>

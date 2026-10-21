@@ -324,6 +324,9 @@ export function ApprovalDocumentView({
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
+  // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
+  const externalDoc = !!form?.hideDocInfoOnComplete && doc.status === '완료';
+
   const closing = (form?.closing !== undefined && form?.closing !== null)
     ? form.closing
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
@@ -495,6 +498,7 @@ export function ApprovalDocumentView({
 
       <div className="approval-print mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-[620px] shadow-xs box-border">
 
+        {!externalDoc && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
           <div className="flex items-center gap-2 h-full">
             <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
@@ -502,6 +506,7 @@ export function ApprovalDocumentView({
           </div>
           <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
         </div>
+        )}
 
         {/* 취소 기안 문서 안내 배너 */}
         {doc.cancelTargetDocId && (
@@ -563,7 +568,7 @@ export function ApprovalDocumentView({
 
         <div className="relative mb-5 flex items-start justify-between gap-4">
           <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-          {!isSealForm(form?.fields) && (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
+          {!externalDoc && !isSealForm(form?.fields) && (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
             <div className="relative">
               <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
@@ -949,6 +954,7 @@ export function ApprovalDocumentView({
           </table>
         )}
 
+        {!externalDoc && (
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
           {closing.trim() && <div>{closing}</div>}
           <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
@@ -996,6 +1002,7 @@ export function ApprovalDocumentView({
             )}
           </div>
         </div>
+        )}
         {activeRelatedDocId && (
           <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
         )}
