@@ -18,6 +18,8 @@ import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
+import { SealFieldRow } from './components/CompanySeal';
+import { isSealForm } from '@/domain/approvalForm/seal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -338,7 +340,7 @@ export function ApprovalDocumentView({
   );
 
   interface LayoutBlock {
-    type: 'table' | 'longtext' | 'table-field';
+    type: 'table' | 'longtext' | 'table-field' | 'seal';
     section: string;
     fields: FormField[];
   }
@@ -376,6 +378,10 @@ export function ApprovalDocumentView({
     const blks: LayoutBlock[] = [];
     act.forEach((f) => {
       const { section: secName, width: fw } = getEffectiveProps(f);
+      if (f.type === '직인') {
+        blks.push({ type: 'seal', section: secName, fields: [f] });
+        return;
+      }
       if (f.type === '장문') {
         blks.push({
           type: 'longtext',
@@ -557,7 +563,7 @@ export function ApprovalDocumentView({
 
         <div className="relative mb-5 flex items-start justify-between gap-4">
           <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-          {(doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
+          {!isSealForm(form?.fields) && (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
             <div className="relative">
               <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
@@ -665,6 +671,10 @@ export function ApprovalDocumentView({
                 lastRenderedSection = block.section;
               }
 
+              if (block.type === 'seal') {
+                return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={doc.status === '완료'} />;
+              }
+
               if (block.type === 'longtext') {
                 const f = block.fields[0];
                 const rawVal = fieldText(f, doc.fieldValues, org);
@@ -707,6 +717,7 @@ export function ApprovalDocumentView({
                     isMaskingActive={isMaskingActive}
                     maskValue={maskValue}
                     minWidth={isHalf ? 'auto' : '500px'}
+                    sealStamped={doc.status === '완료'}
                   />
                 );
 

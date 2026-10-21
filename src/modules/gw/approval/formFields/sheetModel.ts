@@ -21,6 +21,8 @@ export interface CellStyle {
   align?: 'left' | 'center' | 'right';
   numFmt?: 'general' | 'currency' | 'percent';
   border?: { t?: BorderW; r?: BorderW; b?: BorderW; l?: BorderW };
+  /** 회사 직인 칸 — 결재 완료 후 직인이 겹쳐 찍힘 */
+  seal?: boolean;
 }
 
 export interface SheetPayload {

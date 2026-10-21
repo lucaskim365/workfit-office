@@ -54,4 +54,15 @@ export const companyInfoRepo = {
     }
     return { url, path };
   },
+
+  /** 회사 직인 업로드 — 저장소 서명 규칙상 chat/ 아래 경로 사용. */
+  async uploadSeal(file: File, prevPath?: string): Promise<{ url: string; path: string }> {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `chat/branding/company-seal-${Date.now()}.${ext}`;
+    const url = await fileStorage.put(path, file, { contentType: file.type || 'image/png' });
+    if (prevPath && prevPath !== path) {
+      await fileStorage.remove(prevPath);
+    }
+    return { url, path };
+  },
 };

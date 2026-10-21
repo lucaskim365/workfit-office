@@ -293,6 +293,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('docFooter', 256),
       S('logoUrl', 512),
       S('logoPath', 256),
+      S('sealUrl', 512),
+      S('sealPath', 256),
       BOOL('mask', true),
     ],
     indexes: [],

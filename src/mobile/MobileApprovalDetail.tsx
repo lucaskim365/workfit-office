@@ -14,6 +14,7 @@ import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
@@ -673,8 +674,14 @@ function ApprovalBody({
         }
       };
 
+      if (f.type === '직인') {
+        pushSection();
+        rows.push(<SealFieldRow key={f.key} label={f.label} stamped={doc.status === '완료'} />);
+        continue;
+      }
+
       if (f.type === '표') {
-        const tbl = renderTable(f, values, isMaskingActive, maskValue);
+        const tbl = renderTable(f, values, isMaskingActive, maskValue, doc.status === '완료');
         if (!tbl) continue;
         pushSection();
         rows.push(
@@ -733,7 +740,8 @@ function renderTable(
   f: FormField,
   values: Record<string, FieldValue>,
   isMaskingActive: boolean,
-  maskValue: (rawVal: string, isSecret?: boolean) => string
+  maskValue: (rawVal: string, isSecret?: boolean) => string,
+  sealStamped = false
 ): React.ReactNode | null {
   const raw = values[f.key];
   if (typeof raw !== 'string' || !raw) return null;
@@ -749,6 +757,7 @@ function renderTable(
         isMaskingActive={isMaskingActive}
         maskValue={maskValue}
         tone="theme"
+        sealStamped={sealStamped}
       />
     </div>
   );

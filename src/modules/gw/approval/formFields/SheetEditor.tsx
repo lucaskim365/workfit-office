@@ -640,6 +640,14 @@ export function SheetEditor({ isOpen, onClose, title, initial, others, labels, s
                 <Lock className="h-3.5 w-3.5" />
                 <span>비공개</span>
               </button>
+              <button
+                type="button"
+                className={tbBtn(!!focusStyle?.seal)}
+                onClick={() => style({ seal: focusStyle?.seal ? undefined : true })}
+                title="결재 완료 후 회사 직인이 찍힐 칸"
+              >
+                <span>직인 칸</span>
+              </button>
             </>
           )}
         </div>
@@ -790,6 +798,9 @@ export function SheetEditor({ isOpen, onClose, title, initial, others, labels, s
                           <>
                             {isEditing ? draft : displayCellValue(computed, r, col)}
                             {secret && <Lock className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-ink3" />}
+                            {sheet.cellStyles[key]?.seal && (
+                              <span className="absolute bottom-0.5 right-1 text-[9px] font-bold text-rose-500">직인</span>
+                            )}
                           </>
                         )}
                       </td>

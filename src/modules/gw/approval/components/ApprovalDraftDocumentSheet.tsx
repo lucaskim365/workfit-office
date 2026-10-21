@@ -28,6 +28,8 @@ import {
   Calendar,
 } from 'lucide-react';
 import { won } from '../utils/approvalUtils';
+import { SealFieldRow } from './CompanySeal';
+import { isSealForm } from '@/domain/approvalForm/seal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -51,7 +53,7 @@ function korToday(): string {
 }
 
 interface LayoutBlock {
-  type: 'table' | 'longtext' | 'table-field';
+  type: 'table' | 'longtext' | 'table-field' | 'seal';
   section: string;
   fields: FormField[];
 }
@@ -223,6 +225,9 @@ export function ApprovalDraftDocumentSheet({
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
 
+  // 직인 서식 — 결재란 대신 결재 완료 후 회사 직인
+  const sealForm = isSealForm(form?.fields);
+
   // 정렬된 결재 단계 (직인용)
   const stampSteps = useMemo(() => {
     return [...steps]
@@ -263,6 +268,10 @@ export function ApprovalDraftDocumentSheet({
     const blks: LayoutBlock[] = [];
     act.forEach((f) => {
       const { section: secName, width: fw } = getEffectiveProps(f);
+      if (f.type === '직인') {
+        blks.push({ type: 'seal', section: secName, fields: [f] });
+        return;
+      }
       if (f.type === '장문') {
         blks.push({
           type: 'longtext',
@@ -426,20 +435,30 @@ export function ApprovalDraftDocumentSheet({
             </div>
           )}
           {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
-          {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
+          {onStampTableClick && !isDesignMode && !sealForm && stampSteps.length === 0 && (
             <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
               + 결재선 지정
             </div>
           )}
-          <ApprovalStampTable
-            steps={stampSteps}
-            nameOf={nameOf}
-            posOf={posOf}
-            sealOf={sealOf}
-            isSignatureOf={isSignatureOf}
-            allowCurrentSignature
-            isPostApproval={isPostApproval}
-          />
+          {sealForm ? (
+            // 문서에는 결재란이 들어가지 않음 — 결재선 지정·규칙 설정 진입만 남김(인쇄 제외)
+            <div className="grid h-[56px] min-w-[150px] place-items-center rounded border border-dashed border-[#bbb] px-3 text-center text-[11px] font-semibold text-[#888] print:hidden">
+              <span>결재란 대신 회사 직인</span>
+              <span className="text-[10.5px] font-medium">
+                {isDesignMode ? '결재선 규칙 설정' : stampSteps.length > 0 ? `결재선 ${stampSteps.length}명` : '+ 결재선 지정'}
+              </span>
+            </div>
+          ) : (
+            <ApprovalStampTable
+              steps={stampSteps}
+              nameOf={nameOf}
+              posOf={posOf}
+              sealOf={sealOf}
+              isSignatureOf={isSignatureOf}
+              allowCurrentSignature
+              isPostApproval={isPostApproval}
+            />
+          )}
         </div>
       </div>
 
@@ -839,6 +858,11 @@ export function ApprovalDraftDocumentSheet({
             const showSectionHeader = block.section && block.section !== lastRenderedSection;
             if (block.section) {
               lastRenderedSection = block.section;
+            }
+
+            // 직인 블록 — 서식 설계 미리보기에서는 등록된 직인을 보여 줌, 기안 중에는 자리만
+            if (block.type === 'seal') {
+              return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={isDesignMode} />;
             }
 
             // A. 장문 블록 (longtext)

@@ -51,6 +51,10 @@ export const companyInfoSchema = z.object({
   logoUrl: z.string().default(''),
   /** 회사 로고 Storage 경로(교체·삭제용). */
   logoPath: z.string().default(''),
+  /** 회사 직인 이미지 URL — 직인 서식 문서가 결재 완료되면 찍힘. 비어 있으면 미등록. */
+  sealUrl: z.string().default(''),
+  /** 회사 직인 Storage 경로(교체 시 이전 파일 삭제용). */
+  sealPath: z.string().default(''),
   /** 민감정보 마스킹 표기 여부. */
   mask: z.boolean().default(true),
 });

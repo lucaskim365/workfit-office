@@ -4,6 +4,7 @@ import { getCellMergeInfo } from './utils';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { TableCellTextarea } from './TableCellTextarea';
 import { SheetEditor } from './SheetEditor';
+import { CellSealOverlay } from '../components/CompanySeal';
 import {
   normalizeTablePayload,
   recalculateSheet,
@@ -218,6 +219,7 @@ export function TableFieldEditor({
                           className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}
                         />
                       )}
+                      {style?.seal && <CellSealOverlay stamped={isDesignMode} />}
                     </td>
                   );
                 })}

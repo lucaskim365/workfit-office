@@ -124,6 +124,14 @@ const COMPONENT_PALETTE = [
     defaultWidth: 'half' as const,
     defaultLabel: '수량',
   },
+  {
+    type: '직인' as FieldType,
+    label: '회사 직인',
+    icon: '🔴',
+    desc: '결재란 대신 결재 완료 후 회사 직인',
+    defaultWidth: 'full' as const,
+    defaultLabel: '주식회사 ○○○ 대표이사 ○○○',
+  },
 ];
 
 interface ApprovalFormEditorProps {

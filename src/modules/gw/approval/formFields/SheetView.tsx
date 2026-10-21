@@ -1,5 +1,6 @@
 import { getCellMergeInfo } from './utils';
 import { normalizeTablePayload, type SheetPayload } from './sheetModel';
+import { CellSealOverlay } from '../components/CompanySeal';
 import { cellCss, defaultAlign, displayCellValue, isLegacyHeaderCell, isSecretCell } from './sheetStyle';
 
 /**
@@ -29,10 +30,12 @@ interface SheetViewProps {
   minWidth?: string;
   /** 'print' = 흰 바탕 고정 문서(PC 보기·인쇄), 'theme' = 앱 테마 색(모바일) */
   tone?: 'print' | 'theme';
+  /** 결재 완료 — 직인 칸에 회사 직인을 찍음 */
+  sealStamped?: boolean;
 }
 
 /** 읽기 전용 표 — 저장된 값을 그대로 보여 줌(재계산 안 함), 행·열 머리글 없음 */
-export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWidth = '500px', tone = 'print' }: SheetViewProps) {
+export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWidth = '500px', tone = 'print', sealStamped = false }: SheetViewProps) {
   const { cols, rows, merges, colWidths, cellStyles } = sheet;
   const baseCell =
     tone === 'print'
@@ -63,10 +66,11 @@ export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWid
                   rowSpan={rowSpan > 1 ? rowSpan : undefined}
                   colSpan={colSpan > 1 ? colSpan : undefined}
                   title={blurred ? '보안 필드입니다. 열람 권한이 없습니다.' : undefined}
-                  className={`${baseCell} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
+                  className={`${baseCell} ${style?.seal ? 'relative' : ''} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
                   style={{ textAlign: defaultAlign(sheet, rIdx, col), ...cellCss(style) }}
                 >
                   {text}
+                  {style?.seal && <CellSealOverlay stamped={sealStamped} />}
                 </td>
               );
             })}
