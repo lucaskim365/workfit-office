@@ -25,8 +25,13 @@ export const RESOLVERS = [
 ] as const;
 export type Resolver = (typeof RESOLVERS)[number];
 
-/** 결재 단계 구분(ApprovalStep.kind 로 매핑, 검토=결재의 표시변형). */
-export const ROUTE_STEP_KINDS = ['결재', '검토', '참조', '전결'] as const;
+/**
+ * 결재 단계 구분(ApprovalStep.kind 로 매핑). 화면에서 고를 수 있는 것은 결재·합의·참조뿐 —
+ * 검토·전결은 예전 규칙 호환용으로만 남김(검토=결재의 표시변형).
+ */
+export const ROUTE_STEP_KINDS = ['결재', '합의', '검토', '참조', '전결'] as const;
+/** 규칙 설정·기안자 결재선 편집에서 고를 수 있는 구분 */
+export const SELECTABLE_STEP_KINDS = ['결재', '합의'] as const;
 export type RouteStepKind = (typeof ROUTE_STEP_KINDS)[number];
 
 /** 부서 적용 범위(§5.4). */
@@ -49,6 +54,8 @@ export const routeStepSchema = z.object({
   dedupeSelf: z.boolean().default(true),
   /** 해석 실패(체인 끊김) 시 skip 허용. */
   optional: z.boolean().default(false),
+  /** 병렬 그룹 번호('1','2'…) — 같은 번호의 단계는 동시에 진행. null=순차. */
+  parallelGroup: z.string().nullable().optional(),
 });
 export type RouteStep = z.infer<typeof routeStepSchema>;
 

@@ -6,7 +6,7 @@ import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { X, AlertTriangle, Zap, Network, Users, Building2, Star, ChevronDown, BookmarkPlus } from 'lucide-react';
 
-import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
+import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
 import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
@@ -86,7 +86,6 @@ export function ApprovalLineBuilder({
   amount,
   docData,
   bottomSlot,
-  isAgreementEnabled = false,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
@@ -149,13 +148,10 @@ export function ApprovalLineBuilder({
   const approverEdits = useMemo(() => edits.filter((e) => e.kind !== '참조'), [edits]);
   const refEdits = useMemo(() => edits.filter((e) => e.kind === '참조'), [edits]);
 
-  const allowedKinds = useMemo(() => {
-    return STEP_KINDS.filter((k) => k !== '참조' && (k !== '합의' || isAgreementEnabled));
-  }, [isAgreementEnabled]);
-
-  const allowedParallelKinds = useMemo(() => {
-    return allowedKinds.filter((k) => k !== '전결');
-  }, [allowedKinds]);
+  // 고를 수 있는 구분은 결재·합의뿐(전결·대결은 선택지 없음). 예전 값은 결재로 보임.
+  const allowedKinds: StepKind[] = ['결재', '합의'];
+  const allowedParallelKinds = allowedKinds;
+  const shownKind = (k: StepKind): StepKind => (k === '합의' ? '합의' : '결재');
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const deptPosOf = (id: string) => {
@@ -626,9 +622,9 @@ export function ApprovalLineBuilder({
                                 </span>
                               </button>
                               <select
-                                value={edit.kind === '전결' ? '결재' : edit.kind}
+                                value={shownKind(edit.kind)}
                                 onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
-                                className={'shrink-0 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[10px] font-semibold outline-none ' + KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}
+                                className={'shrink-0 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[10px] font-semibold outline-none ' + KIND_TONE[shownKind(edit.kind)]}
                               >
                                 {allowedParallelKinds.map((k) => (
                                   <option key={k} value={k}>{k}</option>
@@ -729,9 +725,9 @@ export function ApprovalLineBuilder({
                     <span className="ml-1 text-[10px] text-ink3">{deptPosOf(edit.approverId)}</span>
                   </button>
                   <select
-                    value={edit.kind}
+                    value={shownKind(edit.kind)}
                     onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
-                    className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
+                    className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[shownKind(edit.kind)]}`}
                   >
                     {allowedKinds.map((k) => (
                       <option key={k} value={k}>{k}</option>

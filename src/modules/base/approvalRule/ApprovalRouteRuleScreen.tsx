@@ -172,7 +172,7 @@ export default function ApprovalRouteRuleScreen() {
       amountFrom: null,
       amountTo: null,
       steps: [
-        { resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false },
+        { resolver: 'DEPT_HEAD', arg: null, kind: '결재', dedupeSelf: true, optional: false },
       ],
     };
 
@@ -544,7 +544,9 @@ export default function ApprovalRouteRuleScreen() {
                     const kind = step.kind;
 
                     const kindColor =
-                      kind === '전결'
+                      kind === '합의'
+                        ? 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30'
+                        : kind === '전결'
                         ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
                         : kind === '검토'
                         ? 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30'
@@ -559,7 +561,7 @@ export default function ApprovalRouteRuleScreen() {
                           className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10.5px] font-bold border ${kindColor}`}
                         >
                           <span>{label}</span>
-                          <span className="text-[9px] opacity-80 font-normal">[{kind}]</span>
+                          <span className="text-[9px] opacity-80 font-normal">[{kind}{step.parallelGroup ? ` · 병렬${step.parallelGroup}` : ''}]</span>
                           {step.arg && (
                             <span className="text-[9px] opacity-70">({step.arg})</span>
                           )}

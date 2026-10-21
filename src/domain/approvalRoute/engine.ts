@@ -184,7 +184,8 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
     
     used.add(pick);
     const kind = toStepKind(rs.kind);
-    steps.push({ seq: seq++, parallelGroup: null, executionType: 'sequential', kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
+    const group = rs.parallelGroup && kind !== '참조' ? `R${rs.parallelGroup}` : null;
+    steps.push({ seq: seq++, parallelGroup: group, executionType: group ? 'parallel' : 'sequential', kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
     if (kind === '전결') {
       hasJeongyeol = true;
     }

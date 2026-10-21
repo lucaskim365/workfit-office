@@ -553,13 +553,30 @@ export function ApprovalRouteRuleEditor({
 
                   {/* 결재 구분 (결재 vs 합의 vs 전결 vs 참조) + 순서 이동/삭제 */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {s.kind !== '참조' && (
+                      <select
+                        value={s.parallelGroup ?? ''}
+                        onChange={(e) => setStep(idx, { parallelGroup: e.target.value || null })}
+                        title="같은 병렬 그룹의 단계는 동시에 진행됩니다"
+                        className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none cursor-pointer ${
+                          s.parallelGroup ? 'border-amber-500/40 bg-amber-500/10 text-amber-700' : 'border-border bg-panel text-ink3'
+                        }`}
+                      >
+                        <option value="">순차</option>
+                        {['1', '2', '3', '4'].map((g) => (
+                          <option key={g} value={g}>병렬 그룹 {g}</option>
+                        ))}
+                      </select>
+                    )}
                     <select
                       value={s.kind}
                       onChange={(e) =>
                         setStep(idx, { kind: e.target.value as RouteStep['kind'] })
                       }
                       className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none cursor-pointer ${
-                        s.kind === '전결'
+                        s.kind === '합의'
+                          ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400'
+                          : s.kind === '전결'
                           ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                           : s.kind === '검토'
                           ? 'border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-400'
@@ -569,9 +586,10 @@ export function ApprovalRouteRuleEditor({
                       }`}
                     >
                       <option value="결재">결재</option>
-                      <option value="전결">전결</option>
-                      <option value="검토">검토</option>
+                      <option value="합의">합의</option>
                       <option value="참조">참조</option>
+                      {/* 예전 규칙에 저장된 값은 그대로 보이게(새로 고를 수는 없음) */}
+                      {(s.kind === '전결' || s.kind === '검토') && <option value={s.kind}>{s.kind} (기존)</option>}
                     </select>
 
                     {/* 위/아래 이동 */}
