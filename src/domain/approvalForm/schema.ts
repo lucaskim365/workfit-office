@@ -113,6 +113,8 @@ export const approvalFormSchema = z.object({
   securityLevel: z.enum(['일반', '대외비', '극비']).nullable().optional(),
   /** 기본 공개 범위 */
   visibility: z.enum(['부서', '비공개']).nullable().optional(),
+  /** 결재 완료 문서에서 상단 자동 정보(문서번호·기안부서·기안자·기안일·완료일·보존연한) 숨김 — 대외 문서용 */
+  hideDocInfoOnComplete: z.boolean().nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

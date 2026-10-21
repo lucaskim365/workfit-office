@@ -896,6 +896,18 @@ export function ApprovalFormEditor({
                     className={inp}
                   />
                 </F>
+                <label className="flex cursor-pointer items-start gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    checked={!!form.hideDocInfoOnComplete}
+                    onChange={(e) => set({ hideDocInfoOnComplete: e.target.checked })}
+                    className="mt-0.5 accent-teal"
+                  />
+                  <span>
+                    <span className="font-semibold text-ink">결재 완료 문서에서 상단 기본 정보 숨김</span>
+                    <span className="block text-[10.5px] text-ink3">문서번호·기안부서·기안자·기안일·결재 완료일·보존연한 표 — 제목은 그대로 보입니다</span>
+                  </span>
+                </label>
               </div>
 
               {/* 기안 권한 및 보안 설정 */}

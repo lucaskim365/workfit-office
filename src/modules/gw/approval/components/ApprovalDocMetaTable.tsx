@@ -45,8 +45,11 @@ export function ApprovalDocMetaTable({
   isAmountInDetails: boolean;
   amountLabel: string;
 }) {
+  // 서식 설정 — 결재 완료 문서에서는 자동 정보 표를 숨김(제목은 유지)
+  const hideAutoInfo = !!form?.hideDocInfoOnComplete && doc.status === '완료';
   return (
     <>
+      {!hideAutoInfo && (
       <table className="w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
         <tbody>
           <MetaRow cells={[['문서번호', doc.docNo], ['기안부서', doc.drafterDept || '—']]} />
@@ -61,8 +64,9 @@ export function ApprovalDocMetaTable({
           )}
         </tbody>
       </table>
+      )}
 
-      <table className="mt-2 w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
+      <table className={`${hideAutoInfo ? '' : 'mt-2 '}w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed`}>
         <tbody>
           <MetaRow cells={[['제 목', doc.title]]} full />
           {doc.amount != null && !isAmountInDetails && (

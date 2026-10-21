@@ -513,6 +513,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('preservationPeriod', 32),
       S('securityLevel', 16),
       S('visibility', 16),
+      BOOL('hideDocInfoOnComplete'),
     ],
     indexes: [IX('code', ['code'])],
   },
