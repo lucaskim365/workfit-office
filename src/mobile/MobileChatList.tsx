@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
 import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
+import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import MobileNotificationBell from './MobileNotificationBell';
@@ -24,6 +25,7 @@ export default function MobileChatList() {
   const me = user!.id;
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
+  const drafts = useChatDrafts(me);
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
   const { meta: presenceMeta, presence: myPresence } = useMyPresence();
@@ -209,7 +211,14 @@ export default function MobileChatList() {
                       {isDirect && otherPresence?.message ? (
                         <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
                       ) : null}
-                      {r.lastMessage?.text ?? '대화를 시작하세요'}
+                      {drafts[r.id] ? (
+                        <>
+                          <span className="mr-1 font-semibold" style={{ color: '#e0483b' }}>[작성 중]</span>
+                          {draftPreview(drafts[r.id])}
+                        </>
+                      ) : (
+                        r.lastMessage?.text ?? '대화를 시작하세요'
+                      )}
                     </span>
                     {n > 0 && (
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: '#e0483b' }}>{n}</span>
