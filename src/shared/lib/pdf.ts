@@ -101,6 +101,13 @@ export async function exportElementToPdf(el: HTMLElement, fileName: string): Pro
     onclone: async (cloned, clonedEl) => {
       cloned.documentElement.style.zoom = '1';
       cloned.body.style.zoom = '1';
+      // 캡처 도구는 글자 간격이 0이면 낱말 단위로 그려, 줄바꿈된 낱말을 앞 줄 맨 앞에 겹쳐 그린다.
+      // 눈에 안 보이는 간격을 주면 글자 하나씩 자리를 재서 그린다(표 칸 여러 줄 글자 깨짐 방지).
+      const view = cloned.defaultView;
+      [clonedEl, ...Array.from(clonedEl.querySelectorAll<HTMLElement>('*'))].forEach((node) => {
+        const ls = view?.getComputedStyle(node).letterSpacing;
+        if (ls === 'normal' || ls === '0px') node.style.letterSpacing = '0.01px';
+      });
       const imgs = Array.from(clonedEl.querySelectorAll('img'));
       imgs.forEach((img) => {
         const data = inlined.get(img.currentSrc || img.src);
