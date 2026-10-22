@@ -183,12 +183,13 @@ export function plainTextOfRich(doc: RichNode): string {
         return;
       default:
         n.content?.forEach(walk);
-        if (BLOCKS.has(n.type) && cur) newline();
+        // 빈 문단(Enter 로 띄운 줄)도 한 줄로 남긴다
+        if (BLOCKS.has(n.type) && (cur || n.type === 'paragraph')) newline();
     }
   };
   walk(doc);
   if (cur) newline();
-  return lines.map((l) => l.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, RICH_SUMMARY_MAX_CHARS);
+  return lines.map((l) => l.trimEnd()).join('\n').trim().slice(0, RICH_SUMMARY_MAX_CHARS);
 }
 
 /** 본문이 가리키는 사진 첨부 id 들(본문 순서) */
