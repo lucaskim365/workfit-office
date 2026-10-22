@@ -204,8 +204,8 @@ export default function MobileApprovalDetail() {
             <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner relative select-none">
               <div
                 style={{
-                  zoom: zoomIn ? 1 : Math.max(0.1, (containerWidth - 24) / 780),
-                  width: '780px',
+                  zoom: zoomIn ? 1 : Math.max(0.1, (containerWidth - 24) / 800),
+                  width: '800px',
                   cursor: zoomIn ? 'zoom-out' : 'zoom-in',
                 }}
                 onClick={() => setZoomIn((z) => !z)}

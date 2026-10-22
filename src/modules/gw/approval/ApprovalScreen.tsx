@@ -1644,7 +1644,7 @@ function DocDetail({
               <span>인쇄</span>
             </button>
           </div>
-          <div className="rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
+          <div className="overflow-x-auto rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
             <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>

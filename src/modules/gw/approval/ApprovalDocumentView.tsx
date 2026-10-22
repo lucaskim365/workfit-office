@@ -496,7 +496,8 @@ export function ApprovalDocumentView({
         </div>
       )}
 
-      <div className="approval-print mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-[620px] shadow-xs box-border">
+      {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
+      <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
         {!externalDoc && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">

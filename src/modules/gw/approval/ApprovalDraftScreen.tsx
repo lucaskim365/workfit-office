@@ -2038,8 +2038,8 @@ function ApprovalDraftInner({
                       </div>
 
                       {/* Actual Document View Sheet inside Canvas */}
-                      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 flex justify-center">
-                        <div className="w-full max-w-[800px] shadow-xl rounded-sm overflow-hidden bg-white border border-black/10 self-start">
+                      <div className="flex-1 overflow-auto px-4 sm:px-6 py-6 flex">
+                        <div className="mx-auto shrink-0 shadow-xl rounded-sm overflow-hidden bg-white border border-black/10 self-start">
                           <ApprovalDocumentView
                             doc={previewDoc}
                             formOverride={selectedForm}
