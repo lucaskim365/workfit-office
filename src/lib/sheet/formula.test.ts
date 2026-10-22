@@ -7,6 +7,7 @@ import {
   valueText,
   colLetter,
   colIndex,
+  shiftFormula,
   type CellGetter,
 } from './formula';
 
@@ -79,4 +80,29 @@ test('숫자 해석·표시·열 문자', () => {
   assert.equal(valueText(true), 'TRUE');
   assert.equal(colLetter(26), 'AA');
   assert.equal(colIndex('AA'), 26);
+});
+
+test('행 삽입·삭제 이동', () => {
+  assert.equal(shiftFormula('=A1+A3', { type: 'row_add', atIndex: 1 }), '=A1+A4');
+  assert.equal(shiftFormula('=SUM(B2:B4)', { type: 'row_add', atIndex: 4 }), '=SUM(B2:B5)');
+  assert.equal(shiftFormula('=A2*2', { type: 'row_del', atIndex: 1 }), '=#REF!*2');
+  assert.equal(shiftFormula('=SUM(A2:A2)', { type: 'row_del', atIndex: 1 }), '=SUM(#REF!)');
+});
+
+test('열 이동', () => {
+  assert.equal(shiftFormula('=B1&C1', { type: 'col_add', atIndex: 1 }), '=C1&D1');
+  assert.equal(shiftFormula('=C1', { type: 'col_del', atIndex: 0 }), '=B1');
+});
+
+test('절대 참조 이동 시 $ 보존', () => {
+  assert.equal(shiftFormula('=$A$2+A$2', { type: 'row_add', atIndex: 0 }), '=$A$3+A$3');
+});
+
+test('문자열 안 주소는 이동하지 않는다', () => {
+  assert.equal(shiftFormula('=IF(A2>0,"A2 확인","")', { type: 'row_add', atIndex: 0 }), '=IF(A3>0,"A2 확인","")');
+});
+
+test('함수 이름·공백 보존, 깨진 식은 그대로', () => {
+  assert.equal(shiftFormula('=round( A1 , 2 )', { type: 'row_add', atIndex: 0 }), '=round( A2 , 2 )');
+  assert.equal(shiftFormula('="열린 따옴표', { type: 'row_add', atIndex: 0 }), '="열린 따옴표');
 });

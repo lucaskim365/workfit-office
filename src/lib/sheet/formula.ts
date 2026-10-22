@@ -394,6 +394,80 @@ function callFn(name: string, args: Node[], get: CellGetter): SheetValue {
   }
 }
 
+// ── 행·열 삽입/삭제에 따른 참조 이동 ──────────────────────
+
+export type ShiftAction = { type: 'row_add' | 'row_del' | 'col_add' | 'col_del'; atIndex: number };
+
+const isRowAction = (a: ShiftAction) => a.type === 'row_add' || a.type === 'row_del';
+const isAdd = (a: ShiftAction) => a.type === 'row_add' || a.type === 'col_add';
+
+/** 단일 좌표 한 축 이동 — 지워진 줄이면 null */
+function shiftIndex(i: number, a: ShiftAction): number | null {
+  if (isAdd(a)) return i >= a.atIndex ? i + 1 : i;
+  if (i === a.atIndex) return null;
+  return i > a.atIndex ? i - 1 : i;
+}
+
+/** 범위 한 축 이동 — 범위 안이나 끝 바로 다음에 넣으면 늘어남, 다 지워지면 null */
+function shiftSpan(start: number, end: number, a: ShiftAction): [number, number] | null {
+  const at = a.atIndex;
+  if (isAdd(a)) {
+    if (at <= start) return [start + 1, end + 1];
+    if (at <= end + 1) return [start, end + 1];
+    return [start, end];
+  }
+  if (at < start) return [start - 1, end - 1];
+  if (at <= end) return end - 1 < start ? null : [start, end - 1];
+  return [start, end];
+}
+
+function refText(t: RefTok, row: number, col: number): string {
+  return `${t.colAbs ? '$' : ''}${colLetter(col)}${t.rowAbs ? '$' : ''}${row + 1}`;
+}
+
+/**
+ * 행·열 삽입/삭제 시 수식의 셀 참조를 옮긴다 (엑셀처럼 $ 절대 참조도 옮기고 $ 표시는 보존)
+ * - 참조 토큰만 바꾸고 공백·글자·함수 이름은 원문 그대로. 읽을 수 없는 식은 그대로 돌려줌
+ */
+export function shiftFormula(expression: string, action: ShiftAction): string {
+  let tokens: Tok[];
+  try {
+    tokens = tokenize(expression);
+  } catch {
+    return expression;
+  }
+  const row = isRowAction(action);
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const a = tokens[i];
+    if (a.kind !== 'ref') continue;
+    const colon = tokens[i + 1];
+    const b = tokens[i + 2];
+    if (colon?.kind === 'op' && colon.value === ':' && b?.kind === 'ref') {
+      // 범위: 위·왼쪽 끝이 앞에 오도록 정렬해 이동
+      const [p, q] = (row ? a.row <= b.row : a.col <= b.col) ? [a, b] : [b, a];
+      const span = row ? shiftSpan(p.row, q.row, action) : shiftSpan(p.col, q.col, action);
+      const text = !span
+        ? '#REF!'
+        : row
+        ? `${refText(p, span[0], p.col)}:${refText(q, span[1], q.col)}`
+        : `${refText(p, p.row, span[0])}:${refText(q, q.row, span[1])}`;
+      edits.push({ start: a.start, end: b.end, text });
+      i += 2;
+      continue;
+    }
+    const moved = shiftIndex(row ? a.row : a.col, action);
+    const text = moved === null ? '#REF!' : row ? refText(a, moved, a.col) : refText(a, a.row, moved);
+    edits.push({ start: a.start, end: a.end, text });
+  }
+  let out = expression;
+  for (let k = edits.length - 1; k >= 0; k--) {
+    const e = edits[k];
+    out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  }
+  return out;
+}
+
 /** 수식 계산 — 앞의 '='는 있어도 없어도 됨 */
 export function evaluateFormula(expression: string, get: CellGetter): SheetValue {
   const src = expression.trim().replace(/^=/, '');
