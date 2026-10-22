@@ -1,6 +1,6 @@
 import { getCellMergeInfo } from './utils';
 import { normalizeTablePayload, type SheetPayload } from './sheetModel';
-import { CellSealOverlay } from '../components/CompanySeal';
+import { CellSealText } from '../components/CompanySeal';
 import { cellCss, defaultAlign, displayCellValue, isLegacyHeaderCell, isSecretCell } from './sheetStyle';
 
 /**
@@ -66,11 +66,10 @@ export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWid
                   rowSpan={rowSpan > 1 ? rowSpan : undefined}
                   colSpan={colSpan > 1 ? colSpan : undefined}
                   title={blurred ? '보안 필드입니다. 열람 권한이 없습니다.' : undefined}
-                  className={`${baseCell} ${style?.seal ? 'relative' : ''} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
+                  className={`${baseCell} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
                   style={{ textAlign: defaultAlign(sheet, rIdx, col), ...cellCss(style) }}
                 >
-                  {text}
-                  {style?.seal && <CellSealOverlay stamped={sealStamped} />}
+                  {style?.seal ? <CellSealText text={text} stamped={sealStamped} /> : text}
                 </td>
               );
             })}
