@@ -20,6 +20,7 @@ import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 import { SealFieldRow } from './components/CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
+import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -67,6 +68,7 @@ export function ApprovalDocumentView({
   external?: boolean;
 }) {
   const org = useOrgTree();
+  const { data: company } = useCompanyInfo();
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
   const [accessibleRelatedDocs, setAccessibleRelatedDocs] = useState<RelatedDoc[]>([]);
@@ -1009,6 +1011,12 @@ export function ApprovalDocumentView({
             )}
           </div>
         </div>
+        )}
+        {/* 대외 문서로 내보내는 결재 완료 문서(발주서 PDF 등) — 맨 아래에 회사 직인 */}
+        {external && doc.status === '완료' && (
+          <div className="mt-10 print-avoid-break">
+            <SealFieldRow label={[company?.name, company?.ceo ? `대표이사  ${company.ceo}` : ''].filter(Boolean).join('   ')} stamped />
+          </div>
         )}
         {activeRelatedDocId && (
           <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
