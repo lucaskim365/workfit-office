@@ -53,7 +53,8 @@ test('재계산 — 연쇄·IF·오류', () => {
 
 test('순환 참조는 0', () => {
   const r = recalculate(fill([['', '']], { A1: '=B1', B1: '=A1+1' }));
-  assert.equal(val(r, 0, 1), '1');
+  assert.equal(val(r, 0, 0), '0');
+  assert.equal(val(r, 0, 1), '0');
 });
 
 test('오류 칸을 참조하면 오류', () => {
@@ -75,4 +76,12 @@ test('sheetSignature — 값·너비엔 그대로, 부가 정보엔 바뀜', () 
     sig
   );
   assert.notEqual(sheetSignature({ ...s, cellMeta: { name: { [cellKey(0, s.cols[0])]: 'amount' } } }), sig);
+});
+
+test('순환 참조 결과는 수식 순서와 무관하고 바깥 칸에 퍼지지 않는다', () => {
+  const ab = recalculate(fill([['', '', '']], { A1: '=B1', B1: '=A1+1', C1: '=B1*10' }));
+  const ba = recalculate({ ...ab, formulas: Object.fromEntries(Object.entries(ab.formulas).reverse()) });
+  for (const r of [ab, ba]) {
+    assert.deepEqual([val(r, 0, 0), val(r, 0, 1), val(r, 0, 2)], ['0', '0', '0']);
+  }
 });

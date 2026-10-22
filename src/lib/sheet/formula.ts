@@ -34,12 +34,19 @@ export function colIndex(letter: string): number {
   return n - 1;
 }
 
-/** 칸 글자 → 숫자 (공백·콤마·₩ 무시, 끝 %는 ÷100). 숫자가 아니면 null */
+/**
+ * 칸 글자 → 숫자. 앞뒤 공백·앞의 ₩ 허용, 콤마는 세 자리 묶음(1,234,567)만, 끝 %는 ÷100.
+ * 중간 공백이 있거나(전화번호 등) 숫자가 아니면 null
+ */
 export function parseNumber(text: string): number | null {
-  let s = String(text).replace(/[\s,₩]/g, '');
+  let s = String(text).trim().replace(/^([+-]?)₩\s*/, '$1');
   if (s === '') return null;
   const percent = s.endsWith('%');
   if (percent) s = s.slice(0, -1);
+  if (s.includes(',')) {
+    if (!/^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(s)) return null;
+    s = s.replace(/,/g, '');
+  }
   if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)) return null;
   const n = Number(s);
   return percent ? n / 100 : n;
@@ -269,33 +276,60 @@ function parse(tokens: Tok[]): Node {
 
 // ── 계산 ───────────────────────────────────────────────
 
-/** 칸에서 읽은 글자는 숫자로 읽히면 숫자 */
-function cellValue(v: SheetValue): SheetValue {
-  if (typeof v !== 'string' || v === '') return v;
-  const n = parseNumber(v);
-  return n === null ? v : n;
+/** 빈 칸 — 숫자와 비교하면 0, 글자와 비교하면 '' (수식 안 "" 글자와 구별) */
+const BLANK = Object.freeze({ blank: true });
+
+/** 숫자로 읽히는 칸 글자 — 계산·비교에는 숫자, 결합(&)에는 원래 글자 */
+class NumText {
+  constructor(readonly n: number, readonly text: string) {}
 }
 
-function toNum(v: SheetValue): number {
-  if (v === '') return 0;
+type Val = SheetValue | typeof BLANK | NumText;
+
+function cellValue(v: SheetValue): Val {
+  if (v === '') return BLANK;
+  if (typeof v !== 'string') return v;
+  const n = parseNumber(v);
+  return n === null ? v : new NumText(n, v);
+}
+
+function toNum(v: Val): number {
+  if (v === BLANK || v === '') return 0;
+  if (v instanceof NumText) return v.n;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (typeof v === 'number') return v;
-  const n = parseNumber(v);
+  const n = parseNumber(v as string);
   if (n === null) throw new FormulaError();
   return n;
 }
 
-function truthy(v: SheetValue): boolean {
+function textOf(v: Val): string {
+  if (v === BLANK) return '';
+  if (v instanceof NumText) return v.text;
+  return valueText(v as SheetValue);
+}
+
+/** 계산기 내부 값 → 바깥에 돌려줄 값 */
+function toSheetValue(v: Val): SheetValue {
+  if (v === BLANK) return '';
+  if (v instanceof NumText) return v.n;
+  return v as SheetValue;
+}
+
+function truthy(v: Val): boolean {
+  if (v === BLANK) return false;
+  if (v instanceof NumText) return v.n !== 0;
   if (typeof v === 'number') return v !== 0;
   if (typeof v === 'boolean') return v;
   return v !== '';
 }
 
-function compare(a: SheetValue, b: SheetValue): number {
-  const numLike = (v: SheetValue) => typeof v !== 'string';
+function compare(a: Val, b: Val): number {
+  const numLike = (v: Val) => typeof v === 'number' || typeof v === 'boolean' || v instanceof NumText;
+  if (a === BLANK && b === BLANK) return 0;
   // 빈 칸은 상대가 숫자면 0, 글자면 ''
-  if (a === '' && numLike(b)) a = 0;
-  if (b === '' && numLike(a)) b = 0;
+  if (a === BLANK) a = numLike(b) ? 0 : '';
+  if (b === BLANK) b = numLike(a) ? 0 : '';
   if (numLike(a) && numLike(b)) return toNum(a) - toNum(b);
   if (typeof a === 'string' && typeof b === 'string') {
     const x = a.toLowerCase();
@@ -305,7 +339,7 @@ function compare(a: SheetValue, b: SheetValue): number {
   return numLike(a) ? -1 : 1; // 숫자 < 글자
 }
 
-function evalNode(n: Node, get: CellGetter): SheetValue {
+function evalNode(n: Node, get: CellGetter): Val {
   switch (n.t) {
     case 'lit':
       return n.v;
@@ -331,7 +365,7 @@ function evalNode(n: Node, get: CellGetter): SheetValue {
           return d === 0 ? 0 : x / d;
         }
         case '&':
-          return valueText(a) + valueText(b);
+          return textOf(a) + textOf(b);
         default: {
           const c = compare(a, b);
           return n.op === '=' ? c === 0 : n.op === '<>' ? c !== 0 : n.op === '<' ? c < 0 : n.op === '>' ? c > 0 : n.op === '<=' ? c <= 0 : c >= 0;
@@ -352,6 +386,7 @@ function numbersOf(args: Node[], get: CellGetter): number[] {
         for (let c = a.c1; c <= a.c2; c++) {
           const v = cellValue(get(r, c));
           if (typeof v === 'number') out.push(v);
+          else if (v instanceof NumText) out.push(v.n);
         }
     } else {
       out.push(toNum(evalNode(a, get)));
@@ -360,7 +395,7 @@ function numbersOf(args: Node[], get: CellGetter): number[] {
   return out;
 }
 
-function callFn(name: string, args: Node[], get: CellGetter): SheetValue {
+function callFn(name: string, args: Node[], get: CellGetter): Val {
   switch (name) {
     case 'SUM':
       return numbersOf(args, get).reduce((x, y) => x + y, 0);
@@ -471,7 +506,7 @@ export function shiftFormula(expression: string, action: ShiftAction): string {
 /** 수식 계산 — 앞의 '='는 있어도 없어도 됨 */
 export function evaluateFormula(expression: string, get: CellGetter): SheetValue {
   const src = expression.trim().replace(/^=/, '');
-  const v = evalNode(parse(tokenize(src)), get);
+  const v = toSheetValue(evalNode(parse(tokenize(src)), get));
   if (typeof v === 'number' && !Number.isFinite(v)) throw new FormulaError();
   return v;
 }

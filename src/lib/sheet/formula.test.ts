@@ -106,3 +106,31 @@ test('함수 이름·공백 보존, 깨진 식은 그대로', () => {
   assert.equal(shiftFormula('=round( A1 , 2 )', { type: 'row_add', atIndex: 0 }), '=round( A2 , 2 )');
   assert.equal(shiftFormula('="열린 따옴표', { type: 'row_add', atIndex: 0 }), '="열린 따옴표');
 });
+
+test('0을 입력한 칸은 빈 글자와 같지 않다 (빈 칸만 같다)', () => {
+  const g = [['0', '']];
+  const gg: CellGetter = (r, c) => g[r]?.[c] ?? '';
+  assert.equal(evaluateFormula('=A1=""', gg), false);
+  assert.equal(evaluateFormula('=B1=""', gg), true);
+  assert.equal(evaluateFormula('=B1=0', gg), true);
+  assert.equal(evaluateFormula('=A1=0', gg), true);
+});
+
+test('결합은 칸 글자를 그대로 쓴다', () => {
+  const g = [['007', '₩3,000', '50%']];
+  const gg: CellGetter = (r, c) => g[r]?.[c] ?? '';
+  assert.equal(evaluateFormula('=A1&"-"', gg), '007-');
+  assert.equal(evaluateFormula('=B1&""', gg), '₩3,000');
+  assert.equal(evaluateFormula('=C1&""', gg), '50%');
+  assert.equal(evaluateFormula('=A1+1', gg), 8);
+  assert.equal(evaluateFormula('=B1*2', gg), 6000);
+});
+
+test('숫자 해석 — 콤마는 세 자리 묶음만, 중간 공백은 숫자 아님', () => {
+  assert.equal(parseNumber('010 1234 5678'), null);
+  assert.equal(parseNumber('1,2,3'), null);
+  assert.equal(parseNumber('12,345,678.5'), 12345678.5);
+  assert.equal(parseNumber('₩3,000'), 3000);
+  const g = [['010 1234 5678', '5']];
+  assert.equal(evaluateFormula('=SUM(A1:B1)', (r, c) => g[r]?.[c] ?? ''), 5);
+});

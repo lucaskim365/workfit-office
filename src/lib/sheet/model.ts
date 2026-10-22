@@ -131,23 +131,35 @@ const ERR = Symbol('err');
 export function recalculate(s: Sheet): Sheet {
   const rows = s.rows.map((r) => ({ ...r }));
   const memo = new Map<string, SheetValue | typeof ERR>();
-  const stack = new Set<string>();
+  const stack: string[] = [];
+  // 순환에 걸린 칸 — 계산 순서와 상관없이 모두 0으로 확정 (순환 중 나온 중간값은 저장하지 않음)
+  const cyclic = new Set<string>();
 
   const valueOf = (key: string): SheetValue => {
     const hit = memo.get(key);
     if (hit === ERR) throw new FormulaError();
     if (hit !== undefined) return hit;
-    if (stack.has(key)) return 0;
-    stack.add(key);
+    const at = stack.indexOf(key);
+    if (at !== -1) {
+      stack.slice(at).forEach((k) => cyclic.add(k));
+      return 0;
+    }
+    stack.push(key);
     try {
       const v = evaluateFormula(s.formulas[key], get);
-      memo.set(key, v);
-      return v;
+      const final = cyclic.has(key) ? 0 : v;
+      memo.set(key, final);
+      return final;
     } catch (e) {
-      if (e instanceof FormulaError) memo.set(key, ERR);
+      if (!(e instanceof FormulaError)) throw e;
+      if (cyclic.has(key)) {
+        memo.set(key, 0);
+        return 0;
+      }
+      memo.set(key, ERR);
       throw e;
     } finally {
-      stack.delete(key);
+      stack.pop();
     }
   };
 
