@@ -56,6 +56,8 @@ export const formFieldSchema = z.object({
   isTabSelector: z.boolean().optional().default(false),
   /** 이 필드가 보안/마스킹 대상 필드인지 여부 */
   isSecret: z.boolean().default(false),
+  /** 대외 문서(결재 완료 후 거래처용 모양·발주서 PDF)에서 숨김 */
+  hideOnExternal: z.boolean().optional(),
   /**
    * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
    * width/section 을 독립적으로 다르게 설정하기 위한 맵.

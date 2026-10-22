@@ -15,7 +15,9 @@ const DOC_ID = 'main';
 const backend = createCrudBackend<CompanyInfo>({
   coll: 'companyInfo',
   parse: (raw) => {
-    const p = companyInfoSchema.safeParse(raw);
+    // DB 빈 칸(null) — 예: 직인 미등록 시 sealUrl — 은 기본값('')으로. 안 그러면 회사 정보 전체를 못 읽어 직인·로고가 빠진다.
+    const cleaned = Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([, v]) => v !== null));
+    const p = companyInfoSchema.safeParse(cleaned);
     if (!p.success) {
       console.error('Failed to parse companyInfo:', p.error);
       return null;

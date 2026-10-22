@@ -775,6 +775,23 @@ export function ApprovalFormEditor({
                         />
                         <span>보안 필드</span>
                       </label>
+
+                      <label
+                        className="flex items-center gap-1.5 cursor-pointer text-ink3 hover:text-ink"
+                        title="결재 완료 후 대외 문서 모양(발주서 PDF 등)에서는 이 필드를 보이지 않음"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedField.hideOnExternal ?? false}
+                          onChange={(e) =>
+                            setField(selectedFieldIdx, {
+                              hideOnExternal: e.target.checked || undefined,
+                            })
+                          }
+                          className="text-teal focus:ring-teal h-3.5 w-3.5 rounded"
+                        />
+                        <span>대외 문서에서 숨김</span>
+                      </label>
                     </div>
 
                     {/* '선택' 타입일 때 세부 옵션 */}

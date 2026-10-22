@@ -17,6 +17,7 @@ import {
 import { usePoReplies, usePurchaseOrderArchive, useUploadPoReply } from '@/features/poArchive/usePoArchive';
 import { poReplyRepo } from '@/data/poArchive/poReply.repo';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
+import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 
 const REPLY_FILTERS: { key: PoReplyFilter; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -91,8 +92,10 @@ export function PurchaseOrderArchive({
   // ── PDF — 화면 밖에 결재 문서를 그려 두고 그대로 떠서 저장한다 ──
   const pdfHostRef = useRef<HTMLDivElement>(null);
   const [pdfDoc, setPdfDoc] = useState<ApprovalDoc | null>(null);
+  // 회사 직인 정보를 다 불러온 뒤에 뜬다 — 직인 자리에 '(직인)' 글자만 찍히지 않게
+  const { isLoading: companyLoading } = useCompanyInfo();
   useEffect(() => {
-    if (!pdfDoc) return;
+    if (!pdfDoc || companyLoading) return;
     let cancelled = false;
     // 서식·사용자 정보가 그려질 시간을 준다(이미 캐시돼 있어 대개 바로 끝난다).
     const timer = setTimeout(async () => {
@@ -111,7 +114,7 @@ export function PurchaseOrderArchive({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [pdfDoc]);
+  }, [pdfDoc, companyLoading]);
 
   const poViewer: PoViewer = { userId: me.id, deptId: '', deptName: me.dept, isManager };
 
@@ -278,7 +281,7 @@ export function PurchaseOrderArchive({
       >
         {viewDoc && (
           <div className="overflow-x-auto">
-            <ApprovalDocumentView doc={viewDoc} currentUser={{ id: me.id, dept: me.dept }} />
+            <ApprovalDocumentView doc={viewDoc} currentUser={{ id: me.id, dept: me.dept }} external />
           </div>
         )}
       </Modal>
@@ -286,7 +289,7 @@ export function PurchaseOrderArchive({
       {/* PDF 생성용 — 화면 밖에 A4 폭으로 그린다 */}
       {pdfDoc && (
         <div ref={pdfHostRef} aria-hidden className="pointer-events-none fixed top-0" style={{ left: -10000, width: 800 }}>
-          <ApprovalDocumentView doc={pdfDoc} currentUser={{ id: me.id, dept: me.dept }} />
+          <ApprovalDocumentView doc={pdfDoc} currentUser={{ id: me.id, dept: me.dept }} external />
         </div>
       )}
     </main>

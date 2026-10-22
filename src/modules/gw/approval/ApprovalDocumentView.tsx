@@ -57,11 +57,14 @@ export function ApprovalDocumentView({
   formOverride,
   currentUser,
   isPreview = false,
+  external = false,
 }: {
   doc: ApprovalDoc;
   formOverride?: ApprovalForm;
   currentUser?: { id: string; dept?: string };
   isPreview?: boolean;
+  /** 서식 설정과 상관없이 대외 문서 모양으로(결재 완료 문서) — 거래처로 보내는 발주서 PDF 등 */
+  external?: boolean;
 }) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -325,7 +328,7 @@ export function ApprovalDocumentView({
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
   // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
-  const externalDoc = !!form?.hideDocInfoOnComplete && doc.status === '완료';
+  const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
 
   const closing = (form?.closing !== undefined && form?.closing !== null)
     ? form.closing
@@ -351,6 +354,8 @@ export function ApprovalDocumentView({
   const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
       if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      // 대외 문서에서 숨기기로 한 필드
+      if (externalDoc && f.hideOnExternal) return false;
       if (f.visibleIf) {
         const parts = f.visibleIf.split(':');
         if (parts.length === 2) {
@@ -436,7 +441,7 @@ export function ApprovalDocumentView({
       effectiveFieldProps: getEffectiveProps,
       longTextFields: longTexts,
     };
-  }, [form, doc.fieldValues, amountField]);
+  }, [form, doc.fieldValues, amountField, externalDoc]);
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
@@ -661,6 +666,7 @@ export function ApprovalDocumentView({
 
         <ApprovalDocMetaTable
           doc={doc}
+          hidden={externalDoc}
           form={form}
           drafterName={drafterName}
           drafterPos={drafterPos}
@@ -839,14 +845,14 @@ export function ApprovalDocumentView({
         )}
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-        {longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
+        {!externalDoc && longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
           <div className="mt-3 min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
             {bodyText}
           </div>
         )}
 
         {/* 첨부파일 영역 */}
-        {doc.attachments && doc.attachments.length > 0 && (
+        {!externalDoc && doc.attachments && doc.attachments.length > 0 && (
           <table className="mt-4 w-full border-collapse text-[12px]">
             <tbody>
               <tr>
@@ -923,7 +929,7 @@ export function ApprovalDocumentView({
 
 
         {/* 관련 문서 연동 영역 */}
-        {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
+        {!externalDoc && accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
           <table className="mt-2 w-full border-collapse text-[12px]">
             <tbody>
               <tr>

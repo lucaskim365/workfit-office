@@ -32,6 +32,7 @@ export function MetaRow({ cells, full }: { cells: Array<[string, React.ReactNode
 
 export function ApprovalDocMetaTable({
   doc,
+  hidden = false,
   form,
   drafterName,
   drafterPos,
@@ -39,6 +40,8 @@ export function ApprovalDocMetaTable({
   amountLabel,
 }: {
   doc: ApprovalDoc;
+  /** 대외 문서 모양 — 자동 정보 표 숨김 */
+  hidden?: boolean;
   form?: ApprovalForm;
   drafterName: string;
   drafterPos: string;
@@ -46,7 +49,7 @@ export function ApprovalDocMetaTable({
   amountLabel: string;
 }) {
   // 서식 설정 — 결재 완료 문서에서는 자동 정보 표와 제목을 모두 숨김(대외 문서용)
-  const hideAutoInfo = !!form?.hideDocInfoOnComplete && doc.status === '완료';
+  const hideAutoInfo = hidden || (!!form?.hideDocInfoOnComplete && doc.status === '완료');
   if (hideAutoInfo) return null;
   return (
     <>
