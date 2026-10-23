@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { buildCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { Holiday } from '@/domain/holiday/schema';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 interface MonthCalendarProps {
   month: string;
@@ -149,13 +150,13 @@ export default function MonthCalendar({
                     } else if (isCompany) {
                       chipStyle = 'bg-teal-500/[0.07] text-teal-700 dark:text-teal-400';
                     } else if (isVacation) {
-                      chipStyle = 'bg-emerald-500/[0.07] text-emerald-700 dark:text-emerald-400';
+                      chipStyle = PERSON_TONES.leave.chip;
                     } else if (isTrip) {
-                      chipStyle = 'bg-indigo-500/[0.07] text-indigo-700 dark:text-indigo-400';
+                      chipStyle = PERSON_TONES.trip.chip;
                     } else if (isOutside) {
-                      chipStyle = 'bg-blue-500/[0.07] text-blue-700 dark:text-blue-400';
+                      chipStyle = PERSON_TONES.outside.chip;
                     } else if (isMeeting) {
-                      chipStyle = 'bg-purple-500/[0.07] text-purple-700 dark:text-purple-400';
+                      chipStyle = PERSON_TONES.meeting.chip;
                     } else if (event.allDay) {
                       chipStyle = 'bg-teal-soft/40 text-teal';
                     }

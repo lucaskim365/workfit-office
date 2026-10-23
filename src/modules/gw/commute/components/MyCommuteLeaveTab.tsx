@@ -11,6 +11,7 @@ import { describeCommuteRecord, leaveChip } from '@/domain/commute/statusDisplay
 import { StatusBadges } from '@/features/commute/StatusBadge';
 import { StatusBadge } from '@/features/commute/StatusBadge';
 import { Button } from '@/shared/ui/Button';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   Calendar as CalendarIcon,
   List,
@@ -349,7 +350,7 @@ export function MyCommuteLeaveTab({
             </div>
             <div className="flex justify-between py-0.5">
               <span className="text-ink3">사용한 휴가</span>
-              <span className="font-bold text-emerald-600 tabular-nums">{monthSummary.leaveDays}일</span>
+              <span className={`font-bold tabular-nums ${PERSON_TONES.leave.text}`}>{monthSummary.leaveDays}일</span>
             </div>
             <div className="flex justify-between py-0.5">
               <span className="text-ink3">지각 / 결근</span>
@@ -667,7 +668,7 @@ export function MyCommuteLeaveTab({
                       <tr key={`sub-${subItem.id}`} className="hover:bg-panel-alt/20 transition-colors">
                         <td className="p-2 text-ink3 font-medium">{subItem.occurrenceDate}</td>
                         <td className="p-2">
-                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-extrabold text-emerald-600 border border-emerald-500/25">
+                          <span className={`rounded border px-1.5 py-0.5 font-extrabold ${PERSON_TONES.leave.badge}`}>
                             대체휴무
                           </span>
                         </td>

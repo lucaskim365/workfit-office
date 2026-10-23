@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
-/** 고정 태그 — 회의·외근·출장은 이름·색을 바꾸거나 지울 수 없다. */
+/** 고정 태그 — 회의·외근·출장은 이름·색을 바꾸거나 지울 수 없다. 색은 사람 상태 색([[statusColors]]). */
 export const FIXED_WORK_PLAN_TAGS = [
-  { id: 'MEETING', name: '회의', colorId: 'purple' },
-  { id: 'OUTSIDE', name: '외근', colorId: 'amber' },
-  { id: 'TRIP', name: '출장', colorId: 'indigo' },
+  { id: 'MEETING', name: '회의', colorId: PERSON_TONES.meeting.tagColorId },
+  { id: 'OUTSIDE', name: '외근', colorId: PERSON_TONES.outside.tagColorId },
+  { id: 'TRIP', name: '출장', colorId: PERSON_TONES.trip.tagColorId },
 ] as const;
 
 export type FixedTagId = (typeof FIXED_WORK_PLAN_TAGS)[number]['id'];
@@ -26,9 +27,8 @@ export type WorkPlanTagDraft = Pick<WorkPlanTag, 'name' | 'colorId' | 'order' | 
 
 /** 처음 한 번 깔아 주는 일반 태그. */
 export const DEFAULT_GENERAL_TAGS: ReadonlyArray<{ name: string; colorId: string }> = [
-  { name: '업무', colorId: 'blue' },
+  { name: '업무', colorId: 'slate' },
   { name: '보고', colorId: 'teal' },
-  { name: '교육', colorId: 'emerald' },
   { name: '마감', colorId: 'rose' },
   { name: '집중', colorId: 'pink' },
 ];

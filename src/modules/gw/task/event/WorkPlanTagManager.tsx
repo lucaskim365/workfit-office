@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { TextField } from '@/shared/ui/form/TextField';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
+import { GENERAL_TAG_COLOR_IDS } from '@/shared/theme/statusColors';
 import { useSaveWorkPlanTag, useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import {
   FIXED_WORK_PLAN_TAGS,
@@ -11,6 +12,11 @@ import {
   reorderGeneralTags,
   type WorkPlanTag,
 } from '@/domain/workPlan/tag';
+
+/** 일반 태그가 고를 수 있는 색 — 사람 상태 색(초록·노랑·파랑·남색·보라)은 뺀다 */
+const GENERAL_TAG_PRESETS = TAG_COLOR_PRESETS.filter((preset) =>
+  (GENERAL_TAG_COLOR_IDS as readonly string[]).includes(preset.id),
+);
 
 const dotClass = (colorId: string) =>
   TAG_COLOR_PRESETS.find((preset) => preset.id === colorId)?.dotColor ?? 'bg-slate-500';
@@ -26,7 +32,7 @@ function ColorSwatches({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      {TAG_COLOR_PRESETS.map((preset) => (
+      {GENERAL_TAG_PRESETS.map((preset) => (
         <button
           key={preset.id}
           type="button"
@@ -115,7 +121,7 @@ function GeneralRow({ tag, index, count, busy, error, onEdit, onRename, onColor,
   );
 }
 
-/** 업무계획 태그 관리 — 고정 태그는 읽기 전용, 일반 태그는 바꾸는 즉시 공용 목록에 저장한다. */
+/** 업무계획 태그 관리 — 고정 태그는 읽기 전용, 일반 태그는 이름·색·순서·숨김만 바꾼다(새 태그 추가 없음). 바꾸는 즉시 공용 목록에 저장한다. */
 export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
   const { data: tags = [] } = useWorkPlanTags();
   const queryClient = useQueryClient();
@@ -124,8 +130,6 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
   const sorted = sortGeneralTags(tags);
 
   const [rowError, setRowError] = useState<{ key: string; message: string } | null>(null);
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState('blue');
 
   const run = async (key: string, task: () => Promise<unknown>): Promise<boolean> => {
     setRowError(null);
@@ -168,14 +172,6 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
     })();
   };
 
-  const add = async () => {
-    const order = sorted.reduce((max, tag) => Math.max(max, tag.order), -1) + 1;
-    const ok = await run('new', () =>
-      save.mutateAsync({ draft: { name: newName.trim(), colorId: newColor, order, hidden: false } }),
-    );
-    if (ok) setNewName('');
-  };
-
   return (
     <div className="flex flex-col gap-4">
       <ul className="flex flex-col divide-y divide-border">
@@ -214,33 +210,6 @@ export function WorkPlanTagManager({ canEdit }: { canEdit: boolean }) {
           ),
         )}
       </ul>
-
-      {canEdit && (
-        <div className="flex flex-col gap-1 border-t border-border pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <TextField
-              value={newName}
-              maxLength={10}
-              disabled={busy}
-              placeholder="새 태그 이름"
-              aria-label="새 태그 이름"
-              invalid={rowError?.key === 'new'}
-              className="w-32"
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newName.trim()) void add();
-              }}
-            />
-            <ColorSwatches value={newColor} disabled={busy} onChange={setNewColor} />
-            <div className="ml-auto">
-              <Button variant="accent" size="sm" disabled={busy || !newName.trim()} onClick={() => void add()}>
-                추가
-              </Button>
-            </div>
-          </div>
-          {rowError?.key === 'new' && <p className="text-[11px] text-danger">{rowError.message}</p>}
-        </div>
-      )}
     </div>
   );
 }

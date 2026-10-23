@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_GENERAL_TAGS } from '../src/domain/workPlan/tag';
 
 /**
- * 업무계획 일반 태그 기본값 시드 — workPlanTags가 비어 있을 때만 5개를 만든다.
+ * 업무계획 일반 태그 기본값 시드 — workPlanTags가 비어 있을 때만 기본 태그(DEFAULT_GENERAL_TAGS)를 만든다.
  * 하나라도 있으면 아무것도 하지 않고 끝낸다(기존 태그를 건드리지 않는다).
  * 사용: npx tsx scripts/provision-work-plan-tags.ts [--prod]
  */

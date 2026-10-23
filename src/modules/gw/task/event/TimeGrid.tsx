@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   DAY_END,
   durationLabel,
@@ -18,7 +19,7 @@ export interface TimeGridBlock {
   start: number;
   end: number;
   label: string;
-  tone: 'meeting' | 'outside' | 'item' | 'room';
+  tone: 'meeting' | 'outside' | 'trip' | 'leave' | 'item' | 'room';
 }
 
 interface TimeGridProps {
@@ -42,12 +43,23 @@ const DESKTOP_MAX_HEIGHT = 'calc(88vh / var(--font-scale, 1) - 18rem)';
 const INITIAL_TOP = 8 * 60;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 시간표 블록 색 — 회의·외근·출장·휴가는 사람 상태 색([[statusColors]]) */
 const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
-  meeting: 'border-blue/40 bg-blue-soft text-blue',
-  outside: 'border-amber/40 bg-amber-soft text-amber',
+  meeting: PERSON_TONES.meeting.block,
+  outside: PERSON_TONES.outside.block,
+  trip: PERSON_TONES.trip.block,
+  leave: PERSON_TONES.leave.block,
   item: 'border-border-hi bg-bg-deep text-ink3',
-  room: 'border-dashed border-blue bg-transparent text-blue',
+  // 회의실 예약 — 회의 색 점선
+  room: `border-dashed bg-transparent ${PERSON_TONES.meeting.text} border-purple-500`,
 };
+
+/** 외근·결재 일정 → 외근/출장/휴가 */
+function scheduleTone(category: string | undefined): TimeGridBlock['tone'] {
+  if (category === 'TRIP') return 'trip';
+  if (category === 'LEAVE') return 'leave';
+  return 'outside';
+}
 
 /** 시간 있는 항목만 시간표 블록으로. 남의 시간표면 ownerName 을 앞에 붙인다 */
 export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGridBlock[] {
@@ -58,7 +70,13 @@ export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGr
     const end = toMinutes(entry.endTime);
     if (end <= start) continue;
     const tone: TimeGridBlock['tone'] =
-      entry.source === 'MEETING' ? 'meeting' : entry.source === 'OUTSIDE' || entry.source === 'APPROVAL' ? 'outside' : 'item';
+      entry.source === 'MEETING'
+        ? 'meeting'
+        : entry.source === 'OUTSIDE'
+          ? scheduleTone(entry.outside?.category)
+          : entry.source === 'APPROVAL'
+            ? scheduleTone(entry.schedule?.category)
+            : 'item';
     blocks.push({
       key: ownerName ? `${ownerName}:${entry.key}` : entry.key,
       start,

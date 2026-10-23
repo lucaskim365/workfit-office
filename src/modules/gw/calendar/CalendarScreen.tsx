@@ -30,6 +30,7 @@ import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from 
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
 import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -532,13 +533,13 @@ function LocalCalendarScreen() {
                   if (isCompany) {
                     badge = <span className="shrink-0 rounded bg-teal-500/[0.07] px-1 text-[9.5px] font-medium text-teal">사내행사</span>;
                   } else if (isVacation) {
-                    badge = <span className="shrink-0 rounded bg-emerald-500/[0.07] px-1 text-[9.5px] font-medium text-emerald-700 dark:text-emerald-400">휴가</span>;
+                    badge = <span className={`shrink-0 rounded px-1 text-[9.5px] font-medium ${PERSON_TONES.leave.chip}`}>휴가</span>;
                   } else if (isTrip) {
-                    badge = <span className="shrink-0 rounded bg-indigo-500/[0.07] px-1 text-[9.5px] font-medium text-indigo-600 dark:text-indigo-400">출장</span>;
+                    badge = <span className={`shrink-0 rounded px-1 text-[9.5px] font-medium ${PERSON_TONES.trip.chip}`}>출장</span>;
                   } else if (isOutside) {
-                    badge = <span className="shrink-0 rounded bg-blue-500/[0.07] px-1 text-[9.5px] font-medium text-blue">외근</span>;
+                    badge = <span className={`shrink-0 rounded px-1 text-[9.5px] font-medium ${PERSON_TONES.outside.chip}`}>외근</span>;
                   } else if (isMeeting) {
-                    badge = <span className="shrink-0 rounded bg-purple-500/[0.07] px-1 text-[9.5px] font-medium text-purple-600 dark:text-purple-400">회의</span>;
+                    badge = <span className={`shrink-0 rounded px-1 text-[9.5px] font-medium ${PERSON_TONES.meeting.chip}`}>회의</span>;
                   }
 
                   // 제목의 [휴가]/[출장]/[외근] 접두어는 뱃지와 겹치므로 뗀다

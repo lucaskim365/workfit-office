@@ -2,13 +2,22 @@ import { scheduleChip, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import type { CalendarEventType } from '@/domain/calendarEvent/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 /* 업무계획 칸 항목의 글·색 — PC 표 칩과 모바일 목록이 같이 쓴다. */
 
-/** 회의(및 회의 외 캘린더 일정) 칩 색 — 기존 보라 그대로 */
-const MEETING_CHIP_CLASS = 'bg-purple-500/15 text-purple-700 border-purple-500/30 dark:text-purple-400';
+/** 회의 칩 색 — 사람 상태 색([[statusColors]]) */
+const MEETING_CHIP_CLASS = PERSON_TONES.meeting.badge;
 /** 모르는·지운 태그 */
 const FALLBACK_TAG_CHIP_CLASS = 'bg-slate-500/10 text-slate-600 border border-slate-500/30 dark:text-slate-400';
+/** 캘린더 일정 종류별 칩 색 — 휴가는 휴가 색, 외근은 외근 색, 나머지는 회의 색 */
+const CALENDAR_CHIP_CLASS: Record<CalendarEventType, string> = {
+  GENERAL: MEETING_CHIP_CLASS,
+  MEETING: MEETING_CHIP_CLASS,
+  COMPANY_EVENT: MEETING_CHIP_CLASS,
+  OUTSIDE: PERSON_TONES.outside.badge,
+  VACATION: PERSON_TONES.leave.badge,
+};
 const CALENDAR_CHIP_TAG: Record<CalendarEventType, string> = {
   GENERAL: '회의',
   MEETING: '회의',
@@ -17,7 +26,7 @@ const CALENDAR_CHIP_TAG: Record<CalendarEventType, string> = {
   VACATION: '휴가',
 };
 
-/** 칩 글(`[태그] 제목`)과 색 — 일반은 태그 색, 회의는 보라, 외근·결재는 근태와 같은 표준 정의([[statusDisplay]]) */
+/** 칩 글(`[태그] 제목`)과 색 — 일반은 태그 색, 회의·외근·출장·휴가는 사람 상태 색([[statusColors]]) */
 export function chipLook(entry: DayEntry): { label: string; badgeClass: string } {
   switch (entry.source) {
     case 'ITEM': {
@@ -30,7 +39,7 @@ export function chipLook(entry: DayEntry): { label: string; badgeClass: string }
     case 'CALENDAR':
       return {
         label: `[${entry.event ? CALENDAR_CHIP_TAG[entry.event.eventType] : '회의'}] ${entry.title}`,
-        badgeClass: MEETING_CHIP_CLASS,
+        badgeClass: entry.event ? CALENDAR_CHIP_CLASS[entry.event.eventType] : MEETING_CHIP_CLASS,
       };
     case 'OUTSIDE': {
       const view = entry.outside;

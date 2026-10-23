@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCalendarDate } from './calendarDate';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
 
@@ -24,10 +25,10 @@ export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
 
 export const CALENDAR_EVENT_TYPE_LABELS: Record<CalendarEventType, { label: string; icon: string; badgeClass: string }> = {
   GENERAL: { label: '일반 일정', icon: '📝', badgeClass: 'bg-slate-500/10 text-slate-600 border-slate-500/20' },
-  MEETING: { label: '회의·미팅', icon: '👥', badgeClass: 'bg-purple-500/10 text-purple-600 border-purple-500/20' },
+  MEETING: { label: '회의·미팅', icon: '👥', badgeClass: PERSON_TONES.meeting.badge },
   COMPANY_EVENT: { label: '사내행사', icon: '🎉', badgeClass: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
-  OUTSIDE: { label: '외근·출장', icon: '🔵', badgeClass: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
-  VACATION: { label: '휴가·부재', icon: '🏖️', badgeClass: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  OUTSIDE: { label: '외근·출장', icon: '🔵', badgeClass: PERSON_TONES.outside.badge },
+  VACATION: { label: '휴가·부재', icon: '🏖️', badgeClass: PERSON_TONES.leave.badge },
 };
 
 export const calendarEventSchema = z.object({
