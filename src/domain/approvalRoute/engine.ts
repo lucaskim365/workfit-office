@@ -1,4 +1,5 @@
 import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
+import { withoutJeongyeol } from '@/domain/approvalDoc/engine';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
@@ -282,10 +283,11 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
     return matches;
   }) ?? null;
 
+  // 규칙·폴백에 남은 전결은 결재로 — 전결 선택지는 없앴다([[withoutJeongyeol]])
   if (rule) {
     const steps = buildSteps(rule, ctx.drafter, org);
-    if (steps.length > 0) return { steps, rule };
+    if (steps.length > 0) return { steps: withoutJeongyeol(steps), rule };
   }
 
-  return { steps: fallbackSteps(ctx.drafter, org), rule: null };
+  return { steps: withoutJeongyeol(fallbackSteps(ctx.drafter, org)), rule: null };
 }

@@ -16,6 +16,15 @@ import type { ApprovalBox, ApprovalDoc, ApprovalRecipient, ApprovalStep, StepDec
  * - 결정은 **오직 현재 활성 그룹의 본인 차례**에서만.
  */
 
+/**
+ * 새로 만드는 결재선에서 전결을 결재로 바꾼다 — 전결 선택지는 2026-10-21 에 없앴다.
+ * 남아 있던 전결 값이 화면엔 '결재'로 보이는데 승인하면 뒤 결재자를 건너뛰던 문제(2026-10-23) 방지.
+ * 자동 결재선·결재선 편집기·상신에서 쓴다. 이미 저장된 문서 데이터는 바꾸지 않는다.
+ */
+export function withoutJeongyeol<T extends { kind: ApprovalStep['kind'] }>(steps: T[]): T[] {
+  return steps.map((s) => (s.kind === '전결' ? { ...s, kind: '결재' } : s));
+}
+
 /** 진행을 막는(=승인이 필요한) 노드인가. 참조만 비차단. */
 export function isBlocking(step: ApprovalStep): boolean {
   return step.kind !== '참조';
@@ -139,7 +148,9 @@ export function applyDecision(
   const completedAtVal = opts.at;
 
   // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
-  if (step.kind === '전결') {
+  // 단, 뒤에 결재자가 남아 있으면(전결 뒤에 결재를 붙인 결재선) 건너뛰지 않고 일반 결재처럼 넘긴다.
+  const blockersAfter = doc.steps.some((s) => s.seq > step.seq && isBlocking(s));
+  if (step.kind === '전결' && !blockersAfter) {
     next = { ...next, status: finalStatus, completedAt: completedAtVal, currentSeq: seq };
   } else {
     // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
@@ -174,7 +185,7 @@ export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
   }
   if (!doc.steps.some(isBlocking)) throw new ApprovalError('결재자를 1명 이상 지정하세요');
 
-  const steps = doc.steps.map((s) => ({ ...s, decision: '대기' as StepDecision, decidedAt: null, comment: '' }));
+  const steps = withoutJeongyeol(doc.steps).map((s) => ({ ...s, decision: '대기' as StepDecision, decidedAt: null, comment: '' }));
   const fresh: ApprovalDoc = {
     ...doc,
     steps,

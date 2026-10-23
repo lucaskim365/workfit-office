@@ -7,6 +7,7 @@ import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { X, AlertTriangle, Zap, Network, Users, Building2, Star, ChevronDown, BookmarkPlus } from 'lucide-react';
 
 import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
+import { withoutJeongyeol } from '@/domain/approvalDoc/engine';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
 import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
@@ -38,7 +39,8 @@ function filterOrgNode(
  */
 
 function toEdit(steps: ApprovalStep[]): EditStep[] {
-  const sorted = [...steps].sort((a, b) => a.seq - b.seq);
+  // 예전 전결 값은 결재로 — 화면에 보이는 구분과 저장되는 구분을 같게([[withoutJeongyeol]])
+  const sorted = withoutJeongyeol([...steps]).sort((a, b) => a.seq - b.seq);
   return sorted.map((s, i) => ({
     approverId: s.approverId,
     kind: s.kind,
