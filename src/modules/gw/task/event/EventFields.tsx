@@ -292,7 +292,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         aria-label="시작 시각"
         value={range ? toHHmm(range.start) : ''}
         disabled={readOnly}
-        className="w-[108px]"
+        className="w-[124px]"
         onChange={(e) => onStart(e.target.value)}
       />
       <ArrowRight size={13} className="text-ink3" />
@@ -301,7 +301,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         aria-label="종료 시각"
         value={range ? toHHmm(range.end) : ''}
         disabled={readOnly}
-        className="w-[108px]"
+        className="w-[124px]"
         onChange={(e) => onEnd(e.target.value)}
       />
       {range && range.end > range.start && (

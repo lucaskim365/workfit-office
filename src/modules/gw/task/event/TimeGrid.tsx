@@ -90,7 +90,8 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = (INITIAL_TOP / DAY_END) * el.scrollHeight;
+    // 시각 글자는 줄 가운데에 걸쳐 있으므로 조금 위에서 시작해야 08:00 글자가 잘리지 않음
+    if (el) el.scrollTop = (INITIAL_TOP / DAY_END) * el.scrollHeight - 12;
   }, []);
 
   const laid = useMemo(() => layoutColumns(blocks), [blocks]);
