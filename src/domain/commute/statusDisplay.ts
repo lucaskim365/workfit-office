@@ -1,5 +1,5 @@
 import type { CommuteRecord } from './schema';
-import { PERSON_TONES } from '@/shared/theme/statusColors';
+import { HOLIDAY_WORK_TONE, PERSON_TONES } from '@/shared/theme/statusColors';
 import { isHalfDayLeave, isQuarterDayLeave, QUARTER_LEAVE_SLOTS } from '@/domain/leave/policy';
 
 /**
@@ -54,11 +54,7 @@ export const STATUS_TONES: Record<StatusKind, StatusTone> = {
   leave: { badge: PERSON_TONES.leave.badge, text: PERSON_TONES.leave.text, dot: PERSON_TONES.leave.dot },
   outside: { badge: PERSON_TONES.outside.badge, text: PERSON_TONES.outside.text, dot: PERSON_TONES.outside.dot },
   trip: { badge: PERSON_TONES.trip.badge, text: PERSON_TONES.trip.text, dot: PERSON_TONES.trip.dot },
-  holiday_work: {
-    badge: 'bg-violet-500/10 border-violet-500/30 text-violet-700 dark:text-violet-400',
-    text: 'text-violet-700 dark:text-violet-400',
-    dot: 'bg-violet-500',
-  },
+  holiday_work: HOLIDAY_WORK_TONE,
   off: { badge: 'bg-panel-alt border-border text-ink3', text: 'text-ink3', dot: 'bg-ink3/40' },
 };
 
