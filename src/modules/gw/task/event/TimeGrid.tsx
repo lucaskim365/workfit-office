@@ -33,9 +33,9 @@ interface TimeGridProps {
 }
 
 /** 한 시간 높이(rem). 좌표 계산은 비율만 쓰므로 body zoom 과 무관하다 */
-const HOUR_REM = 2;
-/** 기본으로 보이는 시간 수(08:00~19:00) */
-const VISIBLE_HOURS = 11;
+const HOUR_REM = 3;
+/** 기본으로 보이는 시간 수(08:00~16:00) — 24시간 전체는 스크롤로 (밤을 넘기는 일정이 끊기지 않게) */
+const VISIBLE_HOURS = 8;
 /** 마운트 시 맨 위에 올 시각(분) */
 const INITIAL_TOP = 8 * 60;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -90,8 +90,10 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    // 시각 글자는 줄 가운데에 걸쳐 있으므로 조금 위에서 시작해야 08:00 글자가 잘리지 않음
-    if (el) el.scrollTop = (INITIAL_TOP / DAY_END) * el.scrollHeight - 12;
+    // 고른 시간이 있으면 그 1시간 전부터, 없으면 08:00부터
+    // 시각 글자는 줄 가운데에 걸쳐 있으므로 조금 위에서 시작해야 맨 위 시각 글자가 잘리지 않음
+    const top = value && !allDay ? Math.min(Math.max(value.start - 60, 0), DAY_END - VISIBLE_HOURS * 60) : INITIAL_TOP;
+    if (el) el.scrollTop = (top / DAY_END) * el.scrollHeight - 12;
   }, []);
 
   const laid = useMemo(() => layoutColumns(blocks), [blocks]);

@@ -9,7 +9,7 @@ import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { EventFields, type EventForm } from './EventFields';
-import { FIXED_KINDS, dateLabel, dotClassOf, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { FIXED_KINDS, dotClassOf, eventWhenLabel, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
 import { kindEnabled } from './entryRouting';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
@@ -44,10 +44,9 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
 
   const close = form.saving ? () => {} : onClose;
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
-  const when = isOutsideKind(state.kind) && state.endDate > state.date
-    ? `${dateLabel(state.date)} ~ ${dateLabel(state.endDate)}`
-    : dateLabel(state.date);
-  const subtitle = [owner.name, when].filter(Boolean).join(' · ');
+  const when = eventWhenLabel(state.date, isOutsideKind(state.kind) ? state.endDate : undefined);
+  const ownerText = [owner.name, owner.position].filter(Boolean).join(' ');
+  const subtitle = [ownerText, when.date, when.week].filter(Boolean).join(' · ');
 
   // 보기 중인 회의 — 참석자는 참석 취소, 주최자도 참석자도 아니면 합류
   const viewedMeeting = entry?.source === 'MEETING' ? entry.event ?? null : null;
@@ -96,7 +95,7 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
                 <span className="shrink-0 rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">회의실 반려</span>
               )}
             </div>
-            {subtitle && <p className="truncate text-[11px] text-ink3">{subtitle}</p>}
+            {subtitle && <p className="truncate text-[12px] font-semibold text-ink2">{subtitle}</p>}
           </div>
           <MoreMenu open={menuOpen} onOpenChange={setMenuOpen} />
         </header>

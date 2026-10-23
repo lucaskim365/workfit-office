@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, ChevronDown, Repeat } from 'lucide-react';
+import { Bell, CalendarDays, Check, ChevronDown, Repeat, UserRound } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
@@ -9,7 +9,7 @@ import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { EventFields, type EventForm } from './EventFields';
-import { FIXED_KINDS, dateLabel, dotClassOf, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
+import { FIXED_KINDS, dotClassOf, eventWhenLabel, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
 import { kindEnabled } from './entryRouting';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
@@ -39,10 +39,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
   const { save, join, leave, remove, confirmingDelete, setConfirmingDelete } = useEventActions(form, onSaved, onClose);
 
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
-  const when = isOutsideKind(state.kind) && state.endDate > state.date
-    ? `${dateLabel(state.date)} ~ ${dateLabel(state.endDate)}`
-    : dateLabel(state.date);
-  const subtitle = [owner.name, when].filter(Boolean).join(' · ');
+  const when = eventWhenLabel(state.date, isOutsideKind(state.kind) ? state.endDate : undefined);
 
   // 보기 중인 회의 — 참석자는 참석 취소, 주최자도 참석자도 아니면 합류
   const viewedMeeting = entry?.source === 'MEETING' ? entry.event ?? null : null;
@@ -82,9 +79,24 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       width={760}
       flush
       title={(
-        <span className="flex flex-wrap items-baseline gap-x-2">
-          <span>{heading}</span>
-          {subtitle && <span className="text-[12px] font-medium text-ink3">{subtitle}</span>}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="mr-1">{heading}</span>
+          {owner.name && (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-panel-alt px-2 py-0.5 text-[13px] font-bold text-ink">
+              <UserRound size={13} className="text-ink3" />
+              {owner.name}
+              {owner.position && <span className="font-semibold text-ink2">{owner.position}</span>}
+            </span>
+          )}
+          {when.date && (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-panel-alt px-2 py-0.5 text-[13px] font-bold text-ink">
+              <CalendarDays size={13} className="text-ink3" />
+              {when.date}
+            </span>
+          )}
+          {when.week && (
+            <span className="rounded-md bg-teal/10 px-2 py-0.5 text-[12px] font-bold text-teal">{when.week}</span>
+          )}
           {entry?.roomStatus === 'PENDING' && (
             <span className="self-center rounded bg-amber-soft px-1.5 py-0.5 text-[10px] font-bold text-amber">회의실 승인 대기</span>
           )}
