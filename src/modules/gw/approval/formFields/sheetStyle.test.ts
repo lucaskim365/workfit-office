@@ -64,6 +64,46 @@ export function runSheetStyleTests() {
     console.log('✓ 4. resolveViewSheet 통과\n');
   }
 
+  // 5. resolveViewSheet — 직인 칸 지정 전에 기안한 문서에도 서식의 직인 칸을 이어 붙임
+  {
+    const master = JSON.stringify({
+      version: 2,
+      cols: ['a', 'b'],
+      rows: [{ a: '품목', b: '' }, { a: '', b: '' }, { a: '발주자', b: '대표이사 홍길동 (인)' }],
+      cellStyles: { '2:b': { seal: true, bold: true } },
+    });
+    // 기안자가 품목 행을 하나 추가해 직인 칸이 한 줄 아래로 밀린 예전 문서 (직인 지정 없음)
+    const oldDoc = JSON.stringify({
+      version: 2,
+      cols: ['a', 'b'],
+      rows: [{ a: '품목', b: '볼트' }, { a: '', b: '너트' }, { a: '', b: '와셔' }, { a: '발주자', b: '대표이사 홍길동 (인)' }],
+      cellStyles: { '3:b': { bold: true } },
+    });
+    const v = resolveViewSheet(master, oldDoc);
+    assert.deepEqual(v.cellStyles['3:b'], { bold: true, seal: true });
+    assert.equal(v.cellStyles['2:b']?.seal, undefined);
+
+    // 글자가 달라졌으면 같은 자리 칸에 찍음
+    const editedDoc = JSON.stringify({
+      version: 2,
+      cols: ['a', 'b'],
+      rows: [{ a: '품목', b: '' }, { a: '', b: '' }, { a: '발주자', b: '대표이사 김철수 (인)' }],
+    });
+    assert.equal(resolveViewSheet(master, editedDoc).cellStyles['2:b']?.seal, true);
+
+    // 문서에 이미 직인 지정이 있으면 문서 것을 그대로 따름
+    const newDoc = JSON.stringify({
+      version: 2,
+      cols: ['a', 'b'],
+      rows: [{ a: '품목', b: '' }, { a: '발주자', b: '대표이사 홍길동 (인)' }, { a: '', b: '' }],
+      cellStyles: { '1:b': { seal: true } },
+    });
+    const n = resolveViewSheet(master, newDoc);
+    assert.equal(n.cellStyles['1:b']?.seal, true);
+    assert.equal(n.cellStyles['2:b']?.seal, undefined);
+    console.log('✓ 5. 예전 문서 직인 칸 이어 붙이기 통과\n');
+  }
+
   console.log('🎉 모든 sheetStyle 테스트 통과!');
 }
 
