@@ -18,6 +18,7 @@ import type { CommuteRecord } from '@/domain/commute/schema';
 import { describeCommuteRecord, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import MobileCommonHeader from './MobileCommonHeader';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
@@ -252,8 +253,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('ONLINE', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'ONLINE'
-                  ? 'bg-emerald-500 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-emerald-500/10 hover:text-emerald-600'
+                  ? `${PERSON_TONES.work.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               🏢 업무 중
@@ -263,8 +264,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('FOCUS', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'FOCUS'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-amber-500/10 hover:text-amber-600'
+                  ? `${PERSON_TONES.focus.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               🎯 집중 근무
@@ -275,8 +276,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('AWAY', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'AWAY'
-                  ? 'bg-yellow-400 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-yellow-400/10 hover:text-yellow-700'
+                  ? `${PERSON_TONES.away.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               ☕ 자리비움
