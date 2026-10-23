@@ -7,7 +7,10 @@ export function SealImage({ stamped, size = 64 }: { stamped: boolean; size?: num
   const { data: info } = useCompanyInfo();
   const url = info?.sealUrl;
   if (stamped && url) {
-    return <img src={url} alt="회사 직인" style={{ width: size, height: size }} className="object-contain" />;
+    // maxWidth none — 글자 끝에 띄운 칸처럼 폭이 0인 곳에서도 공통 스타일(img max-width:100%)에 눌려 폭 0으로 사라지지 않게
+    return (
+      <img src={url} alt="회사 직인" style={{ width: size, height: size, maxWidth: 'none' }} className="shrink-0 object-contain" />
+    );
   }
   return <span className="text-[12px] font-semibold text-[#bbb] select-none">(직인)</span>;
 }
@@ -54,7 +57,7 @@ export function CellSealText({ text, stamped }: { text: string; stamped: boolean
       {head}
       <span className="relative inline-block">
         {last}
-        <span className="pointer-events-none absolute left-full top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <span className="pointer-events-none absolute left-full top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: 'max-content' }}>
           <SealImage stamped={stamped} size={56} />
         </span>
       </span>
