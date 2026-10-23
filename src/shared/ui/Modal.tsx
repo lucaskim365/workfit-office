@@ -15,6 +15,22 @@ interface ModalProps {
   children: ReactNode;
 }
 
+let openCount = 0;
+let saved = { html: '', body: '' };
+
+function lockScroll() {
+  if (openCount++ > 0) return;
+  saved = { html: document.documentElement.style.overflow, body: document.body.style.overflow };
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+
+function unlockScroll() {
+  if (--openCount > 0) return;
+  document.documentElement.style.overflow = saved.html;
+  document.body.style.overflow = saved.body;
+}
+
 /**
  * 공통 모달 — 디자인 토큰 패널(헤더/본문/푸터) 기준.
  * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이는 화면의 88%.
@@ -30,11 +46,18 @@ export function Modal({ open, onClose, title, footer, width = 480, flush = false
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  // 열려 있는 동안 뒤 화면 스크롤 막기 (모달이 겹쳐 열려도 마지막 것이 닫힐 때 풀림)
+  useEffect(() => {
+    if (!open) return;
+    lockScroll();
+    return unlockScroll;
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClass} grid place-items-center bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
+      className={`fixed inset-0 ${zClass} grid place-items-center overscroll-contain bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
       onMouseDown={onClose}
     >
       <div

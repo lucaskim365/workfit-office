@@ -45,8 +45,7 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
   const close = form.saving ? () => {} : onClose;
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
   const when = eventWhenLabel(state.date, isOutsideKind(state.kind) ? state.endDate : undefined);
-  const ownerText = [owner.name, owner.position].filter(Boolean).join(' ');
-  const subtitle = [ownerText, when.date, when.week].filter(Boolean).join(' · ');
+  const subtitle = [owner.name, when.date, when.week].filter(Boolean).join(' · ');
 
   // 보기 중인 회의 — 참석자는 참석 취소, 주최자도 참석자도 아니면 합류
   const viewedMeeting = entry?.source === 'MEETING' ? entry.event ?? null : null;

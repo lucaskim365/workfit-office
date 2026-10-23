@@ -56,17 +56,13 @@ export function sourceIdOf(entry: DayEntry): string {
   return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;
 }
 
-/** 일정 주인 — 새 일정은 칸 주인, 기존 일정은 등록한 사람 (직급은 사용자 목록에서) */
-export function ownerOf(target: EventTarget, users: User[]): { id: string; name: string; position: string } {
-  if (target.mode === 'create') {
-    const position = users.find((u) => u.id === target.owner.id)?.position ?? '';
-    return { id: target.owner.id, name: target.owner.name, position };
-  }
+/** 일정 주인 — 새 일정은 칸 주인, 기존 일정은 등록한 사람 */
+export function ownerOf(target: EventTarget, users: User[]): { id: string; name: string } {
+  if (target.mode === 'create') return { id: target.owner.id, name: target.owner.name };
   const entry = target.entry;
   const id = entry.item?.ownerUserId ?? entry.event?.ownerUserId ?? entry.outside?.ownerUserId ?? entry.schedule?.drafterId ?? '';
-  const user = users.find((u) => u.id === id);
-  const name = user?.name ?? entry.outside?.ownerName ?? entry.schedule?.drafterName ?? '';
-  return { id, name, position: user?.position ?? '' };
+  const name = users.find((u) => u.id === id)?.name ?? entry.outside?.ownerName ?? entry.schedule?.drafterName ?? '';
+  return { id, name };
 }
 
 /** 일정 창 제목 줄의 날짜 — '2026년 10월 20일 (화)', 여러 날이면 '… ~ 10월 22일 (목)', 주차는 시작일 기준 */
@@ -77,7 +73,7 @@ export function eventWhenLabel(date: string, endDate?: string): { date: string; 
     ? ` ~ ${endDate.slice(0, 4) !== date.slice(0, 4) ? `${endDate.slice(0, 4)}년 ` : ''}${dateLabel(endDate)}`
     : '';
   const w = weekOfMonth(date);
-  return { date: `${year}${dateLabel(date)}${range}`, week: w ? `${w.month}월 ${w.week}주차` : '' };
+  return { date: `${year}${dateLabel(date)}${range}`, week: w ? `${w.week}주차` : '' };
 }
 
 /** 시간표에 겹쳐 보일 그날 일정 — 주인 + (회의면) 참석자, 고른 회의실 예약. 고치는 일정 자신은 뺀다. */

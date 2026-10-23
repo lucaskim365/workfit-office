@@ -36,6 +36,8 @@ interface TimeGridProps {
 const HOUR_REM = 3;
 /** 기본으로 보이는 시간 수(08:00~16:00) — 24시간 전체는 스크롤로 (밤을 넘기는 일정이 끊기지 않게) */
 const VISIBLE_HOURS = 8;
+/** PC 일정 창 — 화면이 낮으면 창(최대 88vh) 안에 들어가도록 시간표를 줄임 (제목·도구 막대·버튼 줄 높이를 뺀 값) */
+const DESKTOP_MAX_HEIGHT = 'calc(88vh / var(--font-scale, 1) - 18rem)';
 /** 마운트 시 맨 위에 올 시각(분) */
 const INITIAL_TOP = 8 * 60;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -175,7 +177,10 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
       </div>
 
       <div ref={scrollRef} className="relative overflow-y-auto"
-        style={{ height: `${VISIBLE_HOURS * HOUR_REM}rem` }}>
+        style={{
+          height: mode === 'desktop' ? `min(${VISIBLE_HOURS * HOUR_REM}rem, ${DESKTOP_MAX_HEIGHT})` : `${VISIBLE_HOURS * HOUR_REM}rem`,
+          minHeight: '12rem',
+        }}>
         <div className="relative flex" style={{ height: `${24 * HOUR_REM}rem` }}>
           <div className="relative w-12 shrink-0">
             {hours.slice(1).map((h) => (

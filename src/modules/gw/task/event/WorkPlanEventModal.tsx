@@ -85,7 +85,6 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
             <span className="inline-flex items-center gap-1.5 rounded-md bg-panel-alt px-2 py-0.5 text-[13px] font-bold text-ink">
               <UserRound size={13} className="text-ink3" />
               {owner.name}
-              {owner.position && <span className="font-semibold text-ink2">{owner.position}</span>}
             </span>
           )}
           {when.date && (
@@ -135,7 +134,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
 
         <div className="grid grid-cols-[minmax(0,1fr)_240px]">
           {/* 시간표 높이에 맞추고 넘치는 입력은 왼쪽 안에서 스크롤 */}
-          <div className="relative min-h-[24rem]">
+          <div className="relative min-h-[16rem]">
             <div className="absolute inset-0 overflow-y-auto px-5 py-4">
               <fieldset disabled={readOnly} className="min-w-0">
                 <EventFields
