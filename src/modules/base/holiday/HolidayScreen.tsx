@@ -17,6 +17,7 @@ import {
   type HolidayType,
 } from '@/domain/holiday/schema';
 import { usePermission } from '@/features/auth/usePermission';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const YEAR_OPTIONS: Option[] = [
   { value: 'all', label: '전체 년도' },
@@ -443,8 +444,7 @@ export default function HolidayScreen() {
               {/* 날짜 선택 */}
               <div>
                 <label className="block text-[11.5px] font-bold text-ink2 mb-1.5">휴일 날짜 *</label>
-                <input
-                  type="date"
+                <DateInput
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
                   className="h-10 w-full rounded-xl border border-border bg-panel-alt/50 px-3 text-[12.5px] text-ink outline-none focus:border-teal"

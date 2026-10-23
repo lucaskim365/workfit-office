@@ -4,6 +4,7 @@ import type { Resource } from '@/domain/resource/schema';
 import { planReschedule, type RescheduleInput } from '@/domain/reservation/engine';
 import { combineLocalDateTime, formatResourceDateTime, formatResourceTime, toDateInput } from '@/modules/gw/resource/resourceDate';
 import { ErrorBox, Sheet, inputClass, labelClass, primaryButton, secondaryButton } from './shared';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface RescheduleSheetProps {
   reservation: Reservation;
@@ -83,7 +84,7 @@ export default function RescheduleSheet({ reservation, resource, onClose, onSubm
         {error && <ErrorBox>{error}</ErrorBox>}
         <label className={labelClass}>
           변경 날짜
-          <input type="date" required value={date} disabled={busy} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+          <DateInput required value={date} disabled={busy} onChange={(e) => setDate(e.target.value)} className={inputClass} />
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className={labelClass}>

@@ -8,6 +8,7 @@ import type { User } from '@/domain/user/schema';
 import { useCreateReservation } from '@/features/resource/useReservations';
 import { combineLocalDateTime, defaultReservationWindow } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface ReservationFormProps {
   actor: User;
@@ -90,7 +91,7 @@ export default function ReservationForm({ actor, resources, departments, initial
         </label>
         <label>
           <span className={labelClass}>사용 날짜</span>
-          <input type="date" required value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} />
+          <DateInput required value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} />
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label>

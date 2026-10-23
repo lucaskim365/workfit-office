@@ -30,6 +30,7 @@ import { isDeptHeadTitle, releaseDeptHeadOnLeave, syncDeptHeadFromTitle } from '
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 export default function EmployeeScreen() {
   const { isAdmin } = usePermission();
@@ -1355,8 +1356,7 @@ export default function EmployeeScreen() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-ink2">입사일</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={newEmpHireDate}
                     onChange={(e) => setNewEmpHireDate(e.target.value)}
                     className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"
@@ -1601,8 +1601,7 @@ export default function EmployeeScreen() {
 
                     <div className="flex flex-col gap-1.5">
                       <label className="font-bold text-ink2">입사일</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={editEmpHireDate}
                         onChange={(e) => setEditEmpHireDate(e.target.value)}
                         className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"
@@ -1791,8 +1790,7 @@ export default function EmployeeScreen() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-bold text-ink2">생년월일</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={editEmpBirthDate}
                         onChange={(e) => setEditEmpBirthDate(e.target.value)}
                         className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"

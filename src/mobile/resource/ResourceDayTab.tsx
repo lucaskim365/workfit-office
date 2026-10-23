@@ -6,6 +6,7 @@ import type { User } from '@/domain/user/schema';
 import { useReservations } from '@/features/resource/useReservations';
 import { addDays, dateRangeIso, formatResourceTime, toDateInput } from '@/modules/gw/resource/resourceDate';
 import { EmptyBox, ResourceTypeIcon, StatusBadge, formatDateTitle } from './shared';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface ResourceDayTabProps {
   date: string;
@@ -52,8 +53,7 @@ export default function ResourceDayTab({ date, onDateChange, resources, users, c
         <label className="relative flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 text-[13.5px] font-bold text-ink">
           <Calendar size={14} className="shrink-0 text-teal" />
           <span className="truncate">{formatDateTitle(date)}</span>
-          <input
-            type="date"
+          <DateInput
             aria-label="날짜 선택"
             value={date}
             onChange={(e) => e.target.value && onDateChange(e.target.value)}
