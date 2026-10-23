@@ -35,6 +35,7 @@ import { WorkPlanTagManager } from '@/modules/gw/task/event/WorkPlanTagManager';
 import type { EventTarget } from '@/modules/gw/task/event/eventFormMapping';
 import { createTarget, routeEntry } from '@/modules/gw/task/event/entryRouting';
 import MobileCommonHeader from './MobileCommonHeader';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 /** 모바일 앱 틀(z-[100]) 위에 띄우는 공통 창 층 */
@@ -195,8 +196,7 @@ function MobileTaskBody({ actor }: { actor: User }) {
           <Calendar size={14} className="text-teal" />
           <span>{dateTitleOf(selectedDate)}</span>
           {/* 날짜를 눌러 바로 고른다 */}
-          <input
-            type="date"
+          <DateInput
             aria-label="날짜 선택"
             value={selectedDate}
             onChange={(e) => isValidCalendarDate(e.target.value) && setSelectedDate(e.target.value)}

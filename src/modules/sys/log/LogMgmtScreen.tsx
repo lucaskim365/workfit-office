@@ -6,6 +6,7 @@ import { FilterBar, FilterField, Select, TextInput, type Option } from '@/shared
 import { useSystemLogs } from '@/features/systemLog/useSystemLogs';
 import type { SystemLog } from '@/domain/systemLog/schema';
 import { useQueryClient } from '@tanstack/react-query';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const TONE: Record<SystemLog['type'], Tone> = { 접속: 'ok', 변경: 'warn' };
 const TYPE_OPTIONS: Option[] = [
@@ -210,15 +211,13 @@ export default function LogMgmtScreen() {
         {period === 'custom' && (
           <FilterField label="기간 지정">
             <div className="flex items-center gap-1">
-              <input
-                type="date"
+              <DateInput
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2 text-[11px] font-bold text-ink outline-none focus:border-teal"
               />
               <span className="text-ink3 text-xs">~</span>
-              <input
-                type="date"
+              <DateInput
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2 text-[11px] font-bold text-ink outline-none focus:border-teal"

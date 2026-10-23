@@ -26,6 +26,7 @@ import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 export default function DocumentScreen() {
   const { user } = useAuth();
@@ -918,8 +919,7 @@ export default function DocumentScreen() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-ink2">시행 예정일 (필수)</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={revEffectiveDate}
                     onChange={(e) => setRevEffectiveDate(e.target.value)}
                     required
