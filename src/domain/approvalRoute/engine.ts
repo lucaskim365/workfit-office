@@ -1,5 +1,4 @@
 import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
-import { withoutJeongyeol } from '@/domain/approvalDoc/engine';
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
@@ -10,7 +9,7 @@ import type { ApprovalRouteRule, DeptScope, RouteStep } from './schema';
  *
  * 기안자 위치(부서·부서유형·직급) + 문서유형 + 금액으로 우선순위 첫 매칭 룰을 고르고,
  * 룰의 관계형 단계(RouteStep)를 조직도로 실인물 해석한다. 상향 추적·셀프 결재 제외·
- * 중복 병합·전결 절단 후 ApprovalStep[] 를 돌려준다.
+ * 중복 병합 후 ApprovalStep[] 를 돌려준다. (전결은 2026-10-23 시스템에서 없앴다)
  * ([[dynamic-route-engine]] · docs/동적_결재선_룰엔진_개발_계획서.md §6)
  */
 
@@ -159,21 +158,16 @@ function resolveCandidates(step: RouteStep, drafter: User, org: Org): string[] {
   }
 }
 
-/** RouteStep.kind → ApprovalStep.kind (검토=결재의 표시변형). */
-const toStepKind = (k: RouteStep['kind']): StepKind => (k === '검토' ? '결재' : k);
+/** RouteStep.kind → ApprovalStep.kind — 합의·참조 외(결재·검토, 검사 안 된 예전 '전결' 값)는 모두 결재. */
+const toStepKind = (k: RouteStep['kind'] | string): StepKind => (k === '합의' || k === '참조' ? k : '결재');
 
 /** 매칭 룰의 관계형 단계를 실인물로 해석해 ApprovalStep[] 생성. */
 function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalStep[] {
   const steps: ApprovalStep[] = [];
   const used = new Set<string>();
   let seq = 1;
-  let hasJeongyeol = false;
-  
+
   for (const rs of rule.steps) {
-    // 전결 이후에는 승인 라인(결재/전결)은 차단하고 오직 참조(참조)선만 허용합니다.
-    if (hasJeongyeol && rs.kind !== '참조') {
-      continue;
-    }
     const candidates = resolveCandidates(rs, drafter, org);
     
     const pick = candidates.find((id) => !used.has(id) && (!rs.dedupeSelf || id !== drafter.id) && org.userById.has(id));
@@ -187,14 +181,11 @@ function buildSteps(rule: ApprovalRouteRule, drafter: User, org: Org): ApprovalS
     const kind = toStepKind(rs.kind);
     const group = rs.parallelGroup && kind !== '참조' ? `R${rs.parallelGroup}` : null;
     steps.push({ seq: seq++, parallelGroup: group, executionType: group ? 'parallel' : 'sequential', kind, approverId: pick, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' });
-    if (kind === '전결') {
-      hasJeongyeol = true;
-    }
   }
   return steps;
 }
 
-/** 룰 미매칭·해석 실패 시 폴백 — 소속 부서장 전결(없으면 첫 상급자 결재). */
+/** 룰 미매칭·해석 실패 시 폴백 — 소속 부서장 → 본부장 → 대표이사 결재(기안자가 최상위면 첫 상급자 결재). */
 function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
   const steps: ApprovalStep[] = [];
   const used = new Set<string>();
@@ -223,24 +214,21 @@ function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
     });
   }
 
-  // 3. 대표이사 (기안자 본인이 아니고 중복되지 않으면 최종 '전결' 처리)
+  // 3. 대표이사 (기안자 본인이 아니고 중복되지 않을 때만 포함)
   const chain = org.managerChain(drafter.id);
   const ceoId = chain[chain.length - 1] ?? deptHeads.slice(-1)[0];
   if (ceoId && ceoId !== drafter.id && !used.has(ceoId)) {
     steps.push({
       seq: seq++, parallelGroup: null, executionType: 'sequential',
-      kind: '전결', approverId: ceoId, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+      kind: '결재', approverId: ceoId, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
     });
-  } else if (steps.length > 0) {
-    // 대표이사가 기안자 본인이거나 이미 포함되어 있다면, 생성된 마지막 단계를 전결로 승격
-    steps[steps.length - 1].kind = '전결';
-  } else {
+  } else if (steps.length === 0) {
     // 기안자가 최상위 권한자(예: 대표이사)인 경우, 첫 번째 상급자 또는 폴백 1단계
     const manager = org.managerChain(drafter.id)[0];
     if (manager) {
       steps.push({
         seq: seq++, parallelGroup: null, executionType: 'sequential',
-        kind: '전결', approverId: manager, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
+        kind: '결재', approverId: manager, delegatedFromId: null, decision: '대기', decidedAt: null, comment: ''
       });
     }
   }
@@ -250,7 +238,7 @@ function fallbackSteps(drafter: User, org: Org): ApprovalStep[] {
 
 /**
  * 동적 결재선 해석 — 우선순위 첫 매칭 룰로 결재선을 생성한다.
- * 매칭 룰이 없거나 해석 결과가 비면 폴백(부서장 전결).
+ * 매칭 룰이 없거나 해석 결과가 비면 폴백(부서장 → 본부장 → 대표이사 결재).
  */
 export function resolveRoute(ctx: RouteContext): RouteResult {
   const org = buildOrg(ctx);
@@ -283,11 +271,10 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
     return matches;
   }) ?? null;
 
-  // 규칙·폴백에 남은 전결은 결재로 — 전결 선택지는 없앴다([[withoutJeongyeol]])
   if (rule) {
     const steps = buildSteps(rule, ctx.drafter, org);
-    if (steps.length > 0) return { steps: withoutJeongyeol(steps), rule };
+    if (steps.length > 0) return { steps, rule };
   }
 
-  return { steps: withoutJeongyeol(fallbackSteps(ctx.drafter, org)), rule: null };
+  return { steps: fallbackSteps(ctx.drafter, org), rule: null };
 }

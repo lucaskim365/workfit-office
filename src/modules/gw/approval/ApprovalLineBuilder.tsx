@@ -33,7 +33,7 @@ function filterOrgNode(
 }
 
 /**
- * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 전결규정 적용
+ * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 결재 규칙 적용
  * ③ 수동(피커로 추가·구분 지정·순서·병렬 묶기). 어느 방식이든 동일 steps[]로 수렴.
  * 완전 제어형: 내부 상태 없이 props(steps)에서 편집표현을 도출해 병렬 태그 드리프트를 방지.
  */
@@ -149,7 +149,7 @@ export function ApprovalLineBuilder({
   const approverEdits = useMemo(() => edits.filter((e) => e.kind !== '참조'), [edits]);
   const refEdits = useMemo(() => edits.filter((e) => e.kind === '참조'), [edits]);
 
-  // 고를 수 있는 구분은 결재·합의뿐(전결·대결은 선택지 없음). 예전 값은 결재로 보임.
+  // 고를 수 있는 구분은 결재·합의뿐(대결은 선택지 없음, 전결은 시스템에서 없앰). 예전 값은 결재로 보임.
   const allowedKinds: StepKind[] = ['결재', '합의'];
   const allowedParallelKinds = allowedKinds;
   const shownKind = (k: StepKind): StepKind => (k === '합의' ? '합의' : '결재');

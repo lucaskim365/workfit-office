@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 /**
- * 결재규칙(전결규정) 관리 독립 화면.
+ * 결재 규칙 관리 독립 화면.
  * 전사의 모든 결재규칙(전사 공통 및 각 서식별 특화 규칙)을 한곳에서
  * 일목요연하게 조망하고 우선순위 드래그 앤 드롭 및 CRUD를 총괄 수행합니다.
  */
@@ -248,10 +248,10 @@ export default function ApprovalRouteRuleScreen() {
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2.5">
             <GitMerge className="h-6 w-6 text-teal" />
-            <span>결재규칙(전결규정) 관리</span>
+            <span>결재 규칙 관리</span>
           </h1>
           <p className="mt-0.5 text-xs text-ink3">
-            전사 공통 및 서식별 위임전결 규정, 부서·직급·금액 조건에 따른 자동 결재선을 총괄 관리합니다.
+            전사 공통 및 서식별 결재 규정, 부서·직급·금액 조건에 따른 자동 결재선을 총괄 관리합니다.
           </p>
         </div>
 
@@ -546,8 +546,6 @@ export default function ApprovalRouteRuleScreen() {
                     const kindColor =
                       kind === '합의'
                         ? 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30'
-                        : kind === '전결'
-                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
                         : kind === '검토'
                         ? 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30'
                         : kind === '참조'

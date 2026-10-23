@@ -60,3 +60,20 @@ test('자동 결재선 — 규칙의 전결·폴백 전결 모두 결재로 만�
   const ruled = resolveRoute({ ...base, rules: [rule] });
   assert.deepEqual(ruled.steps.map((s) => [s.kind, s.approverId]), [['결재', 'TL']]);
 });
+
+// 2026-10-23 전결 시스템에서 삭제
+test('예전 규칙의 전결 단계는 읽을 때 결재가 된다', async () => {
+  const { approvalRouteRuleSchema } = await import('@/domain/approvalRoute/schema');
+  const rule = approvalRouteRuleSchema.parse({
+    id: 'RR-X', name: '예전 규칙', steps: [{ resolver: 'DEPT_HEAD', kind: '결재' }, { resolver: 'PARENT_DEPT_HEAD', arg: 1, kind: '전결' }, { resolver: 'ROLE_CEO', kind: '참조' }],
+  });
+  assert.deepEqual(rule.steps.map((s) => s.kind), ['결재', '결재', '참조']);
+});
+
+test('결재 진행 중 전결 단계가 남아 있어도 건너뛰지 않는다 — 마지막 결재자가 승인해야 완료', () => {
+  const doc = mk([{ kind: '전결' }, { kind: '결재' }, { kind: '참조' }]);
+  const first = applyDecision(doc, 1, '승인', { at: '2026-10-23T06:00:00Z' });
+  assert.equal(first.status, '진행중');
+  const last = applyDecision(first, 2, '승인', { at: '2026-10-23T07:00:00Z' });
+  assert.equal(last.status, '완료');
+});

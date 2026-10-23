@@ -415,7 +415,7 @@ export function ApprovalDraftDocumentSheet({
         </h1>
         {/*
           실시간 연동 결재 직인 테이블 — 클릭하면
-          · 디자인 모드(서식 관리): 결재선(전결) 규칙 모달
+          · 디자인 모드(서식 관리): 결재선 규칙 모달
           · 기안 작성: 결재선·수신처 편집 모달
         */}
         <div
@@ -427,7 +427,7 @@ export function ApprovalDraftDocumentSheet({
             ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 focus:outline-none focus-visible:ring-teal transition-all rounded p-1'
             : ''
             }`}
-          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : '클릭하여 결재선 편집') : undefined}
+          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선 규칙 설정' : '클릭하여 결재선 편집') : undefined}
         >
           {onStampTableClick && (
             <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">

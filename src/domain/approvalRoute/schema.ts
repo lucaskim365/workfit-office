@@ -27,9 +27,10 @@ export type Resolver = (typeof RESOLVERS)[number];
 
 /**
  * 결재 단계 구분(ApprovalStep.kind 로 매핑). 화면에서 고를 수 있는 것은 결재·합의·참조뿐 —
- * 검토·전결은 예전 규칙 호환용으로만 남김(검토=결재의 표시변형).
+ * 검토는 예전 규칙 호환용으로만 남김(검토=결재의 표시변형). 전결은 2026-10-23 시스템에서 없앴다 —
+ * 예전 규칙에 남은 전결은 읽을 때 결재로 바꾼다.
  */
-export const ROUTE_STEP_KINDS = ['결재', '합의', '검토', '참조', '전결'] as const;
+export const ROUTE_STEP_KINDS = ['결재', '합의', '검토', '참조'] as const;
 /** 규칙 설정·기안자 결재선 편집에서 고를 수 있는 구분 */
 export const SELECTABLE_STEP_KINDS = ['결재', '합의'] as const;
 export type RouteStepKind = (typeof ROUTE_STEP_KINDS)[number];
@@ -49,7 +50,7 @@ export const routeStepSchema = z.object({
   resolver: z.enum(RESOLVERS),
   /** 해석 인자(직급 rank·부서ID·역할키·n차 등). 문자열/숫자 겸용. */
   arg: z.union([z.string(), z.number()]).nullable().default(null),
-  kind: z.enum(ROUTE_STEP_KINDS).default('결재'),
+  kind: z.preprocess((v) => (v === '전결' ? '결재' : v), z.enum(ROUTE_STEP_KINDS).default('결재')),
   /** 기안자로 해석되면 제외하고 상위로 승격. */
   dedupeSelf: z.boolean().default(true),
   /** 해석 실패(체인 끊김) 시 skip 허용. */

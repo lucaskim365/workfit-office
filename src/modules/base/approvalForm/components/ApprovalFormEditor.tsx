@@ -168,7 +168,7 @@ export function ApprovalFormEditor({
   // 상단 주 탭: 'design' (도구함 & 필드 속성) vs 'config' (서식 메타/보안/결재규칙)
   const [activeMainTab, setActiveMainTab] = useState<'design' | 'config'>('design');
 
-  // 결재선 규칙(전결규정) 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
+  // 결재선 규칙 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
   const [showRouteRuleModal, setShowRouteRuleModal] = useState(false);
 
   // 현재 선택된 필드 인덱스 (기본값은 0번째 필드)
@@ -245,7 +245,7 @@ export function ApprovalFormEditor({
       {
         seq: 3,
         approverId: 'dummy_exec',
-        kind: '전결',
+        kind: '결재',
         decision: '대기',
         parallelGroup: null,
         executionType: 'sequential',
@@ -974,7 +974,7 @@ export function ApprovalFormEditor({
                 <div className="rounded-xl border border-border bg-panel p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-[12.5px] font-bold text-ink">결재선(전결) 규칙 설정</div>
+                      <div className="text-[12.5px] font-bold text-ink">결재선 규칙 설정</div>
                       <div className="text-[10.5px] text-ink3 mt-0.5">
                         등록된 서식 전용 규칙: <span className="text-teal font-bold">{formRulesCount}개</span>
                       </div>

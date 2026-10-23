@@ -12,7 +12,7 @@ interface ApprovalRouteRuleModalProps {
 
 /**
  * 서식 디자이너 A4 직인란 원클릭 연동 모달.
- * 서식에 매칭되는 결재선(전결) 규칙 목록 및 단계 빌더를 모달 형태로 팝업하여
+ * 서식에 매칭되는 결재선 규칙 목록 및 단계 빌더를 모달 형태로 팝업하여
  * 좌측 속성 패널의 스크롤을 유발하지 않고 True WYSIWYG 원칙으로 결재선을 편집합니다.
  */
 export function ApprovalRouteRuleModal({
@@ -51,7 +51,7 @@ export function ApprovalRouteRuleModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-[16px] font-bold text-ink">
-                  '{form.name}' 결재선(전결) 규칙 설정
+                  '{form.name}' 결재선 규칙 설정
                 </h3>
                 <span className="rounded bg-teal/15 px-2 py-0.5 text-[10.5px] font-extrabold text-teal border border-teal/20">
                   {form.code}

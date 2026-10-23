@@ -50,7 +50,7 @@ function fromLine(next: ApprovalStep[], prev: RouteStep[]): RouteStep[] {
     .sort((a, b) => a.seq - b.seq)
     .map((st) => {
       const old = prev.find((p) => stepToken(p) === st.approverId);
-      const kind: RouteStep['kind'] = st.kind === '대결' ? '결재' : st.kind;
+      const kind: RouteStep['kind'] = st.kind === '대결' || st.kind === '전결' ? '결재' : st.kind;
       return {
         ...tokenToResolver(st.approverId),
         kind,

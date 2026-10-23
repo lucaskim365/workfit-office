@@ -12,14 +12,14 @@ import type { ApprovalBox, ApprovalDoc, ApprovalRecipient, ApprovalStep, StepDec
  * 규칙 요약:
  * - 참조(kind='참조')는 열람만 — 진행을 막지 않고 항상 통과 처리.
  * - 순차는 seq 오름차순, 병렬(합의)은 같은 parallelGroup 이 **동시 활성**·전원 승인해야 통과.
- * - 전결(kind='전결') 승인 시 상위 잔여 단계를 생략하고 즉시 완료.
+ * - 전결은 2026-10-23 시스템에서 없앴다. 예전 문서의 '전결' 값은 기록으로만 남고, 결재 진행에서는 결재와 같다.
  * - 결정은 **오직 현재 활성 그룹의 본인 차례**에서만.
  */
 
 /**
- * 새로 만드는 결재선에서 전결을 결재로 바꾼다 — 전결 선택지는 2026-10-21 에 없앴다.
- * 남아 있던 전결 값이 화면엔 '결재'로 보이는데 승인하면 뒤 결재자를 건너뛰던 문제(2026-10-23) 방지.
- * 자동 결재선·결재선 편집기·상신에서 쓴다. 이미 저장된 문서 데이터는 바꾸지 않는다.
+ * 결재선의 예전 '전결' 값을 결재로 바꾼다 — 전결은 2026-10-23 시스템에서 없앴다.
+ * 저장해 둔 '내 결재선'·예전 임시저장 문서처럼 전결이 남은 결재선을 결재선 편집기·상신에서 정리한다.
+ * 이미 저장된 문서 데이터는 바꾸지 않는다.
  */
 export function withoutJeongyeol<T extends { kind: ApprovalStep['kind'] }>(steps: T[]): T[] {
   return steps.map((s) => (s.kind === '전결' ? { ...s, kind: '결재' } : s));
@@ -147,18 +147,11 @@ export function applyDecision(
   const finalStatus = '완료';
   const completedAtVal = opts.at;
 
-  // 전결 승인 → 상위 잔여 단계 생략하고 즉시 완료.
-  // 단, 뒤에 결재자가 남아 있으면(전결 뒤에 결재를 붙인 결재선) 건너뛰지 않고 일반 결재처럼 넘긴다.
-  const blockersAfter = doc.steps.some((s) => s.seq > step.seq && isBlocking(s));
-  if (step.kind === '전결' && !blockersAfter) {
-    next = { ...next, status: finalStatus, completedAt: completedAtVal, currentSeq: seq };
-  } else {
-    // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료.
-    const stillActive = activeGroup(next);
-    if (!stillActive) {
-      // 마지막 그룹 통과 → 완료.
-      next = { ...next, status: finalStatus, completedAt: completedAtVal };
-    }
+  // 활성 그룹이 전원 승인됐는지 확인 → 다음 그룹으로 진행 또는 완료. (전결로 건너뛰는 일은 없다)
+  const stillActive = activeGroup(next);
+  if (!stillActive) {
+    // 마지막 그룹 통과 → 완료.
+    next = { ...next, status: finalStatus, completedAt: completedAtVal };
   }
 
   return { ...next, currentSeq: recomputeCurrentSeq(next) };
@@ -224,7 +217,7 @@ export function isDrafterBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   return doc.status !== '임시저장' && doc.status !== '삭제';
 }
 
-/** 반려함 판정: 결재권자 관점에서 본인이 직접 반려 처리했거나, 결재선(검토/승인/전결)에 참여했던 반려 문서 */
+/** 반려함 판정: 결재권자 관점에서 본인이 직접 반려 처리했거나, 결재선(결재·합의)에 참여했던 반려 문서 */
 export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   const isRejectedStatus = doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
   if (!isRejectedStatus) return false;

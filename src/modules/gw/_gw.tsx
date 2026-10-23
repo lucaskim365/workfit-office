@@ -155,7 +155,7 @@ export function DecisionBadge({ decision }: { decision: StepDecision }) {
   );
 }
 
-/** 결재 구분 라벨 색(참조는 약하게, 전결은 강조). */
+/** 결재 구분 라벨 색(참조는 약하게). 전결은 예전 문서 표시용. */
 export const KIND_TONE: Record<StepKind, string> = {
   결재: 'text-ink2',
   합의: 'text-purple-600',

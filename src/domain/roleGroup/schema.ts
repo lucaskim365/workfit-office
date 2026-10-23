@@ -64,7 +64,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
 
   { id: 'S_BASE_CODE', name: '공통코드 정보', url: '/base/code', category: 'BASE', desc: '시스템 공통 코드 마스터', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APFORM', name: '결재서식 관리', url: '/base/approval-form', category: 'BASE', desc: '전자결재 양식, 입력필드 및 룰 설정', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_BASE_APPROC', name: '결재 프로세스 설정', url: '/base/approval-process', category: 'BASE', desc: '부서합의, 전결규정 등 프로세스 옵션', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_BASE_APPROC', name: '결재 프로세스 설정', url: '/base/approval-process', category: 'BASE', desc: '부서합의, 결재 규정 등 프로세스 옵션', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APMON', name: '결재문서 모니터링', url: '/base/approval-monitor', category: 'BASE', desc: '전사 결재문서 전체 조회 및 감사', supportedActions: ['access', 'update'] },
 
   // 4. 시스템 관리 & 보안 감사
