@@ -3,7 +3,7 @@
  * 프로필 상태·근태·캘린더·업무계획(표 칩·시간표·태그)이 모두 여기서 색을 가져다 쓴다.
  * 색을 바꿀 때는 이 파일만 고친다. (Tailwind 가 읽을 수 있게 클래스는 문자열 그대로 적는다)
  *
- * 근무중·정상 초록 / 휴가 노랑 / 외근 파랑 / 출장 남색 / 회의 보라 / 자리비움 주황 / 집중근무 빨강 / 오프라인 회색
+ * 근무중·정상 초록 / 휴일근무 청록 / 휴가 노랑 / 외근 파랑 / 출장 남색 / 회의 보라 / 자리비움 주황 / 집중근무 빨강 / 오프라인 회색
  */
 export type PersonTone = 'work' | 'leave' | 'outside' | 'trip' | 'meeting' | 'away' | 'focus' | 'offline';
 
@@ -23,6 +23,13 @@ export interface PersonToneClasses {
   /** 업무계획 태그 색 id (TAG_COLOR_PRESETS) */
   tagColorId: string;
 }
+
+/** 근태 휴일근무 — 근무의 한 종류라 초록 계열이되 정상과 구분되는 청록 */
+export const HOLIDAY_WORK_TONE = {
+  badge: 'bg-teal-500/10 border-teal-500/30 text-teal-700 dark:text-teal-400',
+  text: 'text-teal-700 dark:text-teal-400',
+  dot: 'bg-teal-500',
+};
 
 export const PERSON_TONES: Record<PersonTone, PersonToneClasses> = {
   work: {
