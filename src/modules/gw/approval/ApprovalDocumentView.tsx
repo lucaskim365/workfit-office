@@ -721,10 +721,15 @@ export function ApprovalDocumentView({
 
               if (block.type === 'table-field') {
                 const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
+                const sheets = block.fields.map((f) => resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options));
+                // 직인 칸이 있으면 상자가 직인을 자르지 않게 — 직인은 칸 위아래(제목 줄 포함)로 넘쳐 찍힌다
+                const sealed = sheets.some((sh) => Object.values(sh.cellStyles).some((st) => st?.seal));
+                const clip = sealed ? '' : 'overflow-hidden';
+                const scrollX = sealed ? '' : 'overflow-x-auto';
 
-                const renderTableOnly = (f: FormField) => (
+                const renderTableOnly = (f: FormField, i: number) => (
                   <SheetView
-                    sheet={resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options)}
+                    sheet={sheets[i]}
                     allSecret={f.isSecret}
                     isMaskingActive={isMaskingActive}
                     maskValue={maskValue}
@@ -741,18 +746,18 @@ export function ApprovalDocumentView({
                       </div>
                     )}
                     {isHalf ? (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
-                        {block.fields.map((f) => {
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip} grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break`}>
+                        {block.fields.map((f, i) => {
                           const hasLabel = !!(f.label && f.label.trim());
                           return (
                             <div key={f.key} className="flex flex-col">
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
+                                <div className={`text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center ${i === 0 ? 'rounded-tl-lg' : 'rounded-tr-lg'}`}>
                                   {f.label}
                                 </div>
                               )}
-                              <div className="overflow-x-auto">
-                                {renderTableOnly(f)}
+                              <div className={scrollX}>
+                                {renderTableOnly(f, i)}
                               </div>
                             </div>
                           );
@@ -760,21 +765,21 @@ export function ApprovalDocumentView({
                         {block.fields.length === 1 && <div />}
                       </div>
                     ) : (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip}`}>
                         {(() => {
                           const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
                           return (
                             <>
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
+                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] rounded-t-lg">
                                   {block.fields[0].label}
                                 </div>
                               )}
                             </>
                           );
                         })()}
-                        <div className="overflow-x-auto">
-                          {renderTableOnly(block.fields[0])}
+                        <div className={scrollX}>
+                          {renderTableOnly(block.fields[0], 0)}
                         </div>
                       </div>
                     )}
