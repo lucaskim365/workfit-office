@@ -7,7 +7,7 @@ import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
-import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
@@ -723,7 +723,7 @@ export function ApprovalDocumentView({
                 const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
                 const sheets = block.fields.map((f) => resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options));
                 // 직인 칸이 있으면 상자가 직인을 자르지 않게 — 직인은 칸 위아래(제목 줄 포함)로 넘쳐 찍힌다
-                const sealed = sheets.some((sh) => Object.values(sh.cellStyles).some((st) => st?.seal));
+                const sealed = sheets.some(hasSealCell);
                 const clip = sealed ? '' : 'overflow-hidden';
                 const scrollX = sealed ? '' : 'overflow-x-auto';
 

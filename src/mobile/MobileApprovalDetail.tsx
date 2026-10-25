@@ -13,7 +13,7 @@ import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
-import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
@@ -750,7 +750,8 @@ function renderTable(
   if (sheet.cols.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto my-1.5 rounded-lg border border-black/10">
+    // 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다
+    <div className={`overflow-x-auto my-1.5 rounded-lg border border-black/10 ${hasSealCell(sheet) ? 'py-3' : ''}`}>
       <SheetView
         sheet={sheet}
         allSecret={f.isSecret}

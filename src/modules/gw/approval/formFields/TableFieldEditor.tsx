@@ -5,6 +5,7 @@ import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { TableCellTextarea } from './TableCellTextarea';
 import { SheetEditor } from './SheetEditor';
 import { CellSealSlot } from '../components/CompanySeal';
+import { hasSealCell } from './SheetView';
 import {
   normalizeTablePayload,
   recalculateSheet,
@@ -164,7 +165,8 @@ export function TableFieldEditor({
       </div>
 
       {/* 실물 문서와 같은 표 (인라인 내용 입력 가능) */}
-      <div className="w-full overflow-x-auto bg-white rounded border border-[#ddd]">
+      {/* 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다 */}
+      <div className={`w-full overflow-x-auto bg-white rounded border border-[#ddd] ${hasSealCell(effective) ? 'py-3' : ''}`}>
         <table className="w-full table-fixed border-collapse text-left text-[11.5px] border-none">
           <colgroup>
             {cols.map((col, cIdx) => (

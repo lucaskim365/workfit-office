@@ -25,6 +25,11 @@ export function resolveViewSheet(placeholder: string | undefined, docValue: unkn
   };
 }
 
+/** 직인 칸이 하나라도 있는 표 — 칸 밖으로 넘치는 직인이 잘리지 않게 감싸는 상자를 조정할 때 쓴다 */
+export function hasSealCell(sheet: Pick<SheetPayload, 'cellStyles'>): boolean {
+  return Object.values(sheet.cellStyles).some((st) => st?.seal);
+}
+
 /**
  * 직인 칸 지정 전에 기안한 문서 — 서식의 직인 칸을 보기에서만 이어 붙임 (DB 값은 그대로)
  * 서식 직인 칸과 글자가 같은 칸을 찾고, 없으면 같은 자리 칸에 찍음
