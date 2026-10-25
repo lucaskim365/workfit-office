@@ -29,14 +29,14 @@ export function SealFieldRow({ label, stamped }: { label: string; stamped: boole
 }
 
 /**
- * 표 칸 직인 — 칸 내용 오른쪽 끝에 직인 자리를 따로 두어 우측 정렬로 찍는다(작성 화면·문서 보기·PDF 공용).
- * 글자 위에 겹쳐 띄우면 이름을 가리고 아래 행까지 덮으므로, 글자와 직인이 서로 자리를 나눠 갖게 한다.
+ * 표 칸 직인 — 칸 오른쪽 끝에 띄워 찍는다(작성 화면·문서 보기·PDF 공용).
+ * 칸의 너비·높이는 그대로 두고, 직인은 칸 밖으로 넘쳐도 되게 글자 위층에 그린다.
  */
 export function CellSealSlot({ stamped, children }: { stamped: boolean; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
-      <span className="inline-flex h-[56px] w-[56px] shrink-0 items-center justify-center">
+    <div className="relative">
+      {children}
+      <span className="pointer-events-none absolute right-0 top-1/2 z-10 -translate-y-1/2" style={{ width: 56, height: 56 }}>
         <SealImage stamped={stamped} size={56} />
       </span>
     </div>
