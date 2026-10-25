@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { getCellMergeInfo } from './utils';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { TableCellTextarea } from './TableCellTextarea';
 import { SheetEditor } from './SheetEditor';
-import { CellSealOverlay } from '../components/CompanySeal';
+import { CellSealSlot } from '../components/CompanySeal';
 import {
   normalizeTablePayload,
   recalculateSheet,
@@ -36,6 +36,11 @@ export function sheetOfField(field: FormField, value: FieldValue | undefined): S
   if (field.placeholder) return normalizeTablePayload(field.placeholder, fallbackCols);
   const empty = Object.fromEntries(fallbackCols.map((c) => [c, '']));
   return normalizeTablePayload({ cols: fallbackCols, rows: [empty, { ...empty }, { ...empty }] }, fallbackCols);
+}
+
+/** 직인 칸이면 칸 내용 오른쪽에 직인 자리를 붙인다 */
+function withSeal(seal: boolean | undefined, stamped: boolean, content: ReactNode): ReactNode {
+  return seal ? <CellSealSlot stamped={stamped}>{content}</CellSealSlot> : content;
 }
 
 export function TableFieldEditor({
@@ -191,7 +196,7 @@ export function TableFieldEditor({
                       }`}
                       style={cellCss(style)}
                     >
-                      {isCalculated ? (
+                      {withSeal(style?.seal, isDesignMode, isCalculated ? (
                         <div
                           className="flex items-center justify-between w-full px-2 py-1.5 cursor-default select-none"
                           title={isDesignMode && formulaInfo ? `수식: ${formulaInfo.expression}` : undefined}
@@ -218,8 +223,7 @@ export function TableFieldEditor({
                           placeholder={numeric ? '0' : ''}
                           className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}
                         />
-                      )}
-                      {style?.seal && <CellSealOverlay stamped={isDesignMode} />}
+                      ))}
                     </td>
                   );
                 })}

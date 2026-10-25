@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 
 /**
@@ -27,40 +28,17 @@ export function SealFieldRow({ label, stamped }: { label: string; stamped: boole
   );
 }
 
-/** 표 칸 직인(작성 화면) — 입력칸 오른쪽에 겹쳐 표시 */
-export function CellSealOverlay({ stamped }: { stamped: boolean }) {
-  return (
-    <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2">
-      <SealImage stamped={stamped} size={56} />
-    </span>
-  );
-}
-
 /**
- * 표 칸 직인(문서 보기·PDF) — 칸 글자 끝(보통 "(인)")에 겹쳐 찍힘. 글자가 없으면 칸 가운데.
- * 직인이 글자를 밀어내지 않도록 글자 줄 위에 띄워 그린다.
+ * 표 칸 직인 — 칸 내용 오른쪽 끝에 직인 자리를 따로 두어 우측 정렬로 찍는다(작성 화면·문서 보기·PDF 공용).
+ * 글자 위에 겹쳐 띄우면 이름을 가리고 아래 행까지 덮으므로, 글자와 직인이 서로 자리를 나눠 갖게 한다.
  */
-export function CellSealText({ text, stamped }: { text: string; stamped: boolean }) {
-  if (!text.trim()) {
-    return (
-      <span className="flex items-center justify-center">
+export function CellSealSlot({ stamped, children }: { stamped: boolean; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="min-w-0 flex-1">{children}</div>
+      <span className="inline-flex h-[56px] w-[56px] shrink-0 items-center justify-center">
         <SealImage stamped={stamped} size={56} />
       </span>
-    );
-  }
-  // 여러 줄이면 마지막 줄 끝에 찍는다
-  const cut = text.replace(/\s+$/, '').lastIndexOf('\n');
-  const head = cut >= 0 ? text.slice(0, cut + 1) : '';
-  const last = cut >= 0 ? text.slice(cut + 1) : text;
-  return (
-    <>
-      {head}
-      <span className="relative inline-block">
-        {last}
-        <span className="pointer-events-none absolute left-full top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: 'max-content' }}>
-          <SealImage stamped={stamped} size={56} />
-        </span>
-      </span>
-    </>
+    </div>
   );
 }

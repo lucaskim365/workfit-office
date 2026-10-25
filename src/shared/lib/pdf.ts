@@ -48,7 +48,9 @@ async function inlineImageSources(el: HTMLElement): Promise<Map<string, string>>
   await Promise.all(
     [...srcs].map(async (src) => {
       try {
-        const res = await fetch(src, { mode: 'cors', cache: 'force-cache' });
+        // no-store — 화면 <img> 가 CORS 없이 받아 둔 캐시(허용 헤더 없음)를 다시 쓰면 CORS 오류로 직인이 빠진다.
+        //   파일 서버는 Origin 이 있을 때만 허용 헤더를 붙이고 Vary: Origin 을 주지 않으므로 캐시를 건너뛰고 새로 받는다.
+        const res = await fetch(src, { mode: 'cors', cache: 'no-store' });
         if (res.ok) out.set(src, await blobToDataUrl(await res.blob()));
       } catch {
         /* 받지 못하면 캡처 도구의 useCORS 에 맡긴다 */

@@ -1,6 +1,6 @@
 import { getCellMergeInfo } from './utils';
 import { normalizeTablePayload, type SheetPayload } from './sheetModel';
-import { CellSealText } from '../components/CompanySeal';
+import { CellSealSlot } from '../components/CompanySeal';
 import { cellCss, defaultAlign, displayCellValue, isLegacyHeaderCell, isSecretCell } from './sheetStyle';
 
 /**
@@ -101,7 +101,7 @@ export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWid
                   className={`${baseCell} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
                   style={{ textAlign: defaultAlign(sheet, rIdx, col), ...cellCss(style) }}
                 >
-                  {style?.seal ? <CellSealText text={text} stamped={sealStamped} /> : text}
+                  {style?.seal ? <CellSealSlot stamped={sealStamped}>{text}</CellSealSlot> : text}
                 </td>
               );
             })}
