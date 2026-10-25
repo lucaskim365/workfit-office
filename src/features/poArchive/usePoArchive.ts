@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { poReplyRepo } from '@/data/poArchive/poReply.repo';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, type PoViewer } from '@/domain/poArchive/schema';
+import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, type PoReply, type PoViewer } from '@/domain/poArchive/schema';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -39,6 +39,10 @@ export function useUploadPoReply() {
   return useMutation({
     mutationFn: (args: { doc: Pick<ApprovalDoc, 'id' | 'docNo'>; file: File; actor: { id: string; name: string } }) =>
       poReplyRepo.upload(args.doc, args.file, args.actor),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    // 올린 즉시 해당 행에 보이게 캐시에 먼저 넣고, 서버 목록으로 다시 맞춘다.
+    onSuccess: (row) => {
+      qc.setQueryData<PoReply[]>([KEY], (prev = []) => [...prev.filter((r) => r.docId !== row.docId), row]);
+      return qc.invalidateQueries({ queryKey: [KEY] });
+    },
   });
 }

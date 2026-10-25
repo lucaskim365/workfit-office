@@ -181,7 +181,7 @@ export function PurchaseOrderArchive({
               <th className="p-3">제목</th>
               <th className="p-3 w-28">완료일자</th>
               <th className="p-3 w-32 text-center">다운로드</th>
-              <th className="p-3 w-64">회신 문서</th>
+              <th className="p-3 w-72">회신 문서</th>
             </tr>
           </thead>
           <tbody>
@@ -201,8 +201,12 @@ export function PurchaseOrderArchive({
               const uploading = upload.isPending && uploadTarget?.id === d.id;
               const making = pdfDoc?.id === d.id;
               return (
-                <tr key={d.id} className="border-b border-border hover:bg-panel-alt/30 transition-colors">
-                  <td className="p-3 min-w-0">
+                <tr
+                  key={d.id}
+                  className={`border-b border-border transition-colors ${reply ? 'bg-teal-soft/25 hover:bg-teal-soft/40' : 'hover:bg-panel-alt/30'}`}
+                >
+                  {/* 회신 문서가 있는 행은 왼쪽 띠로 한눈에 구분한다 */}
+                  <td className={`p-3 min-w-0 border-l-[3px] ${reply ? 'border-l-teal' : 'border-l-transparent'}`}>
                     <button onClick={() => setViewDoc(d)} className="flex items-center gap-1.5 text-left font-semibold text-ink hover:text-teal transition-colors">
                       <FileText size={13} className="shrink-0 text-ink3" />
                       <span className="truncate">{d.title}</span>
@@ -224,32 +228,53 @@ export function PurchaseOrderArchive({
                     </button>
                   </td>
                   <td className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      {reply ? (
-                        <button
-                          onClick={() => downloadReply(reply)}
-                          title={`${reply.uploadedByName || reply.uploadedBy} · ${reply.uploadedAt.slice(0, 10)}`}
-                          className="inline-flex min-w-0 items-center gap-1 rounded-lg bg-teal-soft/40 px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
-                        >
-                          <FileCheck2 size={12} className="shrink-0" />
-                          <span className="truncate max-w-[140px]">{reply.name}</span>
-                        </button>
-                      ) : (
-                        !canUpload && <span className="text-[11px] text-ink3">회신 대기</span>
-                      )}
-                      {canUpload && (
-                        <button
-                          onClick={() => pickReply(d)}
-                          disabled={upload.isPending}
-                          className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-50 ${
-                            reply ? 'border border-border-hi text-ink3 hover:text-ink' : 'bg-teal text-white hover:opacity-90'
-                          }`}
-                        >
-                          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                          {reply ? '교체' : '회신 문서 업로드'}
-                        </button>
-                      )}
-                    </div>
+                    {reply ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5 text-[10.5px]">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-teal px-2 py-0.5 font-bold text-white">
+                            <FileCheck2 size={11} /> 회신 완료
+                          </span>
+                          <span className="truncate text-ink3">
+                            {[reply.uploadedByName, reply.uploadedAt.slice(0, 10)].filter(Boolean).join(' · ')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => downloadReply(reply)}
+                            title={`${reply.name} 내려받기`}
+                            className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
+                          >
+                            <Download size={12} className="shrink-0" />
+                            <span className="truncate max-w-[150px]">{reply.name}</span>
+                          </button>
+                          {canUpload && (
+                            <button
+                              onClick={() => pickReply(d)}
+                              disabled={upload.isPending}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50 transition-colors"
+                            >
+                              {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                              교체
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        {canUpload ? (
+                          <button
+                            onClick={() => pickReply(d)}
+                            disabled={upload.isPending}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:opacity-90 disabled:opacity-50 transition-colors"
+                          >
+                            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                            회신 문서 업로드
+                          </button>
+                        ) : (
+                          <span className="rounded-full border border-border-hi px-2 py-0.5 text-[10.5px] font-bold text-ink3">회신 대기</span>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

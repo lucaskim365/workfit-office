@@ -543,7 +543,7 @@ const COLLECTIONS: CollectionDef[] = [
     /*
       문서관리 > 발주서 보관함의 회신본(거래처 직인이 찍힌 최종본). 문서당 1건, $id = 결재 문서 ID.
       보관함 목록 자체는 approvalDocs(완료·발주 서식)에서 골라 보여 주므로 여기엔 회신 메타만 있다.
-      실제 파일은 fileStorage(Garage S3) poArchive/{docId}/ 아래.
+      실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/ 아래.
     */
     attributes: [
       S('docId', 64, true),

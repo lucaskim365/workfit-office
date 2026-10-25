@@ -17,10 +17,13 @@ const backend = createCrudBackend<PoReply>({
   seed: [],
 });
 
-/** 확장자만 남긴 저장 경로 — 한글 파일명은 다운로드 이름(filename)으로만 보존한다. */
+/**
+ * 확장자만 남긴 저장 경로 — 한글 파일명은 다운로드 이름(filename)으로만 보존한다.
+ * 저장소 서명 API가 `chat/` 아래 경로만 받으므로 그 아래에 둔다(다른 경로는 400으로 거부된다).
+ */
 function storagePathOf(docId: string, fileName: string, now: Date): string {
   const ext = /\.([A-Za-z0-9]{1,8})$/.exec(fileName)?.[1]?.toLowerCase();
-  return `poArchive/${docId}/reply-${now.getTime()}${ext ? `.${ext}` : ''}`;
+  return `chat/poArchive/${docId}/reply-${now.getTime()}${ext ? `.${ext}` : ''}`;
 }
 
 export const poReplyRepo = {
@@ -70,13 +73,8 @@ export const poReplyRepo = {
     return row;
   },
 
-  /** 다운로드 URL — 서명 URL을 새로 받아 만료를 피하고, 실패하면 저장된 URL을 쓴다. */
+  /** 다운로드 URL — 저장소 서명 API는 다운로드 서명(get)을 지원하지 않아 업로드 때 받은 URL을 그대로 쓴다. */
   async downloadUrl(reply: PoReply): Promise<string> {
-    if (!reply.storagePath) return reply.url;
-    try {
-      return await fileStorage.getSignUrl(reply.storagePath, 'attachment');
-    } catch {
-      return reply.url;
-    }
+    return reply.url;
   },
 };
