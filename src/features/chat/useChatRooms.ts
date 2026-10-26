@@ -28,11 +28,18 @@ export function useChatRooms(userId?: string) {
   });
 }
 
-/** 방별 미읽음 수 맵(도출). */
+/** 방별 미읽음 수 맵(도출). 내가 참여한 방만 센다(방 목록은 같은 화면이 이미 받아 둔 캐시를 쓴다). */
 export function useUnreadCounts(userId?: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: [CHAT_UNREAD_KEY, userId ?? null],
-    queryFn: () => chatMessageRepo.unreadByRoom(userId!),
+    queryFn: async () => {
+      const rooms = await qc.ensureQueryData({
+        queryKey: [CHAT_ROOMS_KEY, userId ?? null],
+        queryFn: () => chatRoomRepo.list(userId),
+      });
+      return chatMessageRepo.unreadByRoom(userId!, rooms.map((r) => r.id));
+    },
     enabled: !!userId,
     refetchInterval: CHAT_POLL_MS,
   });

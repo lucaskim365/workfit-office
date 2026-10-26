@@ -31,12 +31,26 @@ const COLL = 'chatMessages';
 interface ChatMessageBackend {
   /** 전체 메시지 로드(불량 문서는 건너뜀). */
   loadAll(): Promise<ChatMessage[]>;
+  /** 한 방의 메시지만(정렬 전). 4초 폴링이 부르므로 전체를 받지 않는다. */
+  listByRoom(roomId: string): Promise<ChatMessage[]>;
+  /** 메시지 하나(없으면 null). */
+  get(id: string): Promise<ChatMessage | null>;
+  /** 내가 보내지 않았고 아직 안 읽은 메시지의 roomId 들(메시지 1건당 1개). 본문은 받지 않는다. roomIds 를 주면 그 방들만. */
+  unreadRoomIds(userId: string, roomIds?: string[]): Promise<string[]>;
   /** 기존 문서 갱신 우선(markRead/수정용) — 없으면 생성 폴백. */
   save(message: ChatMessage): Promise<void>;
   /** 신규 추가(append용) — 생성 우선, 이미 있으면 갱신 폴백. 신규 전송 시 불필요한 404 방지. */
   create(message: ChatMessage): Promise<void>;
   /** 특정 방의 메시지 전건 삭제. */
   deleteByRoom(roomId: string): Promise<void>;
+}
+
+/** 미읽음 판정(메모리·Firestore 공용) — 내가 보내지 않았고 readBy 에 내가 없는 메시지. */
+function unreadRoomIdsOf(rows: ChatMessage[], userId: string, roomIds?: string[]): string[] {
+  const only = roomIds ? new Set(roomIds) : null;
+  return rows
+    .filter((m) => m.senderId !== userId && !m.readBy.includes(userId) && (!only || only.has(m.roomId)))
+    .map((m) => m.roomId);
 }
 
 /** 저장소 무관 안전 파싱 — 불량 문서 하나가 전체 조회를 깨지 않도록 실패분만 건너뛴다. */
@@ -58,6 +72,15 @@ class MemoryBackend implements ChatMessageBackend {
   private rows: ChatMessage[] = CHAT_MESSAGE_SEED.map((m) => chatMessageSchema.parse(m));
   async loadAll() {
     return this.rows;
+  }
+  async listByRoom(roomId: string) {
+    return this.rows.filter((m) => m.roomId === roomId);
+  }
+  async get(id: string) {
+    return this.rows.find((m) => m.id === id) ?? null;
+  }
+  async unreadRoomIds(userId: string, roomIds?: string[]) {
+    return unreadRoomIdsOf(this.rows, userId, roomIds);
   }
   async save(message: ChatMessage) {
     const i = this.rows.findIndex((x) => x.id === message.id);
@@ -84,6 +107,15 @@ class FirestoreBackend implements ChatMessageBackend {
       if (m) out.push(m);
     }
     return out;
+  }
+  async listByRoom(roomId: string) {
+    return (await this.loadAll()).filter((m) => m.roomId === roomId);
+  }
+  async get(id: string) {
+    return (await this.loadAll()).find((m) => m.id === id) ?? null;
+  }
+  async unreadRoomIds(userId: string, roomIds?: string[]) {
+    return unreadRoomIdsOf(await this.loadAll(), userId, roomIds);
   }
   async save(message: ChatMessage) {
     await setDoc(doc(db!, COLL, message.id), message);
@@ -171,19 +203,57 @@ class AppwriteBackend implements ChatMessageBackend {
     });
   }
 
-  async loadAll() {
-    const out: ChatMessage[] = [];
+  /** 조건에 맞는 문서 전건(100건씩 페이지). */
+  private async loadRows(queries: string[]): Promise<AppwriteRow[]> {
+    const out: AppwriteRow[] = [];
     const PAGE = 100;
     for (let offset = 0; ; offset += PAGE) {
       const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [
+        ...queries,
         Query.limit(PAGE),
         Query.offset(offset),
       ]);
-      for (const row of res.documents as unknown as AppwriteRow[]) {
-        const m = this.fromRow(row);
-        if (m) out.push(m);
-      }
+      out.push(...(res.documents as unknown as AppwriteRow[]));
       if (res.documents.length < PAGE) break;
+    }
+    return out;
+  }
+
+  private parseRows(rows: AppwriteRow[]): ChatMessage[] {
+    const out: ChatMessage[] = [];
+    for (const row of rows) {
+      const m = this.fromRow(row);
+      if (m) out.push(m);
+    }
+    return out;
+  }
+
+  async loadAll() {
+    return this.parseRows(await this.loadRows([]));
+  }
+
+  async listByRoom(roomId: string) {
+    return this.parseRows(await this.loadRows([Query.equal('roomId', roomId)]));
+  }
+
+  async get(id: string) {
+    try {
+      const row = await this.dbs.getDocument(APPWRITE_DATABASE_ID, COLL, assertAppwriteId(id));
+      return this.fromRow(row as unknown as AppwriteRow);
+    } catch (e) {
+      if ((e as { code?: number })?.code === 404) return null;
+      throw e;
+    }
+  }
+
+  async unreadRoomIds(userId: string, roomIds?: string[]) {
+    const base = [Query.select(['$id', 'roomId']), Query.notEqual('senderId', userId), Query.notContains('readBy', userId)];
+    if (!roomIds) return (await this.loadRows(base)).map((r) => String(r.roomId));
+    // 내 방만 — 들어가 보지 않은 남의 방 메시지까지 받지 않는다. 한 쿼리 값은 100개까지.
+    const out: string[] = [];
+    for (let i = 0; i < roomIds.length; i += 100) {
+      const rows = await this.loadRows([...base, Query.equal('roomId', roomIds.slice(i, i + 100))]);
+      out.push(...rows.map((r) => String(r.roomId)));
     }
     return out;
   }
@@ -250,22 +320,22 @@ function selectBackend(): ChatMessageBackend {
 }
 const backend: ChatMessageBackend = selectBackend();
 
+/** 방·사용자별 진행 중인 읽음 처리 — 같은 방을 동시에 두 번 고쳐 쓰지 않게. */
+const markReadInFlight = new Map<string, Promise<void>>();
+
 export const chatMessageRepo = {
   /** 특정 방의 메시지를 시간 오름차순으로. */
   async listByRoom(roomId: string): Promise<ChatMessage[]> {
-    const rows = await backend.loadAll();
+    const rows = await backend.listByRoom(roomId);
     // 같은 시각(초 단위)에 저장된 묶음은 id 순서로 — 사진 묶음 순서가 섞이지 않게
-    return rows.filter((m) => m.roomId === roomId).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true }));
+    return rows.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true }));
   },
 
   /** 방별 미읽음 수(도출) — 내가 보내지 않았고 readBy 에 내가 없는 메시지 수. */
-  async unreadByRoom(userId: string): Promise<Record<string, number>> {
-    const rows = await backend.loadAll();
+  async unreadByRoom(userId: string, roomIds?: string[]): Promise<Record<string, number>> {
     const acc: Record<string, number> = {};
-    for (const m of rows) {
-      if (m.senderId !== userId && !m.readBy.includes(userId)) {
-        acc[m.roomId] = (acc[m.roomId] ?? 0) + 1;
-      }
+    for (const roomId of await backend.unreadRoomIds(userId, roomIds)) {
+      acc[roomId] = (acc[roomId] ?? 0) + 1;
     }
     return acc;
   },
@@ -294,17 +364,35 @@ export const chatMessageRepo = {
     await backend.create(valid);
   },
 
-  /** 방 진입 시 읽음 처리 — 방의 모든 메시지 readBy 에 userId 추가. */
-  async markRead(roomId: string, userId: string): Promise<void> {
-    const targets = (await this.listByRoom(roomId)).filter((m) => !m.readBy.includes(userId));
-    for (const m of targets) {
-      await backend.save({ ...m, readBy: [...m.readBy, userId] });
-    }
+  /**
+   * 방 진입 시 읽음 처리 — 방의 모든 메시지 readBy 에 userId 추가.
+   *
+   * 메시지마다 문서를 고쳐 쓰므로 Appwrite 수정 한도(한 사람 분당 약 120건, 접속 상태·방 삭제 등 모든 수정 공용)에
+   * 걸릴 수 있다. 그래서 ① 같은 방을 동시에 두 번 처리하지 않고(화면 중복 마운트·개발 모드 이중 실행)
+   * ② 최신 메시지부터 처리하며 ③ 한도에 걸리면 오류로 끝내지 않고 멈춘다 — 나머지는 다음 진입 때 이어서.
+   */
+  markRead(roomId: string, userId: string): Promise<void> {
+    const key = `${roomId}|${userId}`;
+    const running = markReadInFlight.get(key);
+    if (running) return running;
+    const job = (async () => {
+      const targets = (await this.listByRoom(roomId)).filter((m) => m.senderId !== userId && !m.readBy.includes(userId)).reverse();
+      try {
+        for (let i = 0; i < targets.length; i += 5) {
+          await Promise.all(targets.slice(i, i + 5).map((m) => backend.save({ ...m, readBy: [...m.readBy, userId] })));
+        }
+      } catch (e) {
+        if ((e as { code?: number })?.code !== 429) throw e;
+        console.warn('[chat] 읽음 처리 한도 도달 — 남은 메시지는 다음에 이어서 처리합니다');
+      }
+    })().finally(() => markReadInFlight.delete(key));
+    markReadInFlight.set(key, job);
+    return job;
   },
 
   /** 메시지 내용 수정 — 백엔드 무관(어댑터 경유). isEdited 플래그 세팅. */
   async updateText(id: string, text: string): Promise<void> {
-    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    const cur = await backend.get(id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     await backend.save({ ...cur, text, isEdited: true });
   },
@@ -314,7 +402,7 @@ export const chatMessageRepo = {
     id: string,
     patch: { body: string; text: string; attachments: Attachment[]; mentions: string[] },
   ): Promise<ChatMessage> {
-    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    const cur = await backend.get(id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     const next: ChatMessage = { ...cur, format: 'rich', ...patch, isEdited: true };
     await backend.save(next);
@@ -325,7 +413,7 @@ export const chatMessageRepo = {
 
   /** 메시지 이모지 반응 수정 */
   async updateReactions(id: string, reactions: Record<string, string[]>): Promise<void> {
-    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    const cur = await backend.get(id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     await backend.save({ ...cur, reactions });
   },
@@ -336,15 +424,14 @@ export const chatMessageRepo = {
    * 남아 있는 경우(새 업로드)에만 저장소에서도 지운다(예전 메시지는 URL만 있어 파일이 남는다).
    */
   async deleteMessage(id: string, actor: { id: string; name: string }, now: Date = new Date()): Promise<ChatMessage> {
-    const rows = await backend.loadAll();
-    const cur = rows.find((m) => m.id === id);
+    const cur = await backend.get(id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     const verdict = canDeleteMessage(cur, actor.id, now);
     if (!verdict.allowed) throw new Error(DELETE_DENIED_MESSAGE[verdict.reason]);
 
     const deleted = applyDeletion(cur, actor, now);
     await backend.save(deleted);
-    for (const reply of scrubReplyPreviews(rows.filter((m) => m.roomId === cur.roomId), id)) {
+    for (const reply of scrubReplyPreviews(await backend.listByRoom(cur.roomId), id)) {
       await backend.save(reply);
     }
     if (cur.attachment?.path) await fileStorage.remove(cur.attachment.path);

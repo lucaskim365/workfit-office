@@ -625,9 +625,12 @@ function MessengerThread({
     onBack();
   };
 
+  // 읽음 처리 — 들어올 때뿐 아니라 방을 열어 둔 동안 새로 온 메시지도(안 그러면 보낸 사람 쪽 숫자가 안 줄어든다)
+  const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
   useEffect(() => {
-    markRead.mutate({ roomId: room.id, userId: me });
-  }, [room.id, me]);
+    if (myUnreadCount > 0) markRead.mutate({ roomId: room.id, userId: me });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUnreadCount, room.id, me]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== room.id) {
