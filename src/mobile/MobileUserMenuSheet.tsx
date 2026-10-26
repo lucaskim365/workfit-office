@@ -16,7 +16,9 @@ import {
   MessageSquare,
   Sparkles,
   UserRound,
+  Type,
 } from 'lucide-react';
+import { CHAT_TEXT_SIZES, setChatTextSize, useChatTextSize } from './chatTextSize';
 
 interface MobileUserMenuSheetProps {
   isOpen: boolean;
@@ -32,6 +34,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
   const navigate = useNavigate();
   const { signOutUser, user } = useAuth();
   const { presence, meta, updatePresence } = useMyPresence();
+  const textSize = useChatTextSize(user?.id ?? '');
 
   // 웹(UserMenu.tsx)과 동일한 상태 변수 및 로직
   const [msgInput, setMsgInput] = useState(presence.message);
@@ -262,6 +265,37 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* 메신저 글자 크기 — 채팅방 메뉴의 '글자 크기'와 같은 설정 */}
+          <div>
+            <div className="mb-2.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-slate-700 dark:text-slate-200">
+                <Type size={14} className="text-teal-500" />
+                <span>메신저 글자 크기</span>
+              </span>
+              <span className="text-[11px] text-slate-400">채팅방·목록에 적용</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {CHAT_TEXT_SIZES.map((s) => {
+                const isSelected = textSize === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setChatTextSize(user.id, s.id)}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2.5 transition-all active:scale-[0.98] ${
+                      isSelected
+                        ? 'border-teal-500 bg-teal-50/70 dark:bg-teal-950/40 shadow-xs ring-1 ring-teal-500/40 font-bold text-slate-900 dark:text-white'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700/60 dark:bg-white/[0.03] text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="leading-none" style={{ fontSize: `${13 * s.scale}px` }}>가</span>
+                    <span className="text-[11px]">{s.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

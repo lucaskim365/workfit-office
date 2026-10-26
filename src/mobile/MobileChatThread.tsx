@@ -26,6 +26,7 @@ import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
+import { CHAT_TEXT_SIZES, chatTextScaleStyle, setChatTextSize, useChatTextSize } from './chatTextSize';
 import { statusColor } from './MobileApprovalList';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
@@ -168,6 +169,8 @@ export default function MobileChatThread() {
   };
   const [viewer, setViewer] = useState<{ attachments: Attachment[]; initialIdx: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [textSizeOpen, setTextSizeOpen] = useState(false);
+  const textSize = useChatTextSize(me);
   const [inviting, setInviting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -304,6 +307,7 @@ export default function MobileChatThread() {
   const menuActions: SheetAction[] = room
     ? [
         { label: '파일함 모아보기 (📁)', onClick: () => { setMenuOpen(false); setShowFileBox(true); } },
+        { label: '글자 크기', onClick: () => setTextSizeOpen(true) },
         ...(room.type === 'group' && (room.createdBy === me || !room.createdBy) ? [{ label: '대화방 이름 변경', onClick: handleRenameRoom }] : []),
         ...(room.type === 'group' || room.type === 'dept' ? [{ label: '방 나가기', danger: true, onClick: onLeave }] : []),
         ...(isAdmin && room.type !== 'dept' ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
@@ -316,7 +320,7 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc' }}>
+    <div className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc', ...chatTextScaleStyle(textSize) }}>
       {(() => {
         const isDirect = room?.type === 'direct';
         const otherId = isDirect ? room.members.find((m) => m !== me) : null;
@@ -423,7 +427,7 @@ export default function MobileChatThread() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
         {processedItems.length === 0 && (
-          <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
+          <div className="py-10 text-center chat-text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
         {processedItems.map((item, idx) => {
           const m = item.message;
@@ -452,7 +456,7 @@ export default function MobileChatThread() {
             <div key={m.id} id={`msg-${m.id}`} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
-                  <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">
+                  <span className="rounded-full bg-black/5 px-3 py-1 chat-text-[10.5px] text-ink3">
                     {fmtDateDivider(m.at)}
                   </span>
                 </div>
@@ -522,6 +526,16 @@ export default function MobileChatThread() {
 
       {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
       {menuOpen && <MobileActionSheet title={room?.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
+      {textSizeOpen && (
+        <MobileActionSheet
+          title="글자 크기 · 채팅 목록의 내 프로필 메뉴에서도 바꿀 수 있어요"
+          actions={CHAT_TEXT_SIZES.map((s) => ({
+            label: s.id === textSize ? `${s.label} ✓` : s.label,
+            onClick: () => setChatTextSize(me, s.id),
+          }))}
+          onClose={() => setTextSizeOpen(false)}
+        />
+      )}
       {sheetMessage && createPortal(
         <div className="fixed inset-0 z-[120] flex flex-col justify-end bg-black/40" onClick={() => setSheetMessage(null)}>
           <div
@@ -650,18 +664,18 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
     <div className="w-[240px] overflow-hidden rounded-2xl border border-black/10 bg-white">
       <div className="flex items-center gap-1.5 px-3 py-2 text-white" style={{ background: '#101830' }}>
         <FileSignature size={14} className="shrink-0" />
-        <span className="text-[11.5px] font-bold">전자결재 알림</span>
+        <span className="chat-text-[11.5px] font-bold">전자결재 알림</span>
         <span
-          className="ml-auto rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+          className="ml-auto rounded-md px-1.5 py-0.5 chat-text-[9.5px] font-bold"
           style={{ background: `${statusColor(payload.status)}33`, color: '#fff' }}
         >
           {payload.status}
         </span>
       </div>
       <div className="px-3 py-2.5">
-        <div className="text-[11px] text-ink3">{text || '전자결재 문서를 확인해 주세요.'}</div>
-        <div className="mt-1.5 line-clamp-2 text-[13px] font-bold text-ink">{payload.title || '(제목 없음)'}</div>
-        <div className="mt-1 text-[11px] text-ink3">
+        <div className="chat-text-[11px] text-ink3">{text || '전자결재 문서를 확인해 주세요.'}</div>
+        <div className="mt-1.5 line-clamp-2 chat-text-[13px] font-bold text-ink">{payload.title || '(제목 없음)'}</div>
+        <div className="mt-1 chat-text-[11px] text-ink3">
           {payload.drafterName}
           {payload.drafterDept ? ` · ${payload.drafterDept}` : ''}
           {payload.docNo ? ` · ${payload.docNo}` : ''}
@@ -669,7 +683,7 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
         <button
           onClick={() => canOpen && nav(`/m/approval/${payload.docId}`)}
           disabled={!canOpen}
-          className="mt-2.5 w-full rounded-lg py-2 text-[12px] font-bold text-white disabled:opacity-40"
+          className="mt-2.5 w-full rounded-lg py-2 chat-text-[12px] font-bold text-white disabled:opacity-40"
           style={{ background: '#4ea8de' }}
         >
           결재 문서 상세 보기 →
@@ -738,11 +752,11 @@ function CompositeMessageBubble({
   const bubbleMeta = (mine && unreadCount > 0) || showTime ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
       {mine && unreadCount > 0 && (
-        <span className="text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
+        <span className="chat-text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}
-      {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+      {showTime && <span className="chat-text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
     </div>
   ) : null;
 
@@ -761,11 +775,11 @@ function CompositeMessageBubble({
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 chat-text-[10.5px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
             <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}>
-              <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
-              <div className="truncate text-[10px] text-ink3">{m.replyTo.text}</div>
+              <div className="chat-text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
+              <div className="truncate chat-text-[10px] text-ink3">{m.replyTo.text}</div>
             </div>
           )}
           <div
@@ -794,7 +808,7 @@ function CompositeMessageBubble({
                   <button
                     key={emoji}
                     onClick={() => onToggleEmoji?.(m.id, emoji)}
-                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all active:scale-95"
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 chat-text-[9.5px] font-bold shadow-3xs transition-all active:scale-95"
                     style={active
                       ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' }
                       : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
@@ -882,7 +896,7 @@ function MessageBubble({
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
-        <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">{m.text}</span>
+        <span className="rounded-full bg-black/5 px-3 py-1 chat-text-[10.5px] text-ink3">{m.text}</span>
       </div>
     );
   }
@@ -900,7 +914,7 @@ function MessageBubble({
         <textarea
           value={editVal}
           onChange={(e) => setEditVal(e.target.value)}
-          className="w-full bg-[#f8fbfe] text-[12px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
+          className="w-full bg-[#f8fbfe] chat-text-[12px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
           rows={2}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -913,7 +927,7 @@ function MessageBubble({
             }
           }}
         />
-        <div className="flex justify-end gap-1 text-[10px]">
+        <div className="flex justify-end gap-1 chat-text-[10px]">
           <button
             onClick={() => { onCancelEdit(); setEditVal(m.text); }}
             className="px-2 py-0.5 bg-black/5 text-ink2 rounded"
@@ -973,15 +987,15 @@ function MessageBubble({
       >
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0 pointer-events-none">
-          <span className="block max-w-[190px] truncate text-[12.5px] font-semibold">{att.name}</span>
-          <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
+          <span className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
       </button>
     );
   } else if (isDeletedMessage(m)) {
     // 삭제된 메시지 — 내용 없이 안내만, 길게 눌러도 메뉴를 열지 않는다
     body = (
-      <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 text-[12.5px] italic text-ink3 select-none">
+      <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 chat-text-[12.5px] italic text-ink3 select-none">
         {DELETED_MESSAGE_TEXT}
       </div>
     );
@@ -993,7 +1007,7 @@ function MessageBubble({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] select-none -webkit-touch-callout-none"
+        className="max-w-full min-w-0 rounded-2xl px-3 py-2 chat-text-[13px] select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} />
@@ -1009,7 +1023,7 @@ function MessageBubble({
         onPointerDown={handleTouchStart}
         onPointerMove={handleTouchMove}
         onPointerUp={handleTouchEnd}
-        className="whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
+        className="whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-2xl px-3 py-2 chat-text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         {renderHighlightedText(m.text, searchQuery, isSearchActive)}
@@ -1030,9 +1044,9 @@ function MessageBubble({
           </div>
         )}
         <div className="min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 chat-text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
-            <div className={`mb-1 truncate rounded-md border-l-2 px-2 py-1 text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}>
+            <div className={`mb-1 truncate rounded-md border-l-2 px-2 py-1 chat-text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}>
               <b>{m.replyTo.senderName || '메시지'}</b> {m.replyTo.text}
             </div>
           )}
@@ -1042,10 +1056,10 @@ function MessageBubble({
               // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에
               <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
                 {mine && unreadCount > 0 && (
-                  <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
+                  <span className="chat-text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
                 )}
-                {m.isEdited && <span className="text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
-                {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+                {m.isEdited && <span className="chat-text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
+                {showTime && <span className="chat-text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
               </div>
             )}
           </div>
@@ -1059,7 +1073,7 @@ function MessageBubble({
                   <button
                     key={emoji}
                     onClick={() => onToggleEmoji(m.id, emoji)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold shadow-sm transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 chat-text-[10px] font-bold shadow-sm transition-all"
                     style={active 
                       ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' } 
                       : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }

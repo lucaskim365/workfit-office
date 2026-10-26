@@ -293,10 +293,18 @@ body {
 }
 
 /*
+  PWA 메신저 글자 크기 — `chat-text-[13px]` 은 13px 에 화면이 깐 --chat-text-scale(보통 1·크게 1.2·아주 크게 1.4)을 곱한다.
+  배율을 깔지 않는 웹 메신저에서는 text-[13px] 과 같다. (src/mobile/chatTextSize.ts)
+*/
+@utility chat-text-* {
+  font-size: calc(--value([length]) * var(--chat-text-scale, 1));
+}
+
+/*
   메신저 서식 메시지(rich) — 입력 편집기(.chat-rich .ProseMirror)와 보낸 메시지(.chat-rich)가 같은 모양을 쓴다.
   Tailwind 기본값이 목록·제목 모양을 지우므로 여기서 되살린다.
 */
-.chat-rich { font-size: 12.5px; line-height: 1.6; word-break: break-word; }
+.chat-rich { font-size: calc(12.5px * var(--chat-text-scale, 1)); line-height: 1.6; word-break: break-word; }
 .chat-rich .ProseMirror { outline: none; white-space: pre-wrap; }
 .chat-rich p { margin: 0; min-height: 1.6em; }
 .chat-rich h1 { font-size: 1.35em; font-weight: 800; margin: 0.3em 0 0.15em; }

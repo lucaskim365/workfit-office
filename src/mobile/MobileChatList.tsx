@@ -17,12 +17,14 @@ import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
+import { chatTextScaleStyle, useChatTextSize } from './chatTextSize';
 
 /** 모바일 채팅방 목록 — 검색·상대 이름·상단 고정·숨김·새 대화. */
 export default function MobileChatList() {
   const { user } = useAuth();
   const nav = useNavigate();
   const me = user!.id;
+  const textSize = useChatTextSize(me);
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const drafts = useChatDrafts(me);
@@ -98,7 +100,7 @@ export default function MobileChatList() {
   const initials = user?.name ? user.name.slice(-2) : 'WF';
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
+    <div className="flex h-full flex-col" style={{ background: '#f2f8fc', ...chatTextScaleStyle(textSize) }}>
       <header className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: '#101830' }}>
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
@@ -167,7 +169,7 @@ export default function MobileChatList() {
 
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {sortedRooms.length === 0 && (
-          <div className="py-16 text-center text-[12px] text-ink3">{kw ? '검색 결과가 없습니다.' : '대화방이 없습니다.'}</div>
+          <div className="py-16 text-center chat-text-[12px] text-ink3">{kw ? '검색 결과가 없습니다.' : '대화방이 없습니다.'}</div>
         )}
         {sortedRooms.map((r) => {
           const n = unread[r.id] ?? 0;
@@ -196,7 +198,7 @@ export default function MobileChatList() {
                 </div>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 truncate text-[14px] font-bold text-ink">
+                    <span className="flex items-center gap-1.5 truncate chat-text-[14px] font-bold text-ink">
                       <span className="truncate">{r.displayName}</span>
                       {isDirect && <BirthdayMark userId={otherId} />}
                       {isPinned && <Pin size={11} className="inline shrink-0" />}
@@ -204,10 +206,10 @@ export default function MobileChatList() {
                         <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
                       )}
                     </span>
-                    <span className="shrink-0 text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
+                    <span className="shrink-0 chat-text-[10px] tabular-nums text-ink3">{fmtTime(r.lastMessage?.at)}</span>
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] text-ink3">
+                    <span className="truncate chat-text-[12px] text-ink3">
                       {isDirect && otherPresence?.message ? (
                         <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
                       ) : null}
@@ -221,7 +223,7 @@ export default function MobileChatList() {
                       )}
                     </span>
                     {n > 0 && (
-                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: '#e0483b' }}>{n}</span>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 chat-text-[11px] font-bold text-white" style={{ background: '#e0483b' }}>{n}</span>
                     )}
                   </span>
                 </span>
