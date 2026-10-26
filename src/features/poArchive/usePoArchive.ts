@@ -46,3 +46,14 @@ export function useUploadPoReply() {
     },
   });
 }
+
+export function useDeletePoReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reply: PoReply) => poReplyRepo.remove(reply),
+    onSuccess: (_, reply) => {
+      qc.setQueryData<PoReply[]>([KEY], (prev = []) => prev.filter((r) => r.docId !== reply.docId));
+      return qc.invalidateQueries({ queryKey: [KEY] });
+    },
+  });
+}

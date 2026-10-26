@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FileCheck2, FileText, Loader2, PackageCheck, Search, Upload } from 'lucide-react';
+import { Download, FileCheck2, FileText, Loader2, PackageCheck, Search, Trash2, Upload } from 'lucide-react';
 import { Modal } from '@/shared/ui/Modal';
 import { downloadFile } from '@/shared/lib/download';
 import { exportElementToPdf } from '@/shared/lib/pdf';
@@ -14,7 +14,7 @@ import {
   type PoReplyFilter,
   type PoViewer,
 } from '@/domain/poArchive/schema';
-import { usePoReplies, usePurchaseOrderArchive, useUploadPoReply } from '@/features/poArchive/usePoArchive';
+import { useDeletePoReply, usePoReplies, usePurchaseOrderArchive, useUploadPoReply } from '@/features/poArchive/usePoArchive';
 import { poReplyRepo } from '@/data/poArchive/poReply.repo';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
@@ -86,6 +86,17 @@ export function PurchaseOrderArchive({
       await downloadFile(await poReplyRepo.downloadUrl(reply), reply.name);
     } catch {
       setErr('회신 문서를 내려받지 못했습니다.');
+    }
+  };
+
+  const remove = useDeletePoReply();
+  const deleteReply = async (reply: PoReply) => {
+    if (!window.confirm(`회신 문서(${reply.name})를 삭제할까요? 삭제하면 되돌릴 수 없습니다.`)) return;
+    setErr(null);
+    try {
+      await remove.mutateAsync(reply);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '회신 문서를 삭제하지 못했습니다.');
     }
   };
 
@@ -181,7 +192,7 @@ export function PurchaseOrderArchive({
               <th className="p-3">제목</th>
               <th className="p-3 w-28">완료일자</th>
               <th className="p-3 w-32 text-center">다운로드</th>
-              <th className="p-3 w-72">회신 문서</th>
+              <th className="p-3 w-80">회신 문서</th>
             </tr>
           </thead>
           <tbody>
@@ -203,10 +214,10 @@ export function PurchaseOrderArchive({
               return (
                 <tr
                   key={d.id}
-                  className={`border-b border-border transition-colors ${reply ? 'bg-teal-soft/25 hover:bg-teal-soft/40' : 'hover:bg-panel-alt/30'}`}
+                  className={`border-b border-border transition-colors ${reply ? 'bg-emerald-500/[0.06] hover:bg-emerald-500/10' : 'hover:bg-panel-alt/30'}`}
                 >
                   {/* 회신 문서가 있는 행은 왼쪽 띠로 한눈에 구분한다 */}
-                  <td className={`p-3 min-w-0 border-l-[3px] ${reply ? 'border-l-teal' : 'border-l-transparent'}`}>
+                  <td className={`p-3 min-w-0 border-l-[3px] ${reply ? 'border-l-emerald-500' : 'border-l-transparent'}`}>
                     <button onClick={() => setViewDoc(d)} className="flex items-center gap-1.5 text-left font-semibold text-ink hover:text-teal transition-colors">
                       <FileText size={13} className="shrink-0 text-ink3" />
                       <span className="truncate">{d.title}</span>
@@ -231,7 +242,7 @@ export function PurchaseOrderArchive({
                     {reply ? (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-1.5 text-[10.5px]">
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-teal px-2 py-0.5 font-bold text-white">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 font-bold text-white">
                             <FileCheck2 size={11} /> 회신 완료
                           </span>
                           <span className="truncate text-ink3">
@@ -255,6 +266,16 @@ export function PurchaseOrderArchive({
                             >
                               {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                               교체
+                            </button>
+                          )}
+                          {canUpload && (
+                            <button
+                              onClick={() => deleteReply(reply)}
+                              disabled={upload.isPending || remove.isPending}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:border-red-500 hover:text-red-500 disabled:opacity-50 transition-colors"
+                            >
+                              {remove.isPending && remove.variables?.docId === d.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                              삭제
                             </button>
                           )}
                         </div>
