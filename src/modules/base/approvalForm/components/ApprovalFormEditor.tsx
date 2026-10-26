@@ -215,6 +215,7 @@ export function ApprovalFormEditor({
       photoUrl: '',
       resignedAt: '',
       fcmToken: '',
+      fcmTokens: [],
     };
   }, [user]);
 

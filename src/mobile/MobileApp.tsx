@@ -24,9 +24,11 @@ import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
 import MobileGalleryScreen from './MobileGalleryScreen';
 import MobileOrgChartScreen from './MobileOrgChartScreen';
+import MobileProfileScreen from './MobileProfileScreen';
 import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 import { ReloginDialog } from '@/app/auth/ReloginDialog';
+import { ModalLayerProvider } from '@/shared/ui/Modal';
 
 /**
  * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
@@ -105,6 +107,8 @@ export default function MobileApp() {
   }, [user]);
 
   return (
+    // 웹 공용 모달(일정·외근 창 등)이 이 셸(z-[100]) 뒤에 깔리지 않도록 층을 올린다
+    <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
       <div
@@ -141,6 +145,7 @@ export default function MobileApp() {
             <Route path="gallery" element={<MobileGalleryScreen />} />
             <Route path="project" element={<MobileComingSoon title="프로젝트" icon="📗" desc="전사 프로젝트 협업 및 진행 관리 기능으로, 개발 로드맵에 따라 순차 오픈 예정입니다." />} />
             <Route path="orgchart" element={<MobileOrgChartScreen />} />
+            <Route path="profile" element={<MobileProfileScreen />} />
 
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
@@ -154,5 +159,6 @@ export default function MobileApp() {
         onDismissToday={() => setShowGuide(false)}
       />
     </div>
+    </ModalLayerProvider>
   );
 }

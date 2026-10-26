@@ -209,7 +209,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('photoUrl', 512),
       S('activeChatRoomId', 64),
       S('resignedAt', 40),
-      S('fcmToken', 256),
+      S('fcmToken', 256), // 예전 단일 토큰 — 서버 함수 전환기 동안 최근 기기 토큰을 같이 둔다
+      SA('fcmTokens', 256), // 기기별 푸시 토큰 목록(PC·휴대폰 등 여러 대)
     ],
     indexes: [IX('empNo', ['empNo']), IX('dept', ['dept'])],
   },

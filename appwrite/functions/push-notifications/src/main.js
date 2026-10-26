@@ -11,6 +11,8 @@
  *   (1.9 TablesDB 표기면 …tables.{coll}.rows.*.create 도 함께)
  *
  * 토큰 소스: **Appwrite users**(단일 SoT). Firestore 폴백은 이관 완료로 제거됨(2026-08-17).
+ * 한 사람이 여러 기기(PC·휴대폰)에서 받도록 users.fcmTokens(목록) + 예전 단일 칸 fcmToken을 모두 쓴다.
+ * 만료된 토큰은 발송 결과를 보고 목록에서 뺀다.
  *
  * 필요 env(함수 설정):
  *   FCM_SERVICE_ACCOUNT   — Firebase 서비스계정 JSON 문자열(workfit-office-app). FCM 발송 전용.
@@ -29,15 +31,59 @@ function ensureAdmin() {
   return admin;
 }
 
-/** users.{id}.fcmToken 조회 — Appwrite(단일 SoT). */
-async function getFcmToken(dbs, DB, uid, log) {
+/** 이 사람의 모든 기기 토큰 — users.fcmTokens + 예전 단일 칸 fcmToken (중복·빈 값 제외). */
+async function getUserTokens(dbs, DB, uid, log) {
   try {
     const u = await dbs.getDocument(DB, 'users', uid);
-    if (u && u.fcmToken) return { token: u.fcmToken, source: 'appwrite' };
+    const list = Array.isArray(u?.fcmTokens) ? u.fcmTokens : [];
+    return [...new Set([...list, u?.fcmToken || ''].filter(Boolean))];
   } catch (e) {
     if (e?.code !== 404) log(`appwrite user ${uid} 조회 오류: ${e.message}`);
+    return [];
   }
-  return { token: '', source: 'none' };
+}
+
+const DEAD_TOKEN_CODES = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']);
+
+/** 만료된 토큰을 그 사람의 목록·단일 칸에서 뺀다. fcmTokens 칸이 없는 DB면 단일 칸만 정리한다. */
+async function removeDeadTokens(dbs, DB, uid, dead, log) {
+  if (dead.length === 0) return;
+  try {
+    const u = await dbs.getDocument(DB, 'users', uid);
+    const list = Array.isArray(u?.fcmTokens) ? u.fcmTokens : [];
+    const patch = {};
+    if (dead.includes(u?.fcmToken)) patch.fcmToken = '';
+    if (Array.isArray(u?.fcmTokens)) patch.fcmTokens = list.filter((t) => !dead.includes(t));
+    if (Object.keys(patch).length > 0) await dbs.updateDocument(DB, 'users', uid, patch);
+    log(`cleared ${dead.length} stale token(s) for ${uid}`);
+  } catch (e) {
+    log(`stale token cleanup failed for ${uid}: ${e.message}`);
+  }
+}
+
+/**
+ * 여러 토큰으로 발송하고, 만료 토큰은 주인별로 정리한다.
+ * owners: token → userId
+ */
+async function sendToTokens(message, owners, dbs, DB, log) {
+  const tokens = [...owners.keys()];
+  if (tokens.length === 0) return { successCount: 0, total: 0 };
+  let successCount = 0;
+  const deadByUser = new Map();
+  // FCM multicast는 한 번에 500개까지
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    const res = await ensureAdmin().messaging().sendEachForMulticast({ ...message, tokens: chunk });
+    successCount += res.successCount;
+    res.responses.forEach((r, idx) => {
+      if (r.success || !DEAD_TOKEN_CODES.has(r.error?.code)) return;
+      const token = chunk[idx];
+      const uid = owners.get(token);
+      deadByUser.set(uid, [...(deadByUser.get(uid) || []), token]);
+    });
+  }
+  await Promise.all([...deadByUser].map(([uid, dead]) => removeDeadTokens(dbs, DB, uid, dead, log)));
+  return { successCount, total: tokens.length };
 }
 
 /** 방 정보(members·name) 조회 — Appwrite(단일 SoT). */
@@ -72,31 +118,27 @@ async function handleChatMessage(msg, dbs, DB, log) {
   if (!room) return { skipped: 'room-not-found' };
 
   const recipientIds = room.members.filter((id) => id && id !== senderId);
-  const tokens = [];
+  const owners = new Map(); // token → userId
   await Promise.all(
     recipientIds.map(async (uid) => {
-      const { token } = await getFcmToken(dbs, DB, uid, log);
-      if (token) tokens.push(token);
+      for (const token of await getUserTokens(dbs, DB, uid, log)) owners.set(token, uid);
     }),
   );
-  if (tokens.length === 0) return { skipped: 'no-tokens', room: roomId };
+  if (owners.size === 0) return { skipped: 'no-tokens', room: roomId };
 
   const senderName = String(msg.senderName || '').replace(/\s+/g, ' ').trim();
   const title = senderName ? `${senderName} · ${room.name}` : room.name;
   const body = chatPreview(msg);
 
-  const res = await ensureAdmin()
-    .messaging()
-    .sendEachForMulticast({
-      tokens,
-      // 웹은 data-only → FCM 자동표시 없이 서비스워커(onBackgroundMessage)가 단일 표시(중복·아이콘·유지 통제).
-      // 모바일은 android.notification / apns.alert 로 백그라운드 알림 표시.
-      data: { roomId: String(roomId), roomName: String(room.name), title: String(title), body: String(body) },
-      android: { priority: 'high', notification: { title, body, channelId: 'workfit_messages' } },
-      apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
-    });
-  log(`chat push: ${res.successCount}/${tokens.length} room ${roomId}`);
-  return { sent: res.successCount, total: tokens.length };
+  const res = await sendToTokens({
+    // 웹은 data-only → FCM 자동표시 없이 서비스워커(onBackgroundMessage)가 단일 표시(중복·아이콘·유지 통제).
+    // 모바일은 android.notification / apns.alert 로 백그라운드 알림 표시.
+    data: { roomId: String(roomId), roomName: String(room.name), title: String(title), body: String(body) },
+    android: { priority: 'high', notification: { title, body, channelId: 'workfit_messages' } },
+    apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
+  }, owners, dbs, DB, log);
+  log(`chat push: ${res.successCount}/${res.total} room ${roomId}`);
+  return { sent: res.successCount, total: res.total };
 }
 
 // ── 인앱 알림(결재 등) → 대상자에게 푸시 ──
@@ -104,8 +146,8 @@ async function handleNotification(noti, dbs, DB, log) {
   const userId = noti?.userId;
   if (!userId) return { skipped: 'no-user' };
 
-  const { token } = await getFcmToken(dbs, DB, userId, log);
-  if (!token) return { skipped: 'no-token', user: userId };
+  const tokens = await getUserTokens(dbs, DB, userId, log);
+  if (tokens.length === 0) return { skipped: 'no-token', user: userId };
 
   const type = noti.type || '시스템';
   const title = noti.title || '새 알림';
@@ -120,36 +162,22 @@ async function handleNotification(noti, dbs, DB, log) {
       : 'workfit_general';
 
   try {
-    await ensureAdmin()
-      .messaging()
-      .send({
-        token,
-        // 웹 data-only(SW 단일 표시), 모바일은 android/apns.
-        data: {
-          type: String(type),
-          docId: String(docId),
-          linkUrl: String(linkUrl),
-          title: String(title),
-          body: String(body),
-        },
-        android: { priority: 'high', notification: { title, body, channelId } },
-        apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
-      });
-    log(`noti push → ${userId} (${type})`);
-    return { sent: 1, user: userId };
+    const res = await sendToTokens({
+      // 웹 data-only(SW 단일 표시), 모바일은 android/apns.
+      data: {
+        type: String(type),
+        docId: String(docId),
+        linkUrl: String(linkUrl),
+        title: String(title),
+        body: String(body),
+      },
+      android: { priority: 'high', notification: { title, body, channelId } },
+      apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
+    }, new Map(tokens.map((t) => [t, userId])), dbs, DB, log);
+    log(`noti push → ${userId} (${type}) ${res.successCount}/${res.total}`);
+    return { sent: res.successCount, total: res.total, user: userId };
   } catch (e) {
-    const code = e?.errorInfo?.code;
-    if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
-      // 만료 토큰 정리(Appwrite).
-      try {
-        await dbs.updateDocument(DB, 'users', userId, { fcmToken: '' });
-      } catch {
-        /* noop */
-      }
-      log(`cleared stale token for ${userId}`);
-    } else {
-      log(`noti push failed for ${userId}: ${e.message}`);
-    }
+    log(`noti push failed for ${userId}: ${e.message}`);
     return { error: e.message, user: userId };
   }
 }

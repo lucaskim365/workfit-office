@@ -72,3 +72,13 @@ test('결재 건과 연결하면 목록에서 빠진다 — 본인만 연결할 
   assert.equal(linked.linkedApprovalDocId, 'AP-261103-001');
   assert.equal((await outsideWorkRepo.listAll({ from: '2026-11-03', to: '2026-11-03' })).some((w) => w.id === created.id), false);
 });
+
+test('관리자는 남의 기록을 고치고 지울 수 있지만 결재 건 연결은 못 한다', async () => {
+  const admin: OutsideWorkActor = { userId: 'U001', active: true, isAdmin: true };
+  const created = await outsideWorkRepo.create(owner, draft({ startDate: '2026-10-22', endDate: '2026-10-22' }));
+  const updated = await outsideWorkRepo.update(admin, created.id, draft({ startDate: '2026-10-22', endDate: '2026-10-22', destination: 'YY전자' }));
+  assert.equal(updated.destination, 'YY전자');
+  assert.equal(updated.ownerUserId, owner.userId);
+  await assert.rejects(outsideWorkRepo.link(admin, created.id, 'AP-261103-002'), (e: unknown) => e instanceof OutsideWorkError && e.code === 'FORBIDDEN');
+  await outsideWorkRepo.remove(admin, created.id);
+});
