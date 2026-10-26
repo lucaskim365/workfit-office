@@ -11,7 +11,7 @@ import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/ch
 import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, usePrefetchChatThread, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import { ChatComposer, type ChatComposerHandle } from '@/features/chat/ChatComposer';
@@ -109,6 +109,8 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unreadMap = {} } = useUnreadCounts(me);
+  // 방 위에 마우스를 올리면 메시지를 미리 받아 둔다 — 누르면 바로 보이게
+  const prefetchThread = usePrefetchChatThread();
   const drafts = useChatDrafts(me);
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
@@ -241,6 +243,7 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
             return (
               <div
                 key={r.id}
+                onMouseEnter={() => prefetchThread(r.id)}
                 onClick={() => setOpenRoomId(r.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();

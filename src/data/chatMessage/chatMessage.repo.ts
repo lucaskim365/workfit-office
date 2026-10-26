@@ -322,6 +322,8 @@ const backend: ChatMessageBackend = selectBackend();
 
 /** 방·사용자별 진행 중인 읽음 처리 — 같은 방을 동시에 두 번 고쳐 쓰지 않게. */
 const markReadInFlight = new Map<string, Promise<void>>();
+/** 처리 중에 다시 불린 방 — 끝나면 한 번 더 돈다. */
+const markReadAgain = new Set<string>();
 
 export const chatMessageRepo = {
   /** 특정 방의 메시지를 시간 오름차순으로. */
@@ -370,22 +372,37 @@ export const chatMessageRepo = {
    * 메시지마다 문서를 고쳐 쓰므로 Appwrite 수정 한도(한 사람 분당 약 120건, 접속 상태·방 삭제 등 모든 수정 공용)에
    * 걸릴 수 있다. 그래서 ① 같은 방을 동시에 두 번 처리하지 않고(화면 중복 마운트·개발 모드 이중 실행)
    * ② 최신 메시지부터 처리하며 ③ 한도에 걸리면 오류로 끝내지 않고 멈춘다 — 나머지는 다음 진입 때 이어서.
+   * 처리 중에 새 메시지가 와서 다시 불리면 끝난 뒤 한 번 더 돈다(안 그러면 그 메시지만 '1'로 남는다).
    */
   markRead(roomId: string, userId: string): Promise<void> {
     const key = `${roomId}|${userId}`;
     const running = markReadInFlight.get(key);
-    if (running) return running;
+    if (running) {
+      markReadAgain.add(key);
+      return running;
+    }
     const job = (async () => {
-      const targets = (await this.listByRoom(roomId)).filter((m) => m.senderId !== userId && !m.readBy.includes(userId)).reverse();
       try {
-        for (let i = 0; i < targets.length; i += 5) {
-          await Promise.all(targets.slice(i, i + 5).map((m) => backend.save({ ...m, readBy: [...m.readBy, userId] })));
+        for (let round = 0; round < 5; round++) {
+          markReadAgain.delete(key);
+          const targets = (await this.listByRoom(roomId)).filter((m) => m.senderId !== userId && !m.readBy.includes(userId)).reverse();
+          try {
+            for (let i = 0; i < targets.length; i += 5) {
+              await Promise.all(targets.slice(i, i + 5).map((m) => backend.save({ ...m, readBy: [...m.readBy, userId] })));
+            }
+          } catch (e) {
+            if ((e as { code?: number })?.code !== 429) throw e;
+            console.warn('[chat] 읽음 처리 한도 도달 — 남은 메시지는 다음에 이어서 처리합니다');
+            return;
+          }
+          if (!markReadAgain.has(key)) return;
         }
-      } catch (e) {
-        if ((e as { code?: number })?.code !== 429) throw e;
-        console.warn('[chat] 읽음 처리 한도 도달 — 남은 메시지는 다음에 이어서 처리합니다');
+      } finally {
+        // 작업 안에서 바로 정리한다 — 끝난 작업을 새 요청이 받아 가 새 메시지를 놓치는 틈이 없게
+        markReadInFlight.delete(key);
+        markReadAgain.delete(key);
       }
-    })().finally(() => markReadInFlight.delete(key));
+    })();
     markReadInFlight.set(key, job);
     return job;
   },
