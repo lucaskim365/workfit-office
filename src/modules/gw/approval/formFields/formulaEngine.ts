@@ -7,7 +7,21 @@
  * - 순환 참조(Circular Reference) 방지 및 안전한 토큰 파서
  */
 
+import type { CellMerge } from './utils';
+
 export type CellFormat = 'currency' | 'percent1' | 'percent2' | 'number';
+
+/** 병합 블록 안의 칸이면 병합 대표(왼쪽 위) 칸 좌표로 바꿔 줌 — 병합이 아니면 그대로 */
+function toMergeAnchor(rIdx: number, cIdx: number, merges?: CellMerge[]): { rIdx: number; cIdx: number } {
+  const m = (merges || []).find(
+    (mg) =>
+      rIdx >= mg.startRow &&
+      rIdx < mg.startRow + mg.rowSpan &&
+      cIdx >= mg.startCol &&
+      cIdx < mg.startCol + mg.colSpan
+  );
+  return m ? { rIdx: m.startRow, cIdx: m.startCol } : { rIdx, cIdx };
+}
 
 export interface CellFormula {
   expression: string; // 예: "=SUM(D18:D26)", "=D27 - H27", "=(D18 / D27) * 100", "=SUM(ABOVE)"
@@ -83,18 +97,13 @@ export function formatCellValue(num: number, format?: CellFormat): string {
   }
 }
 
-/**
- * 행/열 추가·삭제 시 수식 내부의 좌표 및 범위를 엑셀과 동일하게 자동 리인덱싱(Re-indexing)
- */
-export function shiftFormulaCoordinates(
-  expression: string,
-  action: {
-    type: 'row_add' | 'row_del' | 'col_add' | 'col_del';
-    atIndex: number; // 0-based 추가/삭제된 위치
-  }
-): string {
-  if (!expression) return expression;
+export type ShiftAction = {
+  type: 'row_add' | 'row_del' | 'col_add' | 'col_del';
+  atIndex: number; // 0-based 추가/삭제된 위치
+};
 
+/** 괄호 없는 수식 조각의 A1 좌표·범위 이동 */
+function shiftPlainCoordinates(expression: string, action: ShiftAction): string {
   // 1. 범위 표현식 먼저 변환: 예) D18:D26
   let result = expression.replace(/([A-Z]+)(\d+):([A-Z]+)(\d+)/gi, (_match, c1, r1, c2, r2) => {
     let startCol = letterToColIndex(c1);
@@ -165,7 +174,119 @@ export function shiftFormulaCoordinates(
   return result;
 }
 
-/** 안전한 사칙연산 수식 평가기 (토큰 기반, eval 배제) */
+/** 괄호 참조 안쪽 "2:금액" 형태의 숫자 행 이동 — 지워진 행이면 null, 라벨·LAST는 그대로 */
+function shiftBracketRow(inside: string, action: ShiftAction): string | null {
+  const m = inside.match(/^(\s*)(\d+)(\s*:.*)$/s);
+  if (!m || (action.type !== 'row_add' && action.type !== 'row_del')) return inside;
+  let r = parseInt(m[2], 10);
+  if (action.type === 'row_add') {
+    if (r >= action.atIndex) r += 1;
+  } else {
+    if (r === action.atIndex) return null;
+    if (r > action.atIndex) r -= 1;
+  }
+  return `${m[1]}${r}${m[3]}`;
+}
+
+// 타 표 참조 [표]![..] / [표]!D4, 같은 표 괄호 참조 [..]
+const BRACKET_SEGMENT = /\[([^\]!]+)\]\s*!\s*(?:\[([^\]]*)\]|([A-Z]+\d+))|\[([^\]]*)\]/gi;
+
+/**
+ * 행/열 추가·삭제 시 수식 내부의 좌표 및 범위를 엑셀과 동일하게 자동 리인덱싱(Re-indexing)
+ * - 같은 표의 A1 좌표·범위와 [2:금액] 숫자 행 참조를 이동
+ * - 괄호 안 열 제목과 타 표 참조는 건드리지 않음 (타 표는 shiftCrossTableRefs)
+ */
+export function shiftFormulaCoordinates(expression: string, action: ShiftAction): string {
+  if (!expression) return expression;
+  const kept: string[] = [];
+  const masked = expression.replace(BRACKET_SEGMENT, (seg, _t, _ti, _tc, inside) => {
+    let out = seg;
+    if (inside !== undefined) {
+      const shifted = shiftBracketRow(inside, action);
+      out = shifted === null ? '#REF!' : `[${shifted}]`;
+    }
+    kept.push(out);
+    return `\u0000${kept.length - 1}\u0000`;
+  });
+  return shiftPlainCoordinates(masked, action).replace(/\u0000(\d+)\u0000/g, (_m, i) => kept[Number(i)]);
+}
+
+/** 다른 표(tableNames 중 하나)에 행/열이 추가·삭제됐을 때 이 수식의 [표]!… 참조를 이동 */
+export function shiftCrossTableRefs(expression: string, tableNames: string[], action: ShiftAction): string {
+  if (!expression) return expression;
+  return expression.replace(BRACKET_SEGMENT, (seg, table, crossInside, crossCoord) => {
+    if (table === undefined || !tableNames.includes(table.trim())) return seg;
+    if (crossCoord !== undefined) {
+      const shifted = shiftPlainCoordinates(crossCoord, action);
+      return shifted.includes('#REF!') ? '#REF!' : `[${table}]!${shifted}`;
+    }
+    const shifted = shiftBracketRow(crossInside, action);
+    return shifted === null ? '#REF!' : `[${table}]![${shifted}]`;
+  });
+}
+
+/** 수식 오류 칸 표시 */
+export const FORMULA_ERROR = '#오류';
+
+/** 잘못된 수식(괄호 불일치·없는 함수·빠진 피연산자 등) */
+class FormulaError extends Error {}
+
+/** 부동소수 오차 제거 — 소수 10자리에서 반올림 */
+export function roundResult(n: number): number {
+  return Number(n.toFixed(10));
+}
+
+/** 수식 안에 다시 끼워 넣을 숫자 문자열 (지수 표기 회피) */
+/** 숫자 → 식 글자 (지수 표기 회피, 괄호 없음) */
+function numText(n: number): string {
+  if (!Number.isFinite(n)) throw new FormulaError();
+  return Math.abs(n) < 1e21 ? n.toFixed(10).replace(/\.?0+$/, '') : String(n);
+}
+
+/** 수식 안에 다시 끼워 넣을 숫자 (음수는 괄호로 감쌈) */
+function numToExpr(n: number): string {
+  const s = numText(n);
+  return n < 0 ? `(${s})` : s;
+}
+
+const FUNCTIONS: Record<string, (args: number[]) => number> = {
+  SUM: (a) => a.reduce((x, y) => x + y, 0),
+  AVERAGE: (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0),
+  MIN: (a) => (a.length ? Math.min(...a) : 0),
+  MAX: (a) => (a.length ? Math.max(...a) : 0),
+  ROUND: (a) => {
+    if (a.length < 1 || a.length > 2) throw new FormulaError();
+    const f = Math.pow(10, Math.trunc(a[1] ?? 0));
+    return Math.round(a[0] * f) / f;
+  },
+};
+
+/** 셀 주소가 모두 숫자로 바뀐 식에서 함수·괄호를 안쪽부터 풀고 사칙연산 계산 */
+function evaluateExpression(expr: string): number {
+  let e = expr;
+  const inner = /([A-Za-z]*)\s*\(([^()]*)\)/;
+  let guard = 0;
+  for (let m = e.match(inner); m; m = e.match(inner)) {
+    if (++guard > 500) throw new FormulaError(); // 어떤 식이든 멈추지 않도록
+    const name = m[1].toUpperCase();
+    let val: number;
+    if (name) {
+      const fn = FUNCTIONS[name];
+      if (!fn) throw new FormulaError();
+      const args = m[2].trim() === '' ? [] : m[2].split(',').map((a) => evaluateArithmetic(a));
+      val = fn(args);
+    } else {
+      if (m[2].includes(',')) throw new FormulaError();
+      val = evaluateArithmetic(m[2]);
+    }
+    // 괄호를 풀어 낸 값은 괄호 없이 넣는다 — 음수를 다시 괄호로 감싸면 같은 괄호를 끝없이 다시 풂
+    // ('2*-5', '3--5'처럼 연산자 뒤 음수는 계산기가 처리)
+    e = e.slice(0, m.index) + numText(val) + e.slice((m.index ?? 0) + m[0].length);
+  }
+  return evaluateArithmetic(e);
+}
+
+/** 안전한 사칙연산 수식 평가기 (토큰 기반, eval 배제) — 잘못된 식은 FormulaError */
 function evaluateArithmetic(expr: string): number {
   const tokens: string[] = [];
   const cleanExpr = expr.replace(/\s+/g, '');
@@ -195,9 +316,10 @@ function evaluateArithmetic(expr: string): number {
       }
       tokens.push(numStr);
     } else {
-      i++;
+      throw new FormulaError();
     }
   }
+  if (tokens.length === 0) throw new FormulaError();
 
   // Shunting-yard 알고리즘을 이용한 RPN 변환 및 계산
   const outputQueue: (number | string)[] = [];
@@ -223,12 +345,17 @@ function evaluateArithmetic(expr: string): number {
       while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') {
         outputQueue.push(operatorStack.pop()!);
       }
+      if (operatorStack.length === 0) throw new FormulaError(); // 닫는 괄호 짝 없음
       operatorStack.pop(); // '(' 제거
+    } else {
+      throw new FormulaError();
     }
   }
 
   while (operatorStack.length > 0) {
-    outputQueue.push(operatorStack.pop()!);
+    const op = operatorStack.pop()!;
+    if (op === '(') throw new FormulaError(); // 여는 괄호 짝 없음
+    outputQueue.push(op);
   }
 
   // RPN 계산
@@ -237,8 +364,9 @@ function evaluateArithmetic(expr: string): number {
     if (typeof item === 'number') {
       evalStack.push(item);
     } else {
-      const b = evalStack.pop() ?? 0;
-      const a = evalStack.pop() ?? 0;
+      if (evalStack.length < 2) throw new FormulaError(); // 피연산자 빠짐
+      const b = evalStack.pop()!;
+      const a = evalStack.pop()!;
       let res = 0;
       if (item === '+') res = a + b;
       else if (item === '-') res = a - b;
@@ -248,7 +376,14 @@ function evaluateArithmetic(expr: string): number {
     }
   }
 
-  return evalStack.pop() ?? 0;
+  if (evalStack.length !== 1) throw new FormulaError();
+  return evalStack[0];
+}
+
+/** from 행부터 조건에 맞는 첫 행 번호 (없으면 -1) — 예전 제목 행(0번)을 라벨 검색에서 빼기 위함 */
+function findRowFrom<T>(rows: T[], from: number, pred: (row: T) => boolean): number {
+  for (let i = Math.max(0, from); i < rows.length; i++) if (pred(rows[i])) return i;
+  return -1;
 }
 
 export type OtherTablesContext = Record<
@@ -257,6 +392,8 @@ export type OtherTablesContext = Record<
     cols: string[];
     rows: Array<Record<string, string>>;
     headerValues?: Record<string, string>;
+    merges?: CellMerge[];
+    firstDataRow?: number; // 예전 제목 행을 0번 행으로 내린 표면 1
   }
 >;
 
@@ -280,7 +417,8 @@ export function resolveOtherTableCell(
   if (!matchEntry) return 0;
 
   const otherTable = matchEntry[1];
-  const { cols: oCols, rows: oRows, headerValues: oHeaders } = otherTable;
+  const { cols: oCols, rows: oRows, headerValues: oHeaders, merges: oMerges } = otherTable;
+  const oFrom = otherTable.firstDataRow ?? 0;
   if (!oRows || oRows.length === 0 || !oCols || oCols.length === 0) return 0;
 
   const resolveOColKey = (title: string): string => {
@@ -306,13 +444,13 @@ export function resolveOtherTableCell(
       rIdx = oRows.length - 1;
     } else {
       const targetLabel = rowToken.toLowerCase();
-      rIdx = oRows.findIndex((r) =>
+      rIdx = findRowFrom(oRows, oFrom, (r) =>
         Object.values(r).some(
           (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
         )
       );
       if (rIdx === -1) {
-        rIdx = oRows.findIndex((r) =>
+        rIdx = findRowFrom(oRows, oFrom, (r) =>
           Object.values(r).some(
             (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
           )
@@ -320,14 +458,11 @@ export function resolveOtherTableCell(
       }
     }
     if (rIdx >= 0 && rIdx < oRows.length) {
-      const val = parseCellNumber(oRows[rIdx][colKey]);
-      if (val !== 0) return val;
-      // 병합 셀이거나 해당 열에 값이 없는 경우 해당 행 내 다른 열에서 0이 아닌 숫자 탐색
-      for (const c of oCols) {
-        const altVal = parseCellNumber(oRows[rIdx][c]);
-        if (altVal !== 0) return altVal;
-      }
-      return 0;
+      // 병합 블록 안의 칸을 가리키면 대표 칸 값을 씀. 빈 칸은 0 (다른 열 값으로 대체하지 않음)
+      const cIdx = oCols.indexOf(colKey);
+      if (cIdx === -1) return parseCellNumber(oRows[rIdx][colKey]);
+      const anchor = toMergeAnchor(rIdx, cIdx, oMerges);
+      return parseCellNumber(oRows[anchor.rIdx]?.[oCols[anchor.cIdx]]);
     }
     return 0;
   }
@@ -345,7 +480,7 @@ export function resolveOtherTableCell(
   // 3. 열 이름만 지정된 경우: [열이름] -> 소계/합계 행 우선 검색
   const colKey = resolveOColKey(targetRowOrCoord);
   if (oCols.includes(colKey)) {
-    let rIdx = oRows.findIndex((r) =>
+    let rIdx = findRowFrom(oRows, oFrom, (r) =>
       Object.values(r).some(
         (val) =>
           typeof val === 'string' &&
@@ -358,7 +493,7 @@ export function resolveOtherTableCell(
 
   // 4. 행 라벨만 지정된 경우: [소계] -> 금액 열 우선 검색
   const targetLabel = targetRowOrCoord.trim().toLowerCase();
-  const rIdx = oRows.findIndex((r) =>
+  const rIdx = findRowFrom(oRows, oFrom, (r) =>
     Object.values(r).some(
       (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
     )
@@ -392,8 +527,12 @@ export function recalculateTableFormulas(
   rows: Array<Record<string, string>>,
   cellFormulas?: Record<string, CellFormula>,
   headerValues?: Record<string, string>,
-  otherTablesContext?: OtherTablesContext
+  otherTablesContext?: OtherTablesContext,
+  merges?: CellMerge[],
+  opts?: { firstDataRow?: number }
 ): Array<Record<string, string>> {
+  // 예전 제목 행을 0번 행으로 내린 표: 위쪽 합산·행 라벨 검색에서 제목 행 제외
+  const firstDataRow = opts?.firstDataRow ?? 0;
   if (!cellFormulas || Object.keys(cellFormulas).length === 0 || rows.length === 0) {
     return rows;
   }
@@ -445,15 +584,15 @@ export function recalculateTableFormulas(
       if (cleanInside.includes(':')) {
         const [rowToken, colToken] = cleanInside.split(':');
         const val = resolveOtherTableCell(rawTableName, rowToken.trim(), colToken.trim(), otherTablesContext);
-        return String(val);
+        return numToExpr(val);
       }
       const val = resolveOtherTableCell(rawTableName, cleanInside, undefined, otherTablesContext);
-      return String(val);
+      return numToExpr(val);
     });
 
     expr = expr.replace(/\[([^\]!]+)\]\s*!\s*([A-Z]+\d+)/gi, (_m, rawTableName, coord) => {
       const val = resolveOtherTableCell(rawTableName, coord, undefined, otherTablesContext);
-      return String(val);
+      return numToExpr(val);
     });
 
     // 1. SUM([열이름]) 처리: 지정된 열의 상단 모든 행 합산
@@ -461,23 +600,23 @@ export function recalculateTableFormulas(
       const actualCol = resolveColKey(rawColTitle);
       const cIdx = cols.indexOf(actualCol);
       let sum = 0;
-      for (let r = 0; r < targetRowIdx; r++) {
+      for (let r = firstDataRow; r < targetRowIdx; r++) {
         if (cIdx !== -1) {
           sum += getCellValue(r, cIdx);
         } else {
           sum += parseCellNumber(nextRows[r][actualCol]);
         }
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 1. SUM(ABOVE) 처리: 현재 셀 위의 모든 행 합산
     expr = expr.replace(/SUM\s*\(\s*ABOVE\s*\)/gi, () => {
       let sum = 0;
-      for (let r = 0; r < targetRowIdx; r++) {
+      for (let r = firstDataRow; r < targetRowIdx; r++) {
         sum += getCellValue(r, targetColIdx);
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 2. SUM(범위) 처리: 예) SUM(D18:D26)
@@ -503,7 +642,7 @@ export function recalculateTableFormulas(
           }
         }
       }
-      return String(sum);
+      return numToExpr(sum);
     });
 
     // 3. [열이름] 또는 [행:열이름] 명시적 참조 치환
@@ -520,41 +659,33 @@ export function recalculateTableFormulas(
         } else {
           // 행 라벨 검색 (예: '소계', '합계')
           const targetLabel = trimmedRStr.toLowerCase();
-          r = nextRows.findIndex((row) =>
+          r = findRowFrom(nextRows, firstDataRow, (row) =>
             Object.values(row).some(
               (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
             )
           );
           if (r === -1) {
-            r = nextRows.findIndex((row) =>
+            r = findRowFrom(nextRows, firstDataRow, (row) =>
               Object.values(row).some(
                 (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
               )
             );
           }
         }
-        const actualCol = resolveColKey(cName);
+        let actualCol = resolveColKey(cName);
         if (r >= 0 && r < nextRows.length) {
+          // 병합 블록 안의 칸을 가리키면 대표 칸으로. 빈 칸은 0 (다른 열 값으로 대체하지 않음)
+          const cIdx = cols.indexOf(actualCol);
+          if (cIdx !== -1) {
+            const anchor = toMergeAnchor(r, cIdx, merges);
+            r = anchor.rIdx;
+            actualCol = cols[anchor.cIdx];
+          }
           const depKey = `${r}:${actualCol}`;
           if (cellFormulas[depKey] && !stack.has(depKey)) {
-            return String(evaluateCellFormula(depKey, new Set(stack)));
+            return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
           }
-          const directVal = parseCellNumber(nextRows[r][actualCol]);
-          if (directVal !== 0) return String(directVal);
-
-          // 병합 셀이거나 해당 열에 값이 없는 경우: 행 r 내 다른 열에서 수식(fx)이나 0이 아닌 값 탐색
-          for (const c of cols) {
-            const altKey = `${r}:${c}`;
-            if (cellFormulas[altKey] && !stack.has(altKey)) {
-              const altVal = evaluateCellFormula(altKey, new Set(stack));
-              if (altVal !== 0) return String(altVal);
-            }
-          }
-          for (const c of cols) {
-            const altVal = parseCellNumber(nextRows[r][c]);
-            if (altVal !== 0) return String(altVal);
-          }
-          return '0';
+          return numToExpr(parseCellNumber(nextRows[r][actualCol]));
         }
         return '0';
       }
@@ -567,13 +698,13 @@ export function recalculateTableFormulas(
       // 열 이름이 아니라 행 라벨인 경우 (예: [매입발주 금액])
       if (!isKnownCol) {
         const targetLabel = cleanToken.toLowerCase();
-        let r = nextRows.findIndex((row) =>
+        let r = findRowFrom(nextRows, firstDataRow, (row) =>
           Object.values(row).some(
             (val) => typeof val === 'string' && val.trim().toLowerCase() === targetLabel
           )
         );
         if (r === -1) {
-          r = nextRows.findIndex((row) =>
+          r = findRowFrom(nextRows, firstDataRow, (row) =>
             Object.values(row).some(
               (val) => typeof val === 'string' && val.trim().toLowerCase().includes(targetLabel)
             )
@@ -583,12 +714,12 @@ export function recalculateTableFormulas(
           for (const c of cols) {
             const depKey = `${r}:${c}`;
             if (cellFormulas[depKey] && !stack.has(depKey)) {
-              return String(evaluateCellFormula(depKey, new Set(stack)));
+              return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
             }
           }
           for (const c of cols) {
             const val = parseCellNumber(nextRows[r][c]);
-            if (val !== 0) return String(val);
+            if (val !== 0) return numToExpr(val);
           }
           return '0';
         }
@@ -596,27 +727,42 @@ export function recalculateTableFormulas(
 
       const depKey = `${targetRowIdx}:${actualCol}`;
       if (cellFormulas[depKey] && !stack.has(depKey)) {
-        return String(evaluateCellFormula(depKey, new Set(stack)));
+        return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
       }
-      return String(parseCellNumber(nextRows[targetRowIdx][actualCol]));
+      return numToExpr(parseCellNumber(nextRows[targetRowIdx][actualCol]));
+    });
+
+    // 3-1. SUM 외 함수 인자의 범위(A1:C1)를 셀 목록(A1,B1,C1)으로 펼침
+    expr = expr.replace(/([A-Z]+)(\d+)\s*:\s*([A-Z]+)(\d+)/gi, (_m, c1, r1, c2, r2) => {
+      let startCol = letterToColIndex(c1.toUpperCase());
+      let endCol = letterToColIndex(c2.toUpperCase());
+      let startRow = parseInt(r1, 10);
+      let endRow = parseInt(r2, 10);
+      if (startRow > endRow) [startRow, endRow] = [endRow, startRow];
+      if (startCol > endCol) [startCol, endCol] = [endCol, startCol];
+      const refs: string[] = [];
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) refs.push(`${colIndexToLetter(c)}${r}`);
+      }
+      return refs.join(',');
     });
 
     // 4. 단일 셀 참조 치환: 예) D27, H27
     expr = expr.replace(/([A-Z]+)(\d+)/gi, (_m, colStr, rowStr) => {
-      const c = letterToColIndex(colStr);
+      const c = letterToColIndex(colStr.toUpperCase());
       const r = parseInt(rowStr, 10) - 1;
       if (r < 0 || r >= nextRows.length || c < 0 || c >= cols.length) return '0';
 
       const depColName = cols[c];
       const depKey = `${r}:${depColName}`;
       if (cellFormulas[depKey] && !stack.has(depKey)) {
-        return String(evaluateCellFormula(depKey, new Set(stack)));
+        return numToExpr(evaluateCellFormula(depKey, new Set(stack)));
       }
-      return String(getCellValue(r, c));
+      return numToExpr(getCellValue(r, c));
     });
 
-    // 5. 사칙연산 평가
-    return evaluateArithmetic(expr);
+    // 5. 함수·괄호·사칙연산 평가
+    return evaluateExpression(expr);
   };
 
   // 모든 수식 셀을 차례대로 평가하여 적용
@@ -624,95 +770,15 @@ export function recalculateTableFormulas(
     const [rIdxStr, colName] = key.split(':');
     const rIdx = parseInt(rIdxStr, 10);
     if (rIdx >= 0 && rIdx < nextRows.length && cols.includes(colName)) {
-      const calculatedVal = evaluateCellFormula(key);
       const fInfo = cellFormulas[key];
-      nextRows[rIdx][colName] = formatCellValue(calculatedVal, fInfo?.format);
+      try {
+        nextRows[rIdx][colName] = formatCellValue(roundResult(evaluateCellFormula(key)), fInfo?.format);
+      } catch (e) {
+        if (!(e instanceof FormulaError)) throw e;
+        nextRows[rIdx][colName] = FORMULA_ERROR;
+      }
     }
   });
 
   return nextRows;
 }
-
-/**
- * 서식 내 복수의 표 필드를 순회하며 타 표 교차 수식을 연쇄 실시간 재계산하는 헬퍼
- */
-export function cascadeRecalculateAllTables(
-  tableFields: Array<{ key: string; label: string; placeholder?: string; options?: string[] }>,
-  currentVals: Record<string, any>,
-  patch: Record<string, any>
-): Record<string, any> {
-  const mergedVals = { ...currentVals, ...patch };
-  if (!tableFields || tableFields.length <= 1) return patch;
-
-  // 모든 표의 현재 파싱 데이터 구성
-  const allTablesData: Record<
-    string,
-    {
-      cols: string[];
-      rows: Array<Record<string, string>>;
-      cellFormulas?: Record<string, CellFormula>;
-      headerValues?: Record<string, string>;
-      raw: any;
-    }
-  > = {};
-
-  tableFields.forEach((tf) => {
-    const raw = mergedVals[tf.key] || tf.placeholder;
-    if (raw && typeof raw === 'string') {
-      try {
-        const p = JSON.parse(raw);
-        allTablesData[tf.key] = {
-          cols: p.cols || tf.options || [],
-          rows: p.rows || p.defaultRows || [],
-          cellFormulas: p.cellFormulas,
-          headerValues: p.headerValues,
-          raw: p,
-        };
-      } catch (e) {}
-    }
-  });
-
-  // 타 표 컨텍스트 맵 구성 (라벨 및 키 둘 다 매핑)
-  const buildContext = (): OtherTablesContext => {
-    const ctx: OtherTablesContext = {};
-    tableFields.forEach((tf) => {
-      const td = allTablesData[tf.key];
-      if (td) {
-        ctx[tf.label] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
-        ctx[tf.key] = { cols: td.cols, rows: td.rows, headerValues: td.headerValues };
-      }
-    });
-    return ctx;
-  };
-
-  const finalPatch = { ...patch };
-
-  // 수식을 가진 다른 표들 연쇄 재계산
-  tableFields.forEach((tf) => {
-    const td = allTablesData[tf.key];
-    if (td && td.cellFormulas && Object.keys(td.cellFormulas).length > 0) {
-      const hasCrossFormula = Object.values(td.cellFormulas).some(
-        (f) => f.expression && f.expression.includes('!')
-      );
-      if (hasCrossFormula) {
-        const ctx = buildContext();
-        const nextRows = recalculateTableFormulas(
-          td.cols,
-          td.rows,
-          td.cellFormulas,
-          td.headerValues,
-          ctx
-        );
-        td.rows = nextRows;
-        finalPatch[tf.key] = JSON.stringify({
-          ...td.raw,
-          rows: nextRows,
-          defaultRows: nextRows,
-        });
-      }
-    }
-  });
-
-  return finalPatch;
-}
-

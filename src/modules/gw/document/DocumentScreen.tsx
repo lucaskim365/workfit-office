@@ -27,6 +27,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
 import { DateInput } from '@/shared/ui/form/DateInput';
+import { useDepartments } from '@/features/department/useDepartments';
 
 export default function DocumentScreen() {
   const { user } = useAuth();
@@ -43,6 +44,27 @@ export default function DocumentScreen() {
 
   const [searchParams] = useSearchParams();
 
+  // 부서별 문서함 — 조직도의 실제 부서를 트리 순서(상위 → 하위, 같은 층은 정렬순서)로
+  const { data: departments = [] } = useDepartments();
+  const deptFolders = useMemo(() => {
+    const byParent = new Map<string | null, typeof departments>();
+    departments.forEach((d) => {
+      const key = d.parentId && departments.some((p) => p.id === d.parentId) ? d.parentId : null;
+      byParent.set(key, [...(byParent.get(key) ?? []), d]);
+    });
+    const out: Array<{ id: string; name: string; depth: number }> = [];
+    const walk = (parentId: string | null, depth: number) => {
+      [...(byParent.get(parentId) ?? [])]
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+        .forEach((d) => {
+          out.push({ id: d.id, name: d.name, depth });
+          walk(d.id, depth + 1);
+        });
+    };
+    walk(null, 0);
+    return out;
+  }, [departments]);
+
   // 로그인 세션 가공 및 권한 식별
   const CURRENT_USER = useMemo(() => {
     return {
@@ -57,31 +79,32 @@ export default function DocumentScreen() {
   const hasWriteAccess = isAdmin || canAction('S_GW_DOCUMENT', 'create') || canAction('S_GW_DOCUMENT', 'update');
 
   // 사이드바 카테고리 필터
-  const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all'>('all');
+  const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all' | 'po'>('all');
   const [isNoticeOpen, setIsNoticeOpen] = useState(true);
   const [activeSubCategory, setActiveSubCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 3대 대분류 전용 가상 목업 문서 데이터
-  const mockDocuments = useMemo(() => {
-    return [
-      // 1) 전사 공용 문서 (사내규정, 매뉴얼, 서양양식)
-      { id: 101, name: '사내 취업규칙 및 노사협약서', boxId: 'rule', category: 'public', subCategory: 'rule', dept: '경영지원팀', date: '2026-01-10', version: 'v3.2', isRule: true, author: '임진서 대리', desc: 'WorkFit 주식회사 사내 취업규칙 개정본입니다.', attachments: ['취업규칙_v3.2_시행본.pdf'], versions: [{ version: 'v3.2', effectiveDate: '2026-01-10', revisedDate: '2026-01-10', reason: '근로기준법 개정에 따른 유연근무 규정 보완', attachments: ['취업규칙_v3.2_시행본.pdf'] }] },
-      { id: 102, name: '정보보안 가이드라인 및 서약서', boxId: 'rule', category: 'public', subCategory: 'rule', dept: '보안관리팀', date: '2026-03-15', version: 'v2.0', isRule: true, author: '김민수 과장', desc: '보안 강화를 위한 사내 가이드라인입니다.', attachments: ['정보보안_가이드라인.pdf'], versions: [] },
-      { id: 103, name: 'Vite 개발 표준 매뉴얼', boxId: 'manual', category: 'public', subCategory: 'manual', dept: '데이터플랫폼 개발팀', date: '2026-02-20', version: 'v1.0', isRule: false, author: '홍채원 주임', desc: '프론트엔드 Vite 개발 표준 스펙 가이드입니다.', attachments: ['Vite_개발_가이드.pdf'] },
-      { id: 104, name: '지출결의서 양식 (Hwp)', boxId: 'form', category: 'public', subCategory: 'form', dept: '재무관리팀', date: '2025-12-01', version: 'v1.0', isRule: false, author: '박찬우 차장', desc: '지출결의 품의를 위한 기본 양식 문서입니다.', attachments: ['지출결의서_표준양식.hwp'] },
-
-      // 2) 부서별 문서 (품질심사팀, 경영기획팀, AX PMO팀, 데이터플랫폼 개발팀 등)
-      { id: 201, name: '[품질] 2분기 사내 안전점검 결과보고서', boxId: 'etc', category: 'dept', subCategory: '품질심사팀', dept: '품질심사팀', date: '2026-06-18', version: 'v1.0', isRule: false, author: '강윤석 이사', desc: '품질심사팀 2분기 공장 안전점검 종합결과입니다.', attachments: ['2분기_안전점검_결과보고.pdf'] },
-      { id: 202, name: '[기획] 2026 하반기 사업계획 보고서', boxId: 'etc', category: 'dept', subCategory: '경영기획팀', dept: '경영기획팀', date: '2026-07-02', version: 'v2.1', isRule: false, author: '최지혜 주임', desc: '경영기획팀 2026년 하반기 전사 사업 계획 초안입니다.', attachments: ['2026_하반기_사업계획.pdf'] },
-      { id: 203, name: '[PMO] AX 지능화 신규 프로젝트 관리대장', boxId: 'etc', category: 'dept', subCategory: 'AX PMO팀', dept: 'AX PMO팀', date: '2026-05-14', version: 'v1.0', isRule: false, author: '박명규 부장', desc: '신규 프로젝트 진척 관리 대장입니다.', attachments: ['AX_프로젝트_관리대장.xlsx'] },
-      { id: 204, name: '[개발] 데이터 플랫폼 백엔드 아키텍처 설계도', boxId: 'etc', category: 'dept', subCategory: '데이터플랫폼 개발팀', dept: '데이터플랫폼 개발팀', date: '2026-06-30', version: 'v1.5', isRule: false, author: '김승기 부장', desc: '데이터 플랫폼 실시간 수집 파이프라인 설계 명세입니다.', attachments: ['데이터플랫폼_설계도_v1.5.pdf'] },
-
-      // 3) 개인 문서함 (내 기안 초안, 보관문서)
-      { id: 301, name: '[내초안] 경비 지출 증빙 모음집', boxId: 'etc', category: 'personal', subCategory: 'draft', dept: CURRENT_USER.dept, date: '2026-08-20', version: 'v1.0', isRule: false, author: CURRENT_USER.name, desc: '8월 소모품비 지출결의용 영수증 증빙 초안입니다.', attachments: ['8월_경비증빙_모음.pdf'] },
-      { id: 302, name: '[즐겨찾기] 사내 복리후생 규정집', boxId: 'rule', category: 'personal', subCategory: 'fav', dept: '인사지원팀', date: '2026-04-01', version: 'v2.0', isRule: true, author: '조민아 부장', desc: '사내 동호회 지원 및 건강검진 복리후생 개정 규정입니다.', attachments: ['복리후생_규정집_2026.pdf'], versions: [] }
-    ];
-  }, [CURRENT_USER]);
+  // 문서 목록 — 예시(목업) 문서는 제거. 문서 저장소(DB) 연결은 결재서식·문서관리 개편 때 진행.
+  // 부서 문서는 부서명이 아니라 부서 ID(deptId)로 부서별 문서함에 묶인다(부서명이 바뀌어도 유지).
+  const mockDocuments = useMemo(
+    (): Array<{
+      id: number;
+      name: string;
+      boxId: string;
+      category: 'public' | 'dept' | 'personal';
+      subCategory: string;
+      dept: string;
+      deptId?: string;
+      date: string;
+      version: string;
+      isRule: boolean;
+      author: string;
+      desc: string;
+      attachments: string[];
+      versions?: Array<{ version: string; effectiveDate: string; revisedDate: string; reason: string; attachments: string[] }>;
+    }> => [],
+    []
+  );
 
   // 선택된 문서 상세
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -180,7 +203,10 @@ export default function DocumentScreen() {
       // 1. 대분류 필터
       if (activeCategory !== 'all' && d.category !== activeCategory) return false;
       // 2. 소분류 필터
-      if (activeSubCategory !== 'all' && d.subCategory !== activeSubCategory) return false;
+      if (activeSubCategory !== 'all') {
+        // 부서별 문서함은 부서 ID로만 대조
+        if (d.category === 'dept' ? d.deptId !== activeSubCategory : d.subCategory !== activeSubCategory) return false;
+      }
       // 3. 검색어 필터
       const matchQuery = !searchQuery.trim() || d.name.toLowerCase().includes(searchQuery.toLowerCase()) || (d.desc && d.desc.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchQuery;
@@ -349,21 +375,17 @@ export default function DocumentScreen() {
             </span>
           </button>
           <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
-            {[
-              '경영기획팀',
-              '품질심사팀',
-              'AX PMO팀',
-              '데이터플랫폼 개발팀'
-            ].map((deptName) => (
+            {deptFolders.map(({ id, name: deptName, depth }) => (
               <button
-                key={deptName}
+                key={id}
+                style={{ paddingLeft: 8 + depth * 10 }}
                 onClick={() => {
                   setActiveCategory('dept');
-                  setActiveSubCategory(deptName);
+                  setActiveSubCategory(id);
                   setSelectedDocId(null);
                 }}
                 className={`flex w-full items-center gap-2 py-1 px-2 rounded text-left transition-colors text-[11px] font-semibold ${
-                  activeCategory === 'dept' && activeSubCategory === deptName
+                  activeCategory === 'dept' && activeSubCategory === id
                     ? 'text-teal font-extrabold bg-teal-soft/20'
                     : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
                 }`}
@@ -450,7 +472,7 @@ export default function DocumentScreen() {
                 {activeCategory === 'all' 
                   ? '전체 문서함' 
                   : `${activeCategory === 'public' ? '전사 공용' : activeCategory === 'dept' ? '부서별' : '개인'} / ${
-                      activeSubCategory === 'all' ? '전체' : activeSubCategory === 'rule' ? '사내 규정' : activeSubCategory === 'manual' ? '업무 매뉴얼' : activeSubCategory === 'form' ? '공통 서식' : activeSubCategory === 'draft' ? '내 기안 초안' : activeSubCategory === 'fav' ? '개인 보관 문서' : activeSubCategory
+                      activeSubCategory === 'all' ? '전체' : activeSubCategory === 'rule' ? '사내 규정' : activeSubCategory === 'manual' ? '업무 매뉴얼' : activeSubCategory === 'form' ? '공통 서식' : activeSubCategory === 'draft' ? '내 기안 초안' : activeSubCategory === 'fav' ? '개인 보관 문서' : deptFolders.find((f) => f.id === activeSubCategory)?.name ?? activeSubCategory
                     }`}
               </span>
             </h1>

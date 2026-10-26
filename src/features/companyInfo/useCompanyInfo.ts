@@ -32,3 +32,11 @@ export function useUploadCompanyLogo() {
       companyInfoRepo.uploadLogo(file, prevPath),
   });
 }
+
+/** 회사 직인 업로드 — Storage에 올리고 {url, path} 반환(화면이 폼에 반영·저장). */
+export function useUploadCompanySeal() {
+  return useMutation({
+    mutationFn: ({ file, prevPath }: { file: File; prevPath?: string }) =>
+      companyInfoRepo.uploadSeal(file, prevPath),
+  });
+}

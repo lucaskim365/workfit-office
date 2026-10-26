@@ -2,11 +2,9 @@ import { useMemo } from 'react';
 import type { ApprovalRouteRule, Resolver, RouteStep } from '@/domain/approvalRoute/schema';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { RoutePreview } from './RoutePreview';
+import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
+import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import {
-  Plus,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
   DollarSign,
   FileText,
   Layers,
@@ -20,65 +18,48 @@ const inp =
  * 엔지니어링 용어(RESOLVER, arg, rank, dedupeSelf 등)를 배제하고
  * 총무/인사 실무자가 이해하는 자연어 직책으로 매핑합니다.
  */
-interface RolePreset {
-  label: string;
-  desc: string;
-  icon: string;
-  resolver: Resolver;
-  defaultArg: string | null;
-  defaultKind: RouteStep['kind'];
+
+/** 규칙 단계 ↔ 결재선 편집기 단계 — approverId 에 역할 토큰('role:MANAGER' 등) 또는 사용자 ID */
+function stepToken(st: RouteStep): string {
+  if (st.resolver === 'SPECIFIC_USER') return String(st.arg ?? '');
+  return st.arg != null && st.arg !== '' ? `role:${st.resolver}:${st.arg}` : `role:${st.resolver}`;
 }
 
-const ROLE_PRESETS: RolePreset[] = [
-  {
-    label: '직속 상급자',
-    desc: '기안자의 1차 보고 상사',
-    icon: '👔',
-    resolver: 'MANAGER',
-    defaultArg: null,
-    defaultKind: '결재',
-  },
-  {
-    label: '소속 팀장(부서장)',
-    desc: '기안자 부서의 장',
-    icon: '🏢',
-    resolver: 'DEPT_HEAD',
-    defaultArg: null,
-    defaultKind: '결재',
-  },
-  {
-    label: '본부장 (상위 부서장)',
-    desc: '소속 부서의 상위 조직장',
-    icon: '🏛️',
-    resolver: 'PARENT_DEPT_HEAD',
-    defaultArg: '1',
-    defaultKind: '전결',
-  },
-  {
-    label: '대표이사 (CEO)',
-    desc: '회사 최고경영자',
-    icon: '👑',
-    resolver: 'ROLE_CEO',
-    defaultArg: null,
-    defaultKind: '전결',
-  },
-  {
-    label: '특정 부서장',
-    desc: '재경팀장, 인사팀장 등',
-    icon: '👥',
-    resolver: 'SPECIFIC_DEPT_HEAD',
-    defaultArg: '',
-    defaultKind: '검토',
-  },
-  {
-    label: '특정 사용자',
-    desc: '지정 임직원 결재',
-    icon: '👤',
-    resolver: 'SPECIFIC_USER',
-    defaultArg: '',
-    defaultKind: '결재',
-  },
-];
+function tokenToResolver(token: string): Pick<RouteStep, 'resolver' | 'arg'> {
+  if (!token.startsWith('role:')) return { resolver: 'SPECIFIC_USER', arg: token };
+  const [, resolver, arg] = token.split(':');
+  return { resolver: resolver as Resolver, arg: arg ?? null };
+}
+
+function toLine(steps: RouteStep[]): ApprovalStep[] {
+  return steps.map((st, i) => ({
+    seq: i + 1,
+    parallelGroup: st.parallelGroup ?? null,
+    executionType: st.parallelGroup ? ('parallel' as const) : ('sequential' as const),
+    kind: (st.kind === '검토' ? '결재' : st.kind) as StepKind,
+    approverId: stepToken(st),
+    delegatedFromId: null,
+    decision: '대기' as const,
+    decidedAt: null,
+    comment: '',
+  }));
+}
+
+function fromLine(next: ApprovalStep[], prev: RouteStep[]): RouteStep[] {
+  return [...next]
+    .sort((a, b) => a.seq - b.seq)
+    .map((st) => {
+      const old = prev.find((p) => stepToken(p) === st.approverId);
+      const kind: RouteStep['kind'] = st.kind === '대결' || st.kind === '전결' ? '결재' : st.kind;
+      return {
+        ...tokenToResolver(st.approverId),
+        kind,
+        parallelGroup: st.parallelGroup ?? null,
+        dedupeSelf: old?.dedupeSelf ?? true,
+        optional: old?.optional ?? false,
+      };
+    });
+}
 
 interface ApprovalRouteRuleEditorProps {
   rule: ApprovalRouteRule;
@@ -105,33 +86,29 @@ export function ApprovalRouteRuleEditor({
 }: ApprovalRouteRuleEditorProps) {
   const set = (patch: Partial<ApprovalRouteRule>) => onChange({ ...rule, ...patch });
 
-  const setStep = (i: number, patch: Partial<RouteStep>) =>
-    set({
-      steps: rule.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s)),
+  const lineSteps = useMemo(() => toLine(rule.steps), [rule.steps]);
+
+  /** 결재선 편집기에서 고를 역할 — 기본 역할 + 부서별 부서장 + 규칙에 이미 있는 다른 역할 */
+  const roles = useMemo(() => {
+    const base = [
+      { token: 'role:MANAGER', label: '직속 상급자', desc: '기안자의 1차 보고 상사' },
+      { token: 'role:DEPT_HEAD', label: '소속 팀장(부서장)', desc: '기안자 부서의 장' },
+      { token: 'role:PARENT_DEPT_HEAD:1', label: '상위 부서장(본부장)', desc: '소속 부서의 상위 조직장' },
+      { token: 'role:ROLE_CEO', label: '대표이사', desc: '회사 최고경영자' },
+      ...((org?.depts ?? []) as Array<{ id: string; name: string }>).map((d) => ({
+        token: `role:SPECIFIC_DEPT_HEAD:${d.id}`,
+        label: `${d.name} 부서장`,
+        desc: '특정 부서의 장',
+      })),
+    ];
+    rule.steps.forEach((st) => {
+      const token = stepToken(st);
+      if (token.startsWith('role:') && !base.some((r) => r.token === token)) {
+        base.push({ token, label: `${st.resolver}${st.arg != null ? ` (${st.arg})` : ''}`, desc: '기존 규칙 단계' });
+      }
     });
-
-  /** 원클릭 프리셋으로 결재 단계 추가 (셀프제외는 항상 true로 엔진 자동 보장) */
-  const addPresetStep = (preset: RolePreset) => {
-    const isFirstStep = rule.steps.length === 0;
-    const newStep: RouteStep = {
-      resolver: preset.resolver,
-      arg: preset.defaultArg,
-      kind: isFirstStep ? '결재' : preset.defaultKind,
-      dedupeSelf: true, // 내부 엔진에서 항상 자동 스킵
-      optional: false,
-    };
-    set({ steps: [...rule.steps, newStep] });
-  };
-
-  const delStep = (i: number) => set({ steps: rule.steps.filter((_, idx) => idx !== i) });
-
-  const moveStep = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= rule.steps.length) return;
-    const next = [...rule.steps];
-    [next[i], next[j]] = [next[j], next[i]];
-    set({ steps: next });
-  };
+    return base;
+  }, [org, rule.steps]);
 
   const selectedForm = useMemo(
     () => forms.find((f) => f.code === rule.docType),
@@ -446,169 +423,15 @@ export function ApprovalRouteRuleEditor({
           </span>
         </div>
 
-        {/* 원클릭 직책 빠른 추가 버튼 툴바 */}
-        <div>
-          <div className="text-[11px] font-bold text-ink3 mb-1.5">클릭하여 결재 단계 추가:</div>
-          <div className="flex flex-wrap gap-1.5">
-            {ROLE_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => addPresetStep(preset)}
-                className="flex items-center gap-1 rounded-lg border border-border bg-panel-alt px-2.5 py-1 text-[11.5px] font-bold text-ink hover:border-teal hover:bg-teal-soft/30 hover:text-teal transition-all cursor-pointer shadow-xs"
-                title={preset.desc}
-              >
-                <span>{preset.icon}</span>
-                <span>{preset.label}</span>
-                <Plus size={11} className="text-ink3" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 생성된 결재 단계 리스트 (시각적 타임라인) */}
-        {rule.steps.length === 0 ? (
-          <div className="py-8 text-center text-[12px] border border-dashed border-border rounded-xl text-ink3">
-            추가된 결재 단계가 없습니다. 위의 버튼을 눌러 결재자를 추가하세요.
-          </div>
-        ) : (
-          <div className="space-y-1.5 pt-1">
-            {rule.steps.map((s, idx) => {
-              const isFirst = idx === 0;
-              const isLast = idx === rule.steps.length - 1;
-
-              return (
-                <div
-                  key={idx}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel-alt/70 p-2.5 hover:border-teal/30 transition-all"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    {/* 순번 배지 */}
-                    <span className="grid h-6 w-6 place-items-center rounded-lg bg-teal text-[11px] font-mono font-bold text-white shrink-0 shadow-2xs">
-                      {idx + 1}
-                    </span>
-
-                    {/* 결재 대상 설명 및 상세 선택 */}
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {s.resolver === 'MANAGER' && (
-                        <span className="font-bold text-[12.5px] text-ink flex items-center gap-1">
-                          <span>👔</span> <span>직속 상급자</span>
-                        </span>
-                      )}
-                      {s.resolver === 'DEPT_HEAD' && (
-                        <span className="font-bold text-[12.5px] text-ink flex items-center gap-1">
-                          <span>🏢</span> <span>소속 팀장 (부서장)</span>
-                        </span>
-                      )}
-                      {s.resolver === 'PARENT_DEPT_HEAD' && (
-                        <span className="font-bold text-[12.5px] text-ink flex items-center gap-1">
-                          <span>🏛️</span> <span>상위 부서장 (본부장)</span>
-                        </span>
-                      )}
-                      {s.resolver === 'ROLE_CEO' && (
-                        <span className="font-bold text-[12.5px] text-ink flex items-center gap-1">
-                          <span>👑</span> <span>대표이사 (최고경영자)</span>
-                        </span>
-                      )}
-
-                      {/* 특정 사용자 선택 */}
-                      {s.resolver === 'SPECIFIC_USER' && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[12px] font-bold text-ink">👤 특정인:</span>
-                          <select
-                            value={s.arg ?? ''}
-                            onChange={(e) => setStep(idx, { arg: e.target.value || null })}
-                            className="rounded border border-border bg-panel px-2 py-0.5 text-[11.5px] font-medium text-ink outline-none focus:border-teal"
-                          >
-                            <option value="">(임직원 선택)</option>
-                            {org.users.map((u: any) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name} ({u.dept} · {u.position})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* 특정 부서장 선택 */}
-                      {s.resolver === 'SPECIFIC_DEPT_HEAD' && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[12px] font-bold text-ink">👥 부서장:</span>
-                          <select
-                            value={s.arg ?? ''}
-                            onChange={(e) => setStep(idx, { arg: e.target.value || null })}
-                            className="rounded border border-border bg-panel px-2 py-0.5 text-[11.5px] font-medium text-ink outline-none focus:border-teal"
-                          >
-                            <option value="">(부서 선택)</option>
-                            {org.depts.map((d: any) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name} 팀장
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 결재 구분 (결재 vs 합의 vs 전결 vs 참조) + 순서 이동/삭제 */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <select
-                      value={s.kind}
-                      onChange={(e) =>
-                        setStep(idx, { kind: e.target.value as RouteStep['kind'] })
-                      }
-                      className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none cursor-pointer ${
-                        s.kind === '전결'
-                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                          : s.kind === '검토'
-                          ? 'border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-400'
-                          : s.kind === '참조'
-                          ? 'border-border bg-panel text-ink3'
-                          : 'border-teal/40 bg-teal-soft/40 text-teal'
-                      }`}
-                    >
-                      <option value="결재">결재</option>
-                      <option value="전결">전결</option>
-                      <option value="검토">검토</option>
-                      <option value="참조">참조</option>
-                    </select>
-
-                    {/* 위/아래 이동 */}
-                    <button
-                      type="button"
-                      disabled={isFirst}
-                      onClick={() => moveStep(idx, -1)}
-                      className="rounded p-1 text-ink3 hover:text-ink disabled:opacity-30 cursor-pointer"
-                      title="위로 이동"
-                    >
-                      <ChevronUp size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isLast}
-                      onClick={() => moveStep(idx, 1)}
-                      className="rounded p-1 text-ink3 hover:text-ink disabled:opacity-30 cursor-pointer"
-                      title="아래로 이동"
-                    >
-                      <ChevronDown size={14} />
-                    </button>
-
-                    {/* 삭제 */}
-                    <button
-                      type="button"
-                      onClick={() => delStep(idx)}
-                      className="rounded p-1 text-ink3 hover:text-red-500 transition-colors cursor-pointer"
-                      title="단계 삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* 기안 작성의 결재선 편집과 같은 편집기 — 사람 대신 역할(직속 상급자·부서장 등)도 고를 수 있음 */}
+        <ApprovalLineBuilder
+          steps={lineSteps}
+          onChange={(next) => set({ steps: fromLine(next, rule.steps) })}
+          drafterId=""
+          docType={rule.docType}
+          amount={null}
+          ruleMode={{ roles }}
+        />
       </div>
 
       {/* 5. 실시간 결재선 시뮬레이터 (RoutePreview) */}

@@ -8,6 +8,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
+import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
@@ -108,6 +109,7 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unreadMap = {} } = useUnreadCounts(me);
+  const drafts = useChatDrafts(me);
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
   const [q, setQ] = useState('');
@@ -289,7 +291,16 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
                       {isDirect && otherPresence?.message ? (
                         <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
                       ) : null}
-                      {r.lastMessage ? msgPreview(r.lastMessage as any) : '대화 내용이 없습니다.'}
+                      {drafts[r.id] ? (
+                        <>
+                          <span className="mr-1 font-semibold text-amber">[작성 중]</span>
+                          {draftPreview(drafts[r.id])}
+                        </>
+                      ) : r.lastMessage ? (
+                        msgPreview(r.lastMessage as any)
+                      ) : (
+                        '대화 내용이 없습니다.'
+                      )}
                     </span>
                     {n > 0 && (
                       <span className="grid h-[16px] min-w-[16px] shrink-0 place-items-center rounded-full bg-[#ff4d4f] px-1.5 text-[8.5px] font-extrabold text-white shadow-[0_2px_6px_rgba(255,77,79,0.3)] select-none">

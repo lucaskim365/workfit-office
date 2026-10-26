@@ -1,10 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
-import { getCellMergeInfo, type CellMerge } from './utils';
-import { TableDesignerModal, type TableDataPayload, type OtherTableOption } from './TableDesignerModal';
+import { getCellMergeInfo } from './utils';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
-import { recalculateTableFormulas, type CellFormula, type OtherTablesContext } from './formulaEngine';
 import { TableCellTextarea } from './TableCellTextarea';
+import { SheetEditor } from './SheetEditor';
+import { CellSealSlot } from '../components/CompanySeal';
+import { hasSealCell } from './SheetView';
+import {
+  normalizeTablePayload,
+  recalculateSheet,
+  serializeSheet,
+  sheetSignature,
+  type SheetPayload,
+} from './sheetModel';
+import { deleteRow, insertRow } from './sheetOps';
+import { cellCss, defaultAlign, displayCellValue } from './sheetStyle';
 
 interface TableFieldEditorProps {
   field: FormField;
@@ -14,6 +24,24 @@ interface TableFieldEditorProps {
   isHalf?: boolean;
   allFormValues?: Record<string, FieldValue>;
   formFields?: FormField[];
+}
+
+const DEFAULT_COLS = ['구분', '항목', '내용'];
+// 예전 표의 숫자 열 판단(열 키 이름) — 입력 후 콤마 표시용
+const LEGACY_NUM_COL = /수량|단가|가격|금액|비용|비중|수|율/;
+
+/** 표 필드 값(문서 값 → 서식 기본값 → 빈 3행) 을 시트로 */
+export function sheetOfField(field: FormField, value: FieldValue | undefined): SheetPayload {
+  const fallbackCols = field.options && field.options.length > 0 ? field.options : DEFAULT_COLS;
+  if (typeof value === 'string' && value) return normalizeTablePayload(value, fallbackCols);
+  if (field.placeholder) return normalizeTablePayload(field.placeholder, fallbackCols);
+  const empty = Object.fromEntries(fallbackCols.map((c) => [c, '']));
+  return normalizeTablePayload({ cols: fallbackCols, rows: [empty, { ...empty }, { ...empty }] }, fallbackCols);
+}
+
+/** 직인 칸이면 칸 내용 오른쪽에 직인 자리를 붙인다 */
+function withSeal(seal: boolean | undefined, stamped: boolean, content: ReactNode): ReactNode {
+  return seal ? <CellSealSlot stamped={stamped}>{content}</CellSealSlot> : content;
 }
 
 export function TableFieldEditor({
@@ -27,150 +55,44 @@ export function TableFieldEditor({
 }: TableFieldEditorProps) {
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
 
-  // 기본 열/행 정의
-  const defaultCols =
-    field.options && field.options.length > 0 ? field.options : ['구분', '항목', '내용'];
-  const defaultRows: Array<Record<string, string>> = [
-    defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {}),
-    defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {}),
-    defaultCols.reduce((acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }), {}),
-  ];
+  const sheet = useMemo(() => sheetOfField(field, v), [field, v]);
 
-  // 데이터 파싱
-  const parsedData = useMemo<TableDataPayload>(() => {
-    try {
-      if (v && typeof v === 'string') {
-        const p = JSON.parse(v);
-        const cells: Array<{ rIdx: number; col: string }> = p.amountCells
-          ? p.amountCells
-          : p.amountCell
-          ? [p.amountCell]
-          : [];
-        return {
-          cols: Array.isArray(p.cols) && p.cols.length > 0 ? p.cols : defaultCols,
-          rows: (Array.isArray(p.rows) && p.rows.length > 0
-            ? p.rows
-            : Array.isArray(p.defaultRows) && p.defaultRows.length > 0
-            ? p.defaultRows
-            : Array.isArray(p.rows)
-            ? p.rows
-            : Array.isArray(p.defaultRows)
-            ? p.defaultRows
-            : defaultRows) as Array<Record<string, string>>,
-          tableWidth: (p.tableWidth || '100%') as string,
-          colWidths: (p.colWidths || {}) as Record<string, string>,
-          merges: (p.merges ?? []) as CellMerge[],
-          headerValues: (p.headerValues ?? {}) as Record<string, string>,
-          amountCells: cells,
-          sumCell: p.sumCell as { rIdx: number; col: string } | null,
-          secretCols: Array.isArray(p.secretCols) ? (p.secretCols as string[]) : [],
-          secretCells: Array.isArray(p.secretCells) ? (p.secretCells as string[]) : [],
-          secretRows: Array.isArray(p.secretRows) ? (p.secretRows as number[]) : [],
-          cellFormulas: (p.cellFormulas ?? {}) as Record<string, CellFormula>,
-        };
-      } else if (field.placeholder) {
-        const p = JSON.parse(field.placeholder);
-        const cells = p.amountCells
-          ? (p.amountCells as Array<{ rIdx: number; col: string }>)
-          : p.amountCell
-          ? [p.amountCell as { rIdx: number; col: string }]
-          : [];
-        return {
-          cols: (p.cols ?? p.options ?? defaultCols) as string[],
-          rows: (p.rows ?? p.defaultRows ?? defaultRows) as Array<Record<string, string>>,
-          tableWidth: (p.tableWidth ?? '100%') as string,
-          colWidths: (p.colWidths ?? {}) as Record<string, string>,
-          merges: (p.merges ?? []) as CellMerge[],
-          headerValues: (p.headerValues ?? {}) as Record<string, string>,
-          amountCells: cells,
-          sumCell: p.sumCell as { rIdx: number; col: string } | null,
-          secretCols: Array.isArray(p.secretCols) ? (p.secretCols as string[]) : [],
-          secretCells: Array.isArray(p.secretCells) ? (p.secretCells as string[]) : [],
-          secretRows: Array.isArray(p.secretRows) ? (p.secretRows as number[]) : [],
-          cellFormulas: (p.cellFormulas ?? {}) as Record<string, CellFormula>,
-        };
-      }
-    } catch (e) {}
+  // 같은 문서의 다른 표 (표 간 참조용)
+  const { otherSheets, labels } = useMemo(() => {
+    const otherSheets: Record<string, SheetPayload> = {};
+    const labels: Record<string, string> = { [field.key]: field.label || field.key };
+    (formFields ?? [])
+      .filter((f) => f.type === '표' && f.key !== field.key)
+      .forEach((f) => {
+        otherSheets[f.key] = sheetOfField(f, allFormValues?.[f.key]);
+        labels[f.key] = f.label || f.key;
+      });
+    return { otherSheets, labels };
+  }, [formFields, allFormValues, field.key, field.label]);
 
-    return {
-      cols: defaultCols,
-      rows: defaultRows,
-      tableWidth: '100%',
-      colWidths: {},
-      merges: [],
-      headerValues: {},
-      amountCells: [],
-      sumCell: null,
-      secretCols: [],
-      secretCells: [],
-      secretRows: [],
-      cellFormulas: {},
-    };
-  }, [v, field.placeholder, field.options]);
-
-  const {
-    cols,
-    rows,
-    colWidths,
-    merges,
-    headerValues,
-    amountCells,
-    sumCell,
-    cellFormulas,
-  } = parsedData;
-
-  // 문서 내 다른 표들의 최신 데이터 파싱 및 컨텍스트 구성
-  const otherTables = useMemo<OtherTableOption[]>(() => {
-    if (!formFields || !Array.isArray(formFields)) return [];
-    const tableFields = formFields.filter((f) => f.type === '표' && f.key !== field.key);
-    return tableFields.map((f) => {
-      const rawVal = allFormValues?.[f.key] || f.placeholder;
-      let pCols: string[] =
-        f.options && f.options.length > 0 ? f.options : ['구분', '항목', '내용'];
-      let pRows: Array<Record<string, string>> = [];
-      let pHeaders: Record<string, string> = {};
-
-      if (rawVal && typeof rawVal === 'string') {
-        try {
-          const parsed = JSON.parse(rawVal);
-          if (Array.isArray(parsed.cols) && parsed.cols.length > 0) pCols = parsed.cols;
-          if (Array.isArray(parsed.rows)) pRows = parsed.rows;
-          else if (Array.isArray(parsed.defaultRows)) pRows = parsed.defaultRows;
-          if (parsed.headerValues) pHeaders = parsed.headerValues;
-        } catch (e) {}
-      }
-
-      return {
-        key: f.key,
-        label: f.label || f.key,
-        cols: pCols,
-        rows: pRows,
-        headerValues: pHeaders,
-      };
-    });
-  }, [formFields, allFormValues, field.key, field.placeholder]);
-
-  const otherTablesContext = useMemo<OtherTablesContext>(() => {
-    const ctx: OtherTablesContext = {};
-    otherTables.forEach((t) => {
-      ctx[t.label] = {
-        cols: t.cols,
-        rows: t.rows,
-        headerValues: t.headerValues,
-      };
-      ctx[t.key] = {
-        cols: t.cols,
-        rows: t.rows,
-        headerValues: t.headerValues,
-      };
+  const othersByName = useMemo(() => {
+    const ctx: Record<string, SheetPayload> = {};
+    Object.entries(otherSheets).forEach(([key, s]) => {
+      ctx[key] = s;
+      ctx[labels[key]] = s;
     });
     return ctx;
-  }, [otherTables]);
+  }, [otherSheets, labels]);
 
-  // 실시간 수식 및 타 표 교차 참조가 반영된 유효 행 목록
-  const effectiveRows = useMemo(() => {
-    return recalculateTableFormulas(cols, rows, cellFormulas, headerValues, otherTablesContext);
-  }, [cols, rows, cellFormulas, headerValues, otherTablesContext]);
+  // 실시간 수식 및 타 표 참조가 반영된 시트
+  const effective = useMemo(() => recalculateSheet(sheet, othersByName), [sheet, othersByName]);
+  const { cols, rows, merges, colWidths } = effective;
+
+  /** 저장 — 기안 문서는 처음 저장할 때 서식 구조 기준값(baseSig)을 남김 */
+  const toValue = (next: SheetPayload): string => {
+    const withSig =
+      !isDesignMode && !next.baseSig && field.placeholder
+        ? { ...next, baseSig: sheetSignature(normalizeTablePayload(field.placeholder, field.options)) }
+        : next;
+    return serializeSheet(recalculateSheet(withSig, othersByName));
+  };
+
+  const save = (next: SheetPayload) => set({ [field.key]: toValue(next) });
 
   // 50% 절반 너비 표일 때 고정 px로 인한 잘림을 원천 차단하고 비율(%)로 자동 변환
   const isHalfTable = isHalf || field.width === 'half';
@@ -195,123 +117,37 @@ export function TableFieldEditor({
     return colWidths[col] || 'auto';
   };
 
-  // 병합 정보
-  const getMergeInfo = (rIdx: number, cIdx: number) => getCellMergeInfo(rIdx, cIdx, merges);
-
-  // 셀 값 변경 (기안 모드)
+  // 셀 값 변경 (인라인 입력은 글자 그대로 — 수식은 표 편집기에서)
   const handleCellChange = (rIdx: number, col: string, val: string) => {
-    const nextRows = effectiveRows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r));
-
-    // 실시간 수식 및 합계 재계산
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
-    if (sumCell) {
-      let sum = 0;
-      recalculated.forEach((r, idx) => {
-        cols.forEach((c) => {
-          if (sumCell.rIdx === idx && sumCell.col === c) return;
-          if (c.includes('금액') || amountCells.some((ac) => ac.rIdx === idx && ac.col === c)) {
-            const num = Number(String(r[c] ?? '').replace(/[^0-9]/g, '')) || 0;
-            sum += num;
-          }
-        });
-      });
-      if (recalculated[sumCell.rIdx]) {
-        recalculated[sumCell.rIdx] = {
-          ...recalculated[sumCell.rIdx],
-          [sumCell.col]: sum > 0 ? String(sum) : '',
-        };
-      }
-    }
-
-    set({
-      [field.key]: JSON.stringify({
-        ...parsedData,
-        rows: recalculated,
-        defaultRows: recalculated,
-      }),
-    });
+    save({ ...effective, rows: effective.rows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r)) });
   };
 
-  // 기안자용 행 추가
-  const handleAddRow = () => {
-    const emptyRow = cols.reduce(
-      (acc: Record<string, string>, col: string) => ({ ...acc, [col]: '' }),
-      {}
-    );
-    const nextRows = [...effectiveRows, emptyRow];
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
-    if (sumCell) {
-      let sum = 0;
-      recalculated.forEach((r, idx) => {
-        cols.forEach((c) => {
-          if (sumCell.rIdx === idx && sumCell.col === c) return;
-          if (c.includes('금액') || amountCells.some((ac) => ac.rIdx === idx && ac.col === c)) {
-            const num = Number(String(r[c] ?? '').replace(/[^0-9]/g, '')) || 0;
-            sum += num;
-          }
-        });
-      });
-      if (recalculated[sumCell.rIdx]) {
-        recalculated[sumCell.rIdx] = {
-          ...recalculated[sumCell.rIdx],
-          [sumCell.col]: sum > 0 ? String(sum) : '',
-        };
-      }
-    }
-    set({
-      [field.key]: JSON.stringify({
-        ...parsedData,
-        rows: recalculated,
-        defaultRows: recalculated,
-      }),
-    });
-  };
+  const handleAddRow = () => save(insertRow(effective, effective.rows.length));
 
-  // 행 삭제
   const handleDeleteRow = () => {
-    if (effectiveRows.length <= 1) return;
-    const nextRows = effectiveRows.slice(0, effectiveRows.length - 1);
-    let recalculated = recalculateTableFormulas(cols, nextRows, cellFormulas, headerValues, otherTablesContext);
-    if (sumCell) {
-      let sum = 0;
-      recalculated.forEach((r, idx) => {
-        cols.forEach((c) => {
-          if (sumCell.rIdx === idx && sumCell.col === c) return;
-          if (c.includes('금액') || amountCells.some((ac) => ac.rIdx === idx && ac.col === c)) {
-            const num = Number(String(r[c] ?? '').replace(/[^0-9]/g, '')) || 0;
-            sum += num;
-          }
-        });
-      });
-      if (recalculated[sumCell.rIdx]) {
-        recalculated[sumCell.rIdx] = {
-          ...recalculated[sumCell.rIdx],
-          [sumCell.col]: sum > 0 ? String(sum) : '',
-        };
-      }
-    }
-    set({
-      [field.key]: JSON.stringify({
-        ...parsedData,
-        rows: recalculated,
-        defaultRows: recalculated,
-      }),
-    });
+    if (effective.rows.length <= 1) return;
+    save(deleteRow(effective, effective.rows.length - 1));
   };
 
-  // 모달에서 구조 및 수식 적용 시
-  const handleApplyDesigner = (nextData: TableDataPayload) => {
-    set({
-      [field.key]: JSON.stringify({
-        ...nextData,
-        defaultRows: nextData.rows,
-      }),
+  // 표 편집기에서 적용 — 다른 표 참조가 따라 움직였으면 그 표도 함께 저장
+  const handleApplyEditor = (next: SheetPayload, othersPatch: Record<string, SheetPayload>) => {
+    const patch: Record<string, FieldValue> = { [field.key]: toValue(next) };
+    Object.entries(othersPatch).forEach(([key, s]) => {
+      patch[key] = serializeSheet(s);
     });
+    set(patch);
+    setIsDesignerOpen(false);
+  };
+
+  const isNumericCell = (rIdx: number, col: string) => {
+    const style = effective.cellStyles[`${rIdx}:${col}`];
+    if (style?.numFmt === 'currency') return true;
+    return !!effective.legacyHeaderRow && rIdx > 0 && LEGACY_NUM_COL.test(col);
   };
 
   return (
     <div className="w-full relative group">
-      {/* 상단 툴바: 대형 엑셀 표 편집기 열기 버튼 */}
+      {/* 상단 툴바: 표 편집기 열기 버튼 */}
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[11px] font-semibold text-ink3"></span>
         <button
@@ -321,80 +157,36 @@ export function TableFieldEditor({
             setIsDesignerOpen(true);
           }}
           className="flex items-center gap-1.5 rounded-md bg-teal/10 hover:bg-teal text-teal hover:text-white px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer shadow-2xs border border-teal/25"
-          title="행·열 추가/삭제, 수식(fx) 설정, 병합 등 표 양식을 수정하는 표 편집기를 엽니다"
+          title="서식·수식·병합·행열 추가 등 표를 엑셀처럼 편집합니다"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
-          <span>표 편집기 (양식·수식 수정)</span>
+          <span>표 편집</span>
         </button>
       </div>
 
-      {/* 실물 문서와 100% 동일한 공문서 표 렌더러 (인라인 내용 입력 가능) */}
-      <div className="w-full overflow-x-auto bg-white rounded border border-[#ddd]">
+      {/* 실물 문서와 같은 표 (인라인 내용 입력 가능) */}
+      {/* 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다 */}
+      <div className={`w-full overflow-x-auto bg-white rounded border border-[#ddd] ${hasSealCell(effective) ? 'py-3' : ''}`}>
         <table className="w-full table-fixed border-collapse text-left text-[11.5px] border-none">
           <colgroup>
             {cols.map((col, cIdx) => (
-              <col key={cIdx} style={{ width: getColWidth(col, cIdx) }} />
+              <col key={col} style={{ width: getColWidth(col, cIdx) }} />
             ))}
           </colgroup>
           <tbody>
-            {/* 정갈한 헤더 행 (더블클릭 시 표 편집기 열기 지원) */}
-            <tr
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                setIsDesignerOpen(true);
-              }}
-              className="border-b border-[#bbb] bg-[#f9f9f9]"
-              title="더블클릭 시 표 편집기(양식·수식)를 엽니다"
-            >
-              {cols.map((col, cIdx) => {
-                const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(-1, cIdx);
-                if (isMerged && !isStart) return null;
-                const headerTitle = headerValues[col] !== undefined ? headerValues[col] : col;
-                return (
-                  <th
-                    key={col}
-                    rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                    colSpan={colSpan > 1 ? colSpan : undefined}
-                    className="p-2 border border-[#eee] font-bold text-[#444] text-center select-none"
-                  >
-                    {headerTitle}
-                  </th>
-                );
-              })}
-            </tr>
-
-            {/* 데이터 행 리스트 (직접 입력 가능 및 수식 자동 계산) */}
-            {effectiveRows.map((row, rIdx) => (
-              <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]/80 transition-colors">
+            {rows.map((row, rIdx) => (
+              <tr key={rIdx} className="hover:bg-[#fafafa]/80 transition-colors">
                 {cols.map((col, cIdx) => {
-                  const { isMerged, isStart, rowSpan, colSpan } = getMergeInfo(rIdx, cIdx);
+                  const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
                   if (isMerged && !isStart) return null;
 
                   const cellKey = `${rIdx}:${col}`;
-                  const formulaInfo = cellFormulas[cellKey];
-                  const hasFormula = !!formulaInfo;
-                  const isSum = !!(sumCell && sumCell.rIdx === rIdx && sumCell.col === col);
-                  const isCalculated = hasFormula || isSum;
-
-                  const cellVal = row[col] ?? '';
-                  const isPercent = typeof cellVal === 'string' && cellVal.endsWith('%');
-                  const isNumLike =
-                    col.includes('수량') ||
-                    col.includes('단가') ||
-                    col.includes('가격') ||
-                    col.includes('금액') ||
-                    col.includes('비용') ||
-                    col.includes('비중') ||
-                    col.includes('수') ||
-                    col.includes('율') ||
-                    isPercent ||
-                    isCalculated;
-
-                  // 디스플레이 포맷팅
-                  let displayVal = cellVal;
-                  if (isNumLike && !isPercent && !isNaN(Number(String(cellVal).replace(/,/g, ''))) && cellVal !== '') {
-                    displayVal = Number(String(cellVal).replace(/,/g, '')).toLocaleString('ko-KR');
-                  }
+                  const formulaInfo = effective.cellFormulas[cellKey];
+                  const isSum = !!(effective.sumCell && effective.sumCell.rIdx === rIdx && effective.sumCell.col === col);
+                  const isCalculated = !!formulaInfo || isSum;
+                  const style = effective.cellStyles[cellKey];
+                  const align = style?.align ?? defaultAlign(effective, rIdx, col);
+                  const numeric = isNumericCell(rIdx, col);
 
                   return (
                     <td
@@ -402,46 +194,38 @@ export function TableFieldEditor({
                       rowSpan={rowSpan > 1 ? rowSpan : undefined}
                       colSpan={colSpan > 1 ? colSpan : undefined}
                       className={`p-0 border border-[#eee] text-[#222] relative ${
-                        isCalculated ? (isDesignMode ? 'bg-teal-soft/15' : 'bg-[#fafafa]') : ''
+                        isCalculated && !style?.bg ? (isDesignMode ? 'bg-teal-soft/15' : 'bg-[#fafafa]') : ''
                       }`}
+                      style={cellCss(style)}
                     >
-                      {isCalculated ? (
+                      {withSeal(style?.seal, isDesignMode, isCalculated ? (
                         <div
-                          className={`flex items-center justify-between w-full px-2 py-1.5 ${
-                            !isDesignMode ? 'cursor-default select-none' : ''
-                          }`}
-                          title={isDesignMode ? `수식으로 자동 계산됨 (${formulaInfo?.expression || '합산'})` : undefined}
+                          className="flex items-center justify-between w-full px-2 py-1.5 cursor-default select-none"
+                          title={isDesignMode && formulaInfo ? `수식: ${formulaInfo.expression}` : undefined}
                         >
-                          <span
-                            className={`w-full font-medium whitespace-pre-wrap break-words ${
-                              isDesignMode ? 'text-teal font-bold font-mono' : 'text-[#111] dark:text-ink'
-                            } ${isNumLike ? 'text-right' : 'text-left'}`}
-                          >
-                            {displayVal || (isNumLike ? '0' : '—')}
+                          <span className="w-full font-medium whitespace-pre-wrap break-words" style={{ textAlign: align }}>
+                            {displayCellValue(effective, rIdx, col)}
                           </span>
-                          {isDesignMode && hasFormula && (
-                            <span
-                              className="ml-1 shrink-0 px-1 py-0.2 rounded bg-teal text-white font-mono text-[8.5px] font-extrabold shadow-2xs select-none"
-                              title={`수식: ${formulaInfo.expression}`}
-                            >
+                          {isDesignMode && formulaInfo && (
+                            <span className="ml-1 shrink-0 px-1 rounded bg-teal text-white font-mono text-[8.5px] font-extrabold shadow-2xs select-none">
                               fx
                             </span>
                           )}
                         </div>
                       ) : (
                         <TableCellTextarea
-                          value={cellVal}
+                          value={row[col] ?? ''}
                           onChange={(nextVal) => handleCellChange(rIdx, col, nextVal)}
                           onBlur={(e) => {
                             const raw = e.target.value.replace(/,/g, '').trim();
-                            if (isNumLike && !isPercent && !raw.includes('\n') && raw !== '' && !isNaN(Number(raw))) {
+                            if (numeric && !raw.includes('\n') && raw !== '' && !isNaN(Number(raw))) {
                               handleCellChange(rIdx, col, Number(raw).toLocaleString('ko-KR'));
                             }
                           }}
-                          placeholder={isNumLike ? '0' : ''}
-                          className={isNumLike ? 'text-right' : 'text-left'}
+                          placeholder={numeric ? '0' : ''}
+                          className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}
                         />
-                      )}
+                      ))}
                     </td>
                   );
                 })}
@@ -461,7 +245,9 @@ export function TableFieldEditor({
 
       {/* 동적 행 추가 / 행 삭제 버튼 */}
       <div className="mt-1.5 flex items-center justify-between text-[11px]">
-        <span className="text-ink3 font-medium text-[10.5px]">{rows.length}개 행</span>
+        <span className="text-ink3 font-medium text-[10.5px]">
+          {effective.legacyHeaderRow ? rows.length - 1 : rows.length}개 행
+        </span>
         <div className="flex items-center gap-1.5">
           {rows.length > 1 && (
             <button
@@ -485,15 +271,16 @@ export function TableFieldEditor({
         </div>
       </div>
 
-      {/* 대형 엑셀 전용 모달 편집기 */}
-      <TableDesignerModal
+      <SheetEditor
         isOpen={isDesignerOpen}
         onClose={() => setIsDesignerOpen(false)}
-        field={field}
-        initialData={parsedData}
-        onApply={handleApplyDesigner}
+        title={field.label || '표 편집'}
+        initial={effective}
+        others={otherSheets}
+        labels={labels}
+        selfKey={field.key}
         isDesignMode={isDesignMode}
-        otherTables={otherTables}
+        onApply={handleApplyEditor}
       />
     </div>
   );

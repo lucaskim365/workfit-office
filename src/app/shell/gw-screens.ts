@@ -49,7 +49,7 @@ export const GW_READY_APPS = new Set([
   // 메일 - 준비중 비활성화
   // 'mail',
   'employee', // 인명관리 활성화
-  'document', // 문서관리 활성화
+  // 'document', // 문서관리 — 보류(2026-10-21), 발주서 보관함은 사업관리 › 발주 현황으로 이동
   /*
     근태 — 브라우저 직접 조회(401)는 `caps-ingest` Function 경유로 해결했다(2026-08-25).
 

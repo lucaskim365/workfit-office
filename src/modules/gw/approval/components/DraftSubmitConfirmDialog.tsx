@@ -68,7 +68,6 @@ export function DraftSubmitConfirmDialog({
   const refSteps = ordered.filter((s) => s.kind === '참조');
 
   const warnings: string[] = [];
-  if (lineSteps.some((s) => s.kind === '전결')) warnings.push('전결이 포함되어 있어, 전결자가 승인하면 이후 결재자는 생략되고 결재가 완료됩니다.');
   if (isPostApproval) warnings.push('후결(사후 승인) 문서로 상신됩니다.');
 
   const label = (id: string) => {

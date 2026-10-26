@@ -12,7 +12,9 @@ import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
-import { fieldText, getCellMergeInfo, type CellMerge, type OrgLite } from '@/modules/gw/approval/formFields';
+import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
@@ -202,8 +204,8 @@ export default function MobileApprovalDetail() {
             <div ref={containerRef} className="min-h-0 flex-1 overflow-auto bg-white p-3 shadow-inner relative select-none">
               <div
                 style={{
-                  zoom: zoomIn ? 1 : Math.max(0.1, (containerWidth - 24) / 780),
-                  width: '780px',
+                  zoom: zoomIn ? 1 : Math.max(0.1, (containerWidth - 24) / 800),
+                  width: '800px',
                   cursor: zoomIn ? 'zoom-out' : 'zoom-in',
                 }}
                 onClick={() => setZoomIn((z) => !z)}
@@ -672,8 +674,14 @@ function ApprovalBody({
         }
       };
 
+      if (f.type === '직인') {
+        pushSection();
+        rows.push(<SealFieldRow key={f.key} label={f.label} stamped={doc.status === '완료'} />);
+        continue;
+      }
+
       if (f.type === '표') {
-        const tbl = renderTable(f, values, isMaskingActive, maskValue);
+        const tbl = renderTable(f, values, isMaskingActive, maskValue, doc.status === '완료');
         if (!tbl) continue;
         pushSection();
         rows.push(
@@ -732,121 +740,26 @@ function renderTable(
   f: FormField,
   values: Record<string, FieldValue>,
   isMaskingActive: boolean,
-  maskValue: (rawVal: string, isSecret?: boolean) => string
+  maskValue: (rawVal: string, isSecret?: boolean) => string,
+  sealStamped = false
 ): React.ReactNode | null {
   const raw = values[f.key];
   if (typeof raw !== 'string' || !raw) return null;
 
-  let cols: string[] = ['구분', '항목', '내용'];
-  let rows: Array<Record<string, string>> = [];
-  let merges: CellMerge[] = [];
-  let headerValues: Record<string, string> = {};
-  let secretCols: string[] = [];
-  let secretCells: string[] = [];
-  let secretRows: number[] = [];
-
-  if (f.placeholder) {
-    try {
-      const cfg = JSON.parse(f.placeholder);
-      if (cfg && typeof cfg === 'object') {
-        if (cfg.cols) cols = cfg.cols;
-        if (Array.isArray(cfg.merges)) merges = cfg.merges;
-        if (cfg.headerValues) headerValues = cfg.headerValues;
-        if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
-        if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
-        if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
-      }
-    } catch (e) { }
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-        cols = parsed.cols;
-        rows = parsed.rows;
-        if (Array.isArray(parsed.merges)) merges = parsed.merges;
-        if (parsed.headerValues) headerValues = parsed.headerValues;
-        if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
-        if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
-        if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
-      }
-    }
-  } catch (e) { }
-
-  if (cols.length === 0) return null;
-
-  const isNum = (c: string) => /수량|단가|가격|금액|수|율/.test(c);
-  const fmt = (c: string, v: string) => {
-    if (v === '' || v == null) return '—';
-    if (isNum(c)) {
-      const n = Number(String(v).replace(/,/g, ''));
-      if (!isNaN(n)) return n.toLocaleString('ko-KR');
-    }
-    return v;
-  };
+  const sheet = resolveViewSheet(f.placeholder, raw, f.options);
+  if (sheet.cols.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto my-1.5 rounded-lg border border-black/10">
-      <table className="w-full border-collapse text-[11.5px] table-fixed min-w-[500px]">
-        <tbody>
-          <tr style={{ background: '#f9f9f9' }}>
-            {cols.map((c, i) => {
-              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, i, merges);
-              if (isMerged && !isStart) return null;
-              return (
-                <th
-                  key={i}
-                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                  colSpan={colSpan > 1 ? colSpan : undefined}
-                  className="border border-black/10 p-1.5 font-bold text-ink3 text-center"
-                >
-                  {headerValues[c] ?? c}
-                </th>
-              );
-            })}
-          </tr>
-          {rows.map((r, ri) => (
-            <tr key={ri} className="hover:bg-black/[0.01]">
-              {cols.map((c, ci) => {
-                const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(ri, ci, merges);
-                if (isMerged && !isStart) return null;
-
-                const isCellSecret =
-                  f.isSecret ||
-                  secretCols.includes(c) ||
-                  secretRows.includes(ri) ||
-                  secretCells.includes(`${ri}:${ci}`);
-
-                let displayVal = fmt(c, String(r?.[c] ?? ''));
-                if (isCellSecret && isMaskingActive) {
-                  displayVal = maskValue(displayVal, true);
-                }
-
-                const isBlurred = isCellSecret && isMaskingActive;
-
-                return (
-                  <td
-                    key={ci}
-                    rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                    colSpan={colSpan > 1 ? colSpan : undefined}
-                    className={`border border-black/10 p-1.5 text-ink ${isNum(c) ? 'text-right' : 'text-left'} ${isBlurred ? 'blur-xs select-none opacity-60' : ''}`}
-                  >
-                    {displayVal}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={cols.length} className="p-2 text-center text-ink3">
-                등록된 데이터가 없습니다.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    // 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다
+    <div className={`overflow-x-auto my-1.5 rounded-lg border border-black/10 ${hasSealCell(sheet) ? 'py-3' : ''}`}>
+      <SheetView
+        sheet={sheet}
+        allSecret={f.isSecret}
+        isMaskingActive={isMaskingActive}
+        maskValue={maskValue}
+        tone="theme"
+        sealStamped={sealStamped}
+      />
     </div>
   );
 }

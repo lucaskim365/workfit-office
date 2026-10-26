@@ -106,6 +106,7 @@ export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; o
       { l: '자원예약', icon: '📦', to: 'resource' },
       { l: '전자설문', icon: '📋', to: 'survey' },
       { l: '조직도', icon: '🏢', to: 'orgchart' },
+      { l: '문서관리', icon: '🗂️', to: 'document' },
     ],
     [summary.pendingCount, mailUnseen]
   );

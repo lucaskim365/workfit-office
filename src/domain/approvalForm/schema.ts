@@ -26,6 +26,7 @@ export const FIELD_TYPES = [
   '부서', // 부서명
   '안내문', // 입력 없음(작성 가이드)
   '표', // 동적 입력 테이블
+  '직인', // 회사 직인 자리(입력 없음) — 있으면 결재란 대신 결재 완료 후 회사 직인
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
@@ -55,6 +56,8 @@ export const formFieldSchema = z.object({
   isTabSelector: z.boolean().optional().default(false),
   /** 이 필드가 보안/마스킹 대상 필드인지 여부 */
   isSecret: z.boolean().default(false),
+  /** 대외 문서(결재 완료 후 거래처용 모양·발주서 PDF)에서 숨김 */
+  hideOnExternal: z.boolean().optional(),
   /**
    * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
    * width/section 을 독립적으로 다르게 설정하기 위한 맵.
@@ -112,6 +115,8 @@ export const approvalFormSchema = z.object({
   securityLevel: z.enum(['일반', '대외비', '극비']).nullable().optional(),
   /** 기본 공개 범위 */
   visibility: z.enum(['부서', '비공개']).nullable().optional(),
+  /** 결재 완료 문서에서 상단 자동 정보(문서번호·기안부서·기안자·기안일·완료일·보존연한) 숨김 — 대외 문서용 */
+  hideDocInfoOnComplete: z.boolean().nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

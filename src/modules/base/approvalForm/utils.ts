@@ -26,7 +26,7 @@ export const blankRule = (formId: string, docType: string): ApprovalRouteRule =>
   positionToRank: null,
   amountFrom: null,
   amountTo: null,
-  steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '전결', dedupeSelf: true, optional: false }],
+  steps: [{ resolver: 'DEPT_HEAD', arg: null, kind: '결재', dedupeSelf: true, optional: false }],
 });
 
 export const blankField = (): FormField => ({

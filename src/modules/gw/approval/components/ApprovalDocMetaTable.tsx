@@ -32,6 +32,7 @@ export function MetaRow({ cells, full }: { cells: Array<[string, React.ReactNode
 
 export function ApprovalDocMetaTable({
   doc,
+  hidden = false,
   form,
   drafterName,
   drafterPos,
@@ -39,14 +40,20 @@ export function ApprovalDocMetaTable({
   amountLabel,
 }: {
   doc: ApprovalDoc;
+  /** 대외 문서 모양 — 자동 정보 표 숨김 */
+  hidden?: boolean;
   form?: ApprovalForm;
   drafterName: string;
   drafterPos: string;
   isAmountInDetails: boolean;
   amountLabel: string;
 }) {
+  // 서식 설정 — 결재 완료 문서에서는 자동 정보 표와 제목을 모두 숨김(대외 문서용)
+  const hideAutoInfo = hidden || (!!form?.hideDocInfoOnComplete && doc.status === '완료');
+  if (hideAutoInfo) return null;
   return (
     <>
+      {!hideAutoInfo && (
       <table className="w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
         <tbody>
           <MetaRow cells={[['문서번호', doc.docNo], ['기안부서', doc.drafterDept || '—']]} />
@@ -61,8 +68,9 @@ export function ApprovalDocMetaTable({
           )}
         </tbody>
       </table>
+      )}
 
-      <table className="mt-2 w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
+      <table className={`${hideAutoInfo ? '' : 'mt-2 '}w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed`}>
         <tbody>
           <MetaRow cells={[['제 목', doc.title]]} full />
           {doc.amount != null && !isAmountInDetails && (

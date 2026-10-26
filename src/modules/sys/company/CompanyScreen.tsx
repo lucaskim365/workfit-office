@@ -5,7 +5,7 @@ import { Pill } from '@/shared/ui/Pill';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
-import { useCompanyInfo, useSaveCompanyInfo, useUploadCompanyLogo } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyInfo, useSaveCompanyInfo, useUploadCompanyLogo, useUploadCompanySeal } from '@/features/companyInfo/useCompanyInfo';
 import type { CompanyInfo } from '@/domain/companyInfo/schema';
 import { useCompanySites, useSaveCompanySite, useRemoveCompanySite } from '@/features/companySite/useCompanySites';
 import type { CompanySite } from '@/domain/companySite/schema';
@@ -74,6 +74,25 @@ export default function CompanyScreen() {
     );
   };
   const onRemoveLogo = () => setForm((f0) => (f0 ? { ...f0, logoUrl: '', logoPath: '' } : f0));
+
+  // 회사 직인 — 직인 서식 문서가 결재 완료되면 찍힘
+  const uploadSeal = useUploadCompanySeal();
+  const sealRef = useRef<HTMLInputElement>(null);
+  const onPickSeal = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { alert('이미지 파일만 업로드할 수 있습니다.'); return; }
+    if (f.size > 5 * 1024 * 1024) { alert('5MB 이하 이미지만 업로드할 수 있습니다.'); return; }
+    uploadSeal.mutate(
+      { file: f, prevPath: form?.sealPath || undefined },
+      {
+        onSuccess: ({ url, path }) => setForm((f0) => (f0 ? { ...f0, sealUrl: url, sealPath: path } : f0)),
+        onError: () => alert('직인 업로드에 실패했습니다.'),
+      },
+    );
+  };
+  const onRemoveSeal = () => setForm((f0) => (f0 ? { ...f0, sealUrl: '', sealPath: '' } : f0));
 
   // 사업장 인라인 편집 — name(PK)별로 변경분을 draft에 보관, 저장 시 Firestore로 영구 반영.
   const { data: sites, isLoading } = useCompanySites();
@@ -222,6 +241,36 @@ export default function CompanyScreen() {
                   <span className="text-[10.5px] text-ink3">PNG · 권장 240×80px · 5MB 이하<br />보고서·로그인 화면에 사용</span>
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" onChange={onPickLogo} className="hidden" />
+              </div>
+            </FRow>
+            <FRow label="회사 직인" multiline>
+              <div className="flex items-center gap-3">
+                <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-hi bg-white p-1 text-[11px] font-bold text-ink3">
+                  {form?.sealUrl ? <img src={form.sealUrl} alt="회사 직인" className="h-full w-full object-contain" /> : '직인'}
+                </div>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => sealRef.current?.click()}
+                      disabled={uploadSeal.isPending}
+                      className="rounded-md border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink transition-colors hover:bg-panel-alt disabled:opacity-50"
+                    >
+                      {uploadSeal.isPending ? '업로드 중…' : form?.sealUrl ? '변경' : '이미지 선택'}
+                    </button>
+                    {form?.sealUrl && !uploadSeal.isPending && (
+                      <button
+                        type="button"
+                        onClick={onRemoveSeal}
+                        className="rounded-md border border-border-hi px-2.5 py-1 text-[11px] font-bold text-danger transition-colors hover:border-danger hover:bg-danger/10"
+                      >
+                        제거
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[10.5px] text-ink3">배경 없는 PNG · 5MB 이하<br />직인 서식 문서의 결재 완료 시 사용</span>
+                </div>
+                <input ref={sealRef} type="file" accept="image/*" onChange={onPickSeal} className="hidden" />
               </div>
             </FRow>
             <div className="flex items-center justify-between border-t border-border pt-3">

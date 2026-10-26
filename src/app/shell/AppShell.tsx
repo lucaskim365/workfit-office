@@ -293,7 +293,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
         <span>© {new Date().getFullYear()} WorkFit</span>
         <span>·</span>
         <a
-          href="https://www.workfit.kr/ko"
+          href="https://workfitax.com/ko"
           target="_blank"
           rel="noopener noreferrer"
           className="underline underline-offset-2 hover:opacity-100 transition-opacity"

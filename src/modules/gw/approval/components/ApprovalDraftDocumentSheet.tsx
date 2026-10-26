@@ -7,7 +7,7 @@ import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { TableFieldEditor } from '../formFields/TableFieldEditor';
 import { SelectFieldEditor } from '../formFields/SelectFieldEditor';
-import { cascadeRecalculateAllTables } from '../formFields/formulaEngine';
+import { cascadeRecalculateAllTables, normalizeTablePayload } from '../formFields/sheetModel';
 import { SelectorDialog } from './DraftRecipientSection';
 import {
   calculateLeaveDays,
@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
+import { SealFieldRow } from './CompanySeal';
+import { isSealForm } from '@/domain/approvalForm/seal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -52,7 +54,7 @@ function korToday(): string {
 }
 
 interface LayoutBlock {
-  type: 'table' | 'longtext' | 'table-field';
+  type: 'table' | 'longtext' | 'table-field' | 'seal';
   section: string;
   fields: FormField[];
 }
@@ -224,6 +226,9 @@ export function ApprovalDraftDocumentSheet({
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
 
+  // 직인 서식 — 결재란 대신 결재 완료 후 회사 직인
+  const sealForm = isSealForm(form?.fields);
+
   // 정렬된 결재 단계 (직인용)
   const stampSteps = useMemo(() => {
     return [...steps]
@@ -264,6 +269,10 @@ export function ApprovalDraftDocumentSheet({
     const blks: LayoutBlock[] = [];
     act.forEach((f) => {
       const { section: secName, width: fw } = getEffectiveProps(f);
+      if (f.type === '직인') {
+        blks.push({ type: 'seal', section: secName, fields: [f] });
+        return;
+      }
       if (f.type === '장문') {
         blks.push({
           type: 'longtext',
@@ -407,7 +416,7 @@ export function ApprovalDraftDocumentSheet({
         </h1>
         {/*
           실시간 연동 결재 직인 테이블 — 클릭하면
-          · 디자인 모드(서식 관리): 결재선(전결) 규칙 모달
+          · 디자인 모드(서식 관리): 결재선 규칙 모달
           · 기안 작성: 결재선·수신처 편집 모달
         */}
         <div
@@ -419,7 +428,7 @@ export function ApprovalDraftDocumentSheet({
             ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 focus:outline-none focus-visible:ring-teal transition-all rounded p-1'
             : ''
             }`}
-          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : '클릭하여 결재선 편집') : undefined}
+          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선 규칙 설정' : '클릭하여 결재선 편집') : undefined}
         >
           {onStampTableClick && (
             <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">
@@ -427,20 +436,30 @@ export function ApprovalDraftDocumentSheet({
             </div>
           )}
           {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
-          {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
+          {onStampTableClick && !isDesignMode && !sealForm && stampSteps.length === 0 && (
             <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
               + 결재선 지정
             </div>
           )}
-          <ApprovalStampTable
-            steps={stampSteps}
-            nameOf={nameOf}
-            posOf={posOf}
-            sealOf={sealOf}
-            isSignatureOf={isSignatureOf}
-            allowCurrentSignature
-            isPostApproval={isPostApproval}
-          />
+          {sealForm ? (
+            // 문서에는 결재란이 들어가지 않음 — 결재선 지정·규칙 설정 진입만 남김(인쇄 제외)
+            <div className="grid h-[56px] min-w-[150px] place-items-center rounded border border-dashed border-[#bbb] px-3 text-center text-[11px] font-semibold text-[#888] print:hidden">
+              <span>결재란 대신 회사 직인</span>
+              <span className="text-[10.5px] font-medium">
+                {isDesignMode ? '결재선 규칙 설정' : stampSteps.length > 0 ? `결재선 ${stampSteps.length}명` : '+ 결재선 지정'}
+              </span>
+            </div>
+          ) : (
+            <ApprovalStampTable
+              steps={stampSteps}
+              nameOf={nameOf}
+              posOf={posOf}
+              sealOf={sealOf}
+              isSignatureOf={isSignatureOf}
+              allowCurrentSignature
+              isPostApproval={isPostApproval}
+            />
+          )}
         </div>
       </div>
 
@@ -842,6 +861,11 @@ export function ApprovalDraftDocumentSheet({
               lastRenderedSection = block.section;
             }
 
+            // 직인 블록 — 서식 설계 미리보기에서는 등록된 직인을 보여 줌, 기안 중에는 자리만
+            if (block.type === 'seal') {
+              return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={isDesignMode} />;
+            }
+
             // A. 장문 블록 (longtext)
             if (block.type === 'longtext') {
               const f = block.fields[0];
@@ -940,21 +964,19 @@ export function ApprovalDraftDocumentSheet({
                           // 표 내 금액 합계가 있으면 메인 amount에도 연동
                           const updatedVal = cascadedPatch[f.key] || patch[f.key];
                           if (typeof updatedVal === 'string' && updatedVal.includes('"rows"')) {
-                            try {
-                              const parsed = JSON.parse(updatedVal);
-                              const amtCol = parsed.cols?.find(
-                                (c: string) => c.includes('금액') || c.includes('비용')
-                              );
-                              if (amtCol && Array.isArray(parsed.rows)) {
-                                const sum = parsed.rows.reduce((acc: number, r: any) => {
-                                  const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
-                                  return acc + (isNaN(num) ? 0 : num);
-                                }, 0);
-                                if (sum > 0 && (!amount || amount === '0')) {
-                                  setAmount(String(sum));
-                                }
+                            // 예전 표 제목 행(0번)은 합계에서 제외
+                            const sheet = normalizeTablePayload(updatedVal);
+                            const amtCol = sheet.cols.find((c) => c.includes('금액') || c.includes('비용'));
+                            if (amtCol) {
+                              const sum = sheet.rows.reduce((acc, r, idx) => {
+                                if (sheet.legacyHeaderRow && idx === 0) return acc;
+                                const num = Number(String(r[amtCol] || '').replace(/[^0-9]/g, ''));
+                                return acc + (isNaN(num) ? 0 : num);
+                              }, 0);
+                              if (sum > 0 && (!amount || amount === '0')) {
+                                setAmount(String(sum));
                               }
-                            } catch (e) {}
+                            }
                           }
                         }}
                       />

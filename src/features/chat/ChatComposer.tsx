@@ -3,7 +3,8 @@ import type { ChangeEvent } from 'react';
 import { Paperclip, Type, X } from 'lucide-react';
 import { useSendMessage, useSendRich } from '@/features/chat/useChatThread';
 import { ChatRichEditor, type ChatRichEditorHandle, type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
-import { isEmptyRich, isPlainOnlyRich, plainTextOfRich } from '@/domain/chatMessage/richBody';
+import { isEmptyRich, isPlainOnlyRich, plainTextOfRich, type RichNode } from '@/domain/chatMessage/richBody';
+import { clearChatDraft, readChatDraft, saveChatDraft } from '@/features/chat/chatDrafts';
 import { MAX_ATTACHMENT_BYTES, type ReplyPreview } from '@/domain/chatMessage/schema';
 
 export interface ChatComposerHandle {
@@ -44,8 +45,33 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const sendRich = useSendRich(roomId);
   const composerRef = useRef<ChatRichEditorHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  /** 확장 편집기 모드 — 서식 도구 막대, Enter 줄바꿈(Ctrl+Enter 전송) */
+  /** 확장 편집기 모드 — 서식 도구 막대 */
   const [formatMode, setFormatMode] = useState(false);
+
+  // 작성 중인 글 — 방을 다시 열면 입력창에 되살리고, 쓰는 동안 잠깐 뒤에 보관, 입력창이 닫힐 때 마지막 내용 보관
+  const [initialDraft] = useState(() => readChatDraft(senderId, roomId)?.doc);
+  const latestDocRef = useRef<RichNode | null>(null);
+  const saveTimerRef = useRef<number | undefined>(undefined);
+  const flushDraft = () => {
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = undefined;
+    if (latestDocRef.current) saveChatDraft(senderId, roomId, latestDocRef.current);
+  };
+  const onDocChange = (doc: RichNode) => {
+    latestDocRef.current = doc;
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(flushDraft, 400);
+  };
+  const flushRef = useRef(flushDraft);
+  flushRef.current = flushDraft;
+  useEffect(() => {
+    const onHide = () => flushRef.current();
+    window.addEventListener('pagehide', onHide); // 브라우저·창을 닫을 때
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      flushRef.current(); // 다른 방으로 옮기거나 메신저를 닫을 때
+    };
+  }, []);
   /** 확장 모드의 서식 도구 막대 자리 — 입력창 위 한 줄 전체 */
   const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
@@ -106,6 +132,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
     const reset = () => {
       composerRef.current?.clear();
+      latestDocRef.current = null;
+      window.clearTimeout(saveTimerRef.current);
+      clearChatDraft(senderId, roomId);
       onCancelReply();
     };
 
@@ -131,10 +160,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
   const btnSize = mobile ? 'h-9 w-9' : 'h-[30px] w-[30px]';
   const iconSize = mobile ? 18 : 16;
-  const sendLabel = mobile ? '보내기' : formatMode ? '보내기 (Ctrl+Enter)' : '보내기 (Enter)';
-  const placeholder = formatMode
-    ? mobile ? '메시지 입력 (↑ 버튼으로 전송)' : '메시지 입력 (Ctrl+Enter 전송)'
-    : '메시지 입력 (@멘션, 사진 붙여넣기)';
+  const sendLabel = mobile ? '보내기' : '보내기 (Ctrl+Enter)';
+  const placeholder = mobile ? '메시지 입력 (↑ 버튼으로 전송)' : '메시지 입력 (Ctrl+Enter 전송, @멘션, 사진 붙여넣기)';
 
   return (
     <div
@@ -197,6 +224,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             disabled={sendRich.isPending}
             onSubmit={() => void submit()}
             onFiles={attachFiles}
+            initialDoc={initialDraft}
+            onChange={onDocChange}
             minHeight={formatMode ? 120 : 0}
             maxHeight={formatMode ? 300 : 160}
             toolbarContainer={formatMode ? toolbarEl : null}
@@ -220,7 +249,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                 setFormatMode((v) => !v);
                 requestAnimationFrame(() => composerRef.current?.focus());
               }}
-              title={formatMode ? '서식 도구 닫기' : '서식 편집 (굵게·목록·코드…) — 입력창이 넓어지고 Enter 는 줄바꿈, Ctrl+Enter 전송'}
+              title={formatMode ? '서식 도구 닫기' : '서식 편집 (굵게·목록·코드…)'}
               aria-label={formatMode ? '서식 도구 닫기' : '서식 편집'}
               aria-pressed={formatMode}
               className={`grid ${btnSize} shrink-0 place-items-center rounded-full select-none ${formatMode ? 'bg-teal-soft text-teal' : 'text-ink3 hover:bg-panel-alt'}`}

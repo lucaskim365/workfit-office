@@ -13,6 +13,7 @@ export const DEFAULT_NORMAL_MODULE_KEYS = [
   'resource',   // 자원예약
   'survey',     // 전자설문
   'orgchart',   // 조직도
+  'document',   // 문서관리
 ] as const;
 
 const STORAGE_PREFIX = 'workfit_quickdock_normal_order_';

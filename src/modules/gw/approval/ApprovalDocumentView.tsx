@@ -6,7 +6,8 @@ import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
-import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
+import { fieldText } from '@/modules/gw/approval/formFields';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
@@ -17,6 +18,8 @@ import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
+import { SealFieldRow } from './components/CompanySeal';
+import { isSealForm } from '@/domain/approvalForm/seal';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -54,11 +57,14 @@ export function ApprovalDocumentView({
   formOverride,
   currentUser,
   isPreview = false,
+  external = false,
 }: {
   doc: ApprovalDoc;
   formOverride?: ApprovalForm;
   currentUser?: { id: string; dept?: string };
   isPreview?: boolean;
+  /** 서식 설정과 상관없이 대외 문서 모양으로(결재 완료 문서) — 거래처로 보내는 발주서 PDF 등 */
+  external?: boolean;
 }) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -321,6 +327,9 @@ export function ApprovalDocumentView({
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
+  // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
+  const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
+
   const closing = (form?.closing !== undefined && form?.closing !== null)
     ? form.closing
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
@@ -337,7 +346,7 @@ export function ApprovalDocumentView({
   );
 
   interface LayoutBlock {
-    type: 'table' | 'longtext' | 'table-field';
+    type: 'table' | 'longtext' | 'table-field' | 'seal';
     section: string;
     fields: FormField[];
   }
@@ -345,6 +354,8 @@ export function ApprovalDocumentView({
   const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
       if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      // 대외 문서에서 숨기기로 한 필드
+      if (externalDoc && f.hideOnExternal) return false;
       if (f.visibleIf) {
         const parts = f.visibleIf.split(':');
         if (parts.length === 2) {
@@ -375,6 +386,10 @@ export function ApprovalDocumentView({
     const blks: LayoutBlock[] = [];
     act.forEach((f) => {
       const { section: secName, width: fw } = getEffectiveProps(f);
+      if (f.type === '직인') {
+        blks.push({ type: 'seal', section: secName, fields: [f] });
+        return;
+      }
       if (f.type === '장문') {
         blks.push({
           type: 'longtext',
@@ -426,7 +441,7 @@ export function ApprovalDocumentView({
       effectiveFieldProps: getEffectiveProps,
       longTextFields: longTexts,
     };
-  }, [form, doc.fieldValues, amountField]);
+  }, [form, doc.fieldValues, amountField, externalDoc]);
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
@@ -486,8 +501,10 @@ export function ApprovalDocumentView({
         </div>
       )}
 
-      <div className="approval-print mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-[620px] shadow-xs box-border">
+      {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
+      <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
+        {!externalDoc && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
           <div className="flex items-center gap-2 h-full">
             <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
@@ -495,6 +512,7 @@ export function ApprovalDocumentView({
           </div>
           <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
         </div>
+        )}
 
         {/* 취소 기안 문서 안내 배너 */}
         {doc.cancelTargetDocId && (
@@ -556,7 +574,7 @@ export function ApprovalDocumentView({
 
         <div className="relative mb-5 flex items-start justify-between gap-4">
           <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-          {(doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
+          {!externalDoc && !isSealForm(form?.fields) && (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
             <div className="relative">
               <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
@@ -648,6 +666,7 @@ export function ApprovalDocumentView({
 
         <ApprovalDocMetaTable
           doc={doc}
+          hidden={externalDoc}
           form={form}
           drafterName={drafterName}
           drafterPos={drafterPos}
@@ -662,6 +681,10 @@ export function ApprovalDocumentView({
               const showSectionHeader = block.section && block.section !== lastRenderedSection;
               if (block.section) {
                 lastRenderedSection = block.section;
+              }
+
+              if (block.type === 'seal') {
+                return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={doc.status === '완료'} />;
               }
 
               if (block.type === 'longtext') {
@@ -698,137 +721,22 @@ export function ApprovalDocumentView({
 
               if (block.type === 'table-field') {
                 const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
+                const sheets = block.fields.map((f) => resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options));
+                // 직인 칸이 있으면 상자가 직인을 자르지 않게 — 직인은 칸 위아래(제목 줄 포함)로 넘쳐 찍힌다
+                const sealed = sheets.some(hasSealCell);
+                const clip = sealed ? '' : 'overflow-hidden';
+                const scrollX = sealed ? '' : 'overflow-x-auto';
 
-                const renderTableOnly = (f: FormField) => {
-                  const val = doc.fieldValues[f.key];
-                  const defaultCols = ['구분', '항목', '내용'];
-                  const defaultRows: Array<Record<string, string>> = [
-                    { '구분': '', '항목': '', '내용': '' },
-                    { '구분': '', '항목': '', '내용': '' },
-                    { '구분': '', '항목': '', '내용': '' }
-                  ];
-                  let cols: string[] = [...defaultCols];
-                  let rows: Array<Record<string, string>> = [...defaultRows];
-                  let colWidths: Record<string, string> = {};
-                  let merges: CellMerge[] = [];
-                  let headerValues: Record<string, string> = {};
-                  let secretCols: string[] = [];
-                  let secretCells: string[] = [];
-                  let secretRows: number[] = [];
-
-                  if (f.placeholder) {
-                    try {
-                      const cfg = JSON.parse(f.placeholder);
-                      if (cfg && typeof cfg === 'object') {
-                        if (cfg.colWidths) colWidths = cfg.colWidths;
-                        if (cfg.cols) cols = cfg.cols;
-                        if (Array.isArray(cfg.rows)) rows = cfg.rows;
-                        else if (Array.isArray(cfg.defaultRows)) rows = cfg.defaultRows;
-                        if (Array.isArray(cfg.merges)) merges = cfg.merges;
-                        if (cfg.headerValues) headerValues = cfg.headerValues;
-                        if (Array.isArray(cfg.secretCols)) secretCols = cfg.secretCols;
-                        if (Array.isArray(cfg.secretCells)) secretCells = cfg.secretCells;
-                        if (Array.isArray(cfg.secretRows)) secretRows = cfg.secretRows;
-                      }
-                    } catch (e) { }
-                  }
-
-                  try {
-                    if (typeof val === 'string' && val) {
-                      const parsed = JSON.parse(val);
-                      if (parsed && typeof parsed === 'object') {
-                        if (Array.isArray(parsed.cols) && Array.isArray(parsed.rows)) {
-                          cols = parsed.cols;
-                          rows = parsed.rows;
-                          colWidths = (parsed.colWidths && Object.keys(parsed.colWidths).length > 0) ? parsed.colWidths : colWidths;
-                          if (Array.isArray(parsed.merges)) merges = parsed.merges;
-                          if (parsed.headerValues) headerValues = parsed.headerValues;
-                          if (Array.isArray(parsed.secretCols)) secretCols = parsed.secretCols;
-                          if (Array.isArray(parsed.secretCells)) secretCells = parsed.secretCells;
-                          if (Array.isArray(parsed.secretRows)) secretRows = parsed.secretRows;
-                        }
-                      }
-                    }
-                  } catch (e) { }
-
-                  return (
-                    <table className="table-fixed border-collapse text-left text-[11.5px] border-none" style={{ width: '100%', minWidth: isHalf ? 'auto' : '500px' }}>
-                      <colgroup>
-                        {cols.map((col, cIdx) => (
-                          <col key={cIdx} style={{ width: colWidths[col] || 'auto' }} />
-                        ))}
-                      </colgroup>
-                      <tbody>
-                        {/* 헤더 행 — tbody 첫 번째 tr (rowSpan이 데이터 행까지 정상 확장됨) */}
-                        <tr className="border-b border-[#bbb] bg-[#f9f9f9]">
-                          {cols.map((col, cIdx) => {
-                            const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(-1, cIdx, merges);
-                            if (isMerged && !isStart) return null;
-                            return (
-                              <th
-                                key={col}
-                                rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                colSpan={colSpan > 1 ? colSpan : undefined}
-                                className="p-2 border border-[#eee] font-bold text-[#555]"
-                              >
-                                {headerValues[col] !== undefined ? headerValues[col] : col}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                        {rows.map((row, rIdx) => (
-                          <tr key={rIdx} className="border-b border-[#eee] hover:bg-[#fafafa]">
-                            {cols.map((col, cIdx) => {
-                              const isCellSecret =
-                                f.isSecret ||
-                                secretCols.includes(col) ||
-                                secretRows.includes(rIdx) ||
-                                secretCells.includes(`${rIdx}:${cIdx}`);
-
-                              const cellVal = row[col] ?? '';
-                              const isPercent = typeof cellVal === 'string' && cellVal.endsWith('%');
-                              const isNumLike = col.includes('수량') || col.includes('단가') || col.includes('가격') || col.includes('금액') || col.includes('수') || col.includes('율') || col.includes('비중') || isPercent;
-                              let displayVal = isNumLike && !isPercent && !isNaN(Number(cellVal.replace(/,/g, ''))) && cellVal !== ''
-                                ? Number(cellVal.replace(/,/g, '')).toLocaleString()
-                                : cellVal;
-
-                              if (isCellSecret && isMaskingActive) {
-                                displayVal = maskValue(displayVal, true);
-                              }
-
-                              const { isMerged, isStart, rowSpan, colSpan } = getCellMergeInfo(rIdx, cIdx, merges);
-
-                              if (isMerged && !isStart) return null;
-
-                              const isCellBlurred = isCellSecret && isMaskingActive;
-
-                              return (
-                                <td
-                                  key={col}
-                                  rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                                  colSpan={colSpan > 1 ? colSpan : undefined}
-                                  title={isCellBlurred ? "보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                                  className={`p-2 border border-[#eee] text-[#222] whitespace-pre-wrap break-words leading-relaxed ${isNumLike ? 'text-right' : 'text-left'} ${isCellBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''
-                                    }`}
-                                >
-
-                                  {displayVal || '—'}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                        {rows.length === 0 && (
-                          <tr>
-                            <td colSpan={cols.length} className="py-4 text-center text-[#999] text-[11px]">
-                              등록된 데이터가 없습니다.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  );
-                };
+                const renderTableOnly = (f: FormField, i: number) => (
+                  <SheetView
+                    sheet={sheets[i]}
+                    allSecret={f.isSecret}
+                    isMaskingActive={isMaskingActive}
+                    maskValue={maskValue}
+                    minWidth={isHalf ? 'auto' : '500px'}
+                    sealStamped={doc.status === '완료'}
+                  />
+                );
 
                 return (
                   <div key={blockIdx} className={`space-y-1 ${isHalf ? 'print-avoid-break' : ''}`}>
@@ -838,18 +746,18 @@ export function ApprovalDocumentView({
                       </div>
                     )}
                     {isHalf ? (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
-                        {block.fields.map((f) => {
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip} grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break`}>
+                        {block.fields.map((f, i) => {
                           const hasLabel = !!(f.label && f.label.trim());
                           return (
                             <div key={f.key} className="flex flex-col">
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
+                                <div className={`text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center ${i === 0 ? 'rounded-tl-lg' : 'rounded-tr-lg'}`}>
                                   {f.label}
                                 </div>
                               )}
-                              <div className="overflow-x-auto">
-                                {renderTableOnly(f)}
+                              <div className={scrollX}>
+                                {renderTableOnly(f, i)}
                               </div>
                             </div>
                           );
@@ -857,21 +765,21 @@ export function ApprovalDocumentView({
                         {block.fields.length === 1 && <div />}
                       </div>
                     ) : (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip}`}>
                         {(() => {
                           const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
                           return (
                             <>
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
+                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] rounded-t-lg">
                                   {block.fields[0].label}
                                 </div>
                               )}
                             </>
                           );
                         })()}
-                        <div className="overflow-x-auto">
-                          {renderTableOnly(block.fields[0])}
+                        <div className={scrollX}>
+                          {renderTableOnly(block.fields[0], 0)}
                         </div>
                       </div>
                     )}
@@ -942,14 +850,14 @@ export function ApprovalDocumentView({
         )}
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-        {longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
+        {!externalDoc && longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
           <div className="mt-3 min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
             {bodyText}
           </div>
         )}
 
         {/* 첨부파일 영역 */}
-        {doc.attachments && doc.attachments.length > 0 && (
+        {!externalDoc && doc.attachments && doc.attachments.length > 0 && (
           <table className="mt-4 w-full border-collapse text-[12px]">
             <tbody>
               <tr>
@@ -1026,7 +934,7 @@ export function ApprovalDocumentView({
 
 
         {/* 관련 문서 연동 영역 */}
-        {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
+        {!externalDoc && accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
           <table className="mt-2 w-full border-collapse text-[12px]">
             <tbody>
               <tr>
@@ -1058,6 +966,7 @@ export function ApprovalDocumentView({
           </table>
         )}
 
+        {!externalDoc && (
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
           {closing.trim() && <div>{closing}</div>}
           <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
@@ -1105,6 +1014,7 @@ export function ApprovalDocumentView({
             )}
           </div>
         </div>
+        )}
         {activeRelatedDocId && (
           <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
         )}

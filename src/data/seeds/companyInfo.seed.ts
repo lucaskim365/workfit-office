@@ -29,6 +29,8 @@ export const COMPANY_INFO_SEED: CompanyInfo[] = [
     docFooter: '본 문서는 WorkFitIntranet에서 발행되었습니다.',
     logoUrl: '',
     logoPath: '',
+    sealUrl: '',
+    sealPath: '',
     mask: true,
   },
 ];

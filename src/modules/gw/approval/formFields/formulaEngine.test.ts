@@ -5,8 +5,8 @@ import {
   cellToCoord,
   coordToCell,
   shiftFormulaCoordinates,
+  shiftCrossTableRefs,
   recalculateTableFormulas,
-  cascadeRecalculateAllTables,
   formatCellValue,
   type CellFormula,
 } from './formulaEngine';
@@ -226,48 +226,7 @@ export function runFormulaEngineTests() {
     console.log('✓ 8. 타 표 교차 참조(Cross-Table Reference: 매출구분 소계 - 매입발주 합계 = 매출이익) 통과\n');
   }
 
-  // 9. 복수 표 연쇄 실시간 재계산 (cascadeRecalculateAllTables)
-  {
-    const fields = [
-      { key: 'table_sales', label: '매출구분' },
-      { key: 'table_purchase', label: '매입발주' },
-      { key: 'table_profit', label: '손익요약' },
-    ];
-
-    const currentVals: Record<string, string> = {
-      table_sales: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '소계', 금액: '100,000,000' }],
-      }),
-      table_purchase: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '합계', 금액: '40,000,000' }],
-      }),
-      table_profit: JSON.stringify({
-        cols: ['항목', '금액'],
-        rows: [{ 항목: '매출이익', 금액: '' }],
-        cellFormulas: {
-          '0:금액': { expression: '=[매출구분]![소계:금액] - [매입발주]![합계:금액]', format: 'currency' },
-        },
-      }),
-    };
-
-    // 기안자가 매입발주 금액을 40,000,000 -> 30,000,000 으로 수정
-    const patch = {
-      table_purchase: JSON.stringify({
-        cols: ['구분', '금액'],
-        rows: [{ 구분: '합계', 금액: '30,000,000' }],
-      }),
-    };
-
-    const cascaded = cascadeRecalculateAllTables(fields, currentVals, patch);
-
-    // 손익요약의 매출이익이 자동으로 100,000,000 - 30,000,000 = 70,000,000 으로 재계산되어야 함
-    assert(cascaded.table_profit != null, 'table_profit이 연쇄 재계산되어야 함');
-    const profitParsed = JSON.parse(cascaded.table_profit);
-    assert.equal(profitParsed.rows[0]['금액'], '70,000,000');
-    console.log('✓ 9. 복수 표 연쇄 실시간 재계산(cascadeRecalculateAllTables: 매출이익 70,000,000 자동 갱신) 통과\n');
-  }
+  // 9. 복수 표 연쇄 재계산은 sheetModel.test.ts 6번으로 이동
 
   // 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액의 병합된 셀 = 매출이익)
   {
@@ -299,7 +258,9 @@ export function runFormulaEngineTests() {
       '3:발주예상일자': { expression: '=[매출구분]![소계:금액] - [매입발주 금액:발주 금액]', format: 'currency' },
     };
 
-    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas, undefined, otherTablesContext);
+    // '매입발주 금액' 행의 발주예상일자~발주 금액 두 칸이 병합되어 있음
+    const merges = [{ startRow: 2, startCol: 1, rowSpan: 1, colSpan: 2 }];
+    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas, undefined, otherTablesContext, merges);
 
     // 매입발주 금액은 30,000,000
     assert.equal(recalculated[2]['발주예상일자'], '30,000,000');
@@ -315,6 +276,110 @@ export function runFormulaEngineTests() {
     assert.equal(recalculated2[3]['발주예상일자'], '70,000,000');
 
     console.log('✓ 10. 병합 셀 및 행 라벨 참조 (매출구분 소계 - 매입발주 금액 병합셀 = 매출이익) 통과\n');
+  }
+
+  // 11. 여러 열의 위-아래 셀 계산 — 한 열에만 값을 넣어도 다른 열 수식에 값이 번지지 않아야 함
+  {
+    const cols = ['구분', '1월', '2월'];
+    const rows = [
+      { 구분: '매출', '1월': '100', '2월': '' },
+      { 구분: '매입', '1월': '', '2월': '' },
+      { 구분: '차액', '1월': '', '2월': '' },
+    ];
+    const cellFormulas: Record<string, CellFormula> = {
+      '2:1월': { expression: '=[매출:1월] - [매입:1월]', format: 'number' },
+      '2:2월': { expression: '=[매출:2월] - [매입:2월]', format: 'number' },
+    };
+    const recalculated = recalculateTableFormulas(cols, rows, cellFormulas);
+    assert.equal(recalculated[2]['1월'], '100');
+    assert.equal(recalculated[2]['2월'], '0');
+
+    // 타 표 참조도 빈 칸은 0
+    const ctx = { 월별: { cols, rows } };
+    const other = recalculateTableFormulas(
+      ['항목', '값'],
+      [{ 항목: '2월 매출', 값: '' }],
+      { '0:값': { expression: '=[월별]![매출:2월]', format: 'number' } },
+      undefined,
+      ctx
+    );
+    assert.equal(other[0]['값'], '0');
+    console.log('✓ 11. 여러 열 위-아래 셀 계산 — 빈 칸이 다른 열 값으로 대체되지 않음 통과\n');
+  }
+
+  // 12~14. 함수·반올림·오류
+  {
+    const c = ['A', 'B', 'C', 'D'];
+    const r = [{ A: '10', B: '4', C: '3', D: '' }];
+    const calc = (e: string) =>
+      recalculateTableFormulas(c, r, { '0:D': { expression: e, format: 'number' } })[0].D;
+    assert.equal(calc('=AVERAGE(A1:C1)'), '5.6666666667');
+    assert.equal(calc('=MIN(A1:C1)'), '3');
+    assert.equal(calc('=MAX(A1:C1)'), '10');
+    assert.equal(calc('=ROUND(A1/C1, 1)'), '3.3');
+    assert.equal(calc('=sum(a1:c1)*2'), '34');
+    console.log('✓ 12. AVERAGE·MIN·MAX·ROUND·소문자 함수 통과');
+
+    assert.equal(calc('=SUM(A1:C1)*0.1'), '1.7');
+    console.log('✓ 13. 소수 오차 반올림 통과');
+
+    // 0으로 나누기는 예전처럼 0 (빈 서식의 비율 칸이 오류로 보이지 않도록)
+    assert.equal(calc('=A1/0'), '0');
+    assert.equal(calc('=(A1+B1'), '#오류');
+    assert.equal(calc('=FOO(A1)'), '#오류');
+    assert.equal(calc('=A1+'), '#오류');
+    assert.equal(calc('=ROUND((A1+B1)/C1, 2)'), '4.67');
+    // 오류 칸을 참조하는 수식도 오류
+    const chained = recalculateTableFormulas(c, r, {
+      '0:C': { expression: '=FOO(A1)', format: 'number' },
+      '0:D': { expression: '=C1+1', format: 'number' },
+    });
+    assert.equal(chained[0].D, '#오류');
+    console.log('✓ 14. invalid formulas show error 통과\n');
+  }
+
+  // 15. 같은 표 괄호 숫자 행 참조 이동, 괄호 안 열 제목·타 표 참조는 그대로
+  {
+    assert.equal(
+      shiftFormulaCoordinates('=[2:금액] - [소계:금액] + D3', { type: 'row_add', atIndex: 0 }),
+      '=[3:금액] - [소계:금액] + D4'
+    );
+    assert.equal(shiftFormulaCoordinates('=[매출]!D4 + D4', { type: 'row_add', atIndex: 0 }), '=[매출]!D4 + D5');
+    assert.equal(shiftFormulaCoordinates('=[Q1] + A1', { type: 'row_add', atIndex: 0 }), '=[Q1] + A2');
+    assert.equal(shiftFormulaCoordinates('=[2:금액]', { type: 'row_del', atIndex: 2 }), '=#REF!');
+    console.log('✓ 15. 괄호 숫자 행 참조 이동 통과');
+  }
+
+  // 16. 타 표 참조 이동
+  {
+    assert.equal(
+      shiftCrossTableRefs('=[매출]!D4 + [매입]!D4', ['매출'], { type: 'row_add', atIndex: 0 }),
+      '=[매출]!D5 + [매입]!D4'
+    );
+    assert.equal(shiftCrossTableRefs('=[매출]![2:금액]', ['매출'], { type: 'row_del', atIndex: 2 }), '=#REF!');
+    assert.equal(
+      shiftCrossTableRefs('=[매출]![소계:금액] + [매출]![1:금액] + A1', ['매출'], { type: 'row_add', atIndex: 0 }),
+      '=[매출]![소계:금액] + [매출]![2:금액] + A1'
+    );
+    console.log('✓ 16. 타 표 참조 이동 통과\n');
+  }
+
+  // 17. 음수 결과 — A1-A2 가 음수여도 멈추지 않고 계산 (괄호 무한 반복 버그)
+  {
+    const c = ['A', 'B'];
+    const r = [{ A: '3', B: '' }, { A: '10', B: '' }];
+    const calc = (e: string) =>
+      recalculateTableFormulas(c, r, { '0:B': { expression: e, format: 'number' } })[0].B;
+    assert.equal(calc('=A1-A2'), '-7');
+    assert.equal(calc('=(A1-A2)*2'), '-14');
+    assert.equal(calc('=ROUND(A1-A2, 0) + 1'), '-6');
+    assert.equal(calc('=SUM(A1:A2) - (A2*2)'), '-7');
+    const chained = recalculateTableFormulas(c, r, {
+      '0:B': { expression: '=A1-A2', format: 'number' },
+      '1:B': { expression: '=B1*2', format: 'number' },
+    });
+    assert.equal(chained[1].B, '-14');
+    console.log('✓ 17. 음수 결과 계산 통과\n');
   }
 
   console.log('🎉 모든 formulaEngine 테스트 통과!');

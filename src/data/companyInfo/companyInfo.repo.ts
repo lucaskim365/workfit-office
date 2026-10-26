@@ -15,7 +15,9 @@ const DOC_ID = 'main';
 const backend = createCrudBackend<CompanyInfo>({
   coll: 'companyInfo',
   parse: (raw) => {
-    const p = companyInfoSchema.safeParse(raw);
+    // DB 빈 칸(null) — 예: 직인 미등록 시 sealUrl — 은 기본값('')으로. 안 그러면 회사 정보 전체를 못 읽어 직인·로고가 빠진다.
+    const cleaned = Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([, v]) => v !== null));
+    const p = companyInfoSchema.safeParse(cleaned);
     if (!p.success) {
       console.error('Failed to parse companyInfo:', p.error);
       return null;
@@ -49,6 +51,17 @@ export const companyInfoRepo = {
     const path = `branding/company-logo-${Date.now()}.${ext}`;
     const url = await fileStorage.put(path, file, { contentType: file.type || 'image/png' });
     // 교체 시 이전 파일 best-effort 삭제 (data URL 폴백에서는 no-op)
+    if (prevPath && prevPath !== path) {
+      await fileStorage.remove(prevPath);
+    }
+    return { url, path };
+  },
+
+  /** 회사 직인 업로드 — 저장소 서명 규칙상 chat/ 아래 경로 사용. */
+  async uploadSeal(file: File, prevPath?: string): Promise<{ url: string; path: string }> {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `chat/branding/company-seal-${Date.now()}.${ext}`;
+    const url = await fileStorage.put(path, file, { contentType: file.type || 'image/png' });
     if (prevPath && prevPath !== path) {
       await fileStorage.remove(prevPath);
     }

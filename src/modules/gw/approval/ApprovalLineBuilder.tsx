@@ -6,11 +6,13 @@ import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { X, AlertTriangle, Zap, Network, Users, Building2, Star, ChevronDown, BookmarkPlus } from 'lucide-react';
 
-import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
+import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
+import { withoutJeongyeol } from '@/domain/approvalDoc/engine';
 import type { User } from '@/domain/user/schema';
 import { KIND_TONE } from '@/modules/gw/_gw';
 import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
 import { fromMyRouteSteps, type MyApprovalRoute } from '@/domain/myApprovalRoute/schema';
+import { buildLineGroups, moveLineGroup, type EditStep, type EmptyGroup, type LineGroup } from './approvalLineOrder';
 
 type OrgNode = import('@/features/gw/useOrgTree').OrgNode;
 
@@ -31,21 +33,14 @@ function filterOrgNode(
 }
 
 /**
- * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 전결규정 적용
+ * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 결재 규칙 적용
  * ③ 수동(피커로 추가·구분 지정·순서·병렬 묶기). 어느 방식이든 동일 steps[]로 수렴.
  * 완전 제어형: 내부 상태 없이 props(steps)에서 편집표현을 도출해 병렬 태그 드리프트를 방지.
  */
 
-/** 편집표현 — 병렬그룹/단독 노드 편집 표현 */
-interface EditStep {
-  approverId: string;
-  kind: StepKind;
-  linkedPrev: boolean;
-  groupId?: string | null; // 독립 병렬 그룹 ID (예: 'G1', 'G2')
-}
-
 function toEdit(steps: ApprovalStep[]): EditStep[] {
-  const sorted = [...steps].sort((a, b) => a.seq - b.seq);
+  // 예전 전결 값은 결재로 — 화면에 보이는 구분과 저장되는 구분을 같게([[withoutJeongyeol]])
+  const sorted = withoutJeongyeol([...steps]).sort((a, b) => a.seq - b.seq);
   return sorted.map((s, i) => ({
     approverId: s.approverId,
     kind: s.kind,
@@ -86,7 +81,7 @@ export function ApprovalLineBuilder({
   amount,
   docData,
   bottomSlot,
-  isAgreementEnabled = false,
+  ruleMode,
 }: {
   steps: ApprovalStep[];
   onChange: (steps: ApprovalStep[]) => void;
@@ -96,6 +91,11 @@ export function ApprovalLineBuilder({
   docData?: Record<string, any> | null;
   bottomSlot?: React.ReactNode;
   isAgreementEnabled?: boolean;
+  /**
+   * 결재선 규칙 설정용 — 사람 대신 '직속 상급자' 같은 역할도 고를 수 있게 한다.
+   * approverId 에 역할 토큰(roles[].token) 또는 사용자 ID 가 들어간다. 자동 결재선·내 결재선·참조자 칸은 숨김.
+   */
+  ruleMode?: { roles: Array<{ token: string; label: string; desc: string }> };
 }) {
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
@@ -118,8 +118,8 @@ export function ApprovalLineBuilder({
     return users.find((u) => u.id === drafterId) || org.users?.find((u: any) => u.id === drafterId);
   }, [users, org.users, drafterId]);
 
-  // 빈 병렬 그룹 ID 목록 (사용자가 생성한 빈 병렬 그룹 박스 유지용)
-  const [emptyGroupIds, setEmptyGroupIds] = useState<string[]>([]);
+  // 빈 병렬 그룹 (사용자가 만든 빈 병렬 그룹 박스와 결재선 안 위치)
+  const [emptyGroups, setEmptyGroups] = useState<EmptyGroup[]>([]);
 
   // 피커 상태
   const [picker, setPicker] = useState<
@@ -149,16 +149,16 @@ export function ApprovalLineBuilder({
   const approverEdits = useMemo(() => edits.filter((e) => e.kind !== '참조'), [edits]);
   const refEdits = useMemo(() => edits.filter((e) => e.kind === '참조'), [edits]);
 
-  const allowedKinds = useMemo(() => {
-    return STEP_KINDS.filter((k) => k !== '참조' && (k !== '합의' || isAgreementEnabled));
-  }, [isAgreementEnabled]);
+  // 고를 수 있는 구분은 결재·합의뿐(대결은 선택지 없음, 전결은 시스템에서 없앰). 예전 값은 결재로 보임.
+  const allowedKinds: StepKind[] = ['결재', '합의'];
+  const allowedParallelKinds = allowedKinds;
+  const shownKind = (k: StepKind): StepKind => (k === '합의' ? '합의' : '결재');
 
-  const allowedParallelKinds = useMemo(() => {
-    return allowedKinds.filter((k) => k !== '전결');
-  }, [allowedKinds]);
-
-  const nameOf = (id: string) => org.userById(id)?.name ?? id;
+  const roleOf = (id: string) => ruleMode?.roles.find((r) => r.token === id);
+  const nameOf = (id: string) => roleOf(id)?.label ?? org.userById(id)?.name ?? id;
   const deptPosOf = (id: string) => {
+    const role = roleOf(id);
+    if (role) return role.desc;
     const u = org.userById(id);
     return u ? `${u.dept} · ${u.position}` : '';
   };
@@ -184,7 +184,13 @@ export function ApprovalLineBuilder({
     if (nextApprovers.length > 0) {
       nextApprovers[0] = { ...nextApprovers[0], linkedPrev: false };
     }
+    keepEmptiesAfterRemoval([approverIdx]);
     emit([...nextApprovers, ...refEdits]);
+  };
+
+  /** 결재자를 지우면 그 뒤에 있던 빈 병렬 그룹의 위치도 앞으로 당긴다 */
+  const keepEmptiesAfterRemoval = (removedIdx: number[]) => {
+    setEmptyGroups((prev) => prev.map((e) => ({ ...e, before: e.before - removedIdx.filter((i) => i < e.before).length })));
   };
 
   /** 참조자 삭제 */
@@ -193,47 +199,20 @@ export function ApprovalLineBuilder({
     emit([...approverEdits, ...nextRefs]);
   };
 
-  /** 단독 결재 노드 단위 이동 */
-  const moveApprover = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= approverEdits.length) return;
-    const nextApprovers = [...approverEdits];
-    [nextApprovers[i], nextApprovers[j]] = [nextApprovers[j], nextApprovers[i]];
-    if (nextApprovers.length > 0) nextApprovers[0].linkedPrev = false;
-    emit([...nextApprovers, ...refEdits]);
+  /** 단계(병렬 그룹 또는 단독 결재자) 위/아래 한 칸 — 병렬 그룹은 통째로 움직이고, 단독 결재자는 병렬 그룹을 건너뛴다 */
+  const moveGroup = (groupIdx: number, dir: -1 | 1) => {
+    const to = groupIdx + dir;
+    if (to < 0 || to >= renderGroups.length) return;
+    const { approvers, empties } = moveLineGroup(renderGroups, groupIdx, dir);
+    setEmptyGroups(empties);
+    emit([...approvers, ...refEdits]);
   };
 
-  /** 병렬 그룹 전체 위치 이동 (위/아래, 빈 그룹 포함) */
-  const moveGroup = (renderGroupsList: any[], groupIdx: number, dir: -1 | 1) => {
-    const targetGroupIdx = groupIdx + dir;
-    if (targetGroupIdx < 0 || targetGroupIdx >= renderGroupsList.length) return;
-
-    const newRenderGroups = [...renderGroupsList];
-    [newRenderGroups[groupIdx], newRenderGroups[targetGroupIdx]] = [newRenderGroups[targetGroupIdx], newRenderGroups[groupIdx]];
-
-    // 1) emptyGroupIds 배열의 순서도 새로운 renderGroups 순서대로 재정렬
-    const newEmptyGroupIds: string[] = [];
-    const nextApprovers: EditStep[] = [];
-
-    newRenderGroups.forEach((g) => {
-      if (g.items.length === 0) {
-        newEmptyGroupIds.push(g.id);
-      } else {
-        g.items.forEach((item: any, idx: number) => {
-          nextApprovers.push({
-            ...item.edit,
-            linkedPrev: idx > 0,
-            groupId: g.isParallel ? (g.id.startsWith('empty-') ? `G${Date.now()}` : g.id) : null,
-          });
-        });
-      }
-    });
-
-    if (nextApprovers.length > 0) {
-      nextApprovers[0].linkedPrev = false;
-    }
-    setEmptyGroupIds(newEmptyGroupIds);
-    emit([...nextApprovers, ...refEdits]);
+  /** 결재자 n명을 pos 자리에 넣으면 그 뒤의 빈 병렬 그룹도 함께 뒤로 (skipId: 채워져서 사라질 빈 그룹) */
+  const keepEmptiesAfterInsert = (pos: number, n: number, skipId?: string) => {
+    setEmptyGroups((prev) =>
+      prev.filter((e) => e.id !== skipId).map((e) => (e.before > pos ? { ...e, before: e.before + n } : e)),
+    );
   };
 
   /** 결재 피커에서 인원 단일 또는 다중 선택 시 처리 */
@@ -259,7 +238,7 @@ export function ApprovalLineBuilder({
     } else if (picker.mode === 'add-to-group') {
       const targetIdx = picker.groupIndex;
       if (targetIdx === -1 && picker.targetGroupId) {
-        // 빈 병렬 그룹에 멤버 추가
+        // 빈 병렬 그룹에 멤버 추가 — 그 빈 그룹이 있던 자리에 넣는다
         const generatedPgId = `G_${Date.now()}`;
         const newItems = selectedIds.map((id, idx) => ({
           approverId: id,
@@ -267,8 +246,11 @@ export function ApprovalLineBuilder({
           linkedPrev: idx > 0,
           groupId: generatedPgId, // 독립 병렬그룹 ID 부여 (1명이어도 보존)
         }));
-        emit([...approverEdits, ...newItems, ...refEdits]);
-        setEmptyGroupIds((prev) => prev.filter((id) => id !== picker.targetGroupId));
+        const pos = Math.min(emptyGroups.find((e) => e.id === picker.targetGroupId)?.before ?? approverEdits.length, approverEdits.length);
+        const next = [...approverEdits];
+        next.splice(pos, 0, ...newItems); // 빈 그룹 자리는 항상 단계 경계
+        emit([...next, ...refEdits]);
+        keepEmptiesAfterInsert(pos, newItems.length, picker.targetGroupId);
       } else {
         // 기존 병렬 그룹에 멤버 추가
         let lastGroupIdx = targetIdx;
@@ -285,6 +267,7 @@ export function ApprovalLineBuilder({
         const next = [...approverEdits];
         next.splice(lastGroupIdx + 1, 0, ...newItems);
         emit([...next, ...refEdits]);
+        keepEmptiesAfterInsert(lastGroupIdx, newItems.length);
       }
     }
     setPicker(null);
@@ -293,12 +276,12 @@ export function ApprovalLineBuilder({
   /** 빈 병렬 그룹 생성 */
   const createEmptyParallelGroup = () => {
     const newGroupId = `empty-pg-${Date.now()}`;
-    setEmptyGroupIds((prev) => [...prev, newGroupId]);
+    setEmptyGroups((prev) => [...prev, { id: newGroupId, before: approverEdits.length }]);
   };
 
   /** 빈 병렬 그룹 삭제 */
   const removeEmptyGroup = (groupId: string) => {
-    setEmptyGroupIds((prev) => prev.filter((id) => id !== groupId));
+    setEmptyGroups((prev) => prev.filter((e) => e.id !== groupId));
   };
 
   const fillAuto = () => {
@@ -339,48 +322,12 @@ export function ApprovalLineBuilder({
   }, [edits, drafterId]);
 
   // approverEdits를 그룹 단위로 묶어서 UI 렌더링용 구조 생성
-  const renderGroups = useMemo(() => {
-    const groups: { id: string; isParallel: boolean; items: { edit: EditStep; originalIndex: number }[] }[] = [];
-    approverEdits.forEach((edit, index) => {
-      // 명시적인 groupId가 존재하는 병렬 노드이거나 이전과 연결된 경우
-      if (edit.groupId) {
-        const existingGroup = groups.find((g) => g.id === edit.groupId);
-        if (existingGroup) {
-          existingGroup.items.push({ edit, originalIndex: index });
-        } else {
-          groups.push({
-            id: edit.groupId,
-            isParallel: true,
-            items: [{ edit, originalIndex: index }],
-          });
-        }
-      } else if (edit.linkedPrev && groups.length > 0) {
-        const currentGroup = groups[groups.length - 1];
-        currentGroup.isParallel = true;
-        currentGroup.items.push({ edit, originalIndex: index });
-      } else {
-        groups.push({
-          id: `seq-${index}`,
-          isParallel: false,
-          items: [{ edit, originalIndex: index }],
-        });
-      }
-    });
-
-    // 빈 병렬 그룹 추가
-    emptyGroupIds.forEach((egId) => {
-      groups.push({
-        id: egId,
-        isParallel: true,
-        items: [],
-      });
-    });
-
-    return groups;
-  }, [approverEdits, emptyGroupIds]);
+  const renderGroups: LineGroup[] = useMemo(() => buildLineGroups(approverEdits, emptyGroups), [approverEdits, emptyGroups]);
 
   return (
     <div>
+      {!ruleMode && (
+      <>
       {/* 상단 3방식 툴바 */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <button
@@ -421,7 +368,7 @@ export function ApprovalLineBuilder({
           type="button"
           onClick={() => {
             onChange([]);
-            setEmptyGroupIds([]);
+            setEmptyGroups([]);
           }}
           className="rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1 text-[11px] font-semibold text-ink3 hover:text-red-500 hover:border-red-300 transition-colors cursor-pointer"
         >
@@ -582,6 +529,9 @@ export function ApprovalLineBuilder({
         </div>
       )}
 
+      </>
+      )}
+
       {/* [1] 결재선 노드 리스트 (그룹 단위 렌더링) — 매끄러운 1->2->3 타임라인 */}
       <div>
         {renderGroups.map((group, groupIdx) => {
@@ -626,9 +576,9 @@ export function ApprovalLineBuilder({
                                 </span>
                               </button>
                               <select
-                                value={edit.kind === '전결' ? '결재' : edit.kind}
+                                value={shownKind(edit.kind)}
                                 onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
-                                className={'shrink-0 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[10px] font-semibold outline-none ' + KIND_TONE[edit.kind === '전결' ? '결재' : edit.kind]}
+                                className={'shrink-0 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[10px] font-semibold outline-none ' + KIND_TONE[shownKind(edit.kind)]}
                               >
                                 {allowedParallelKinds.map((k) => (
                                   <option key={k} value={k}>{k}</option>
@@ -664,7 +614,7 @@ export function ApprovalLineBuilder({
                     <div className="flex shrink-0 flex-col">
                       <button
                         type="button"
-                        onClick={() => moveGroup(renderGroups, groupIdx, -1)}
+                        onClick={() => moveGroup(groupIdx, -1)}
                         title="병렬 그룹 위로 이동"
                         className="text-[9px] leading-none text-ink3 hover:text-ink"
                       >
@@ -672,7 +622,7 @@ export function ApprovalLineBuilder({
                       </button>
                       <button
                         type="button"
-                        onClick={() => moveGroup(renderGroups, groupIdx, 1)}
+                        onClick={() => moveGroup(groupIdx, 1)}
                         title="병렬 그룹 아래로 이동"
                         className="text-[9px] leading-none text-ink3 hover:text-ink"
                       >
@@ -690,6 +640,7 @@ export function ApprovalLineBuilder({
                           // 그룹 내 모든 멤버 일괄 삭제
                           const indicesToRemove = group.items.map((it) => it.originalIndex);
                           const next = approverEdits.filter((_, idx) => !indicesToRemove.includes(idx));
+                          keepEmptiesAfterRemoval(indicesToRemove);
                           if (next.length > 0) next[0].linkedPrev = false;
                           emit([...next, ...refEdits]);
                         }
@@ -729,17 +680,17 @@ export function ApprovalLineBuilder({
                     <span className="ml-1 text-[10px] text-ink3">{deptPosOf(edit.approverId)}</span>
                   </button>
                   <select
-                    value={edit.kind}
+                    value={shownKind(edit.kind)}
                     onChange={(ev) => setKind(originalIndex, ev.target.value as StepKind)}
-                    className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[edit.kind]}`}
+                    className={`shrink-0 rounded border border-border-hi bg-panel px-1.5 py-1 text-[11px] font-semibold outline-none ${KIND_TONE[shownKind(edit.kind)]}`}
                   >
                     {allowedKinds.map((k) => (
                       <option key={k} value={k}>{k}</option>
                     ))}
                   </select>
                   <div className="flex shrink-0 flex-col">
-                    <button type="button" onClick={() => moveApprover(originalIndex, -1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
-                    <button type="button" onClick={() => moveApprover(originalIndex, 1)} className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
+                    <button type="button" onClick={() => moveGroup(groupIdx, -1)} title="위로 이동" className="text-[9px] leading-none text-ink3 hover:text-ink">▲</button>
+                    <button type="button" onClick={() => moveGroup(groupIdx, 1)} title="아래로 이동" className="text-[9px] leading-none text-ink3 hover:text-ink">▼</button>
                   </div>
                   <button
                     type="button"
@@ -786,6 +737,8 @@ export function ApprovalLineBuilder({
         </button>
       </div>
 
+      {!ruleMode && (
+      <>
       {/* [2] 참조자 전용 분리 섹션 */}
       <div className="mt-4 rounded-xl border border-border bg-panel-alt/30 p-3">
         <div className="flex items-center justify-between mb-1.5">
@@ -844,6 +797,9 @@ export function ApprovalLineBuilder({
         )}
       </div>
 
+      </>
+      )}
+
       {dupWarn && (
         <p className="mt-2 text-[10.5px] text-amber flex items-center gap-1">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -875,7 +831,8 @@ export function ApprovalLineBuilder({
               </button>
             </div>
             <UserPickList
-              users={users.filter((u) => u.status === '사용' && canDesignate(u))}
+              roles={ruleMode?.roles}
+              users={users.filter((u) => u.status === '사용' && (ruleMode ? true : canDesignate(u)))}
               org={org}
               onPick={pick}
               isMultiSelect={picker.mode === 'add-ref' || (picker.mode === 'add-to-group' && picker.groupIndex === -1)}
@@ -892,19 +849,21 @@ export function ApprovalLineBuilder({
 
 /** 조직도 트리 및 리스트 탭 전환 사용자 선택 컴포넌트 (단일/다중 선택 지원). */
 function UserPickList({
+  roles,
   users,
   org,
   onPick,
   isMultiSelect = false,
   minSelectCount = 1,
 }: {
+  roles?: Array<{ token: string; label: string; desc: string }>;
   users: User[];
   org: ReturnType<typeof useOrgTree>;
   onPick: (ids: string | string[]) => void;
   isMultiSelect?: boolean;
   minSelectCount?: number;
 }) {
-  const [tab, setTab] = useState<'org' | 'list'>('org');
+  const [tab, setTab] = useState<'role' | 'org' | 'list'>(roles ? 'role' : 'org');
   const [q, setQ] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const kw = q.trim().toLowerCase();
@@ -938,6 +897,15 @@ function UserPickList({
       {/* 탭 & 검색창 */}
       <div className="border-b border-border p-3 space-y-2 shrink-0">
         <div className="flex gap-1 rounded-lg bg-panel-alt p-1">
+          {roles && (
+            <button
+              type="button"
+              onClick={() => setTab('role')}
+              className={`flex-1 rounded-md py-1 text-[11.5px] font-bold transition-all ${tab === 'role' ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`}
+            >
+              역할
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setTab('org')}
@@ -975,6 +943,24 @@ function UserPickList({
               <UserPickItem key={u.id} user={u} onPick={toggleSelect} isSelected={selectedIds.includes(u.id)} isMulti={isMultiSelect} />
             ))}
             {list.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">검색 결과가 없습니다.</div>}
+          </div>
+        ) : tab === 'role' && roles ? (
+          /* 역할(직속 상급자·부서장 등) — 결재선 규칙 설정 전용 */
+          <div className="space-y-0.5">
+            {roles.map((r) => {
+              const on = selectedIds.includes(r.token);
+              return (
+                <button
+                  key={r.token}
+                  type="button"
+                  onClick={() => toggleSelect(r.token)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${on ? 'bg-teal-soft/50' : 'hover:bg-panel-alt'}`}
+                >
+                  <span className="text-[12px] font-semibold text-ink">{r.label}</span>
+                  <span className="ml-2 truncate text-[10.5px] text-ink3">{r.desc}</span>
+                </button>
+              );
+            })}
           </div>
         ) : tab === 'org' ? (
           /* 조직도 트리 뷰 */

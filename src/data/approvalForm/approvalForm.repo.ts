@@ -153,6 +153,8 @@ export const approvalFormRepo = {
         ? form.securityLevel
         : '일반',
       visibility: form.visibility === '비공개' ? '비공개' : '부서',
+      // 설정을 건드린 서식만 보냄(건드리지 않은 서식 저장은 예전과 같음)
+      ...(typeof form.hideDocInfoOnComplete === 'boolean' ? { hideDocInfoOnComplete: form.hideDocInfoOnComplete } : {}),
     };
 
     const parsed = approvalFormSchema.parse(sanitized);

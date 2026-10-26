@@ -133,7 +133,7 @@ export default function RetireModal({ open, user, onClose, onDone }: RetireModal
                 ))}
               </ul>
               <div className="mt-2 text-[10.5px] text-amber-700">
-                퇴직 처리 후 해당 문서는 <b>대결/전결자 지정</b> 또는 <b>결재선 교체</b>로 별도
+                퇴직 처리 후 해당 문서는 <b>대결자 지정</b> 또는 <b>결재선 교체</b>로 별도
                 처리해야 합니다. (자동 대체는 다음 단계에서 지원)
               </div>
             </div>

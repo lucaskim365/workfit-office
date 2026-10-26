@@ -293,6 +293,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('docFooter', 256),
       S('logoUrl', 512),
       S('logoPath', 256),
+      S('sealUrl', 512),
+      S('sealPath', 256),
       BOOL('mask', true),
     ],
     indexes: [],
@@ -511,6 +513,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('preservationPeriod', 32),
       S('securityLevel', 16),
       S('visibility', 16),
+      BOOL('hideDocInfoOnComplete'),
     ],
     indexes: [IX('code', ['code'])],
   },
@@ -533,6 +536,28 @@ const COLLECTIONS: CollectionDef[] = [
       J('steps'), // array of routeStep
     ],
     indexes: [IX('docType', ['docType']), IX('priority', ['priority'])],
+  },
+  {
+    id: 'poArchiveReplies',
+    name: '발주서 회신 문서',
+    /*
+      문서관리 > 발주서 보관함의 회신본(거래처 직인이 찍힌 최종본). 문서당 1건, $id = 결재 문서 ID.
+      보관함 목록 자체는 approvalDocs(완료·발주 서식)에서 골라 보여 주므로 여기엔 회신 메타만 있다.
+      실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/ 아래.
+    */
+    attributes: [
+      S('docId', 64, true),
+      S('docNo', 64, true),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 100),
+      S('uploadedBy', 64, true),
+      S('uploadedByName', 64),
+      S('uploadedAt', 40),
+    ],
+    indexes: [],
   },
   {
     id: 'approvalFolders',
@@ -558,6 +583,25 @@ const COLLECTIONS: CollectionDef[] = [
       S('grade', 16),
     ],
     indexes: [IX('type', ['type'])],
+  },
+  {
+    id: 'bizVendorProjects',
+    name: '도입기업-사업 연결',
+    /*
+      사업관리 › 도입기업 정보. 도입기업(vendors.code) ↔ 사업(workProjects.id) 연결표.
+      $id = `${vendorCode}__${projectId}` 라 같은 연결은 두 번 생기지 않는다. role = 발주처·매입처·외주.
+      vendors·workProjects 에는 칸을 더하지 않는다 — 연결은 전부 여기에만 있다.
+    */
+    attributes: [
+      S('id', 128, true),
+      S('vendorCode', 64, true),
+      S('projectId', 64, true),
+      EN('role', ['발주처', '매입처', '외주']),
+      S('note', 200),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+    ],
+    indexes: [IX('bvpVendor', ['vendorCode']), IX('bvpProject', ['projectId'])],
   },
   {
     id: 'items',

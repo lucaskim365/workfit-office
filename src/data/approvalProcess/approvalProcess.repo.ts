@@ -9,20 +9,12 @@ export interface ProcessOption {
 }
 
 export const DEFAULT_PROCESS_OPTIONS: ProcessOption[] = [
-  // 1. 결재 프로세스 (대결/전결/후결/선결)
+  // 1. 결재 프로세스 (대결/후결/선결) — 전결은 2026-10-23 시스템에서 없앴다
   {
     id: 'proxy_approval',
     category: '결재 프로세스',
     name: '대결자 지정',
     description: '결재자 휴가/출장 등 부재 등록 및 기본 대결자를 설정하여 결재를 자동 대행하는 프로세스를 사용합니다.',
-    enabled: true,
-    isImplemented: true,
-  },
-  {
-    id: 'arbitrary_decision',
-    category: '결재 프로세스',
-    name: '전결 승인',
-    description: '서식 및 규칙별 전결 기준 충족 시, 전결권자의 승인으로 최종 승인 또는 차상급 결재를 전결 처리합니다.',
     enabled: true,
     isImplemented: true,
   },
@@ -143,8 +135,8 @@ export const approvalProcessRepo = {
         isImplemented: doc.isImplemented,
       }));
 
-      // DEFAULT_PROCESS_OPTIONS의 순서를 기준으로 정렬 (순서 보장)
-      return storedOptions.sort((a, b) => {
+      // DEFAULT_PROCESS_OPTIONS의 순서를 기준으로 정렬 (순서 보장). 없앤 항목(예: 전결 승인)은 DB에 남아 있어도 빼고 보인다.
+      return storedOptions.filter((o) => DEFAULT_PROCESS_OPTIONS.some((d) => d.id === o.id)).sort((a, b) => {
         const idxA = DEFAULT_PROCESS_OPTIONS.findIndex((x) => x.id === a.id);
         const idxB = DEFAULT_PROCESS_OPTIONS.findIndex((x) => x.id === b.id);
         return idxA - idxB;

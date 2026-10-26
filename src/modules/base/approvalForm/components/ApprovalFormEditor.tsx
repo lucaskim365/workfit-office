@@ -124,6 +124,14 @@ const COMPONENT_PALETTE = [
     defaultWidth: 'half' as const,
     defaultLabel: '수량',
   },
+  {
+    type: '직인' as FieldType,
+    label: '회사 직인',
+    icon: '🔴',
+    desc: '결재란 대신 결재 완료 후 회사 직인',
+    defaultWidth: 'full' as const,
+    defaultLabel: '주식회사 ○○○ 대표이사 ○○○',
+  },
 ];
 
 interface ApprovalFormEditorProps {
@@ -160,7 +168,7 @@ export function ApprovalFormEditor({
   // 상단 주 탭: 'design' (도구함 & 필드 속성) vs 'config' (서식 메타/보안/결재규칙)
   const [activeMainTab, setActiveMainTab] = useState<'design' | 'config'>('design');
 
-  // 결재선 규칙(전결규정) 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
+  // 결재선 규칙 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
   const [showRouteRuleModal, setShowRouteRuleModal] = useState(false);
 
   // 현재 선택된 필드 인덱스 (기본값은 0번째 필드)
@@ -237,7 +245,7 @@ export function ApprovalFormEditor({
       {
         seq: 3,
         approverId: 'dummy_exec',
-        kind: '전결',
+        kind: '결재',
         decision: '대기',
         parallelGroup: null,
         executionType: 'sequential',
@@ -767,6 +775,23 @@ export function ApprovalFormEditor({
                         />
                         <span>보안 필드</span>
                       </label>
+
+                      <label
+                        className="flex items-center gap-1.5 cursor-pointer text-ink3 hover:text-ink"
+                        title="결재 완료 후 대외 문서 모양(발주서 PDF 등)에서는 이 필드를 보이지 않음"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedField.hideOnExternal ?? false}
+                          onChange={(e) =>
+                            setField(selectedFieldIdx, {
+                              hideOnExternal: e.target.checked || undefined,
+                            })
+                          }
+                          className="text-teal focus:ring-teal h-3.5 w-3.5 rounded"
+                        />
+                        <span>대외 문서에서 숨김</span>
+                      </label>
                     </div>
 
                     {/* '선택' 타입일 때 세부 옵션 */}
@@ -888,6 +913,18 @@ export function ApprovalFormEditor({
                     className={inp}
                   />
                 </F>
+                <label className="flex cursor-pointer items-start gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    checked={!!form.hideDocInfoOnComplete}
+                    onChange={(e) => set({ hideDocInfoOnComplete: e.target.checked })}
+                    className="mt-0.5 accent-teal"
+                  />
+                  <span>
+                    <span className="font-semibold text-ink">대외 문서 — 결재 완료 문서는 서식 본문만 표시</span>
+                    <span className="block text-[10.5px] text-ink3">상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명을 숨깁니다 (발주서 보관함·PDF 포함)</span>
+                  </span>
+                </label>
               </div>
 
               {/* 기안 권한 및 보안 설정 */}
@@ -937,7 +974,7 @@ export function ApprovalFormEditor({
                 <div className="rounded-xl border border-border bg-panel p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-[12.5px] font-bold text-ink">결재선(전결) 규칙 설정</div>
+                      <div className="text-[12.5px] font-bold text-ink">결재선 규칙 설정</div>
                       <div className="text-[10.5px] text-ink3 mt-0.5">
                         등록된 서식 전용 규칙: <span className="text-teal font-bold">{formRulesCount}개</span>
                       </div>
