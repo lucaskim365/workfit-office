@@ -12,7 +12,7 @@ function serverFixture() {
     admin: { apps: [{}], messaging: () => ({
       sendEachForMulticast: async (payload) => {
         sent.push(payload);
-        return { successCount: payload.tokens.length };
+        return { successCount: payload.tokens.length, responses: payload.tokens.map(() => ({ success: true })) };
       },
     }) },
   });
@@ -39,6 +39,8 @@ test('채팅 발송: 발신자 제외, 이름·미리보기 전달, 기존 모�
   assert.equal(payload.data.body, '회의 시작합니다');
   assert.equal(payload.android.notification.body, payload.data.body);
   assert.equal(payload.apns.payload.aps.alert.title, payload.data.title);
+  // 웹 푸시(PWA)는 높은 우선순위 — 잠긴 휴대폰·절전 상태에서도 늦지 않게
+  assert.equal(payload.webpush.headers.Urgency, 'high');
 });
 
 test('미리보기: 긴 내용·이모지·빈 메시지·첨부를 처리하고 시스템 메시지는 발송하지 않음', async () => {

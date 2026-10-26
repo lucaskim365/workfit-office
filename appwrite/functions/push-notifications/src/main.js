@@ -43,6 +43,13 @@ async function getUserTokens(dbs, DB, uid, log) {
   }
 }
 
+/**
+ * 웹 푸시(PWA·PC 브라우저) 우선순위 — android/apns 설정은 네이티브 앱용이라 웹 토큰에는 적용되지 않는다.
+ * Urgency 를 주지 않으면 '보통'으로 가서, 잠긴 휴대폰·절전 상태에서 늦게 오거나 묶이거나 빠진다.
+ * TTL: 기기가 꺼져 있어도 하루 동안은 보관했다가 전달한다.
+ */
+const WEBPUSH_HIGH = { headers: { Urgency: 'high', TTL: '86400' } };
+
 const DEAD_TOKEN_CODES = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']);
 
 /** 만료된 토큰을 그 사람의 목록·단일 칸에서 뺀다. fcmTokens 칸이 없는 DB면 단일 칸만 정리한다. */
@@ -136,6 +143,7 @@ async function handleChatMessage(msg, dbs, DB, log) {
     data: { roomId: String(roomId), roomName: String(room.name), title: String(title), body: String(body) },
     android: { priority: 'high', notification: { title, body, channelId: 'workfit_messages' } },
     apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
+    webpush: WEBPUSH_HIGH,
   }, owners, dbs, DB, log);
   log(`chat push: ${res.successCount}/${res.total} room ${roomId}`);
   return { sent: res.successCount, total: res.total };
@@ -173,6 +181,7 @@ async function handleNotification(noti, dbs, DB, log) {
       },
       android: { priority: 'high', notification: { title, body, channelId } },
       apns: { payload: { aps: { alert: { title, body }, sound: 'default' } } },
+      webpush: WEBPUSH_HIGH,
     }, new Map(tokens.map((t) => [t, userId])), dbs, DB, log);
     log(`noti push → ${userId} (${type}) ${res.successCount}/${res.total}`);
     return { sent: res.successCount, total: res.total, user: userId };
