@@ -77,4 +77,10 @@ export const poReplyRepo = {
   async downloadUrl(reply: PoReply): Promise<string> {
     return reply.url;
   },
+
+  /** 회신 문서 삭제 — 메타를 먼저 지우고 파일은 best-effort 로 지운다(파일만 남는 건 목록에 안 보여 무해). */
+  async remove(reply: PoReply): Promise<void> {
+    await backend.remove(reply.docId);
+    if (reply.storagePath) await fileStorage.remove(reply.storagePath).catch(() => undefined);
+  },
 };
