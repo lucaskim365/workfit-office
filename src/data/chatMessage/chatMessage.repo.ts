@@ -203,10 +203,10 @@ class AppwriteBackend implements ChatMessageBackend {
     });
   }
 
-  /** 조건에 맞는 문서 전건(100건씩 페이지). */
+  /** 조건에 맞는 문서 전건. 한 번에 1000건 — 방 하나는 대개 한 번 요청으로 끝난다(휴대폰은 요청 왕복이 길다). */
   private async loadRows(queries: string[]): Promise<AppwriteRow[]> {
     const out: AppwriteRow[] = [];
-    const PAGE = 100;
+    const PAGE = 1000;
     for (let offset = 0; ; offset += PAGE) {
       const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [
         ...queries,

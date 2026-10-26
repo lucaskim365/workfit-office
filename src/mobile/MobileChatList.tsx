@@ -6,6 +6,7 @@ import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/use
 import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
 import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
 import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
+import { usePrefetchChatThread } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import MobileNotificationBell from './MobileNotificationBell';
@@ -28,6 +29,7 @@ export default function MobileChatList() {
   const { data: rooms = [] } = useChatRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const drafts = useChatDrafts(me);
+  const prefetchThread = usePrefetchChatThread();
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
   const { meta: presenceMeta, presence: myPresence } = useMyPresence();
@@ -184,6 +186,7 @@ export default function MobileChatList() {
               className={`flex items-center border-b border-black/5 bg-white active:bg-black/5 ${isPinned ? 'bg-[#f2f8fc]' : ''}`}
             >
               <button
+                onPointerDown={() => prefetchThread(r.id)}
                 onClick={() => nav(`/m/room/${r.id}`)}
                 className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
               >

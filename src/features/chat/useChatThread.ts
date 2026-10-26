@@ -7,6 +7,7 @@ import { notificationRepo } from '@/data/notification/notification.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
 import { buildAttachmentBatch } from './attachmentBatch';
+import { useChatRealtime } from './chatRealtime';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -16,12 +17,27 @@ export const CHAT_THREAD_KEY = 'chatThread';
 
 /** 방의 메시지(시간 오름차순). */
 export function useChatThread(roomId?: string) {
+  useChatRealtime();
   return useQuery({
     queryKey: [CHAT_THREAD_KEY, roomId ?? null],
     queryFn: () => chatMessageRepo.listByRoom(roomId!),
     enabled: !!roomId,
     refetchInterval: CHAT_POLL_MS,
   });
+}
+
+/**
+ * 방 메시지 미리 받기 — 목록에서 방을 누르는 순간(손가락이 닿을 때) 시작해, 방 화면이 뜰 때 이미 받아 둔 상태로.
+ * 방금 받은 게 있으면 다시 받지 않는다.
+ */
+export function usePrefetchChatThread() {
+  const qc = useQueryClient();
+  return (roomId: string) =>
+    void qc.prefetchQuery({
+      queryKey: [CHAT_THREAD_KEY, roomId],
+      queryFn: () => chatMessageRepo.listByRoom(roomId),
+      staleTime: CHAT_POLL_MS,
+    });
 }
 
 interface SendVars {
