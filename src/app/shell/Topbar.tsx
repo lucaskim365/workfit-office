@@ -53,6 +53,7 @@ function Brand({ logoUrl, onLogoClick }: { logoUrl?: string; onLogoClick?: () =>
 
 export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, userOpen, setUserOpen, onPick, dockOpen, setDockOpen }: TopbarProps) {
   const [themeOpen, setThemeOpen] = useState(false);
+  const viewportWidth = useVisibleViewportWidth();
   // 열린 드롭다운이 화면 좌/우 가장자리를 넘어가면 안쪽으로 밀어주는 보정값(px).
   const panelRef = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(0);
@@ -151,7 +152,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
         color: 'var(--color-header-text)',
         // 본문이 창보다 넓어 가로 스크롤이 생겨도 상단바는 보이는 창 너비에 고정한다 —
         // 오른쪽 알림·프로필 아이콘이 늘 창 오른쪽 끝에 보인다.
-        width: 'calc(100vw / var(--font-scale, 1))',
+        // 100vw 는 세로 스크롤바 너비까지 포함해 그만큼 페이지를 넘치게 하므로, 스크롤바를 뺀 너비를 잰다.
+        width: viewportWidth ? `calc(${viewportWidth}px / var(--font-scale, 1))` : 'calc(100vw / var(--font-scale, 1))',
       }}
       /*
         @container — 창이 좁아지면 왼쪽(테스트 계정 글자 → 로고 글자 → 메뉴 글자)부터 줄인다.
@@ -418,4 +420,22 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
       {themeOpen && <ThemeCustomizerModal open={themeOpen} onClose={() => setThemeOpen(false)} />}
     </header>
   );
+}
+
+/** 세로 스크롤바를 뺀 보이는 창 너비(화면 배율 적용 전 px). 스크롤바가 생기고 없어질 때도 다시 잰다. */
+function useVisibleViewportWidth(): number | null {
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const measure = () => setWidth(root.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return width;
 }
