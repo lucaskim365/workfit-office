@@ -393,6 +393,13 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    // 식권 대장(그룹웨어 > 식권 대장). 날짜당 문서 하나($id = MT-YYYY-MM-DD). 발행·남은 수는 저장하지 않고 계산한다.
+    id: 'mealTickets',
+    name: '식권 대장',
+    attributes: [S('date', 10, true), INT('stockIn', false, 0, 0, 1000000), SA('recipients', 64), S('memo', 500), S('updatedBy', 64), S('updatedAt', 40)],
+    indexes: [UQ('date', ['date'])],
+  },
+  {
     id: 'companySites',
     name: '사업장',
     attributes: [S('name', 128, true), S('kind', 32, true), S('addr', 256), S('tel', 32), S('mgr', 64), BOOL('active', true)],

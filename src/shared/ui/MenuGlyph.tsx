@@ -41,6 +41,7 @@ import {
   BarChart3,
   PhoneCall,
   Check,
+  Ticket,
 } from 'lucide-react';
 
 /** 유니코드 이모지/키 → Lucide SVG 아이콘 컴포넌트 매핑 */
@@ -83,6 +84,8 @@ const LUCIDE_GLYPHS: Record<string, ComponentType<LucideProps>> = {
   '🗓': CalendarDays,
   '🗓️': CalendarDays,
   'work-plan': CalendarDays,
+  '🎫': Ticket,
+  'meal-ticket': Ticket,
 
   // 자원예약, 설문, 업무 서브 탭
   '🧾': Receipt,

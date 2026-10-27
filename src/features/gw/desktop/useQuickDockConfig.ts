@@ -14,6 +14,7 @@ export const DEFAULT_NORMAL_MODULE_KEYS = [
   'survey',     // 전자설문
   'orgchart',   // 조직도
   'document',   // 문서관리
+  'meal-ticket', // 식권 대장
 ] as const;
 
 const STORAGE_PREFIX = 'workfit_quickdock_normal_order_';

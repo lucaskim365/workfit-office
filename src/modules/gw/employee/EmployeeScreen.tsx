@@ -801,7 +801,7 @@ export default function EmployeeScreen() {
             </div>
 
             {/* 임직원 목록 테이블 */}
-            <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
+            <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel [contain:inline-size]">
               <table className="w-full text-left border-collapse text-[11.5px]">
                 <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2 whitespace-nowrap">
                   <tr>

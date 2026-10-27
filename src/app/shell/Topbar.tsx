@@ -166,7 +166,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             if (m.use === false) return false;
             if (m.id === 'M_MSG' || m.id === 'M_WIDDY') return true;
             if (m.id === 'M_GW') {
-              const gwScreens = ['/gw/approval', '/gw/leave', '/gw/calendar', '/gw/mail', '/gw/resource', '/gw/survey', '/gw/board', '/gw/community', '/gw/document', '/gw/employee', '/gw/task', '/gw/work-plan', '/gw/orgchart', '/gw/commute', '/gw/gallery'];
+              const gwScreens = ['/gw/approval', '/gw/leave', '/gw/calendar', '/gw/mail', '/gw/resource', '/gw/survey', '/gw/board', '/gw/community', '/gw/document', '/gw/employee', '/gw/task', '/gw/work-plan', '/gw/orgchart', '/gw/commute', '/gw/gallery', '/gw/meal-ticket'];
               return gwScreens.some((url) => canAccess(url));
             }
             const accessibleCount = (m.children ?? [])

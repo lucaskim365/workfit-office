@@ -52,6 +52,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_GW_EMPLOYEE', name: '인명관리', url: '/gw/employee', category: 'GW', desc: '임직원 연락처 및 프로필 검색', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_ORGCHART', name: '조직도', url: '/gw/orgchart', category: 'GW', desc: '조직 계층도 및 부서원 조회', supportedActions: ['access'] },
   { id: 'S_GW_GALLERY', name: '회사 갤러리', url: '/gw/gallery', category: 'GW', desc: '사내 행사 및 전사 갤러리 공유', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_GW_MEAL_TICKET', name: '식권 대장', url: '/gw/meal-ticket', category: 'GW', desc: '날짜별 식권 수령자 체크, 입고·남은 식권 관리', supportedActions: ['access', 'update'] },
 
   // 2. 경영 현황 (1개)
   { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', category: 'EXEC', desc: '경영 지표 및 전사 KPI 요약', supportedActions: ['access', 'update'] },
