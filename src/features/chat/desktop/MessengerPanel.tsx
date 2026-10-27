@@ -29,6 +29,7 @@ import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
+import { ProfileCardHost, useOpenProfileCard } from './ProfileCard';
 
 /** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
 export function fmtTime(iso?: string): string {
@@ -194,14 +195,16 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
 
   if (openRoom) {
     return (
-      <MessengerThread
-        room={openRoom}
-        me={me}
-        meName={meName}
-        isAdmin={isAdmin}
-        users={users}
-        onBack={() => setOpenRoomId(null)}
-      />
+      <ProfileCardHost me={me} meName={meName} onOpenRoom={handleCreated}>
+        <MessengerThread
+          room={openRoom}
+          me={me}
+          meName={meName}
+          isAdmin={isAdmin}
+          users={users}
+          onBack={() => setOpenRoomId(null)}
+        />
+      </ProfileCardHost>
     );
   }
 
@@ -384,6 +387,7 @@ function MessengerThread({
 }) {
   const displayName = getRoomDisplayName(room, me, users);
   const presenceMap = useAllUserPresences();
+  const openProfile = useOpenProfileCard();
   const { data: messages = [] } = useChatThread(room.id);
   const { data: rooms = [] } = useChatRooms(me);
   const markRead = useMarkRead();
@@ -747,9 +751,19 @@ function MessengerThread({
           <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
             <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
             <div className="relative shrink-0">
-              <span className="grid h-8 w-8 place-items-center rounded-[10px] text-[14px] font-bold" style={{ background: room.color + '22', color: room.color }}>
+              {/* 방 사진 — 단체방은 참여자 목록 열고 닫기, 1:1은 상대 명함 */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  if (!isDirect) setShowMemberList((prev) => !prev);
+                  else if (otherId) openProfile?.(otherId, e.currentTarget, displayName);
+                }}
+                title={isDirect ? `${displayName} 프로필` : showMemberList ? '참여자 목록 닫기' : '참여자 목록 보기'}
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-[10px] text-[14px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50"
+                style={{ background: room.color + '22', color: room.color }}
+              >
                 {isDirect ? displayName[0] : '👥'}
-              </span>
+              </button>
               {isDirect && <PresenceDot presence={otherPresence} size="md" />}
             </div>
             <div className="min-w-0 flex-1 ml-0.5">
@@ -845,7 +859,13 @@ function MessengerThread({
               const p = presenceMap[m.id];
               return (
                 <div key={m.id} className="flex items-center justify-between gap-2 text-[11.5px]">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    type="button"
+                    disabled={!openProfile}
+                    onClick={(e) => openProfile?.(m.id, e.currentTarget, m.name)}
+                    title={`${m.name} 프로필`}
+                    className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-black/5 disabled:cursor-default"
+                  >
                     <div className="relative shrink-0">
                       <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
                         {m.name?.[0] ?? '?'}
@@ -856,7 +876,7 @@ function MessengerThread({
                     <BirthdayMark userId={m.id} />
                     <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
                     <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
-                  </div>
+                  </button>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {p && (
                       <PresenceBadge presence={p} showMessage={true} size="xs" />
@@ -1148,7 +1168,8 @@ function MessageContextMenuPortal({
   ) : null;
   const [pos, setPos] = useState({ x: activeMenu.x, y: activeMenu.y });
 
-  useEffect(() => {
+  // 화면을 그리기 전에 위치를 맞춘다 — useEffect 면 누른 자리에 한 번 그려진 뒤 옮겨져 튀어 보인다
+  useLayoutEffect(() => {
     if (!menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
     const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
@@ -1189,7 +1210,7 @@ function MessageContextMenuPortal({
         bottom: 'auto',
         margin: 0,
       }}
-      className="fixed z-[99999] min-w-[150px] rounded-lg py-1 text-[11.5px] font-medium outline-none select-none animate-in fade-in zoom-in-95 duration-75"
+      className="fixed z-[99999] min-w-[150px] rounded-lg py-1 text-[11.5px] font-medium outline-none select-none"
       onClick={onClose}
     >
       {/* 이모지 리액션 단축 5종 */}
@@ -1302,6 +1323,7 @@ function CompositeMessageBubble({
 }) {
   const m = item.message;
   const presenceMap = useAllUserPresences();
+  const openProfile = useOpenProfileCard();
   const mine = m.senderId === me;
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
@@ -1331,14 +1353,30 @@ function CompositeMessageBubble({
         {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
         {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
-            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+            <button
+              type="button"
+              disabled={!openProfile || !m.senderId}
+              onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
+              title={`${m.senderName ?? ''} 프로필`}
+              style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }}
+              className="grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
+            >
               {m.senderName?.[0] ?? '?'}
-            </span>
+            </button>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!openProfile || !m.senderId}
+              onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
+              className="mb-0.5 block cursor-pointer text-[10px] text-ink3 hover:text-ink hover:underline disabled:cursor-default disabled:no-underline"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
             <button
               type="button"
@@ -1450,6 +1488,7 @@ function MessageBubble({
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
   const presenceMap = useAllUserPresences();
+  const openProfile = useOpenProfileCard();
 
   useEffect(() => {
     setEditVal(m.text);
@@ -1615,14 +1654,30 @@ function MessageBubble({
         {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
         {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
-            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+            <button
+              type="button"
+              disabled={!openProfile || !m.senderId}
+              onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
+              title={`${m.senderName ?? ''} 프로필`}
+              style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }}
+              className="grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
+            >
               {m.senderName?.[0] ?? '?'}
-            </span>
+            </button>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!openProfile || !m.senderId}
+              onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
+              className="mb-0.5 block cursor-pointer text-[10px] text-ink3 hover:text-ink hover:underline disabled:cursor-default disabled:no-underline"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
             <button
               type="button"

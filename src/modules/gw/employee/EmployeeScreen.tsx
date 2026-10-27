@@ -800,22 +800,23 @@ export default function EmployeeScreen() {
               </div>
             </div>
 
-            {/* 임직원 목록 테이블 */}
-            <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel [contain:inline-size]">
-              <table className="w-full text-left border-collapse text-[11.5px]">
+            {/* 임직원 목록 테이블 — 표 영역이 좁으면 덜 중요한 열부터 숨긴다(상세 창에서 볼 수 있음).
+                @container(inline-size 격리)라 표가 넓어도 페이지 너비를 밀어내지 않고 이 안에서만 가로 스크롤된다. */}
+            <div className="@container flex-1 overflow-auto rounded-lg border border-border bg-panel">
+              <table className="w-full whitespace-nowrap text-left border-collapse text-[11.5px]">
                 <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2 whitespace-nowrap">
                   <tr>
-                    <th className="py-2.5 px-3 text-center w-12">사진</th>
+                    <th className="hidden @min-[1030px]:table-cell py-2.5 px-3 text-center w-12">사진</th>
                     <th className="py-2.5 px-3 w-28">사번</th>
                     <th className="py-2.5 px-3 w-28">이름</th>
                     <th className="py-2.5 px-3 min-w-[140px]">부서</th>
                     <th className="py-2.5 px-3 w-24">직급</th>
                     <th className="py-2.5 px-3 w-24">직책</th>
-                    <th className="py-2.5 px-3 min-w-[180px]">업무 이메일</th>
-                    <th className="py-2.5 px-3 min-w-[180px]">개인 이메일</th>
-                    <th className="py-2.5 px-3 w-36">연락처</th>
+                    <th className="hidden @min-[680px]:table-cell py-2.5 px-3 min-w-[180px]">업무 이메일</th>
+                    <th className="hidden @min-[1030px]:table-cell py-2.5 px-3 min-w-[180px]">개인 이메일</th>
+                    <th className="hidden @min-[820px]:table-cell py-2.5 px-3 w-36">연락처</th>
                     <th className="py-2.5 px-3 text-center w-20">재직상태</th>
-                    <th className="py-2.5 px-3 text-center w-24">근태관리</th>
+                    <th className="hidden @min-[820px]:table-cell py-2.5 px-3 text-center w-24">근태관리</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -830,7 +831,7 @@ export default function EmployeeScreen() {
                             isSelected ? 'bg-teal-soft/10 font-semibold' : ''
                           }`}
                         >
-                          <td className="py-2 px-3 text-center">
+                          <td className="hidden @min-[1030px]:table-cell py-2 px-3 text-center">
                             <span className="mx-auto grid h-6.5 w-6.5 place-items-center rounded-full bg-teal-soft text-[10.5px] font-bold text-teal">
                               {e.name[0]}
                             </span>
@@ -861,9 +862,9 @@ export default function EmployeeScreen() {
                           </td>
                           <td className="py-2 px-3 text-[11.5px] text-ink2 whitespace-nowrap">{e.position}</td>
                           <td className="py-2 px-3 text-[11.5px] text-ink3 whitespace-nowrap">{e.duty}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">{e.email || '-'}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.personalEmail || '-'}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
+                          <td className="hidden @min-[680px]:table-cell py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">{e.email || '-'}</td>
+                          <td className="hidden @min-[1030px]:table-cell py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.personalEmail || '-'}</td>
+                          <td className="hidden @min-[820px]:table-cell py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
                           <td className="py-2 px-3 text-center">
                             <span
                               className={`inline-block rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
@@ -885,7 +886,7 @@ export default function EmployeeScreen() {
                                 : '재직'}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="hidden @min-[820px]:table-cell py-2 px-3 text-center">
                             <span
                               className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
                                 e.isAttendanceTarget

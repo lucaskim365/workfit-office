@@ -99,9 +99,10 @@ export const LightboxViewer: React.FC<LightboxViewerProps> = ({
 
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative flex max-h-[calc(92vh/var(--font-scale,1))] max-w-5xl w-full flex-col overflow-hidden rounded-3xl bg-panel shadow-2xl animate-in zoom-in-95 duration-200"
+        className="content-scroll relative flex max-h-[calc(92vh/var(--font-scale,1))] max-w-5xl w-full flex-col overflow-y-auto overscroll-contain rounded-3xl bg-panel shadow-2xl animate-in zoom-in-95 duration-200"
       >
-        <div className="relative flex max-h-[calc(65vh/var(--font-scale,1))] min-h-[350px] w-full items-center justify-center bg-black/95 overflow-hidden">
+        {/* 작은 화면에서 창이 화면보다 길면 아래 정보·버튼이 잘리지 않게 창 안에서 스크롤한다 — 사진 크기는 그대로, 각 영역은 줄어들지 않음 */}
+        <div className="relative flex max-h-[calc(65vh/var(--font-scale,1))] min-h-[350px] w-full shrink-0 items-center justify-center bg-black/95 overflow-hidden">
           <img
             src={activeItem.images[activeImageIndex] || activeItem.images[0]}
             alt={activeItem.caption || activeItem.description || '갤러리 사진'}
@@ -119,7 +120,7 @@ export const LightboxViewer: React.FC<LightboxViewerProps> = ({
         </div>
 
         {activeItem.images.length > 1 && (
-          <div className="flex items-center gap-2 overflow-x-auto bg-panel-alt/50 px-4 py-2 border-t border-border/50">
+          <div className="flex shrink-0 items-center gap-2 overflow-x-auto bg-panel-alt/50 px-4 py-2 border-t border-border/50">
             {activeItem.images.map((img, idx) => (
               <button
                 key={idx}
@@ -137,8 +138,8 @@ export const LightboxViewer: React.FC<LightboxViewerProps> = ({
           </div>
         )}
 
-        <div className="flex flex-col justify-between p-5 bg-panel border-t border-border">
-          <div className="flex items-start justify-between gap-4">
+        <div className="flex shrink-0 flex-col justify-between p-5 bg-panel border-t border-border">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="rounded-md bg-teal-soft px-2.5 py-1 text-xs font-bold text-teal">
