@@ -474,7 +474,7 @@ export default function MobileModuleLauncher() {
                   onClick={() => nav(item.path)}
                   className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3 text-left shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all active:scale-97 cursor-pointer"
                 >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 transition-colors group-hover:bg-teal-50 group-hover:text-teal">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 transition-colors group-hover:bg-teal-50 group-hover:text-teal">
                     <IconComponent size={18} strokeWidth={2.1} />
                   </div>
 

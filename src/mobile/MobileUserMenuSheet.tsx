@@ -101,7 +101,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
         {/* 상단 드래그 핸들 & 닫기 버튼 */}
         <div className="relative flex items-center justify-between border-b border-black/5 px-5 py-3.5 dark:border-white/10">
           <div className="flex-1" />
-          <div className="h-1.5 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div className="h-1.5 w-10 rounded-full bg-slate-200" />
           <div className="flex flex-1 justify-end">
             <button
               type="button"
@@ -225,13 +225,13 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
                 }}
                 placeholder="상태 메시지 입력 (예: 3시까지 미팅)"
                 maxLength={50}
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
               />
               {msgInput && (
                 <button
                   type="button"
                   onClick={handleMsgClear}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-500 hover:bg-slate-100"
                   title="지우기"
                 >
                   삭제
@@ -259,7 +259,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
                     key={preset}
                     type="button"
                     onClick={() => handlePresetClick(preset)}
-                    className="rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition-all hover:border-teal-400 hover:text-teal-700 active:scale-95 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                    className="rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition-all hover:border-teal-400 hover:text-teal-700 active:scale-95"
                   >
                     {preset}
                   </button>

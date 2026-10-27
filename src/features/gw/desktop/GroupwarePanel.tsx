@@ -387,7 +387,7 @@ export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; o
                   >
                     <span className="truncate">{a.l}</span>
                     {!enabled ? (
-                      <span className="shrink-0 rounded bg-slate-200 dark:bg-slate-700 px-1 py-[1px] text-[7.5px] font-bold text-slate-600 dark:text-slate-300">
+                      <span className="shrink-0 rounded bg-slate-200 px-1 py-[1px] text-[7.5px] font-bold text-slate-600">
                         준비중
                       </span>
                     ) : isEditing ? (

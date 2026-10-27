@@ -527,7 +527,7 @@ function VisualDiagramOrgChart({
                         <td className="px-5 py-1 font-bold text-slate-900">
                           <span>{m.name}</span>
                           {m.isConcurrent && !isVirtual && (
-                            <span className="ml-1.5 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                            <span className="ml-1.5 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                               겸직
                             </span>
                           )}
@@ -572,7 +572,7 @@ function VisualDiagramOrgChart({
                           <td className="px-3.5 py-0.5 font-bold text-slate-900">
                             <span>{m.name}</span>
                             {m.isConcurrent && (
-                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                 겸직
                               </span>
                             )}
@@ -612,7 +612,7 @@ function VisualDiagramOrgChart({
                           <td className="px-3.5 py-0.5 font-bold text-slate-900">
                             <span>{m.name}</span>
                             {m.isConcurrent && (
-                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                 겸직
                               </span>
                             )}
@@ -695,7 +695,7 @@ function VisualDiagramOrgChart({
                               <td className="py-1 font-bold text-slate-900">
                                 <span>{m.name}</span>
                                 {m.isConcurrent && (
-                                  <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                  <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                     겸직
                                   </span>
                                 )}

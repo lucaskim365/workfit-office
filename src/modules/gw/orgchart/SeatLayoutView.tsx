@@ -535,7 +535,7 @@ function SeatBlockBox({
     block.kind === 'label'
       ? 'border border-transparent'
       : block.kind === 'room'
-        ? 'border border-slate-500/70 bg-slate-100/80 dark:bg-slate-800/40'
+        ? 'border border-slate-500/70 bg-slate-100/80'
         : 'border border-slate-500/70 bg-panel';
 
   return (

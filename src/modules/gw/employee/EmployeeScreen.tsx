@@ -771,7 +771,7 @@ export default function EmployeeScreen() {
                                   ).length;
                                   if (concCount > 0) {
                                     return (
-                                      <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                      <span className="rounded bg-slate-200 px-1.5 py-0.2 text-[9.5px] font-bold text-slate-700 border border-slate-300">
                                         +{concCount}겸직
                                       </span>
                                     );
@@ -931,7 +931,7 @@ export default function EmployeeScreen() {
                           className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${
                             selectedEmp.isAttendanceTarget
                               ? 'border-teal/20 bg-teal-soft/20 text-teal'
-                              : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                              : 'border-slate-300 bg-slate-100 text-slate-600'
                           }`}
                         >
                           {selectedEmp.isAttendanceTarget ? '대상 (ON)' : '제외 (OFF)'}
@@ -995,7 +995,7 @@ export default function EmployeeScreen() {
                                   className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
                                     m.isPrimary
                                       ? 'bg-teal-soft text-teal border border-teal/20'
-                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600'
+                                      : 'bg-slate-200 text-slate-700 border border-slate-300'
                                   }`}
                                 >
                                   {m.isPrimary ? '주소속' : '겸직'}
@@ -1309,7 +1309,7 @@ export default function EmployeeScreen() {
                   className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
                     newEmpIsAttendanceTarget
                       ? 'border-teal bg-teal text-white shadow-xs'
-                      : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      : 'border-slate-300 bg-slate-100 text-slate-600'
                   }`}
                 >
                   <span>{newEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
@@ -1566,7 +1566,7 @@ export default function EmployeeScreen() {
                       className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
                         editEmpIsAttendanceTarget
                           ? 'border-teal bg-teal text-white shadow-xs'
-                          : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          : 'border-slate-300 bg-slate-100 text-slate-600'
                       }`}
                     >
                       <span>{editEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
@@ -1597,7 +1597,7 @@ export default function EmployeeScreen() {
                               className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-1.5 text-[11px]"
                             >
                               <div className="flex items-center gap-2">
-                                <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9.5px] font-bold text-slate-700 border border-slate-300">
                                   겸직
                                 </span>
                                 <span className="font-semibold text-ink">{m.deptName}</span>

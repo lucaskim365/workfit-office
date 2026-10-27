@@ -1572,7 +1572,7 @@ function DocDetail({
                       key={idx}
                       className={`rounded-lg p-2.5 border ${isReject
                           ? 'border-danger/30 bg-danger/5'
-                          : 'border-border/60 bg-white dark:bg-zinc-800 shadow-2xs'
+                          : 'border-border/60 bg-panel shadow-2xs'
                         }`}
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
@@ -1659,7 +1659,7 @@ function DocDetail({
               <span>인쇄</span>
             </button>
           </div>
-          <div className="overflow-x-auto rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
+          <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm p-3 sm:p-4">
             <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>
