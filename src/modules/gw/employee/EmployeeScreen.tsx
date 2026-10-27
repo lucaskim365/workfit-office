@@ -27,6 +27,9 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import type { Department } from '@/domain/department/schema';
 import { isDeptHeadTitle, releaseDeptHeadOnLeave, syncDeptHeadFromTitle } from '@/data/orgSync/orgSync';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
+import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
 
 export default function EmployeeScreen() {
   const { isAdmin } = usePermission();
@@ -51,6 +54,20 @@ export default function EmployeeScreen() {
     return window.confirm(
       `'${dept.name}' 부서장이 ${nameOf(dept.headUserId)}에서 ${nameOf(userId)}(으)로 바뀝니다.\n${nameOf(dept.headUserId)}은(는) '${dept.name}' 부서장 직책에서 내려갑니다. 진행할까요?`,
     );
+  };
+  /**
+   * 본직 부서 발령 시 그 부서 단체방에 초대한다. 이전 부서방에서는 빼지 않는다(나가기는 본인이 한다).
+   * 메신저 쪽 실패가 인사 저장을 실패로 보이게 하지 않도록 경고만 남긴다.
+   */
+  const joinDeptRoom = async (userId: string, dept: Department) => {
+    try {
+      const roomId = await chatRoomRepo.addMemberToDeptRoom(dept.id, userId);
+      if (!roomId) return;
+      await appendSystemMessage(roomId, `부서 발령으로 ${users.find((u) => u.id === userId)?.name ?? userId}님이 초대되었습니다`);
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+    } catch (e) {
+      console.warn('부서방 초대 실패:', (e as Error)?.message || e);
+    }
   };
   /** 부서장 연동 뒤 부서·사람 화면이 새 값을 읽게 한다. */
   const refreshOrg = () => {
@@ -403,6 +420,7 @@ export default function EmployeeScreen() {
         } finally {
           refreshOrg();
         }
+        await joinDeptRoom(targetUser.id, targetDept);
       }
 
       setSelectedCreateUserId('');
@@ -529,6 +547,8 @@ export default function EmployeeScreen() {
         } finally {
           refreshOrg();
         }
+        // 다른 부서로 옮겼거나 처음 발령이면 새 부서방에 초대(퇴직 처리 중이면 제외)
+        if (prevDeptId !== targetDept.id && editEmpStatus !== 'RETIRED') await joinDeptRoom(targetUser.id, targetDept);
       }
 
       setIsEditModalOpen(false);

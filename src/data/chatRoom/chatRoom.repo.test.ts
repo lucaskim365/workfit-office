@@ -46,3 +46,19 @@ test('부서명 변경 적용은 최신 방을 다시 읽어, 이미 바뀌었�
   // 다른 브라우저가 같은 이름 변경을 또 시도 → 건너뜀(메시지 중복 방지)
   assert.equal(await chatRoomRepo.applyDeptRoomRename('RM-DEPT-T5', '[새팀] 부서 단체방'), false);
 });
+
+test('부서 발령 시 새 부서방에만 들어가고, 이전 부서방·지운 방은 그대로', async () => {
+  await save({ id: 'RM-DEPT-T6', type: 'dept', name: '[옛팀] 부서 단체방', members: ['M', 'X'] });
+  await save({ id: 'RM-DEPT-T7', type: 'dept', name: '[새팀] 부서 단체방', members: ['Y'] });
+  await save({ id: 'RM-DEPT-T8', type: 'dept', name: '[지운팀] 부서 단체방', members: ['Y'], deletedAt: '2026-10-01T00:00:00' });
+
+  assert.equal(await chatRoomRepo.addMemberToDeptRoom('T7', 'M'), 'RM-DEPT-T7');
+  assert.deepEqual((await find('RM-DEPT-T7')).members, ['Y', 'M']);
+  assert.deepEqual((await find('RM-DEPT-T6')).members, ['M', 'X']);
+
+  // 이미 있으면 다시 넣지 않는다(시스템 메시지 중복 방지), 지운 방·없는 방은 건드리지 않는다
+  assert.equal(await chatRoomRepo.addMemberToDeptRoom('T7', 'M'), null);
+  assert.equal(await chatRoomRepo.addMemberToDeptRoom('T8', 'M'), null);
+  assert.deepEqual((await find('RM-DEPT-T8')).members, ['Y']);
+  assert.equal(await chatRoomRepo.addMemberToDeptRoom('T404', 'M'), null);
+});
