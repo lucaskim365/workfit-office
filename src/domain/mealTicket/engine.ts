@@ -22,6 +22,33 @@ export type MealTicketDay = z.infer<typeof mealTicketDaySchema>;
 
 export const mealTicketId = (date: string) => `MT-${date}`;
 
+/** 받은 사람 목록에 여러 명을 넣거나 뺀다. 이미 있으면 다시 넣지 않고, 순서는 유지한다. */
+export function applyRecipients(recipients: string[], userIds: string[], received: boolean): string[] {
+  if (!received) {
+    const ids = new Set(userIds);
+    return recipients.filter((id) => !ids.has(id));
+  }
+  return [...recipients, ...userIds.filter((id, i) => !recipients.includes(id) && userIds.indexOf(id) === i)];
+}
+
+/**
+ * 표에서 두 칸 사이 사각형 범위(사람 × 날짜) — Shift+클릭용.
+ * 날짜별로 묶어 돌려준다(저장도 날짜당 한 번).
+ */
+export function rangeCells(
+  people: string[],
+  dates: string[],
+  from: { userId: string; date: string },
+  to: { userId: string; date: string },
+): Map<string, string[]> {
+  const [r1, r2] = [people.indexOf(from.userId), people.indexOf(to.userId)].sort((a, b) => a - b);
+  const [c1, c2] = [dates.indexOf(from.date), dates.indexOf(to.date)].sort((a, b) => a - b);
+  const out = new Map<string, string[]>();
+  if (r1 < 0 || c1 < 0) return out;
+  for (const date of dates.slice(c1, c2 + 1)) out.set(date, people.slice(r1, r2 + 1));
+  return out;
+}
+
 export const emptyMealTicketDay = (date: string): MealTicketDay => ({ date, stockIn: 0, recipients: [], memo: null, updatedBy: null, updatedAt: null });
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];

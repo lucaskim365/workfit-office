@@ -40,3 +40,16 @@ test('CSV — 받은 칸 O, 사람별 합계, 입고·발행·남은 식권·메
     '메모,,,"분실 1, 반납 0",',
   ]);
 });
+
+test('Shift 범위 — 두 칸 사이 사각형을 날짜별로, 거꾸로 골라도 같다', async () => {
+  const { rangeCells, applyRecipients } = await import('./engine');
+  const people = ['A', 'B', 'C', 'D'];
+  const dates = ['2026-10-01', '2026-10-02', '2026-10-03'];
+  const r = rangeCells(people, dates, { userId: 'C', date: '2026-10-03' }, { userId: 'B', date: '2026-10-02' });
+  assert.deepEqual([...r], [['2026-10-02', ['B', 'C']], ['2026-10-03', ['B', 'C']]]);
+  // 목록에 없는 사람(검색으로 걸러진 경우)은 범위를 만들지 않는다
+  assert.equal(rangeCells(people, dates, { userId: 'Z', date: '2026-10-01' }, { userId: 'A', date: '2026-10-01' }).size, 0);
+
+  assert.deepEqual(applyRecipients(['A', 'B'], ['B', 'C', 'C'], true), ['A', 'B', 'C']);
+  assert.deepEqual(applyRecipients(['A', 'B', 'C'], ['A', 'C'], false), ['B']);
+});

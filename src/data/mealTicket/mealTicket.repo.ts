@@ -1,10 +1,11 @@
 import { createCrudBackend, Query } from '@/data/_backend/crudBackend';
-import { emptyMealTicketDay, mealTicketDaySchema, mealTicketId, type MealTicketDay } from '@/domain/mealTicket/engine';
+import { applyRecipients, emptyMealTicketDay, mealTicketDaySchema, mealTicketId, type MealTicketDay } from '@/domain/mealTicket/engine';
 import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
  * 식권 대장 저장소 — mealTickets, 날짜당 문서 하나(`MT-YYYY-MM-DD`).
  * 한두 사람이 같은 날을 동시에 체크할 수 있으므로, 고칠 때마다 그날 문서를 다시 읽고 바꾼 칸만 반영해 저장한다.
+ * 한 브라우저 안에서 같은 날을 연달아 고치면(빠른 클릭·드래그) 읽기-저장이 겹쳐 앞의 변경이 사라지므로 날짜별로 차례로 처리한다.
  */
 const backend = createCrudBackend<MealTicketDay>({
   coll: 'mealTickets',
@@ -21,10 +22,22 @@ async function fresh(date: string): Promise<MealTicketDay> {
   return rows.find((d) => d.date === date) ?? emptyMealTicketDay(date);
 }
 
-async function update(date: string, change: (d: MealTicketDay) => MealTicketDay, actor: string): Promise<MealTicketDay> {
-  const next = { ...change(await fresh(date)), updatedBy: actor, updatedAt: nowLocalIso() };
-  await backend.save(next);
-  return next;
+const queues = new Map<string, Promise<unknown>>();
+
+function update(date: string, change: (d: MealTicketDay) => MealTicketDay, actor: string): Promise<MealTicketDay> {
+  const run = async () => {
+    const next = { ...change(await fresh(date)), updatedBy: actor, updatedAt: nowLocalIso() };
+    await backend.save(next);
+    return next;
+  };
+  const prev = queues.get(date) ?? Promise.resolve();
+  const job = prev.then(run, run);
+  const tail = job.catch(() => undefined);
+  queues.set(date, tail);
+  void tail.then(() => {
+    if (queues.get(date) === tail) queues.delete(date);
+  });
+  return job;
 }
 
 export const mealTicketRepo = {
@@ -33,12 +46,9 @@ export const mealTicketRepo = {
     return (await backend.loadAll()).sort((a, b) => a.date.localeCompare(b.date));
   },
 
-  /** 그날 받은 사람 체크/해제. */
-  setReceived(date: string, userId: string, received: boolean, actor: string) {
-    return update(date, (d) => {
-      const others = d.recipients.filter((id) => id !== userId);
-      return { ...d, recipients: received ? [...others, userId] : others };
-    }, actor);
+  /** 그날 받은 사람 체크/해제 — 여러 명을 한 번에(드래그·Shift 범위). */
+  setReceived(date: string, userIds: string[], received: boolean, actor: string) {
+    return update(date, (d) => ({ ...d, recipients: applyRecipients(d.recipients, userIds, received) }), actor);
   },
 
   /** 그날 들어온 식권 수. */

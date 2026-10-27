@@ -5,7 +5,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { useMealTickets, useUpdateMealTicket } from '@/features/mealTicket/useMealTickets';
-import { dayLabel, monthCsv, monthDates, shiftMonth, summarizeMonth, weekdayOf } from '@/domain/mealTicket/engine';
+import { dayLabel, monthCsv, monthDates, rangeCells, shiftMonth, summarizeMonth, weekdayOf } from '@/domain/mealTicket/engine';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
@@ -54,6 +54,69 @@ export default function MealTicketScreen() {
     box.scrollLeft = cell ? Math.max(0, cell.offsetLeft - 150 - cell.offsetWidth * 3) : 0;
   }, [month, isLoading]);
 
+  /*
+   * 체크 — 칸을 누르면 그 칸이 바뀌고, 누른 채 끌면 지나간 칸이 모두 같은 상태가 된다(놓을 때 저장).
+   * Shift+클릭은 마지막으로 누른 칸과 이 칸 사이 사각형(사람 × 날짜)을 마지막으로 누른 칸의 상태로 맞춘다.
+   * 저장은 날짜별로 한 번 — 바뀌는 사람만 모아서.
+   */
+  const cellKey = (date: string, userId: string) => `${date}|${userId}`;
+  const [preview, setPreview] = useState<Map<string, boolean> | null>(null);
+  const dragRef = useRef<{ received: boolean; cells: Map<string, Set<string>> } | null>(null);
+  const anchorRef = useRef<{ userId: string; date: string; received: boolean } | null>(null);
+  const isChecked = (date: string, userId: string) =>
+    preview?.get(cellKey(date, userId)) ?? byDate.get(date)?.recipients.includes(userId) ?? false;
+
+  const commit = (cells: Map<string, Iterable<string>>, received: boolean) => {
+    for (const [date, ids] of cells) {
+      const current = byDate.get(date)?.recipients ?? [];
+      const userIds = [...ids].filter((id) => current.includes(id) !== received);
+      if (userIds.length) save.mutate({ kind: 'received', date, userIds, received });
+    }
+    // 화면 반영(낙관적 갱신)이 끝난 다음 프레임에 미리보기를 걷는다 — 바로 걷으면 잠깐 원래대로 깜빡인다
+    requestAnimationFrame(() => setPreview(null));
+  };
+
+  const onCellDown = (e: React.MouseEvent, date: string, userId: string) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const anchor = anchorRef.current;
+    if (e.shiftKey && anchor) {
+      const cells = rangeCells(shown.map((p) => p.id), dates, anchor, { userId, date });
+      setPreview(new Map([...cells].flatMap(([d, ids]) => ids.map((id) => [cellKey(d, id), anchor.received] as const))));
+      commit(cells, anchor.received);
+      return;
+    }
+    const received = !isChecked(date, userId);
+    anchorRef.current = { userId, date, received };
+    dragRef.current = { received, cells: new Map([[date, new Set([userId])]]) };
+    setPreview(new Map([[cellKey(date, userId), received]]));
+    const finish = () => {
+      const drag = dragRef.current;
+      dragRef.current = null;
+      if (drag) commit(drag.cells, drag.received);
+    };
+    window.addEventListener('mouseup', finish, { once: true });
+  };
+
+  const onCellEnter = (date: string, userId: string) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const set = drag.cells.get(date) ?? new Set<string>();
+    if (set.has(userId)) return;
+    set.add(userId);
+    drag.cells.set(date, set);
+    setPreview((prev) => new Map(prev ?? []).set(cellKey(date, userId), drag.received));
+  };
+
+  /** 키보드(Tab으로 옮겨 Space·Enter) — 한 칸씩 */
+  const onCellKey = (e: React.KeyboardEvent, date: string, userId: string) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    const received = !isChecked(date, userId);
+    anchorRef.current = { userId, date, received };
+    commit(new Map([[date, [userId]]]), received);
+  };
+
   const offDay = (date: string) => weekdayOf(date) === 0 || weekdayOf(date) === 6 || holidayNames.has(date);
 
   const download = () => {
@@ -79,7 +142,7 @@ export default function MealTicketScreen() {
       <GwHead
         icon="🎫"
         name="식권 대장"
-        desc="받은 사람을 체크하면 발행·남은 식권이 자동 계산됩니다. 식권을 받아 온 날은 표 위쪽 '입고'에 수량을, 분실 등은 날짜를 눌러 메모로 남기세요."
+        desc="받은 사람을 체크하면 발행·남은 식권이 자동 계산됩니다. 누른 채 끌거나 Shift+클릭으로 여러 칸을 한 번에 체크할 수 있습니다. 식권을 받아 온 날은 표 위쪽 '입고'에 수량을, 분실 등은 날짜를 눌러 메모로 남기세요."
         right={
           <Button onClick={download} disabled={isLoading}>
             <Download size={14} /> 엑셀 다운로드
@@ -112,7 +175,7 @@ export default function MealTicketScreen() {
 
       {/* 세로는 페이지 스크롤 하나로 펼치고, 표는 가로로만 스크롤한다. 합계 줄은 머리글 바로 아래에 둔다. */}
       <div ref={scrollRef} className="content-scroll mt-3 overflow-x-auto rounded-xl border border-border bg-panel shadow-sm [contain:inline-size]">
-        <table className="border-separate border-spacing-0 text-xs">
+        <table className="select-none border-separate border-spacing-0 text-xs">
           <thead>
             <tr>
               <th className={`${firstCol} min-w-[150px] border-b bg-panel-alt px-3 py-2 text-left font-bold text-ink2`}>이름</th>
@@ -174,19 +237,24 @@ export default function MealTicketScreen() {
                     <span className="ml-1.5 text-[10.5px] text-ink3">{p.retired ? '퇴직' : p.dept}</span>
                   </td>
                   {dates.map((date) => {
-                    const checked = byDate.get(date)?.recipients.includes(p.id) ?? false;
+                    const checked = isChecked(date, p.id);
                     if (checked) total += 1;
                     return (
-                      <td key={date} className={`border-b border-border p-0 text-center ${date === today ? 'border-x border-x-teal bg-teal-soft' : offDay(date) ? 'bg-bg group-hover:bg-panel-alt' : 'group-hover:bg-panel-alt'}`}>
-                        <label className="flex h-8 cursor-pointer items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => save.mutate({ kind: 'received', date, userId: p.id, received: e.target.checked })}
-                            className="h-4 w-4 cursor-pointer accent-teal"
-                            aria-label={`${p.name} ${dayLabel(date)} 식권`}
-                          />
-                        </label>
+                      <td
+                        key={date}
+                        onMouseDown={(e) => onCellDown(e, date, p.id)}
+                        onMouseEnter={() => onCellEnter(date, p.id)}
+                        className={`h-8 cursor-pointer border-b border-border p-0 text-center ${date === today ? 'border-x border-x-teal bg-teal-soft' : offDay(date) ? 'bg-bg group-hover:bg-panel-alt' : 'group-hover:bg-panel-alt'}`}
+                      >
+                        {/* 마우스는 칸(td)이 받는다 — 체크박스는 보이기·키보드용 */}
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          readOnly
+                          onKeyDown={(e) => onCellKey(e, date, p.id)}
+                          className="pointer-events-none h-4 w-4 accent-teal"
+                          aria-label={`${p.name} ${dayLabel(date)} 식권`}
+                        />
                       </td>
                     );
                   })}
