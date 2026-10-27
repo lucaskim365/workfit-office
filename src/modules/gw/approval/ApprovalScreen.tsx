@@ -231,7 +231,6 @@ export default function ApprovalScreen() {
   // 다중 선택 상태 & 일괄 처리 훅
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
-  const [batchComment, setBatchComment] = useState('');
   // 목록 툴바 — 정렬·안읽음만 보기
   const [listOrder, setListOrder] = useState<ListOrder>('recent');
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -430,17 +429,16 @@ export default function ApprovalScreen() {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // 일괄 승인 실행
-  const handleBatchApprove = async () => {
+  // 일괄 승인 실행 — 의견은 모달에서 바로 받는다(상태에 넣었다 읽으면 갱신 전 값이라 늘 기본 문구가 저장됐다)
+  const handleBatchApprove = async (comment: string) => {
     if (approvableSelectedIds.length === 0) return;
     try {
       await batchDecide.mutateAsync({
         docIds: approvableSelectedIds,
         userId: me,
-        comment: batchComment.trim() || '일괄 승인 처리되었습니다.',
+        comment: comment.trim() || '일괄 승인 처리되었습니다.',
       });
       setShowBatchApproveConfirm(false);
-      setBatchComment('');
       setSelectedIds([]);
     } catch (err: any) {
       alert(`일괄 승인 중 오류가 발생했습니다: ${err.message || String(err)}`);
@@ -1048,10 +1046,7 @@ export default function ApprovalScreen() {
           confirmText="일괄 승인 확정"
           confirmTone="bg-teal"
           busy={batchDecide.isPending}
-          onConfirm={(comment) => {
-            setBatchComment(comment);
-            handleBatchApprove();
-          }}
+          onConfirm={(comment) => handleBatchApprove(comment)}
           onClose={() => setShowBatchApproveConfirm(false)}
         />
       )}
