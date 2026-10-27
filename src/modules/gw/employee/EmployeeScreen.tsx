@@ -14,6 +14,7 @@ import { describeBirthday } from '@/domain/birthday/engine';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { Button } from '@/shared/ui/Button';
 import {
+  DEPARTMENT_MEMBERS_KEY,
   useDepartmentMembers,
   useUpsertDepartmentMember,
   useRemoveDepartmentMember,
@@ -23,6 +24,9 @@ import {
   sanitizeJobTitle,
   makeDepartmentMemberId,
 } from '@/domain/departmentMember/engine';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Department } from '@/domain/department/schema';
+import { isDeptHeadTitle, releaseDeptHeadOnLeave, syncDeptHeadFromTitle } from '@/data/orgSync/orgSync';
 
 export default function EmployeeScreen() {
   const { isAdmin } = usePermission();
@@ -35,6 +39,23 @@ export default function EmployeeScreen() {
   const { data: departmentMembers = [] } = useDepartmentMembers();
   const upsertDeptMember = useUpsertDepartmentMember();
   const removeDeptMember = useRemoveDepartmentMember();
+  const qc = useQueryClient();
+
+  /**
+   * 부서장 직책으로 발령하면 그 부서의 부서장도 바뀐다(부서/조직관리와 같은 기록) — 다른 사람이 부서장이면 먼저 묻는다.
+   * 위원회·부서장 직책이 아니면 묻지 않는다.
+   */
+  const confirmDeptHeadChange = (userId: string, dept: Department | undefined, title: string) => {
+    if (!dept || isCommitteeDept(dept) || !isDeptHeadTitle(title) || !dept.headUserId || dept.headUserId === userId) return true;
+    const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? id;
+    return window.confirm(
+      `'${dept.name}' 부서장이 ${nameOf(dept.headUserId)}에서 ${nameOf(userId)}(으)로 바뀝니다.\n${nameOf(dept.headUserId)}은(는) '${dept.name}' 부서장 직책에서 내려갑니다. 진행할까요?`,
+    );
+  };
+  /** 부서장 연동 뒤 부서·사람 화면이 새 값을 읽게 한다. */
+  const refreshOrg = () => {
+    for (const key of ['departments', 'employeeProfiles', 'users', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] });
+  };
 
   // 필터 및 검색 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -337,6 +358,7 @@ export default function EmployeeScreen() {
     const targetDept = departments.find((d) => d.name === targetDeptName) || departments[0];
     const deptId = targetDept?.id || 'dept_default';
     const finalDuty = sanitizeJobTitle(targetDept, newEmpDuty || '팀원');
+    if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({
@@ -375,6 +397,13 @@ export default function EmployeeScreen() {
         order: 1,
         assignedAt: new Date().toISOString(),
       });
+      if (targetDept) {
+        try {
+          await syncDeptHeadFromTitle(targetUser.id, targetDept.id, '', finalDuty);
+        } finally {
+          refreshOrg();
+        }
+      }
 
       setSelectedCreateUserId('');
       setNewEmpNo('');
@@ -439,6 +468,11 @@ export default function EmployeeScreen() {
 
     const targetDept = departments.find((d) => d.name === editEmpDept);
     const finalDuty = sanitizeJobTitle(targetDept || editEmpDept, editEmpDuty);
+    // 바꾸기 전 본직 부서·직책 — 부서장 연동(이동·강등) 판단용
+    const prevProfile = employeeProfiles.find((p) => p.userId === targetUser.id || p.id === targetUser.id);
+    const prevDeptId = prevProfile?.deptId ?? departmentMembers.find((m) => m.userId === targetUser.id && m.isPrimary)?.deptId ?? null;
+    const prevTitle = prevProfile?.jobTitle ?? '';
+    if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({
@@ -486,6 +520,15 @@ export default function EmployeeScreen() {
           order: 1,
           assignedAt: prevPrimary?.assignedAt || new Date().toISOString(),
         });
+
+        // 부서장 연동 — 다른 부서로 옮겼으면 예전 부서 부서장에서 빼고, 새 부서에서는 처음 발령처럼 본다
+        try {
+          const moved = !!prevDeptId && prevDeptId !== targetDept.id;
+          if (moved) await releaseDeptHeadOnLeave(targetUser.id, prevDeptId);
+          await syncDeptHeadFromTitle(targetUser.id, targetDept.id, moved ? '' : prevTitle, finalDuty);
+        } finally {
+          refreshOrg();
+        }
       }
 
       setIsEditModalOpen(false);
@@ -511,6 +554,7 @@ export default function EmployeeScreen() {
     }
 
     const sanitizedDuty = sanitizeJobTitle(targetDept, newConcJobTitle);
+    if (!confirmDeptHeadChange(selectedUserId, targetDept, sanitizedDuty)) return;
     try {
       await upsertDeptMember.mutateAsync({
         id: makeDepartmentMemberId(selectedUserId, targetDept.id),
@@ -522,6 +566,11 @@ export default function EmployeeScreen() {
         order: 99,
         assignedAt: new Date().toISOString(),
       });
+      try {
+        await syncDeptHeadFromTitle(selectedUserId, targetDept.id, '', sanitizedDuty);
+      } finally {
+        refreshOrg();
+      }
       setNewConcDeptId('');
       setNewConcJobTitle('팀원');
       alert(`'${targetDept.name}' 겸직이 성공적으로 등록되었습니다.`);
@@ -534,7 +583,16 @@ export default function EmployeeScreen() {
   const handleRemoveConcurrentAffiliation = async (memberId: string, deptName: string) => {
     if (confirm(`'${deptName}' 겸직 소속을 해제하시겠습니까?`)) {
       try {
+        const member = departmentMembers.find((m) => m.id === memberId);
         await removeDeptMember.mutateAsync(memberId);
+        // 그 부서 부서장이었으면 부서장도 비운다
+        if (member) {
+          try {
+            await releaseDeptHeadOnLeave(member.userId, member.deptId);
+          } finally {
+            refreshOrg();
+          }
+        }
         alert(`'${deptName}' 겸직이 해제되었습니다.`);
       } catch (err: any) {
         alert(err.message || '겸직 해제 중 오류가 발생했습니다.');
