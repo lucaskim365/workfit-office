@@ -5,9 +5,9 @@ import type { Attachment, ChatMessage, ReplyPreview } from '@/domain/chatMessage
 import { RICH_BODY_MAX_CHARS, imageIdsOfRich, mentionIdsOfRich, plainTextOfRich, sanitizeRichDoc, type RichNode } from '@/domain/chatMessage/richBody';
 import { notificationRepo } from '@/data/notification/notification.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
-import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
+import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from './useChatRooms';
 import { buildAttachmentBatch } from './attachmentBatch';
-import { useChatRealtime } from './chatRealtime';
+import { CHAT_POLL_FALLBACK_MS, chatPollInterval, fetchThread, useChatRealtime } from './chatRealtime';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -20,9 +20,9 @@ export function useChatThread(roomId?: string) {
   useChatRealtime();
   return useQuery({
     queryKey: [CHAT_THREAD_KEY, roomId ?? null],
-    queryFn: () => chatMessageRepo.listByRoom(roomId!),
+    queryFn: () => fetchThread(roomId!),
     enabled: !!roomId,
-    refetchInterval: CHAT_POLL_MS,
+    refetchInterval: chatPollInterval,
   });
 }
 
@@ -35,8 +35,8 @@ export function usePrefetchChatThread() {
   return (roomId: string) =>
     void qc.prefetchQuery({
       queryKey: [CHAT_THREAD_KEY, roomId],
-      queryFn: () => chatMessageRepo.listByRoom(roomId),
-      staleTime: CHAT_POLL_MS,
+      queryFn: () => fetchThread(roomId),
+      staleTime: CHAT_POLL_FALLBACK_MS,
     });
 }
 
@@ -167,9 +167,9 @@ export function useMarkRead() {
   return useMutation({
     mutationFn: ({ roomId, userId }: { roomId: string; userId: string }) =>
       chatMessageRepo.markRead(roomId, userId),
-    onSuccess: () => {
+    onSuccess: (_, { roomId }) => {
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
-      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
     },
   });
 }

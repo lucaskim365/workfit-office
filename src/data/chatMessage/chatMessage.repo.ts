@@ -11,6 +11,7 @@ import {
 } from '@/domain/chatMessage/schema';
 import { CHAT_MESSAGE_SEED } from '@/data/seeds/chatMessage.seed';
 import { applyDeletion, canDeleteMessage, DELETE_DENIED_MESSAGE, scrubReplyPreviews } from '@/domain/chatMessage/deletion';
+import { compareChatMessages } from '@/domain/chatMessage/order';
 
 /**
  * 채팅 메시지 Repository — DB 접근을 캡슐화하는 유일한 계층.
@@ -177,7 +178,7 @@ class AppwriteBackend implements ChatMessageBackend {
   }
 
   /** Appwrite row → 도메인 객체(JSON 복원 후 안전 파싱). */
-  private fromRow(row: AppwriteRow): ChatMessage | null {
+  static fromRow(row: AppwriteRow): ChatMessage | null {
     const parseJson = (v: unknown) => (typeof v === 'string' && v ? JSON.parse(v) : null);
     return safeParse({
       id: row.$id,
@@ -222,7 +223,7 @@ class AppwriteBackend implements ChatMessageBackend {
   private parseRows(rows: AppwriteRow[]): ChatMessage[] {
     const out: ChatMessage[] = [];
     for (const row of rows) {
-      const m = this.fromRow(row);
+      const m = AppwriteBackend.fromRow(row);
       if (m) out.push(m);
     }
     return out;
@@ -239,7 +240,7 @@ class AppwriteBackend implements ChatMessageBackend {
   async get(id: string) {
     try {
       const row = await this.dbs.getDocument(APPWRITE_DATABASE_ID, COLL, assertAppwriteId(id));
-      return this.fromRow(row as unknown as AppwriteRow);
+      return AppwriteBackend.fromRow(row as unknown as AppwriteRow);
     } catch (e) {
       if ((e as { code?: number })?.code === 404) return null;
       throw e;
@@ -329,8 +330,12 @@ export const chatMessageRepo = {
   /** 특정 방의 메시지를 시간 오름차순으로. */
   async listByRoom(roomId: string): Promise<ChatMessage[]> {
     const rows = await backend.listByRoom(roomId);
-    // 같은 시각(초 단위)에 저장된 묶음은 id 순서로 — 사진 묶음 순서가 섞이지 않게
-    return rows.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true }));
+    return rows.sort(compareChatMessages);
+  },
+
+  /** 실시간 신호에 실려 온 메시지 문서 → 메시지(Appwrite 전용). 읽을 수 없는 문서면 null. */
+  fromRealtime(payload: Record<string, unknown>): ChatMessage | null {
+    return dbDriver === 'appwrite' && typeof payload.$id === 'string' ? AppwriteBackend.fromRow(payload as AppwriteRow) : null;
   },
 
   /** 방별 미읽음 수(도출) — 내가 보내지 않았고 readBy 에 내가 없는 메시지 수. */
