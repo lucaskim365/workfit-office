@@ -1320,10 +1320,10 @@ function CompositeMessageBubble({
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const hasMeta = (mine && unreadCount > 0) || showTime;
+  const hasMeta = unreadCount > 0 || showTime;
   const bubbleMeta = hasMeta ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-      {mine && unreadCount > 0 && (
+      {unreadCount > 0 && (
         <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
@@ -1620,10 +1620,10 @@ function MessageBubble({
   }
 
   // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 붙인다 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
-  const hasMeta = (mine && unreadCount > 0) || showTime || m.isEdited;
+  const hasMeta = unreadCount > 0 || showTime || m.isEdited;
   const bubbleMeta = hasMeta ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-      {mine && unreadCount > 0 && (
+      {unreadCount > 0 && (
         <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>

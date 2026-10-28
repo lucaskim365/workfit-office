@@ -738,9 +738,9 @@ function CompositeMessageBubble({
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const bubbleMeta = (mine && unreadCount > 0) || showTime ? (
+  const bubbleMeta = unreadCount > 0 || showTime ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-      {mine && unreadCount > 0 && (
+      {unreadCount > 0 && (
         <span className="chat-text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
@@ -1041,10 +1041,10 @@ function MessageBubble({
           )}
           <div className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
-            {((mine && unreadCount > 0) || showTime || m.isEdited) && (
+            {(unreadCount > 0 || showTime || m.isEdited) && (
               // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에
               <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-                {mine && unreadCount > 0 && (
+                {unreadCount > 0 && (
                   <span className="chat-text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
                 )}
                 {m.isEdited && <span className="chat-text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
