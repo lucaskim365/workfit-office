@@ -561,6 +561,28 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    id: 'poTaxInvoices',
+    name: '발주서 매입 세금계산서',
+    /*
+      사업관리 > 발주 현황 보관함의 매입 세금계산서 파일. 문서당 1건, $id = 결재 문서 ID.
+      파일이 있으면 '발행 완료', 없으면 '미발행'으로 보인다. 칸 구성은 poArchiveReplies 와 같다.
+      실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/tax-invoice-* .
+    */
+    attributes: [
+      S('docId', 64, true),
+      S('docNo', 64, true),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 100),
+      S('uploadedBy', 64, true),
+      S('uploadedByName', 64),
+      S('uploadedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
     id: 'approvalFolders',
     name: '결재 서식 폴더',
     attributes: [S('id', 64, true), S('name', 128, true), INT('order')],
