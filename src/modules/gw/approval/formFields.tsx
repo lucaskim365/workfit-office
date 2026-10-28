@@ -26,6 +26,7 @@ export {
   type CellMerge,
   type OrgLite,
 } from './formFields/utils';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal';
 
@@ -148,7 +149,7 @@ export function DynamicField({
       );
 
     case '날짜':
-      return <input type="date" value={sv} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
+      return <DateInput value={sv} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
 
     case '기간': {
       const start = sv;

@@ -1,6 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Calendar } from 'lucide-react';
 import { daysBetween } from './utils';
+import { useHolidays } from '@/features/holiday/useHolidays';
+import { dayTone, type DayTone } from '@/shared/ui/form/datePickerGrid';
+
+const TONE_TEXT: Record<DayTone, string> = { holiday: 'text-danger', sun: 'text-danger', sat: 'text-blue', normal: 'text-ink' };
 
 interface CalendarRangePickerProps {
   start: string;
@@ -99,6 +103,8 @@ export function CalendarRangePicker({
   }
 
   const daysLabel = start && end ? daysBetween(start, end) : 0;
+  const { data: holidays = [] } = useHolidays(String(year));
+  const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -143,7 +149,7 @@ export function CalendarRangePicker({
 
           <div className="grid grid-cols-7 gap-y-1 text-center text-[10.5px] font-bold text-ink3 mb-1.5">
             {['일', '월', '화', '수', '목', '금', '토'].map((w) => (
-              <span key={w}>{w}</span>
+              <span key={w} className={w === '일' ? 'text-danger' : w === '토' ? 'text-blue' : undefined}>{w}</span>
             ))}
           </div>
 
@@ -155,11 +161,9 @@ export function CalendarRangePicker({
               const isWithinRange = !singleDateOnly && start && end && dateStr >= start && dateStr <= end;
 
               let btnClass = 'h-8 w-8 mx-auto grid place-items-center rounded-lg transition-all ';
-              if (!currentMonth) {
-                btnClass += 'text-ink3/40 ';
-              } else {
-                btnClass += 'text-ink ';
-              }
+              // 일요일·공휴일 빨강, 토요일 파랑
+              if (!isStart && !isEnd && !isWithinRange) btnClass += `${TONE_TEXT[dayTone(dateStr, idx % 7, holidayMap)]} `;
+              if (!currentMonth) btnClass += 'opacity-35 ';
 
               if (isStart || isEnd) {
                 btnClass += 'bg-teal text-white font-bold ';
@@ -173,6 +177,7 @@ export function CalendarRangePicker({
                 <button
                   key={idx}
                   type="button"
+                  title={holidayMap.get(dateStr)}
                   onClick={() => handleDateClick(dateStr)}
                   className={btnClass}
                 >

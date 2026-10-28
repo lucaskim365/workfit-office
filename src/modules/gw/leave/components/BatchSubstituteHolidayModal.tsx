@@ -16,6 +16,7 @@ import {
   History,
   Info,
 } from 'lucide-react';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface BatchSubstituteHolidayModalProps {
   adminName: string;
@@ -403,8 +404,7 @@ export function BatchSubstituteHolidayModal({
                   </div>
                 </div>
 
-                <input
-                  type="date"
+                <DateInput
                   value={occurrenceDate}
                   onChange={(e) => handleOccurrenceChange(e.target.value)}
                   className="w-full rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-teal"
@@ -453,8 +453,7 @@ export function BatchSubstituteHolidayModal({
                     <label className="text-[11.5px] font-bold text-ink">유효 만료일</label>
                     <span className="text-[10px] text-ink3 font-medium">(기본 발생+1년)</span>
                   </div>
-                  <input
-                    type="date"
+                  <DateInput
                     value={expirationDate}
                     onChange={(e) => setExpirationDate(e.target.value)}
                     className="w-full rounded-xl border border-border bg-panel px-3 py-2 text-xs font-semibold text-ink outline-none focus:border-teal"

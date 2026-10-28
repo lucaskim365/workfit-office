@@ -36,6 +36,7 @@ import { useMyWorkPlans, useUpdateWorkPlan } from '@/features/workPlan/useWorkPl
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { calculatePlanProgress, getWorkPlanTagMeta, parseWorkPlanItems, toggleWorkPlanItem } from '@/domain/workPlan/engine';
 import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -341,9 +342,9 @@ export default function MobileCalendarScreen() {
                   <div className="flex items-center gap-0.5 mt-0.5 h-1.5">
                     {cellEvents.slice(0, 3).map((e, idx) => {
                       let dotColor = 'bg-teal';
-                      // 웹·근태와 같은 색([[statusDisplay]]): 휴가 초록, 외근 파랑, 출장 남색
-                      if (e.eventType === 'VACATION') dotColor = 'bg-emerald-500';
-                      else if (e.eventType === 'OUTSIDE') dotColor = e.title.startsWith('[출장]') ? 'bg-indigo-500' : 'bg-blue-500';
+                      // 웹·근태와 같은 색([[statusColors]]): 휴가 노랑, 외근 파랑, 출장 남색
+                      if (e.eventType === 'VACATION') dotColor = PERSON_TONES.leave.dot;
+                      else if (e.eventType === 'OUTSIDE') dotColor = e.title.startsWith('[출장]') ? PERSON_TONES.trip.dot : PERSON_TONES.outside.dot;
 
                       return (
                         <span

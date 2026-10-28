@@ -30,6 +30,7 @@ import {
 import { won } from '../utils/approvalUtils';
 import { SealFieldRow } from './CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -1421,8 +1422,7 @@ function InlineFieldEditor({
 
     case '날짜':
       return (
-        <input
-          type="date"
+        <DateInput
           value={sv}
           onChange={(e) => setVals({ [field.key]: e.target.value })}
           className="bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer"

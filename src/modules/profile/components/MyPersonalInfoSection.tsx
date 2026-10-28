@@ -4,6 +4,7 @@ import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
 import { useEmployeeProfiles, useUpdateMyEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { describeBirthday } from '@/domain/birthday/engine';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const inputClass =
   'w-full rounded-lg border border-border-hi bg-transparent px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal focus:ring-1 focus:ring-teal/30';
@@ -81,7 +82,7 @@ function MyPersonalInfoForm({ user, profile }: { user: User; profile: EmployeePr
         <div className="col-span-2">
           <label className="mb-0.5 block text-[10.5px] font-bold text-ink3">생년월일</label>
           <div className="flex flex-wrap items-center gap-3">
-            <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={`${inputClass} !w-[170px]`} />
+            <DateInput value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={`${inputClass} !w-[170px]`} />
             <label className="flex cursor-pointer items-center gap-1.5 text-[12px] font-bold text-ink">
               <input type="checkbox" checked={birthLunar} onChange={(e) => setBirthLunar(e.target.checked)} className="h-4 w-4 accent-teal" />
               음력
