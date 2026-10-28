@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Download, Printer, Search } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useUsers } from '@/features/user/useUsers';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
@@ -9,6 +9,7 @@ import { dayLabel, monthCsv, monthDates, rangeCells, remainingAsOf, remainingCel
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
+import { MealTicketPrintSheet } from './MealTicketPrintSheet';
 
 /**
  * 식권 대장 — 한 달을 출석부처럼(행 = 재직자, 열 = 날짜). 체크하면 그날 받은 사람이 되고,
@@ -129,6 +130,25 @@ export default function MealTicketScreen() {
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * PDF 저장 — 인쇄용 표를 붙인 다음 프레임에 인쇄 창을 연다(인쇄 창의 'PDF로 저장').
+   * 문서 제목이 PDF 파일 이름이 되므로 인쇄하는 동안만 바꿔 둔다.
+   */
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    if (!printing) return;
+    const title = document.title;
+    document.title = `식권대장_${month}`;
+    const done = () => setPrinting(false);
+    window.addEventListener('afterprint', done, { once: true });
+    const frame = requestAnimationFrame(() => window.print());
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('afterprint', done);
+      document.title = title;
+    };
+  }, [printing, month]);
+
   const editMemo = (date: string) => {
     const memo = window.prompt(`${dayLabel(date)} 메모 (예: 분실 1장)`, byDate.get(date)?.memo ?? '');
     if (memo !== null) save.mutate({ kind: 'memo', date, memo: memo.trim() });
@@ -145,9 +165,14 @@ export default function MealTicketScreen() {
         name="식권 대장"
         desc="받은 사람을 체크하면 발행·남은 식권이 자동 계산됩니다. 누른 채 끌거나 Shift+클릭으로 여러 칸을 한 번에 체크할 수 있습니다. 식권을 받아 온 날은 표 위쪽 '입고'에 수량을, 분실 등은 날짜를 눌러 메모로 남기세요."
         right={
-          <Button onClick={download} disabled={isLoading}>
-            <Download size={14} /> 엑셀 다운로드
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setPrinting(true)} disabled={isLoading || printing}>
+              <Printer size={14} /> PDF 저장
+            </Button>
+            <Button onClick={download} disabled={isLoading}>
+              <Download size={14} /> 엑셀 다운로드
+            </Button>
+          </div>
         }
       />
 
@@ -271,6 +296,20 @@ export default function MealTicketScreen() {
           </tbody>
         </table>
       </div>
+      {printing && (
+        <MealTicketPrintSheet
+          month={month}
+          dates={dates}
+          people={people}
+          byDate={byDate}
+          summary={summary}
+          opening={opening}
+          remainingNow={remainingNow}
+          today={today}
+          offDay={offDay}
+          weekdayOf={weekdayOf}
+        />
+      )}
     </div>
   );
 }
