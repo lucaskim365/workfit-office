@@ -33,8 +33,7 @@ export default function MobileCommonHeader({
 
   return (
     <header
-      className="flex items-center gap-2 px-3 py-2.5 text-white shrink-0 shadow-xs select-none"
-      style={{ background: '#101830' }}
+      className="m-header flex items-center gap-2 px-3 py-2.5 text-white shrink-0 shadow-xs select-none"
     >
       <button
         type="button"

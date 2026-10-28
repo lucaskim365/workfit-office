@@ -199,7 +199,7 @@ export default function MobileApprovalDetail() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center justify-between px-3 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center justify-between px-3 py-3 text-white">
         <div className="flex items-center gap-2">
           <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
           <span className="text-[15px] font-bold">전자결재 상세</span>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { onForegroundMessage } from '@/shared/lib/messaging';
 import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/shared/lib/transientPushNotification';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
@@ -36,6 +37,14 @@ import { ModalLayerProvider } from '@/shared/ui/Modal';
  */
 export default function MobileApp() {
   const { user, loading } = useAuth();
+
+  // 웹과 같은 테마 색 — 이 기기에 저장된 테마(없으면 웹 기본). 글씨 배율은 PWA 에서 항상 1이라 색만 적용하고,
+  // 휴대폰 상단 상태바 색(안드로이드)도 상단바 색에 맞춘다.
+  useEffect(() => {
+    const theme = loadUserTheme(user?.id);
+    applyTheme(theme.headerBg, theme.pointColor, theme.btnColor);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.headerBg);
+  }, [user?.id]);
   const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
 
@@ -113,7 +122,7 @@ export default function MobileApp() {
       <ReloginDialog variant="mobile" />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
-        style={{ background: '#101830', paddingTop: 'env(safe-area-inset-top)' }}
+        style={{ background: 'var(--color-header-bg)', paddingTop: 'env(safe-area-inset-top)' }}
       >
         {loading ? (
           <div className="grid flex-1 place-items-center text-[13px] text-ink3">불러오는 중…</div>

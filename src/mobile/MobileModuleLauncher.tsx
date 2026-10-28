@@ -241,8 +241,7 @@ export default function MobileModuleLauncher() {
     <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f4f6fa' }}>
       {/* 1. 상단 네이비 프리미엄 헤더 */}
       <header
-        className="flex items-center justify-between px-3.5 py-3 text-white shrink-0 shadow-xs"
-        style={{ background: '#101830' }}
+        className="m-header flex items-center justify-between px-3.5 py-3 text-white shrink-0 shadow-xs"
       >
         <div className="flex items-center gap-2">
           <button
@@ -555,7 +554,7 @@ export default function MobileModuleLauncher() {
           <button
             type="button"
             onClick={() => nav('/m')}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#101830] py-3 text-[13px] font-bold text-white shadow-md hover:bg-[#162344] active:scale-98 transition-all cursor-pointer"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy py-3 text-[13px] font-bold text-white shadow-md hover:opacity-90 active:scale-98 transition-all cursor-pointer"
           >
             <MessageSquare size={16} />
             <span>메신저로 돌아가기</span>

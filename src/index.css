@@ -61,6 +61,38 @@ html {
   color: var(--color-teal-text) !important;
 }
 
+/*
+  PWA(/m) 상단바 — 웹 상단바와 같은 테마 색(--color-header-bg / --color-header-text).
+  상단바 안의 흰 글씨·반투명 흰 배경·테두리는 남색 바탕에 맞춰 만든 것이라, 테마 글자색 기준으로 바꿔
+  밝은 테마에서도 보이게 한다. 배경을 직접 지정한 아바타·배지(style 배경, 색 있는 bg-)는 흰 글씨를 그대로 둔다.
+*/
+.m-header {
+  background: var(--color-header-bg) !important;
+  color: var(--color-header-text) !important;
+}
+.m-header .text-white:not([style*='background']):not([class*='bg-teal']):not([class*='bg-amber']):not([class*='bg-red']):not([class*='bg-danger']):not([class*='bg-emerald']):not([class*='bg-blue']):not([class*='bg-navy']),
+.m-header .hover\:text-white:hover {
+  color: var(--color-header-text) !important;
+}
+.m-header .text-white\/90 {
+  color: color-mix(in srgb, var(--color-header-text) 90%, transparent) !important;
+}
+.m-header .text-white\/80 {
+  color: color-mix(in srgb, var(--color-header-text) 80%, transparent) !important;
+}
+.m-header .text-white\/60 {
+  color: color-mix(in srgb, var(--color-header-text) 60%, transparent) !important;
+}
+.m-header :is(.bg-white\/10, .bg-white\/15, .bg-white\/20, .hover\:bg-white\/5:hover, .hover\:bg-white\/10:hover, .hover\:bg-white\/20:hover) {
+  background-color: color-mix(in srgb, var(--color-header-text) 10%, transparent) !important;
+}
+.m-header :is(.border-white\/10, .border-white\/20, .border-white\/30) {
+  border-color: color-mix(in srgb, var(--color-header-text) 25%, transparent) !important;
+}
+.m-header .hover\:ring-white\/30:hover {
+  --tw-ring-color: color-mix(in srgb, var(--color-header-text) 30%, transparent) !important;
+}
+
 
 html,
 body,

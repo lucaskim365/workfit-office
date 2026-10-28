@@ -317,7 +317,7 @@ export default function MobileChatThread() {
         const otherPresence = otherId ? presenceMap[otherId] : null;
 
         return (
-          <header className="flex shrink-0 items-center gap-1.5 px-2 py-3 text-white" style={{ background: '#101830' }}>
+          <header className="m-header flex shrink-0 items-center gap-1.5 px-2 py-3 text-white">
             <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
             {isDirect && (
               <div className="relative shrink-0 mr-1">
@@ -651,7 +651,7 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   const canOpen = !!payload.docId;
   return (
     <div className="w-[240px] overflow-hidden rounded-2xl border border-black/10 bg-white">
-      <div className="flex items-center gap-1.5 px-3 py-2 text-white" style={{ background: '#101830' }}>
+      <div className="m-header flex items-center gap-1.5 px-3 py-2 text-white">
         <FileSignature size={14} className="shrink-0" />
         <span className="chat-text-[11.5px] font-bold">전자결재 알림</span>
         <span
@@ -1381,7 +1381,7 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
         <button onClick={onDone} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-bold">멤버 초대</div>
@@ -1773,7 +1773,7 @@ function MobileFileBoxModal({
 
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-      <header className="flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 bg-[#101830] text-white">
+      <header className="m-header flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 text-white">
         <span className="text-[15px] font-bold">📁 파일함 모아보기</span>
         <button onClick={onClose} className="text-[14px] font-semibold text-white/80 hover:text-white px-2 cursor-pointer">닫기</button>
       </header>

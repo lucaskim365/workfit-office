@@ -103,7 +103,7 @@ export default function MobileChatList() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc', ...chatTextScaleStyle(textSize) }}>
-      <header className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex items-center gap-2 px-4 py-3 text-white">
         <img src="/icons/icon-192.png" alt="" className="h-6 w-6 rounded" />
         <span className="text-[15px] font-bold">워크핏 메신저</span>
         <div className="ml-auto flex items-center gap-1.5">
@@ -148,7 +148,7 @@ export default function MobileChatList() {
               </div>
             )}
             <span
-              className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#101830] shadow-xs ${presenceMeta.dotColor}`}
+              className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-header-bg)] shadow-xs ${presenceMeta.dotColor}`}
               title={presenceMeta.label}
             />
           </button>

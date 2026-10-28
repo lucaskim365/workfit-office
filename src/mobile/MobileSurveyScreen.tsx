@@ -239,7 +239,7 @@ export default function MobileSurveyScreen() {
       {/* 3. 설문 상세 팝업 */}
       {selectedSurvey && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white animate-in fade-in slide-in-from-bottom duration-200">
-          <header className="flex items-center justify-between border-b border-border px-3 py-3 shrink-0 bg-[#101830] text-white">
+          <header className="m-header flex items-center justify-between border-b border-border px-3 py-3 shrink-0 text-white">
             <span className="text-[13px] font-bold truncate">{responding ? '설문 응답' : '설문 상세'}</span>
             <button
               type="button"

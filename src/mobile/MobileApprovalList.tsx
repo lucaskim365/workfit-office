@@ -266,7 +266,7 @@ export default function MobileApprovalList() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
         <div className="ml-auto flex items-center gap-1">
