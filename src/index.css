@@ -179,7 +179,7 @@ body {
 
 /* ──────────────────────────────────────────────────────────────
    전자결재 문서 인쇄 — 인쇄 시 결재 문서(.approval-print)만 남기고 앱 UI를 숨긴다.
-   visibility 트릭으로 레이아웃을 보존하며 문서만 노출.
+   문서와 그 바깥 틀만 남기고 나머지는 자리째 뺀다(display:none).
    ────────────────────────────────────────────────────────────── */
 @media print {
   /* 모든 부모 컨테이너의 높이, 스크롤바, 레이아웃 절대위치 제한을 제거하여 여러 페이지 인쇄 보장 */
@@ -198,6 +198,12 @@ body {
   .approval-print,
   .approval-print * {
     visibility: visible !important;
+  }
+
+  /* 보이지 않게만 하면(visibility) 숨은 목록·메신저 등이 자리를 그대로 차지해 문서 뒤에 빈 페이지가 여러 장 생긴다.
+     문서도, 문서를 감싼 틀도 아닌 것은 자리째 뺀다. (:has 를 모르는 브라우저는 이 규칙만 무시하고 위 방식으로 인쇄) */
+  body *:not(.approval-print, .approval-print *, :has(.approval-print)) {
+    display: none !important;
   }
 
   .approval-print {
