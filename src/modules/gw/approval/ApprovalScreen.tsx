@@ -36,6 +36,7 @@ import {
   activeSteps,
   currentApproverIds,
   matchesBox,
+  isMyApprovedDone,
   byRecent,
   getEffectiveRecipients,
 } from '@/domain/approvalDoc/engine';
@@ -123,7 +124,7 @@ export default function ApprovalScreen() {
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
@@ -249,6 +250,8 @@ export default function ApprovalScreen() {
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+    // 결재 대기함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
+    if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
 
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
     const uniqueMap = new Map<string, ApprovalDoc>();
@@ -306,8 +309,11 @@ export default function ApprovalScreen() {
       if (todoFilter === 'progress') {
         return list.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me);
+          return d.status === '진행중' && !approvers.includes(me);
         });
+      }
+      if (todoFilter === 'done') {
+        return list.filter((d: ApprovalDoc) => isMyApprovedDone(d, me));
       }
       return list;
     }
@@ -827,9 +833,10 @@ export default function ApprovalScreen() {
                   onChange={setTodoFilter}
                   activeClass="bg-teal text-white"
                   options={[
+                    { key: 'all', label: '전체' },
                     { key: 'pending', label: '결재대기중', count: activePendingCount },
                     { key: 'progress', label: '진행중' },
-                    { key: 'all', label: '전체' },
+                    { key: 'done', label: '완료' },
                   ]}
                 />
               )}
