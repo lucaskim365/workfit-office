@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mealTicketRepo } from '@/data/mealTicket/mealTicket.repo';
-import { applyRecipients, emptyMealTicketDay, type MealTicketDay } from '@/domain/mealTicket/engine';
+import { applyRecipients, emptyMealTicketDay, recipientsOf, withRecipients, type Meal, type MealTicketDay } from '@/domain/mealTicket/engine';
 
 export const MEAL_TICKETS_KEY = ['mealTickets'];
 
@@ -9,14 +9,14 @@ export function useMealTickets() {
 }
 
 type Change =
-  | { kind: 'received'; date: string; userIds: string[]; received: boolean }
+  | { kind: 'received'; date: string; meal: Meal; userIds: string[]; received: boolean }
   | { kind: 'stockIn'; date: string; stockIn: number }
   | { kind: 'memo'; date: string; memo: string };
 
 const apply = (d: MealTicketDay, c: Change): MealTicketDay => {
   if (c.kind === 'stockIn') return { ...d, stockIn: c.stockIn };
   if (c.kind === 'memo') return { ...d, memo: c.memo || null };
-  return { ...d, recipients: applyRecipients(d.recipients, c.userIds, c.received) };
+  return withRecipients(d, c.meal, applyRecipients(recipientsOf(d, c.meal), c.userIds, c.received));
 };
 
 const UPDATE_KEY = ['mealTickets', 'update'];
@@ -27,7 +27,7 @@ export function useUpdateMealTicket(actor: string) {
   return useMutation({
     mutationKey: UPDATE_KEY,
     mutationFn: (c: Change) => {
-      if (c.kind === 'received') return mealTicketRepo.setReceived(c.date, c.userIds, c.received, actor);
+      if (c.kind === 'received') return mealTicketRepo.setReceived(c.date, c.meal, c.userIds, c.received, actor);
       if (c.kind === 'stockIn') return mealTicketRepo.setStockIn(c.date, c.stockIn, actor);
       return mealTicketRepo.setMemo(c.date, c.memo, actor);
     },

@@ -1,5 +1,5 @@
 import { createCrudBackend, Query } from '@/data/_backend/crudBackend';
-import { applyRecipients, emptyMealTicketDay, mealTicketDaySchema, mealTicketId, type MealTicketDay } from '@/domain/mealTicket/engine';
+import { applyRecipients, emptyMealTicketDay, mealTicketDaySchema, mealTicketId, recipientsOf, withRecipients, type Meal, type MealTicketDay } from '@/domain/mealTicket/engine';
 import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
@@ -46,9 +46,9 @@ export const mealTicketRepo = {
     return (await backend.loadAll()).sort((a, b) => a.date.localeCompare(b.date));
   },
 
-  /** 그날 받은 사람 체크/해제 — 여러 명을 한 번에(드래그·Shift 범위). */
-  setReceived(date: string, userIds: string[], received: boolean, actor: string) {
-    return update(date, (d) => ({ ...d, recipients: applyRecipients(d.recipients, userIds, received) }), actor);
+  /** 그날 그 끼니(중식·석식)에 받은 사람 체크/해제 — 여러 명을 한 번에(드래그·Shift 범위). */
+  setReceived(date: string, meal: Meal, userIds: string[], received: boolean, actor: string) {
+    return update(date, (d) => withRecipients(d, meal, applyRecipients(recipientsOf(d, meal), userIds, received)), actor);
   },
 
   /** 그날 들어온 식권 수. */

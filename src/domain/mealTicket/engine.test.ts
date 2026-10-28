@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dayLabel, emptyMealTicketDay, monthCsv, monthDates, remainingAsOf, shiftMonth, summarizeMonth, type MealTicketDay } from './engine';
 
-const day = (date: string, stockIn: number, recipients: string[], memo?: string): MealTicketDay => ({ ...emptyMealTicketDay(date), stockIn, recipients, memo });
+const day = (date: string, stockIn: number, recipients: string[], memo?: string, dinnerRecipients: string[] = []): MealTicketDay => ({
+  ...emptyMealTicketDay(date),
+  stockIn,
+  recipients,
+  dinnerRecipients,
+  memo,
+});
 
 test('한 달 날짜와 요일 표기', () => {
   assert.equal(monthDates('2026-02').length, 28);
@@ -16,9 +22,9 @@ test('남은 식권은 입고 합계 − 받은 사람 수 합계이고 다음 �
   const days = [day('2026-09-30', 300, ['A', 'B']), day('2026-10-01', 0, ['A']), day('2026-10-03', 100, ['A', 'B', 'C'])];
   const { opening, rows } = summarizeMonth(days, monthDates('2026-10'));
   assert.equal(opening, 298);
-  assert.deepEqual(rows[0], { date: '2026-10-01', stockIn: 0, issued: 1, remaining: 297 });
-  assert.deepEqual(rows[1], { date: '2026-10-02', stockIn: 0, issued: 0, remaining: 297 });
-  assert.deepEqual(rows[2], { date: '2026-10-03', stockIn: 100, issued: 3, remaining: 394 });
+  assert.deepEqual(rows[0], { date: '2026-10-01', stockIn: 0, issued: 1, dinner: 0, remaining: 297 });
+  assert.deepEqual(rows[1], { date: '2026-10-02', stockIn: 0, issued: 0, dinner: 0, remaining: 297 });
+  assert.deepEqual(rows[2], { date: '2026-10-03', stockIn: 100, issued: 3, dinner: 0, remaining: 394 });
   assert.equal(rows.at(-1)!.remaining, 394);
 });
 
@@ -36,6 +42,7 @@ test('CSV — 받은 칸 O, 사람별 합계, 입고·발행·남은 식권·메
     '나,영업팀,,O,,1',
     '입고,전월 이월 0,10,,,10',
     '발행,,1,2,,3',
+    '그중 석식,,,,,0',
     // 입고·발행이 없는 날(2/3)은 화면처럼 비운다
     '남은 식권,,9,7,,7',
     '메모,,,"분실 1, 반납 0",,',
@@ -61,4 +68,25 @@ test('합계 칸 남은 수 — 오늘까지, 아직 오지 않은 달은 이월
   assert.equal(remainingAsOf(opening, rows, '2026-02-02'), 9);
   assert.equal(remainingAsOf(opening, rows, '2026-03-01'), 14);
   assert.equal(remainingAsOf(opening, rows, '2026-01-31'), opening);
+});
+
+test('석식 — 같은 식권이라 발행은 중식 + 석식, 남은 식권도 함께 줄고 이월된다. 엑셀 칸은 O·석·O석', () => {
+  const days = [day('2026-09-30', 10, ['A'], undefined, ['A']), day('2026-10-01', 0, ['A', 'B'], undefined, ['B'])];
+  const { opening, rows } = summarizeMonth(days, monthDates('2026-10').slice(0, 2));
+  assert.equal(opening, 8);
+  assert.deepEqual(rows[0], { date: '2026-10-01', stockIn: 0, issued: 3, dinner: 1, remaining: 5 });
+
+  const csv = monthCsv(days, monthDates('2026-10').slice(0, 1), [
+    { id: 'A', name: '가' },
+    { id: 'B', name: '나' },
+    { id: 'C', name: '다' },
+  ], '2026-10-31');
+  assert.deepEqual(csv.slice(1).split('\r\n').slice(1, 7), [
+    '가,,O,1',
+    '나,,O석,2',
+    '다,,,0',
+    '입고,전월 이월 8,,0',
+    '발행,,3,3',
+    '그중 석식,,1,1',
+  ]);
 });

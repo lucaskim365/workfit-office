@@ -238,7 +238,8 @@ export default function App() {
       <Route path="/gw/mail" element={<ProtectedRoute url="/gw/mail"><GwComingSoon /></ProtectedRoute>} />
       <Route path="/gw/commute" element={<ProtectedRoute url="/gw/commute"><GwCommute /></ProtectedRoute>} />
       <Route path="/gw/gallery" element={<ProtectedRoute url="/gw/gallery"><GwGallery /></ProtectedRoute>} />
-      <Route path="/gw/meal-ticket" element={<ProtectedRoute url="/gw/meal-ticket"><GwMealTicket /></ProtectedRoute>} />
+      {/* 식권 대장 — 메뉴에 없고 주소로만 들어온다. 권한 없이 로그인한 누구나 보고 고칠 수 있다 */}
+      <Route path="/gw/meal-ticket" element={<GwMealTicket />} />
       <Route path="/gw/:app" element={<GwComingSoon />} />
       {/* 개인 프로필 설정 */}
       <Route path="/profile" element={<ProfileScreen />} />

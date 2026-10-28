@@ -5,7 +5,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { useMealTickets, useUpdateMealTicket } from '@/features/mealTicket/useMealTickets';
-import { dayLabel, monthCsv, monthDates, rangeCells, remainingAsOf, remainingCell, shiftMonth, summarizeMonth, weekdayOf } from '@/domain/mealTicket/engine';
+import { dayLabel, MEAL_LABEL, monthCsv, monthDates, rangeCells, recipientsOf, remainingAsOf, remainingCell, shiftMonth, summarizeMonth, weekdayOf, type Meal } from '@/domain/mealTicket/engine';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
@@ -14,12 +14,16 @@ import { MealTicketPrintSheet } from './MealTicketPrintSheet';
 /**
  * 식권 대장 — 한 달을 출석부처럼(행 = 재직자, 열 = 날짜). 체크하면 그날 받은 사람이 되고,
  * 아래 줄에서 입고를 적으면 발행(= 받은 사람 수)·남은 식권은 자동으로 계산된다. 누구나 고칠 수 있다.
+ * 중식·석식은 표 위에서 바꿔 가며 체크한다(같은 식권 — 발행은 둘의 합). 다른 끼니에 받은 칸은 작은 점으로 보인다.
  */
 export default function MealTicketScreen() {
   const { user } = useAuth();
   const today = calendarToday();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [q, setQ] = useState('');
+  /** 지금 체크하는 끼니 */
+  const [meal, setMeal] = useState<Meal>('lunch');
+  const otherMeal: Meal = meal === 'lunch' ? 'dinner' : 'lunch';
   const dates = useMemo(() => monthDates(month), [month]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -65,13 +69,13 @@ export default function MealTicketScreen() {
   const dragRef = useRef<{ received: boolean; cells: Map<string, Set<string>> } | null>(null);
   const anchorRef = useRef<{ userId: string; date: string; received: boolean } | null>(null);
   const isChecked = (date: string, userId: string) =>
-    preview?.get(cellKey(date, userId)) ?? byDate.get(date)?.recipients.includes(userId) ?? false;
+    preview?.get(cellKey(date, userId)) ?? recipientsOf(byDate.get(date), meal).includes(userId);
 
   const commit = (cells: Map<string, Iterable<string>>, received: boolean) => {
     for (const [date, ids] of cells) {
-      const current = byDate.get(date)?.recipients ?? [];
+      const current = recipientsOf(byDate.get(date), meal);
       const userIds = [...ids].filter((id) => current.includes(id) !== received);
-      if (userIds.length) save.mutate({ kind: 'received', date, userIds, received });
+      if (userIds.length) save.mutate({ kind: 'received', date, meal, userIds, received });
     }
     // 화면 반영(낙관적 갱신)이 끝난 다음 프레임에 미리보기를 걷는다 — 바로 걷으면 잠깐 원래대로 깜빡인다
     requestAnimationFrame(() => setPreview(null));
@@ -163,7 +167,7 @@ export default function MealTicketScreen() {
       <GwHead
         icon="🎫"
         name="식권 대장"
-        desc="받은 사람을 체크하면 발행·남은 식권이 자동 계산됩니다. 누른 채 끌거나 Shift+클릭으로 여러 칸을 한 번에 체크할 수 있습니다. 식권을 받아 온 날은 표 위쪽 '입고'에 수량을, 분실 등은 날짜를 눌러 메모로 남기세요."
+        desc="받은 사람을 체크하면 발행·남은 식권이 자동 계산됩니다. 중식·석식은 표 위에서 바꿔 가며 체크하고, 다른 끼니에 받은 칸은 작은 점으로 보입니다. 누른 채 끌거나 Shift+클릭으로 여러 칸을 한 번에 체크할 수 있습니다. 식권을 받아 온 날은 표 위쪽 '입고'에 수량을, 분실 등은 날짜를 눌러 메모로 남기세요."
         right={
           <div className="flex gap-2">
             <Button onClick={() => setPrinting(true)} disabled={isLoading || printing}>
@@ -189,12 +193,29 @@ export default function MealTicketScreen() {
             <button type="button" onClick={() => setMonth(today.slice(0, 7))} className="ml-1 rounded-lg border border-border bg-panel px-2.5 py-1.5 text-xs font-semibold text-ink2 hover:bg-panel-alt">이번 달</button>
           )}
         </div>
+        <div className="flex h-8 overflow-hidden rounded-lg border border-border bg-panel text-xs font-bold" role="group" aria-label="체크할 끼니">
+          {(['lunch', 'dinner'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={meal === m}
+              onClick={() => {
+                setMeal(m);
+                anchorRef.current = null; // Shift 범위는 같은 끼니 안에서만
+              }}
+              className={`px-3.5 ${meal === m ? (m === 'lunch' ? 'bg-teal text-white' : 'bg-amber text-white') : 'text-ink2 hover:bg-panel-alt'}`}
+            >
+              {MEAL_LABEL[m]}
+            </button>
+          ))}
+        </div>
         <label className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-panel px-2.5 text-ink3">
           <Search size={14} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서 검색" className="w-36 bg-transparent text-xs text-ink outline-none" />
         </label>
         <div className="ml-auto text-xs text-ink2">
-          전월 이월 <b className="text-ink">{opening}</b> · 이번 달 발행 <b className="text-ink">{summary.reduce((a, r) => a + r.issued, 0)}</b> · 남은 식권{' '}
+          전월 이월 <b className="text-ink">{opening}</b> · 이번 달 발행 <b className="text-ink">{summary.reduce((a, r) => a + r.issued, 0)}</b>
+          <span className="text-ink3">(석식 {summary.reduce((a, r) => a + r.dinner, 0)})</span> · 남은 식권{' '}
           <b className="text-teal">{remainingNow}</b>
         </div>
       </div>
@@ -244,6 +265,13 @@ export default function MealTicketScreen() {
               <td className={`${lastCol} bg-panel-alt text-center font-semibold text-ink`}>{summary.reduce((a, r) => a + r.issued, 0) || ''}</td>
             </tr>
             <tr>
+              <td className={`${firstCol} bg-panel-alt py-1 pl-5 pr-3 text-[11px] font-semibold text-ink3`}>└ 그중 석식</td>
+              {summary.map((r) => (
+                <td key={r.date} className={`text-center text-[11px] font-semibold text-amber ${sumCell(r.date)}`}>{r.dinner || ''}</td>
+              ))}
+              <td className={`${lastCol} bg-panel-alt text-center text-[11px] font-semibold text-amber`}>{summary.reduce((a, r) => a + r.dinner, 0) || ''}</td>
+            </tr>
+            <tr>
               <td className={`${firstCol} border-b-2 bg-panel-alt px-3 py-1.5 font-bold text-ink`}>남은 식권</td>
               {summary.map((r) => (
                 <td key={r.date} className={`border-b-2 border-border text-center font-bold ${r.remaining < 0 ? 'text-danger' : 'text-teal'} ${sumCell(r.date)}`}>
@@ -264,13 +292,15 @@ export default function MealTicketScreen() {
                   </td>
                   {dates.map((date) => {
                     const checked = isChecked(date, p.id);
-                    if (checked) total += 1;
+                    const other = recipientsOf(byDate.get(date), otherMeal).includes(p.id);
+                    total += (checked ? 1 : 0) + (other ? 1 : 0); // 합계 = 받은 식권 수(중식 + 석식)
                     return (
                       <td
                         key={date}
                         onMouseDown={(e) => onCellDown(e, date, p.id)}
                         onMouseEnter={() => onCellEnter(date, p.id)}
-                        className={`h-8 cursor-pointer border-b border-border p-0 text-center ${date === today ? 'border-x border-x-teal bg-teal-soft' : offDay(date) ? 'bg-bg group-hover:bg-panel-alt' : 'group-hover:bg-panel-alt'}`}
+                        title={other ? `${MEAL_LABEL[otherMeal]}도 받음` : undefined}
+                        className={`relative h-8 cursor-pointer border-b border-border p-0 text-center ${date === today ? 'border-x border-x-teal bg-teal-soft' : offDay(date) ? 'bg-bg group-hover:bg-panel-alt' : 'group-hover:bg-panel-alt'}`}
                       >
                         {/* 마우스는 칸(td)이 받는다 — 체크박스는 보이기·키보드용 */}
                         <input
@@ -278,9 +308,11 @@ export default function MealTicketScreen() {
                           checked={checked}
                           readOnly
                           onKeyDown={(e) => onCellKey(e, date, p.id)}
-                          className="pointer-events-none h-4 w-4 accent-teal"
-                          aria-label={`${p.name} ${dayLabel(date)} 식권`}
+                          className={`pointer-events-none h-4 w-4 ${meal === 'lunch' ? 'accent-teal' : 'accent-amber'}`}
+                          aria-label={`${p.name} ${dayLabel(date)} ${MEAL_LABEL[meal]} 식권`}
                         />
+                        {/* 다른 끼니에도 받았으면 작은 점 — 끼니를 바꾸지 않아도 보이게 */}
+                        {other && <span className={`pointer-events-none absolute right-1 top-1 h-1.5 w-1.5 rounded-full ${otherMeal === 'dinner' ? 'bg-amber' : 'bg-teal'}`} />}
                       </td>
                     );
                   })}

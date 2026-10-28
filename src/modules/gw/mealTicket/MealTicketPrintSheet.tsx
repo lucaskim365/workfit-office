@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { remainingCell, type MealTicketDay, type MealTicketDaySummary } from '@/domain/mealTicket/engine';
+import { mealMark, remainingCell, ticketsOf, type MealTicketDay, type MealTicketDaySummary } from '@/domain/mealTicket/engine';
 
 const WEEKDAY = '일월화수목금토';
 
@@ -18,6 +18,7 @@ interface Props {
 
 /**
  * 식권 대장 인쇄(PDF 저장)용 한 달 표 — A4 가로, 행 = 사람, 열 = 날짜(화면 표와 같은 모양).
+ * 받은 칸은 엑셀과 같이 중식 O, 석식 석, 둘 다 O석. 합계는 받은 식권 수.
  * 인쇄하는 동안만 body 에 붙인다. 인쇄 때는 `.approval-print` 만 보이는 공통 규칙(index.css)을 그대로 쓰고,
  * 용지 방향·여백은 이 표가 떠 있을 때만 끼우는 @page 로 바꾼다(전자결재 인쇄는 세로 그대로).
  */
@@ -40,8 +41,8 @@ export function MealTicketPrintSheet({ month, dates, people, byDate, summary, op
           </h1>
           <div className="text-[8pt]">
             전월 이월 <b>{opening}</b> · 이번 달 입고 <b>{summary.reduce((a, r) => a + r.stockIn, 0)}</b> · 발행{' '}
-            <b>{summary.reduce((a, r) => a + r.issued, 0)}</b> · 남은 식권 <b>{remainingNow}</b>
-            <span className="ml-[3mm] text-[#666]">출력 {today}</span>
+            <b>{summary.reduce((a, r) => a + r.issued, 0)}</b>(석식 {summary.reduce((a, r) => a + r.dinner, 0)}) · 남은 식권 <b>{remainingNow}</b>
+            <span className="ml-[3mm] text-[#666]">O 중식 · 석 석식 · 출력 {today}</span>
           </div>
         </div>
 
@@ -67,7 +68,7 @@ export function MealTicketPrintSheet({ month, dates, people, byDate, summary, op
           </thead>
           <tbody>
             {people.map((p) => {
-              const total = dates.filter((d) => byDate.get(d)?.recipients.includes(p.id)).length;
+              const total = dates.reduce((a, d) => a + ticketsOf(byDate.get(d), p.id), 0);
               return (
                 <tr key={p.id} className="break-inside-avoid">
                   <td className={`${cell} truncate px-[1mm] text-left`}>
@@ -75,7 +76,7 @@ export function MealTicketPrintSheet({ month, dates, people, byDate, summary, op
                   </td>
                   {dates.map((d) => (
                     <td key={d} className={`${cell} h-[4.6mm] ${off(d)}`}>
-                      {byDate.get(d)?.recipients.includes(p.id) ? 'O' : ''}
+                      {mealMark(byDate.get(d), p.id)}
                     </td>
                   ))}
                   <td className={`${cell} font-semibold`}>{total || ''}</td>
@@ -86,6 +87,7 @@ export function MealTicketPrintSheet({ month, dates, people, byDate, summary, op
               [
                 ['입고', (r: MealTicketDaySummary) => r.stockIn || '', summary.reduce((a, r) => a + r.stockIn, 0)],
                 ['발행', (r: MealTicketDaySummary) => r.issued || '', summary.reduce((a, r) => a + r.issued, 0)],
+                ['그중 석식', (r: MealTicketDaySummary) => r.dinner || '', summary.reduce((a, r) => a + r.dinner, 0)],
                 ['남은 식권', remainingCell, remainingNow],
               ] as const
             ).map(([label, value, total], i) => (
