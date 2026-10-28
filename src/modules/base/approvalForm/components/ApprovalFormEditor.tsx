@@ -216,6 +216,7 @@ export function ApprovalFormEditor({
       resignedAt: '',
       fcmToken: '',
       fcmTokens: [],
+      fcmTokensRecall: [],
     };
   }, [user]);
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MAX_PUSH_TOKENS, allPushTokens, hasPushToken, withPushToken, withoutPushToken } from './pushTokens';
+import { MAX_PUSH_TOKENS, allPushTokens, hasPushToken, withPushToken, withRecallToken, withoutPushToken } from './pushTokens';
 
 test('목록과 예전 단일 칸을 합쳐 중복 없이 모은다', () => {
   assert.deepEqual(allPushTokens({ fcmTokens: ['a', 'b'], fcmToken: 'b' }), ['a', 'b']);
@@ -26,4 +26,11 @@ test('토큰을 빼면 목록과 단일 칸에서 모두 빠진다', () => {
   assert.deepEqual(withoutPushToken({ fcmTokens: ['a', 'b'], fcmToken: 'b' }, 'a'), { fcmTokens: ['b'], fcmToken: 'b' });
   assert.equal(hasPushToken({ fcmTokens: ['a'], fcmToken: '' }, 'a'), true);
   assert.equal(hasPushToken({ fcmTokens: ['a'], fcmToken: '' }, ''), false);
+});
+
+test('회수 신호 목록 — 아이폰이 아닌 기기만 맨 앞에 넣고, 아이폰이면(또는 바뀌면) 뺀다', () => {
+  assert.deepEqual(withRecallToken([], 'android', true), ['android']);
+  assert.deepEqual(withRecallToken(['pc'], 'android', true), ['android', 'pc']);
+  assert.deepEqual(withRecallToken(['pc', 'iphone'], 'iphone', false), ['pc']);
+  assert.deepEqual(withRecallToken(null, 'iphone', false), []);
 });

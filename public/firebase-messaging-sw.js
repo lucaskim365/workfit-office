@@ -31,6 +31,16 @@ async function expireNotification(id, tag) {
 messaging.onBackgroundMessage(async (payload) => {
   const n = payload.notification || {};
   const data = payload.data || {};
+  // 회수 신호 — 다른 기기에서 읽은 대화방의 알림을 닫는다(새 알림이 아니다).
+  // 브라우저는 푸시마다 알림을 띄우라고 요구하므로(안 띄우면 기본 알림이 대신 뜬다) 소리·진동 없는 알림을
+  // 잠깐 띄웠다가 바로 닫는다. 아이폰에는 이 신호를 보내지 않는다(서버가 users.fcmTokensRecall 로 거른다).
+  if (data.type === 'recall-chat') {
+    if (data.roomId) for (const old of await self.registration.getNotifications({ tag: data.roomId })) old.close();
+    const tag = `workfit-recall-${data.roomId || ''}`;
+    await self.registration.showNotification('알림 정리', { tag, silent: true, data: {} });
+    for (const shown of await self.registration.getNotifications({ tag })) shown.close();
+    return;
+  }
   const isChat = Boolean(data.roomId);
   const bodyText = n.body || data.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
   const id = `${Date.now()}-${Math.random()}`;

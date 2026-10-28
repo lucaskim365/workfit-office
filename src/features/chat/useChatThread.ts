@@ -10,6 +10,7 @@ import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from './useChatRooms';
 import { buildAttachmentBatch } from './attachmentBatch';
 import { CHAT_POLL_FALLBACK_MS, chatPollInterval, fetchThread, useChatRealtime } from './chatRealtime';
 import { loadMessagesSince, loadOlderMessages, subscribeThreadWindows, threadWindowOf } from './threadWindow';
+import { requestChatNotificationRecall } from '@/shared/lib/messaging';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -187,13 +188,17 @@ export function useRoomFiles(roomId: string, enabled: boolean) {
   });
 }
 
-/** 방 진입 시 읽음 처리 — 미읽음 배지 클리어. */
+/**
+ * 방 진입 시 읽음 처리 — 미읽음 배지 클리어.
+ * 실제로 읽음으로 바꾼 메시지가 있으면 내 다른 기기(안드로이드·PC)의 그 방 푸시 알림을 닫아 달라고 서버에 알린다.
+ */
 export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ roomId, userId }: { roomId: string; userId: string }) =>
       chatMessageRepo.markRead(roomId, userId),
-    onSuccess: (_, { roomId }) => {
+    onSuccess: (marked, { roomId }) => {
+      if (marked > 0) requestChatNotificationRecall(roomId);
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
       qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
     },

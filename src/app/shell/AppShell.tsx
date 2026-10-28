@@ -14,6 +14,7 @@ import { ScrollTopButton } from './ScrollTopButton';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useToastNotificationsTrigger } from '@/features/notification/useNotifications';
+import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
 import { ReloginDialog } from '@/app/auth/ReloginDialog';
 
 function loadJSON<T>(key: string, fallback: T): T {
@@ -39,6 +40,8 @@ function ScreenLoading() {
 export default function AppShell({ routes }: { routes: ReactNode }) {
   const { user } = useAuth();
   useToastNotificationsTrigger(user?.id);
+  // 이 PC 에 남은 읽은 대화방의 푸시 알림 정리
+  useCloseReadChatNotifications(user?.id);
 
   const location = useLocation();
   const navigate = useNavigate();
