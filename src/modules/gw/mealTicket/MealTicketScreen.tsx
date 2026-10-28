@@ -5,7 +5,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { useMealTickets, useUpdateMealTicket } from '@/features/mealTicket/useMealTickets';
-import { dayLabel, monthCsv, monthDates, rangeCells, shiftMonth, summarizeMonth, weekdayOf } from '@/domain/mealTicket/engine';
+import { dayLabel, monthCsv, monthDates, rangeCells, remainingAsOf, remainingCell, shiftMonth, summarizeMonth, weekdayOf } from '@/domain/mealTicket/engine';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
@@ -32,7 +32,7 @@ export default function MealTicketScreen() {
   const holidayNames = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
   const { opening, rows: summary } = useMemo(() => summarizeMonth(days, dates), [days, dates]);
   // 지금 남은 식권 — 지난달이면 그달 말, 이번 달이면 오늘까지, 다음 달이면 이월분
-  const remainingNow = summary.filter((r) => r.date <= today).at(-1)?.remaining ?? opening;
+  const remainingNow = remainingAsOf(opening, summary, today);
 
   // 재직자 + 이 달에 받은 기록이 있는 퇴직자(합계가 맞도록)
   const people = useMemo(() => {
@@ -120,7 +120,7 @@ export default function MealTicketScreen() {
   const offDay = (date: string) => weekdayOf(date) === 0 || weekdayOf(date) === 6 || holidayNames.has(date);
 
   const download = () => {
-    const csv = monthCsv(days, dates, people);
+    const csv = monthCsv(days, dates, people, today);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a');
     a.href = url;
@@ -135,6 +135,7 @@ export default function MealTicketScreen() {
   };
 
   const firstCol = 'sticky left-0 z-[5] border-r border-border'; // 배경은 쓰는 곳에서 — 같은 칸에 배경 두 개가 겹치지 않게
+  const lastCol = 'sticky right-0 z-[5] border-l border-border'; // 합계 — 이름 열처럼 가로 스크롤해도 오른쪽에 붙어 있게
   const sumCell = (date: string) => (date === today ? 'bg-teal-soft' : 'bg-panel-alt');
 
   return (
@@ -199,7 +200,7 @@ export default function MealTicketScreen() {
                   </div>
                 </th>
               ))}
-              <th className="min-w-[48px] border-b border-l border-border bg-panel-alt px-2 text-center font-bold text-ink2">합계</th>
+              <th className={`${lastCol} min-w-[48px] border-b bg-panel-alt px-2 text-center font-bold text-ink2`}>합계</th>
             </tr>
             <tr>
               <td className={`${firstCol} bg-panel-alt px-3 py-1 font-bold text-ink`}>입고</td>
@@ -208,23 +209,23 @@ export default function MealTicketScreen() {
                   <StockInput value={r.stockIn} onSave={(n) => save.mutate({ kind: 'stockIn', date: r.date, stockIn: n })} />
                 </td>
               ))}
-              <td className="border-l border-border bg-panel-alt text-center font-semibold text-ink">{summary.reduce((a, r) => a + r.stockIn, 0) || ''}</td>
+              <td className={`${lastCol} bg-panel-alt text-center font-semibold text-ink`}>{summary.reduce((a, r) => a + r.stockIn, 0) || ''}</td>
             </tr>
             <tr>
               <td className={`${firstCol} bg-panel-alt px-3 py-1.5 font-bold text-ink`}>발행</td>
               {summary.map((r) => (
                 <td key={r.date} className={`text-center font-semibold text-ink2 ${sumCell(r.date)}`}>{r.issued || ''}</td>
               ))}
-              <td className="border-l border-border bg-panel-alt text-center font-semibold text-ink">{summary.reduce((a, r) => a + r.issued, 0) || ''}</td>
+              <td className={`${lastCol} bg-panel-alt text-center font-semibold text-ink`}>{summary.reduce((a, r) => a + r.issued, 0) || ''}</td>
             </tr>
             <tr>
               <td className={`${firstCol} border-b-2 bg-panel-alt px-3 py-1.5 font-bold text-ink`}>남은 식권</td>
               {summary.map((r) => (
                 <td key={r.date} className={`border-b-2 border-border text-center font-bold ${r.remaining < 0 ? 'text-danger' : 'text-teal'} ${sumCell(r.date)}`}>
-                  {r.stockIn || r.issued ? r.remaining : ''}
+                  {remainingCell(r)}
                 </td>
               ))}
-              <td className="border-b-2 border-l border-border bg-panel-alt text-center font-bold text-teal">{remainingNow}</td>
+              <td className={`${lastCol} border-b-2 bg-panel-alt text-center font-bold text-teal`}>{remainingNow}</td>
             </tr>
           </thead>
           <tbody>
@@ -258,7 +259,7 @@ export default function MealTicketScreen() {
                       </td>
                     );
                   })}
-                  <td className="border-b border-l border-border text-center font-semibold text-ink">{total || ''}</td>
+                  <td className={`${lastCol} border-b bg-panel text-center font-semibold text-ink group-hover:bg-panel-alt`}>{total || ''}</td>
                 </tr>
               );
             })}
