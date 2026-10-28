@@ -7,7 +7,7 @@ import { useApprovalBoxes, useBatchDecideStep } from '@/features/gw/useApprovals
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import MobileNotificationBell from './MobileNotificationBell';
-import { currentApproverIds } from '@/domain/approvalDoc/engine';
+import { byRecent, currentApproverIds, isMyApprovedDone } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } from '@/domain/approvalDoc/search';
@@ -76,7 +76,7 @@ export default function MobileApprovalList() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
@@ -178,8 +178,9 @@ export default function MobileApprovalList() {
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
 
-    // 1. 결재 대기함 필터링
+    // 1. 결재 대기함 필터링 — 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터, 웹과 같게)
     if (box === '대기') {
+      const myDone = (byBox['완료'] ?? []).filter((d) => isMyApprovedDone(d, me));
       if (todoFilter === 'pending') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
@@ -189,10 +190,12 @@ export default function MobileApprovalList() {
       if (todoFilter === 'progress') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me);
+          return d.status === '진행중' && !approvers.includes(me);
         });
       }
-      return rawDocs;
+      if (todoFilter === 'done') return myDone;
+      const ids = new Set(rawDocs.map((d) => d.id));
+      return [...rawDocs, ...myDone.filter((d) => !ids.has(d.id))].sort(byRecent);
     }
 
     // 2. 상신함 필터링
@@ -400,8 +403,8 @@ export default function MobileApprovalList() {
 
       {box === '대기' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['pending', 'progress', 'all'] as const).map((f) => {
-            const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
+          {(['all', 'pending', 'progress', 'done'] as const).map((f) => {
+            const label = f === 'pending' ? '대기중' : f === 'progress' ? '진행중' : f === 'done' ? '완료' : '전체';
             const active = todoFilter === f;
             return (
               <button
@@ -410,7 +413,7 @@ export default function MobileApprovalList() {
                   setTodoFilter(f);
                   exitSelectMode();
                 }}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
@@ -439,7 +442,7 @@ export default function MobileApprovalList() {
               <button
                 key={f}
                 onClick={() => setDraftFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#2563eb] text-white shadow-sm shadow-[#2563eb]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
