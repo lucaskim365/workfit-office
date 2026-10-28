@@ -211,15 +211,26 @@ export function PurchaseOrderArchive({
       {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] font-semibold text-red-500 shrink-0">{err}</p>}
 
       {/* 목록 */}
-      <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
-        <table className="w-full border-collapse text-left text-[11.5px]">
+      {/*
+        표는 상자 너비에 맞춘다(table-fixed) — 가로 스크롤 없이, 좁으면 제목은 말줄임·파일 칸은 줄을 바꿔 들어간다.
+        contain:inline-size — 표 내용 너비가 페이지 전체를 넓히지 않게(넓어지면 상단바 오른쪽이 빈다)
+      */}
+      <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-panel [contain:inline-size]">
+        <table className="w-full table-fixed border-collapse text-left text-[11.5px]">
+          <colgroup>
+            <col />
+            <col className="w-[6.5rem]" />
+            <col className="w-[5.5rem]" />
+            <col className="w-[27%]" />
+            <col className="w-[27%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-panel-alt/50 font-bold text-ink2">
               <th className="p-3">제목</th>
-              <th className="p-3 w-28">완료일자</th>
-              <th className="p-3 w-32 text-center">다운로드</th>
-              <th className="p-3 w-80">회신 문서</th>
-              <th className="p-3 w-80">매입 세금계산서</th>
+              <th className="p-3">완료일자</th>
+              <th className="p-3 text-center">다운로드</th>
+              <th className="p-3">회신 문서</th>
+              <th className="p-3">매입 세금계산서</th>
             </tr>
           </thead>
           <tbody>
@@ -247,11 +258,11 @@ export function PurchaseOrderArchive({
                 >
                   {/* 회신 문서가 있는 행은 왼쪽 띠로 한눈에 구분한다 */}
                   <td className={`p-3 min-w-0 border-l-[3px] ${reply ? 'border-l-emerald-500' : 'border-l-transparent'}`}>
-                    <button onClick={() => setViewDoc(d)} className="flex items-center gap-1.5 text-left font-semibold text-ink hover:text-teal transition-colors">
+                    <button onClick={() => setViewDoc(d)} title={d.title} className="flex max-w-full items-center gap-1.5 text-left font-semibold text-ink hover:text-teal transition-colors">
                       <FileText size={13} className="shrink-0 text-ink3" />
                       <span className="truncate">{d.title}</span>
                     </button>
-                    <div className="mt-0.5 pl-5 text-[10.5px] text-ink3">
+                    <div className="mt-0.5 truncate pl-5 text-[10.5px] text-ink3">
                       <span className="font-mono">{d.docNo}</span>
                       {(d.drafterName || d.drafterDept) && <span> · {[d.drafterDept, d.drafterName].filter(Boolean).join(' ')}</span>}
                     </div>
@@ -434,20 +445,21 @@ function PoFileCell({
   }
   return (
     <div {...dropProps} className={`flex flex-col gap-1.5 ${overClass}`}>
-      <div className="flex items-center gap-1.5 text-[10.5px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10.5px]">
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 font-bold text-white">
           {doneIcon} {doneLabel}
         </span>
         <span className="truncate text-ink3">{[file.uploadedByName, file.uploadedAt.slice(0, 10)].filter(Boolean).join(' · ')}</span>
       </div>
-      <div className="flex items-center gap-1.5">
+      {/* 좁으면 교체·삭제가 파일 이름 아래 줄로 내려간다 */}
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <button
           onClick={() => onDownload(file)}
           title={`${file.name} 내려받기`}
-          className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
+          className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
         >
           <Download size={12} className="shrink-0" />
-          <span className="truncate max-w-[150px]">{file.name}</span>
+          <span className="truncate">{file.name}</span>
         </button>
         {canUpload && (
           <button

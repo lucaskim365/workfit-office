@@ -252,7 +252,12 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
           />
         )}
 
-        <div className="flex flex-1 flex-col min-w-fit w-full">
+        {/*
+          그룹웨어(/gw, 사이드바 없음)는 본문이 넓으면 페이지째 가로 스크롤한다(min-w-fit — 전자결재 문서가 잘리지 않게).
+          사이드바가 있는 화면은 본문(main)이 안에서 스크롤하므로 min-w-0 — min-w-fit 이면 사이드바 폭만큼 창 밖으로 밀려
+          페이지가 넘치고 상단바 오른쪽이 빈다.
+        */}
+        <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 flex-col min-w-fit w-full' : 'flex flex-1 flex-col min-w-0'}>
           <TabBar
             tabs={viewTabs}
             activeTabId={activeTabId}
