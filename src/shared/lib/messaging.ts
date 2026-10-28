@@ -102,23 +102,12 @@ export function requestChatNotificationRecall(roomId: string): void {
 export async function closeChatNotifications(keep: (roomId: string) => boolean): Promise<void> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   try {
-    // 등록이 여럿일 수 있다(예전 방식으로 만든 등록이 남은 기기) — 모두 뒤진다
-    let shown = 0;
-    let closed = 0;
-    for (const reg of await navigator.serviceWorker.getRegistrations()) {
-      if (!reg.getNotifications) continue;
-      for (const n of await reg.getNotifications()) {
-        shown += 1;
-        // 방 ID 는 알림 data 에, 없으면 tag(대화 알림은 tag = 방 ID, 'RM-' 로 시작)로 — 결재 등 다른 알림은 건드리지 않는다
-        const roomId = (n.data as { roomId?: string } | null)?.roomId || (n.tag?.startsWith('RM-') ? n.tag : '');
-        if (roomId && !keep(roomId)) {
-          n.close();
-          closed += 1;
-        }
-      }
+    const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    if (!reg?.getNotifications) return;
+    for (const n of await reg.getNotifications()) {
+      const roomId = (n.data as { roomId?: string } | null)?.roomId;
+      if (roomId && !keep(roomId)) n.close();
     }
-    // 휴대폰을 PC 크롬(chrome://inspect)에 연결해 볼 때 원인을 가릴 수 있게 남긴다
-    if (shown > 0) console.info(`[push] 읽은 방 알림 정리: 떠 있는 알림 ${shown}개 중 ${closed}개 닫음`);
   } catch (e) {
     console.warn('[push] 읽은 방 알림 정리 실패', e);
   }
