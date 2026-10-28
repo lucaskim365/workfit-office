@@ -408,7 +408,7 @@ function selectBackend(): ChatMessageBackend {
 const backend: ChatMessageBackend = selectBackend();
 
 /** 방·사용자별 진행 중인 읽음 처리 — 같은 방을 동시에 두 번 고쳐 쓰지 않게. */
-const markReadInFlight = new Map<string, Promise<number>>();
+const markReadInFlight = new Map<string, Promise<void>>();
 /** 처리 중에 다시 불린 방 — 끝나면 한 번 더 돈다. */
 const markReadAgain = new Set<string>();
 
@@ -500,8 +500,7 @@ export const chatMessageRepo = {
    * ② 최신 메시지부터 처리하며 ③ 한도에 걸리면 오류로 끝내지 않고 멈춘다 — 나머지는 다음 진입 때 이어서.
    * 처리 중에 새 메시지가 와서 다시 불리면 끝난 뒤 한 번 더 돈다(안 그러면 그 메시지만 '1'로 남는다).
    */
-  /** 돌려주는 값: 이번에 읽음으로 바꾼 메시지 수(0이면 이미 다 읽은 방) */
-  markRead(roomId: string, userId: string): Promise<number> {
+  markRead(roomId: string, userId: string): Promise<void> {
     const key = `${roomId}|${userId}`;
     const running = markReadInFlight.get(key);
     if (running) {
@@ -509,7 +508,6 @@ export const chatMessageRepo = {
       return running;
     }
     const job = (async () => {
-      let marked = 0;
       try {
         for (let round = 0; round < 5; round++) {
           markReadAgain.delete(key);
@@ -518,16 +516,14 @@ export const chatMessageRepo = {
           try {
             for (let i = 0; i < targets.length; i += 5) {
               await Promise.all(targets.slice(i, i + 5).map((m) => backend.save({ ...m, readBy: [...m.readBy, userId] })));
-              marked += targets.slice(i, i + 5).length;
             }
           } catch (e) {
             if ((e as { code?: number })?.code !== 429) throw e;
             console.warn('[chat] 읽음 처리 한도 도달 — 남은 메시지는 다음에 이어서 처리합니다');
-            return marked;
+            return;
           }
-          if (!markReadAgain.has(key)) return marked;
+          if (!markReadAgain.has(key)) return;
         }
-        return marked;
       } finally {
         // 작업 안에서 바로 정리한다 — 끝난 작업을 새 요청이 받아 가 새 메시지를 놓치는 틈이 없게
         markReadInFlight.delete(key);

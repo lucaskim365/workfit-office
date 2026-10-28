@@ -1,7 +1,5 @@
 import { getMessaging, getToken, onMessage, isSupported, type Messaging } from 'firebase/messaging';
-import { Functions } from 'appwrite';
 import { app, isFirebaseConfigured } from './firebase';
-import { client as appwriteClient } from './appwrite';
 import { userRepo } from '@/data/user/user.repo';
 
 /**
@@ -70,49 +68,6 @@ export async function releasePushTokenOnSignOut(userId: string): Promise<void> {
   catch (e) { console.warn('[push] 로그아웃 기기 토큰 정리 실패', e); }
 }
 
-/**
- * 아이폰·아이패드인가 — 이 기기는 회수 신호(보이지 않는 푸시)를 받지 않게 한다(domain/user/pushTokens withRecallToken).
- * 아이패드는 데스크톱 사파리처럼 'Macintosh' 로 나오므로 터치 지원으로 가른다.
- */
-function isAppleMobile(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-}
-
-/** 서버 푸시 함수(appwrite/functions/push-notifications) */
-const PUSH_FUNCTION_ID = 'push-notifications';
-/** 회수 신호 종류 — 서비스워커(public/firebase-messaging-sw.js)·서버 함수와 같은 값 */
-const RECALL_CHAT = 'recall-chat';
-
-/**
- * 이 기기에서 대화방을 읽었으니, 내 다른 기기(안드로이드·PC)의 그 방 알림을 닫아 달라고 서버에 알린다.
- * 실패해도 읽음 처리에는 영향이 없다(알림이 남을 뿐).
- */
-export function requestChatNotificationRecall(roomId: string): void {
-  if (!appwriteClient || !roomId) return;
-  new Functions(appwriteClient)
-    .createExecution(PUSH_FUNCTION_ID, JSON.stringify({ type: RECALL_CHAT, roomId }), true)
-    .catch((e) => console.warn('[push] 알림 회수 요청 실패', e));
-}
-
-/**
- * 이 기기에 떠 있는 대화방 알림 중 keep 이 false 인 방의 알림을 닫는다(이미 읽은 방).
- * 아이폰은 회수 신호를 받지 않으므로, 앱이 화면에 있거나 돌아올 때 이걸로 정리한다.
- */
-export async function closeChatNotifications(keep: (roomId: string) => boolean): Promise<void> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-  try {
-    const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    if (!reg?.getNotifications) return;
-    for (const n of await reg.getNotifications()) {
-      const roomId = (n.data as { roomId?: string } | null)?.roomId;
-      if (roomId && !keep(roomId)) n.close();
-    }
-  } catch (e) {
-    console.warn('[push] 읽은 방 알림 정리 실패', e);
-  }
-}
-
 async function registerPushServiceWorker(): Promise<ServiceWorkerRegistration> {
   const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { updateViaCache: 'none' });
   // 화면을 다시 열지 않아도 최신 표시 코드를 설치한다. 실패해도 기존 푸시는 유지한다.
@@ -139,7 +94,7 @@ export async function enablePushForUser(userId: string): Promise<{ ok: boolean; 
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (!token) return { ok: false, error: '토큰 발급 실패(null)' };
 
-    await userRepo.updateFcmToken(userId, token, !isAppleMobile());
+    await userRepo.updateFcmToken(userId, token);
     rememberDeviceToken(token);
     console.log('[push] 토큰 저장 완료', token.slice(0, 20) + '…');
     return { ok: true };
@@ -165,7 +120,7 @@ export async function syncPushToken(userId: string): Promise<void> {
     signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
-      await userRepo.updateFcmToken(userId, token, !isAppleMobile());
+      await userRepo.updateFcmToken(userId, token);
       rememberDeviceToken(token);
     }
   } catch (e) {
@@ -192,11 +147,6 @@ export async function onForegroundMessage(
   onMessage(msg, (payload) => {
     const n = payload.notification ?? {};
     const d = payload.data ?? {};
-    // 회수 신호는 새 알림이 아니다 — 그 방 알림만 닫는다
-    if (d.type === RECALL_CHAT) {
-      if (d.roomId) void closeChatNotifications((roomId) => roomId !== d.roomId);
-      return;
-    }
     cb({
       title: n.title ?? d.title ?? '새 알림',
       body: n.body ?? d.body ?? '',

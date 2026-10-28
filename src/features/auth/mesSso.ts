@@ -26,7 +26,6 @@ export const FALLBACK_ADMIN_USER: User = {
   resignedAt: '',
   fcmToken: '',
   fcmTokens: [],
-  fcmTokensRecall: [],
   assignments: [],
 };
 

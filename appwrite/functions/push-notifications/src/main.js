@@ -5,10 +5,6 @@
  * 기존 Firebase Cloud Functions(onNewChatMessage·onNewNotification)를 Appwrite Function으로
  * 이식. **발송은 FCM 유지**(무료·무제한). 트리거만 Appwrite DB 이벤트로 전환.
  *
- * 화면에서 직접 실행(회수 요청) — { type: 'recall-chat', roomId }: 부른 사람이 그 방을 읽었으니
- *   그 사람의 다른 기기(안드로이드·PC, users.fcmTokensRecall)에 "그 방 알림 닫기" 신호를 보낸다. 아이폰 제외.
- *   (appwrite.json execute: users — 로그인한 사용자만, 부른 사람은 x-appwrite-user-id 로 서버가 확인)
- *
  * 트리거(이벤트) — 함수 설정에서 아래 2개 등록:
  *   databases.workfit.collections.chatMessages.documents.*.create
  *   databases.workfit.collections.notifications.documents.*.create
@@ -65,7 +61,6 @@ async function removeDeadTokens(dbs, DB, uid, dead, log) {
     const patch = {};
     if (dead.includes(u?.fcmToken)) patch.fcmToken = '';
     if (Array.isArray(u?.fcmTokens)) patch.fcmTokens = list.filter((t) => !dead.includes(t));
-    if (Array.isArray(u?.fcmTokensRecall)) patch.fcmTokensRecall = u.fcmTokensRecall.filter((t) => !dead.includes(t));
     if (Object.keys(patch).length > 0) await dbs.updateDocument(DB, 'users', uid, patch);
     log(`cleared ${dead.length} stale token(s) for ${uid}`);
   } catch (e) {
@@ -154,29 +149,6 @@ async function handleChatMessage(msg, dbs, DB, log) {
   return { sent: res.successCount, total: res.total };
 }
 
-// ── 다른 기기에서 읽은 대화방 → 내 기기(안드로이드·PC)의 그 방 알림 회수 ──
-async function handleRecall(userId, roomId, dbs, DB, log) {
-  if (!userId || !roomId) return { skipped: 'no-user-or-room' };
-  let u;
-  try {
-    u = await dbs.getDocument(DB, 'users', userId);
-  } catch (e) {
-    return { skipped: 'user-not-found' };
-  }
-  // 회수 신호를 받아도 되는 기기에만 — 아이폰·이 기능 전에 등록한 기기는 목록에 없어 빠진다
-  // (아이폰 웹 푸시는 화면에 안 보이는 푸시가 쌓이면 알림 권한을 끊을 수 있다)
-  const all = new Set([...(Array.isArray(u.fcmTokens) ? u.fcmTokens : []), u.fcmToken || ''].filter(Boolean));
-  const tokens = (Array.isArray(u.fcmTokensRecall) ? u.fcmTokensRecall : []).filter((t) => all.has(t));
-  if (tokens.length === 0) return { skipped: 'no-recall-tokens' };
-  const res = await sendToTokens({
-    data: { type: 'recall-chat', roomId: String(roomId) },
-    // 오래 지난 회수 신호는 의미가 없다 — 10분 안에 못 전하면 버린다
-    webpush: { headers: { Urgency: 'high', TTL: '600' } },
-  }, new Map(tokens.map((t) => [t, userId])), dbs, DB, log);
-  log(`recall → ${userId} room ${roomId} ${res.successCount}/${res.total}`);
-  return { sent: res.successCount, total: res.total };
-}
-
 // ── 인앱 알림(결재 등) → 대상자에게 푸시 ──
 async function handleNotification(noti, dbs, DB, log) {
   const userId = noti?.userId;
@@ -230,14 +202,6 @@ export default async ({ req, res, log, error }) => {
 
     const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
     const dbs = new Databases(client);
-
-    // 화면에서 직접 부른 실행(회수 요청) — 부른 사람(서버가 확인한 로그인 사용자)의 기기에만 보낸다
-    if (req.headers['x-appwrite-trigger'] === 'http') {
-      const body = req.bodyJson || {};
-      if (body.type !== 'recall-chat') return res.json({ ok: false, error: 'unknown-request' }, 400);
-      const result = await handleRecall(req.headers['x-appwrite-user-id'], String(body.roomId || ''), dbs, DB, log);
-      return res.json({ ok: true, result });
-    }
 
     const event = req.headers['x-appwrite-event'] || '';
     const doc = req.bodyJson || {};

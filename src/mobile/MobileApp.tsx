@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
-import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
 import { onForegroundMessage } from '@/shared/lib/messaging';
 import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/shared/lib/transientPushNotification';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
@@ -46,8 +45,6 @@ export default function MobileApp() {
     applyTheme(theme.headerBg, theme.pointColor, theme.btnColor);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.headerBg);
   }, [user?.id]);
-  // 읽은 대화방의 푸시 알림 정리(아이폰은 회수 신호를 받지 않아 이걸로만 정리된다)
-  useCloseReadChatNotifications(user?.id);
   const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
 
