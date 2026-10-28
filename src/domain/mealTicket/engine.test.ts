@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { dayLabel, emptyMealTicketDay, monthCsv, monthDates, shiftMonth, summarizeMonth, type MealTicketDay } from './engine';
+import { dayLabel, emptyMealTicketDay, monthCsv, monthDates, remainingAsOf, shiftMonth, summarizeMonth, type MealTicketDay } from './engine';
 
 const day = (date: string, stockIn: number, recipients: string[], memo?: string): MealTicketDay => ({ ...emptyMealTicketDay(date), stockIn, recipients, memo });
 
@@ -24,20 +24,21 @@ test('남은 식권은 입고 합계 − 받은 사람 수 합계이고 다음 �
 
 test('CSV — 받은 칸 O, 사람별 합계, 입고·발행·남은 식권·메모 행, 쉼표는 따옴표로', () => {
   const days = [day('2026-02-01', 10, ['A']), day('2026-02-02', 0, ['A', 'B'], '분실 1, 반납 0')];
-  const csv = monthCsv(days, monthDates('2026-02').slice(0, 2), [
+  const csv = monthCsv(days, monthDates('2026-02').slice(0, 3), [
     { id: 'A', name: '가', dept: '개발팀' },
     { id: 'B', name: '나', dept: '영업팀' },
-  ]);
+  ], '2026-02-28');
   assert.ok(csv.startsWith('﻿'));
   const lines = csv.slice(1).split('\r\n');
   assert.deepEqual(lines, [
-    '이름,부서,2/1(일),2/2(월),합계',
-    '가,개발팀,O,O,2',
-    '나,영업팀,,O,1',
-    '입고,전월 이월 0,10,,10',
-    '발행,,1,2,3',
-    '남은 식권,,9,7,7',
-    '메모,,,"분실 1, 반납 0",',
+    '이름,부서,2/1(일),2/2(월),2/3(화),합계',
+    '가,개발팀,O,O,,2',
+    '나,영업팀,,O,,1',
+    '입고,전월 이월 0,10,,,10',
+    '발행,,1,2,,3',
+    // 입고·발행이 없는 날(2/3)은 화면처럼 비운다
+    '남은 식권,,9,7,,7',
+    '메모,,,"분실 1, 반납 0",,',
   ]);
 });
 
@@ -52,4 +53,12 @@ test('Shift 범위 — 두 칸 사이 사각형을 날짜별로, 거꾸로 골�
 
   assert.deepEqual(applyRecipients(['A', 'B'], ['B', 'C', 'C'], true), ['A', 'B', 'C']);
   assert.deepEqual(applyRecipients(['A', 'B', 'C'], ['A', 'C'], false), ['B']);
+});
+
+test('합계 칸 남은 수 — 오늘까지, 아직 오지 않은 달은 이월분', () => {
+  const days = [day('2026-02-01', 10, ['A']), day('2026-02-03', 5, [])];
+  const { opening, rows } = summarizeMonth(days, monthDates('2026-02').slice(0, 3));
+  assert.equal(remainingAsOf(opening, rows, '2026-02-02'), 9);
+  assert.equal(remainingAsOf(opening, rows, '2026-03-01'), 14);
+  assert.equal(remainingAsOf(opening, rows, '2026-01-31'), opening);
 });

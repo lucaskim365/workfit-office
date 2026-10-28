@@ -102,6 +102,13 @@ export function summarizeMonth(days: MealTicketDay[], dates: string[]): { openin
   return { opening, rows };
 }
 
+/** 날짜 칸에 적을 남은 수 — 입고·발행이 있던 날만(화면·엑셀 공통). */
+export const remainingCell = (r: MealTicketDaySummary): number | '' => (r.stockIn || r.issued ? r.remaining : '');
+
+/** 합계 칸의 남은 수 — 오늘 기준(지난달은 말일, 다음 달은 이월분). */
+export const remainingAsOf = (opening: number, rows: MealTicketDaySummary[], today: string): number =>
+  rows.filter((r) => r.date <= today).at(-1)?.remaining ?? opening;
+
 const csvCell = (v: string | number) => {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -115,6 +122,7 @@ export function monthCsv(
   days: MealTicketDay[],
   dates: string[],
   people: { id: string; name: string; dept?: string }[],
+  today: string,
 ): string {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const { opening, rows } = summarizeMonth(days, dates);
@@ -126,7 +134,7 @@ export function monthCsv(
   }
   lines.push(['입고', `전월 이월 ${opening}`, ...rows.map((r) => r.stockIn || ''), rows.reduce((a, r) => a + r.stockIn, 0)]);
   lines.push(['발행', '', ...rows.map((r) => r.issued || ''), rows.reduce((a, r) => a + r.issued, 0)]);
-  lines.push(['남은 식권', '', ...rows.map((r) => r.remaining), rows.at(-1)?.remaining ?? opening]);
+  lines.push(['남은 식권', '', ...rows.map(remainingCell), remainingAsOf(opening, rows, today)]);
   if (dates.some((date) => byDate.get(date)?.memo)) {
     lines.push(['메모', '', ...dates.map((date) => byDate.get(date)?.memo ?? ''), '']);
   }

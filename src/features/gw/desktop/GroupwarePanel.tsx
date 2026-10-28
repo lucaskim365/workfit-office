@@ -102,7 +102,6 @@ export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; o
       { l: '게시판', icon: '📌', to: 'board' },
       { l: '인명관리', icon: '👥', to: 'employee' },
       { l: '회사 갤러리', icon: '🖼️', to: 'gallery' },
-      { l: '식권 대장', icon: '🎫', to: 'meal-ticket' },
       { l: '프로젝트', icon: '📗', to: 'task' },
       { l: '자원예약', icon: '📦', to: 'resource' },
       { l: '전자설문', icon: '📋', to: 'survey' },
