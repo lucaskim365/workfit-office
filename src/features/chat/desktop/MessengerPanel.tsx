@@ -11,7 +11,8 @@ import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/ch
 import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, usePrefetchChatThread, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, usePrefetchChatThread, useRoomFiles, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import { ChatComposer, type ChatComposerHandle } from '@/features/chat/ChatComposer';
@@ -445,7 +446,9 @@ function MessengerThread({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const [hasNewMsg, setHasNewMsg] = useState(false);
-  const prevLengthRef = useRef(messages.length);
+  /** 맨 아래 메시지 — 바뀌면 새 메시지가 온 것(위로 올려 옛 메시지를 받아 길이만 늘어난 것과 구분) */
+  const lastId = messages.at(-1)?.id ?? null;
+  const prevLastIdRef = useRef(lastId);
   const isInitialLoadRef = useRef(true);
   const prevRoomIdRef = useRef(room.id);
 
@@ -487,6 +490,7 @@ function MessengerThread({
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    nav.onScroll();
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     setShowScrollBtn(!isAtBottom);
     if (isAtBottom) {
@@ -504,11 +508,14 @@ function MessengerThread({
 
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  /** 답장 인용을 누르면 원본 메시지로 이동해 잠깐 강조한다. 사진 묶음 속 메시지도 묶음 위치로 찾는다. */
-  const jumpToMessage = useCallback((messageId: string) => {
-    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg-ids~="${CSS.escape(messageId)}"]`);
+  /** 나눠 받은 메시지 위에서의 위로 올려 더 받기·검색·원문 이동(웹·모바일 공용) */
+  const nav = useThreadNavigator({ roomId: room.id, messages, scrollRef, searchQuery });
+  /** 답장 인용을 누르면 원본 메시지로 이동해 잠깐 강조한다. 아직 안 받은 옛 메시지면 받아 온 뒤 이동한다. */
+  const { reveal } = nav;
+  const jumpToMessage = useCallback(async (messageId: string) => {
+    const el = await reveal(messageId);
     if (!el) {
-      window.alert(searchQuery ? '원본 메시지가 검색 결과에 없습니다. 검색어를 지우고 다시 눌러 주세요.' : '원본 메시지를 찾을 수 없습니다.');
+      window.alert('원본 메시지를 찾을 수 없습니다.');
       return;
     }
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -516,13 +523,14 @@ function MessengerThread({
     void el.offsetWidth; // 같은 메시지를 연달아 눌러도 강조 애니메이션이 다시 돌게
     el.classList.add('chat-jump-highlight');
     window.setTimeout(() => el.classList.remove('chat-jump-highlight'), 1800);
-  }, [searchQuery]);
+  }, [reveal]);
 
-  const [currentSearchIdx, setCurrentSearchIdx] = useState(0);
   const [showFileBox, setShowFileBox] = useState(false);
+  /** 파일함 — 안 받은 옛 메시지의 파일까지(열었을 때 서버에서 받는다. 받기 전엔 받아 둔 것으로) */
+  const { data: fileMessages } = useRoomFiles(room.id, showFileBox);
 
   const filesInRoom = useMemo(() => {
-    return messages
+    return (fileMessages ?? messages)
       .filter((m) => m.attachment)
       .map((m) => ({
         messageId: m.id,
@@ -532,7 +540,7 @@ function MessengerThread({
         type: m.type,
       }))
       .reverse();
-  }, [messages]);
+  }, [fileMessages, messages]);
 
   const [showMemberList, setShowMemberList] = useState(false);
   const kick = useKickMember();
@@ -586,28 +594,6 @@ function MessengerThread({
   // 검색 시 전체 대화를 유지하면서 위치 탐색만 하도록 변경
   const filteredMessages = messages;
 
-  const searchMatchIds = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return messages
-      .filter((m) => {
-        if (m.type === 'system') return false;
-        return m.text?.toLowerCase().includes(q);
-      })
-      .map((m) => m.id);
-  }, [messages, searchQuery]);
-
-  // 검색 인덱스 변경에 따른 스크롤 위치 이동
-  useEffect(() => {
-    if (searchMatchIds.length > 0 && currentSearchIdx >= 0) {
-      const activeId = searchMatchIds[currentSearchIdx];
-      const el = document.getElementById(`msg-${activeId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [searchMatchIds, currentSearchIdx]);
-
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
 
   const canLeave = room.type === 'group' || room.type === 'dept';
@@ -643,7 +629,7 @@ function MessengerThread({
     if (prevRoomIdRef.current !== room.id) {
       prevRoomIdRef.current = room.id;
       isInitialLoadRef.current = true;
-      prevLengthRef.current = 0;
+      prevLastIdRef.current = null;
     }
   }, [room.id]);
 
@@ -669,7 +655,7 @@ function MessengerThread({
       }
     } else {
       const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-      if (filteredMessages.length > prevLengthRef.current) {
+      if (lastId !== prevLastIdRef.current) {
         if (isAtBottom) {
           el.scrollTop = el.scrollHeight;
           setHasNewMsg(false);
@@ -678,8 +664,8 @@ function MessengerThread({
         }
       }
     }
-    prevLengthRef.current = filteredMessages.length;
-  }, [filteredMessages.length, room.id]);
+    prevLastIdRef.current = lastId;
+  }, [lastId, room.id]);
 
   const handlePaste = (e: React.ClipboardEvent<any>) => {
     // 입력창 안에서 붙여넣은 사진은 편집기가 이미 넣었다 — 여기서 또 넣으면 두 장이 된다
@@ -906,37 +892,35 @@ function MessengerThread({
             <Search size={12} className="text-ink3 shrink-0" />
             <input
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentSearchIdx(0);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
               placeholder="메시지 또는 첨부파일명 검색..."
               className="w-full bg-transparent text-[11px] text-ink outline-none placeholder:text-ink3"
             />
             {searchQuery && (
               <button
-                onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }}
+                onClick={() => setSearchQuery('')}
                 className="text-ink3 hover:text-ink w-4 h-4 grid place-items-center rounded bg-black/5 cursor-pointer"
               >
                 <X size={10} />
               </button>
             )}
           </div>
-          {searchMatchIds.length > 0 && (
+          {nav.search.count > 0 && (
             <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-bold text-ink2 bg-panel-alt rounded-full px-2.5 py-1 select-none">
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev - 1 + searchMatchIds.length) % searchMatchIds.length)}
+                onClick={nav.search.prev}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform cursor-pointer"
               >
                 ◀
               </button>
               <span className="tabular-nums">
-                {currentSearchIdx + 1}/{searchMatchIds.length}
+                {nav.search.index + 1}/{nav.search.count}
               </span>
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev + 1) % searchMatchIds.length)}
+                onClick={nav.search.next}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform cursor-pointer"
               >
                 ▶
@@ -947,6 +931,7 @@ function MessengerThread({
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} className="menu-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        {nav.loadingOlder && <div className="py-2 text-center text-[10.5px] text-ink3">이전 대화를 불러오는 중…</div>}
         {processedItems.length === 0 && (
           <div className="py-12 text-center text-[11.5px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다' : '대화 내용이 없습니다'}</div>
         )}
@@ -1049,7 +1034,7 @@ function MessengerThread({
                     onCancelEdit={() => setEditingMsgId(null)}
                     onToggleEmoji={handleToggleEmoji}
                     searchQuery={searchQuery}
-                    isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
+                    isSearchActive={nav.search.activeId === m.id}
                     showTime={showTime}
                     showProfile={!groupedWithPrev}
                     onContextMenu={(e) => {

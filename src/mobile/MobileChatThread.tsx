@@ -7,7 +7,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, useRoomFiles } from '@/features/chat/useChatThread';
+import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
@@ -103,13 +104,17 @@ export default function MobileChatThread() {
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [hasNewMsg, setHasNewMsg] = useState(false);
-  const prevLengthRef = useRef(messages.length);
+  /** 맨 아래 메시지 — 바뀌면 새 메시지가 온 것(위로 올려 옛 메시지를 받아 길이만 늘어난 것과 구분) */
+  const lastId = messages.at(-1)?.id ?? null;
+  const prevLastIdRef = useRef(lastId);
   const isInitialLoadRef = useRef(true);
   const prevRoomIdRef = useRef(roomId);
 
   const [showFileBox, setShowFileBox] = useState(false);
+  /** 파일함 — 안 받은 옛 메시지의 파일까지(열었을 때 서버에서 받는다. 받기 전엔 받아 둔 것으로) */
+  const { data: fileMessages } = useRoomFiles(roomId, showFileBox);
   const filesInRoom = useMemo(() => {
-    return messages
+    return (fileMessages ?? messages)
       .filter((m) => m.attachment)
       .map((m) => ({
         messageId: m.id,
@@ -119,7 +124,7 @@ export default function MobileChatThread() {
         type: m.type,
       }))
       .reverse();
-  }, [messages]);
+  }, [fileMessages, messages]);
 
   const copyToClipboard = async (val: string) => {
     try {
@@ -175,10 +180,13 @@ export default function MobileChatThread() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** 나눠 받은 메시지 위에서의 위로 올려 더 받기·검색 이동(웹·모바일 공용) */
+  const thread = useThreadNavigator({ roomId, messages, scrollRef, searchQuery });
 
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    thread.onScroll();
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     setShowScrollBtn(!isAtBottom);
     if (isAtBottom) {
@@ -210,30 +218,6 @@ export default function MobileChatThread() {
   // 검색 시 전체 대화를 유지하면서 위치 탐색만 하도록 변경
   const filteredMessages = messages;
 
-  const searchMatchIds = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return messages
-      .filter((m) => {
-        if (m.type === 'system') return false;
-        return m.text?.toLowerCase().includes(q);
-      })
-      .map((m) => m.id);
-  }, [messages, searchQuery]);
-
-  const [currentSearchIdx, setCurrentSearchIdx] = useState(0);
-
-  // 검색 인덱스 변경에 따른 스크롤 위치 이동
-  useEffect(() => {
-    if (searchMatchIds.length > 0 && currentSearchIdx >= 0) {
-      const activeId = searchMatchIds[currentSearchIdx];
-      const el = document.getElementById(`msg-${activeId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [searchMatchIds, currentSearchIdx]);
-
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
 
   useEffect(() => {
@@ -252,7 +236,7 @@ export default function MobileChatThread() {
     if (prevRoomIdRef.current !== roomId) {
       prevRoomIdRef.current = roomId;
       isInitialLoadRef.current = true;
-      prevLengthRef.current = 0;
+      prevLastIdRef.current = null;
     }
   }, [roomId]);
 
@@ -279,7 +263,7 @@ export default function MobileChatThread() {
       }
     } else {
       const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-      if (filteredMessages.length > prevLengthRef.current) {
+      if (lastId !== prevLastIdRef.current) {
         if (isAtBottom) {
           el.scrollTop = el.scrollHeight;
           setHasNewMsg(false);
@@ -288,8 +272,8 @@ export default function MobileChatThread() {
         }
       }
     }
-    prevLengthRef.current = filteredMessages.length;
-  }, [filteredMessages.length, roomId]);
+    prevLastIdRef.current = lastId;
+  }, [lastId, roomId]);
 
   const onLeave = async () => {
     if (!room || leave.isPending) return;
@@ -394,34 +378,32 @@ export default function MobileChatThread() {
             <Search size={13} className="shrink-0 text-ink3" />
             <input
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentSearchIdx(0);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
               placeholder="메시지 또는 첨부파일명 검색…"
               className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-ink3">
+              <button onClick={() => setSearchQuery('')} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-ink3">
                 <X size={10} />
               </button>
             )}
           </div>
-          {searchMatchIds.length > 0 && (
+          {thread.search.count > 0 && (
             <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-bold text-ink2 bg-black/5 rounded-full px-2.5 py-1 select-none">
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev - 1 + searchMatchIds.length) % searchMatchIds.length)}
+                onClick={thread.search.prev}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
               >
                 ◀
               </button>
               <span className="tabular-nums">
-                {currentSearchIdx + 1}/{searchMatchIds.length}
+                {thread.search.index + 1}/{thread.search.count}
               </span>
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev + 1) % searchMatchIds.length)}
+                onClick={thread.search.next}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
               >
                 ▶
@@ -432,6 +414,7 @@ export default function MobileChatThread() {
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
+        {thread.loadingOlder && <div className="py-2 text-center chat-text-[11px] text-ink3">이전 대화를 불러오는 중…</div>}
         {processedItems.length === 0 && (
           <div className="py-10 text-center chat-text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
@@ -459,7 +442,7 @@ export default function MobileChatThread() {
           const showTime = !hideTime;
 
           return (
-            <div key={m.id} id={`msg-${m.id}`} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
+            <div key={m.id} id={`msg-${m.id}`} data-msg-ids={(item.bundleMessages ?? [m]).map((x) => x.id).join(' ')} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-black/5 px-3 py-1 chat-text-[10.5px] text-ink3">
@@ -493,7 +476,7 @@ export default function MobileChatThread() {
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
                   searchQuery={searchQuery}
-                  isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
+                  isSearchActive={thread.search.activeId === m.id}
                 />
               )}
             </div>
