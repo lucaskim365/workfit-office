@@ -23,6 +23,8 @@ interface Target {
   userId: string;
   fallbackName?: string;
   rect: DOMRect;
+  /** 누른 자리를 담은 메신저 패널(.dock-panel) — 명함을 그 바깥에 띄운다. 전체 화면 메신저 등 패널이 없으면 null */
+  panel: DOMRect | null;
 }
 
 export function ProfileCardHost({
@@ -40,7 +42,11 @@ export function ProfileCardHost({
   const [target, setTarget] = useState<Target | null>(null);
   const open: OpenProfileCard = (userId, anchor, fallbackName) => {
     if (!userId) return;
-    setTarget((cur) => (cur?.userId === userId ? null : { userId, fallbackName, rect: anchor.getBoundingClientRect() }));
+    setTarget((cur) =>
+      cur?.userId === userId
+        ? null
+        : { userId, fallbackName, rect: anchor.getBoundingClientRect(), panel: anchor.closest('.dock-panel')?.getBoundingClientRect() ?? null },
+    );
   };
   return (
     <ProfileCardContext.Provider value={open}>
@@ -91,15 +97,18 @@ function ProfileCard({
   const title = [user?.position, user?.jobTitle && user.jobTitle !== user.position ? user.jobTitle : ''].filter(Boolean).join(' · ');
   const avatar = getAvatarStyle(target.userId);
 
-  // 누른 자리 오른쪽(모자라면 왼쪽)에, 화면 밖으로 나가지 않게. 화면 배율(body zoom) 안의 고정 위치라 좌표를 배율로 나눈다.
+  // 메신저 패널 바깥(왼쪽)에 — 패널 안에 뜨면 대화를 가린다. 바깥 자리가 모자라면 누른 자리 오른쪽(모자라면 왼쪽)에.
+  // 화면 밖으로 나가지 않게. 화면 배율(body zoom) 안의 고정 위치라 좌표를 배율로 나눈다.
   useLayoutEffect(() => {
     const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
     const vw = window.innerWidth / zoom;
     const vh = window.innerHeight / zoom;
     const r = target.rect;
     const h = (ref.current?.getBoundingClientRect().height ?? 220) / zoom;
+    const outside = target.panel ? target.panel.left / zoom - CARD_W - 8 : -1;
     let x = r.right / zoom + 8;
-    if (x + CARD_W > vw - 8) x = r.left / zoom - CARD_W - 8;
+    if (outside >= 8) x = outside;
+    else if (x + CARD_W > vw - 8) x = r.left / zoom - CARD_W - 8;
     x = Math.min(Math.max(8, x), vw - CARD_W - 8);
     const y = Math.min(Math.max(8, r.top / zoom - 8), vh - h - 8);
     setPos({ x, y });

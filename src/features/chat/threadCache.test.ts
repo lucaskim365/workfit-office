@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
-import { applyLiveChange, replayChanges } from './threadCache';
+import { applyLiveChange, mergeMessages, replayChanges } from './threadCache';
 
 const msg = (id: string, at: string, over: Partial<ChatMessage> = {}): ChatMessage => ({
   id,
@@ -60,4 +60,21 @@ test('받기 시작한 뒤의 변경만, 그 방 것만 다시 얹는다', () =>
     { at: 210, change: { roomId: 'X', message: msg('x', '2026-10-28T09:02:00', { roomId: 'X' }) } },
   ];
   assert.deepEqual(ids(replayChanges(fetched, log, 'R', 150)), ['a', 'b']);
+});
+
+test('받아 둔 구간보다 오래된 메시지의 신호는 끼워 넣지 않는다 — 받아 둔 메시지가 바뀐 건 반영한다', () => {
+  const from = '2026-10-28T09:00:00';
+  const list = [msg('a', from), msg('b', '2026-10-28T09:01:00')];
+  assert.equal(applyLiveChange(list, { roomId: 'R', message: msg('old', '2026-10-27T09:00:00') }, from), list);
+  const edited = applyLiveChange(list, { roomId: 'R', message: msg('a', from, { isEdited: true }) }, from);
+  assert.equal(edited[0].isEdited, true);
+  assert.deepEqual(ids(applyLiveChange(list, { roomId: 'R', message: msg('c', '2026-10-28T09:02:00') }, from)), ['a', 'b', 'c']);
+});
+
+test('더 받은 옛 메시지는 앞에 합치고, 이미 있는 메시지는 화면 것을 둔다', () => {
+  const list = [msg('b', '2026-10-28T09:01:00', { isEdited: true }), msg('c', '2026-10-28T09:02:00')];
+  const out = mergeMessages(list, [msg('a', '2026-10-28T09:00:00'), msg('b', '2026-10-28T09:01:00')]);
+  assert.deepEqual(ids(out), ['a', 'b', 'c']);
+  assert.equal(out[1].isEdited, true);
+  assert.equal(mergeMessages(list, [msg('c', '2026-10-28T09:02:00')]), list);
 });

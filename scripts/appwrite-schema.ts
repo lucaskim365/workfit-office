@@ -137,7 +137,8 @@ const COLLECTIONS: CollectionDef[] = [
       J('attachments', 20000),
       SA('mentions', 64),
     ],
-    indexes: [IX('roomId', ['roomId']), IX('at', ['at'])],
+    // roomId_at: 방 메시지 나눠 받기(최근 100건부터·시각 범위) — features/chat/threadWindow
+    indexes: [IX('roomId', ['roomId']), IX('at', ['at']), IX('roomId_at', ['roomId', 'at'])],
   },
   {
     id: 'chatRooms',
@@ -393,10 +394,10 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
-    // 식권 대장(그룹웨어 > 식권 대장). 날짜당 문서 하나($id = MT-YYYY-MM-DD). 발행·남은 수는 저장하지 않고 계산한다.
+    // 식권 대장(주소 /gw/meal-ticket). 날짜당 문서 하나 — recipients 중식, dinnerRecipients 석식($id = MT-YYYY-MM-DD). 발행·남은 수는 저장하지 않고 계산한다.
     id: 'mealTickets',
     name: '식권 대장',
-    attributes: [S('date', 10, true), INT('stockIn', false, 0, 0, 1000000), SA('recipients', 64), S('memo', 500), S('updatedBy', 64), S('updatedAt', 40)],
+    attributes: [S('date', 10, true), INT('stockIn', false, 0, 0, 1000000), SA('recipients', 64), SA('dinnerRecipients', 64), S('memo', 500), S('updatedBy', 64), S('updatedAt', 40)],
     indexes: [UQ('date', ['date'])],
   },
   {

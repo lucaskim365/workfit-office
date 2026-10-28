@@ -6,12 +6,14 @@ import { dbDriver } from '@/shared/lib/dbDriver';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
 import { applyLiveChange, replayChanges, type LiveChange, type TimedChange } from './threadCache';
+import { fetchThreadWindow, threadWindowOf } from './threadWindow';
 
 /**
  * 메신저 데이터 맞추기 — 화면의 메신저 데이터를 언제 서버와 맞추는지는 이 파일 한 곳에서 정한다.
  *
  * 1. 실시간 신호(Appwrite Realtime): 메시지가 생기거나 바뀌면 신호에 실린 내용으로 열린 방 목록을 바로 고친다.
  *    방 전체를 다시 받지 않는다. 방 목록·안읽음 수는 가벼워서 다시 받는다(짧게 모아 한 번).
+ *    방 메시지는 받아 둔 구간(threadWindow — 최근 100건부터, 위로 올리면 더)만 다룬다.
  * 2. 한꺼번에 맞추기(resync): 실시간 연결이 붙거나 끊길 때, 10초 넘게 다른 창에 있다가 돌아올 때 — 그 사이 놓친 신호를 메우려고 화면에 떠 있는 것을 다시 받는다.
  * 3. 주기 조회: 실시간이 연결돼 있으면 1분, 끊겨 있으면 4초. 메신저 화면이 보일 때만 돈다.
  *
@@ -50,11 +52,14 @@ export function chatPollInterval(): number {
   return connected ? POLL_CONNECTED_MS : CHAT_POLL_FALLBACK_MS;
 }
 
-/** 방 메시지 받기 — 받는 동안 실시간으로 들어온 변경을 받은 목록에 다시 얹는다 */
-export async function fetchThread(roomId: string): Promise<ChatMessage[]> {
+/**
+ * 방 메시지 받기(받아 둔 구간만 — threadWindow) — 받는 동안 실시간으로 들어온 변경을 받은 목록에 다시 얹는다.
+ * cached: 지금 화면의 방 메시지(없으면 처음 받기).
+ */
+export async function fetchThread(roomId: string, cached: () => ChatMessage[] | undefined): Promise<ChatMessage[]> {
   const since = Date.now();
-  const list = await chatMessageRepo.listByRoom(roomId);
-  return replayChanges(list, recent, roomId, since);
+  const list = await fetchThreadWindow(roomId, cached);
+  return replayChanges(list, recent, roomId, since, threadWindowOf(roomId).from);
 }
 
 function remember(change: LiveChange) {
@@ -87,7 +92,7 @@ function onEvent(qc: QueryClient, response: RealtimeResponseEvent<Record<string,
       const change: LiveChange | null = removed ? { roomId, removedId: String(payload.$id) } : message ? { roomId, message } : null;
       if (change) {
         remember(change);
-        qc.setQueryData<ChatMessage[]>([THREAD_KEY, roomId], (cur) => cur && applyLiveChange(cur, change));
+        qc.setQueryData<ChatMessage[]>([THREAD_KEY, roomId], (cur) => cur && applyLiveChange(cur, change, threadWindowOf(roomId).from));
       } else {
         pending.add(roomId); // 내용을 읽을 수 없으면 그 방만 다시 받는다
       }
