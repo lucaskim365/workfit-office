@@ -18,7 +18,7 @@
  */
 import { readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 const { Client, Functions, Query, ID } = await import('node-appwrite');
 const { InputFile } = await import('node-appwrite/file');
@@ -125,12 +125,10 @@ const BUNDLE_DIR = 'appwrite/_deploy_bundles';
 mkdirSync(BUNDLE_DIR, { recursive: true });
 const tar = resolve(BUNDLE_DIR, `${FUNCTION_ID}.tar.gz`);
 rmSync(tar, { force: true });
-// `--force-local`이 없으면 GNU tar가 `C:\...`의 콜론을 원격 호스트로 읽어 실패한다.
-// 단, Windows 기본 bsdtar는 --force-local을 지원하지 않는다.
-const tarArgs = process.platform === 'win32'
-  ? ['-czf', tar, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.']
-  : ['--force-local', '-czf', tar, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.'];
-execFileSync('tar', tarArgs, { stdio: 'inherit' });
+// tar 에는 상대 경로를 넘긴다 — `C:\...`처럼 콜론이 든 경로를 GNU tar(Git Bash 가 PATH 앞에 둔다)는 원격 호스트로
+// 읽어 실패하고, `--force-local` 로 막으려 하면 Windows 기본 bsdtar 가 그 옵션을 몰라 실패한다. 상대 경로면 둘 다 된다.
+const tarRel = relative(process.cwd(), tar).split('\\').join('/');
+execFileSync('tar', ['-czf', tarRel, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.'], { stdio: 'inherit' });
 
 let dep = await retry('deployment', () => fn.createDeployment({
   functionId: FUNCTION_ID, code: InputFile.fromPath(tar, `${FUNCTION_ID}.tar.gz`), activate: true,
