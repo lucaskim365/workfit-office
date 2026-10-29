@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
+import { CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { onForegroundMessage } from '@/shared/lib/messaging';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
@@ -47,6 +49,7 @@ export default function MobileApp() {
   }, [user?.id]);
   // 읽은 대화방의 푸시 알림 정리(아이폰은 회수 신호를 받지 않아 이걸로만 정리된다)
   useCloseReadChatNotifications(user?.id);
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
 
@@ -108,6 +111,9 @@ export default function MobileApp() {
             renotify: Boolean(p.roomId || p.docId),
           };
           await reg.showNotification(p.title, options);
+          // 띄운 뒤의 안 읽은 수로 다시 정리하게 한다 — 다른 기기에 방이 열려 있으면 이 알림보다 읽음 처리가 먼저
+          // 끝나 안 읽은 수가 더 바뀌지 않으므로, 다시 받지 않으면 이 알림이 남는다(useCloseReadChatNotifications)
+          if (p.roomId) void qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
           new Notification(p.title, { body, icon: '/icons/icon-192.png' });
@@ -116,7 +122,7 @@ export default function MobileApp() {
         /* iOS 등 미지원 환경 무시 */
       }
     });
-  }, [user]);
+  }, [user, qc]);
 
   return (
     // 웹 공용 모달(일정·외근 창 등)이 이 셸(z-[100]) 뒤에 깔리지 않도록 층을 올린다
