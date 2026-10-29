@@ -25,7 +25,7 @@ const backend = createCrudBackend<User>({
   seed: USER_SEED.map((u) => userSchema.parse(u)),
   // 기기 토큰 목록은 토큰 전용 함수(patchPushTokens)로만 쓴다. 프로필 저장 등이 옛 목록으로 덮어쓰지 않게 하고,
   // DB에 칸이 아직 없을 때도 일반 저장이 깨지지 않게 한다.
-  stripFields: ['fcmTokens'],
+  stripFields: ['fcmTokens', 'fcmTokensRecall'],
 });
 
 /** Appwrite가 "없는 칸"이라 거절한 오류인가 (fcmTokens 칸 추가 전) */
@@ -43,6 +43,15 @@ async function patchPushTokens(userId: string, fcmTokens: string[], fcmToken: st
   } catch (error) {
     if (!isUnknownAttributeError(error)) throw error;
     await backend.patch(userId, { fcmToken });
+  }
+}
+
+/** 회수 신호 토큰 목록만 부분 저장. DB에 칸이 아직 없으면 건너뛴다(회수만 안 될 뿐 알림은 그대로). */
+async function patchRecallTokens(userId: string, fcmTokensRecall: string[]): Promise<void> {
+  try {
+    await backend.patch(userId, { fcmTokensRecall });
+  } catch (error) {
+    if (!isUnknownAttributeError(error)) throw error;
   }
 }
 
@@ -76,7 +85,7 @@ import { assertAccountStatusEdit } from '@/domain/user/accountStatus';
 import { isDuplicateEmpNo, nextEmpNo } from '@/domain/user/empNo';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
-import { hasPushToken, withPushToken, withoutPushToken } from '@/domain/user/pushTokens';
+import { hasPushToken, withPushToken, withRecallToken, withoutPushToken } from '@/domain/user/pushTokens';
 
 registerTestAccountSource(() => backend.loadAll());
 
@@ -222,7 +231,8 @@ export const userRepo = {
    *  그래서 같은 토큰을 가진 **다른 계정에서는 뺀다**(최근 로그인 우선).
    *  토큰 칸만 부분 저장하고, 내 것을 먼저 저장한다. 다른 계정 정리는 일부가 실패해도 넘어간다
    *  (한 기기로 여러 계정에 로그인했던 사람만 알림 연결이 실패하던 문제). */
-  async updateFcmToken(userId: string, token: string): Promise<void> {
+  /** recallOk: 이 기기가 회수 신호를 받아도 되는가(안드로이드 휴대폰 화면이면 true — messaging.ts acceptsRecall) — withRecallToken */
+  async updateFcmToken(userId: string, token: string, recallOk = false): Promise<void> {
     if (!token) return;
     const all = await this.listIncludingTestAccounts();
     const existing = all.find((u) => u.id === userId);
@@ -231,11 +241,14 @@ export const userRepo = {
     const mine = withPushToken(existing, token);
     const unchanged = existing.fcmToken === token && mine.join() === existing.fcmTokens.join();
     if (!unchanged) await patchPushTokens(userId, mine, token);
+    const recall = withRecallToken(existing.fcmTokensRecall, token, recallOk);
+    if (recall.join() !== existing.fcmTokensRecall.join()) await patchRecallTokens(userId, recall);
 
     const stale = all.filter((u) => u.id !== userId && hasPushToken(u, token));
-    const results = await Promise.allSettled(stale.map((u) => {
+    const results = await Promise.allSettled(stale.map(async (u) => {
       const next = withoutPushToken(u, token);
-      return patchPushTokens(u.id, next.fcmTokens, next.fcmToken);
+      await patchPushTokens(u.id, next.fcmTokens, next.fcmToken);
+      if (u.fcmTokensRecall.includes(token)) await patchRecallTokens(u.id, withRecallToken(u.fcmTokensRecall, token, false));
     }));
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`[push] ${stale[i].id} 계정의 이전 토큰 회수 실패`, r.reason);
@@ -249,6 +262,7 @@ export const userRepo = {
     if (!existing || !hasPushToken(existing, token)) return;
     const next = withoutPushToken(existing, token);
     await patchPushTokens(userId, next.fcmTokens, next.fcmToken);
+    if (existing.fcmTokensRecall.includes(token)) await patchRecallTokens(userId, withRecallToken(existing.fcmTokensRecall, token, false));
   },
 
   async removeMany(ids: Array<string | number>): Promise<void> {

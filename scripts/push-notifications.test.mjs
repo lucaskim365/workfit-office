@@ -19,7 +19,7 @@ function serverFixture() {
   const source = read('appwrite/functions/push-notifications/src/main.js')
     .replace(/^import .*;\r?\n/gm, '')
     .replace('export default async', 'const entry = async');
-  vm.runInContext(`${source}\nglobalThis.handleChat = handleChatMessage; globalThis.preview = chatPreview;`, context);
+  vm.runInContext(`${source}\nglobalThis.handleChat = handleChatMessage; globalThis.preview = chatPreview; globalThis.handleRecall = handleRecall;`, context);
   return { sent, context, db: {
     // Only read APIs are provided: a write during chat dispatch would fail the test.
     getDocument: async (_database, collection, id) => collection === 'chatRooms'
@@ -41,6 +41,26 @@ test('채팅 발송: 발신자 제외, 이름·미리보기 전달, 기존 모�
   assert.equal(payload.apns.payload.aps.alert.title, payload.data.title);
   // 웹 푸시(PWA)는 높은 우선순위 — 잠긴 휴대폰·절전 상태에서도 늦지 않게
   assert.equal(payload.webpush.headers.Urgency, 'high');
+});
+
+test('채팅 발송: 메시지 시각(at)을 실어 휴대폰이 회수 신호와 비교할 수 있게', async () => {
+  const { context, db, sent } = serverFixture();
+  await context.handleChat({ roomId: 'ROOM', senderId: 'sender', text: '안녕', type: 'text', at: '2026-10-29T10:00:00' }, db, 'test', () => {});
+  assert.equal(sent[0].data.at, '2026-10-29T10:00:00');
+});
+
+test('회수: 부른 사람의 회수 가능 기기에만, 읽은 기기 자신은 빼고, 읽은 시각을 실어 보냄', async () => {
+  const { context, sent } = serverFixture();
+  const db = {
+    getDocument: async () => ({ fcmToken: '', fcmTokens: ['android', 'iphone', 'pc', 'android-reader'], fcmTokensRecall: ['android', 'android-reader', 'removed'] }),
+  };
+  const result = await context.handleRecall('me', 'ROOM', '2026-10-29T10:00:00', 'android-reader', db, 'test', () => {});
+  assert.equal(result.sent, 1);
+  assert.deepEqual(Array.from(sent[0].tokens), ['android']);
+  assert.equal(sent[0].data.type, 'recall-chat');
+  assert.equal(sent[0].data.readUpTo, '2026-10-29T10:00:00');
+  assert.equal(sent[0].notification, undefined);
+  assert.equal((await context.handleRecall('me', 'ROOM', '', '', db, 'test', () => {})).skipped, 'no-user-room-or-time');
 });
 
 test('미리보기: 긴 내용·이모지·빈 메시지·첨부를 처리하고 시스템 메시지는 발송하지 않음', async () => {
@@ -196,29 +216,35 @@ test('PC 활성 상태: 권한 차단·모바일 제외를 유지하고 일정 �
   assert.equal(calendar.shown[0].options.data.linkUrl, '/gw/calendar?date=2026-10-07');
 });
 
-function backgroundFixture() {
+function backgroundFixture(mode) {
   let callback;
-  const shown = [], timers = [], listeners = {};
+  const shown = [], timers = [], listeners = {}, store = new Map();
   const context = vm.createContext({
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
     importScripts: () => {},
     firebase: { initializeApp: () => {}, messaging: () => ({ onBackgroundMessage: (cb) => { callback = cb; } }) },
+    Response: class { constructor(body) { this.body = body; } async text() { return this.body; } },
+    caches: { open: async () => ({
+      match: async (key) => (store.has(key) ? { text: async () => store.get(key) } : undefined),
+      put: async (key, res) => { store.set(key, await res.text()); },
+    }) },
     self: {
       addEventListener: (name, listener) => { listeners[name] = listener; },
       registration: {
         showNotification: async (title, options) => shown.push({ title, options, data: options.data, tag: options.tag, closed: false, close() { this.closed = true; } }),
-        getNotifications: async ({ tag }) => shown.filter((item) => item.tag === tag && !item.closed).slice(-1),
+        getNotifications: async ({ tag } = {}) => shown.filter((item) => (tag === undefined || item.tag === tag) && !item.closed).slice(-1),
       },
     },
   });
   vm.runInContext(read('public/firebase-messaging-sw.js'), context);
+  if (mode) listeners.message({ data: { type: 'workfit-mode', mode }, waitUntil: () => {} });
   return { callback, shown, timers, listeners };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test('백그라운드 서비스워커: 미리보기와 클릭 데이터를 유지하고 10초 뒤 닫음', async () => {
-  const { callback, shown, timers } = backgroundFixture();
+test('백그라운드 서비스워커(PC): 미리보기와 클릭 데이터를 유지하고 5초 뒤 닫음', async () => {
+  const { callback, shown, timers } = backgroundFixture('desktop');
   const pending = callback({ data: { title: '홍길동 · 팀 채팅', body: '회의 시작합니다', roomId: 'ROOM' } });
   await flush();
   assert.equal(shown[0].title, '홍길동 · 팀 채팅');
@@ -226,18 +252,66 @@ test('백그라운드 서비스워커: 미리보기와 클릭 데이터를 유�
   assert.equal(shown[0].options.renotify, true);
   assert.equal(shown[0].options.data.roomId, 'ROOM');
   assert.equal(shown[0].options.requireInteraction, false);
-  assert.equal(timers[0].ms, 10_000);
+  assert.equal(timers[0].ms, 5_000);
   assert.equal(shown[0].closed, false);
   timers[0].fn();
   await pending;
   assert.equal(shown[0].closed, true);
 });
 
-test('포그라운드: 10초 타이머가 같은 방의 새 알림을 닫지 않음', async () => {
+test('백그라운드 서비스워커(휴대폰): 스스로 닫지 않고 읽을 때까지 남김', async () => {
+  for (const mode of ['pwa', undefined]) {
+    const { callback, shown, timers } = backgroundFixture(mode);
+    await callback({ data: { title: '팀 채팅', body: '내용', roomId: 'ROOM' } });
+    assert.equal(timers.length, 0, String(mode));
+    assert.equal(shown[0].closed, false, String(mode));
+    assert.equal(typeof shown[0].data.shownAt, 'number');
+  }
+});
+
+test('회수 신호: 읽은 시각까지의 그 방 알림만 닫고, 더 늦은 메시지·다른 방 알림은 남김', async () => {
+  const { callback, shown } = backgroundFixture('pwa');
+  await callback({ data: { roomId: 'ROOM', body: '읽은 메시지', at: '2026-10-29T10:00:00' } });
+  await callback({ data: { roomId: 'OTHER', body: '다른 방', at: '2026-10-29T09:00:00' } });
+  await callback({ data: { type: 'recall-chat', roomId: 'ROOM', readUpTo: '2026-10-29T10:00:00' } });
+  assert.equal(shown.length, 2);
+  assert.equal(shown[0].closed, true);
+  assert.equal(shown[1].closed, false);
+  await callback({ data: { roomId: 'ROOM', body: '새 메시지', at: '2026-10-29T10:00:05' } });
+  await callback({ data: { type: 'recall-chat', roomId: 'ROOM', readUpTo: '2026-10-29T10:00:00' } });
+  assert.equal(shown[2].closed, false);
+});
+
+test('회수 신호가 알림보다 먼저 와도: 이미 읽은 메시지의 알림은 띄우지 않음', async () => {
+  const { callback, shown, listeners } = backgroundFixture('pwa');
+  await callback({ data: { type: 'recall-chat', roomId: 'ROOM', readUpTo: '2026-10-29T10:00:00' } });
+  await callback({ data: { roomId: 'ROOM', body: '읽은 메시지', at: '2026-10-29T10:00:00' } });
+  assert.equal(shown.length, 0);
+  // 앱이 화면에 있을 때 받은 회수 신호(페이지가 넘김)도 같은 규칙
+  let pending;
+  listeners.message({ data: { type: 'workfit-recall-chat', roomId: 'ROOM', readUpTo: '2026-10-29T10:00:09' }, waitUntil: (p) => { pending = p; } });
+  await pending;
+  await callback({ data: { roomId: 'ROOM', body: '이것도 읽음', at: '2026-10-29T10:00:09' } });
+  await callback({ data: { roomId: 'ROOM', body: '안 읽은 메시지', at: '2026-10-29T10:00:10' } });
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].options.body, '안 읽은 메시지');
+});
+
+test('휴대폰 포그라운드: 알림을 스스로 닫지 않고 정리 기준(at·shownAt)을 실음', async () => {
+  const { callbacks, shown, timers, messages } = foregroundFixture('granted', false, 'mobile');
+  await callbacks[0]({ title: '팀 채팅', body: '메시지', roomId: 'ROOM', at: '2026-10-29T10:00:00' });
+  assert.equal(shown.length, 1);
+  assert.equal(timers.length, 0);
+  assert.equal(messages.length, 0);
+  assert.equal(shown[0].data.at, '2026-10-29T10:00:00');
+  assert.equal(typeof shown[0].data.shownAt, 'number');
+});
+
+test('PC 포그라운드: 5초 타이머가 같은 방의 새 알림을 닫지 않음', async () => {
   const { callbacks, shown, timers, messages } = foregroundFixture();
   await callbacks[0]({ title: '팀 채팅', body: '첫 메시지', roomId: 'ROOM' });
   await callbacks[0]({ title: '팀 채팅', body: '새 메시지', roomId: 'ROOM' });
-  assert.equal(timers[0].ms, 10_000);
+  assert.equal(timers[0].ms, 5_000);
   assert.equal(messages[0].type, 'workfit-expire-notification');
   assert.equal(shown[0].options.requireInteraction, false);
   timers[0].fn();
@@ -248,8 +322,8 @@ test('포그라운드: 10초 타이머가 같은 방의 새 알림을 닫지 않
   assert.equal(shown[1].closed, true);
 });
 
-test('백그라운드: 이전 타이머는 새 알림을 유지하고 SW 메시지도 만료까지 기다림', async () => {
-  const { callback, shown, timers, listeners } = backgroundFixture();
+test('백그라운드(PC): 이전 타이머는 새 알림을 유지하고 SW 메시지도 만료까지 기다림', async () => {
+  const { callback, shown, timers, listeners } = backgroundFixture('desktop');
   const first = callback({ data: { roomId: 'ROOM', body: '첫 메시지' } });
   await flush();
   const second = callback({ data: { roomId: 'ROOM', body: '새 메시지' } });
@@ -259,7 +333,7 @@ test('백그라운드: 이전 타이머는 새 알림을 유지하고 SW 메시�
   assert.equal(shown[1].closed, false);
   let expiry;
   listeners.message({ data: { type: 'workfit-expire-notification', id: shown[1].data.workfitNotificationId, tag: 'ROOM' }, waitUntil: (promise) => { expiry = promise; } });
-  assert.equal(timers[2].ms, 10_000);
+  assert.equal(timers[2].ms, 5_000);
   timers[2].fn();
   await expiry;
   assert.equal(shown[1].closed, true);

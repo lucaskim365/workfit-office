@@ -27,6 +27,16 @@ export function withoutPushToken(
   };
 }
 
+/**
+ * 회수 신호(다른 기기에서 읽은 대화방의 알림 닫기)를 받아도 되는 기기 토큰 목록(users.fcmTokensRecall).
+ * 안드로이드 휴대폰만 넣는다 — 아이폰 웹 푸시는 화면에 보이지 않는 푸시가 쌓이면 알림 권한을 끊을 수 있고,
+ * PC 알림은 5초 뒤 스스로 닫힌다. 목록에 없는 기기에는 회수 신호를 보내지 않는다.
+ */
+export function withRecallToken(list: string[] | null | undefined, token: string, allowed: boolean): string[] {
+  const rest = (list ?? []).filter((t) => t && t !== token);
+  return (allowed ? [token, ...rest] : rest).slice(0, MAX_PUSH_TOKENS);
+}
+
 /** 이 사람이 이 토큰을 들고 있는가 */
 export function hasPushToken(user: { fcmTokens?: string[] | null; fcmToken?: string | null }, token: string): boolean {
   return Boolean(token) && allPushTokens(user).includes(token);

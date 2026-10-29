@@ -1,29 +1,68 @@
 /**
  * push-notifications 함수만 재배포(코드 deployment 1건). bridge-a2f 등 다른 함수는 건드리지 않는다.
- * 함수/이벤트/스코프/env 는 기존 그대로 두고, 패치된 tar.gz 를 새 deployment 로 업로드·활성화만 한다.
- * 실행: node scripts/deploy-push-only.mjs
+ * 1) 함수 폴더를 tar.gz 로 묶는다(appwrite/_deploy_bundles — gitignore)
+ * 2) 실행 권한(execute)만 appwrite.json 값으로 맞춘다 — 화면이 직접 부르는 회수 요청(execute: users)에 필요.
+ *    deployment 를 올려도 함수 설정은 안 바뀌므로 따로 맞춰야 한다. 이벤트·스코프·env 등 나머지 설정은 그대로 둔다.
+ * 3) 새 deployment 업로드·활성화
+ *
+ * 실행: node scripts/deploy-push-only.mjs           (.env.local 의 프로젝트 = 개발)
+ *       node scripts/deploy-push-only.mjs --prod    (운영 프로젝트, APPWRITE_API_KEY_PROD)
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 const env = readFileSync('.env.local', 'utf8');
 const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n]*)', 'm')) || [])[1];
 const { Client, Functions } = await import('node-appwrite');
 const { InputFile } = await import('node-appwrite/file');
 
+const isProd = process.argv.includes('--prod');
 const client = new Client()
   .setEndpoint(get('VITE_APPWRITE_ENDPOINT'))
-  .setProject(get('VITE_APPWRITE_PROJECT_ID'))
-  .setKey(get('APPWRITE_API_KEY'));
+  // 운영 프로젝트 ID 는 scripts/appwrite-schema.ts --prod 와 같은 값
+  .setProject(isProd ? '6a6bf85e002acb7f71d6' : get('VITE_APPWRITE_PROJECT_ID'))
+  .setKey(isProd ? get('APPWRITE_API_KEY_PROD') : get('APPWRITE_API_KEY'));
 const fn = new Functions(client);
 
 const FN_ID = 'push-notifications';
-const TAR = 'appwrite/_deploy_bundles/push-notifications.tar.gz';
+const SRC = `appwrite/functions/${FN_ID}`;
+const TAR = `appwrite/_deploy_bundles/${FN_ID}.tar.gz`;
+const spec = JSON.parse(readFileSync(`${SRC}/appwrite.json`, 'utf8')).functions.find((f) => f.$id === FN_ID);
+
+console.log(`▶ 대상: ${isProd ? '운영' : '개발'} 프로젝트`);
+mkdirSync('appwrite/_deploy_bundles', { recursive: true });
+execSync(`tar -czf ${TAR} -C ${SRC} --exclude=node_modules .`);
+console.log(`  ✓ 압축: ${TAR}`);
 
 // 배포 전 안전 확인: 함수가 이미 존재하는지(신규 생성/이벤트 변경 없음)
 const before = await fn.get(FN_ID);
 console.log(`▶ 대상 함수: ${before.$id} "${before.name}" runtime=${before.runtime}`);
-console.log(`  현재 활성 deployment: ${before.deployment || '(없음)'}`);
 console.log(`  이벤트 ${before.events.length}개 (변경하지 않음)`);
+
+const execute = spec?.execute ?? [];
+if (JSON.stringify(before.execute) !== JSON.stringify(execute)) {
+  // update 는 빠진 값을 기본값으로 되돌리므로 현재 설정을 그대로 넘기고 execute 만 바꾼다
+  await fn.update({
+    functionId: FN_ID,
+    name: before.name,
+    runtime: before.runtime,
+    execute,
+    events: before.events,
+    schedule: before.schedule,
+    timeout: before.timeout,
+    enabled: before.enabled,
+    logging: before.logging,
+    entrypoint: before.entrypoint,
+    commands: before.commands,
+    scopes: before.scopes,
+    ...(before.buildSpecification ? { buildSpecification: before.buildSpecification } : {}),
+    ...(before.runtimeSpecification ? { runtimeSpecification: before.runtimeSpecification } : {}),
+    ...(before.deploymentRetention !== undefined ? { deploymentRetention: before.deploymentRetention } : {}),
+  });
+  console.log(`  ✓ 실행 권한: ${JSON.stringify(before.execute)} → ${JSON.stringify(execute)}`);
+} else {
+  console.log(`  실행 권한 ${JSON.stringify(execute)} (변경 없음)`);
+}
 
 console.log(`\n▶ 새 deployment 업로드(활성화) — ${TAR}`);
 const dep = await fn.createDeployment(FN_ID, InputFile.fromPath(TAR, `${FN_ID}.tar.gz`), true, 'src/main.js', 'npm install');
@@ -44,8 +83,9 @@ for (let i = 0; i < 40 && !['ready', 'failed'].includes(status); i++) {
 }
 
 const after = await fn.get(FN_ID);
-console.log(`\n결과: 함수 활성 deployment = ${after.deployment}`);
-console.log(after.deployment === dep.$id && status === 'ready'
+const active = after.deploymentId ?? after.deployment;
+console.log(`\n결과: 함수 활성 deployment = ${active}, 실행 권한 = ${JSON.stringify(after.execute)}`);
+console.log(active === dep.$id && status === 'ready'
   ? '✅ 재배포 완료 — 새 deployment 활성화됨'
-  : `⚠️ 확인 필요 (status=${status}, active=${after.deployment})`);
+  : `⚠️ 확인 필요 (status=${status}, active=${active})`);
 process.exit(status === 'ready' ? 0 : 1);

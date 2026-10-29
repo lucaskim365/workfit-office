@@ -225,6 +225,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('resignedAt', 40),
       S('fcmToken', 256), // 예전 단일 토큰 — 서버 함수 전환기 동안 최근 기기 토큰을 같이 둔다
       SA('fcmTokens', 256), // 기기별 푸시 토큰 목록(PC·휴대폰 등 여러 대)
+      SA('fcmTokensRecall', 256), // 그중 알림 회수 신호를 받아도 되는 기기(안드로이드 휴대폰만 — 아이폰·PC 제외)
     ],
     indexes: [IX('empNo', ['empNo']), IX('dept', ['dept'])],
   },
