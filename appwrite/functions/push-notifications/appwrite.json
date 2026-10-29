@@ -8,7 +8,7 @@
       "entrypoint": "src/main.js",
       "commands": "npm install",
       "path": ".",
-      "execute": ["users"],
+      "execute": ["any"],
       "events": [
         "databases.workfit.collections.chatMessages.documents.*.create",
         "databases.workfit.collections.notifications.documents.*.create",

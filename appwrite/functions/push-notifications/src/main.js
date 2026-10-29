@@ -5,11 +5,12 @@
  * 기존 Firebase Cloud Functions(onNewChatMessage·onNewNotification)를 Appwrite Function으로
  * 이식. **발송은 FCM 유지**(무료·무제한). 트리거만 Appwrite DB 이벤트로 전환.
  *
- * 화면에서 직접 실행(회수 요청) — { type: 'recall-chat', roomId, readUpTo, exceptToken }: 부른 사람이 그 방을
+ * 화면에서 직접 실행(회수 요청) — { type: 'recall-chat', token, roomId, readUpTo, exceptToken }: 부른 사람이 그 방을
  *   readUpTo(메시지 시각)까지 읽었으니, 그 사람의 안드로이드 휴대폰(users.fcmTokensRecall)에 "그 시각까지의 그 방
  *   알림 닫기" 신호를 보낸다. 아이폰·PC 제외, 읽은 기기 자신(exceptToken)도 제외.
- *   (appwrite.json execute: users — 로그인한 사용자만, 부른 사람은 x-appwrite-user-id 로 서버가 확인)
- *   ⚠ execute 는 deployment 가 아니라 함수 설정이다 — scripts/deploy-push-only.mjs 가 함께 맞춘다.
+ *   화면은 Appwrite 세션 없이 손님으로 붙으므로 execute: any 이고, 부른 사람은 로그인 서명 토큰(token)으로
+ *   확인한다(src/token.js, 함수 변수 AUTH_TOKEN_SECRET — widdy-login·mail 과 같은 값).
+ *   ⚠ execute·변수는 deployment 가 아니라 함수 설정이다 — scripts/deploy-push-only.mjs 가 함께 맞춘다.
  *
  * 트리거(이벤트) — 함수 설정에서 아래 2개 등록:
  *   databases.workfit.collections.chatMessages.documents.*.create
@@ -27,6 +28,7 @@
  */
 import { Client, Databases } from 'node-appwrite';
 import admin from 'firebase-admin';
+import { resolveUserId } from './token.js';
 
 // firebase-admin 1회 초기화(FCM 발송 전용).
 function ensureAdmin() {
@@ -238,8 +240,10 @@ export default async ({ req, res, log, error }) => {
     if (req.headers['x-appwrite-trigger'] === 'http') {
       const body = req.bodyJson || {};
       if (body.type !== 'recall-chat') return res.json({ ok: false, error: 'unknown-request' }, 400);
+      const userId = resolveUserId(body);
+      if (!userId) return res.json({ ok: false, error: 'unauthorized' }, 401);
       const result = await handleRecall(
-        req.headers['x-appwrite-user-id'], String(body.roomId || ''), String(body.readUpTo || ''), String(body.exceptToken || ''),
+        userId, String(body.roomId || ''), String(body.readUpTo || ''), String(body.exceptToken || ''),
         dbs, DB, log,
       );
       return res.json({ ok: true, result });

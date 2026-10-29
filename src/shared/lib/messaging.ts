@@ -3,6 +3,7 @@ import { Functions } from 'appwrite';
 import { app, isFirebaseConfigured } from './firebase';
 import { client as appwriteClient } from './appwrite';
 import { userRepo } from '@/data/user/user.repo';
+import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 
 /**
  * FCM 웹 푸시(PWA) — 알림 권한/토큰/수신.
@@ -115,10 +116,13 @@ export function requestChatNotificationRecall(roomId: string, readUpTo: string):
   const delay = Math.max(0, Math.min(RECALL_QUIET_MS, firstAt + RECALL_MAX_WAIT_MS - Date.now()));
   const timer = setTimeout(() => {
     pendingRecalls.delete(roomId);
+    // 서버가 부른 사람을 확인하는 로그인 서명 토큰(화면은 Appwrite 세션이 없다). 없으면 보내도 거절된다
+    const token = getWiddyToken();
+    if (!token) return;
     let exceptToken = '';
     try { exceptToken = localStorage.getItem(DEVICE_TOKEN_KEY) ?? ''; } catch { /* 저장 제한 환경 */ }
     new Functions(client)
-      .createExecution(PUSH_FUNCTION_ID, JSON.stringify({ type: RECALL_CHAT, roomId, readUpTo: latest, exceptToken }), true)
+      .createExecution(PUSH_FUNCTION_ID, JSON.stringify({ type: RECALL_CHAT, token, roomId, readUpTo: latest, exceptToken }), true)
       .catch((e) => console.warn('[push] 알림 회수 요청 실패', e));
   }, delay);
   pendingRecalls.set(roomId, { readUpTo: latest, firstAt, timer });

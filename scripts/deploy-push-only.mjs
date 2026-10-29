@@ -1,8 +1,8 @@
 /**
  * push-notifications 함수만 재배포(코드 deployment 1건). bridge-a2f 등 다른 함수는 건드리지 않는다.
  * 1) 함수 폴더를 tar.gz 로 묶는다(appwrite/_deploy_bundles — gitignore)
- * 2) 실행 권한(execute)만 appwrite.json 값으로 맞춘다 — 화면이 직접 부르는 회수 요청(execute: users)에 필요.
- *    deployment 를 올려도 함수 설정은 안 바뀌므로 따로 맞춰야 한다. 이벤트·스코프·env 등 나머지 설정은 그대로 둔다.
+ * 2) 실행 권한(execute)을 appwrite.json 값으로, 변수 AUTH_TOKEN_SECRET 을 .env.local 값으로 맞춘다 — 화면이 직접
+ *    부르는 회수 요청에 필요. deployment 를 올려도 함수 설정은 안 바뀌므로 따로 맞춰야 한다. 이벤트·스코프·다른 변수는 그대로 둔다.
  * 3) 새 deployment 업로드·활성화
  *
  * 실행: node scripts/deploy-push-only.mjs           (.env.local 의 프로젝트 = 개발)
@@ -13,7 +13,7 @@ import { execSync } from 'node:child_process';
 
 const env = readFileSync('.env.local', 'utf8');
 const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n]*)', 'm')) || [])[1];
-const { Client, Functions } = await import('node-appwrite');
+const { Client, Functions, ID } = await import('node-appwrite');
 const { InputFile } = await import('node-appwrite/file');
 
 const isProd = process.argv.includes('--prod');
@@ -30,14 +30,36 @@ const TAR = `appwrite/_deploy_bundles/${FN_ID}.tar.gz`;
 const spec = JSON.parse(readFileSync(`${SRC}/appwrite.json`, 'utf8')).functions.find((f) => f.$id === FN_ID);
 
 console.log(`▶ 대상: ${isProd ? '운영' : '개발'} 프로젝트`);
-mkdirSync('appwrite/_deploy_bundles', { recursive: true });
-execSync(`tar -czf ${TAR} -C ${SRC} --exclude=node_modules .`);
-console.log(`  ✓ 압축: ${TAR}`);
 
 // 배포 전 안전 확인: 함수가 이미 존재하는지(신규 생성/이벤트 변경 없음)
 const before = await fn.get(FN_ID);
 console.log(`▶ 대상 함수: ${before.$id} "${before.name}" runtime=${before.runtime}`);
 console.log(`  이벤트 ${before.events.length}개 (변경하지 않음)`);
+
+/**
+ * 회수 요청의 부른 사람 확인용 서명 시크릿 — widdy-login·mail 과 같은 값이어야 한다(scripts/deploy-mail-stack.mjs 와 같은 키 이름).
+ * .env.local 에 없으면 함수에 이미 있는 값을 그대로 둔다(secret 이라 읽을 수 없다).
+ * 둘 다 없으면 아무것도 바꾸지 않고 멈춘다 — 그대로 배포하면 회수 요청이 모두 거절된다.
+ */
+const TOKEN_SECRET = isProd ? get('AUTH_TOKEN_SECRET_PROD') : get('WIDDY_TOKEN_SECRET');
+const existingSecret = (await fn.listVariables(FN_ID)).variables.find((v) => v.key === 'AUTH_TOKEN_SECRET');
+if (!TOKEN_SECRET && !existingSecret) {
+  console.error(`✗ 함수에 AUTH_TOKEN_SECRET 이 없고 .env.local 에 ${isProd ? 'AUTH_TOKEN_SECRET_PROD' : 'WIDDY_TOKEN_SECRET'} 도 없습니다.`);
+  console.error('  widdy-login·mail 함수와 같은 값을 .env.local 에 넣고 다시 실행하세요. (아무것도 바꾸지 않았습니다)');
+  process.exit(1);
+}
+
+mkdirSync('appwrite/_deploy_bundles', { recursive: true });
+execSync(`tar -czf ${TAR} -C ${SRC} --exclude=node_modules .`);
+console.log(`  ✓ 압축: ${TAR}`);
+
+if (TOKEN_SECRET) {
+  if (existingSecret) await fn.updateVariable(FN_ID, existingSecret.$id, 'AUTH_TOKEN_SECRET', TOKEN_SECRET, true);
+  else await fn.createVariable(FN_ID, ID.unique(), 'AUTH_TOKEN_SECRET', TOKEN_SECRET, true);
+  console.log(`  ✓ 변수 AUTH_TOKEN_SECRET ${existingSecret ? '갱신' : '추가'}`);
+} else {
+  console.log('  변수 AUTH_TOKEN_SECRET: 함수에 있는 값 유지(.env.local 에 없음)');
+}
 
 const execute = spec?.execute ?? [];
 if (JSON.stringify(before.execute) !== JSON.stringify(execute)) {
