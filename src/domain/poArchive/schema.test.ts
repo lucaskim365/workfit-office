@@ -19,7 +19,7 @@ const doc = (id: string, over: Partial<ApprovalDoc> = {}): ApprovalDoc =>
   });
 const viewer = (over: Partial<PoViewer> = {}): PoViewer => ({ userId: 'U099', deptId: 'D9', deptName: '개발팀', isManager: false, ...over });
 const noDept = () => '';
-const all: PoArchiveQuery = { keyword: '', from: '', to: '', reply: 'all' };
+const all: PoArchiveQuery = { keyword: '', from: '', to: '', reply: 'all', tax: 'all' };
 
 test('서식 code 나 이름에 "발주"가 들어 있으면 발주서 서식이다', () => {
   assert.equal(isPurchaseOrderForm({ code: 'PO', name: '발주서' }), true);
@@ -68,11 +68,25 @@ test('검색어·완료일·회신 여부로 거르고 완료일 최신순으로
     doc('C', { title: '대성반도체 소모품 발주', completedAt: '2026-09-20T03:00:00.000Z' }),
   ];
   const replied = (id: string) => id === 'A';
-  assert.deepEqual(filterPurchaseOrders(rows, all, replied).map((d) => d.id), ['B', 'A', 'C']);
-  assert.deepEqual(filterPurchaseOrders(rows, { ...all, keyword: '대성 발주' }, replied).map((d) => d.id), ['A', 'C']);
-  assert.deepEqual(filterPurchaseOrders(rows, { ...all, from: '2026-10-01', to: '2026-10-10' }, replied).map((d) => d.id), ['A']);
-  assert.deepEqual(filterPurchaseOrders(rows, { ...all, reply: 'pending' }, replied).map((d) => d.id), ['B', 'C']);
-  assert.deepEqual(filterPurchaseOrders(rows, { ...all, reply: 'replied' }, replied).map((d) => d.id), ['A']);
+  const noTax = () => false;
+  assert.deepEqual(filterPurchaseOrders(rows, all, replied, noTax).map((d) => d.id), ['B', 'A', 'C']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, keyword: '대성 발주' }, replied, noTax).map((d) => d.id), ['A', 'C']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, from: '2026-10-01', to: '2026-10-10' }, replied, noTax).map((d) => d.id), ['A']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, reply: 'pending' }, replied, noTax).map((d) => d.id), ['B', 'C']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, reply: 'replied' }, replied, noTax).map((d) => d.id), ['A']);
+});
+
+test('매입 세금계산서 발행 여부로 거르고, 회신 여부와 함께 걸 수 있다', () => {
+  const rows = [
+    doc('A', { completedAt: '2026-10-03T03:00:00.000Z' }),
+    doc('B', { completedAt: '2026-10-02T03:00:00.000Z' }),
+    doc('C', { completedAt: '2026-10-01T03:00:00.000Z' }),
+  ];
+  const replied = (id: string) => id !== 'C';
+  const issued = (id: string) => id === 'B';
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, tax: 'issued' }, replied, issued).map((d) => d.id), ['B']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, tax: 'unissued' }, replied, issued).map((d) => d.id), ['A', 'C']);
+  assert.deepEqual(filterPurchaseOrders(rows, { ...all, reply: 'replied', tax: 'unissued' }, replied, issued).map((d) => d.id), ['A']);
 });
 
 test('PDF 파일명에서 파일명에 못 쓰는 글자를 뺀다', () => {
