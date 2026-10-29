@@ -238,67 +238,35 @@ function hasFullAccessTitle(user) {
  * 3. 부서장(`departments.headUserId` 또는 팀장 직책) -> 소속 부서 임직원만 (`empIds: Set(...)`)
  * 4. 일반 사원 -> 본인만
  */
-/**
- * 열람 범위 판정에 쓰는 기준 목록(직원·계정·인명관리·부서·직급·직책·임원/운영자 매핑) — 잠깐 기억해 두고 같이 쓴다.
- *
- * 조회 요청마다 이 목록 전부를 처음부터 다시 받았는데, 화면이 열릴 때 요청 4~5개가 한꺼번에 오면
- * 같은 전량 조회가 30번 넘게 몰려 일부 요청이 30초 동안 응답을 못 받고 실패했다(2026-10-29 운영 실측:
- * 13시대 조회 77건 중 54건). 동시에 온 요청은 진행 중인 조회 하나를 같이 기다리고, 받은 목록은
- * REFERENCE_TTL_MS 동안 다시 쓴다. 함수 프로세스는 요청 사이에 살아 있어 모듈 변수가 유지된다.
- * 에이전트가 직원 목록을 새로 적재하면 바로 버린다(clearReferenceCache).
- */
-const REFERENCE_TTL_MS = 60_000;
-let referenceCache = null; // { at, promise }
-
-function clearReferenceCache() {
-  referenceCache = null;
-}
-
-function loadReference(dbs, DB, log) {
-  if (referenceCache && Date.now() - referenceCache.at < REFERENCE_TTL_MS) return referenceCache.promise;
-  const startedAt = Date.now();
-  const promise = (async () => {
-    // 소속은 인명관리(기준정보 ID)로 판단한다 — 계정의 dept·position·jobTitle 칸은 옛 사본이라 보지 않는다.
-    const [employees, users, profiles, depts, positions, jobTitles, execMappings] = await Promise.all([
-      listAll(dbs, DB, 'employees', [], log),
-      listAll(dbs, DB, 'users', [], log),
-      listAll(dbs, DB, 'employeeProfiles', [], log),
-      listAll(dbs, DB, 'departments', [], log),
-      listAll(dbs, DB, 'positions', [], log),
-      listAll(dbs, DB, 'jobTitles', [], log),
-      // EXEC(임원)·OPERATOR(시스템 관리자) 매핑. 못 읽으면 이 단계만 건너뛴다(null)
-      dbs
-        .listDocuments(DB, 'roleMappings', [Query.equal('roleCode', ['EXEC', 'OPERATOR']), Query.limit(100)])
-        .then((r) => r.documents)
-        .catch((err) => {
-          log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
-          return null;
-        }),
-    ]);
-    log(`reference loaded in ${Date.now() - startedAt}ms`);
-    return { employees, users, profiles, depts, positions, jobTitles, execMappings };
-  })();
-  referenceCache = { at: startedAt, promise };
-  // 실패한 조회는 기억하지 않는다 — 다음 요청이 다시 받는다
-  promise.catch(() => {
-    if (referenceCache?.promise === promise) referenceCache = null;
-  });
-  return promise;
-}
-
 async function resolveViewerScope(dbs, DB, uid, log) {
-  const { employees, users, profiles, depts, positions, jobTitles, execMappings } = await loadReference(dbs, DB, log);
-  const me = users.find((u) => u.id === uid);
+  const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
   const myName = me ? String(me.name).trim() : '';
 
+  // 소속은 인명관리(기준정보 ID)로 판단한다 — 계정의 dept·position·jobTitle 칸은 옛 사본이라 보지 않는다.
+  const [employees, users, profiles, depts, positions, jobTitles] = await Promise.all([
+    listAll(dbs, DB, 'employees', [], log),
+    listAll(dbs, DB, 'users', [], log),
+    listAll(dbs, DB, 'employeeProfiles', [], log),
+    listAll(dbs, DB, 'departments', [], log),
+    listAll(dbs, DB, 'positions', [], log),
+    listAll(dbs, DB, 'jobTitles', [], log),
+  ]);
   const aff = affiliationOf(uid, profiles, { depts, positions, jobTitles });
   const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
   const myEmpId = matched === undefined ? null : Number(matched.empId);
 
   // 1. roleMappings 컬렉션에서 EXEC(임원) 또는 OPERATOR(시스템 관리자) 매핑 검사
-  if (execMappings?.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
-    log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
-    return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
+  try {
+    const mappings = await dbs.listDocuments(DB, 'roleMappings', [
+      Query.equal('roleCode', ['EXEC', 'OPERATOR']),
+      Query.limit(100),
+    ]);
+    if (mappings.documents.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
+      log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
+      return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
+    }
+  } catch (err) {
+    log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
   }
 
   // 2. 직급/직책에 임원 명칭 포함 또는 레거시 화이트리스트
@@ -380,9 +348,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
       볼 수 있는 범위를 **서버에서** 정한다. 화면이 보내는 값으로 정하면 요청을 고쳐 남의
       근태를 열 수 있다. null이면 제한 없음(관리자).
     */
-    const scopeStartedAt = Date.now();
     const scope = await resolveViewerScope(dbs, DB, uid, log);
-    log(`scope ready in ${Date.now() - scopeStartedAt}ms`);
     const canSee = (empId) => scope.empIds === null || scope.empIds.has(Number(empId));
 
     switch (action) {
@@ -403,8 +369,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
       }
 
       case 'listEmployees': {
-        // 열람 범위 판정 때 받아 둔 직원 목록을 그대로 쓴다(loadReference)
-        const rows = (await loadReference(dbs, DB, log)).employees.filter((d) => canSee(d.empId));
+        const rows = (await listAll(dbs, DB, 'employees', [], log)).filter((d) => canSee(d.empId));
         return res.json({
           data: rows.map((d) => ({
             empId: Number(d.empId),
@@ -574,8 +539,6 @@ export default async ({ req, res, log, error }) => {
 
   try {
     const upserted = await storePayload(dbs, DB, parsed.data, new Date(), log);
-    // 직원 목록이 바뀌었을 수 있다 — 조회가 기억해 둔 기준 목록을 버린다
-    clearReferenceCache();
     log(`ingested ${JSON.stringify(upserted)}`);
     return res.json({ ok: true, upserted });
   } catch (e) {
