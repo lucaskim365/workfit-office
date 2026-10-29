@@ -5,7 +5,7 @@ import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
 import { CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
-import { onForegroundMessage } from '@/shared/lib/messaging';
+import { isChatMessageReadHere, onForegroundMessage } from '@/shared/lib/messaging';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
 import MobileNotificationsScreen from './MobileNotificationsScreen';
@@ -96,6 +96,8 @@ export default function MobileApp() {
       try {
         if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
         if (shouldSuppressChatPopup(p.roomId)) return;
+        // 다른 기기에서 이미 읽은 메시지(읽음 표시가 알림보다 먼저 도착) — 띄우지 않는다
+        if (isChatMessageReadHere(p.roomId, p.at)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
         const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
         // at·shownAt: 읽은 방 알림 정리 기준(서비스워커 recallChat, closeReadChatNotifications)

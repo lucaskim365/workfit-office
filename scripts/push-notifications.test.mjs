@@ -95,6 +95,7 @@ function foregroundFixture(permission = 'granted', mobile = false, screen = 'des
   const context = vm.createContext({
     user: { id: 'receiver' }, isMobilePwa: mobile,
     qc: { invalidateQueries: async (filters) => { invalidated.push(filters.queryKey); } }, CHAT_UNREAD_KEY: 'chatUnread',
+    isChatMessageReadHere: (roomId, at) => roomId === 'READ-ROOM' && at <= '2026-10-29T10:00:00',
     document: page,
     Notification: { permission },
     navigator: { serviceWorker: { getRegistration: async () => registration } },
@@ -314,6 +315,14 @@ test('휴대폰 포그라운드: 대화 알림을 띄운 뒤 안 읽은 수를 �
   assert.equal(invalidated.length, 0);
   await callbacks[0]({ title: '팀 채팅', body: '메시지', roomId: 'ROOM' });
   assert.equal(JSON.stringify(invalidated), JSON.stringify([['chatUnread']]));
+});
+
+test('휴대폰 포그라운드: 다른 기기에서 이미 읽은 메시지(읽음 표시가 먼저 옴)의 알림은 띄우지 않음', async () => {
+  const { callbacks, shown } = foregroundFixture('granted', false, 'mobile');
+  await callbacks[0]({ title: '팀 채팅', body: '읽은 메시지', roomId: 'READ-ROOM', at: '2026-10-29T10:00:00' });
+  assert.equal(shown.length, 0);
+  await callbacks[0]({ title: '팀 채팅', body: '새 메시지', roomId: 'READ-ROOM', at: '2026-10-29T10:00:01' });
+  assert.equal(shown.length, 1);
 });
 
 test('PC 포그라운드: 5초 타이머가 같은 방의 새 알림을 닫지 않음', async () => {

@@ -62,6 +62,13 @@ export async function fetchThread(roomId: string, cached: () => ChatMessage[] | 
   return replayChanges(list, recent, roomId, since, threadWindowOf(roomId).from);
 }
 
+/** 실시간으로 들어온 메시지(생성·수정)를 듣는 곳 — 읽음 표시(readBy)로 휴대폰 알림을 닫는 데 쓴다(useCloseReadChatNotifications) */
+const messageListeners = new Set<(message: ChatMessage) => void>();
+export function onLiveChatMessage(listener: (message: ChatMessage) => void): () => void {
+  messageListeners.add(listener);
+  return () => messageListeners.delete(listener);
+}
+
 function remember(change: LiveChange) {
   const now = Date.now();
   recent.push({ at: now, change });
@@ -90,6 +97,7 @@ function onEvent(qc: QueryClient, response: RealtimeResponseEvent<Record<string,
       const removed = events.some((e) => e.endsWith('.delete'));
       const message = removed ? null : chatMessageRepo.fromRealtime(payload);
       const change: LiveChange | null = removed ? { roomId, removedId: String(payload.$id) } : message ? { roomId, message } : null;
+      if (message) for (const listener of messageListeners) listener(message);
       if (change) {
         remember(change);
         qc.setQueryData<ChatMessage[]>([THREAD_KEY, roomId], (cur) => cur && applyLiveChange(cur, change, threadWindowOf(roomId).from));
