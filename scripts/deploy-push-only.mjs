@@ -12,7 +12,8 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 const env = readFileSync('.env.local', 'utf8');
-const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n]*)', 'm')) || [])[1];
+// .env.local 은 줄 끝이 \r\n 이라 \r 까지 값으로 읽히지 않게 뺀다 — 비밀값에 붙으면 서명이 안 맞아 회수 요청이 모두 401 이 됐다
+const get = (k) => (env.match(new RegExp('^' + k + '\\s*=\\s*"?([^"\\n\\r]*)', 'm')) || [])[1]?.trim();
 const { Client, Functions, ID } = await import('node-appwrite');
 const { InputFile } = await import('node-appwrite/file');
 
