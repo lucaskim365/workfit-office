@@ -124,27 +124,6 @@ export function requestChatNotificationRecall(roomId: string, readUpTo: string):
   pendingRecalls.set(roomId, { readUpTo: latest, firstAt, timer });
 }
 
-/** 이 화면이 아는 방별 '어디까지 읽었나'(메시지 시각) — 이미 읽은 메시지의 알림을 화면이 새로 띄우지 않게 */
-const readUpToByRoom = new Map<string, string>();
-
-/**
- * 그 방을 readUpTo(메시지 시각)까지 읽었다 — 이 기기의 그 방 알림 중 그 시각까지의 것을 닫는다.
- * 서비스워커가 기록해 두므로 그 뒤 늦게 도착한 같은 메시지의 알림도 띄우지 않는다(public/firebase-messaging-sw.js recallChat).
- */
-export function closeChatNotificationsUpTo(roomId: string, readUpTo: string): void {
-  if (!roomId || !readUpTo || readUpTo <= (readUpToByRoom.get(roomId) ?? '')) return;
-  readUpToByRoom.set(roomId, readUpTo);
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-  void navigator.serviceWorker.ready
-    .then((reg) => reg.active?.postMessage({ type: 'workfit-recall-chat', roomId, readUpTo }))
-    .catch((e) => console.warn('[push] 읽은 방 알림 닫기 실패', e));
-}
-
-/** 이 메시지를 이미 읽은 것으로 알고 있나(closeChatNotificationsUpTo 로 받은 값 기준) */
-export function isChatMessageReadHere(roomId: string | undefined, at: string | undefined): boolean {
-  return Boolean(roomId && at && at <= (readUpToByRoom.get(roomId) ?? ''));
-}
-
 /**
  * 이 기기에 떠 있는 대화방 알림 중 이미 읽은 방(안 읽은 메시지 0)의 알림을 닫는다.
  * fetchedAt: 안 읽은 수를 받은 시각 — 그 뒤에 뜬 알림(shownAt)은 그 수에 아직 안 잡혔을 수 있어 건드리지 않는다.
@@ -266,7 +245,9 @@ export async function onForegroundMessage(
     const d = payload.data ?? {};
     // 회수 신호는 새 알림이 아니다 — 서비스워커에 넘겨 백그라운드 때와 같은 규칙으로 닫는다
     if (d.type === RECALL_CHAT) {
-      if (d.roomId && d.readUpTo) closeChatNotificationsUpTo(d.roomId, d.readUpTo);
+      void navigator.serviceWorker?.ready
+        .then((reg) => reg.active?.postMessage({ type: 'workfit-recall-chat', roomId: d.roomId, readUpTo: d.readUpTo }))
+        .catch((e) => console.warn('[push] 알림 회수 실패', e));
       return;
     }
     cb({
