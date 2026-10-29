@@ -12,6 +12,7 @@ import {
   type PoArchiveQuery,
   type PoReply,
   type PoReplyFilter,
+  type PoTaxFilter,
   type PoViewer,
 } from '@/domain/poArchive/schema';
 import {
@@ -32,6 +33,39 @@ const REPLY_FILTERS: { key: PoReplyFilter; label: string }[] = [
   { key: 'pending', label: '회신 대기' },
   { key: 'replied', label: '회신 완료' },
 ];
+/** 매입 세금계산서 — 목록 칸의 표시(미발행·발행 완료)와 같은 말 */
+const TAX_FILTERS: { key: PoTaxFilter; label: string }[] = [
+  { key: 'all', label: '계산서 전체' },
+  { key: 'unissued', label: '미발행' },
+  { key: 'issued', label: '발행 완료' },
+];
+
+/** 상단 필터 묶음(전체·대기·완료 같은 단추 줄) */
+function FilterGroup<K extends string>({
+  label,
+  items,
+  value,
+  onChange,
+}: {
+  label: string;
+  items: { key: K; label: string }[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex rounded-lg border border-border-hi overflow-hidden text-[11px] font-bold">
+      {items.map((f) => (
+        <button
+          key={f.key}
+          onClick={() => onChange(f.key)}
+          className={`px-2.5 py-1.5 transition-colors ${value === f.key ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'}`}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** 파일 고르는 창에 먼저 보여 줄 형식 — 스캔본·사진·PDF. 다른 형식도 올릴 수 있다(끌어다 놓기 포함). */
 const REPLY_ACCEPT = '.pdf,.jpg,.jpeg,.png,.tif,.tiff';
@@ -63,10 +97,10 @@ export function PurchaseOrderArchive({
 
   const replyByDoc = useMemo(() => new Map(replies.map((r) => [r.docId, r])), [replies]);
   const taxByDoc = useMemo(() => new Map(taxInvoices.map((t) => [t.docId, t])), [taxInvoices]);
-  const [query, setQuery] = useState<PoArchiveQuery>({ keyword: '', from: '', to: '', reply: 'all' });
+  const [query, setQuery] = useState<PoArchiveQuery>({ keyword: '', from: '', to: '', reply: 'all', tax: 'all' });
   const rows = useMemo(
-    () => filterPurchaseOrders(docs, query, (id) => replyByDoc.has(id)),
-    [docs, query, replyByDoc],
+    () => filterPurchaseOrders(docs, query, (id) => replyByDoc.has(id), (id) => taxByDoc.has(id)),
+    [docs, query, replyByDoc, taxByDoc],
   );
 
   const [viewDoc, setViewDoc] = useState<ApprovalDoc | null>(null);
@@ -169,17 +203,8 @@ export function PurchaseOrderArchive({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-border-hi overflow-hidden text-[11px] font-bold">
-            {REPLY_FILTERS.map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setQuery({ ...query, reply: f.key })}
-                className={`px-2.5 py-1.5 transition-colors ${query.reply === f.key ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <FilterGroup label="회신 문서" items={REPLY_FILTERS} value={query.reply} onChange={(reply) => setQuery({ ...query, reply })} />
+          <FilterGroup label="매입 세금계산서" items={TAX_FILTERS} value={query.tax} onChange={(tax) => setQuery({ ...query, tax })} />
           <input
             type="date"
             value={query.from}
@@ -359,7 +384,7 @@ export function PurchaseOrderArchive({
 
 /**
  * 보관함 첨부 칸 — 회신 문서·매입 세금계산서가 같은 모양을 쓴다.
- * 파일이 있으면: [완료 표시] 올린 사람 · 날짜 / 파일 이름(내려받기) · 교체 · 삭제
+ * 파일이 있으면: [완료 표시] 올린 사람 · 날짜 / 파일 이름(내려받기) / 교체 · 삭제
  * 없으면: 올릴 수 있는 사람에겐 점선 올리기 칸(클릭·끌어다 놓기), 나머지에겐 상태 표시만.
  * 올릴 수 있는 사람은 칸 어디에 파일을 놓아도 올라간다(있으면 교체).
  */
@@ -451,17 +476,17 @@ function PoFileCell({
         </span>
         <span className="truncate text-ink3">{[file.uploadedByName, file.uploadedAt.slice(0, 10)].filter(Boolean).join(' · ')}</span>
       </div>
-      {/* 좁으면 교체·삭제가 파일 이름 아래 줄로 내려간다 */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <button
-          onClick={() => onDownload(file)}
-          title={`${file.name} 내려받기`}
-          className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
-        >
-          <Download size={12} className="shrink-0" />
-          <span className="truncate">{file.name}</span>
-        </button>
-        {canUpload && (
+      {/* 파일 이름은 한 줄을 다 쓰고(길면 말줄임), 교체·삭제는 늘 그 아래 줄 — 이름 길이와 상관없이 같은 자리에 둔다 */}
+      <button
+        onClick={() => onDownload(file)}
+        title={`${file.name} 내려받기`}
+        className="inline-flex min-w-0 max-w-full self-start items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
+      >
+        <Download size={12} className="shrink-0" />
+        <span className="truncate">{file.name}</span>
+      </button>
+      {canUpload && (
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onPick}
             disabled={busy}
@@ -470,8 +495,6 @@ function PoFileCell({
             {uploadIcon}
             교체
           </button>
-        )}
-        {canUpload && (
           <button
             onClick={() => onDelete(file)}
             disabled={busy}
@@ -480,8 +503,8 @@ function PoFileCell({
             {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
             삭제
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

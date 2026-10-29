@@ -84,6 +84,8 @@ export const poReplySchema = z.object({
 export type PoReply = z.infer<typeof poReplySchema>;
 
 export type PoReplyFilter = 'all' | 'replied' | 'pending';
+/** 매입 세금계산서 — 파일을 올렸으면 발행 완료, 없으면 미발행 */
+export type PoTaxFilter = 'all' | 'issued' | 'unissued';
 
 export interface PoArchiveQuery {
   /** 제목·문서번호·기안자·기안부서 — 띄어쓴 낱말이 모두 들어 있으면 일치. */
@@ -92,6 +94,7 @@ export interface PoArchiveQuery {
   from: string;
   to: string;
   reply: PoReplyFilter;
+  tax: PoTaxFilter;
 }
 
 /** 완료일 `YYYY-MM-DD`(로컬). 완료일이 없으면 빈 문자열. */
@@ -108,6 +111,7 @@ export function filterPurchaseOrders(
   docs: ApprovalDoc[],
   q: PoArchiveQuery,
   hasReply: (docId: string) => boolean,
+  hasTaxInvoice: (docId: string) => boolean,
 ): ApprovalDoc[] {
   return docs
     .filter((d) => {
@@ -117,6 +121,8 @@ export function filterPurchaseOrders(
       if (q.to && day > q.to) return false;
       if (q.reply === 'replied' && !hasReply(d.id)) return false;
       if (q.reply === 'pending' && hasReply(d.id)) return false;
+      if (q.tax === 'issued' && !hasTaxInvoice(d.id)) return false;
+      if (q.tax === 'unissued' && hasTaxInvoice(d.id)) return false;
       return true;
     })
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
