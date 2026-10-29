@@ -6,7 +6,7 @@ import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfi
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { useCreateRoom } from '@/features/chat/useChatRooms';
-import { getAvatarStyle } from './MessengerPanel';
+import { getAvatarStyle } from '@/features/chat/avatarStyle';
 
 /**
  * 대화방 프로필 명함 — 프로필 사진·이름을 누르면 그 옆에 작게 뜬다.
@@ -82,20 +82,10 @@ function ProfileCard({
   onClose: () => void;
   onOpenRoom: (roomId: string) => void;
 }) {
-  const { data: users = [] } = useUsers();
-  const { data: profiles = [] } = useEmployeeProfiles();
-  const presenceMap = useAllUserPresences();
-  const createRoom = useCreateRoom();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const user = users.find((u) => u.id === target.userId);
-  const profile = profiles.find((p) => p.userId === target.userId || p.id === target.userId);
-  const name = user?.name ?? target.fallbackName ?? '알 수 없음';
-  const active = user?.status === '사용';
-  const title = [user?.position, user?.jobTitle && user.jobTitle !== user.position ? user.jobTitle : ''].filter(Boolean).join(' · ');
-  const avatar = getAvatarStyle(target.userId);
+  const { data: users = [] } = useUsers();
+  const name = users.find((u) => u.id === target.userId)?.name ?? target.fallbackName ?? '알 수 없음';
 
   // 메신저 패널 바깥(왼쪽)에 — 패널 안에 뜨면 대화를 가린다. 바깥 자리가 모자라면 누른 자리 오른쪽(모자라면 왼쪽)에.
   // 화면 밖으로 나가지 않게. 화면 배율(body zoom) 안의 고정 위치라 좌표를 배율로 나눈다.
@@ -130,6 +120,51 @@ function ProfileCard({
     };
   }, [onClose]);
 
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`${name} 프로필`}
+      style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, width: CARD_W }}
+      className="fixed z-[99999] overflow-hidden rounded-xl border border-border bg-white text-ink shadow-[0_12px_32px_rgba(16,24,48,0.22)]"
+    >
+      <ProfileCardContent userId={target.userId} fallbackName={target.fallbackName} me={me} meName={meName} onOpenRoom={onOpenRoom} />
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * 명함 내용 — 사진·이름·직급·부서·상태, 업무 이메일·연락처, 1:1 대화.
+ * 웹은 누른 자리 옆에 작게 띄우고(ProfileCard), 모바일은 아래에서 올라오는 시트에 담는다(mobile/MobileProfileSheet).
+ */
+export function ProfileCardContent({
+  userId,
+  fallbackName,
+  me,
+  meName,
+  onOpenRoom,
+}: {
+  userId: string;
+  fallbackName?: string;
+  me: string;
+  meName: string;
+  /** 1:1 대화방이 정해지면 그 방을 연다 */
+  onOpenRoom: (roomId: string) => void;
+}) {
+  const { data: users = [] } = useUsers();
+  const { data: profiles = [] } = useEmployeeProfiles();
+  const presenceMap = useAllUserPresences();
+  const createRoom = useCreateRoom();
+  const [copied, setCopied] = useState(false);
+
+  const user = users.find((u) => u.id === userId);
+  const profile = profiles.find((p) => p.userId === userId || p.id === userId);
+  const name = user?.name ?? fallbackName ?? '알 수 없음';
+  const active = user?.status === '사용';
+  const title = [user?.position, user?.jobTitle && user.jobTitle !== user.position ? user.jobTitle : ''].filter(Boolean).join(' · ');
+  const avatar = getAvatarStyle(userId);
+
   const startDirect = async () => {
     if (!user || createRoom.isPending) return;
     try {
@@ -152,14 +187,8 @@ function ProfileCard({
     }
   };
 
-  return createPortal(
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label={`${name} 프로필`}
-      style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, width: CARD_W }}
-      className="fixed z-[99999] overflow-hidden rounded-xl border border-border bg-white text-ink shadow-[0_12px_32px_rgba(16,24,48,0.22)]"
-    >
+  return (
+    <>
       <div className="flex items-center gap-3 bg-[#f2f8fc] px-4 py-3.5">
         <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold">
           {name[0] ?? '?'}
@@ -170,7 +199,7 @@ function ProfileCard({
             {title && <span className="shrink-0 text-[11px] font-semibold text-ink2">{title}</span>}
           </div>
           <div className="mt-0.5 truncate text-[11px] text-ink2">{user ? (active ? user.dept : '퇴직') : ''}</div>
-          {active && presenceMap[target.userId] && <PresenceBadge presence={presenceMap[target.userId]} showMessage size="xs" className="mt-1" />}
+          {active && presenceMap[userId] && <PresenceBadge presence={presenceMap[userId]} showMessage size="xs" className="mt-1" />}
         </div>
       </div>
 
@@ -205,7 +234,6 @@ function ProfileCard({
           </button>
         </div>
       )}
-    </div>,
-    document.body,
+    </>
   );
 }

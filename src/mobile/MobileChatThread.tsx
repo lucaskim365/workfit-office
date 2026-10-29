@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
@@ -27,6 +27,7 @@ import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
+import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
 import { CHAT_TEXT_SIZES, chatTextScaleStyle, setChatTextSize, useChatTextSize } from './chatTextSize';
 import { statusColor } from './MobileApprovalList';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
@@ -34,24 +35,9 @@ import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndi
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 
-/** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
-export function getAvatarStyle(userId: string): { bg: string; text: string } {
-  const PASTEL_PALETTE = [
-    { bg: '#e0f2fe', text: '#0369a1' }, // 파스텔 스카이 블루
-    { bg: '#fce7f3', text: '#be185d' }, // 파스텔 핑크
-    { bg: '#dcfce7', text: '#15803d' }, // 파스텔 민트/그린
-    { bg: '#fef9c3', text: '#a16207' }, // 파스텔 옐로우
-    { bg: '#f3e8ff', text: '#6b21a8' }, // 파스텔 퍼플
-    { bg: '#ffedd5', text: '#c2410c' }, // 파스텔 오렌지
-    { bg: '#e0e7ff', text: '#3730a3' }, // 파스텔 인디고
-  ];
-  if (!userId) return PASTEL_PALETTE[0];
-  let sum = 0;
-  for (let i = 0; i < userId.length; i++) {
-    sum += userId.charCodeAt(i);
-  }
-  return PASTEL_PALETTE[sum % PASTEL_PALETTE.length];
-}
+// 아바타 색 — 웹·모바일 공용(features/chat/avatarStyle)
+export { getAvatarStyle } from '@/features/chat/avatarStyle';
+import { getAvatarStyle } from '@/features/chat/avatarStyle';
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
@@ -182,6 +168,28 @@ export default function MobileChatThread() {
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 나눠 받은 메시지 위에서의 위로 올려 더 받기·검색 이동(웹·모바일 공용) */
   const thread = useThreadNavigator({ roomId, messages, scrollRef, searchQuery });
+
+  /** 답장 인용을 누르면 원본 메시지로 이동해 잠깐 강조한다. 아직 안 받은 옛 메시지면 받아 온 뒤 이동한다(웹과 같다). */
+  const { reveal } = thread;
+  const jumpToMessage = useCallback(async (messageId: string) => {
+    const el = await reveal(messageId);
+    if (!el) {
+      window.alert('원본 메시지를 찾을 수 없습니다.');
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('chat-jump-highlight');
+    void el.offsetWidth; // 같은 메시지를 연달아 눌러도 강조 애니메이션이 다시 돌게
+    el.classList.add('chat-jump-highlight');
+    window.setTimeout(() => el.classList.remove('chat-jump-highlight'), 1800);
+  }, [reveal]);
+
+  /** 명함(프로필 사진·이름을 누르면)·참여자 목록(단체방 이름을 누르면) — 아래에서 올라오는 시트 */
+  const [profileTarget, setProfileTarget] = useState<{ userId: string; name?: string } | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const openProfile = useCallback((userId: string, name?: string) => {
+    if (userId) setProfileTarget({ userId, name });
+  }, []);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -320,7 +328,12 @@ export default function MobileChatThread() {
           <header className="m-header flex shrink-0 items-center gap-1.5 px-2 py-3 text-white">
             <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
             {isDirect && (
-              <div className="relative shrink-0 mr-1">
+              <button
+                type="button"
+                onClick={() => otherId && openProfile(otherId, displayName)}
+                title={`${displayName} 프로필`}
+                className="relative shrink-0 mr-1"
+              >
                 <span
                   style={{ background: (room?.color || '#101830') + '33', color: '#fff' }}
                   className="grid h-8 w-8 place-items-center rounded-[10px] text-[13px] font-bold border border-white/20"
@@ -328,11 +341,19 @@ export default function MobileChatThread() {
                   {displayName[0] ?? '?'}
                 </span>
                 <PresenceDot presence={otherPresence} size="sm" />
-              </div>
+              </button>
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <div className="truncate text-[14.5px] font-bold text-white">{displayName}</div>
+                {/* 1:1 방은 상대 명함, 단체방은 참여자 목록 */}
+                <button
+                  type="button"
+                  onClick={() => (isDirect ? otherId && openProfile(otherId, displayName) : room && setShowMembers(true))}
+                  title={isDirect ? `${displayName} 프로필` : '참여자 목록 보기'}
+                  className="min-w-0 truncate text-left text-[14.5px] font-bold text-white"
+                >
+                  {displayName}
+                </button>
                 {isDirect && <BirthdayMark userId={otherId} />}
                 {isDirect && otherPresence && (
                   <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
@@ -348,7 +369,9 @@ export default function MobileChatThread() {
                 )}
               </div>
               {room && room.type !== 'direct' ? (
-                <div className="text-[10px] text-white/60">{room.members.length}명</div>
+                <button type="button" onClick={() => setShowMembers(true)} title="참여자 목록 보기" className="block text-left text-[10px] text-white/60">
+                  {room.members.length}명 ▾
+                </button>
               ) : otherPresence?.message ? (
                 <div className="text-[10px] text-[#4ea8de] truncate font-medium">
                   {otherPresence.message}
@@ -413,7 +436,11 @@ export default function MobileChatThread() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/*
+        overscroll-contain: 대화창 맨 위(이전 대화를 불러오는 중)에서 더 끌어내려도 그 동작이 페이지로 넘어가지 않게 한다.
+        넘어가면 휴대폰 크롬이 '당겨서 새로고침'으로 받아 페이지를 다시 열었다.
+      */}
+      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
         {thread.loadingOlder && <div className="py-2 text-center chat-text-[11px] text-ink3">이전 대화를 불러오는 중…</div>}
         {processedItems.length === 0 && (
           <div className="py-10 text-center chat-text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
@@ -461,6 +488,8 @@ export default function MobileChatThread() {
                   showProfile={!groupedWithPrev}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
+                  onOpenProfile={openProfile}
+                  onJumpToMessage={jumpToMessage}
                 />
               ) : (
                 <MessageBubble
@@ -475,6 +504,8 @@ export default function MobileChatThread() {
                   onCancelEdit={() => setEditingMessageId(null)}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
+                  onOpenProfile={openProfile}
+                  onJumpToMessage={jumpToMessage}
                   searchQuery={searchQuery}
                   isSearchActive={thread.search.activeId === m.id}
                 />
@@ -515,6 +546,29 @@ export default function MobileChatThread() {
 
       {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
       {menuOpen && <MobileActionSheet title={room?.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
+      {showMembers && room && (
+        <MobileMemberSheet
+          memberIds={room.members}
+          onClose={() => setShowMembers(false)}
+          onPick={(userId, name) => {
+            setShowMembers(false);
+            openProfile(userId, name);
+          }}
+        />
+      )}
+      {profileTarget && (
+        <MobileProfileSheet
+          userId={profileTarget.userId}
+          fallbackName={profileTarget.name}
+          me={me}
+          meName={meName}
+          onClose={() => setProfileTarget(null)}
+          onOpenRoom={(id) => {
+            setProfileTarget(null);
+            nav(`/m/room/${id}`);
+          }}
+        />
+      )}
       {textSizeOpen && (
         <MobileActionSheet
           title="글자 크기 · 채팅 목록의 내 프로필 메뉴에서도 바꿀 수 있어요"
@@ -692,6 +746,8 @@ function CompositeMessageBubble({
   showProfile = true,
   onLongPress,
   onToggleEmoji,
+  onOpenProfile,
+  onJumpToMessage,
 }: {
   item: RenderMessageItem;
   me: string;
@@ -702,6 +758,10 @@ function CompositeMessageBubble({
   showProfile?: boolean;
   onLongPress: (m: ChatMessage) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
+  /** 프로필 사진·이름을 누르면 명함 */
+  onOpenProfile?: (userId: string, name?: string) => void;
+  /** 답장 인용을 누르면 원본으로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
 }) {
   const m = item.message;
   const presenceMap = useAllUserPresences();
@@ -756,20 +816,43 @@ function CompositeMessageBubble({
       <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && !showProfile && <div className="w-[30px] shrink-0" />}
         {!mine && showProfile && (
-          <div className="relative shrink-0 self-end">
+          <button
+            type="button"
+            disabled={!onOpenProfile || !m.senderId}
+            onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+            title={`${m.senderName ?? ''} 프로필`}
+            className="relative shrink-0 self-end"
+          >
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
               {m.senderName?.[0] ?? '?'}
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
-          </div>
+          </button>
         )}
         <div className="group min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 chat-text-[10.5px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!onOpenProfile || !m.senderId}
+              onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+              className="mb-0.5 block text-left chat-text-[10.5px] text-ink3"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
-            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full rounded-md border-l-2 px-2 py-1 text-left ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}
+            >
               <div className="chat-text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
               <div className="truncate chat-text-[10px] text-ink3">{m.replyTo.text}</div>
-            </div>
+            </button>
           )}
           <div
             onTouchStart={handleTouchStart}
@@ -830,6 +913,8 @@ function MessageBubble({
   onToggleEmoji,
   searchQuery = '',
   isSearchActive = false,
+  onOpenProfile,
+  onJumpToMessage,
 }: {
   m: ChatMessage;
   me: string;
@@ -845,6 +930,10 @@ function MessageBubble({
   onToggleEmoji: (messageId: string, emoji: string) => void;
   searchQuery?: string;
   isSearchActive?: boolean;
+  /** 프로필 사진·이름을 누르면 명함 */
+  onOpenProfile?: (userId: string, name?: string) => void;
+  /** 답장 인용을 누르면 원본으로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -1025,19 +1114,42 @@ function MessageBubble({
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
         {!mine && showProfile && (
-          <div className="relative shrink-0 self-end">
+          <button
+            type="button"
+            disabled={!onOpenProfile || !m.senderId}
+            onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+            title={`${m.senderName ?? ''} 프로필`}
+            className="relative shrink-0 self-end"
+          >
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
-          </div>
+          </button>
         )}
         <div className="min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 chat-text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!onOpenProfile || !m.senderId}
+              onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+              className="mb-0.5 block text-left chat-text-[10px] text-ink3"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
-            <div className={`mb-1 truncate rounded-md border-l-2 px-2 py-1 chat-text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full truncate rounded-md border-l-2 px-2 py-1 text-left chat-text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}
+            >
               <b>{m.replyTo.senderName || '메시지'}</b> {m.replyTo.text}
-            </div>
+            </button>
           )}
           <div className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
