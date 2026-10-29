@@ -88,11 +88,7 @@ function foregroundFixture(permission = 'granted', mobile = false, screen = 'des
   const shown = [], callbacks = [], warnings = [], timers = [], messages = [], invalidated = [];
   const page = { visibilityState: 'visible', focused: true, hasFocus() { return this.focused; } };
   const registration = {
-    // 서비스워커처럼 표시 요청('workfit-show-notification')을 받으면 띄운다
-    active: { postMessage: (message) => {
-      messages.push(message);
-      if (message.type === 'workfit-show-notification') void registration.showNotification(message.title, message.options);
-    } },
+    active: { postMessage: (message) => messages.push(message) },
     showNotification: async (title, options) => shown.push({ title, options, data: options.data, tag: options.tag, closed: false, close() { this.closed = true; } }),
     getNotifications: async ({ tag }) => shown.filter((item) => item.tag === tag && !item.closed).slice(-1),
   };
@@ -303,26 +299,12 @@ test('회수 신호가 알림보다 먼저 와도: 이미 읽은 메시지의 �
   assert.equal(shown[0].options.body, '안 읽은 메시지');
 });
 
-test('서비스워커: 페이지가 넘긴 휴대폰 알림을 대신 띄우고, 그 알림은 회수 신호로 닫힌다', async () => {
-  const { shown, listeners } = backgroundFixture('pwa');
-  let pending;
-  const options = { body: '메시지', tag: 'ROOM', renotify: true, data: { roomId: 'ROOM', at: '2026-10-29T10:00:00', shownAt: 1 } };
-  listeners.message({ data: { type: 'workfit-show-notification', title: '팀 채팅', options }, waitUntil: (p) => { pending = p; } });
-  await pending;
-  assert.equal(shown.length, 1);
-  assert.equal(shown[0].options.body, '메시지');
-  listeners.message({ data: { type: 'workfit-recall-chat', roomId: 'ROOM', readUpTo: '2026-10-29T10:00:00' }, waitUntil: (p) => { pending = p; } });
-  await pending;
-  assert.equal(shown[0].closed, true);
-});
-
 test('휴대폰 포그라운드: 알림을 스스로 닫지 않고 정리 기준(at·shownAt)을 실음', async () => {
   const { callbacks, shown, timers, messages } = foregroundFixture('granted', false, 'mobile');
   await callbacks[0]({ title: '팀 채팅', body: '메시지', roomId: 'ROOM', at: '2026-10-29T10:00:00' });
   assert.equal(shown.length, 1);
   assert.equal(timers.length, 0);
-  // 페이지가 직접 띄우지 않고 서비스워커에 넘긴다, 닫기 예약(expire)은 없다
-  assert.equal(JSON.stringify(messages.map((m) => m.type)), JSON.stringify(['workfit-show-notification']));
+  assert.equal(messages.length, 0);
   assert.equal(shown[0].data.at, '2026-10-29T10:00:00');
   assert.equal(typeof shown[0].data.shownAt, 'number');
 });
