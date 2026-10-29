@@ -128,9 +128,12 @@ export function requestChatNotificationRecall(roomId: string, readUpTo: string):
  * 이 기기에 떠 있는 대화방 알림 중 이미 읽은 방(안 읽은 메시지 0)의 알림을 닫는다.
  * fetchedAt: 안 읽은 수를 받은 시각 — 그 뒤에 뜬 알림(shownAt)은 그 수에 아직 안 잡혔을 수 있어 건드리지 않는다.
  * 아이폰은 회수 신호를 받지 않으므로, 앱이 화면에 있거나 돌아올 때 이걸로 정리한다.
+ * 돌려주는 값: 그렇게 건드리지 않고 넘긴 알림 수 — 0보다 크면 호출부가 안 읽은 수를 다시 받아 한 번 더 부른다
+ * (다른 기기에 방을 열어 두면 알림보다 읽음 처리가 먼저 끝나, 다시 받지 않으면 알림이 남는다).
  */
-export async function closeReadChatNotifications(unread: Record<string, number>, fetchedAt: number): Promise<void> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+export async function closeReadChatNotifications(unread: Record<string, number>, fetchedAt: number): Promise<number> {
+  let deferred = 0;
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return deferred;
   try {
     // 등록이 여럿일 수 있다(예전 방식으로 만든 등록이 남은 기기) — 모두 뒤진다
     let shown = 0;
@@ -143,16 +146,20 @@ export async function closeReadChatNotifications(unread: Record<string, number>,
         // 방 ID 는 알림 data 에, 없으면 tag(대화 알림은 tag = 방 ID, 'RM-' 로 시작)로 — 결재 등 다른 알림은 건드리지 않는다
         const roomId = data?.roomId || (n.tag?.startsWith('RM-') ? n.tag : '');
         if (!roomId || (unread[roomId] ?? 0) > 0) continue;
-        if (typeof data?.shownAt === 'number' && data.shownAt >= fetchedAt) continue;
+        if (typeof data?.shownAt === 'number' && data.shownAt >= fetchedAt) {
+          deferred += 1;
+          continue;
+        }
         n.close();
         closed += 1;
       }
     }
     // 휴대폰을 PC 크롬(chrome://inspect)에 연결해 볼 때 원인을 가릴 수 있게 남긴다
-    if (shown > 0) console.info(`[push] 읽은 방 알림 정리: 떠 있는 알림 ${shown}개 중 ${closed}개 닫음`);
+    if (shown > 0) console.info(`[push] 읽은 방 알림 정리: 떠 있는 알림 ${shown}개 중 ${closed}개 닫음, ${deferred}개는 다시 확인`);
   } catch (e) {
     console.warn('[push] 읽은 방 알림 정리 실패', e);
   }
+  return deferred;
 }
 
 async function registerPushServiceWorker(): Promise<ServiceWorkerRegistration> {

@@ -85,7 +85,7 @@ function foregroundFixture(permission = 'granted', mobile = false, screen = 'des
   };
   walk(ast);
   assert.ok(effect);
-  const shown = [], callbacks = [], warnings = [], timers = [], messages = [];
+  const shown = [], callbacks = [], warnings = [], timers = [], messages = [], invalidated = [];
   const page = { visibilityState: 'visible', focused: true, hasFocus() { return this.focused; } };
   const registration = {
     active: { postMessage: (message) => messages.push(message) },
@@ -94,6 +94,7 @@ function foregroundFixture(permission = 'granted', mobile = false, screen = 'des
   };
   const context = vm.createContext({
     user: { id: 'receiver' }, isMobilePwa: mobile,
+    qc: { invalidateQueries: async (filters) => { invalidated.push(filters.queryKey); } }, CHAT_UNREAD_KEY: 'chatUnread',
     document: page,
     Notification: { permission },
     navigator: { serviceWorker: { getRegistration: async () => registration } },
@@ -104,7 +105,7 @@ function foregroundFixture(permission = 'granted', mobile = false, screen = 'des
   vm.runInContext(ts.transpileModule(read('src/shared/lib/viewedChatRoom.ts').replace(/^export /gm, ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
   vm.runInContext(ts.transpileModule(read('src/shared/lib/transientPushNotification.ts').replace(/^export /gm, ''), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
   vm.runInContext(ts.transpileModule(`(${effect})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
-  return { shown, callbacks, warnings, timers, messages, page, context, registerRoom: context.registerViewedChatRoom };
+  return { shown, callbacks, warnings, timers, messages, invalidated, page, context, registerRoom: context.registerViewedChatRoom };
 }
 
 test('PC·모바일: 현재 보는 방만 생략하고 다른 방·결재·일정 알림은 유지', async () => {
@@ -305,6 +306,14 @@ test('휴대폰 포그라운드: 알림을 스스로 닫지 않고 정리 기준
   assert.equal(messages.length, 0);
   assert.equal(shown[0].data.at, '2026-10-29T10:00:00');
   assert.equal(typeof shown[0].data.shownAt, 'number');
+});
+
+test('휴대폰 포그라운드: 대화 알림을 띄운 뒤 안 읽은 수를 다시 받음(다른 기기가 먼저 읽었으면 정리되게), 결재 알림은 안 받음', async () => {
+  const { callbacks, invalidated } = foregroundFixture('granted', false, 'mobile');
+  await callbacks[0]({ title: '결재', body: '내용', docId: 'DOC' });
+  assert.equal(invalidated.length, 0);
+  await callbacks[0]({ title: '팀 채팅', body: '메시지', roomId: 'ROOM' });
+  assert.equal(JSON.stringify(invalidated), JSON.stringify([['chatUnread']]));
 });
 
 test('PC 포그라운드: 5초 타이머가 같은 방의 새 알림을 닫지 않음', async () => {
