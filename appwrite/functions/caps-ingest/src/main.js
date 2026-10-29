@@ -22,7 +22,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Client, Databases, Query } from 'node-appwrite';
 import { z } from 'zod';
 import { resolveUserId } from './token.js';
-import { affiliationOf, headScope, matchesExecMapping } from './scope.js';
+import { affiliationOf, headDepts, matchesExecMapping, memberUserIds } from './scope.js';
 
 /* ------------------------------------------------------------------ 계약 §2 인증 */
 
@@ -238,35 +238,79 @@ function hasFullAccessTitle(user) {
  * 3. 부서장(`departments.headUserId` 또는 팀장 직책) -> 소속 부서 임직원만 (`empIds: Set(...)`)
  * 4. 일반 사원 -> 본인만
  */
+/**
+ * 값 목록 중 하나와 같은 문서 전부 — Appwrite 는 equal 한 번에 값을 100개까지 받으므로 나눠 묻는다.
+ * 값이 없으면 묻지 않는다.
+ */
+async function listWhereIn(dbs, DB, collection, key, values, log) {
+  const unique = [...new Set(values.filter(Boolean))];
+  const out = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    out.push(...(await listAll(dbs, DB, collection, [Query.equal(key, unique.slice(i, i + 100))], log)));
+  }
+  return out;
+}
+
+/**
+ * 인명관리 프로필의 소속을 이름으로 풀 때 쓰는 기준정보 — 그 프로필들이 가리키는 부서·직급·직책만.
+ * ID 를 채운 프로필은 ID 로, 아직 안 채운 예전 프로필은 이름 칸으로 찾는다(scope.js storedIds 와 같은 규칙).
+ */
+async function mastersOf(dbs, DB, profiles, log) {
+  const hasIds = (p) => Boolean(p.deptId || p.positionId || p.jobTitleId);
+  const withIds = profiles.filter(hasIds);
+  const legacy = profiles.filter((p) => !hasIds(p));
+  const pick = async (collection, idKey, nameKey) => {
+    const [byId, byName] = await Promise.all([
+      listWhereIn(dbs, DB, collection, '$id', withIds.map((p) => p[idKey]), log),
+      listWhereIn(dbs, DB, collection, 'name', legacy.map((p) => p[nameKey]), log),
+    ]);
+    return [...byId, ...byName];
+  };
+  const [depts, positions, jobTitles] = await Promise.all([
+    pick('departments', 'deptId', 'dept'),
+    pick('positions', 'positionId', 'position'),
+    pick('jobTitles', 'jobTitleId', 'jobTitle'),
+  ]);
+  return { depts, positions, jobTitles };
+}
+
+/**
+ * 요청자의 열람 범위를 정하는 데 필요한 것만 조회한다.
+ *
+ * 예전에는 요청마다 직원·계정·인명관리·부서·직급·직책을 **전량** 받아 그 안에서 찾았다. 화면이 열릴 때 요청
+ * 4~5개가 한꺼번에 오면 같은 전량 조회가 30번 넘게 몰려 일부가 30초 동기 실행 한도에 걸려 실패했다
+ * (운영 2026-10-29 13시대: 조회 77건 중 54건). 판정 규칙은 그대로 두고, 각 단계에 걸리는 문서만 조건으로 묻는다.
+ *   - 일반 사원: 내 계정·내 인명관리·내 소속 기준정보·내 이름의 직원·임원/운영자 매핑
+ *   - 부서장: 위 + 내가 맡은 부서, 그 부서의 인명관리·계정·직원
+ * 직원(employees)과는 예전처럼 이름이 같은지로 잇는다(이름 앞뒤 공백까지 같아야 한다).
+ */
 async function resolveViewerScope(dbs, DB, uid, log) {
-  const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
+  const [me, myProfiles, execMappings] = await Promise.all([
+    dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)]).then((r) => r.documents[0]),
+    dbs.listDocuments(DB, 'employeeProfiles', [Query.equal('userId', uid), Query.limit(1)]).then((r) => r.documents),
+    // EXEC(임원)·OPERATOR(시스템 관리자) 매핑. 못 읽으면 이 단계만 건너뛴다
+    dbs
+      .listDocuments(DB, 'roleMappings', [Query.equal('roleCode', ['EXEC', 'OPERATOR']), Query.limit(100)])
+      .then((r) => r.documents)
+      .catch((err) => {
+        log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
+        return [];
+      }),
+  ]);
   const myName = me ? String(me.name).trim() : '';
 
   // 소속은 인명관리(기준정보 ID)로 판단한다 — 계정의 dept·position·jobTitle 칸은 옛 사본이라 보지 않는다.
-  const [employees, users, profiles, depts, positions, jobTitles] = await Promise.all([
-    listAll(dbs, DB, 'employees', [], log),
-    listAll(dbs, DB, 'users', [], log),
-    listAll(dbs, DB, 'employeeProfiles', [], log),
-    listAll(dbs, DB, 'departments', [], log),
-    listAll(dbs, DB, 'positions', [], log),
-    listAll(dbs, DB, 'jobTitles', [], log),
+  const [masters, myEmployees] = await Promise.all([
+    mastersOf(dbs, DB, myProfiles, log),
+    myName ? listWhereIn(dbs, DB, 'employees', 'name', [myName], log) : [],
   ]);
-  const aff = affiliationOf(uid, profiles, { depts, positions, jobTitles });
-  const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
-  const myEmpId = matched === undefined ? null : Number(matched.empId);
+  const aff = affiliationOf(uid, myProfiles, masters);
+  const myEmpId = myEmployees.length > 0 ? Number(myEmployees[0].empId) : null;
 
   // 1. roleMappings 컬렉션에서 EXEC(임원) 또는 OPERATOR(시스템 관리자) 매핑 검사
-  try {
-    const mappings = await dbs.listDocuments(DB, 'roleMappings', [
-      Query.equal('roleCode', ['EXEC', 'OPERATOR']),
-      Query.limit(100),
-    ]);
-    if (mappings.documents.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
-      log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
-      return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
-    }
-  } catch (err) {
-    log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
+  if (execMappings.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
+    log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
+    return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
   }
 
   // 2. 직급/직책에 임원 명칭 포함 또는 레거시 화이트리스트
@@ -277,13 +321,28 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
   // 3. 부서장이면 맡은 부서(인명관리 부서 ID 기준) 소속 전원, 아니면 나 하나.
-  const { deptNames, memberNames } = headScope({ uid, aff, depts, profiles, users, masters: { depts, positions, jobTitles } });
-  const names = deptNames.length > 0 ? memberNames : new Set([myName]);
+  const headed = await listAll(dbs, DB, 'departments', [Query.equal('headUserId', uid)], log);
+  const { deptIds, deptNames } = headDepts({ uid, aff, depts: headed, me });
+  if (deptIds.length === 0) {
+    const empIds = new Set(myEmployees.map((e) => Number(e.empId)));
+    log(`scope uid=${uid} kind=self 부서=- 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+    return { empIds, kind: 'self', deptNames: [], myEmpId, myName };
+  }
 
-  const empIds = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
-  const kind = deptNames.length > 0 ? 'head' : 'self';
-  log(`scope uid=${uid} kind=${kind} 부서=${deptNames.join(',') || '-'} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
-  return { empIds, kind, deptNames, myEmpId, myName };
+  // 맡은 부서의 인명관리 — 부서 ID 가 맞는 것 + ID 를 아직 안 채운 예전 프로필 중 부서 이름이 맞는 것
+  const [byId, byName] = await Promise.all([
+    listWhereIn(dbs, DB, 'employeeProfiles', 'deptId', deptIds, log),
+    listWhereIn(dbs, DB, 'employeeProfiles', 'dept', deptNames, log),
+  ]);
+  const headedMasters = { depts: [...headed, ...masters.depts], positions: [], jobTitles: [] };
+  const memberIds = memberUserIds([...byId, ...byName], deptIds, headedMasters);
+  const members = await listWhereIn(dbs, DB, 'users', 'id', [...memberIds], log);
+  const memberNames = members.map((u) => String(u.name).trim());
+  const employees = await listWhereIn(dbs, DB, 'employees', 'name', memberNames, log);
+
+  const empIds = new Set(employees.map((e) => Number(e.empId)));
+  log(`scope uid=${uid} kind=head 부서=${deptNames.join(',')} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+  return { empIds, kind: 'head', deptNames, myEmpId, myName };
 }
 
 /** 한 번에 가져올 수 있는 상한. Appwrite `limit`의 최댓값이다. */
@@ -369,7 +428,10 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
       }
 
       case 'listEmployees': {
-        const rows = (await listAll(dbs, DB, 'employees', [], log)).filter((d) => canSee(d.empId));
+        // 관리자만 전 직원을 받는다. 나머지는 볼 수 있는 사번만 묻는다(대개 본인 1명)
+        const rows = scope.empIds === null
+          ? await listAll(dbs, DB, 'employees', [], log)
+          : (await listWhereIn(dbs, DB, 'employees', 'empId', [...scope.empIds], log)).filter((d) => canSee(d.empId));
         return res.json({
           data: rows.map((d) => ({
             empId: Number(d.empId),
