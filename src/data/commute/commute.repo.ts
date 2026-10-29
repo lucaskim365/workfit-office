@@ -6,7 +6,7 @@ import {
   type CommuteViewer,
 } from '@/domain/commute/schema';
 import { COMMUTE_EMPLOYEE_FIXTURE, COMMUTE_RECORD_FIXTURE } from './commute.fixture';
-import { commuteGateway } from './commute.gateway';
+import { commuteGateway, type CommuteBootstrap } from './commute.gateway';
 import { dbDriver } from '@/shared/lib/dbDriver';
 
 /**
@@ -22,6 +22,28 @@ import { dbDriver } from '@/shared/lib/dbDriver';
  * 출퇴근 기록을 가져가게 된다. 신원은 메일과 같은 `widdy-login` 서명 토큰을 쓴다.
  */
 export const commuteRepo = {
+  /**
+   * 화면을 열 때 필요한 것을 한 번에 — 내 열람 범위·직원·내 한 달(·includeAll 이면 전 직원 한 달).
+   * 정렬은 각각 따로 받을 때(viewerScope·listEmployees·listMonth·listMonthAll)와 같다.
+   * memory 드라이버는 Function 이 없으니 각각을 불러 모은다.
+   */
+  async bootstrap(month: string, includeAll: boolean): Promise<CommuteBootstrap> {
+    if (dbDriver !== 'memory') {
+      const b = await commuteGateway.bootstrap(month, includeAll);
+      return {
+        ...b,
+        employees: b.employees.sort((a, c) => a.name.localeCompare(c.name, 'ko')),
+        myMonth: b.myMonth?.sort((a, c) => a.date.localeCompare(c.date)) ?? null,
+      };
+    }
+    const [viewer, employees, monthAll] = await Promise.all([
+      this.viewerScope(),
+      this.listEmployees(),
+      includeAll ? this.listMonthAll(month) : null,
+    ]);
+    return { viewer, employees, myMonth: viewer.empId === null ? null : await this.listMonth(viewer.empId, month), monthAll };
+  },
+
   /**
    * 내 열람 범위. 판정은 서버가 하고 화면은 결과만 쓴다.
    *

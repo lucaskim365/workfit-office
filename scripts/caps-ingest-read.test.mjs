@@ -43,6 +43,12 @@ const DATA = {
     { $id: 'e7', empId: 17, name: '옛사원' },
   ],
   roleMappings: [{ $id: 'r1', roleCode: 'EXEC', targetType: 'USER', targetId: 'U002' }],
+  attendance: [
+    { $id: 'a11', empId: 11, date: '2026-10-01', inAt: '09:00', status: 'normal' },
+    { $id: 'a12', empId: 11, date: '2026-10-02', inAt: '09:05', status: 'late' },
+    { $id: 'a13', empId: 13, date: '2026-10-01', inAt: '08:50', status: 'normal' },
+    { $id: 'a14', empId: 11, date: '2026-09-30', inAt: '09:00', status: 'normal' },
+  ],
 };
 
 function fixture() {
@@ -51,20 +57,32 @@ function fixture() {
     equal: (key, value) => ({ t: 'equal', key, values: Array.isArray(value) ? value : [value] }),
     limit: (n) => ({ t: 'limit', n }),
     cursorAfter: (id) => ({ t: 'after', id }),
+    greaterThanEqual: (key, value) => ({ t: 'gte', key, value }),
+    lessThanEqual: (key, value) => ({ t: 'lte', key, value }),
+  };
+  let uid = null;
+  const extra = {
+    resolveUserId: () => uid,
+    Client: class { setEndpoint() { return this; } setProject() { return this; } setKey() { return this; } },
+    Databases: class { constructor() { return dbs; } },
   };
   // 적재 경로의 스키마(zod)는 이 테스트와 상관없다 — 어떤 호출·속성이든 받아 주는 자리 표시
   const anything = new Proxy(function () {}, { get: () => anything, apply: () => anything });
-  const context = vm.createContext({ z: anything, Query, console });
+  const context = vm.createContext({ z: anything, Query, console, ...extra });
   const scope = read('appwrite/functions/caps-ingest/src/scope.js').replace(/^export /gm, '');
   const source = read('appwrite/functions/caps-ingest/src/main.js')
     .replace(/^import [\s\S]*?;\r?\n/gm, '')
     .replace('export default async', 'const entry = async');
-  vm.runInContext(`${scope}\n${source}\nglobalThis.resolveViewerScope = resolveViewerScope;`, context);
+  vm.runInContext(`${scope}\n${source}\nglobalThis.resolveViewerScope = resolveViewerScope; globalThis.handleAppRead = handleAppRead;`, context);
   const dbs = {
     listDocuments: async (_db, coll, queries) => {
       const filters = queries.filter((q) => q.t === 'equal');
       calls.push({ coll, filtered: filters.length > 0 });
       let rows = (DATA[coll] ?? []).filter((r) => filters.every((f) => f.values.includes(r[f.key])));
+      for (const q of queries) {
+        if (q.t === 'gte') rows = rows.filter((r) => r[q.key] >= q.value);
+        if (q.t === 'lte') rows = rows.filter((r) => r[q.key] <= q.value);
+      }
       const after = queries.find((q) => q.t === 'after');
       if (after) rows = rows.slice(rows.findIndex((r) => r.$id === after.id) + 1);
       const limit = queries.find((q) => q.t === 'limit');
@@ -75,7 +93,15 @@ function fixture() {
     const s = await context.resolveViewerScope(dbs, 'workfit', uid, () => {});
     return { kind: s.kind, empIds: s.empIds === null ? null : [...s.empIds].sort(), deptNames: [...s.deptNames], myEmpId: s.myEmpId };
   };
-  return { resolve, calls };
+  /** 화면 조회 요청 하나를 그대로 보낸다 — { status, body } */
+  const request = async (who, action, payload = {}) => {
+    uid = who;
+    let out;
+    const res = { json: (body, status = 200) => { out = { status, body: JSON.parse(JSON.stringify(body)) }; return out; } };
+    await context.handleAppRead({ req: { bodyJson: { action, payload } }, res, log: () => {}, error: () => {}, endpoint: '', projectId: '', apiKey: '', DB: 'workfit' });
+    return out;
+  };
+  return { resolve, calls, request };
 }
 
 test('일반 사원: 본인만', async () => {
@@ -119,4 +145,36 @@ test('어떤 경우에도 조건 없는 전량 조회를 하지 않는다', asyn
     await resolve(uid);
     assert.deepEqual(calls.filter((c) => !c.filtered).map((c) => c.coll), [], uid);
   }
+});
+
+test('bootstrap: 한 번에 받는 내용이 따로 받을 때(viewerScope·listEmployees·listMonth)와 같다 — 일반 사원', async () => {
+  const { request } = fixture();
+  const boot = await request('U001', 'bootstrap', { month: '2026-10', includeAll: false });
+  assert.equal(boot.status, 200);
+  assert.deepEqual(boot.body.data.viewer, (await request('U001', 'viewerScope')).body.data);
+  assert.deepEqual(boot.body.data.employees, (await request('U001', 'listEmployees')).body.data);
+  assert.deepEqual(boot.body.data.myMonth, (await request('U001', 'listMonth', { empId: 11, month: '2026-10' })).body.data);
+  assert.deepEqual(boot.body.data.myMonth.map((r) => r.date), ['2026-10-01', '2026-10-02']);
+  assert.equal(boot.body.data.monthAll, null);
+});
+
+test('bootstrap: includeAll 이어도 볼 수 있는 사람 것만 — 일반 사원은 남의 근태가 안 섞인다', async () => {
+  const { request } = fixture();
+  const boot = await request('U001', 'bootstrap', { month: '2026-10', includeAll: true });
+  assert.deepEqual(boot.body.data.monthAll.map((r) => r.empId), [11, 11]);
+  assert.deepEqual(boot.body.data.monthAll, (await request('U001', 'listMonthAll', { month: '2026-10' })).body.data);
+});
+
+test('bootstrap: 관리자는 전 직원·전 직원 한 달, 내 사번이 없으면 내 한 달은 null', async () => {
+  const { request } = fixture();
+  const boot = await request('U002', 'bootstrap', { month: '2026-10', includeAll: true });
+  assert.equal(boot.body.data.viewer.kind, 'admin');
+  assert.equal(boot.body.data.employees.length, 5);
+  assert.equal(boot.body.data.myMonth, null);
+  assert.deepEqual(boot.body.data.monthAll.map((r) => r.empId).sort(), [11, 11, 13]);
+});
+
+test('bootstrap: 조회 월 형식이 틀리면 400', async () => {
+  const { request } = fixture();
+  assert.equal((await request('U001', 'bootstrap', { month: '2026/10' })).status, 400);
 });
