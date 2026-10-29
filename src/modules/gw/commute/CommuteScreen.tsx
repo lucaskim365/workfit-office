@@ -367,9 +367,10 @@ export default function CommuteScreen() {
   const [selectedPersonDetail, setSelectedPersonDetail] = useState<CommutePersonRow | null>(null);
 
   /*
-    내 근태 사번 — 서버가 알려준 사번(viewer.empId)을 먼저 쓰고, 없으면 받은 직원 목록에서 이름(공백 무시)·사번으로 찾는다.
+    내 근태 사번 — 서버가 알려준 사번(viewer.empId)을 먼저 쓰고, 없으면 받은 CAPS 직원 목록에서 이름(공백 무시)·사번으로 찾는다.
     서버의 답이 오기 전에는 묻지 않는다(null). 예전에는 계정 사번이나 99999 를 짐작해 먼저 물어, 남의 사번이라
     거절(403)되고 다시 묻는 요청이 화면을 열 때마다 생겼다. 끝내 못 찾으면 내 근태는 비어 있다.
+    화면용 직원 목록(employees)에서는 찾지 않는다 — CAPS 에 없는 계정에 지어 붙인 사번이 섞여 있어 근태가 있을 수 없다.
   */
   const myEmpId = useMemo(() => {
     if (!viewer) return null;
@@ -379,10 +380,8 @@ export default function CommuteScreen() {
     const foundInCaps = allEmployees.find(
       (e) => (uName && normName(e.name) === normName(uName)) || (uEmpNo && e.empId === uEmpNo)
     );
-    if (foundInCaps?.empId) return foundInCaps.empId;
-    const foundInEmps = employees.find((e) => e.name.trim() === uName);
-    return foundInEmps?.empId ?? null;
-  }, [viewer, allEmployees, employees, user, normName]);
+    return foundInCaps?.empId ?? null;
+  }, [viewer, allEmployees, user, normName]);
 
   // 내 근태 쿼리
   const myMonthQuery = useCommuteMonth(myEmpId, month, { enabled: boot.isSettled });
