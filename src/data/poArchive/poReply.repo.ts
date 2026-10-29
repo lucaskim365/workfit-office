@@ -1,22 +1,24 @@
 import { createCrudBackend } from '@/data/_backend/crudBackend';
-import { poReplySchema, type PoReply } from '@/domain/poArchive/schema';
+import { poFileIdOf, poReplySchema, type PoReply } from '@/domain/poArchive/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { fileStorage } from '@/shared/lib/storage';
 
 /**
- * 발주서 보관함 첨부 Repository — 결재 문서당 파일 1건. 메타는 컬렉션, 파일은 fileStorage(Garage S3).
- *   - 회신 문서(거래처 직인본): `poArchiveReplies`
- *   - 매입 세금계산서: `poTaxInvoices`
+ * 발주서 보관함 첨부 Repository. 메타는 컬렉션, 파일은 fileStorage(Garage S3).
+ *   - 회신 문서(거래처 직인본): `poArchiveReplies` — 결재 문서당 1건(다시 올리면 교체)
+ *   - 매입 세금계산서: `poTaxInvoices` — 결재 문서당 여러 건(올릴 때마다 추가)
  * 결재 문서(approvalDocs)는 읽기만 하고 여기서 절대 쓰지 않는다(CLAUDE.md §2).
  */
-function createPoFileRepo({ coll, filePrefix, label }: { coll: string; filePrefix: string; label: string }) {
+function createPoFileRepo({ coll, filePrefix, label, multiple }: { coll: string; filePrefix: string; label: string; multiple: boolean }) {
   const backend = createCrudBackend<PoReply>({
     coll,
     parse: (raw) => {
       const parsed = poReplySchema.safeParse(raw);
       return parsed.success ? parsed.data : null;
     },
-    idOf: (row) => row.docId,
+    idOf: poFileIdOf,
+    // id 는 $id 로만 둔다(컬렉션에 칸이 없다)
+    stripFields: ['id'],
     seed: [],
   });
 
@@ -29,18 +31,25 @@ function createPoFileRepo({ coll, filePrefix, label }: { coll: string; filePrefi
     return `chat/poArchive/${docId}/${filePrefix}-${now.getTime()}${ext ? `.${ext}` : ''}`;
   }
 
+  /** 여러 건 방식의 새 문서 ID — Appwrite $id 규격(36자 이내, 영숫자) */
+  function newFileId(now: Date): string {
+    return `${filePrefix.replace(/[^a-z]/g, '').slice(0, 3)}${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   return {
+    multiple,
+
     async list(): Promise<PoReply[]> {
       return backend.loadAll();
     },
 
     /**
-     * 올리기 — 문서당 1건. 다시 올리면 교체하고 이전 파일은 지운다(best-effort).
-     * 첫 등록은 `insert` 라 컬렉션이 없으면 조용히 건너뛰지 않고 오류를 낸다 — 파일은 올라갔는데
+     * 올리기 — 1건 방식은 다시 올리면 교체하고 이전 파일은 지운다(best-effort). 여러 건 방식은 늘 새로 추가한다.
+     * 새 등록은 `insert` 라 컬렉션이 없으면 조용히 건너뛰지 않고 오류를 낸다 — 파일은 올라갔는데
      * 목록에 안 보이는 사고를 막는다.
      */
     async upload(doc: Pick<ApprovalDoc, 'id' | 'docNo'>, file: File, actor: { id: string; name: string }): Promise<PoReply> {
-      const prev = (await backend.loadAll()).find((r) => r.docId === doc.id) ?? null;
+      const prev = multiple ? null : (await backend.loadAll()).find((r) => r.docId === doc.id) ?? null;
       const now = new Date();
       const storagePath = storagePathOf(doc.id, file.name, now);
       const url = await fileStorage.put(storagePath, file, {
@@ -52,6 +61,7 @@ function createPoFileRepo({ coll, filePrefix, label }: { coll: string; filePrefi
         throw new Error(`파일 저장소가 설정되지 않아 ${label}를 저장할 수 없습니다. 관리자에게 Storage 설정을 요청하세요.`);
       }
       const row = poReplySchema.parse({
+        ...(multiple ? { id: newFileId(now) } : {}),
         docId: doc.id,
         docNo: doc.docNo,
         name: file.name,
@@ -83,7 +93,7 @@ function createPoFileRepo({ coll, filePrefix, label }: { coll: string; filePrefi
 
     /** 삭제 — 메타를 먼저 지우고 파일은 best-effort 로 지운다(파일만 남는 건 목록에 안 보여 무해). */
     async remove(file: PoReply): Promise<void> {
-      await backend.remove(file.docId);
+      await backend.remove(poFileIdOf(file));
       if (file.storagePath) await fileStorage.remove(file.storagePath).catch(() => undefined);
     },
   };
@@ -91,5 +101,5 @@ function createPoFileRepo({ coll, filePrefix, label }: { coll: string; filePrefi
 
 export type PoFileRepo = ReturnType<typeof createPoFileRepo>;
 
-export const poReplyRepo = createPoFileRepo({ coll: 'poArchiveReplies', filePrefix: 'reply', label: '회신 문서' });
-export const poTaxInvoiceRepo = createPoFileRepo({ coll: 'poTaxInvoices', filePrefix: 'tax-invoice', label: '세금계산서' });
+export const poReplyRepo = createPoFileRepo({ coll: 'poArchiveReplies', filePrefix: 'reply', label: '회신 문서', multiple: false });
+export const poTaxInvoiceRepo = createPoFileRepo({ coll: 'poTaxInvoices', filePrefix: 'tax-invoice', label: '세금계산서', multiple: true });

@@ -5,12 +5,37 @@ import {
   canUploadPoReply,
   canViewPurchaseOrder,
   filterPurchaseOrders,
+  groupPoFilesByDoc,
   isArchivedPurchaseOrder,
   isPurchaseOrderForm,
+  poFileIdOf,
   poPdfFileName,
+  poReplySchema,
   type PoArchiveQuery,
   type PoViewer,
 } from './schema';
+
+const poFile = (docId: string, uploadedAt: string, id?: string) =>
+  poReplySchema.parse({
+    ...(id ? { id } : {}), docId, docNo: docId, name: `${docId}.pdf`, url: 'https://files/x', storagePath: 'chat/poArchive/x',
+    size: 1, contentType: 'application/pdf', uploadedBy: 'U011', uploadedAt,
+  });
+
+test('첨부 문서 ID — 따로 받은 ID가 없으면(예전 1건 방식) 결재 문서 ID', () => {
+  assert.equal(poFileIdOf(poFile('DOC1', '2026-10-01T00:00:00.000Z')), 'DOC1');
+  assert.equal(poFileIdOf(poFile('DOC1', '2026-10-01T00:00:00.000Z', 'tax1abc')), 'tax1abc');
+});
+
+test('세금계산서 여러 건 — 결재 문서별로 묶고 올린 순서대로 늘어놓는다(예전 1건과 새 건이 섞여도)', () => {
+  const byDoc = groupPoFilesByDoc([
+    poFile('A', '2026-10-03T00:00:00.000Z', 'tax3'),
+    poFile('B', '2026-10-02T00:00:00.000Z'),
+    poFile('A', '2026-10-01T00:00:00.000Z'),
+  ]);
+  assert.deepEqual(byDoc.get('A')?.map(poFileIdOf), ['A', 'tax3']);
+  assert.deepEqual(byDoc.get('B')?.map(poFileIdOf), ['B']);
+  assert.equal(byDoc.has('C'), false);
+});
 
 const doc = (id: string, over: Partial<ApprovalDoc> = {}): ApprovalDoc =>
   approvalDocSchema.parse({
