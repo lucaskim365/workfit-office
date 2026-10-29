@@ -8,6 +8,8 @@ import {
   canUploadPoReply,
   completedDateOf,
   filterPurchaseOrders,
+  groupPoFilesByDoc,
+  poFileIdOf,
   poPdfFileName,
   type PoArchiveQuery,
   type PoReply,
@@ -73,6 +75,8 @@ const REPLY_ACCEPT = '.pdf,.jpg,.jpeg,.png,.tif,.tiff';
 /** 행마다 올리는 파일 종류 */
 type UploadKind = 'reply' | 'tax';
 const KIND_LABEL: Record<UploadKind, string> = { reply: '회신 문서', tax: '세금계산서' };
+/** 결재 문서당 여러 건을 올리는가 — 저장소(poReply.repo)의 multiple 과 같다 */
+const MULTIPLE: Record<UploadKind, boolean> = { reply: poReplyRepo.multiple, tax: poTaxInvoiceRepo.multiple };
 
 /**
  * 발주서 보관함 — 결재 완료된 발주서가 자동으로 쌓이는 목록.
@@ -96,7 +100,8 @@ export function PurchaseOrderArchive({
   const uploadTax = useUploadPoTaxInvoice();
 
   const replyByDoc = useMemo(() => new Map(replies.map((r) => [r.docId, r])), [replies]);
-  const taxByDoc = useMemo(() => new Map(taxInvoices.map((t) => [t.docId, t])), [taxInvoices]);
+  // 세금계산서는 결재 문서당 여러 건
+  const taxByDoc = useMemo(() => groupPoFilesByDoc(taxInvoices), [taxInvoices]);
   const [query, setQuery] = useState<PoArchiveQuery>({ keyword: '', from: '', to: '', reply: 'all', tax: 'all' });
   const rows = useMemo(
     () => filterPurchaseOrders(docs, query, (id) => replyByDoc.has(id), (id) => taxByDoc.has(id)),
@@ -111,30 +116,38 @@ export function PurchaseOrderArchive({
   const [uploadTarget, setUploadTarget] = useState<{ doc: ApprovalDoc; kind: UploadKind } | null>(null);
   const pickFile = (doc: ApprovalDoc, kind: UploadKind) => {
     setUploadTarget({ doc, kind });
+    // 세금계산서는 한 번에 여러 개를 고를 수 있다(회신 문서는 1건 — 교체)
+    if (fileRef.current) fileRef.current.multiple = MULTIPLE[kind];
     fileRef.current?.click();
   };
-  const uploadPoFile = async (doc: ApprovalDoc, kind: UploadKind, file: File) => {
+  /** 회신 문서: 첫 파일 1건으로 교체. 세금계산서: 고른 파일을 모두 차례로 추가. */
+  const uploadPoFiles = async (doc: ApprovalDoc, kind: UploadKind, files: File[]) => {
     const label = KIND_LABEL[kind];
-    const prev = (kind === 'reply' ? replyByDoc : taxByDoc).get(doc.id);
+    const targets = MULTIPLE[kind] ? files : files.slice(0, 1);
+    if (targets.length === 0) return;
+    const prev = kind === 'reply' ? replyByDoc.get(doc.id) : undefined;
     if (prev && !window.confirm(`이미 올린 ${label}(${prev.name})를 새 파일로 바꿀까요?`)) return;
     setErr(null);
     setUploadTarget({ doc, kind });
     try {
-      await (kind === 'reply' ? upload : uploadTax).mutateAsync({ doc, file, actor: { id: me.id, name: me.name } });
+      for (const file of targets) {
+        await (kind === 'reply' ? upload : uploadTax).mutateAsync({ doc, file, actor: { id: me.id, name: me.name } });
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : `${label}를 올리지 못했습니다.`);
     } finally {
       setUploadTarget(null);
     }
   };
-  const onFile = async (file: File | undefined) => {
+  const onFiles = async (list: FileList | null) => {
     const target = uploadTarget;
+    const files = Array.from(list ?? []);
     if (fileRef.current) fileRef.current.value = '';
-    if (!file || !target) {
+    if (files.length === 0 || !target) {
       setUploadTarget(null);
       return;
     }
-    await uploadPoFile(target.doc, target.kind, file);
+    await uploadPoFiles(target.doc, target.kind, files);
   };
 
   const downloadPoFile = async (kind: UploadKind, file: PoReply) => {
@@ -272,7 +285,7 @@ export function PurchaseOrderArchive({
             {rows.map((d) => {
               const reply = replyByDoc.get(d.id);
               const canUpload = canUploadPoReply(d, poViewer);
-              const tax = taxByDoc.get(d.id);
+              const taxes = taxByDoc.get(d.id) ?? [];
               const uploading = upload.isPending && uploadTarget?.kind === 'reply' && uploadTarget.doc.id === d.id;
               const uploadingTax = uploadTax.isPending && uploadTarget?.kind === 'tax' && uploadTarget.doc.id === d.id;
               const making = pdfDoc?.id === d.id;
@@ -305,34 +318,36 @@ export function PurchaseOrderArchive({
                   </td>
                   <td className="p-3">
                     <PoFileCell
-                      file={reply}
+                      files={reply ? [reply] : []}
+                      multiple={MULTIPLE.reply}
                       canUpload={canUpload}
                       uploading={uploading}
-                      deleting={remove.isPending && remove.variables?.docId === d.id}
+                      deletingId={remove.isPending && remove.variables ? poFileIdOf(remove.variables) : null}
                       busy={anyUploading || remove.isPending}
                       doneLabel="회신 완료"
                       doneIcon={<FileCheck2 size={11} />}
                       emptyLabel="회신 대기"
                       emptyTone="teal"
                       onPick={() => pickFile(d, 'reply')}
-                      onDropFile={(f) => void uploadPoFile(d, 'reply', f)}
+                      onDropFiles={(fs) => void uploadPoFiles(d, 'reply', fs)}
                       onDownload={(f) => downloadPoFile('reply', f)}
                       onDelete={(f) => deletePoFile('reply', f)}
                     />
                   </td>
                   <td className="p-3">
                     <PoFileCell
-                      file={tax}
+                      files={taxes}
+                      multiple={MULTIPLE.tax}
                       canUpload={canUpload}
                       uploading={uploadingTax}
-                      deleting={removeTax.isPending && removeTax.variables?.docId === d.id}
+                      deletingId={removeTax.isPending && removeTax.variables ? poFileIdOf(removeTax.variables) : null}
                       busy={anyUploading || removeTax.isPending}
                       doneLabel="발행 완료"
                       doneIcon={<Receipt size={11} />}
                       emptyLabel="미발행"
                       emptyTone="amber"
                       onPick={() => pickFile(d, 'tax')}
-                      onDropFile={(f) => void uploadPoFile(d, 'tax', f)}
+                      onDropFiles={(fs) => void uploadPoFiles(d, 'tax', fs)}
                       onDownload={(f) => downloadPoFile('tax', f)}
                       onDelete={(f) => deletePoFile('tax', f)}
                     />
@@ -345,7 +360,7 @@ export function PurchaseOrderArchive({
       </div>
       <p className="text-[10.5px] text-ink3 shrink-0">총 {rows.length}건{rows.length !== docs.length && ` (전체 ${docs.length}건)`}</p>
 
-      <input ref={fileRef} type="file" accept={REPLY_ACCEPT} className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
+      <input ref={fileRef} type="file" accept={REPLY_ACCEPT} className="hidden" onChange={(e) => void onFiles(e.target.files)} />
 
       {/* 원문 보기 */}
       <Modal
@@ -384,44 +399,51 @@ export function PurchaseOrderArchive({
 
 /**
  * 보관함 첨부 칸 — 회신 문서·매입 세금계산서가 같은 모양을 쓴다.
- * 파일이 있으면: [완료 표시] 올린 사람 · 날짜 / 파일 이름(내려받기) / 교체 · 삭제
+ * 1건 방식(회신 문서): [완료 표시] 올린 사람 · 날짜 / 파일 이름(내려받기) / 교체 · 삭제
+ * 여러 건 방식(세금계산서): [완료 표시] 마지막 올린 사람 · 날짜 · N건 / 파일마다 이름(내려받기) + 삭제 / 추가
  * 없으면: 올릴 수 있는 사람에겐 점선 올리기 칸(클릭·끌어다 놓기), 나머지에겐 상태 표시만.
- * 올릴 수 있는 사람은 칸 어디에 파일을 놓아도 올라간다(있으면 교체).
+ * 올릴 수 있는 사람은 칸 어디에 파일을 놓아도 올라간다(1건 방식은 교체, 여러 건 방식은 놓은 파일 모두 추가).
  */
 function PoFileCell({
-  file,
+  files,
+  multiple,
   canUpload,
   uploading,
-  deleting,
+  deletingId,
   busy,
   doneLabel,
   doneIcon,
   emptyLabel,
   emptyTone,
   onPick,
-  onDropFile,
+  onDropFiles,
   onDownload,
   onDelete,
 }: {
-  file: PoReply | undefined;
+  files: PoReply[];
+  multiple: boolean;
   canUpload: boolean;
   uploading: boolean;
-  deleting: boolean;
+  /** 지우는 중인 첨부의 문서 ID(poFileIdOf) */
+  deletingId: string | null;
   busy: boolean;
   doneLabel: string;
   doneIcon: ReactNode;
   emptyLabel: string;
   emptyTone: 'teal' | 'amber';
   onPick: () => void;
-  onDropFile: (file: File) => void;
+  onDropFiles: (files: File[]) => void;
   onDownload: (file: PoReply) => void;
   onDelete: (file: PoReply) => void;
 }) {
   const uploadIcon = uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />;
+  const deleteIcon = (file: PoReply) =>
+    deletingId === poFileIdOf(file) ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />;
   const tone =
     emptyTone === 'teal'
       ? { box: 'border-teal/60 bg-teal/5 text-teal hover:bg-teal/10', badge: 'border-teal/60 text-teal', over: 'outline-teal/60 bg-teal/5' }
       : { box: 'border-amber-500/60 bg-amber-500/5 text-amber-600 hover:bg-amber-500/10', badge: 'border-amber-500/60 text-amber-600', over: 'outline-amber-500/60 bg-amber-500/5' };
+  const smallButton = 'inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 disabled:opacity-50 transition-colors';
 
   // 끌어다 놓기 — 칸 안의 버튼 사이를 지날 때 꺼지지 않게, 칸 밖으로 나갈 때만 강조를 끈다
   const [over, setOver] = useState(false);
@@ -439,14 +461,14 @@ function PoFileCell({
         onDrop: (e: DragEvent<HTMLDivElement>) => {
           e.preventDefault();
           setOver(false);
-          const dropped = e.dataTransfer.files[0];
-          if (dropped) onDropFile(dropped);
+          const dropped = Array.from(e.dataTransfer.files);
+          if (dropped.length > 0) onDropFiles(dropped);
         },
       }
     : {};
   const overClass = over ? `rounded-lg outline-2 outline-dashed outline-offset-2 ${tone.over}` : '';
 
-  if (!file) {
+  if (files.length === 0) {
     return (
       <div {...dropProps} className={overClass}>
         {canUpload ? (
@@ -460,7 +482,7 @@ function PoFileCell({
               {uploadIcon}
               {emptyLabel}
             </span>
-            <span className="text-[10px] opacity-75">클릭 또는 파일 끌어다 놓기</span>
+            <span className="text-[10px] opacity-75">클릭 또는 파일 끌어다 놓기{multiple && '(여러 개 가능)'}</span>
           </button>
         ) : (
           <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${tone.badge}`}>{emptyLabel}</span>
@@ -468,42 +490,74 @@ function PoFileCell({
       </div>
     );
   }
+  const latest = files[files.length - 1];
+  const fileButton = (file: PoReply, grow: boolean) => (
+    <button
+      onClick={() => onDownload(file)}
+      title={`${file.name} 내려받기`}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors ${grow ? 'flex-1' : 'self-start'}`}
+    >
+      <Download size={12} className="shrink-0" />
+      <span className="truncate">{file.name}</span>
+    </button>
+  );
   return (
     <div {...dropProps} className={`flex flex-col gap-1.5 ${overClass}`}>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10.5px]">
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 font-bold text-white">
           {doneIcon} {doneLabel}
         </span>
-        <span className="truncate text-ink3">{[file.uploadedByName, file.uploadedAt.slice(0, 10)].filter(Boolean).join(' · ')}</span>
+        <span className="truncate text-ink3">
+          {[latest.uploadedByName, latest.uploadedAt.slice(0, 10), multiple && files.length > 1 ? `${files.length}건` : '']
+            .filter(Boolean)
+            .join(' · ')}
+        </span>
       </div>
-      {/* 파일 이름은 한 줄을 다 쓰고(길면 말줄임), 교체·삭제는 늘 그 아래 줄 — 이름 길이와 상관없이 같은 자리에 둔다 */}
-      <button
-        onClick={() => onDownload(file)}
-        title={`${file.name} 내려받기`}
-        className="inline-flex min-w-0 max-w-full self-start items-center gap-1 rounded-lg border border-teal/40 bg-panel px-2 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft transition-colors"
-      >
-        <Download size={12} className="shrink-0" />
-        <span className="truncate">{file.name}</span>
-      </button>
-      {canUpload && (
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={onPick}
-            disabled={busy}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:border-teal hover:text-teal disabled:opacity-50 transition-colors"
-          >
-            {uploadIcon}
-            교체
-          </button>
-          <button
-            onClick={() => onDelete(file)}
-            disabled={busy}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:border-red-500 hover:text-red-500 disabled:opacity-50 transition-colors"
-          >
-            {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-            삭제
-          </button>
-        </div>
+      {multiple ? (
+        <>
+          {/* 파일마다 한 줄 — 이름은 남는 폭을 다 쓰고(길면 말줄임) 삭제는 늘 줄 오른쪽 끝 */}
+          {files.map((file) => (
+            <div key={poFileIdOf(file)} className="flex min-w-0 items-center gap-1.5">
+              {fileButton(file, true)}
+              {canUpload && (
+                <button
+                  onClick={() => onDelete(file)}
+                  disabled={busy}
+                  title={`${file.name} 삭제`}
+                  aria-label={`${file.name} 삭제`}
+                  className={`${smallButton} px-1.5 hover:border-red-500 hover:text-red-500`}
+                >
+                  {deleteIcon(file)}
+                </button>
+              )}
+            </div>
+          ))}
+          {canUpload && (
+            <div>
+              <button onClick={onPick} disabled={busy} title="파일을 더 올립니다(끌어다 놓아도 됩니다)" className={`${smallButton} hover:border-teal hover:text-teal`}>
+                {uploadIcon}
+                추가
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* 파일 이름은 한 줄을 다 쓰고(길면 말줄임), 교체·삭제는 늘 그 아래 줄 — 이름 길이와 상관없이 같은 자리에 둔다 */}
+          {fileButton(latest, false)}
+          {canUpload && (
+            <div className="flex items-center gap-1.5">
+              <button onClick={onPick} disabled={busy} className={`${smallButton} hover:border-teal hover:text-teal`}>
+                {uploadIcon}
+                교체
+              </button>
+              <button onClick={() => onDelete(latest)} disabled={busy} className={`${smallButton} hover:border-red-500 hover:text-red-500`}>
+                {deleteIcon(latest)}
+                삭제
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

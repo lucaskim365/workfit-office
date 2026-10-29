@@ -586,7 +586,8 @@ const COLLECTIONS: CollectionDef[] = [
     id: 'poTaxInvoices',
     name: '발주서 매입 세금계산서',
     /*
-      사업관리 > 발주 현황 보관함의 매입 세금계산서 파일. 문서당 1건, $id = 결재 문서 ID.
+      사업관리 > 발주 현황 보관함의 매입 세금계산서 파일. 결재 문서당 여러 건 — 새로 올린 것은 저마다 $id 를 받고,
+      여러 건을 받기 전에 올린 것은 $id = 결재 문서 ID 그대로다(poFileIdOf). 결재 문서는 docId 칸으로 묶는다.
       파일이 있으면 '발행 완료', 없으면 '미발행'으로 보인다. 칸 구성은 poArchiveReplies 와 같다.
       실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/tax-invoice-* .
     */

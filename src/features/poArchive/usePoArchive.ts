@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { poReplyRepo, poTaxInvoiceRepo, type PoFileRepo } from '@/data/poArchive/poReply.repo';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, type PoReply, type PoViewer } from '@/domain/poArchive/schema';
+import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, poFileIdOf, type PoReply, type PoViewer } from '@/domain/poArchive/schema';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -29,7 +29,7 @@ export function usePurchaseOrderArchive(viewer: Omit<PoViewer, 'deptId'> | null)
 }
 
 /**
- * 보관함 첨부(회신 문서·매입 세금계산서) 조회·올리기·삭제 — 둘 다 결재 문서당 파일 1건이라 같은 훅을 쓴다.
+ * 보관함 첨부(회신 문서·매입 세금계산서) 조회·올리기·삭제 — 회신은 결재 문서당 1건(교체), 세금계산서는 여러 건(추가).
  * 올리거나 지운 즉시 해당 행에 보이게 캐시를 먼저 고치고, 서버 목록으로 다시 맞춘다.
  */
 function poFileHooks(key: string, repo: PoFileRepo) {
@@ -41,7 +41,10 @@ function poFileHooks(key: string, repo: PoFileRepo) {
       mutationFn: (args: { doc: Pick<ApprovalDoc, 'id' | 'docNo'>; file: File; actor: { id: string; name: string } }) =>
         repo.upload(args.doc, args.file, args.actor),
       onSuccess: (row) => {
-        qc.setQueryData<PoReply[]>([key], (prev = []) => [...prev.filter((r) => r.docId !== row.docId), row]);
+        qc.setQueryData<PoReply[]>([key], (prev = []) => [
+          ...prev.filter((r) => (repo.multiple ? poFileIdOf(r) !== poFileIdOf(row) : r.docId !== row.docId)),
+          row,
+        ]);
         return qc.invalidateQueries({ queryKey: [key] });
       },
     });
@@ -52,7 +55,7 @@ function poFileHooks(key: string, repo: PoFileRepo) {
     return useMutation({
       mutationFn: (file: PoReply) => repo.remove(file),
       onSuccess: (_, file) => {
-        qc.setQueryData<PoReply[]>([key], (prev = []) => prev.filter((r) => r.docId !== file.docId));
+        qc.setQueryData<PoReply[]>([key], (prev = []) => prev.filter((r) => poFileIdOf(r) !== poFileIdOf(file)));
         return qc.invalidateQueries({ queryKey: [key] });
       },
     });
