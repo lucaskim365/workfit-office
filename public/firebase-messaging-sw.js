@@ -118,6 +118,16 @@ self.addEventListener('message', (event) => {
     event.waitUntil(recallChat(d.roomId, d.readUpTo));
     return;
   }
+  /**
+   * 앱이 화면에 있을 때 받은 휴대폰 알림 — 페이지가 넘겨주면 여기서 띄운다(src/mobile/MobileApp.tsx).
+   * 안드로이드에서 페이지가 직접 띄운 알림은 두 번째부터 getNotifications 에 잡히지 않아 닫을 수 없었다
+   * (읽어도·앱을 다시 열어도 남고, 같은 방 알림을 서비스워커가 새로 띄워 덮어써야 사라졌다).
+   * 서비스워커가 띄운 알림은 늘 닫히므로 휴대폰 알림은 모두 여기서 띄운다.
+   */
+  if (d.type === 'workfit-show-notification' && typeof d.title === 'string') {
+    event.waitUntil(self.registration.showNotification(d.title, d.options || {}));
+    return;
+  }
   if (d.type === 'workfit-mode' && d.mode) {
     clientMode = d.mode;
     event.waitUntil(caches.open('workfit-meta').then((c) => c.put('/mode', new Response(d.mode))));

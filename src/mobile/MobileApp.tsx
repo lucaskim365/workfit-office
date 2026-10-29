@@ -112,7 +112,10 @@ export default function MobileApp() {
             tag: p.roomId || p.docId || undefined,
             renotify: Boolean(p.roomId || p.docId),
           };
-          await reg.showNotification(p.title, options);
+          // 서비스워커가 띄우게 한다 — 페이지가 직접 띄운 알림은 안드로이드에서 두 번째부터 닫을 수 없었다
+          // (public/firebase-messaging-sw.js 'workfit-show-notification'). 서비스워커가 없으면 직접 띄운다.
+          if (reg.active) reg.active.postMessage({ type: 'workfit-show-notification', title: p.title, options });
+          else await reg.showNotification(p.title, options);
           // 띄운 뒤의 안 읽은 수로 다시 정리하게 한다 — 다른 기기에 방이 열려 있으면 이 알림보다 읽음 처리가 먼저
           // 끝나 안 읽은 수가 더 바뀌지 않으므로, 다시 받지 않으면 이 알림이 남는다(useCloseReadChatNotifications)
           if (p.roomId) void qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
