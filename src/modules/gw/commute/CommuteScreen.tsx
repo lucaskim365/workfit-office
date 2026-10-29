@@ -8,6 +8,7 @@ import {
   type CommuteRecord,
 } from '@/domain/commute/schema';
 import {
+  useCommuteBootstrap,
   useCommuteEmployees,
   useCommuteMonth,
   useCommuteMonthAll,
@@ -123,7 +124,17 @@ export default function CommuteScreen() {
   const canAll = commuteScope === 'ALL';
   const canManagePolicy = isAdmin || canAll;
 
-  const viewerQuery = useCommuteViewer();
+  // 조회 월 — 화면을 열 때 한 번에 받는 요청(useCommuteBootstrap)이 써서 여기서 정한다
+  const [month, setMonth] = useState(thisMonth());
+
+  /*
+    화면을 열 때(월을 바꿀 때) 내 범위·직원·내 한 달·(팀장·관리자면) 전 직원 한 달을 요청 하나로 받는다.
+    따로 부르면 요청 4~5개가 동시에 서버를 붙잡고 기다려 30초씩 멈췄다. 아래 각 조회는 이게 끝난 뒤에 켜지고,
+    채워 둔 캐시를 쓰므로 서버에 다시 묻지 않는다. includeAll 은 아래 canManage 와 같은 조건이다.
+  */
+  const boot = useCommuteBootstrap(month, commuteScope === 'ALL' || commuteScope === 'TEAM');
+
+  const viewerQuery = useCommuteViewer({ enabled: boot.isSettled });
   const viewer = viewerQuery.data;
 
   // 시스템 전체 사용자 목록
@@ -134,7 +145,7 @@ export default function CommuteScreen() {
   const normName = useCallback((s?: string | null) => (s || '').replace(/\s+/g, ''), []);
 
   // CAPS 연동 직원 목록
-  const employeesQuery = useCommuteEmployees();
+  const employeesQuery = useCommuteEmployees({ enabled: boot.isSettled });
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
 
   // 사용자 검색 맵 (이름, 사번, ID 기준 빠른 매핑)
@@ -339,7 +350,6 @@ export default function CommuteScreen() {
   }, []);
 
   // 필터 상태
-  const [month, setMonth] = useState(thisMonth());
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [onlyAnomaly, setOnlyAnomaly] = useState<boolean>(false);
@@ -356,8 +366,14 @@ export default function CommuteScreen() {
   // 상세 슬라이드오버 상태
   const [selectedPersonDetail, setSelectedPersonDetail] = useState<CommutePersonRow | null>(null);
 
+  /*
+    내 근태 사번 — 서버가 알려준 사번(viewer.empId)을 먼저 쓰고, 없으면 받은 직원 목록에서 이름(공백 무시)·사번으로 찾는다.
+    서버의 답이 오기 전에는 묻지 않는다(null). 예전에는 계정 사번이나 99999 를 짐작해 먼저 물어, 남의 사번이라
+    거절(403)되고 다시 묻는 요청이 화면을 열 때마다 생겼다. 끝내 못 찾으면 내 근태는 비어 있다.
+  */
   const myEmpId = useMemo(() => {
-    if (viewer?.empId) return viewer.empId;
+    if (!viewer) return null;
+    if (viewer.empId) return viewer.empId;
     const uName = (user?.name ?? '').trim();
     const uEmpNo = user?.empNo ? Number(user.empNo) : null;
     const foundInCaps = allEmployees.find(
@@ -365,14 +381,14 @@ export default function CommuteScreen() {
     );
     if (foundInCaps?.empId) return foundInCaps.empId;
     const foundInEmps = employees.find((e) => e.name.trim() === uName);
-    return foundInEmps?.empId ?? uEmpNo ?? (user ? 99999 : null);
-  }, [viewer?.empId, allEmployees, employees, user, normName]);
+    return foundInEmps?.empId ?? null;
+  }, [viewer, allEmployees, employees, user, normName]);
 
   // 내 근태 쿼리
-  const myMonthQuery = useCommuteMonth(myEmpId, month);
+  const myMonthQuery = useCommuteMonth(myEmpId, month, { enabled: boot.isSettled });
 
   // 전사 한 달치 전 직원 쿼리 (캐시를 유지하여 탭 전환 시 깜빡임 방지)
-  const monthAllQuery = useCommuteMonthAll(canManage ? month : null);
+  const monthAllQuery = useCommuteMonthAll(canManage ? month : null, { enabled: boot.isSettled });
 
   // 내 휴가·외근·출장 승인 일정 (사용자 id·이름 합산)
   const myApprovalDays = useMemo(() => approvalDaysOf({ id: user?.id, name: user?.name }), [approvalDaysOf, user?.id, user?.name]);
@@ -1014,7 +1030,7 @@ export default function CommuteScreen() {
       </section>
 
       {/* 3. 4대 관제 View 전환 렌더링 */}
-      {monthAllQuery.isLoading ? (
+      {monthAllQuery.isLoading || !boot.isSettled ? (
         <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-panel text-xs text-ink3">
           전사 근태 데이터를 정밀 집계 중입니다…
         </div>
@@ -1170,7 +1186,7 @@ export default function CommuteScreen() {
             month={month}
             setMonth={setMonth}
             monthRows={myMonthRows}
-            isLoading={myMonthQuery.isLoading}
+            isLoading={myMonthQuery.isLoading || !boot.isSettled}
             holidayMap={holidayMap}
             policyStartTime={policy.workStartTime}
             policyEndTime={policy.workEndTime}
