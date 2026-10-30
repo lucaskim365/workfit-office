@@ -32,7 +32,7 @@ test('반차 + 지각은 두 배지를 함께 낸다', () => {
 
 test('외근·출장은 표시가 빠지지 않는다', () => {
   assert.deepEqual(shorts(rec({ status: 'outside', outsideName: '오전 외근' })), ['외근']);
-  assert.equal(describeCommuteRecord(rec({ status: 'outside', outsideName: '오전 외근' }))[0].label, '오전 외근');
+  assert.equal(describeCommuteRecord(rec({ status: 'outside', outsideName: '오전 외근' }))[0].label, '외근');
   assert.deepEqual(shorts(rec({ status: 'trip' })), ['출장']);
   assert.deepEqual(shorts(rec({ status: 'outside', leaveName: '오후반차' })), ['반차', '외근']);
 });
@@ -52,6 +52,8 @@ test('휴가인데 출근한 날은 휴가 배지, 미기록은 미체크', () =
 test('결재 일정 칩', () => {
   assert.equal(scheduleChip({ category: 'LEAVE', leaveType: '오후반차' }).label, '오후반차');
   assert.equal(scheduleChip({ category: 'OUTSIDE', subType: '종일 외근' }).kind, 'outside');
+  // 외근은 세부 구분 없이 모두 '외근'
+  assert.equal(scheduleChip({ category: 'OUTSIDE', subType: '오후 외근' }).label, '외근');
   assert.equal(scheduleChip({ category: 'TRIP', subType: '해외출장' }).label, '해외출장');
 });
 

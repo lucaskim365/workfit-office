@@ -109,9 +109,10 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       <div className="flex flex-col">
         <KindToolbar form={form} target={target} />
 
-        {isOutsideKind(state.kind) && (
+        {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
+        {state.kind === 'TRIP' && (
           <div className="flex flex-wrap items-center gap-1 border-b border-border px-5 py-2" role="radiogroup" aria-label="세부 구분">
-            {OUTSIDE_WORK_SUBTYPES[state.kind as 'OUTSIDE' | 'TRIP'].map((subType) => {
+            {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
               const active = state.subType === subType;
               return (
                 <button

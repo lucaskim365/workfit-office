@@ -439,12 +439,13 @@ function DayList({
 
 /** 항목 한 줄 — 시간 + `[태그] 제목`. 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryRow({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
-  const { label, badgeClass } = chipLook(entry);
+  const { label, badgeClass, dotClass } = chipLook(entry);
   const openable = !(entry.source === 'APPROVAL' && !entry.outside);
   const body = (
     <>
-      <span className="w-[76px] shrink-0 text-[11px] font-semibold text-ink3">{timeRangeOf(entry)}</span>
-      <span className={`flex min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 py-1.5 text-[12px] font-bold ${badgeClass}`}>
+      <span className="w-[76px] shrink-0 text-[11px] font-semibold tabular-nums text-ink3">{timeRangeOf(entry)}</span>
+      <span className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-bold ${badgeClass}`}>
+        {dotClass && <span className={`-mx-[3px] h-3 w-3 shrink-0 scale-50 rounded-full ${dotClass}`} aria-hidden />}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {entry.roomStatus === 'PENDING' && (
           <span className="shrink-0 rounded bg-amber-soft px-1 text-[10px] font-bold text-amber">대기</span>

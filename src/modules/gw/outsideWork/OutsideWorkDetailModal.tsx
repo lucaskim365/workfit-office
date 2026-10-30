@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Car, CheckCircle2, FileText, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
-import { OUTSIDE_WORK_CATEGORY_LABELS } from '@/domain/outsideWork/schema';
+import { OUTSIDE_WORK_CATEGORY_LABELS, outsideKindLabel } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
 import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
@@ -108,7 +108,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
       width={460}
       title={(
         <span className="flex items-center gap-2">
-          <span>[{OUTSIDE_WORK_CATEGORY_LABELS[view.category]}] {view.subType}</span>
+          <span>[{OUTSIDE_WORK_CATEGORY_LABELS[view.category]}] {outsideKindLabel(view.category, view.subType)}</span>
           {sourceBadge}
         </span>
       )}

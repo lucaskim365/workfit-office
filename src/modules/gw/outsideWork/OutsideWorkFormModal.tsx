@@ -3,6 +3,8 @@ import type { User } from '@/domain/user/schema';
 import {
   OUTSIDE_WORK_CATEGORY_LABELS,
   OUTSIDE_WORK_SUBTYPES,
+  outsideKindLabel,
+  outsideSubTypeOf,
   outsideWorkSchema,
   type OutsideWork,
   type OutsideWorkCategory,
@@ -91,7 +93,7 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
     setError('');
     const draft: OutsideWorkDraft = {
       category,
-      subType,
+      subType: category === 'OUTSIDE' ? outsideSubTypeOf(allDay) : subType,
       startDate,
       endDate: endDate < startDate ? startDate : endDate,
       allDay,
@@ -151,7 +153,8 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
               </button>
             ))}
             <span className="mx-1 w-px self-stretch bg-border" />
-            {OUTSIDE_WORK_SUBTYPES[category].map((s) => (
+            {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
+            {category === 'TRIP' && OUTSIDE_WORK_SUBTYPES.TRIP.map((s) => (
               <button key={s} type="button" className={segBtn(subType === s)} onClick={() => pickSubType(s)}>
                 {s}
               </button>
@@ -228,7 +231,7 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
         {overlapping.length > 0 && (
           <p className="rounded-md border border-amber/30 bg-amber-soft/30 px-3 py-2 text-[11px] font-semibold text-amber">
             이 기간에 이미 외근·출장이 있습니다:{' '}
-            {overlapping.map((v) => `${v.subType}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
+            {overlapping.map((v) => `${outsideKindLabel(v.category, v.subType)}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
           </p>
         )}
 

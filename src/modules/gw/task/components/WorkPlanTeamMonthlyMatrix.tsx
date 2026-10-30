@@ -670,11 +670,14 @@ const CELL_PADDING = 8;
 
 /** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
-  const { label, badgeClass } = chipLook(entry);
+  const { label, badgeClass, dotClass, hint } = chipLook(entry);
   const openable = !(entry.source === 'APPROVAL' && !entry.outside);
   const body = (
     <>
-      <span className="shrink-0 text-[8px] font-normal opacity-80">{timeOf(entry)}</span>
+      {/* 시각 칸 폭·숫자 폭 고정 — 11:00 처럼 좁은 숫자도 점·제목 열이 맞게 */}
+      <span className="w-[2.8em] shrink-0 text-[8px] font-normal tabular-nums opacity-80">{timeOf(entry)}</span>
+      {/* 작은 원은 확대 배율에서 픽셀 반올림으로 찌그러진다 — 크게 그려 축소(변형은 반올림하지 않는다) */}
+      {dotClass && <span className={`-mx-0.5 h-2 w-2 shrink-0 scale-50 rounded-full ${dotClass}`} aria-hidden />}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {entry.roomStatus === 'PENDING' && (
         <span className="shrink-0 rounded bg-amber-soft px-1 text-[8px] font-bold text-amber">대기</span>
@@ -690,7 +693,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
   const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs ${badgeClass}`;
   if (!openable) {
     return (
-      <div title={`${label} (${timeRangeOf(entry)})`} className={chipClass}>
+      <div title={`${hint} (${timeRangeOf(entry)})`} className={chipClass}>
         {body}
       </div>
     );
@@ -704,7 +707,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
       }}
       // 칩을 두 번 눌러도 새 일정 창이 뜨지 않게
       onDoubleClick={(e) => e.stopPropagation()}
-      title={`${label} (${timeRangeOf(entry)})`}
+      title={`${hint} (${timeRangeOf(entry)})`}
       className={`${chipClass} cursor-pointer hover:brightness-95`}
     >
       {body}

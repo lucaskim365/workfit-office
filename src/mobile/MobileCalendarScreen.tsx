@@ -19,6 +19,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { scheduleChip } from '@/domain/commute/statusDisplay';
+import { outsideKindLabel } from '@/domain/outsideWork/schema';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
@@ -94,7 +95,7 @@ export default function MobileCalendarScreen() {
 
       const isLeave = s.category === 'LEAVE';
       const eventType: CalendarEvent['eventType'] = isLeave ? 'VACATION' : 'OUTSIDE';
-      const typeLabel = isLeave ? '휴가' : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
+      const typeLabel = s.category === 'LEAVE' ? '휴가' : outsideKindLabel(s.category, s.subType);
       const prefix = isLeave ? '[휴가]' : s.category === 'OUTSIDE' ? '[외근]' : '[출장]';
       const drafterUser = userMap.get(s.drafterId);
       const drafter = s.drafterName || drafterUser?.name || '';
@@ -157,7 +158,7 @@ export default function MobileCalendarScreen() {
         list.push({
           id: `CAL-SELF-${w.id}-${dStr}`,
           ownerUserId: w.ownerUserId,
-          title: `${prefix} ${w.subType} (${w.destination}) - ${ownerWithPos}`,
+          title: `${prefix} ${outsideKindLabel(w.category, w.subType)} (${w.destination}) - ${ownerWithPos}`,
           date: dStr,
           allDay: w.allDay,
           startTime: w.allDay ? null : w.startTime,

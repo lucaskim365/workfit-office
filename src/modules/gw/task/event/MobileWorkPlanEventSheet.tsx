@@ -102,9 +102,10 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <KindRow form={form} target={target} />
 
-          {isOutsideKind(state.kind) && (
+          {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
+          {state.kind === 'TRIP' && (
             <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2" role="radiogroup" aria-label="세부 구분">
-              {OUTSIDE_WORK_SUBTYPES[state.kind as 'OUTSIDE' | 'TRIP'].map((subType) => {
+              {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
                 const active = state.subType === subType;
                 return (
                   <button

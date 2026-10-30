@@ -62,7 +62,7 @@ export interface StatusChip {
   kind: StatusKind;
   /** 근태표 칸처럼 좁은 곳에 쓰는 짧은 표기 (예: 반차, 휴근) */
   short: string;
-  /** 전체 이름 (예: 오전반차, 종일 외근) */
+  /** 전체 이름 (예: 오전반차, 해외출장). 외근은 세부 구분 없이 늘 '외근' */
   label: string;
 }
 
@@ -111,7 +111,7 @@ export function describeCommuteRecord(rec: Pick<
     case 'leave':
       return [leave ?? leaveChip('연차')];
     case 'outside':
-      return withLeave(chipOf('outside', '외근', clean(rec.outsideName) || '외근'));
+      return withLeave(chipOf('outside', '외근', '외근'));
     case 'trip':
       return withLeave(chipOf('trip', '출장', clean(rec.tripName) || '출장'));
     case 'holiday_work':
@@ -132,6 +132,6 @@ export function scheduleChip(s: {
   docTitle?: string | null;
 }): StatusChip {
   if (s.category === 'LEAVE') return leaveChip(s.leaveType, s.docTitle);
-  if (s.category === 'OUTSIDE') return chipOf('outside', '외근', clean(s.subType) || '외근');
+  if (s.category === 'OUTSIDE') return chipOf('outside', '외근', '외근');
   return chipOf('trip', '출장', clean(s.subType) || '출장');
 }

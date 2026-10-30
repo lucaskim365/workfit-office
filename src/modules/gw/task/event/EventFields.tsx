@@ -3,6 +3,7 @@ import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, Phone, UserPlus, Users,
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
+import { outsideKindLabel } from '@/domain/outsideWork/schema';
 import { DAY_END, durationLabel, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useOutsideSchedulesOf } from '@/features/outsideWork/useOutsideWorks';
@@ -675,7 +676,7 @@ function OutsideOverlapWarning({
   return (
     <p className="rounded-md border border-amber/30 bg-amber-soft/30 px-3 py-2 text-[11px] font-semibold text-amber">
       {who ? `${who}님은 ` : ''}이 기간에 이미 외근·출장이 있습니다:{' '}
-      {overlapping.map((v) => `${v.subType}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
+      {overlapping.map((v) => `${outsideKindLabel(v.category, v.subType)}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
     </p>
   );
 }

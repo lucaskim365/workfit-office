@@ -24,6 +24,16 @@ export const OUTSIDE_WORK_SUBTYPES: Record<OutsideWorkCategory, readonly string[
   TRIP: ['국내출장', '해외출장'],
 };
 
+/**
+ * 외근은 세부 구분을 고르지 않는다(2026-10-30 결정) — 저장값만 종일 여부로 맞춘다.
+ * 예전 '오전·오후 외근' 기록은 그대로 두고, 화면에는 모두 '외근'으로 보인다(`outsideKindLabel`).
+ */
+export const outsideSubTypeOf = (allDay: boolean): string => (allDay ? '종일 외근' : '시간 외근');
+
+/** 화면 표기 — 외근은 세부 구분 없이 '외근', 출장은 국내·해외출장 */
+export const outsideKindLabel = (category: OutsideWorkCategory, subType?: string | null): string =>
+  category === 'OUTSIDE' ? '외근' : subType?.trim() || '출장';
+
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
 const dateSchema = z.string().refine(isValidCalendarDate, '올바른 날짜를 입력하세요.');
 
