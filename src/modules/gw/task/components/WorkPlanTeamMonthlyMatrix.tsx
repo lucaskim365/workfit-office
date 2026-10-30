@@ -373,11 +373,6 @@ export function WorkPlanTeamMonthlyMatrix({
           <h2 className="ml-1 text-[14px] font-extrabold text-ink flex items-center gap-1.5">
             <CalendarIcon size={16} className="text-teal" />
             <span>{yearNum}년 {monthNum}월 업무계획</span>
-            {visibleWeekNum !== null && (
-              <span className="rounded-md bg-teal-soft/40 px-1.5 py-0.5 text-[11.5px] font-extrabold text-teal">
-                {visibleWeekNum}주차
-              </span>
-            )}
           </h2>
 
           {currentMonth === todayStr.slice(0, 7) && (
