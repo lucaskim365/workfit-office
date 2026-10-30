@@ -124,14 +124,14 @@ export default function ApprovalScreen() {
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
   const handleSelectBox = (newBox: ApprovalBox | '문서함') => {
     setBox(newBox);
     setSelId(null);
-    if (newBox === '대기') setTodoFilter('pending');
+    if (newBox === '대기') setTodoFilter('all');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
     nextUrl.searchParams.delete('doc');
