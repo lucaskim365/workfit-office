@@ -7,7 +7,8 @@ import {
 } from '@/domain/calendarEvent/calendarDate';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
-import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import type { DayCell, DayEntry, MemoPlanRef } from '@/domain/workPlan/dayEntries';
+import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
@@ -19,6 +20,7 @@ import {
   Calendar as CalendarIcon,
   Settings,
   LocateFixed,
+  StickyNote,
 } from 'lucide-react';
 
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -70,6 +72,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onCreate?: (date: string, member: User) => void;
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
+  /** 내 칸 메모 저장. 없으면(사용 중이 아닌 계정) 메모는 보기만. 실패하면 이유를 담아 throw */
+  onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
   /** 보고 있는 달(YYYY-MM) — 화면이 들고 칸 조립 범위로도 쓴다 */
   month: string;
   onMonthChange: (month: string) => void;
@@ -93,6 +97,7 @@ export function WorkPlanTeamMonthlyMatrix({
   workPlans: monthlyPlans,
   onCreate,
   onOpenEntry,
+  onSaveMemo,
   onOpenCompanySchedule,
   onOpenConfig,
   filters,
@@ -631,9 +636,15 @@ export function WorkPlanTeamMonthlyMatrix({
                                     ))}
                                   </div>
                                 )}
-                                {/* 2) 이전 메모 — 예전 글(서식 제거, 읽기 전용) */}
-                                {cell.legacyMemo && <LegacyMemo text={cell.legacyMemo} divided={entries.length > 0} />}
-                                {entries.length === 0 && !cell.legacyMemo && <div className="min-h-[50px] w-full" />}
+                                {/* 2) 메모 — 서식 없는 글. 내 칸은 눌러서 바로 고친다 */}
+                                <CellMemo
+                                  key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
+                                  text={cell.memo}
+                                  label={`${member.name} ${d.monthNum}월 ${d.dayNum}일 메모`}
+                                  divided={entries.length > 0}
+                                  onSave={isMe && onSaveMemo ? (text) => onSaveMemo(dayStr, cell.memoPlan, text) : undefined}
+                                />
+                                {entries.length === 0 && !cell.memo && <div className="min-h-[50px] w-full" />}
                               </td>
                             );
                           })}
@@ -701,11 +712,27 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
   );
 }
 
-/** 이전 메모 — 예전 자유 글(서식 제거). 읽기 전용, 3줄 넘으면 접어 둔다. */
-function LegacyMemo({ text, divided }: { text: string; divided: boolean }) {
+/**
+ * 칸 메모 — 서식 없는 글, 3줄 넘으면 접어 둔다. `onSave`가 있으면(내 칸) 글을 누르거나
+ * 칸 오른쪽 위 메모 버튼으로 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
+ */
+function CellMemo({
+  text,
+  label,
+  divided,
+  onSave,
+}: {
+  text: string | null;
+  label: string;
+  divided: boolean;
+  onSave?: (text: string) => Promise<void>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -713,11 +740,106 @@ function LegacyMemo({ text, divided }: { text: string; divided: boolean }) {
     setOverflowing(el.scrollHeight > el.clientHeight + 1);
   }, [text, expanded]);
 
+  const startEdit = () => {
+    if (!onSave) return;
+    setError('');
+    setDraft(text ?? '');
+  };
+
+  const finish = async () => {
+    if (draft === null || saving || !onSave) return;
+    if (draft.trim() === (text ?? '').trim()) {
+      setDraft(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+
+  if (draft !== null) {
+    return (
+      <div className={divided ? 'mt-1.5 border-t border-border/40 pt-1' : ''} onDoubleClick={stop}>
+        <textarea
+          aria-label={label}
+          autoFocus
+          value={draft}
+          maxLength={WORK_PLAN_MEMO_MAX}
+          disabled={saving}
+          rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
+          placeholder="메모"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void finish()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setDraft(null);
+            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              void finish();
+            }
+          }}
+          className="w-full resize-none rounded border border-sky-300 bg-panel px-1.5 py-1 text-[10px] leading-relaxed text-ink outline-none focus:border-sky-400 disabled:opacity-60 dark:border-sky-700"
+        />
+        {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
+      </div>
+    );
+  }
+
+  if (!text) {
+    // 메모 없는 내 칸 — 마우스를 올리면 [+] 옆에 메모 버튼
+    return onSave ? (
+      <button
+        type="button"
+        aria-label={`${label} 쓰기`}
+        title="메모"
+        onClick={(e) => {
+          e.stopPropagation();
+          startEdit();
+        }}
+        onDoubleClick={stop}
+        className="absolute right-7 top-1 z-20 grid h-5 w-5 place-items-center rounded border border-border bg-panel text-ink2 opacity-0 shadow-2xs transition-opacity hover:border-teal/50 hover:text-teal focus:opacity-100 group-hover/day:opacity-100"
+      >
+        <StickyNote size={11} />
+      </button>
+    ) : null;
+  }
+
   return (
     <div className={divided ? 'mt-1.5 border-t border-border/40 pt-1' : ''}>
       <div
         ref={ref}
-        className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'}`}
+        role={onSave ? 'button' : undefined}
+        tabIndex={onSave ? 0 : undefined}
+        aria-label={onSave ? `${label} 고치기` : undefined}
+        title={onSave ? '눌러서 메모 고치기' : undefined}
+        onClick={
+          onSave
+            ? (e) => {
+                e.stopPropagation();
+                startEdit();
+              }
+            : undefined
+        }
+        onKeyDown={
+          onSave
+            ? (e) => {
+                if (e.key === 'Enter') startEdit();
+              }
+            : undefined
+        }
+        onDoubleClick={onSave ? stop : undefined}
+        className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'} ${
+          onSave ? 'cursor-text rounded hover:bg-panel-alt/60' : ''
+        }`}
       >
         {text}
       </div>

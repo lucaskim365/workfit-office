@@ -1,4 +1,5 @@
 import type { CommutePolicy } from '@/domain/commutePolicy/schema';
+import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { MEETING_DEFAULT_VISIBILITY } from '@/domain/calendarEvent/meeting';
 import { calendarEventSchema, type CalendarEventDraft, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import { OUTSIDE_WORK_SUBTYPES, outsideWorkSchema, type OutsideWorkDraft } from '@/domain/outsideWork/schema';
@@ -363,4 +364,28 @@ export function validateOutsideDraft(draft: OutsideWorkDraft, ownerId: string): 
   const now = new Date().toISOString();
   const parsed = outsideWorkSchema.safeParse({ ...draft, id: 'OW-00000000-0000', ownerUserId: ownerId, createdAt: now, updatedAt: now });
   return parsed.success ? null : firstIssue(parsed.error.issues);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 외근·출장 기간 글 — 하루면 빈 글, 출장은 'N박 M일', 외근은 'N일' */
+export function outsideLengthLabel(kind: 'OUTSIDE' | 'TRIP', startDate: string, endDate: string): string {
+  if (!isValidCalendarDate(startDate) || !isValidCalendarDate(endDate)) return '';
+  const days = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / DAY_MS) + 1;
+  if (days <= 1) return '';
+  return kind === 'TRIP' ? `${days - 1}박 ${days}일` : `${days}일`;
+}
+
+/** 지난 행선지 추천 — 최근 일정부터, 같은 곳은 한 번만 */
+export function recentDestinations(schedules: Array<{ startDate: string; destination?: string }>, limit: number): string[] {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const s of [...schedules].sort((a, b) => b.startDate.localeCompare(a.startDate))) {
+    const destination = (s.destination ?? '').trim();
+    if (!destination || seen.has(destination)) continue;
+    seen.add(destination);
+    list.push(destination);
+    if (list.length >= limit) break;
+  }
+  return list;
 }

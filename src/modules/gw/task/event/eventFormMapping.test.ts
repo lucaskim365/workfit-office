@@ -12,6 +12,8 @@ import {
   applyDateChange,
   applyRangeChange,
   applySubType,
+  outsideLengthLabel,
+  recentDestinations,
   roomDayBlocks,
   initialCreateState,
   initialStateFromEntry,
@@ -422,4 +424,28 @@ test('회의실 블록 — 날을 넘는 예약은 그날 안으로 자르고, �
 
 test('회의실 블록 — 날짜가 올바르지 않으면 빈 목록', () => {
   assert.deepEqual(roomDayBlocks([rsv({ startAt: '2026-10-21T01:00:00.000Z', endAt: '2026-10-21T02:00:00.000Z' })], 'R1', '', null), []);
+});
+
+test('외근·출장 기간 — 하루면 빈 글, 출장은 N박 M일, 외근은 N일', () => {
+  assert.equal(outsideLengthLabel('TRIP', '2026-10-30', '2026-10-30'), '');
+  assert.equal(outsideLengthLabel('TRIP', '2026-10-30', '2026-11-01'), '2박 3일');
+  assert.equal(outsideLengthLabel('OUTSIDE', '2026-10-30', '2026-10-31'), '2일');
+  // 종료일이 앞서거나 날짜가 틀리면 빈 글
+  assert.equal(outsideLengthLabel('TRIP', '2026-10-30', '2026-10-29'), '');
+  assert.equal(outsideLengthLabel('TRIP', '', '2026-10-29'), '');
+});
+
+test('지난 행선지 — 최근 것부터, 같은 곳은 한 번, 공백 제외, 최대 개수', () => {
+  const list = recentDestinations(
+    [
+      { startDate: '2026-10-01', destination: '부산 본사' },
+      { startDate: '2026-10-20', destination: '대전 공장' },
+      { startDate: '2026-10-10', destination: ' 부산 본사 ' },
+      { startDate: '2026-10-15', destination: '' },
+      { startDate: '2026-10-05' },
+    ],
+    5,
+  );
+  assert.deepEqual(list, ['대전 공장', '부산 본사']);
+  assert.equal(recentDestinations([{ startDate: '1', destination: 'a' }, { startDate: '2', destination: 'b' }], 1).length, 1);
 });

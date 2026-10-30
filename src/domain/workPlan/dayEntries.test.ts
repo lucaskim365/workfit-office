@@ -124,14 +124,26 @@ test('연결 예약이 PENDING이면 roomStatus PENDING, CONFIRMED면 null', () 
   assert.equal(confirmed.entries[0].roomStatus, null);
 });
 
-test('이전 메모는 서식 없이, 빈 글은 null', () => {
-  const plan = (content: string, ownerUserId = 'U011') =>
-    ({ id: 'WP-20261020-0001', ownerUserId, date: D, content, createdAt: NOW, updatedAt: NOW });
+test('메모는 서식 없이, 원본 문서 참조와 함께 — 빈 글이어도 문서는 알려 준다', () => {
+  const plan = (content: string, ownerUserId = 'U011', id = 'WP-20261020-0001') =>
+    ({ id, ownerUserId, date: D, content, createdAt: NOW, updatedAt: NOW });
   const withMemo = buildDayEntries('U011', D, { ...empty(), legacyPlans: [plan('첫 줄\n두 번째')] });
-  assert.equal(withMemo.legacyMemo, '첫 줄\n두 번째');
-  assert.equal(buildDayEntries('U011', D, { ...empty(), legacyPlans: [plan('   ')] }).legacyMemo, null);
-  assert.equal(buildDayEntries('U011', D, empty()).legacyMemo, null);
-  assert.equal(buildDayEntries('__COMPANY__', D, { ...empty(), legacyPlans: [plan('공지', '__COMPANY__')] }).legacyMemo, null);
+  assert.equal(withMemo.memo, '첫 줄\n두 번째');
+  assert.deepEqual(withMemo.memoPlan, { id: 'WP-20261020-0001', updatedAt: NOW });
+  const blank = buildDayEntries('U011', D, { ...empty(), legacyPlans: [plan('__c__:0')] });
+  assert.equal(blank.memo, null);
+  assert.deepEqual(blank.memoPlan, { id: 'WP-20261020-0001', updatedAt: NOW });
+  const none = buildDayEntries('U011', D, empty());
+  assert.equal(none.memo, null);
+  assert.equal(none.memoPlan, null);
+  assert.equal(buildDayEntries('__COMPANY__', D, { ...empty(), legacyPlans: [plan('공지', '__COMPANY__')] }).memo, null);
+  // 같은 날 문서가 둘이면 글이 있는 쪽
+  const twice = buildDayEntries('U011', D, {
+    ...empty(),
+    legacyPlans: [plan('글 있음'), plan('__c__:0', 'U011', 'WP-20261020-0002')],
+  });
+  assert.equal(twice.memo, '글 있음');
+  assert.equal(twice.memoPlan?.id, 'WP-20261020-0001');
 });
 
 test('못 찾는 태그는 기타', () => {

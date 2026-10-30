@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronUp,
   Plus,
+  StickyNote,
   Tags,
   User as UserIcon,
   UserPlus,
@@ -25,6 +26,8 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
+import { useSaveWorkPlanMemo } from '@/features/workPlan/useWorkPlans';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
@@ -165,6 +168,18 @@ function MobileTaskBody({ actor }: { actor: User }) {
 
   const myCell = cellOf(actor.id, selectedDate);
 
+  /** 내 메모 저장 — 비우면 지우고, 있으면 고치고, 없으면 만든다 */
+  const saveMemo = useSaveWorkPlanMemo();
+  const handleSaveMemo = async (text: string) => {
+    await saveMemo.mutateAsync({
+      actor: { userId: actor.id, active: actorActive },
+      ownerUserId: actor.id,
+      date: selectedDate,
+      memoPlan: myCell.memoPlan,
+      text,
+    });
+  };
+
   return (
     <div className="relative flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
       <MobileCommonHeader
@@ -251,7 +266,12 @@ function MobileTaskBody({ actor }: { actor: User }) {
       <div className="flex-1 overflow-y-auto p-3.5">
         {view === 'me' ? (
           <div className="rounded-2xl border border-teal/40 bg-white p-3.5 shadow-xs">
-            <DayList cell={myCell} onOpen={handleOpenEntry} />
+            <DayList
+              key={selectedDate}
+              cell={myCell}
+              onOpen={handleOpenEntry}
+              onSaveMemo={actorActive ? handleSaveMemo : undefined}
+            />
           </div>
         ) : (
           <div className="space-y-3">
@@ -385,17 +405,34 @@ function MobileTaskBody({ actor }: { actor: User }) {
   );
 }
 
-/** 그 날 항목 목록 — 시간순(조립 결과 순서 그대로) + 이전 메모(읽기 전용) */
-function DayList({ cell, onOpen }: { cell: DayCell; onOpen: (entry: DayEntry) => void }) {
-  if (cell.entries.length === 0 && !cell.legacyMemo) {
+/** 그 날 항목 목록 — 시간순(조립 결과 순서 그대로) + 메모. `onSaveMemo`가 있으면(내 목록) 메모를 고친다 */
+function DayList({
+  cell,
+  onOpen,
+  onSaveMemo,
+}: {
+  cell: DayCell;
+  onOpen: (entry: DayEntry) => void;
+  onSaveMemo?: (text: string) => Promise<void>;
+}) {
+  const empty = cell.entries.length === 0 && !cell.memo;
+  if (empty && !onSaveMemo) {
     return <div className="py-4 text-center text-[11.5px] text-ink3">일정이 없습니다.</div>;
   }
   return (
     <div className="flex flex-col gap-1.5">
+      {empty && <div className="py-3 text-center text-[11.5px] text-ink3">일정이 없습니다.</div>}
       {cell.entries.map((entry) => (
         <EntryRow key={entry.key} entry={entry} onOpen={onOpen} />
       ))}
-      {cell.legacyMemo && <LegacyMemo text={cell.legacyMemo} divided={cell.entries.length > 0} />}
+      {(cell.memo || onSaveMemo) && (
+        <DayMemo
+          key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
+          text={cell.memo}
+          divided={cell.entries.length > 0}
+          onSave={onSaveMemo}
+        />
+      )}
     </div>
   );
 }
@@ -429,11 +466,14 @@ function EntryRow({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry
   );
 }
 
-/** 이전 메모 — 예전 자유 글(서식 제거). 읽기 전용, 4줄 넘으면 접어 둔다. */
-function LegacyMemo({ text, divided }: { text: string; divided: boolean }) {
+/** 메모 — 서식 없는 글, 4줄 넘으면 접어 둔다. `onSave`가 있으면 눌러서 고치고 [저장]/[취소]로 끝낸다. */
+function DayMemo({ text, divided, onSave }: { text: string | null; divided: boolean; onSave?: (text: string) => Promise<void> }) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -441,25 +481,96 @@ function LegacyMemo({ text, divided }: { text: string; divided: boolean }) {
     setOverflowing(el.scrollHeight > el.clientHeight + 1);
   }, [text, expanded]);
 
+  const save = async () => {
+    if (draft === null || saving || !onSave) return;
+    if (draft.trim() === (text ?? '').trim()) {
+      setDraft(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className={divided ? 'mt-1 border-t border-border/50 pt-2' : ''}>
-      <div className="mb-0.5 text-[10.5px] font-bold text-ink3">이전 메모</div>
-      <div
-        ref={ref}
-        className={`whitespace-pre-line break-words text-[11.5px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-4'}`}
-      >
-        {text}
+      <div className="mb-0.5 flex items-center gap-1 text-[10.5px] font-bold text-ink3">
+        <StickyNote size={11} />
+        메모
       </div>
-      {(overflowing || expanded) && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-ink3"
-        >
-          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          {expanded ? '접기' : '더보기'}
-        </button>
+      {draft !== null ? (
+        <>
+          <textarea
+            aria-label="메모"
+            autoFocus
+            value={draft}
+            maxLength={WORK_PLAN_MEMO_MAX}
+            disabled={saving}
+            rows={5}
+            onChange={(e) => setDraft(e.target.value)}
+            className="w-full resize-none rounded-lg border border-teal/50 bg-white px-2.5 py-2 text-[12px] leading-relaxed text-ink outline-none select-text disabled:opacity-60"
+          />
+          {error && <div role="alert" className="mt-0.5 text-[11px] font-semibold text-danger">{error}</div>}
+          <div className="mt-1.5 flex justify-end gap-1.5">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setError('');
+                setDraft(null);
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-[11.5px] font-bold text-ink2 active:bg-panel-alt"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save()}
+              className="rounded-lg bg-teal px-3 py-1.5 text-[11.5px] font-bold text-white active:opacity-80 disabled:opacity-60"
+            >
+              저장
+            </button>
+          </div>
+        </>
+      ) : text ? (
+        <>
+          <div
+            ref={ref}
+            role={onSave ? 'button' : undefined}
+            onClick={onSave ? () => setDraft(text) : undefined}
+            className={`whitespace-pre-line break-words text-[11.5px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-4'}`}
+          >
+            {text}
+          </div>
+          {(overflowing || expanded) && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-ink3"
+            >
+              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {expanded ? '접기' : '더보기'}
+            </button>
+          )}
+        </>
+      ) : (
+        onSave && (
+          <button
+            type="button"
+            onClick={() => setDraft('')}
+            className="w-full rounded-lg border border-dashed border-border px-2.5 py-2 text-left text-[11.5px] text-ink3 active:bg-panel-alt"
+          >
+            메모 쓰기
+          </button>
+        )
       )}
     </div>
   );

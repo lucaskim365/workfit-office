@@ -11,10 +11,11 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import {
   useCreateWorkPlan,
   useRemoveWorkPlan,
+  useSaveWorkPlanMemo,
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
-import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import type { DayEntry, MemoPlanRef } from '@/domain/workPlan/dayEntries';
 import { monthGridDates, useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { WorkPlanEventModal } from './event/WorkPlanEventModal';
@@ -101,6 +102,7 @@ export default function WorkPlanScreen() {
   const create = useCreateWorkPlan();
   const update = useUpdateWorkPlan();
   const remove = useRemoveWorkPlan();
+  const saveMemo = useSaveWorkPlanMemo();
 
   /** 인원 정렬 — 관리자가 정한 순서 → 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]) */
   const { compare: compareRoster } = useRosterOrder();
@@ -228,6 +230,12 @@ export default function WorkPlanScreen() {
     openEventModal(createTarget(date, member, actor, today, new Date()));
   };
 
+  /** 내 칸 메모 저장 — 비우면 지우고, 있으면 고치고, 없으면 만든다 */
+  const handleSaveMemo = async (date: string, memoPlan: MemoPlanRef | null, text: string) => {
+    if (!actor) return;
+    await saveMemo.mutateAsync({ actor: { userId: actor.id, active: actorActive }, ownerUserId: actor.id, date, memoPlan, text });
+  };
+
   /** 칩 클릭 — 수정·보기 일정 창, 결재·동행 외근 상세, 회의 외 캘린더 일정 창([[entryRouting]]) */
   const handleOpenEntry = (entry: DayEntry) => {
     if (!actor) return;
@@ -284,6 +292,7 @@ export default function WorkPlanScreen() {
         workPlans={workPlans}
         onCreate={actorActive ? handleCreate : undefined}
         onOpenEntry={handleOpenEntry}
+        onSaveMemo={actorActive ? handleSaveMemo : undefined}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={(

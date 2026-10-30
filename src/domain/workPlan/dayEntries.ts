@@ -4,9 +4,8 @@ import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import type { Reservation } from '@/domain/reservation/schema';
-import { parseWorkPlanItems } from './engine';
 import type { WorkPlanItem } from './item';
-import { stripInlineMarks } from './richText';
+import { contentToMemo } from './memo';
 import type { WorkPlan } from './schema';
 import { resolveTag, type WorkPlanTag } from './tag';
 import { isWorkPlanDerivedEvent } from './workPlanCalendarBridge';
@@ -45,9 +44,18 @@ export interface DayEntryInput {
   members: Array<{ id: string; name: string }>;
 }
 
+/** 그 사람·그 날의 메모 원본(`workPlans` 1건) — 고칠 때 쓴다 */
+export interface MemoPlanRef {
+  id: string;
+  updatedAt: string;
+}
+
 export interface DayCell {
   entries: DayEntry[];
-  legacyMemo: string | null;
+  /** 메모 글(서식 제거). 없으면 null */
+  memo: string | null;
+  /** 메모 원본 문서. 글이 비어 있어도 문서가 있으면 채운다(새로 만들면 겹치므로) */
+  memoPlan: MemoPlanRef | null;
 }
 
 const SOURCE_ORDER: Record<DayEntrySource, number> = { MEETING: 0, CALENDAR: 1, OUTSIDE: 2, APPROVAL: 3, ITEM: 4 };
@@ -61,20 +69,8 @@ function compareEntries(a: DayEntry, b: DayEntry): number {
   return a.title.localeCompare(b.title, 'ko');
 }
 
-/** 이전(자유 글) 업무계획 → 서식 없는 메모. 태그가 있던 줄은 `[태그] ` 접두. 빈 글이면 null. */
-function legacyMemoOf(content: string): string | null {
-  const lines = parseWorkPlanItems(content)
-    .map((line) => {
-      const text = stripInlineMarks(line.text).trim();
-      if (!text) return '';
-      return line.tag ? `[${line.tag}] ${text}` : text;
-    })
-    .filter(Boolean);
-  return lines.length > 0 ? lines.join('\n') : null;
-}
-
 const COMPANY_OWNER = '__COMPANY__';
-const EMPTY_CELL: DayCell = { entries: [], legacyMemo: null };
+const EMPTY_CELL: DayCell = { entries: [], memo: null, memoPlan: null };
 
 /**
  * 사람·날짜별 칸 목록을 한 번 훑어 만들고, 조회 함수를 돌려준다.
@@ -83,7 +79,7 @@ const EMPTY_CELL: DayCell = { entries: [], legacyMemo: null };
 export function indexDayEntries(input: DayEntryInput, dates: string[]): (userId: string, date: string) => DayCell {
   const dateSet = new Set(dates);
   const map = new Map<string, DayEntry[]>();
-  const memoMap = new Map<string, string>();
+  const memoMap = new Map<string, { memo: string | null; plan: MemoPlanRef }>();
   const push = (userId: string, date: string, entry: DayEntry) => {
     const k = `${userId}|${date}`;
     const list = map.get(k);
@@ -187,11 +183,13 @@ export function indexDayEntries(input: DayEntryInput, dates: string[]): (userId:
     }
   }
 
-  // 이전 메모(전사 공통 줄은 대상 아님)
+  // 메모(전사 공통 줄은 대상 아님) — 같은 날 문서가 여럿이면 글이 있는 쪽을 쓴다
   for (const plan of input.legacyPlans) {
     if (plan.ownerUserId === COMPANY_OWNER || !dateSet.has(plan.date)) continue;
-    const memo = legacyMemoOf(plan.content);
-    if (memo) memoMap.set(`${plan.ownerUserId}|${plan.date}`, memo);
+    const k = `${plan.ownerUserId}|${plan.date}`;
+    const memo = contentToMemo(plan.content);
+    if (memoMap.get(k)?.memo && !memo) continue;
+    memoMap.set(k, { memo, plan: { id: plan.id, updatedAt: plan.updatedAt } });
   }
 
   for (const list of map.values()) list.sort(compareEntries);
@@ -199,9 +197,9 @@ export function indexDayEntries(input: DayEntryInput, dates: string[]): (userId:
   return (userId, date) => {
     const k = `${userId}|${date}`;
     const entries = map.get(k);
-    const legacyMemo = memoMap.get(k) ?? null;
-    if (!entries && legacyMemo === null) return EMPTY_CELL;
-    return { entries: entries ?? [], legacyMemo };
+    const memo = memoMap.get(k);
+    if (!entries && !memo) return EMPTY_CELL;
+    return { entries: entries ?? [], memo: memo?.memo ?? null, memoPlan: memo?.plan ?? null };
   };
 }
 

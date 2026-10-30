@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, UserPlus, Users, X } from 'lucide-react';
+import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, Phone, UserPlus, Users, X } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
@@ -10,6 +10,7 @@ import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Button } from '@/shared/ui/Button';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { TextField } from '@/shared/ui/form/TextField';
+import { outsideLengthLabel, recentDestinations } from './eventFormMapping';
 import { RoomPicker } from './RoomPicker';
 import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
 
@@ -59,36 +60,38 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
   const main = part !== 'more';
   const more = part !== 'main';
-  // 나눠 그릴 때(모바일)는 날짜·시각을 두 줄로, 외근·출장 종료일은 [자세히]로
+  // 나눠 그릴 때(모바일)는 날짜·시각을 두 줄로
   const split = part !== 'all';
+
+  if (isOutside) {
+    return (
+      <OutsideFields
+        form={form}
+        actor={actor}
+        users={users}
+        ownerId={ownerId}
+        ownerName={ownerName}
+        outsideSelfId={outsideSelfId}
+        part={part}
+        autoFocusTitle={autoFocusTitle}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
       {main && (
-        <Row label={isOutside ? '행선지' : '제목'}>
-          {isOutside ? (
-            <input
-              aria-label="행선지"
-              className={titleClass}
-              value={state.destination}
-              maxLength={200}
-              placeholder="행선지"
-              disabled={readOnly}
-              autoFocus={autoFocusTitle && !readOnly}
-              onChange={(e) => set('destination', e.target.value)}
-            />
-          ) : (
-            <input
-              aria-label="제목"
-              className={titleClass}
-              value={state.title}
-              maxLength={100}
-              placeholder={isMeeting ? '회의 제목' : '제목'}
-              disabled={readOnly}
-              autoFocus={autoFocusTitle && !readOnly}
-              onChange={(e) => set('title', e.target.value)}
-            />
-          )}
+        <Row label="제목">
+          <input
+            aria-label="제목"
+            className={titleClass}
+            value={state.title}
+            maxLength={100}
+            placeholder={isMeeting ? '회의 제목' : '제목'}
+            disabled={readOnly}
+            autoFocus={autoFocusTitle && !readOnly}
+            onChange={(e) => set('title', e.target.value)}
+          />
         </Row>
       )}
 
@@ -100,13 +103,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
 
       {main && (
         <Row icon={<Clock size={15} />} label="날짜·시간">
-          <TimeFields form={form} stacked={split} showEndDate={!split} />
-        </Row>
-      )}
-
-      {more && split && isOutside && (
-        <Row icon={<Clock size={15} />} label="종료일">
-          <EndDateField form={form} />
+          <TimeFields form={form} stacked={split} />
         </Row>
       )}
 
@@ -125,29 +122,8 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      {more && isOutside && (
-        <Row icon={<Users size={15} />} label="동행자">
-          <CompanionField form={form} actor={actor} users={users} nameOf={nameOf} />
-        </Row>
-      )}
-
-      {more && isOutside && (
-        <Row icon={<AlignLeft size={15} />} label="목적">
-          <textarea
-            aria-label="목적"
-            className={`${textareaClass} min-h-[52px]`}
-            value={state.purpose}
-            maxLength={500}
-            rows={2}
-            placeholder="목적"
-            disabled={readOnly}
-            onChange={(e) => set('purpose', e.target.value)}
-          />
-        </Row>
-      )}
-
       {more && (
-        <Row icon={isOutside ? <span className="w-[15px]" /> : <AlignLeft size={15} />} label="세부 내용">
+        <Row icon={<AlignLeft size={15} />} label="세부 내용">
           <textarea
             aria-label={isMeeting ? '세부 내용·안건' : '메모'}
             className={`${textareaClass} min-h-[84px]`}
@@ -175,39 +151,6 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         </Row>
       )}
 
-      {more && isOutside && (
-        <Row icon={<Car size={15} />} label="교통수단·연락처">
-          <div className="grid grid-cols-2 gap-2">
-            <TextField
-              aria-label="교통수단"
-              value={state.transportation}
-              maxLength={50}
-              placeholder="교통수단"
-              disabled={readOnly}
-              onChange={(e) => set('transportation', e.target.value)}
-            />
-            <TextField
-              aria-label="연락처"
-              value={state.contact}
-              maxLength={50}
-              placeholder="연락처"
-              disabled={readOnly}
-              onChange={(e) => set('contact', e.target.value)}
-            />
-          </div>
-        </Row>
-      )}
-
-      {main && isOutside && !readOnly && (
-        <OutsideOverlapWarning
-          ownerId={ownerId}
-          ownerName={ownerName}
-          selfId={outsideSelfId}
-          startDate={state.date}
-          endDate={state.endDate < state.date ? state.date : state.endDate}
-        />
-      )}
-
       {main && isMeeting && form.similarMeetings.length > 0 && (
         <SimilarMeetings meetings={form.similarMeetings} actorId={actor.id} nameOf={nameOf} saving={form.saving} onJoin={onJoin} />
       )}
@@ -219,6 +162,207 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
 function visibilityOptionsOf(options: CalendarVisibility[], current: CalendarVisibility) {
   const list = options.includes(current) ? options : [...options, current];
   return list.map((value) => ({ value, label: CALENDAR_VISIBILITY_LABELS[value] }));
+}
+
+const TRANSPORT_PRESETS = ['자차', '법인차량', '대중교통', 'KTX·기차', '항공'] as const;
+const RECENT_DESTINATION_LIMIT = 5;
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3" aria-label={title}>
+      <h3 className="border-b border-border pb-1 text-[11px] font-bold text-ink3">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * 외근·출장 입력 — 제목(저장은 목적 칸) → 출장지·외근지(행선지·기간) → 세부 정보(동행자·교통·연락처·메모).
+ * 나눠 그릴 때(모바일) 'main' = 제목·장소·기간, 'more' = 종료일과 세부 정보.
+ */
+function OutsideFields({
+  form,
+  actor,
+  users,
+  ownerId,
+  ownerName,
+  outsideSelfId,
+  part,
+  autoFocusTitle,
+}: Omit<EventFieldsProps, 'onJoin'> & { part: 'all' | 'main' | 'more'; autoFocusTitle: boolean }) {
+  const { state, set, readOnly } = form;
+  const kind = state.kind === 'TRIP' ? 'TRIP' : 'OUTSIDE';
+  const placeLabel = kind === 'TRIP' ? '출장지' : '외근지';
+  const main = part !== 'more';
+  const more = part !== 'main';
+  const split = part !== 'all';
+  const endDate = state.endDate < state.date ? state.date : state.endDate;
+  const length = outsideLengthLabel(kind, state.date, endDate);
+  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+
+  return (
+    <div className="flex flex-col gap-4">
+      {main && (
+        <Row label="제목">
+          <input
+            aria-label="제목"
+            className={titleClass}
+            value={state.purpose}
+            maxLength={500}
+            placeholder="제목"
+            disabled={readOnly}
+            autoFocus={autoFocusTitle && !readOnly}
+            onChange={(e) => set('purpose', e.target.value)}
+          />
+        </Row>
+      )}
+
+      {main && (
+        <Section title={placeLabel}>
+          <Row icon={<MapPin size={15} />} label={placeLabel}>
+            <DestinationField form={form} ownerId={ownerId} ownerName={ownerName} placeholder={placeLabel} />
+          </Row>
+          <Row icon={<Clock size={15} />} label="날짜·시간">
+            <TimeFields form={form} stacked={split} showEndDate={!split} />
+            {length && !split && <LengthBadge length={length} />}
+          </Row>
+          {!readOnly && (
+            <OutsideOverlapWarning ownerId={ownerId} ownerName={ownerName} selfId={outsideSelfId} startDate={state.date} endDate={endDate} />
+          )}
+        </Section>
+      )}
+
+      {more && (
+        <Section title="세부 정보">
+          {split && (
+            <Row icon={<Clock size={15} />} label="종료일">
+              <div className="flex flex-wrap items-center gap-2">
+                <EndDateField form={form} />
+                {length && <LengthBadge length={length} />}
+              </div>
+            </Row>
+          )}
+          <Row icon={<Users size={15} />} label="동행자">
+            <CompanionField
+              form={form}
+              actor={actor}
+              users={users}
+              nameOf={nameOf}
+              selfId={outsideSelfId}
+              startDate={state.date}
+              endDate={endDate}
+            />
+          </Row>
+          <Row icon={<Car size={15} />} label="교통수단">
+            <TransportField form={form} />
+          </Row>
+          <Row icon={<Phone size={15} />} label="연락처">
+            <TextField
+              aria-label="연락처"
+              value={state.contact}
+              maxLength={50}
+              placeholder="연락처"
+              disabled={readOnly}
+              className="w-full max-w-[240px]"
+              onChange={(e) => set('contact', e.target.value)}
+            />
+          </Row>
+          <Row icon={<AlignLeft size={15} />} label="메모">
+            <textarea
+              aria-label="메모"
+              className={`${textareaClass} min-h-[84px]`}
+              value={state.memo}
+              maxLength={2000}
+              rows={4}
+              placeholder="메모"
+              disabled={readOnly}
+              onChange={(e) => set('memo', e.target.value)}
+            />
+          </Row>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function LengthBadge({ length }: { length: string }) {
+  return <span className="mt-1.5 inline-block rounded bg-teal/10 px-1.5 py-0.5 text-[11px] font-bold text-teal">{length}</span>;
+}
+
+/** 행선지 — 비어 있으면 일정 주인의 지난 행선지를 눌러 채운다 */
+function DestinationField({ form, ownerId, ownerName, placeholder }: { form: EventForm; ownerId: string; ownerName: string; placeholder: string }) {
+  const { state, set, readOnly } = form;
+  const schedules = useOutsideSchedulesOf(ownerId, ownerName);
+  const recent = useMemo(() => recentDestinations(schedules, RECENT_DESTINATION_LIMIT), [schedules]);
+  const showRecent = !readOnly && !state.destination.trim() && recent.length > 0;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TextField
+        aria-label={placeholder}
+        value={state.destination}
+        maxLength={200}
+        placeholder={placeholder}
+        disabled={readOnly}
+        className="w-full"
+        onChange={(e) => set('destination', e.target.value)}
+      />
+      {showRecent && (
+        <div className="flex flex-wrap items-center gap-1" aria-label="지난 행선지">
+          <span className="text-[10.5px] font-semibold text-ink3">최근</span>
+          {recent.map((destination) => (
+            <button
+              key={destination}
+              type="button"
+              className="max-w-[200px] truncate rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-ink2 hover:bg-panel-alt"
+              onClick={() => set('destination', destination)}
+            >
+              {destination}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 교통수단 — 자주 쓰는 것은 눌러 고르고(다시 누르면 해제), 그 밖은 직접 입력 */
+function TransportField({ form }: { form: EventForm }) {
+  const { state, set, readOnly } = form;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {!readOnly && (
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="교통수단 고르기">
+          {TRANSPORT_PRESETS.map((preset) => {
+            const active = state.transportation === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set('transportation', active ? '' : preset)}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+                }`}
+              >
+                {preset}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <TextField
+        aria-label="교통수단"
+        value={state.transportation}
+        maxLength={50}
+        placeholder={readOnly ? '' : '직접 입력'}
+        disabled={readOnly}
+        className="w-full max-w-[240px]"
+        onChange={(e) => set('transportation', e.target.value)}
+      />
+    </div>
+  );
 }
 
 /** 외근·출장 종료일 */
@@ -443,21 +587,51 @@ function AttendeeField({ form, actor, users }: { form: EventForm; actor: User; u
   );
 }
 
-/** 외근·출장 동행자 — 기존 등록 창과 같은 부서 트리 선택기 */
-function CompanionField({ form, actor, users, nameOf }: { form: EventForm; actor: User; users: User[]; nameOf: (id: string) => string }) {
+/** 외근·출장 동행자 — 기존 등록 창과 같은 부서 트리 선택기. 동행자마다 같은 기간 외근·출장 겹침도 알린다 */
+function CompanionField({
+  form,
+  actor,
+  users,
+  nameOf,
+  selfId,
+  startDate,
+  endDate,
+}: {
+  form: EventForm;
+  actor: User;
+  users: User[];
+  nameOf: (id: string) => string;
+  selfId: string | null;
+  startDate: string;
+  endDate: string;
+}) {
   const { state, set, readOnly } = form;
   const [showPicker, setShowPicker] = useState(false);
   const pickable = useMemo(() => users.filter((u) => u.id !== actor.id), [users, actor.id]);
   const companions = state.companionIds.map((id) => ({ id, name: nameOf(id) })).filter((c) => c.name);
+  const remove = (id: string) => set('companionIds', state.companionIds.filter((v) => v !== id));
 
   return (
     <div className="flex flex-col gap-1.5 pt-1">
       <div className="flex flex-wrap items-center gap-1">
-        {companions.map(({ id, name }) => (
-          <span key={id} className="rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold text-blue">
-            {name}
-          </span>
-        ))}
+        {companions.map(({ id, name }) => {
+          const position = users.find((u) => u.id === id)?.position;
+          return (
+            <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-soft py-0.5 pl-2 pr-1 text-[11px] font-semibold text-blue">
+              {name}{position ? ` ${position}` : ''}
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label={`${name} 빼기`}
+                  className="grid h-4 w-4 place-items-center rounded-full hover:bg-blue/15"
+                  onClick={() => remove(id)}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          );
+        })}
         {companions.length === 0 && readOnly && <span className="text-[11.5px] text-ink3">없음</span>}
         {!readOnly && (
           <Button size="sm" variant="accent" onClick={() => setShowPicker((v) => !v)}>
@@ -468,6 +642,10 @@ function CompanionField({ form, actor, users, nameOf }: { form: EventForm; actor
       {showPicker && !readOnly && (
         <MemberPicker users={pickable} selected={state.companionIds} lockedUserId="" onChange={(ids) => set('companionIds', ids)} />
       )}
+      {!readOnly &&
+        companions.map(({ id, name }) => (
+          <OutsideOverlapWarning key={id} ownerId={id} ownerName={name} selfId={selfId} startDate={startDate} endDate={endDate} who={name} />
+        ))}
     </div>
   );
 }
@@ -479,12 +657,15 @@ function OutsideOverlapWarning({
   selfId,
   startDate,
   endDate,
+  who,
 }: {
   ownerId: string;
   ownerName: string;
   selfId: string | null;
   startDate: string;
   endDate: string;
+  /** 동행자 겹침이면 그 사람 이름 */
+  who?: string;
 }) {
   const existing = useOutsideSchedulesOf(ownerId, ownerName);
   const overlapping = existing.filter(
@@ -493,7 +674,7 @@ function OutsideOverlapWarning({
   if (overlapping.length === 0) return null;
   return (
     <p className="rounded-md border border-amber/30 bg-amber-soft/30 px-3 py-2 text-[11px] font-semibold text-amber">
-      이 기간에 이미 외근·출장이 있습니다:{' '}
+      {who ? `${who}님은 ` : ''}이 기간에 이미 외근·출장이 있습니다:{' '}
       {overlapping.map((v) => `${v.subType}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
     </p>
   );
