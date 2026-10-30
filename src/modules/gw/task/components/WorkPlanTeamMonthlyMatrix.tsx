@@ -489,7 +489,7 @@ export function WorkPlanTeamMonthlyMatrix({
                             )}
                             {/* 전사 주요 일정 내용 */}
                             {content ? (
-                              <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 break-words leading-tight line-clamp-2">
+                              <div className="whitespace-pre-line text-[10px] font-bold text-rose-600 dark:text-rose-400 break-words leading-tight">
                                 {content}
                               </div>
                             ) : !holidayName ? (

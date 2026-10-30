@@ -83,19 +83,20 @@ export function WorkPlanCompanyScheduleModal({
           <label className="block text-[11px] font-bold text-ink2">
             주요 일정 내용
           </label>
-          <input
-            type="text"
+          {/* Enter = 줄바꿈, Ctrl·Cmd+Enter = 저장 */}
+          <textarea
             autoFocus
+            rows={3}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 handleSave();
               }
             }}
-            placeholder="예: 16시. 선포식(7층) / 전체 회식 (17:00~)"
-            className="w-full rounded-xl border border-border-hi bg-panel px-3 py-2 text-[12px] font-semibold text-rose-600 dark:text-rose-400 outline-none focus:border-rose-500 placeholder:text-ink3 placeholder:font-normal"
+            placeholder={'예: 16시. 선포식(7층)\n전체 회식 (17:00~)'}
+            className="w-full resize-y rounded-xl border leading-relaxed border-border-hi bg-panel px-3 py-2 text-[12px] font-semibold text-rose-600 dark:text-rose-400 outline-none focus:border-rose-500 placeholder:text-ink3 placeholder:font-normal"
           />
         </div>
 
