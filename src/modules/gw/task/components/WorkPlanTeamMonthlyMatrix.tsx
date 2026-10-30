@@ -693,7 +693,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
   const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs ${badgeClass}`;
   if (!openable) {
     return (
-      <div title={`${hint} (${timeRangeOf(entry)})`} className={chipClass}>
+      <div title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint} className={chipClass}>
         {body}
       </div>
     );
@@ -707,7 +707,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
       }}
       // 칩을 두 번 눌러도 새 일정 창이 뜨지 않게
       onDoubleClick={(e) => e.stopPropagation()}
-      title={`${hint} (${timeRangeOf(entry)})`}
+      title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint}
       className={`${chipClass} cursor-pointer hover:brightness-95`}
     >
       {body}

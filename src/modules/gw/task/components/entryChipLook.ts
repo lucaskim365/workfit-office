@@ -85,9 +85,14 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
   }
 }
 
-/** 시각 없는 칸 글 — 업무는 '미정'(시간을 모르는 일), 그 밖(외근·출장·휴가 등)은 '종일' */
+/** 휴가 — 종류(연차·반차 등)가 제목에 있으므로 시각 칸은 비운다 */
+const isLeave = (entry: DayEntry) =>
+  (entry.source === 'APPROVAL' && entry.schedule?.category === 'LEAVE') ||
+  (entry.source === 'CALENDAR' && entry.event?.eventType === 'VACATION');
+/** 시각 없는 칸 글 — 업무는 '미정'(시간을 모르는 일), 그 밖(외근·출장 등)은 '종일' */
 const noTimeOf = (entry: DayEntry) => (entry.source === 'ITEM' ? '미정' : '종일');
-export const timeOf = (entry: DayEntry) => (entry.allDay || !entry.startTime ? noTimeOf(entry) : entry.startTime);
-/** 종료 미정이면 '10:00~' */
+export const timeOf = (entry: DayEntry) =>
+  isLeave(entry) ? '' : entry.allDay || !entry.startTime ? noTimeOf(entry) : entry.startTime;
+/** 종료 미정이면 '10:00~'. 휴가는 '' */
 export const timeRangeOf = (entry: DayEntry) =>
-  entry.allDay || !entry.startTime ? noTimeOf(entry) : `${entry.startTime}~${entry.endTime ?? ''}`;
+  isLeave(entry) ? '' : entry.allDay || !entry.startTime ? noTimeOf(entry) : `${entry.startTime}~${entry.endTime ?? ''}`;
