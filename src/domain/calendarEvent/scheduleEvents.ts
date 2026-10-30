@@ -1,7 +1,7 @@
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { scheduleChip } from '@/domain/commute/statusDisplay';
-import type { OutsideWork } from '@/domain/outsideWork/schema';
+import { outsideTitleOf, type OutsideWork } from '@/domain/outsideWork/schema';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { CalendarEvent, CalendarEventType } from './schema';
 
@@ -54,10 +54,11 @@ export function buildScheduleEvents(
     const isLeave = s.category === 'LEAVE';
     const eventType: CalendarEventType = isLeave ? 'VACATION' : 'OUTSIDE';
     const who = nameWithPos(s.drafterId, s.drafterName);
-    const place = s.destination ? ` (${s.destination})` : '';
+    // 외근·출장은 업무계획과 같이 제목(목적 첫 줄)만 — 행선지는 상세에서
+    const subject = outsideTitleOf(s.purpose);
     const title = isLeave
       ? `[휴가] ${who} (${scheduleChip(s).label})`
-      : `${s.category === 'TRIP' ? '[출장]' : '[외근]'} ${who}${place}`;
+      : `${s.category === 'TRIP' ? '[출장]' : '[외근]'} ${who}${subject ? ` · ${subject}` : ''}`;
     const isAllDay = !s.startTime || !s.endTime || s.startTime >= s.endTime;
     const outsideView = fromApprovalSchedule(s);
 
@@ -91,7 +92,8 @@ export function buildScheduleEvents(
     if (!activeUserIds.has(w.ownerUserId)) continue;
     const view = fromOutsideWork(w, (id) => userMap.get(id)?.name);
     const tag = w.category === 'TRIP' ? '[출장]' : '[외근]';
-    const title = `${tag} ${nameWithPos(w.ownerUserId)} (${w.destination})`;
+    const subject = outsideTitleOf(w.purpose);
+    const title = `${tag} ${nameWithPos(w.ownerUserId)}${subject ? ` · ${subject}` : ''}`;
     eachDate(w.startDate, w.endDate, (date) => {
       const id = `CAL-SELF-${w.id}-${date}`;
       outsideViewByEventId.set(id, view);
@@ -103,7 +105,8 @@ export function buildScheduleEvents(
         allDay: w.allDay,
         startTime: w.allDay ? null : w.startTime,
         endTime: w.allDay ? null : w.endTime,
-        memo: w.purpose,
+        // 목적은 제목에 들어가므로 메모는 등록한 메모
+        memo: w.memo,
         visibility: 'COMPANY',
         eventType: 'OUTSIDE',
         attendeeUserIds: [],

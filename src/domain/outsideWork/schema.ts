@@ -80,3 +80,9 @@ export const outsideWorkSchema = z.object({
 
 export type OutsideWork = z.infer<typeof outsideWorkSchema>;
 export type OutsideWorkDraft = Omit<OutsideWork, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'linkedApprovalDocId'>;
+
+/**
+ * 외근·출장 제목 — 목적 칸의 첫 줄(업무계획 칩·캘린더 공통). 행선지는 제목에 넣지 않고 상세에서 본다.
+ */
+export const outsideTitleOf = (purpose?: string | null): string =>
+  (purpose ?? '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? '';
