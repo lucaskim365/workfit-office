@@ -357,6 +357,7 @@ export default function WorkPlanScreen() {
           cellOf={cellOf}
           onClose={() => setEventModal(null)}
           onSaved={setNotice}
+          onSaveMemo={actorActive ? handleSaveMemo : undefined}
         />
       )}
 
