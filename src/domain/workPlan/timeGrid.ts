@@ -90,3 +90,86 @@ export function quickDefaultRange(now: Date): MinuteRange {
   const start = Math.min((Math.floor(minutes / SLOT_MINUTES) + 1) * SLOT_MINUTES, DAY_END - SLOT_MINUTES);
   return { start, end: start + SLOT_MINUTES };
 }
+
+/** 시각 글 — 24:00(하루 끝)도 그대로 쓴다(저장은 toHHmm 이 23:59로 바꾼다) */
+const clockLabel = (minutes: number) => (minutes >= DAY_END ? '24:00' : toHHmm(minutes));
+
+/** 시작 시각 고르기 목록 — 30분 간격, 칸에 없는 지금 값(예: 09:15)은 끼워 넣는다 */
+export function startTimeOptions(current: number | null): number[] {
+  const list = Array.from({ length: DAY_END / SLOT_MINUTES }, (_, i) => i * SLOT_MINUTES);
+  if (current !== null && current >= 0 && current < DAY_END && current % SLOT_MINUTES !== 0) {
+    list.push(current);
+    list.sort((a, b) => a - b);
+  }
+  return list;
+}
+
+/** 종료 시각 고르기 목록 — 시작 뒤 30분 경계부터 24:00까지, 글에 길이를 붙인다('11:00 (1시간)') */
+export function endTimeOptions(start: number, current: number | null): Array<{ minute: number; label: string }> {
+  const minutes: number[] = [];
+  for (let m = (Math.floor(start / SLOT_MINUTES) + 1) * SLOT_MINUTES; m <= DAY_END; m += SLOT_MINUTES) minutes.push(m);
+  if (current !== null && current > start && current <= DAY_END && !minutes.includes(current)) {
+    minutes.push(current);
+    minutes.sort((a, b) => a - b);
+  }
+  return minutes.map((minute) => ({ minute, label: `${clockLabel(minute)} (${durationLabel({ start, end: minute })})` }));
+}
+
+/** 지금 시각이 속한 1시간 칸(시간표의 '지금' 표시) */
+export function hourBlockOf(now: Date): MinuteRange {
+  const start = now.getHours() * 60;
+  return { start, end: start + 60 };
+}
+
+const MERIDIEM = /^(오전|오후|am|pm)/;
+const MERIDIEM_END = /(오전|오후|am|pm)$/;
+
+/**
+ * 시각 직접 입력 → 분(5분 단위 반올림). 못 읽으면 null.
+ * '9:30'·'930'·'14'·'9시 반'·'오후 2시'·'2pm'·'정오'. 오전·오후 없이 1~7시는 오후로 본다(근무시간 기준) —
+ * 앞에 0을 붙이면('02:00') 그대로.
+ */
+export function parseTimeInput(text: string): number | null {
+  let s = text.trim().toLowerCase().replace(/\s+/g, '');
+  if (!s) return null;
+  if (s === '정오') return 12 * 60;
+  if (s === '자정') return 0;
+
+  let meridiem: 'am' | 'pm' | null = null;
+  const lead = s.match(MERIDIEM) ?? s.match(MERIDIEM_END);
+  if (lead) {
+    meridiem = lead[1] === '오전' || lead[1] === 'am' ? 'am' : 'pm';
+    s = s.replace(lead.index === 0 ? MERIDIEM : MERIDIEM_END, '');
+  }
+
+  let hourText: string;
+  let minute = 0;
+  let m: RegExpMatchArray | null;
+  if ((m = s.match(/^(\d{1,2}):(\d{1,2})$/))) {
+    hourText = m[1];
+    minute = Number(m[2]);
+  } else if ((m = s.match(/^(\d{1,2})시(?:(\d{1,2})분?|(반))?$/))) {
+    hourText = m[1];
+    minute = m[3] ? 30 : m[2] ? Number(m[2]) : 0;
+  } else if ((m = s.match(/^(\d{1,2})(\d{2})$/))) {
+    hourText = m[1];
+    minute = Number(m[2]);
+  } else if ((m = s.match(/^\d{1,2}$/))) {
+    hourText = m[0];
+  } else {
+    return null;
+  }
+
+  let hour = Number(hourText);
+  if (minute > 59) return null;
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+  } else if (hour >= 1 && hour <= 7 && !hourText.startsWith('0')) {
+    hour += 12;
+  }
+  const total = hour * 60 + minute;
+  if (total > DAY_END) return null;
+  return Math.min(Math.round(total / 5) * 5, DAY_END);
+}

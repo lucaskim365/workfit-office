@@ -1,10 +1,12 @@
-import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   DAY_END,
   durationLabel,
+  hourBlockOf,
   layoutColumns,
   moveRange,
   rangeFromDrag,
@@ -107,12 +109,20 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const [, setTick] = useState(0);
+  // 지금 시각 — 1분마다 다시 읽어 '지금' 시간대 칸을 옮긴다
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const nowBlock = date === calendarToday(now) ? hourBlockOf(now) : null;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    // 고른 시간이 있으면 그 1시간 전부터, 없으면 08:00부터
+    // 고른 시간이 있으면 그 1시간 전부터, 없고 오늘이면 지금 1시간 전부터, 그 밖엔 08:00부터
     // 시각 글자는 줄 가운데에 걸쳐 있으므로 조금 위에서 시작해야 맨 위 시각 글자가 잘리지 않음
-    const top = value && !allDay ? Math.min(Math.max(value.start - 60, 0), DAY_END - VISIBLE_HOURS * 60) : INITIAL_TOP;
+    const anchor = value && !allDay ? value.start : nowBlock ? nowBlock.start : null;
+    const top = anchor !== null ? Math.min(Math.max(anchor - 60, 0), DAY_END - VISIBLE_HOURS * 60) : INITIAL_TOP;
     if (el) el.scrollTop = (top / DAY_END) * el.scrollHeight - 12;
   }, []);
 
@@ -204,7 +214,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
             {hours.slice(1).map((h) => (
               <span
                 key={h}
-                className="absolute right-1.5 -translate-y-1/2 text-[11px] text-ink3"
+                className={`absolute right-1.5 -translate-y-1/2 text-[11px] ${nowBlock?.start === h * 60 ? 'font-bold text-teal' : 'text-ink3'}`}
                 style={{ top: pct(h * 60) }}
               >
                 {String(h).padStart(2, '0')}:00
@@ -220,6 +230,15 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
             onPointerUp={onGridUp}
             onPointerCancel={endDrag}
           >
+            {/* 지금 시간대(1시간) — 연하게 칠한다(오늘일 때만) */}
+            {nowBlock && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bg-teal/[0.13]"
+                style={{ top: pct(nowBlock.start), height: pct(nowBlock.end - nowBlock.start) }}
+              />
+            )}
+
             {hours.map((h) => (
               <div key={h} className="pointer-events-none absolute inset-x-0">
                 <div className="absolute inset-x-0 border-t border-border" style={{ top: pct(h * 60) }} />

@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   durationLabel,
+  endTimeOptions,
+  hourBlockOf,
+  startTimeOptions,
   layoutColumns,
+  parseTimeInput,
   moveRange,
   quickDefaultRange,
   rangeFromDrag,
@@ -78,4 +82,70 @@ test('빠른 입력 기본값', () => {
   assert.deepEqual(quickDefaultRange(new Date(2026, 9, 21, 10, 0)), { start: 630, end: 660 });
   assert.deepEqual(quickDefaultRange(new Date(2026, 9, 21, 23, 40)), { start: 1410, end: 1440 });
   assert.deepEqual(quickDefaultRange(new Date(2026, 9, 21, 23, 30)), { start: 1410, end: 1440 });
+});
+
+test('시작 시각 목록 — 30분 간격 00:00~23:30, 칸에 없는 지금 값은 끼워 넣는다', () => {
+  const list = startTimeOptions(null);
+  assert.equal(list.length, 48);
+  assert.deepEqual(list.slice(0, 2), [0, 30]);
+  assert.equal(list.at(-1), 1410);
+  const odd = startTimeOptions(555); // 09:15
+  assert.equal(odd.length, 49);
+  assert.deepEqual(odd.slice(18, 21), [540, 555, 570]);
+});
+
+test('종료 시각 목록 — 시작 뒤 30분 간격(24:00까지)과 길이, 칸에 없는 지금 값도 포함', () => {
+  const list = endTimeOptions(1380, null); // 23:00 시작
+  assert.deepEqual(list.map((o) => o.minute), [1410, 1440]);
+  assert.deepEqual(list.map((o) => o.label), ['23:30 (30분)', '24:00 (1시간)']);
+  const odd = endTimeOptions(600, 645); // 10:00 시작, 10:45 끝
+  assert.deepEqual(odd.slice(0, 3).map((o) => o.label), ['10:30 (30분)', '10:45 (45분)', '11:00 (1시간)']);
+  // 시작이 30분 경계가 아니어도 다음 경계부터
+  assert.equal(endTimeOptions(555, null)[0].minute, 570);
+});
+
+test('현재 시간대 — 그 시각이 속한 1시간 칸', () => {
+  assert.deepEqual(hourBlockOf(new Date(2026, 9, 30, 10, 42)), { start: 600, end: 660 });
+  assert.deepEqual(hourBlockOf(new Date(2026, 9, 30, 23, 59)), { start: 1380, end: 1440 });
+});
+
+test('시각 직접 입력 — 여러 표기를 분으로', () => {
+  const cases: Array<[string, number | null]> = [
+    ['9:30', 570],
+    ['09:30', 570],
+    ['930', 570],
+    ['0930', 570],
+    ['1430', 870],
+    ['14', 840],
+    ['9', 540],
+    ['9시', 540],
+    ['9시 30분', 570],
+    ['9시반', 570],
+    ['오전 9시', 540],
+    ['오후 2시', 840],
+    ['오후2:30', 870],
+    ['2pm', 840],
+    ['9:30am', 570],
+    ['12pm', 720],
+    ['12am', 0],
+    ['오전 12시', 0],
+    ['정오', 720],
+    ['24:00', 1440],
+    // 오전·오후 없이 1~7시 = 오후(근무시간 기준), 앞에 0을 붙이면 그대로
+    ['2시', 840],
+    ['2', 840],
+    ['2:30', 870],
+    ['02:00', 120],
+    ['8', 480],
+    // 5분 단위로 반올림
+    ['9:32', 570],
+    ['9:33', 575],
+    // 못 읽는 값
+    ['', null],
+    ['abc', null],
+    ['25', null],
+    ['9:75', null],
+    ['24:30', null],
+  ];
+  for (const [input, expected] of cases) assert.equal(parseTimeInput(input), expected, input);
 });

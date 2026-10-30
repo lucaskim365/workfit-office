@@ -4,8 +4,10 @@ import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
 import { outsideKindLabel } from '@/domain/outsideWork/schema';
-import { DAY_END, durationLabel, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
+import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
+import { DAY_END, durationLabel, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
+import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { useOutsideSchedulesOf } from '@/features/outsideWork/useOutsideWorks';
 import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Button } from '@/shared/ui/Button';
@@ -13,11 +15,14 @@ import { SelectField } from '@/shared/ui/form/SelectField';
 import { TextField } from '@/shared/ui/form/TextField';
 import { outsideLengthLabel, recentDestinations } from './eventFormMapping';
 import { RoomPicker } from './RoomPicker';
+import { TimeCombo } from './TimeCombo';
 import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
 
 export type EventForm = ReturnType<typeof useWorkPlanEventForm>;
 
 const DEFAULT_LENGTH = 60;
+/** 길이 버튼(분) */
+const LENGTH_PRESETS = [30, 60, 90, 120] as const;
 
 const textareaClass =
   'w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-teal disabled:bg-panel-alt';
@@ -388,22 +393,29 @@ function EndDateField({ form }: { form: EventForm }) {
  */
 function TimeFields({ form, stacked = false, showEndDate = true }: { form: EventForm; stacked?: boolean; showEndDate?: boolean }) {
   const { state, set, readOnly } = form;
+  const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
+  const work = { start: toMinutes(policy.workStartTime), end: toMinutes(policy.workEndTime) };
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
   const range = state.range;
   const showTimes = isMeeting || !state.allDay;
 
-  const onStart = (value: string) => {
-    if (!value) return;
-    const start = toMinutes(value);
+  // 시각 = 입력 + 30분 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
+  const onStart = (start: number) => {
+    if (start >= DAY_END) return;
     const length = range ? range.end - range.start : DEFAULT_LENGTH;
     form.setRange({ start, end: Math.min(start + Math.max(length, 1), DAY_END) });
   };
-  const onEnd = (value: string) => {
-    if (!value) return;
-    const end = toMinutes(value);
-    form.setRange({ start: range?.start ?? Math.max(end - DEFAULT_LENGTH, 0), end });
+  const onEnd = (end: number) => {
+    if (!range || end <= range.start) return;
+    form.setRange({ start: range.start, end });
   };
+  const onLength = (length: number) => {
+    if (!range) return;
+    form.setRange({ start: range.start, end: Math.min(range.start + length, DAY_END) });
+  };
+  const startOptions = startTimeOptions(range?.start ?? null).map((minute) => ({ minute, label: toHHmm(minute) }));
+  const endOptions = range ? endTimeOptions(range.start, range.end) : [];
   const dates = (
     <>
       <TextField
@@ -432,27 +444,56 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   );
   const times = showTimes && (
     <>
-      <TextField
-        type="time"
+      <TimeCombo
         aria-label="시작 시각"
-        value={range ? toHHmm(range.start) : ''}
+        className="w-[88px]"
+        value={range?.start ?? null}
+        options={startOptions}
+        anchor={quickDefaultRange(new Date()).start}
+        work={work}
+        placeholder="시작"
         disabled={readOnly}
-        className="w-[124px]"
-        onChange={(e) => onStart(e.target.value)}
+        touch={stacked}
+        onChange={onStart}
       />
       <ArrowRight size={13} className="text-ink3" />
-      <TextField
-        type="time"
+      <TimeCombo
         aria-label="종료 시각"
-        value={range ? toHHmm(range.end) : ''}
-        disabled={readOnly}
-        className="w-[124px]"
-        onChange={(e) => onEnd(e.target.value)}
+        className="w-[88px]"
+        value={range?.end ?? null}
+        options={endOptions}
+        work={work}
+        placeholder="종료"
+        disabled={readOnly || !range}
+        touch={stacked}
+        onChange={onEnd}
       />
       {range && range.end > range.start && (
         <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
       )}
     </>
+  );
+  // 자주 쓰는 길이 — 누르면 시작 기준으로 끝을 정한다
+  const lengths = showTimes && range && !readOnly && (
+    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="길이">
+      {LENGTH_PRESETS.map((length) => {
+        const active = range.end - range.start === length;
+        return (
+          <button
+            key={length}
+            type="button"
+            aria-pressed={active}
+            disabled={range.start + length > DAY_END}
+            onClick={() => onLength(length)}
+            className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors disabled:opacity-40 ${
+              active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+            }`}
+          >
+            {durationLabel({ start: 0, end: length })}
+          </button>
+        );
+      })}
+    </div>
   );
   const allDayToggle = !isMeeting && (
     <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
@@ -475,14 +516,18 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
           {allDayToggle}
         </div>
         {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
+        {lengths}
       </div>
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {dates}
-      {times}
-      {allDayToggle}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {dates}
+        {times}
+        {allDayToggle}
+      </div>
+      {lengths}
     </div>
   );
 }
