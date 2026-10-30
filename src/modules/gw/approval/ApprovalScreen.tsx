@@ -662,7 +662,7 @@ export default function ApprovalScreen() {
                     <button
                       key={b}
                       onClick={() => handleSelectBox(b)}
-                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm) ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
@@ -925,6 +925,25 @@ export default function ApprovalScreen() {
                     { key: 'completed', label: '완료' },
                   ]}
                 />
+              )}
+              {box === '완료' && (
+                // 서식 — 사이드바 바로가기와 같은 값. 여기서는 내 완료함에 있는 서식을 모두 고를 수 있다
+                <select
+                  value={completedForm ?? ''}
+                  onChange={(e) => setCompletedForm(e.target.value || null)}
+                  title="서식"
+                  className={`h-[26px] max-w-[160px] rounded-lg border px-2 text-[11.5px] font-bold outline-none cursor-pointer transition-colors ${completedForm ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel text-ink2 hover:border-teal'}`}
+                >
+                  <option value="">전체 서식</option>
+                  {completedForm && !completedFormCounts.some((f) => f.code === completedForm) && (
+                    <option value={completedForm}>{formNameOf(completedForm)} 0</option>
+                  )}
+                  {completedFormCounts.map((f) => (
+                    <option key={f.code} value={f.code}>
+                      {formNameOf(f.code)} {f.count}
+                    </option>
+                  ))}
+                </select>
               )}
               {box === '완료' && (
                 <FilterSegment
