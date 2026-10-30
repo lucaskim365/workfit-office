@@ -648,6 +648,8 @@ export function WorkPlanTeamMonthlyMatrix({
 const SPAN_LANE_HEIGHT = 20;
 /** 칸 안쪽 여백(p-2)과 같은 값 */
 const CELL_PADDING = 8;
+/** 메모 글을 한 번 눌렀을 때 더블클릭인지 기다리는 시간(ms) */
+const DOUBLE_CLICK_WAIT = 250;
 
 /** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
@@ -730,6 +732,18 @@ function CellMemo({
     setDraft(text ?? '');
   };
 
+  /*
+    메모 글 누르기 = 고치기, 칸 더블클릭 = 업무 추가. 더블클릭의 첫 번째 누름이 메모 고치기를 먼저 열지 않게
+    고치기는 잠깐 기다렸다 열고, 그 사이 두 번째 누름이 오면 취소한다(더블클릭은 칸으로 올려 보낸다).
+  */
+  const editTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(editTimer.current), []);
+  const startEditSoon = () => {
+    window.clearTimeout(editTimer.current);
+    editTimer.current = window.setTimeout(startEdit, DOUBLE_CLICK_WAIT);
+  };
+  const cancelEdit = () => window.clearTimeout(editTimer.current);
+
   const finish = async () => {
     if (draft === null || saving || !onSave) return;
     if (draft.trim() === (text ?? '').trim()) {
@@ -809,7 +823,8 @@ function CellMemo({
           onSave
             ? (e) => {
                 e.stopPropagation();
-                startEdit();
+                if (e.detail > 1) return;
+                startEditSoon();
               }
             : undefined
         }
@@ -820,7 +835,7 @@ function CellMemo({
               }
             : undefined
         }
-        onDoubleClick={onSave ? stop : undefined}
+        onDoubleClick={onSave ? cancelEdit : undefined}
         className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'} ${
           onSave ? 'cursor-text rounded hover:bg-panel-alt/60' : ''
         }`}
