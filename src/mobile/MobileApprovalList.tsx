@@ -76,7 +76,7 @@ export default function MobileApprovalList() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
@@ -372,7 +372,7 @@ export default function MobileApprovalList() {
               onClick={() => {
                 setBox(b.key);
                 exitSelectMode();
-                setTodoFilter('pending');
+                setTodoFilter('all');
                 setDraftFilter('all');
                 setDoneFilter('all');
                 setRejectFilter('all');
