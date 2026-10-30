@@ -278,40 +278,30 @@ export function WorkPlanTeamMonthlyMatrix({
   const [yearNum, monthNum] = currentMonth.split('-').map(Number);
   const stickyWeek = visibleWeekNum !== null ? weeks.find((w) => w.weekNum === visibleWeekNum) : undefined;
 
-  /** 주차 날짜 머리행의 칸들 (주차 이름 + 월~일) — 본표와 상단 고정 머리행이 함께 쓴다 */
+  /**
+   * 주차 날짜 머리행의 칸들 (주차 이름 + 월~일) — 본표와 상단 고정 머리행이 함께 쓴다.
+   * 한 줄: '요일 날짜'. 오늘은 날짜를 청록 원으로, 토요일 파랑·일요일·공휴일 빨강 글(공휴일 이름은 옆에), 다른 달은 'M/D' 흐리게.
+   */
   const renderWeekHeaderCells = (week: WeekBlock) => (
     <>
-      {/* 주차 성명 열 헤더 */}
-      <th className="border-r border-border p-2 text-center text-[11px] font-bold text-ink bg-panel-alt/80">
-        <div className="flex flex-col items-center justify-center gap-0.5">
-          <span className="text-[11.5px] font-extrabold text-ink flex items-center gap-1">
-            <span>{week.weekNum}주차</span>
-          </span>
-          {week.hasToday ? (
-            <span className="rounded bg-teal px-1.5 py-0.2 text-[8px] font-bold text-white shadow-2xs">
-              이번 주
-            </span>
-          ) : (
-            <span className="text-[9px] text-ink3 font-medium">
-              {week.days[0].monthNum}/{week.days[0].dayNum}~{week.days[6].monthNum}/{week.days[6].dayNum}
-            </span>
-          )}
-        </div>
+      <th
+        title={`${week.days[0].monthNum}/${week.days[0].dayNum}~${week.days[6].monthNum}/${week.days[6].dayNum}`}
+        className={`border-r border-border px-2 py-1 text-center text-[11.5px] font-extrabold ${week.hasToday ? 'text-sky-700 dark:text-sky-300' : 'text-ink2'}`}
+      >
+        {week.weekNum}주차
       </th>
 
-      {/* 월 ~ 일 (7개 요일 열 헤더) */}
       {week.days.map((d) => {
         const isOtherMonth = !d.inCurrentMonth;
         const targetMonth = d.dateStr.slice(0, 7);
-
-        // 빨간날(일요일 또는 공휴일): 연한 살구/장미톤, 토요일: 연한 파랑
-        const headerBg = d.isRedDay
-          ? 'bg-rose-100/75 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-extrabold'
+        const tone = d.isRedDay ? 'text-rose-600 dark:text-rose-400' : d.isSat ? 'text-blue-600 dark:text-blue-400' : 'text-ink';
+        const tint = d.isToday
+          ? 'bg-sky-50 dark:bg-sky-950/30'
+          : d.isRedDay
+          ? 'bg-rose-50/70 dark:bg-rose-950/20'
           : d.isSat
-          ? 'bg-blue-100/75 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
-          : d.isToday
-          ? 'bg-teal-50 dark:bg-teal-950/30 text-teal font-extrabold'
-          : 'bg-panel-alt/60 text-ink';
+          ? 'bg-blue-50/70 dark:bg-blue-950/20'
+          : '';
 
         return (
           <th
@@ -321,27 +311,23 @@ export function WorkPlanTeamMonthlyMatrix({
                 setCurrentMonth(targetMonth);
               }
             }}
-            className={`${dayColBorderClass(d.isToday)} p-1.5 text-center transition-all ${headerBg} ${
-              isOtherMonth
-                ? 'opacity-40 hover:opacity-100 hover:bg-teal-soft/30 hover:text-teal cursor-pointer'
-                : ''
+            title={d.holidayName}
+            className={`${dayColBorderClass(d.isToday)} px-1.5 py-1 transition-colors ${tint} ${tone} ${
+              isOtherMonth ? 'opacity-45 hover:opacity-100 cursor-pointer' : ''
             }`}
           >
-            <div className="flex flex-col items-center justify-center gap-0.5">
-              <div className="flex items-center justify-center gap-1">
-                <span className="text-[12px] font-extrabold">{d.dayNum}</span>
-                <span className="text-[10px] opacity-80">({d.weekdayKo})</span>
-                {isOtherMonth && (
-                  <span className="text-[8.5px] font-semibold text-teal opacity-90">
-                    ({d.monthNum}월)
-                  </span>
-                )}
-                {d.isToday && (
-                  <span className="rounded bg-teal px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
-                    오늘
-                  </span>
-                )}
-              </div>
+            <div className="flex min-w-0 items-center justify-center gap-1 leading-none">
+              <span className={`text-[10.5px] ${d.isToday ? 'font-extrabold text-sky-700 dark:text-sky-300' : 'font-semibold opacity-75'}`}>{d.weekdayKo}</span>
+              {d.isToday ? (
+                <span className="grid h-[1.6em] min-w-[1.6em] place-items-center rounded-full bg-sky-600 px-1 text-[12px] font-extrabold tabular-nums text-white" aria-label="오늘">
+                  {d.dayNum}
+                </span>
+              ) : (
+                <span className="text-[12.5px] font-extrabold tabular-nums">
+                  {isOtherMonth ? `${d.monthNum}/${d.dayNum}` : d.dayNum}
+                </span>
+              )}
+              {d.holidayName && <span className="min-w-0 truncate text-[9.5px] font-bold">{d.holidayName}</span>}
             </div>
           </th>
         );
@@ -349,14 +335,14 @@ export function WorkPlanTeamMonthlyMatrix({
     </>
   );
 
-  const weekHeaderRowClass = (week: WeekBlock) => (week.hasToday ? 'bg-teal-soft/20' : 'bg-panel-alt/75');
+  const weekHeaderRowClass = (week: WeekBlock) => (week.hasToday ? 'bg-teal-soft/15' : 'bg-panel-alt/60');
 
   return (
     <div className="space-y-4">
       {/* ── 월간 상단 툴바 (스크롤해도 상단 고정) ── */}
       <div ref={stickyBarRef} className="sticky top-[var(--shell-top)] z-40">
       <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel px-2.5 py-1.5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
             <button
@@ -432,7 +418,7 @@ export function WorkPlanTeamMonthlyMatrix({
             stickyWeekScrollRef.current = el;
             if (el && tableScrollRef.current) el.scrollLeft = tableScrollRef.current.scrollLeft;
           }}
-          className="absolute inset-x-0 top-full mt-1.5 overflow-hidden rounded-lg border border-border bg-panel shadow-md"
+          className="absolute inset-x-0 top-full mt-1 overflow-hidden rounded-lg border border-border bg-panel shadow-md"
         >
           <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-[11px]">
             {MATRIX_COLGROUP}
