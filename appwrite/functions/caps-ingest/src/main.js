@@ -22,7 +22,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Client, Databases, Query } from 'node-appwrite';
 import { z } from 'zod';
 import { resolveUserId } from './token.js';
-import { affiliationOf, headScope, matchesExecMapping } from './scope.js';
+import { affiliationOf, headDepts, matchesExecMapping, memberUserIds } from './scope.js';
 
 /* ------------------------------------------------------------------ 계약 §2 인증 */
 
@@ -238,35 +238,79 @@ function hasFullAccessTitle(user) {
  * 3. 부서장(`departments.headUserId` 또는 팀장 직책) -> 소속 부서 임직원만 (`empIds: Set(...)`)
  * 4. 일반 사원 -> 본인만
  */
+/**
+ * 값 목록 중 하나와 같은 문서 전부 — Appwrite 는 equal 한 번에 값을 100개까지 받으므로 나눠 묻는다.
+ * 값이 없으면 묻지 않는다.
+ */
+async function listWhereIn(dbs, DB, collection, key, values, log) {
+  const unique = [...new Set(values.filter(Boolean))];
+  const out = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    out.push(...(await listAll(dbs, DB, collection, [Query.equal(key, unique.slice(i, i + 100))], log)));
+  }
+  return out;
+}
+
+/**
+ * 인명관리 프로필의 소속을 이름으로 풀 때 쓰는 기준정보 — 그 프로필들이 가리키는 부서·직급·직책만.
+ * ID 를 채운 프로필은 ID 로, 아직 안 채운 예전 프로필은 이름 칸으로 찾는다(scope.js storedIds 와 같은 규칙).
+ */
+async function mastersOf(dbs, DB, profiles, log) {
+  const hasIds = (p) => Boolean(p.deptId || p.positionId || p.jobTitleId);
+  const withIds = profiles.filter(hasIds);
+  const legacy = profiles.filter((p) => !hasIds(p));
+  const pick = async (collection, idKey, nameKey) => {
+    const [byId, byName] = await Promise.all([
+      listWhereIn(dbs, DB, collection, '$id', withIds.map((p) => p[idKey]), log),
+      listWhereIn(dbs, DB, collection, 'name', legacy.map((p) => p[nameKey]), log),
+    ]);
+    return [...byId, ...byName];
+  };
+  const [depts, positions, jobTitles] = await Promise.all([
+    pick('departments', 'deptId', 'dept'),
+    pick('positions', 'positionId', 'position'),
+    pick('jobTitles', 'jobTitleId', 'jobTitle'),
+  ]);
+  return { depts, positions, jobTitles };
+}
+
+/**
+ * 요청자의 열람 범위를 정하는 데 필요한 것만 조회한다.
+ *
+ * 예전에는 요청마다 직원·계정·인명관리·부서·직급·직책을 **전량** 받아 그 안에서 찾았다. 화면이 열릴 때 요청
+ * 4~5개가 한꺼번에 오면 같은 전량 조회가 30번 넘게 몰려 일부가 30초 동기 실행 한도에 걸려 실패했다
+ * (운영 2026-10-29 13시대: 조회 77건 중 54건). 판정 규칙은 그대로 두고, 각 단계에 걸리는 문서만 조건으로 묻는다.
+ *   - 일반 사원: 내 계정·내 인명관리·내 소속 기준정보·내 이름의 직원·임원/운영자 매핑
+ *   - 부서장: 위 + 내가 맡은 부서, 그 부서의 인명관리·계정·직원
+ * 직원(employees)과는 예전처럼 이름이 같은지로 잇는다(이름 앞뒤 공백까지 같아야 한다).
+ */
 async function resolveViewerScope(dbs, DB, uid, log) {
-  const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
+  const [me, myProfiles, execMappings] = await Promise.all([
+    dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)]).then((r) => r.documents[0]),
+    dbs.listDocuments(DB, 'employeeProfiles', [Query.equal('userId', uid), Query.limit(1)]).then((r) => r.documents),
+    // EXEC(임원)·OPERATOR(시스템 관리자) 매핑. 못 읽으면 이 단계만 건너뛴다
+    dbs
+      .listDocuments(DB, 'roleMappings', [Query.equal('roleCode', ['EXEC', 'OPERATOR']), Query.limit(100)])
+      .then((r) => r.documents)
+      .catch((err) => {
+        log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
+        return [];
+      }),
+  ]);
   const myName = me ? String(me.name).trim() : '';
 
   // 소속은 인명관리(기준정보 ID)로 판단한다 — 계정의 dept·position·jobTitle 칸은 옛 사본이라 보지 않는다.
-  const [employees, users, profiles, depts, positions, jobTitles] = await Promise.all([
-    listAll(dbs, DB, 'employees', [], log),
-    listAll(dbs, DB, 'users', [], log),
-    listAll(dbs, DB, 'employeeProfiles', [], log),
-    listAll(dbs, DB, 'departments', [], log),
-    listAll(dbs, DB, 'positions', [], log),
-    listAll(dbs, DB, 'jobTitles', [], log),
+  const [masters, myEmployees] = await Promise.all([
+    mastersOf(dbs, DB, myProfiles, log),
+    myName ? listWhereIn(dbs, DB, 'employees', 'name', [myName], log) : [],
   ]);
-  const aff = affiliationOf(uid, profiles, { depts, positions, jobTitles });
-  const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
-  const myEmpId = matched === undefined ? null : Number(matched.empId);
+  const aff = affiliationOf(uid, myProfiles, masters);
+  const myEmpId = myEmployees.length > 0 ? Number(myEmployees[0].empId) : null;
 
   // 1. roleMappings 컬렉션에서 EXEC(임원) 또는 OPERATOR(시스템 관리자) 매핑 검사
-  try {
-    const mappings = await dbs.listDocuments(DB, 'roleMappings', [
-      Query.equal('roleCode', ['EXEC', 'OPERATOR']),
-      Query.limit(100),
-    ]);
-    if (mappings.documents.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
-      log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
-      return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
-    }
-  } catch (err) {
-    log(`roleMappings 조회 스킵/실패: ${err?.message || err}`);
+  if (execMappings.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
+    log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
+    return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
   }
 
   // 2. 직급/직책에 임원 명칭 포함 또는 레거시 화이트리스트
@@ -277,13 +321,28 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
   // 3. 부서장이면 맡은 부서(인명관리 부서 ID 기준) 소속 전원, 아니면 나 하나.
-  const { deptNames, memberNames } = headScope({ uid, aff, depts, profiles, users, masters: { depts, positions, jobTitles } });
-  const names = deptNames.length > 0 ? memberNames : new Set([myName]);
+  const headed = await listAll(dbs, DB, 'departments', [Query.equal('headUserId', uid)], log);
+  const { deptIds, deptNames } = headDepts({ uid, aff, depts: headed, me });
+  if (deptIds.length === 0) {
+    const empIds = new Set(myEmployees.map((e) => Number(e.empId)));
+    log(`scope uid=${uid} kind=self 부서=- 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+    return { empIds, kind: 'self', deptNames: [], myEmpId, myName };
+  }
 
-  const empIds = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
-  const kind = deptNames.length > 0 ? 'head' : 'self';
-  log(`scope uid=${uid} kind=${kind} 부서=${deptNames.join(',') || '-'} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
-  return { empIds, kind, deptNames, myEmpId, myName };
+  // 맡은 부서의 인명관리 — 부서 ID 가 맞는 것 + ID 를 아직 안 채운 예전 프로필 중 부서 이름이 맞는 것
+  const [byId, byName] = await Promise.all([
+    listWhereIn(dbs, DB, 'employeeProfiles', 'deptId', deptIds, log),
+    listWhereIn(dbs, DB, 'employeeProfiles', 'dept', deptNames, log),
+  ]);
+  const headedMasters = { depts: [...headed, ...masters.depts], positions: [], jobTitles: [] };
+  const memberIds = memberUserIds([...byId, ...byName], deptIds, headedMasters);
+  const members = await listWhereIn(dbs, DB, 'users', 'id', [...memberIds], log);
+  const memberNames = members.map((u) => String(u.name).trim());
+  const employees = await listWhereIn(dbs, DB, 'employees', 'name', memberNames, log);
+
+  const empIds = new Set(employees.map((e) => Number(e.empId)));
+  log(`scope uid=${uid} kind=head 부서=${deptNames.join(',')} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+  return { empIds, kind: 'head', deptNames, myEmpId, myName };
 }
 
 /** 한 번에 가져올 수 있는 상한. Appwrite `limit`의 최댓값이다. */
@@ -314,6 +373,64 @@ async function listAll(dbs, DB, collection, queries, log, cap = 5000) {
     cursor = page.documents[page.documents.length - 1].$id;
   }
   return out;
+}
+
+/** 근태 한 줄 — 화면에 내려주는 모양(조회 요청 모두 같다). */
+const toRecord = (d) => ({
+  empId: Number(d.empId),
+  date: String(d.date),
+  inAt: d.inAt ?? null,
+  outAt: d.outAt ?? null,
+  basicMin: Number(d.basicMin ?? 0),
+  overMin: Number(d.overMin ?? 0),
+  nightMin: Number(d.nightMin ?? 0),
+  lateMin: Number(d.lateMin ?? 0),
+  totalMin: Number(d.totalMin ?? 0),
+  status: String(d.status || 'unknown'),
+});
+
+/** 열람 범위 중 화면에 알려줄 것 */
+const viewerOf = (scope) => ({ empId: scope.myEmpId, name: scope.myName, kind: scope.kind, deptNames: scope.deptNames });
+
+const canSeeIn = (scope) => (empId) => scope.empIds === null || scope.empIds.has(Number(empId));
+
+/** 볼 수 있는 직원. 관리자만 전 직원을 받는다. 나머지는 볼 수 있는 사번만 묻는다(대개 본인 1명). */
+async function readEmployees(dbs, DB, scope, log) {
+  const rows = scope.empIds === null
+    ? await listAll(dbs, DB, 'employees', [], log)
+    : (await listWhereIn(dbs, DB, 'employees', 'empId', [...scope.empIds], log)).filter((d) => canSeeIn(scope)(d.empId));
+  return rows.map((d) => ({
+    empId: Number(d.empId),
+    name: String(d.name ?? ''),
+    active: Boolean(d.active),
+    retireDate: d.retireDate ?? null,
+  }));
+}
+
+/**
+ * 한 직원의 한 달. 권한 확인은 부르는 쪽이 한다.
+ * `idx_empId_date`를 그대로 타는 질의다. 전건을 받아 화면에서 거르면 근태처럼
+ * 직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
+ */
+async function readMonth(dbs, DB, empId, month, log) {
+  const rows = await listAll(dbs, DB, 'attendance', [
+    Query.equal('empId', empId),
+    Query.greaterThanEqual('date', `${month}-01`),
+    Query.lessThanEqual('date', `${month}-31`),
+  ], log);
+  return rows.map(toRecord);
+}
+
+/**
+ * 한 달치 전 직원 중 볼 수 있는 것. 직원 수 × 일수라 셋 중 가장 크다(300명이면 6천 건대). 그래도
+ * 커서로 전량을 가져온다 — 집계 화면에서 잘리면 합계가 조용히 틀린다.
+ */
+async function readMonthAll(dbs, DB, scope, month, log) {
+  const rows = await listAll(dbs, DB, 'attendance', [
+    Query.greaterThanEqual('date', `${month}-01`),
+    Query.lessThanEqual('date', `${month}-31`),
+  ], log, 20000);
+  return rows.filter((d) => canSeeIn(scope)(d.empId)).map(toRecord);
 }
 
 /**
@@ -349,7 +466,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
       근태를 열 수 있다. null이면 제한 없음(관리자).
     */
     const scope = await resolveViewerScope(dbs, DB, uid, log);
-    const canSee = (empId) => scope.empIds === null || scope.empIds.has(Number(empId));
+    const canSee = canSeeIn(scope);
 
     switch (action) {
       /*
@@ -358,26 +475,11 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         `empId`는 "내 근태"가 쓸 본인 사번이고, 이름이 안 맞으면 null이다.
       */
       case 'viewerScope': {
-        return res.json({
-          data: {
-            empId: scope.myEmpId,
-            name: scope.myName,
-            kind: scope.kind,
-            deptNames: scope.deptNames,
-          },
-        });
+        return res.json({ data: viewerOf(scope) });
       }
 
       case 'listEmployees': {
-        const rows = (await listAll(dbs, DB, 'employees', [], log)).filter((d) => canSee(d.empId));
-        return res.json({
-          data: rows.map((d) => ({
-            empId: Number(d.empId),
-            name: String(d.name ?? ''),
-            active: Boolean(d.active),
-            retireDate: d.retireDate ?? null,
-          })),
-        });
+        return res.json({ data: await readEmployees(dbs, DB, scope, log) });
       }
 
       case 'listMonth': {
@@ -387,29 +489,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
           return readFail(res, 'INVALID_INPUT', '사번과 조회 월(YYYY-MM)이 필요합니다.', 400);
         }
         if (!canSee(empId)) return readFail(res, 'FORBIDDEN', '이 직원의 근태를 볼 권한이 없습니다.', 403);
-        /*
-          `idx_empId_date`를 그대로 타는 질의다. 전건을 받아 화면에서 거르면 근태처럼
-          직원×일수로 늘어나는 데이터에서 조회 상한에 먼저 걸린다.
-        */
-        const rows = await listAll(dbs, DB, 'attendance', [
-          Query.equal('empId', empId),
-          Query.greaterThanEqual('date', `${month}-01`),
-          Query.lessThanEqual('date', `${month}-31`),
-        ], log);
-        return res.json({
-          data: rows.map((d) => ({
-            empId: Number(d.empId),
-            date: String(d.date),
-            inAt: d.inAt ?? null,
-            outAt: d.outAt ?? null,
-            basicMin: Number(d.basicMin ?? 0),
-            overMin: Number(d.overMin ?? 0),
-            nightMin: Number(d.nightMin ?? 0),
-            lateMin: Number(d.lateMin ?? 0),
-            totalMin: Number(d.totalMin ?? 0),
-            status: String(d.status || 'unknown'),
-          })),
-        });
+        return res.json({ data: await readMonth(dbs, DB, empId, month, log) });
       }
 
       case 'listDay': {
@@ -423,20 +503,7 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
           직원이 몇 명이든 전량을 가져온다 — 잘리면 "그날 안 온 사람"과 구분이 안 된다.
         */
         const rows = (await listAll(dbs, DB, 'attendance', [Query.equal('date', date)], log)).filter((d) => canSee(d.empId));
-        return res.json({
-          data: rows.map((d) => ({
-            empId: Number(d.empId),
-            date: String(d.date),
-            inAt: d.inAt ?? null,
-            outAt: d.outAt ?? null,
-            basicMin: Number(d.basicMin ?? 0),
-            overMin: Number(d.overMin ?? 0),
-            nightMin: Number(d.nightMin ?? 0),
-            lateMin: Number(d.lateMin ?? 0),
-            totalMin: Number(d.totalMin ?? 0),
-            status: String(d.status || 'unknown'),
-          })),
-        });
+        return res.json({ data: rows.map(toRecord) });
       }
 
       case 'listMonthAll': {
@@ -444,28 +511,28 @@ async function handleAppRead({ req, res, log, error, endpoint, projectId, apiKey
         if (!/^\d{4}-\d{2}$/.test(month)) {
           return readFail(res, 'INVALID_INPUT', '조회 월(YYYY-MM)이 필요합니다.', 400);
         }
-        /*
-          한 달치 전 직원. 직원 수 × 일수라 셋 중 가장 크다(300명이면 6천 건대). 그래도
-          커서로 전량을 가져온다 — 집계 화면에서 잘리면 합계가 조용히 틀린다.
-        */
-        const rows = (await listAll(dbs, DB, 'attendance', [
-          Query.greaterThanEqual('date', `${month}-01`),
-          Query.lessThanEqual('date', `${month}-31`),
-        ], log, 20000)).filter((d) => canSee(d.empId));
-        return res.json({
-          data: rows.map((d) => ({
-            empId: Number(d.empId),
-            date: String(d.date),
-            inAt: d.inAt ?? null,
-            outAt: d.outAt ?? null,
-            basicMin: Number(d.basicMin ?? 0),
-            overMin: Number(d.overMin ?? 0),
-            nightMin: Number(d.nightMin ?? 0),
-            lateMin: Number(d.lateMin ?? 0),
-            totalMin: Number(d.totalMin ?? 0),
-            status: String(d.status || 'unknown'),
-          })),
-        });
+        return res.json({ data: await readMonthAll(dbs, DB, scope, month, log) });
+      }
+
+      /*
+        화면을 열 때 필요한 것을 한 번에 — 내 열람 범위·볼 수 있는 직원·내 한 달(·관리자면 전 직원 한 달).
+        따로 부르면 요청 4~5개가 동시에 서버 작업자를 붙잡고 기다려, 함수가 DB 를 읽을 작업자가 모자라
+        30초씩 멈췄다(개발 서버 실측: DB 를 읽는 동기 실행 동시 8개는 0.2초, 16개는 7개가 30초 멈춤.
+        DB 를 안 읽는 실행은 24개도 0.2초). 응답 내용은 각 요청과 같다.
+        myMonth: 내 사번을 모르거나 볼 수 없으면 null. monthAll: includeAll 이 아니면 null.
+      */
+      case 'bootstrap': {
+        const month = String(payload.month || '');
+        if (!/^\d{4}-\d{2}$/.test(month)) {
+          return readFail(res, 'INVALID_INPUT', '조회 월(YYYY-MM)이 필요합니다.', 400);
+        }
+        const myEmpId = scope.myEmpId;
+        const [employees, myMonth, monthAll] = await Promise.all([
+          readEmployees(dbs, DB, scope, log),
+          myEmpId !== null && canSee(myEmpId) ? readMonth(dbs, DB, myEmpId, month, log) : null,
+          payload.includeAll ? readMonthAll(dbs, DB, scope, month, log) : null,
+        ]);
+        return res.json({ data: { viewer: viewerOf(scope), employees, myMonth, monthAll } });
       }
 
       default:

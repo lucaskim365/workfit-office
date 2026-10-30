@@ -1583,7 +1583,7 @@ function ApprovalDraftInner({
         {/* 중앙 A4 문서 캔버스 (배경색 #878d90으로 백색 A4 용지와 완벽한 대비 및 세로 스크롤) */}
         <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex flex-col items-center bg-[#878d90] transition-colors">
           {cancelTargetDoc && (
-            <div className="mx-auto mb-5 w-full max-w-[800px] rounded-xl border border-rose-500/40 bg-rose-50/95 dark:bg-zinc-900 p-4 text-[12px] text-rose-950 dark:text-rose-200 shadow-md backdrop-blur-xs flex items-center justify-between animate-fade-in">
+            <div className="mx-auto mb-5 w-full max-w-[800px] rounded-xl border border-rose-500/40 bg-rose-50/95 p-4 text-[12px] text-rose-950 shadow-md backdrop-blur-xs flex items-center justify-between animate-fade-in">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
                 <div>

@@ -52,21 +52,34 @@ export function matchesExecMapping(m, { uid, empNo, myName, aff }) {
  * 맡은 부서가 없어도 팀장·부서장 직책(또는 테스트 부서장 testB)이면 자기 부서를 본다.
  */
 export function headScope({ uid, aff, depts, profiles, users, masters = { depts, positions: [], jobTitles: [] } }) {
-  const headed = depts.filter((d) => d.headUserId === uid);
-  let deptIds = headed.map((d) => d.$id);
-  let deptNames = headed.map((d) => String(d.name));
-
   const me = users.find((u) => u.id === uid);
-  if (deptIds.length === 0 && aff.deptId) {
-    const jobText = `${aff.position} ${aff.jobTitle} ${me?.name ?? ''}`.toLowerCase();
-    if (jobText.includes('팀장') || jobText.includes('부서장') || jobText.includes('testb')) {
-      deptIds = [aff.deptId];
-      deptNames = [aff.dept];
-    }
-  }
-
-  const ids = new Set(deptIds);
-  const memberIds = new Set(profiles.filter((p) => ids.has(storedIds(p, masters).deptId)).map((p) => p.userId));
+  const { deptIds, deptNames } = headDepts({ uid, aff, depts, me });
+  const memberIds = memberUserIds(profiles, deptIds, masters);
   const memberNames = new Set(users.filter((u) => memberIds.has(u.id)).map((u) => String(u.name).trim()));
   return { deptNames, memberNames };
+}
+
+/**
+ * 부서장이 맡은 부서 — depts 에는 이 사람이 부서장(headUserId)인 부서만 넘겨도 된다(main.js 는 그것만 조회한다).
+ * 맡은 부서가 없어도 팀장·부서장 직책(또는 테스트 부서장 testB)이면 자기 부서.
+ */
+export function headDepts({ uid, aff, depts, me }) {
+  const headed = depts.filter((d) => d.headUserId === uid);
+  if (headed.length > 0) return { deptIds: headed.map((d) => d.$id), deptNames: headed.map((d) => String(d.name)) };
+  if (aff.deptId) {
+    const jobText = `${aff.position} ${aff.jobTitle} ${me?.name ?? ''}`.toLowerCase();
+    if (jobText.includes('팀장') || jobText.includes('부서장') || jobText.includes('testb')) {
+      return { deptIds: [aff.deptId], deptNames: [aff.dept] };
+    }
+  }
+  return { deptIds: [], deptNames: [] };
+}
+
+/**
+ * 그 부서들의 인명관리 소속자(계정 ID). profiles 에는 후보만 넘겨도 된다 — 부서 ID 가 맞는 프로필과,
+ * ID 를 아직 안 채운 예전 프로필 중 부서 이름이 맞는 것(masters.depts 로 이름 → ID).
+ */
+export function memberUserIds(profiles, deptIds, masters) {
+  const ids = new Set(deptIds);
+  return new Set(profiles.filter((p) => ids.has(storedIds(p, masters).deptId)).map((p) => p.userId));
 }

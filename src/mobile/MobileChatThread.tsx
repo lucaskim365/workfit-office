@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
@@ -7,7 +7,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, useRoomFiles } from '@/features/chat/useChatThread';
+import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
@@ -26,30 +27,17 @@ import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
+import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
+import { CHAT_TEXT_SIZES, chatTextScaleStyle, setChatTextSize, useChatTextSize } from './chatTextSize';
 import { statusColor } from './MobileApprovalList';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 
-/** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
-export function getAvatarStyle(userId: string): { bg: string; text: string } {
-  const PASTEL_PALETTE = [
-    { bg: '#e0f2fe', text: '#0369a1' }, // 파스텔 스카이 블루
-    { bg: '#fce7f3', text: '#be185d' }, // 파스텔 핑크
-    { bg: '#dcfce7', text: '#15803d' }, // 파스텔 민트/그린
-    { bg: '#fef9c3', text: '#a16207' }, // 파스텔 옐로우
-    { bg: '#f3e8ff', text: '#6b21a8' }, // 파스텔 퍼플
-    { bg: '#ffedd5', text: '#c2410c' }, // 파스텔 오렌지
-    { bg: '#e0e7ff', text: '#3730a3' }, // 파스텔 인디고
-  ];
-  if (!userId) return PASTEL_PALETTE[0];
-  let sum = 0;
-  for (let i = 0; i < userId.length; i++) {
-    sum += userId.charCodeAt(i);
-  }
-  return PASTEL_PALETTE[sum % PASTEL_PALETTE.length];
-}
+// 아바타 색 — 웹·모바일 공용(features/chat/avatarStyle)
+export { getAvatarStyle } from '@/features/chat/avatarStyle';
+import { getAvatarStyle } from '@/features/chat/avatarStyle';
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
@@ -102,13 +90,17 @@ export default function MobileChatThread() {
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [hasNewMsg, setHasNewMsg] = useState(false);
-  const prevLengthRef = useRef(messages.length);
+  /** 맨 아래 메시지 — 바뀌면 새 메시지가 온 것(위로 올려 옛 메시지를 받아 길이만 늘어난 것과 구분) */
+  const lastId = messages.at(-1)?.id ?? null;
+  const prevLastIdRef = useRef(lastId);
   const isInitialLoadRef = useRef(true);
   const prevRoomIdRef = useRef(roomId);
 
   const [showFileBox, setShowFileBox] = useState(false);
+  /** 파일함 — 안 받은 옛 메시지의 파일까지(열었을 때 서버에서 받는다. 받기 전엔 받아 둔 것으로) */
+  const { data: fileMessages } = useRoomFiles(roomId, showFileBox);
   const filesInRoom = useMemo(() => {
-    return messages
+    return (fileMessages ?? messages)
       .filter((m) => m.attachment)
       .map((m) => ({
         messageId: m.id,
@@ -118,7 +110,7 @@ export default function MobileChatThread() {
         type: m.type,
       }))
       .reverse();
-  }, [messages]);
+  }, [fileMessages, messages]);
 
   const copyToClipboard = async (val: string) => {
     try {
@@ -168,14 +160,41 @@ export default function MobileChatThread() {
   };
   const [viewer, setViewer] = useState<{ attachments: Attachment[]; initialIdx: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [textSizeOpen, setTextSizeOpen] = useState(false);
+  const textSize = useChatTextSize(me);
   const [inviting, setInviting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** 나눠 받은 메시지 위에서의 위로 올려 더 받기·검색 이동(웹·모바일 공용) */
+  const thread = useThreadNavigator({ roomId, messages, scrollRef, searchQuery });
+
+  /** 답장 인용을 누르면 원본 메시지로 이동해 잠깐 강조한다. 아직 안 받은 옛 메시지면 받아 온 뒤 이동한다(웹과 같다). */
+  const { reveal } = thread;
+  const jumpToMessage = useCallback(async (messageId: string) => {
+    const el = await reveal(messageId);
+    if (!el) {
+      window.alert('원본 메시지를 찾을 수 없습니다.');
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('chat-jump-highlight');
+    void el.offsetWidth; // 같은 메시지를 연달아 눌러도 강조 애니메이션이 다시 돌게
+    el.classList.add('chat-jump-highlight');
+    window.setTimeout(() => el.classList.remove('chat-jump-highlight'), 1800);
+  }, [reveal]);
+
+  /** 명함(프로필 사진·이름을 누르면)·참여자 목록(단체방 이름을 누르면) — 아래에서 올라오는 시트 */
+  const [profileTarget, setProfileTarget] = useState<{ userId: string; name?: string } | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const openProfile = useCallback((userId: string, name?: string) => {
+    if (userId) setProfileTarget({ userId, name });
+  }, []);
 
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    thread.onScroll();
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     setShowScrollBtn(!isAtBottom);
     if (isAtBottom) {
@@ -207,43 +226,25 @@ export default function MobileChatThread() {
   // 검색 시 전체 대화를 유지하면서 위치 탐색만 하도록 변경
   const filteredMessages = messages;
 
-  const searchMatchIds = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return messages
-      .filter((m) => {
-        if (m.type === 'system') return false;
-        return m.text?.toLowerCase().includes(q);
-      })
-      .map((m) => m.id);
-  }, [messages, searchQuery]);
-
-  const [currentSearchIdx, setCurrentSearchIdx] = useState(0);
-
-  // 검색 인덱스 변경에 따른 스크롤 위치 이동
-  useEffect(() => {
-    if (searchMatchIds.length > 0 && currentSearchIdx >= 0) {
-      const activeId = searchMatchIds[currentSearchIdx];
-      const el = document.getElementById(`msg-${activeId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [searchMatchIds, currentSearchIdx]);
-
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
 
   useEffect(() => {
     unhideRoom(me, roomId);
-    markRead.mutate({ roomId, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, me]);
+
+  // 읽음 처리 — 들어올 때뿐 아니라 방을 열어 둔 동안 새로 온 메시지도(안 그러면 보낸 사람 쪽 숫자가 안 줄어든다)
+  const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
+  useEffect(() => {
+    if (myUnreadCount > 0) markRead.mutate({ roomId, userId: me });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUnreadCount, roomId, me]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== roomId) {
       prevRoomIdRef.current = roomId;
       isInitialLoadRef.current = true;
-      prevLengthRef.current = 0;
+      prevLastIdRef.current = null;
     }
   }, [roomId]);
 
@@ -270,7 +271,7 @@ export default function MobileChatThread() {
       }
     } else {
       const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-      if (filteredMessages.length > prevLengthRef.current) {
+      if (lastId !== prevLastIdRef.current) {
         if (isAtBottom) {
           el.scrollTop = el.scrollHeight;
           setHasNewMsg(false);
@@ -279,8 +280,8 @@ export default function MobileChatThread() {
         }
       }
     }
-    prevLengthRef.current = filteredMessages.length;
-  }, [filteredMessages.length, roomId]);
+    prevLastIdRef.current = lastId;
+  }, [lastId, roomId]);
 
   const onLeave = async () => {
     if (!room || leave.isPending) return;
@@ -304,6 +305,7 @@ export default function MobileChatThread() {
   const menuActions: SheetAction[] = room
     ? [
         { label: '파일함 모아보기 (📁)', onClick: () => { setMenuOpen(false); setShowFileBox(true); } },
+        { label: '글자 크기', onClick: () => setTextSizeOpen(true) },
         ...(room.type === 'group' && (room.createdBy === me || !room.createdBy) ? [{ label: '대화방 이름 변경', onClick: handleRenameRoom }] : []),
         ...(room.type === 'group' || room.type === 'dept' ? [{ label: '방 나가기', danger: true, onClick: onLeave }] : []),
         ...(isAdmin && room.type !== 'dept' ? [{ label: '방 삭제 (관리자)', danger: true, onClick: onDelete }] : []),
@@ -316,17 +318,22 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc' }}>
+    <div className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc', ...chatTextScaleStyle(textSize) }}>
       {(() => {
         const isDirect = room?.type === 'direct';
         const otherId = isDirect ? room.members.find((m) => m !== me) : null;
         const otherPresence = otherId ? presenceMap[otherId] : null;
 
         return (
-          <header className="flex shrink-0 items-center gap-1.5 px-2 py-3 text-white" style={{ background: '#101830' }}>
+          <header className="m-header flex shrink-0 items-center gap-1.5 px-2 py-3 text-white">
             <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
             {isDirect && (
-              <div className="relative shrink-0 mr-1">
+              <button
+                type="button"
+                onClick={() => otherId && openProfile(otherId, displayName)}
+                title={`${displayName} 프로필`}
+                className="relative shrink-0 mr-1"
+              >
                 <span
                   style={{ background: (room?.color || '#101830') + '33', color: '#fff' }}
                   className="grid h-8 w-8 place-items-center rounded-[10px] text-[13px] font-bold border border-white/20"
@@ -334,11 +341,19 @@ export default function MobileChatThread() {
                   {displayName[0] ?? '?'}
                 </span>
                 <PresenceDot presence={otherPresence} size="sm" />
-              </div>
+              </button>
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <div className="truncate text-[14.5px] font-bold text-white">{displayName}</div>
+                {/* 1:1 방은 상대 명함, 단체방은 참여자 목록 */}
+                <button
+                  type="button"
+                  onClick={() => (isDirect ? otherId && openProfile(otherId, displayName) : room && setShowMembers(true))}
+                  title={isDirect ? `${displayName} 프로필` : '참여자 목록 보기'}
+                  className="min-w-0 truncate text-left text-[14.5px] font-bold text-white"
+                >
+                  {displayName}
+                </button>
                 {isDirect && <BirthdayMark userId={otherId} />}
                 {isDirect && otherPresence && (
                   <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
@@ -354,7 +369,9 @@ export default function MobileChatThread() {
                 )}
               </div>
               {room && room.type !== 'direct' ? (
-                <div className="text-[10px] text-white/60">{room.members.length}명</div>
+                <button type="button" onClick={() => setShowMembers(true)} title="참여자 목록 보기" className="block text-left text-[10px] text-white/60">
+                  {room.members.length}명 ▾
+                </button>
               ) : otherPresence?.message ? (
                 <div className="text-[10px] text-[#4ea8de] truncate font-medium">
                   {otherPresence.message}
@@ -384,34 +401,32 @@ export default function MobileChatThread() {
             <Search size={13} className="shrink-0 text-ink3" />
             <input
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentSearchIdx(0);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
               placeholder="메시지 또는 첨부파일명 검색…"
               className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(''); setCurrentSearchIdx(0); }} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-ink3">
+              <button onClick={() => setSearchQuery('')} className="grid h-4 w-4 place-items-center rounded bg-black/10 text-ink3">
                 <X size={10} />
               </button>
             )}
           </div>
-          {searchMatchIds.length > 0 && (
+          {thread.search.count > 0 && (
             <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-bold text-ink2 bg-black/5 rounded-full px-2.5 py-1 select-none">
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev - 1 + searchMatchIds.length) % searchMatchIds.length)}
+                onClick={thread.search.prev}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
               >
                 ◀
               </button>
               <span className="tabular-nums">
-                {currentSearchIdx + 1}/{searchMatchIds.length}
+                {thread.search.index + 1}/{thread.search.count}
               </span>
               <button
                 type="button"
-                onClick={() => setCurrentSearchIdx((prev) => (prev + 1) % searchMatchIds.length)}
+                onClick={thread.search.next}
                 className="text-[13px] leading-none px-1 hover:text-ink active:scale-90 transition-transform"
               >
                 ▶
@@ -421,9 +436,14 @@ export default function MobileChatThread() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/*
+        overscroll-contain: 대화창 맨 위(이전 대화를 불러오는 중)에서 더 끌어내려도 그 동작이 페이지로 넘어가지 않게 한다.
+        넘어가면 휴대폰 크롬이 '당겨서 새로고침'으로 받아 페이지를 다시 열었다.
+      */}
+      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        {thread.loadingOlder && <div className="py-2 text-center chat-text-[11px] text-ink3">이전 대화를 불러오는 중…</div>}
         {processedItems.length === 0 && (
-          <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
+          <div className="py-10 text-center chat-text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
         {processedItems.map((item, idx) => {
           const m = item.message;
@@ -449,10 +469,10 @@ export default function MobileChatThread() {
           const showTime = !hideTime;
 
           return (
-            <div key={m.id} id={`msg-${m.id}`} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
+            <div key={m.id} id={`msg-${m.id}`} data-msg-ids={(item.bundleMessages ?? [m]).map((x) => x.id).join(' ')} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
-                  <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">
+                  <span className="rounded-full bg-black/5 px-3 py-1 chat-text-[10.5px] text-ink3">
                     {fmtDateDivider(m.at)}
                   </span>
                 </div>
@@ -468,6 +488,8 @@ export default function MobileChatThread() {
                   showProfile={!groupedWithPrev}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
+                  onOpenProfile={openProfile}
+                  onJumpToMessage={jumpToMessage}
                 />
               ) : (
                 <MessageBubble
@@ -482,8 +504,10 @@ export default function MobileChatThread() {
                   onCancelEdit={() => setEditingMessageId(null)}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
+                  onOpenProfile={openProfile}
+                  onJumpToMessage={jumpToMessage}
                   searchQuery={searchQuery}
-                  isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
+                  isSearchActive={thread.search.activeId === m.id}
                 />
               )}
             </div>
@@ -522,6 +546,39 @@ export default function MobileChatThread() {
 
       {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
       {menuOpen && <MobileActionSheet title={room?.name} actions={menuActions} onClose={() => setMenuOpen(false)} />}
+      {showMembers && room && (
+        <MobileMemberSheet
+          memberIds={room.members}
+          onClose={() => setShowMembers(false)}
+          onPick={(userId, name) => {
+            setShowMembers(false);
+            openProfile(userId, name);
+          }}
+        />
+      )}
+      {profileTarget && (
+        <MobileProfileSheet
+          userId={profileTarget.userId}
+          fallbackName={profileTarget.name}
+          me={me}
+          meName={meName}
+          onClose={() => setProfileTarget(null)}
+          onOpenRoom={(id) => {
+            setProfileTarget(null);
+            nav(`/m/room/${id}`);
+          }}
+        />
+      )}
+      {textSizeOpen && (
+        <MobileActionSheet
+          title="글자 크기 · 채팅 목록의 내 프로필 메뉴에서도 바꿀 수 있어요"
+          actions={CHAT_TEXT_SIZES.map((s) => ({
+            label: s.id === textSize ? `${s.label} ✓` : s.label,
+            onClick: () => setChatTextSize(me, s.id),
+          }))}
+          onClose={() => setTextSizeOpen(false)}
+        />
+      )}
       {sheetMessage && createPortal(
         <div className="fixed inset-0 z-[120] flex flex-col justify-end bg-black/40" onClick={() => setSheetMessage(null)}>
           <div
@@ -648,20 +705,20 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   const canOpen = !!payload.docId;
   return (
     <div className="w-[240px] overflow-hidden rounded-2xl border border-black/10 bg-white">
-      <div className="flex items-center gap-1.5 px-3 py-2 text-white" style={{ background: '#101830' }}>
+      <div className="m-header flex items-center gap-1.5 px-3 py-2 text-white">
         <FileSignature size={14} className="shrink-0" />
-        <span className="text-[11.5px] font-bold">전자결재 알림</span>
+        <span className="chat-text-[11.5px] font-bold">전자결재 알림</span>
         <span
-          className="ml-auto rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+          className="ml-auto rounded-md px-1.5 py-0.5 chat-text-[9.5px] font-bold"
           style={{ background: `${statusColor(payload.status)}33`, color: '#fff' }}
         >
           {payload.status}
         </span>
       </div>
       <div className="px-3 py-2.5">
-        <div className="text-[11px] text-ink3">{text || '전자결재 문서를 확인해 주세요.'}</div>
-        <div className="mt-1.5 line-clamp-2 text-[13px] font-bold text-ink">{payload.title || '(제목 없음)'}</div>
-        <div className="mt-1 text-[11px] text-ink3">
+        <div className="chat-text-[11px] text-ink3">{text || '전자결재 문서를 확인해 주세요.'}</div>
+        <div className="mt-1.5 line-clamp-2 chat-text-[13px] font-bold text-ink">{payload.title || '(제목 없음)'}</div>
+        <div className="mt-1 chat-text-[11px] text-ink3">
           {payload.drafterName}
           {payload.drafterDept ? ` · ${payload.drafterDept}` : ''}
           {payload.docNo ? ` · ${payload.docNo}` : ''}
@@ -669,7 +726,7 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
         <button
           onClick={() => canOpen && nav(`/m/approval/${payload.docId}`)}
           disabled={!canOpen}
-          className="mt-2.5 w-full rounded-lg py-2 text-[12px] font-bold text-white disabled:opacity-40"
+          className="mt-2.5 w-full rounded-lg py-2 chat-text-[12px] font-bold text-white disabled:opacity-40"
           style={{ background: '#4ea8de' }}
         >
           결재 문서 상세 보기 →
@@ -689,6 +746,8 @@ function CompositeMessageBubble({
   showProfile = true,
   onLongPress,
   onToggleEmoji,
+  onOpenProfile,
+  onJumpToMessage,
 }: {
   item: RenderMessageItem;
   me: string;
@@ -699,6 +758,10 @@ function CompositeMessageBubble({
   showProfile?: boolean;
   onLongPress: (m: ChatMessage) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
+  /** 프로필 사진·이름을 누르면 명함 */
+  onOpenProfile?: (userId: string, name?: string) => void;
+  /** 답장 인용을 누르면 원본으로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
 }) {
   const m = item.message;
   const presenceMap = useAllUserPresences();
@@ -735,14 +798,14 @@ function CompositeMessageBubble({
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const bubbleMeta = (mine && unreadCount > 0) || showTime ? (
+  const bubbleMeta = unreadCount > 0 || showTime ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-      {mine && unreadCount > 0 && (
-        <span className="text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
+      {unreadCount > 0 && (
+        <span className="chat-text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}
-      {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+      {showTime && <span className="chat-text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
     </div>
   ) : null;
 
@@ -753,20 +816,43 @@ function CompositeMessageBubble({
       <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && !showProfile && <div className="w-[30px] shrink-0" />}
         {!mine && showProfile && (
-          <div className="relative shrink-0 self-end">
+          <button
+            type="button"
+            disabled={!onOpenProfile || !m.senderId}
+            onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+            title={`${m.senderName ?? ''} 프로필`}
+            className="relative shrink-0 self-end"
+          >
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
               {m.senderName?.[0] ?? '?'}
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
-          </div>
+          </button>
         )}
         <div className="group min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!onOpenProfile || !m.senderId}
+              onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+              className="mb-0.5 block text-left chat-text-[10.5px] text-ink3"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
-            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}>
-              <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
-              <div className="truncate text-[10px] text-ink3">{m.replyTo.text}</div>
-            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full rounded-md border-l-2 px-2 py-1 text-left ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}
+            >
+              <div className="chat-text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
+              <div className="truncate chat-text-[10px] text-ink3">{m.replyTo.text}</div>
+            </button>
           )}
           <div
             onTouchStart={handleTouchStart}
@@ -794,7 +880,7 @@ function CompositeMessageBubble({
                   <button
                     key={emoji}
                     onClick={() => onToggleEmoji?.(m.id, emoji)}
-                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9.5px] font-bold shadow-3xs transition-all active:scale-95"
+                    className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 chat-text-[9.5px] font-bold shadow-3xs transition-all active:scale-95"
                     style={active
                       ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' }
                       : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
@@ -827,6 +913,8 @@ function MessageBubble({
   onToggleEmoji,
   searchQuery = '',
   isSearchActive = false,
+  onOpenProfile,
+  onJumpToMessage,
 }: {
   m: ChatMessage;
   me: string;
@@ -842,6 +930,10 @@ function MessageBubble({
   onToggleEmoji: (messageId: string, emoji: string) => void;
   searchQuery?: string;
   isSearchActive?: boolean;
+  /** 프로필 사진·이름을 누르면 명함 */
+  onOpenProfile?: (userId: string, name?: string) => void;
+  /** 답장 인용을 누르면 원본으로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -882,7 +974,7 @@ function MessageBubble({
   if (m.type === 'system') {
     return (
       <div className="my-1 flex justify-center">
-        <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">{m.text}</span>
+        <span className="rounded-full bg-black/5 px-3 py-1 chat-text-[10.5px] text-ink3">{m.text}</span>
       </div>
     );
   }
@@ -900,7 +992,7 @@ function MessageBubble({
         <textarea
           value={editVal}
           onChange={(e) => setEditVal(e.target.value)}
-          className="w-full bg-[#f8fbfe] text-[12px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
+          className="w-full bg-[#f8fbfe] chat-text-[12px] text-ink border border-[#bae0ff] rounded-lg px-2 py-1.5 outline-none resize-none"
           rows={2}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -913,7 +1005,7 @@ function MessageBubble({
             }
           }}
         />
-        <div className="flex justify-end gap-1 text-[10px]">
+        <div className="flex justify-end gap-1 chat-text-[10px]">
           <button
             onClick={() => { onCancelEdit(); setEditVal(m.text); }}
             className="px-2 py-0.5 bg-black/5 text-ink2 rounded"
@@ -973,15 +1065,15 @@ function MessageBubble({
       >
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0 pointer-events-none">
-          <span className="block max-w-[190px] truncate text-[12.5px] font-semibold">{att.name}</span>
-          <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
+          <span className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
       </button>
     );
   } else if (isDeletedMessage(m)) {
     // 삭제된 메시지 — 내용 없이 안내만, 길게 눌러도 메뉴를 열지 않는다
     body = (
-      <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 text-[12.5px] italic text-ink3 select-none">
+      <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 chat-text-[12.5px] italic text-ink3 select-none">
         {DELETED_MESSAGE_TEXT}
       </div>
     );
@@ -993,7 +1085,7 @@ function MessageBubble({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] select-none -webkit-touch-callout-none"
+        className="max-w-full min-w-0 rounded-2xl px-3 py-2 chat-text-[13px] select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} />
@@ -1009,7 +1101,7 @@ function MessageBubble({
         onPointerDown={handleTouchStart}
         onPointerMove={handleTouchMove}
         onPointerUp={handleTouchEnd}
-        className="whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
+        className="whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-2xl px-3 py-2 chat-text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         {renderHighlightedText(m.text, searchQuery, isSearchActive)}
@@ -1022,30 +1114,53 @@ function MessageBubble({
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
         {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
         {!mine && showProfile && (
-          <div className="relative shrink-0 self-end">
+          <button
+            type="button"
+            disabled={!onOpenProfile || !m.senderId}
+            onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+            title={`${m.senderName ?? ''} 프로필`}
+            className="relative shrink-0 self-end"
+          >
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
-          </div>
+          </button>
         )}
         <div className="min-w-0">
-          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && (
+            <button
+              type="button"
+              disabled={!onOpenProfile || !m.senderId}
+              onClick={() => onOpenProfile?.(m.senderId || '', m.senderName)}
+              className="mb-0.5 block text-left chat-text-[10px] text-ink3"
+            >
+              {m.senderName}
+            </button>
+          )}
           {m.replyTo && (
-            <div className={`mb-1 truncate rounded-md border-l-2 px-2 py-1 text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full truncate rounded-md border-l-2 px-2 py-1 text-left chat-text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}
+            >
               <b>{m.replyTo.senderName || '메시지'}</b> {m.replyTo.text}
-            </div>
+            </button>
           )}
           <div className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
-            {((mine && unreadCount > 0) || showTime || m.isEdited) && (
+            {(unreadCount > 0 || showTime || m.isEdited) && (
               // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에
               <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
-                {mine && unreadCount > 0 && (
-                  <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
+                {unreadCount > 0 && (
+                  <span className="chat-text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
                 )}
-                {m.isEdited && <span className="text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
-                {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+                {m.isEdited && <span className="chat-text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
+                {showTime && <span className="chat-text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
               </div>
             )}
           </div>
@@ -1059,7 +1174,7 @@ function MessageBubble({
                   <button
                     key={emoji}
                     onClick={() => onToggleEmoji(m.id, emoji)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold shadow-sm transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 chat-text-[10px] font-bold shadow-sm transition-all"
                     style={active 
                       ? { background: '#e6960c20', borderColor: '#e6960c', color: '#e6960c' } 
                       : { background: '#fff', borderColor: 'rgba(0,0,0,0.08)', color: '#666' }
@@ -1378,7 +1493,7 @@ function InviteOverlay({ room, meName, onDone }: { room: ChatRoom; meName: strin
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
         <button onClick={onDone} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-bold">멤버 초대</div>
@@ -1770,7 +1885,7 @@ function MobileFileBoxModal({
 
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-      <header className="flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 bg-[#101830] text-white">
+      <header className="m-header flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 text-white">
         <span className="text-[15px] font-bold">📁 파일함 모아보기</span>
         <button onClick={onClose} className="text-[14px] font-semibold text-white/80 hover:text-white px-2 cursor-pointer">닫기</button>
       </header>

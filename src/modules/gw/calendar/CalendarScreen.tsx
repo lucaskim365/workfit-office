@@ -15,18 +15,17 @@ import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveWorkPlanScope } from '@/features/auth/scopeHelper';
 import { useAllApprovals } from '@/features/gw/useApprovals';
-import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
-import { scheduleChip } from '@/domain/commute/statusDisplay';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
-import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
+import { useCompanyImportantByDate } from '@/features/workPlan/useCompanyImportant';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
-import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { OutsideScheduleView } from '@/domain/outsideWork/view';
+import { buildScheduleEvents } from '@/domain/calendarEvent/scheduleEvents';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
 import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
@@ -245,106 +244,10 @@ function LocalCalendarScreen() {
   // 결재 없이 직접 등록한 외근·출장도 같은 모양으로 투영한다(전사 공개)
   const outsideWorksQuery = useOutsideWorks(range);
   // outsideViewByEventId: 투영 일정 id → 외근·출장 상세. 외근·출장 칩을 누르면 일정 창 대신 상세를 연다.
-  const { scheduleEvents, outsideViewByEventId } = useMemo(() => {
-    const list: CalendarEvent[] = [];
-    const outsideViewByEventId = new Map<string, OutsideScheduleView>();
-    const schedules = extractApprovedSchedules(approvalsQuery.data ?? []);
-    for (const s of schedules) {
-      // 퇴사 처리된 직원의 일정은 캘린더에 노출되지 않도록 필터링
-      if (s.drafterId && !activeUserIdSet.has(s.drafterId)) continue;
-
-      let curr = new Date(s.startDate + 'T00:00:00');
-      const last = new Date(s.endDate + 'T00:00:00');
-      if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
-
-      const isLeave = s.category === 'LEAVE';
-      const isTrip = s.category === 'TRIP';
-      const eventType: CalendarEventType = isLeave ? 'VACATION' : 'OUTSIDE';
-      const drafterUser = userMap.get(s.drafterId);
-      const drafter = s.drafterName || drafterUser?.name || '';
-      const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
-
-      // 사용자 요청: 외근, 출장, 휴가 등 모든 일정에서 이름 뒤에 직급이 바로 붙도록 반영
-      // 휴가는 종류(연차·오전반차 등)까지 보인다 — 사유는 비공개
-      const title = isLeave
-        ? `[휴가] ${drafterWithPos} (${scheduleChip(s).label})`
-        : isTrip
-        ? `[출장] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`
-        : `[외근] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`;
-
-      while (curr <= last) {
-        const yyyy = curr.getFullYear();
-        const mm = String(curr.getMonth() + 1).padStart(2, '0');
-        const dd = String(curr.getDate()).padStart(2, '0');
-        const dStr = `${yyyy}-${mm}-${dd}`;
-
-        const isAllDay = !s.startTime || !s.endTime || s.startTime >= s.endTime;
-
-        const outsideView = fromApprovalSchedule(s);
-        if (outsideView) outsideViewByEventId.set(`CAL-APPR-${s.docId}-${dStr}`, outsideView);
-        list.push({
-          id: `CAL-APPR-${s.docId}-${dStr}`,
-          ownerUserId: s.drafterId,
-          title,
-          date: dStr,
-          allDay: isAllDay,
-          startTime: isAllDay ? null : s.startTime!,
-          endTime: isAllDay ? null : s.endTime!,
-          // 휴가 건은 개인 프라이버시 보호를 위해 사유를 철저히 비공개(빈 문자열) 처리
-          memo: isLeave ? '' : (s.body ? `업무: ${s.body}` : ''),
-          visibility: 'COMPANY',
-          eventType,
-          attendeeUserIds: [],
-          deptId: null,
-          projectId: null,
-          reminded: true,
-          location: null,
-          reservationId: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-
-        curr.setDate(curr.getDate() + 1);
-      }
-    }
-
-    for (const w of outsideWorksQuery.data ?? []) {
-      if (!activeUserIdSet.has(w.ownerUserId)) continue;
-      const ownerUser = userMap.get(w.ownerUserId);
-      const ownerWithPos = [ownerUser?.name ?? '', ownerUser?.position ?? ''].filter(Boolean).join(' ');
-      const view = fromOutsideWork(w, (id) => userMap.get(id)?.name);
-      const tag = w.category === 'TRIP' ? '[출장]' : '[외근]';
-      let curr = new Date(w.startDate + 'T00:00:00');
-      const last = new Date(w.endDate + 'T00:00:00');
-      while (curr <= last) {
-        const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
-        const id = `CAL-SELF-${w.id}-${dStr}`;
-        outsideViewByEventId.set(id, view);
-        list.push({
-          id,
-          ownerUserId: w.ownerUserId,
-          title: `${tag} ${ownerWithPos} (${w.destination})`,
-          date: dStr,
-          allDay: w.allDay,
-          startTime: w.allDay ? null : w.startTime,
-          endTime: w.allDay ? null : w.endTime,
-          memo: w.purpose,
-          visibility: 'COMPANY',
-          eventType: 'OUTSIDE',
-          attendeeUserIds: [],
-          deptId: null,
-          projectId: null,
-          reminded: true,
-          location: null,
-          reservationId: null,
-          createdAt: w.createdAt,
-          updatedAt: w.updatedAt,
-        });
-        curr.setDate(curr.getDate() + 1);
-      }
-    }
-    return { scheduleEvents: list, outsideViewByEventId };
-  }, [approvalsQuery.data, outsideWorksQuery.data, activeUserIdSet, userMap]);
+  const { scheduleEvents, outsideViewByEventId } = useMemo(
+    () => buildScheduleEvents(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], userMap, activeUserIdSet),
+    [approvalsQuery.data, outsideWorksQuery.data, activeUserIdSet, userMap],
+  );
   const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
   const [outsideEdit, setOutsideEdit] = useState<OutsideWork | null>(null);
 
@@ -379,15 +282,7 @@ function LocalCalendarScreen() {
   const holidaysQuery = useHolidays(month.slice(0, 4));
   const holidays = holidaysQuery.data ?? [];
   /** 업무계획의 전사 공통 중요 일정(__COMPANY__) — 날짜별 내용 */
-  const allWorkPlansQuery = useAllWorkPlans(range, true);
-  const importantByDate = useMemo(() => {
-    const map = new Map<string, string>();
-    (allWorkPlansQuery.data ?? []).forEach((plan) => {
-      const content = plan.content?.trim();
-      if (plan.ownerUserId === '__COMPANY__' && content) map.set(plan.date, content);
-    });
-    return map;
-  }, [allWorkPlansQuery.data]);
+  const importantByDate = useCompanyImportantByDate(range);
   const selectedHoliday = holidays.find((h) => h.date === selectedDate)?.name;
   const selectedImportant = importantByDate.get(selectedDate);
 

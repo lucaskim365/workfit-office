@@ -54,6 +54,14 @@ export const userSchema = z.object({
    */
   fcmToken: z.string().default(''),
   /**
+   * 기기별 FCM 토큰 목록 — PC·휴대폰 등 여러 기기에서 모두 알림을 받는다.
+   * fcmToken은 서버 함수 전환기 동안 가장 최근 기기 토큰을 같이 둔다.
+   * 일반 저장(save)에서는 빼고 토큰 전용 함수(updateFcmToken 등)만 쓴다.
+   */
+  fcmTokens: z.array(z.string()).default([]),
+  /** 회수 신호를 받아도 되는 기기 토큰(안드로이드 휴대폰만 — 아이폰·PC 제외) — domain/user/pushTokens withRecallToken */
+  fcmTokensRecall: z.array(z.string()).default([]),
+  /**
    * 다중 소속(겸직) 확장 스키마 (User.dept 단일 구조의 점진적 확장 대비).
    */
   assignments: z.array(

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Calendar,
   Check,
@@ -88,7 +89,12 @@ function MobileTaskBody({ actor }: { actor: User }) {
   const actorActive = actor.status === '사용';
 
   const today = calendarToday();
-  const [selectedDate, setSelectedDate] = useState<string>(today);
+  // 캘린더 등에서 ?date=YYYY-MM-DD로 들어오면 그 날짜로 연다
+  const [searchParams] = useSearchParams();
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const param = searchParams.get('date');
+    return param && isValidCalendarDate(param) ? param : today;
+  });
   const [view, setView] = useState<'me' | 'team'>('me');
   const [deptFilter, setDeptFilter] = useState<string>('all');
 

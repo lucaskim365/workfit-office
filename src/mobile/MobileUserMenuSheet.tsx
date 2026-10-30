@@ -15,7 +15,10 @@ import {
   LogOut,
   MessageSquare,
   Sparkles,
+  UserRound,
+  Type,
 } from 'lucide-react';
+import { CHAT_TEXT_SIZES, setChatTextSize, useChatTextSize } from './chatTextSize';
 
 interface MobileUserMenuSheetProps {
   isOpen: boolean;
@@ -31,6 +34,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
   const navigate = useNavigate();
   const { signOutUser, user } = useAuth();
   const { presence, meta, updatePresence } = useMyPresence();
+  const textSize = useChatTextSize(user?.id ?? '');
 
   // 웹(UserMenu.tsx)과 동일한 상태 변수 및 로직
   const [msgInput, setMsgInput] = useState(presence.message);
@@ -97,7 +101,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
         {/* 상단 드래그 핸들 & 닫기 버튼 */}
         <div className="relative flex items-center justify-between border-b border-black/5 px-5 py-3.5 dark:border-white/10">
           <div className="flex-1" />
-          <div className="h-1.5 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div className="h-1.5 w-10 rounded-full bg-slate-200" />
           <div className="flex flex-1 justify-end">
             <button
               type="button"
@@ -221,13 +225,13 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
                 }}
                 placeholder="상태 메시지 입력 (예: 3시까지 미팅)"
                 maxLength={50}
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
               />
               {msgInput && (
                 <button
                   type="button"
                   onClick={handleMsgClear}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-500 hover:bg-slate-100"
                   title="지우기"
                 >
                   삭제
@@ -255,7 +259,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
                     key={preset}
                     type="button"
                     onClick={() => handlePresetClick(preset)}
-                    className="rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition-all hover:border-teal-400 hover:text-teal-700 active:scale-95 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                    className="rounded-lg border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition-all hover:border-teal-400 hover:text-teal-700 active:scale-95"
                   >
                     {preset}
                   </button>
@@ -264,8 +268,53 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
             </div>
           </div>
 
+          {/* 메신저 글자 크기 — 채팅방 메뉴의 '글자 크기'와 같은 설정 */}
+          <div>
+            <div className="mb-2.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-slate-700 dark:text-slate-200">
+                <Type size={14} className="text-teal-500" />
+                <span>메신저 글자 크기</span>
+              </span>
+              <span className="text-[11px] text-slate-400">채팅방·목록에 적용</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {CHAT_TEXT_SIZES.map((s) => {
+                const isSelected = textSize === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setChatTextSize(user.id, s.id)}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2.5 transition-all active:scale-[0.98] ${
+                      isSelected
+                        ? 'border-teal-500 bg-teal-50/70 dark:bg-teal-950/40 shadow-xs ring-1 ring-teal-500/40 font-bold text-slate-900 dark:text-white'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700/60 dark:bg-white/[0.03] text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="leading-none" style={{ fontSize: `${13 * s.scale}px` }}>가</span>
+                    <span className="text-[11px]">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 유틸리티 & 시스템 설정 메뉴 */}
           <div className="space-y-1 rounded-2xl border border-slate-200 bg-white p-1.5 dark:border-slate-700/60 dark:bg-white/[0.02]">
+            <button
+              type="button"
+              onClick={() => { onClose(); navigate('/m/profile'); }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-700 transition-colors hover:bg-slate-50 active:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+            >
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-400">
+                <UserRound size={16} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold">내 프로필</div>
+                <div className="text-[11px] text-slate-400">사진·연락처·비밀번호·결재 도장/서명</div>
+              </div>
+            </button>
+
             <button
               type="button"
               onClick={handleOpenGuide}

@@ -49,7 +49,7 @@ export function Sheet({ title, titleId, onClose, closeDisabled = false, raised =
   return (
     <div className={`fixed inset-0 ${raised ? 'z-[60]' : 'z-50'} flex items-end justify-center bg-black/40 p-2 sm:p-4`}>
       <section role="dialog" aria-modal="true" aria-labelledby={titleId} className="flex w-full max-w-[440px] max-h-[90dvh] flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-[#101830] px-4 py-3 text-white">
+        <header className="flex shrink-0 items-center justify-between gap-2 m-header border-b border-border px-4 py-3 text-white">
           <h2 id={titleId} className="min-w-0 text-[13.5px] font-bold">{title}</h2>
           <button type="button" aria-label="닫기" disabled={closeDisabled} onClick={onClose} className="shrink-0 p-1 disabled:opacity-50"><X size={18} /></button>
         </header>

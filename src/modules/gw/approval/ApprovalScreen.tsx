@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -36,6 +36,7 @@ import {
   activeSteps,
   currentApproverIds,
   matchesBox,
+  isMyApprovedDone,
   byRecent,
   getEffectiveRecipients,
 } from '@/domain/approvalDoc/engine';
@@ -68,6 +69,10 @@ import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo
  */
 /** 검색 드롭다운에 한 번에 그리는 최대 건수 — 넘치면 건수만 알리고 검색어를 더 좁히게 한다 */
 const SEARCH_RESULT_LIMIT = 50;
+
+/** 목록 상자: 고정된 툴바(--appr-bar) 바로 아래에 붙고, 화면 높이 안에서 따로 스크롤된다 (12px=툴바와의 간격, 16px=아래 여백) */
+const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
+const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '결재 대기함',
@@ -119,7 +124,7 @@ export default function ApprovalScreen() {
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
@@ -227,7 +232,6 @@ export default function ApprovalScreen() {
   // 다중 선택 상태 & 일괄 처리 훅
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
-  const [batchComment, setBatchComment] = useState('');
   // 목록 툴바 — 정렬·안읽음만 보기
   const [listOrder, setListOrder] = useState<ListOrder>('recent');
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -246,6 +250,8 @@ export default function ApprovalScreen() {
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+    // 결재 대기함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
+    if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
 
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
     const uniqueMap = new Map<string, ApprovalDoc>();
@@ -303,8 +309,11 @@ export default function ApprovalScreen() {
       if (todoFilter === 'progress') {
         return list.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me);
+          return d.status === '진행중' && !approvers.includes(me);
         });
+      }
+      if (todoFilter === 'done') {
+        return list.filter((d: ApprovalDoc) => isMyApprovedDone(d, me));
       }
       return list;
     }
@@ -314,6 +323,16 @@ export default function ApprovalScreen() {
   // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
   // 선택이 없으면 null — 목록만 보이고, 문서를 눌러야 상세가 열린다(맨 앞 문서 자동 열람 없음)
   const selDoc = useMemo(() => resolveSelectedDoc(selId, filteredList, allDocs), [selId, filteredList, allDocs]);
+
+  // 툴바(검색 줄)는 상단에 고정되고, 목록 상자는 그 아래에서 따로 스크롤된다(상세 본문은 페이지와 함께) — 툴바 높이를 재서 목록 위치·높이를 맞춘다
+  const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
+  const [toolbarH, setToolbarH] = useState(60);
+  useEffect(() => {
+    if (!toolbarEl) return;
+    const ro = new ResizeObserver(() => setToolbarH(toolbarEl.offsetHeight));
+    ro.observe(toolbarEl);
+    return () => ro.disconnect();
+  }, [toolbarEl]);
 
   /** 상세 닫기 → 목록만 보기. 주소의 doc 도 지워 새로고침해도 다시 열리지 않게 한다. */
   const handleCloseDoc = () => {
@@ -416,17 +435,16 @@ export default function ApprovalScreen() {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // 일괄 승인 실행
-  const handleBatchApprove = async () => {
+  // 일괄 승인 실행 — 의견은 모달에서 바로 받는다(상태에 넣었다 읽으면 갱신 전 값이라 늘 기본 문구가 저장됐다)
+  const handleBatchApprove = async (comment: string) => {
     if (approvableSelectedIds.length === 0) return;
     try {
       await batchDecide.mutateAsync({
         docIds: approvableSelectedIds,
         userId: me,
-        comment: batchComment.trim() || '일괄 승인 처리되었습니다.',
+        comment: comment.trim() || '일괄 승인 처리되었습니다.',
       });
       setShowBatchApproveConfirm(false);
-      setBatchComment('');
       setSelectedIds([]);
     } catch (err: any) {
       alert(`일괄 승인 중 오류가 발생했습니다: ${err.message || String(err)}`);
@@ -462,10 +480,13 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className="w-full px-6 pt-2 pb-6 min-w-[920px]">
+    <div
+      className="w-full px-6 pt-2 pb-6 min-w-[920px]"
+      style={{ '--appr-bar': `${toolbarH}px` } as CSSProperties}
+    >
       <div className="flex gap-4 items-start w-full">
         {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
-        <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[calc(var(--shell-top)+8px)] z-10">
+        <div className="w-[180px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[calc(var(--shell-top)+8px)] z-10">
 
           <button
             onClick={() => setShowFormSelectModal(true)}
@@ -607,19 +628,20 @@ export default function ApprovalScreen() {
                     <button
                       key={b}
                       onClick={() => handleSelectBox(b)}
-                      className={`flex w-full items-center justify-between rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
-                      <span className="flex items-center gap-1.5">
-                        <span>{label}</span>
+                      {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="truncate whitespace-nowrap">{label}</span>
                         {b !== '반려' && b !== '문서함' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
-                          <span className="rounded-full bg-red-500/10 px-1.5 text-[9.5px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
+                          <span className="shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-1 text-[9px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
                             새 {unreadState.unreadCount(b as ApprovalBox)}
                           </span>
                         )}
                       </span>
                       {hasBadge && b !== '문서함' && (
-                        <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
+                        <span className={`grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
                           {badgeCount}
                         </span>
                       )}
@@ -642,7 +664,8 @@ export default function ApprovalScreen() {
 
           </div>
 
-          {/* 목록 툴바(목록·상세 위 전체 너비): 선택·일괄 동작 | 검색 | 안읽음만·정렬 */}
+          {/* 목록 툴바(목록·상세 위 전체 너비): 선택·일괄 동작 | 검색 | 안읽음만·정렬 — 스크롤해도 상단에 고정 */}
+          <div ref={setToolbarEl} className="sticky top-[var(--shell-top)] z-20 -mt-3 pt-3 bg-bg">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-panel px-3.5 py-2 shadow-sm text-[12px] font-bold text-ink2">
             <div className="flex items-center gap-2 shrink-0">
               {selectableList.length > 0 && (
@@ -810,9 +833,10 @@ export default function ApprovalScreen() {
                   onChange={setTodoFilter}
                   activeClass="bg-teal text-white"
                   options={[
+                    { key: 'all', label: '전체' },
                     { key: 'pending', label: '결재대기중', count: activePendingCount },
                     { key: 'progress', label: '진행중' },
-                    { key: 'all', label: '전체' },
+                    { key: 'done', label: '완료' },
                   ]}
                 />
               )}
@@ -880,12 +904,13 @@ export default function ApprovalScreen() {
               </select>
             </div>
           </div>
+          </div>
 
           <div className="flex items-start gap-4">
             {/* 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 340px(여러 문서를 빠르게 넘겨보기 좋게 분할 유지) */}
             {(
-              <div className={`min-w-0 flex flex-col self-start ${selDoc ? `w-[340px] shrink-0 sticky top-[calc(var(--shell-top)+8px)] ${isListCollapsed ? 'hidden' : ''}` : 'flex-1'}`}>
-              <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm animate-fadeIn">
+              <div className={`min-w-0 flex flex-col self-start ${PANE_STICKY} ${selDoc ? `w-[340px] shrink-0 ${isListCollapsed ? 'hidden' : ''}` : 'flex-1'}`}>
+              <div className={`overflow-y-auto overscroll-contain rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm animate-fadeIn ${PANE_MAX_H}`}>
 
                 {/* 목록 데이터 영역 */}
                 <div>
@@ -1028,10 +1053,7 @@ export default function ApprovalScreen() {
           confirmText="일괄 승인 확정"
           confirmTone="bg-teal"
           busy={batchDecide.isPending}
-          onConfirm={(comment) => {
-            setBatchComment(comment);
-            handleBatchApprove();
-          }}
+          onConfirm={(comment) => handleBatchApprove(comment)}
           onClose={() => setShowBatchApproveConfirm(false)}
         />
       )}
@@ -1557,7 +1579,7 @@ function DocDetail({
                       key={idx}
                       className={`rounded-lg p-2.5 border ${isReject
                           ? 'border-danger/30 bg-danger/5'
-                          : 'border-border/60 bg-white dark:bg-zinc-800 shadow-2xs'
+                          : 'border-border/60 bg-panel shadow-2xs'
                         }`}
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
@@ -1644,7 +1666,7 @@ function DocDetail({
               <span>인쇄</span>
             </button>
           </div>
-          <div className="overflow-x-auto rounded-xl border border-border bg-white dark:bg-zinc-900 shadow-sm p-3 sm:p-4">
+          <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm p-3 sm:p-4">
             <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
           </div>
         </div>

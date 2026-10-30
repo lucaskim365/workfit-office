@@ -171,8 +171,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
       {replyTo && (
         <div className="mb-1.5 flex items-center gap-2 rounded-lg border-l-[3px] border-amber bg-panel-alt px-2.5 py-1.5">
           <div className="min-w-0 flex-1">
-            <div className="text-[10.5px] font-bold text-amber">{replyTo.senderName || '메시지'}에게 답장</div>
-            <div className="truncate text-[11px] text-ink3">{replyTo.text}</div>
+            <div className="chat-text-[10.5px] font-bold text-amber">{replyTo.senderName || '메시지'}에게 답장</div>
+            <div className="truncate chat-text-[11px] text-ink3">{replyTo.text}</div>
           </div>
           <button onClick={onCancelReply} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 hover:bg-black/5">
             <X size={13} />

@@ -11,7 +11,7 @@ import { type User } from '@/domain/user/schema';
  */
 const DEMO_PW = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
 
-export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signType' | 'resignedAt' | 'fcmToken' | 'assignments'>[] = [
+export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signType' | 'resignedAt' | 'fcmToken' | 'fcmTokens' | 'fcmTokensRecall' | 'assignments'>[] = [
   // 대표이사
   { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', email: 'ympark@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
   // AX지능화본부 — 직책 본부장 / 직급 상무이사

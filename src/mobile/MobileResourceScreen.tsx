@@ -196,7 +196,7 @@ export default function MobileResourceScreen() {
 
       {notice && (
         <div className="pointer-events-none fixed inset-x-0 z-[70] flex justify-center px-4" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
-          <p role="status" className="pointer-events-auto max-w-[420px] rounded-2xl bg-[#101830] px-4 py-3 text-center text-[12.5px] font-semibold text-white shadow-xl" onClick={() => setNotice('')}>
+          <p role="status" className="pointer-events-auto max-w-[420px] rounded-2xl bg-navy px-4 py-3 text-center text-[12.5px] font-semibold text-white shadow-xl" onClick={() => setNotice('')}>
             {notice}
           </p>
         </div>

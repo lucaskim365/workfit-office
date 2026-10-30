@@ -450,7 +450,7 @@ export function WorkPlanTeamMonthlyMatrix({
         onScroll={(e) => {
           if (stickyWeekScrollRef.current) stickyWeekScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }}
-        className="overflow-x-auto rounded-xl border border-border bg-panel shadow-xs scrollbar-thin"
+        className="overflow-x-auto rounded-xl border border-border bg-panel shadow-xs scrollbar-thin [contain:inline-size]"
       >
         <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-[11px] select-text">
           {MATRIX_COLGROUP}

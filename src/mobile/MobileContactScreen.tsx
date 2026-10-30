@@ -300,7 +300,7 @@ export default function MobileContactScreen() {
                     <button
                       type="button"
                       onClick={() => handleStartChat(u.id)}
-                      className="flex items-center justify-center gap-1 rounded-xl bg-[#101830] py-1.5 text-[11px] font-bold text-white hover:bg-[#1a264a] active:scale-95 transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center justify-center gap-1 rounded-xl bg-navy py-1.5 text-[11px] font-bold text-white hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-2xs"
                       title="1:1 대화"
                     >
                       <MessageSquare size={13} />

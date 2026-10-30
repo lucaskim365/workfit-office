@@ -9,7 +9,15 @@ import { departmentMemberRepo } from '@/data/departmentMember/departmentMember.r
 import { departmentRepo } from '@/data/department/department.repo';
 import { positionRepo } from '@/data/position/position.repo';
 import { jobTitleRepo } from '@/data/jobTitle/jobTitle.repo';
-import { departmentDeleteBlocker, jobTitleDeleteBlocker, positionDeleteBlocker, setPersonJobTitle } from './orgSync';
+import {
+  assignDeptHead,
+  departmentDeleteBlocker,
+  jobTitleDeleteBlocker,
+  positionDeleteBlocker,
+  releaseDeptHeadOnLeave,
+  setPersonJobTitle,
+  syncDeptHeadFromTitle,
+} from './orgSync';
 
 const dept = (id: string, name: string, parentId: string | null = null) =>
   departmentRepo.save({ id, name, parentId, headUserId: null, deptType: '본사', order: 1 });
@@ -73,4 +81,96 @@ test('기준정보에 없는 직책으로 지정하면 조용히 넘어가지 �
   await person('UJ9', { dept: 'X팀', jobTitle: 'X직책' });
   await assert.rejects(setPersonJobTitle('UJ9', '위원장'), /직책 '위원장'/);
   assert.equal((await employeeProfileRepo.get('UJ9'))?.jobTitleId, 'JX1');
+});
+
+// ── 부서장 지정 — 부서 headUserId 와 그 부서에서의 직책을 함께 맞춘다 ──
+const headDept = (id: string, name: string, deptType: '본사' | '위원회' = '본사', headUserId: string | null = null) =>
+  departmentRepo.save({ id, name, parentId: null, headUserId, deptType, order: 1 });
+
+test('다른 부서 사람을 부서장으로 지정하면 그 부서 겸직 팀장이 생기고, 본직 직책과 기존 부서장의 본직 부서는 그대로다', async () => {
+  await headDept('DH1', 'H1팀');
+  await headDept('DH2', 'H2팀');
+  await person('UH1', { dept: 'H1팀', position: '부장', jobTitle: '팀장' }); // H1팀 부서장
+  await person('UH2', { dept: 'H2팀', position: '부장', jobTitle: '팀장' }); // H2팀 팀장(부서장 칸은 비어 있던 상태)
+  await assignDeptHead('DH1', 'UH1');
+
+  await assignDeptHead('DH2', 'UH1');
+
+  assert.equal((await departmentRepo.get('DH2'))?.headUserId, 'UH1');
+  assert.equal((await departmentMemberRepo.get('DM-UH1-DH2'))?.jobTitle, '팀장');
+  assert.equal((await departmentMemberRepo.get('DM-UH1-DH2'))?.isPrimary, false);
+  assert.equal((await employeeProfileRepo.get('UH1'))?.jobTitle, '팀장'); // 본직(H1팀) 직책 그대로
+  assert.equal((await departmentRepo.get('DH1'))?.headUserId, 'UH1');
+  assert.equal((await employeeProfileRepo.get('UH2'))?.jobTitle, '팀원'); // H2팀의 기존 팀장은 내려간다
+});
+
+test('부서장을 바꾸면 기존 부서장은 그 부서 직책만 내려가고, 그 사람이 겸직으로 맡던 다른 부서는 그대로다', async () => {
+  await headDept('DH3', 'H3팀');
+  await headDept('DH4', 'H4팀');
+  await person('UH3', { dept: 'H3팀', position: '부장', jobTitle: '팀원' });
+  await person('UH4', { dept: 'H4팀', position: '부장', jobTitle: '팀원' });
+  await assignDeptHead('DH3', 'UH4'); // UH4 가 H3팀 겸직 부서장
+  await assignDeptHead('DH4', 'UH4'); // 본직 H4팀 부서장
+
+  await assignDeptHead('DH3', 'UH3');
+
+  assert.equal((await departmentRepo.get('DH3'))?.headUserId, 'UH3');
+  assert.equal((await employeeProfileRepo.get('UH3'))?.jobTitle, '팀장');
+  assert.equal((await departmentMemberRepo.get('DM-UH4-DH3'))?.jobTitle, '팀원');
+  assert.equal((await employeeProfileRepo.get('UH4'))?.jobTitle, '팀장');
+  assert.equal((await departmentRepo.get('DH4'))?.headUserId, 'UH4');
+});
+
+test('인명관리에서 팀장으로 발령하면 부서장이 바뀌고, 부서장을 팀원으로 바꾸면 부서장이 비워진다', async () => {
+  await headDept('DH5', 'H5팀');
+  await person('UH5', { dept: 'H5팀', position: '과장', jobTitle: '팀장' });
+  await person('UH6', { dept: 'H5팀', position: '대리', jobTitle: '팀원' });
+  await assignDeptHead('DH5', 'UH5');
+
+  // 화면이 직책을 먼저 저장한 뒤 연동을 부른다
+  await setPersonJobTitle('UH6', '팀장');
+  await syncDeptHeadFromTitle('UH6', 'DH5', '팀원', '팀장');
+  assert.equal((await departmentRepo.get('DH5'))?.headUserId, 'UH6');
+  assert.equal((await employeeProfileRepo.get('UH5'))?.jobTitle, '팀원');
+
+  await setPersonJobTitle('UH6', '팀원');
+  await syncDeptHeadFromTitle('UH6', 'DH5', '팀장', '팀원');
+  assert.equal((await departmentRepo.get('DH5'))?.headUserId, null);
+});
+
+test('겸직을 해제하거나 본직 부서를 옮기면 그 부서 부서장에서 빠진다', async () => {
+  await headDept('DH6', 'H6팀');
+  await person('UH7', { dept: 'H1팀', position: '부장', jobTitle: '팀원' });
+  await assignDeptHead('DH6', 'UH7');
+  assert.equal((await departmentRepo.get('DH6'))?.headUserId, 'UH7');
+
+  await departmentMemberRepo.remove('DM-UH7-DH6');
+  await releaseDeptHeadOnLeave('UH7', 'DH6');
+  assert.equal((await departmentRepo.get('DH6'))?.headUserId, null);
+});
+
+test('위원회는 직책을 바꾸지 않고 부서장만 지정한다', async () => {
+  await headDept('DH7', 'H7위원회', '위원회');
+  await person('UH8', { dept: 'H1팀', position: '이사', jobTitle: '임원' });
+
+  await assignDeptHead('DH7', 'UH8');
+
+  assert.equal((await departmentRepo.get('DH7'))?.headUserId, 'UH8');
+  assert.equal(await departmentMemberRepo.get('DM-UH8-DH7'), null);
+  assert.equal((await employeeProfileRepo.get('UH8'))?.jobTitle, '임원');
+});
+
+test('필요한 직책이 직책 목록에 없으면 부서장도 직책도 바꾸지 않는다', async () => {
+  await headDept('DH8', 'H8본부');
+  await departmentRepo.save({ id: 'DH8', name: 'H8본부', parentId: null, headUserId: null, deptType: '본부', order: 1 });
+  await person('UH9', { dept: 'H8본부', position: '부장', jobTitle: '팀원' });
+  const removed = (await jobTitleRepo.list()).find((j) => j.name === '본부장');
+  if (removed) await jobTitleRepo.remove(removed.id);
+  try {
+    await assert.rejects(assignDeptHead('DH8', 'UH9'), /본부장/);
+    assert.equal((await departmentRepo.get('DH8'))?.headUserId, null);
+    assert.equal((await employeeProfileRepo.get('UH9'))?.jobTitle, '팀원');
+  } finally {
+    if (removed) await jobTitleRepo.save(removed);
+  }
 });

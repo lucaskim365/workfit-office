@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Settings, X, Info, Search } from 'lucide-react';
+import { ClipboardCheck, Settings, X, Info, Search, Check } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useApprovalBoxes } from '@/features/gw/useApprovals';
+import { useApprovalBoxes, useBatchDecideStep } from '@/features/gw/useApprovals';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import MobileNotificationBell from './MobileNotificationBell';
-import { currentApproverIds } from '@/domain/approvalDoc/engine';
+import { byRecent, currentApproverIds, isMyApprovedDone } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } from '@/domain/approvalDoc/search';
@@ -76,7 +76,7 @@ export default function MobileApprovalList() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
@@ -85,6 +85,17 @@ export default function MobileApprovalList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
   const deptArchiveDocs = useDeptArchiveDocs(me);
+
+  // 일괄 승인 — 결재대기함 '결재대기중'(전부 내 차례)에서만. 승인은 웹과 같은 useBatchDecideStep(문서마다 내 차례인지 다시 확인).
+  const batchDecide = useBatchDecideStep();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false);
+  const [batchComment, setBatchComment] = useState('');
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
 
 
   // 1. 내가 즉시 승인/결재해야 할 활성 대기 건수 (전임자 승계 건 포함)
@@ -167,8 +178,9 @@ export default function MobileApprovalList() {
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
 
-    // 1. 결재 대기함 필터링
+    // 1. 결재 대기함 필터링 — 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터, 웹과 같게)
     if (box === '대기') {
+      const myDone = (byBox['완료'] ?? []).filter((d) => isMyApprovedDone(d, me));
       if (todoFilter === 'pending') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
@@ -178,10 +190,12 @@ export default function MobileApprovalList() {
       if (todoFilter === 'progress') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me);
+          return d.status === '진행중' && !approvers.includes(me);
         });
       }
-      return rawDocs;
+      if (todoFilter === 'done') return myDone;
+      const ids = new Set(rawDocs.map((d) => d.id));
+      return [...rawDocs, ...myDone.filter((d) => !ids.has(d.id))].sort(byRecent);
     }
 
     // 2. 상신함 필터링
@@ -231,9 +245,28 @@ export default function MobileApprovalList() {
 
   const isSearching = searchQuery.trim().length > 0;
 
+  const canBatchApprove = !isSearching && box === '대기' && todoFilter === 'pending' && docs.length > 0;
+  // 승인되어 목록에서 빠진 문서는 선택에서도 뺀다
+  const batchIds = selectedIds.filter((id) => docs.some((d) => d.id === id));
+  const allSelected = docs.length > 0 && batchIds.length === docs.length;
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const runBatchApprove = async () => {
+    if (batchIds.length === 0) return;
+    try {
+      await batchDecide.mutateAsync({ docIds: batchIds, userId: me, comment: batchComment.trim() || '일괄 승인 처리되었습니다.' });
+      setShowBatchConfirm(false);
+      setBatchComment('');
+      exitSelectMode();
+    } catch (e) {
+      window.alert(`일괄 승인 중 오류가 발생했습니다: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
         <div className="ml-auto flex items-center gap-1">
@@ -338,6 +371,7 @@ export default function MobileApprovalList() {
               key={b.key}
               onClick={() => {
                 setBox(b.key);
+                exitSelectMode();
                 setTodoFilter('pending');
                 setDraftFilter('all');
                 setDoneFilter('all');
@@ -369,14 +403,17 @@ export default function MobileApprovalList() {
 
       {box === '대기' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['pending', 'progress', 'all'] as const).map((f) => {
-            const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
+          {(['all', 'pending', 'progress', 'done'] as const).map((f) => {
+            const label = f === 'pending' ? '대기중' : f === 'progress' ? '진행중' : f === 'done' ? '완료' : '전체';
             const active = todoFilter === f;
             return (
               <button
                 key={f}
-                onClick={() => setTodoFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                onClick={() => {
+                  setTodoFilter(f);
+                  exitSelectMode();
+                }}
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
@@ -405,7 +442,7 @@ export default function MobileApprovalList() {
               <button
                 key={f}
                 onClick={() => setDraftFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#2563eb] text-white shadow-sm shadow-[#2563eb]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
@@ -510,17 +547,50 @@ export default function MobileApprovalList() {
                 {box === '대기' ? '결재할 문서가 없습니다.' : '문서가 없습니다.'}
               </div>
             ) : (
-              docs.map((d) => (
-                <ApprovalRow
-                  key={d.id}
-                  doc={d}
-                  isUnread={unreadState.isUnreadInBox(box, d.id)}
-                  onOpen={() => {
-                    unreadState.markRead(d.id);
-                    nav(`/m/approval/${d.id}`);
-                  }}
-                />
-              ))
+              <>
+                {canBatchApprove && (
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12px]">
+                    {selectMode ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIds(allSelected ? [] : docs.map((d) => d.id))}
+                          className="font-bold text-[#2563eb]"
+                        >
+                          {allSelected ? '전체 해제' : '전체 선택'}
+                        </button>
+                        <span className="text-ink3">{batchIds.length}건 선택</span>
+                        <button type="button" onClick={exitSelectMode} className="ml-auto font-bold text-ink3">
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-ink3">여러 건을 한 번에 승인할 수 있습니다.</span>
+                        <button type="button" onClick={() => setSelectMode(true)} className="ml-auto font-bold text-[#2563eb]">
+                          선택
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {docs.map((d) => (
+                  <ApprovalRow
+                    key={d.id}
+                    doc={d}
+                    isUnread={unreadState.isUnreadInBox(box, d.id)}
+                    checked={selectMode && canBatchApprove ? batchIds.includes(d.id) : undefined}
+                    onOpen={() => {
+                      if (selectMode && canBatchApprove) {
+                        toggleSelect(d.id);
+                        return;
+                      }
+                      unreadState.markRead(d.id);
+                      nav(`/m/approval/${d.id}`);
+                    }}
+                  />
+                ))}
+              </>
             )}
           </>
         )}
@@ -534,6 +604,61 @@ export default function MobileApprovalList() {
             <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
           </p>
         </div>
+      )}
+
+      {selectMode && canBatchApprove && (
+        <div className="shrink-0 border-t border-black/10 bg-white p-3 shadow-lg" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+          <button
+            type="button"
+            onClick={() => setShowBatchConfirm(true)}
+            disabled={batchIds.length === 0 || batchDecide.isPending}
+            className="w-full rounded-xl py-3 text-[15px] font-bold text-white active:scale-[0.98] transition-all disabled:opacity-40 shadow-sm"
+            style={{ background: '#16a34a' }}
+          >
+            {batchIds.length > 0 ? `${batchIds.length}건 일괄 승인` : '승인할 문서를 선택하세요'}
+          </button>
+        </div>
+      )}
+
+      {showBatchConfirm && createPortal(
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 p-4" onClick={() => !batchDecide.isPending && setShowBatchConfirm(false)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-slate-100 px-5 py-3.5 text-[15px] font-bold text-ink">일괄 승인</div>
+            <div className="space-y-3 px-5 py-4">
+              <p className="text-[13px] font-semibold text-ink">
+                선택한 <span className="text-[#16a34a]">{batchIds.length}건</span>을 모두 승인합니다.
+              </p>
+              <p className="text-[11.5px] text-amber-700">승인 후에는 취소하거나 되돌릴 수 없습니다.</p>
+              <textarea
+                value={batchComment}
+                onChange={(e) => setBatchComment(e.target.value)}
+                placeholder="의견 (선택 · 비우면 '일괄 승인 처리되었습니다.')"
+                rows={3}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-ink outline-none focus:border-[#16a34a] focus:bg-white"
+              />
+            </div>
+            <div className="flex gap-2.5 border-t border-slate-100 p-3">
+              <button
+                type="button"
+                onClick={() => setShowBatchConfirm(false)}
+                disabled={batchDecide.isPending}
+                className="flex-1 rounded-xl border border-black/10 py-2.5 text-[14px] font-bold text-ink2 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={runBatchApprove}
+                disabled={batchDecide.isPending || batchIds.length === 0}
+                className="flex-1 rounded-xl py-2.5 text-[14px] font-bold text-white disabled:opacity-50"
+                style={{ background: '#16a34a' }}
+              >
+                {batchDecide.isPending ? '승인 중…' : '승인'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {isSettingsOpen && createPortal(
@@ -606,7 +731,8 @@ export default function MobileApprovalList() {
   );
 }
 
-function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () => void; isUnread?: boolean }) {
+/** checked 를 주면(선택 모드) 왼쪽에 체크 표시가 붙는다. */
+function ApprovalRow({ doc, onOpen, isUnread, checked }: { doc: ApprovalDoc; onOpen: () => void; isUnread?: boolean; checked?: boolean }) {
   const drafter = doc.drafterName || doc.drafterId;
   
   let statusText: string = doc.status === '시행대기' ? '완료' : doc.status === '시행반송' ? '반려' : doc.status;
@@ -615,8 +741,16 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
   return (
     <button
       onClick={onOpen}
-      className="flex w-full flex-col gap-1 border-b border-slate-100 bg-white px-4 py-3 text-left active:bg-slate-50 transition-colors"
+      className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left active:bg-slate-50 transition-colors ${checked ? 'bg-emerald-50/60' : 'bg-white'}`}
     >
+      {checked !== undefined && (
+        <span
+          className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 ${checked ? 'border-[#16a34a] bg-[#16a34a] text-white' : 'border-slate-300 bg-white'}`}
+        >
+          {checked && <Check size={13} strokeWidth={3} />}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex items-center gap-1.5">
         <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>
           {doc.docType}
@@ -641,6 +775,7 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
           {doc.drafterDept ? ` · ${doc.drafterDept}` : ''}
         </span>
         <span className="ml-auto shrink-0 tabular-nums">{fmtDocDate(doc.submittedAt ?? doc.createdAt)}</span>
+      </div>
       </div>
     </button>
   );

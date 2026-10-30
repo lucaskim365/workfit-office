@@ -156,8 +156,8 @@ export function RichMessageBody({
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {fileIcon(att.name)}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-semibold leading-tight text-ink" title={att.name}>{att.name}</div>
-                    <div className="mt-0.5 text-[10px] font-medium text-ink3">{fmtSize(att.size)}</div>
+                    <div className="truncate chat-text-[12px] font-semibold leading-tight text-ink" title={att.name}>{att.name}</div>
+                    <div className="mt-0.5 chat-text-[10px] font-medium text-ink3">{fmtSize(att.size)}</div>
                   </div>
                 </div>
                 <button

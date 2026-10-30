@@ -6,6 +6,19 @@
  *
  * 실행: npm run appwrite:schema   (내부적으로 tsx scripts/appwrite-schema.ts)
  *
+ * 옵션:
+ *   --only=a,b   정의된 컬렉션 중 이것만 대상으로 한다.
+ *   --new-only   **새 컬렉션 생성만** 한다(--only 필수). 대상 컬렉션이 이미 있으면 속성·인덱스·enum
+ *                포함 아무것도 고치지 않고 건너뛰며, 데이터베이스가 없으면 만들지 않고 멈춘다.
+ *                다른 컬렉션과 문서(데이터)는 어떤 모드에서도 읽거나 쓰지 않는다.
+ *   --dry-run    서버를 조회만 하고 무엇을 만들지 출력한 뒤 끝낸다(쓰기 0건).
+ *   --prod       운영 프로젝트 ID·APPWRITE_API_KEY_PROD 를 쓴다.
+ *
+ *   예) 발주서 보관함 회신 컬렉션만 새로 만들기:
+ *       npm run appwrite:schema:po -- --dry-run          (확인)
+ *       npm run appwrite:schema:po                       (dev 적용)
+ *       npm run appwrite:schema:po -- --prod             (운영 적용)
+ *
  * 필요 env (.env.local 또는 프로세스 환경):
  *   APPWRITE_ENDPOINT     (없으면 VITE_APPWRITE_ENDPOINT)   예: https://appwrite.widdyax.com/v1
  *   APPWRITE_PROJECT_ID   (없으면 VITE_APPWRITE_PROJECT_ID) 예: 6a6bf85e002acb7f71d6
@@ -137,7 +150,8 @@ const COLLECTIONS: CollectionDef[] = [
       J('attachments', 20000),
       SA('mentions', 64),
     ],
-    indexes: [IX('roomId', ['roomId']), IX('at', ['at'])],
+    // roomId_at: 방 메시지 나눠 받기(최근 100건부터·시각 범위) — features/chat/threadWindow
+    indexes: [IX('roomId', ['roomId']), IX('at', ['at']), IX('roomId_at', ['roomId', 'at'])],
   },
   {
     id: 'chatRooms',
@@ -209,7 +223,9 @@ const COLLECTIONS: CollectionDef[] = [
       S('photoUrl', 512),
       S('activeChatRoomId', 64),
       S('resignedAt', 40),
-      S('fcmToken', 256),
+      S('fcmToken', 256), // 예전 단일 토큰 — 서버 함수 전환기 동안 최근 기기 토큰을 같이 둔다
+      SA('fcmTokens', 256), // 기기별 푸시 토큰 목록(PC·휴대폰 등 여러 대)
+      SA('fcmTokensRecall', 256), // 그중 알림 회수 신호를 받아도 되는 기기(안드로이드 휴대폰만 — 아이폰·PC 제외)
     ],
     indexes: [IX('empNo', ['empNo']), IX('dept', ['dept'])],
   },
@@ -392,6 +408,13 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    // 식권 대장(주소 /gw/meal-ticket). 날짜당 문서 하나 — recipients 중식, dinnerRecipients 석식($id = MT-YYYY-MM-DD). 발행·남은 수는 저장하지 않고 계산한다.
+    id: 'mealTickets',
+    name: '식권 대장',
+    attributes: [S('date', 10, true), INT('stockIn', false, 0, 0, 1000000), SA('recipients', 64), SA('dinnerRecipients', 64), S('memo', 500), S('updatedBy', 64), S('updatedAt', 40)],
+    indexes: [UQ('date', ['date'])],
+  },
+  {
     id: 'companySites',
     name: '사업장',
     attributes: [S('name', 128, true), S('kind', 32, true), S('addr', 256), S('tel', 32), S('mgr', 64), BOOL('active', true)],
@@ -544,6 +567,29 @@ const COLLECTIONS: CollectionDef[] = [
       문서관리 > 발주서 보관함의 회신본(거래처 직인이 찍힌 최종본). 문서당 1건, $id = 결재 문서 ID.
       보관함 목록 자체는 approvalDocs(완료·발주 서식)에서 골라 보여 주므로 여기엔 회신 메타만 있다.
       실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/ 아래.
+    */
+    attributes: [
+      S('docId', 64, true),
+      S('docNo', 64, true),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 100),
+      S('uploadedBy', 64, true),
+      S('uploadedByName', 64),
+      S('uploadedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
+    id: 'poTaxInvoices',
+    name: '발주서 매입 세금계산서',
+    /*
+      사업관리 > 발주 현황 보관함의 매입 세금계산서 파일. 결재 문서당 여러 건 — 새로 올린 것은 저마다 $id 를 받고,
+      여러 건을 받기 전에 올린 것은 $id = 결재 문서 ID 그대로다(poFileIdOf). 결재 문서는 docId 칸으로 묶는다.
+      파일이 있으면 '발행 완료', 없으면 '미발행'으로 보인다. 칸 구성은 poArchiveReplies 와 같다.
+      실제 파일은 fileStorage(Garage S3) chat/poArchive/{docId}/tax-invoice-* .
     */
     attributes: [
       S('docId', 64, true),
@@ -1597,8 +1643,23 @@ async function main() {
     }
   }
 
+  const newOnly = process.argv.includes('--new-only');
+  const dryRun = process.argv.includes('--dry-run');
+  if (newOnly && !only) {
+    console.error('✗ --new-only 는 --only=컬렉션 과 함께 써야 합니다(전체 컬렉션 대상 실행 방지).');
+    process.exit(1);
+  }
+
   console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}`);
-  console.log(only ? `  대상 한정: ${only.join(', ')}\n` : `  대상: 전체 ${targets.length}종\n`);
+  console.log(only ? `  대상 한정: ${only.join(', ')}` : `  대상: 전체 ${targets.length}종`);
+  if (newOnly) console.log('  모드: 새 컬렉션 생성만(기존 컬렉션·데이터 무변경)');
+  if (dryRun) console.log('  모드: dry-run(조회만, 쓰기 없음)');
+  console.log('');
+
+  if (newOnly || dryRun) {
+    await runGuarded(dbs, dbId, targets, { newOnly, dryRun });
+    return;
+  }
 
   await ensureDatabase(dbs, dbId);
 
@@ -1617,6 +1678,62 @@ async function main() {
   }
 
   console.log('\n✅ 스키마 적용 완료. (재실행해도 안전 — 멱등)');
+}
+
+/**
+ * 안전 모드(--new-only / --dry-run).
+ *
+ * 쓰기는 **없던 컬렉션을 만들고 그 안에 속성·인덱스를 다는 것**뿐이다. 이미 있는 컬렉션은
+ * 존재 확인(getCollection)만 하고 건너뛴다 — 기존 컬렉션에 속성을 추가하거나 enum 값을 늘리는
+ * ensureAttribute 경로를 아예 타지 않는다. 데이터베이스도 만들지 않는다.
+ */
+async function runGuarded(
+  dbs: Databases,
+  dbId: string,
+  targets: CollectionDef[],
+  opts: { newOnly: boolean; dryRun: boolean },
+) {
+  try {
+    await dbs.get(dbId);
+  } catch (e) {
+    if (isCode(e, 404)) {
+      console.error(`✗ database "${dbId}" 가 없습니다 — 안전 모드에서는 만들지 않습니다.`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  let created = 0;
+  for (const c of targets) {
+    console.log(`[${c.id}] ${c.name}`);
+    let exists = true;
+    try {
+      await dbs.getCollection(dbId, c.id);
+    } catch (e) {
+      if (!isCode(e, 404)) throw e;
+      exists = false;
+    }
+
+    if (exists) {
+      console.log(`  • 이미 존재 — ${opts.newOnly ? '안전 모드라 아무것도 바꾸지 않고 건너뜀' : '(dry-run) 일반 모드라면 빠진 속성·인덱스를 추가함'}`);
+      continue;
+    }
+
+    console.log(`  + 새로 만듦: 속성 ${c.attributes.length}개 [${c.attributes.map((a) => a.key).join(', ')}]`);
+    if (c.indexes.length) console.log(`  + 인덱스 ${c.indexes.length}개 [${c.indexes.map((i) => i.key).join(', ')}]`);
+    if (opts.dryRun) continue;
+
+    await dbs.createCollection(dbId, c.id, c.name, c.permissions ?? POC_PERMISSIONS, /* documentSecurity */ false);
+    console.log(`  ✓ collection "${c.id}" 생성`);
+    // 방금 만든 빈 컬렉션이라 기존 속성이 없다 — 그 컬렉션에만 속성·인덱스를 단다.
+    for (const a of c.attributes) await ensureAttribute(dbs, dbId, c.id, a, new Set());
+    await waitAttributesAvailable(dbs, dbId, c.id, c.attributes.map((a) => a.key));
+    for (const idx of c.indexes) await ensureIndex(dbs, dbId, c.id, idx, new Set());
+    created++;
+  }
+
+  if (opts.dryRun) console.log('\n✅ dry-run 끝 — 아무것도 쓰지 않았습니다.');
+  else console.log(created ? `\n✅ 완료 — 새 컬렉션 ${created}개만 만들었습니다.` : '\n✅ 완료 — 만들 컬렉션이 없어 아무것도 바꾸지 않았습니다.');
 }
 
 main().catch((e) => {

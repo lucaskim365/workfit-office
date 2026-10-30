@@ -1,13 +1,11 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { poReplyRepo } from '@/data/poArchive/poReply.repo';
+import { poReplyRepo, poTaxInvoiceRepo, type PoFileRepo } from '@/data/poArchive/poReply.repo';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, type PoReply, type PoViewer } from '@/domain/poArchive/schema';
+import { canViewPurchaseOrder, isArchivedPurchaseOrder, isPurchaseOrderForm, poFileIdOf, type PoReply, type PoViewer } from '@/domain/poArchive/schema';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-
-const KEY = 'poArchiveReplies';
 
 /**
  * 발주서 보관함 문서 — 결재 완료된 발주서 중 내가 볼 수 있는 것.
@@ -30,30 +28,48 @@ export function usePurchaseOrderArchive(viewer: Omit<PoViewer, 'deptId'> | null)
   return { docs, isLoading };
 }
 
-export function usePoReplies() {
-  return useQuery({ queryKey: [KEY], queryFn: () => poReplyRepo.list() });
+/**
+ * 보관함 첨부(회신 문서·매입 세금계산서) 조회·올리기·삭제 — 회신은 결재 문서당 1건(교체), 세금계산서는 여러 건(추가).
+ * 올리거나 지운 즉시 해당 행에 보이게 캐시를 먼저 고치고, 서버 목록으로 다시 맞춘다.
+ */
+function poFileHooks(key: string, repo: PoFileRepo) {
+  const useList = () => useQuery({ queryKey: [key], queryFn: () => repo.list() });
+
+  const useUpload = () => {
+    const qc = useQueryClient();
+    return useMutation({
+      mutationFn: (args: { doc: Pick<ApprovalDoc, 'id' | 'docNo'>; file: File; actor: { id: string; name: string } }) =>
+        repo.upload(args.doc, args.file, args.actor),
+      onSuccess: (row) => {
+        qc.setQueryData<PoReply[]>([key], (prev = []) => [
+          ...prev.filter((r) => (repo.multiple ? poFileIdOf(r) !== poFileIdOf(row) : r.docId !== row.docId)),
+          row,
+        ]);
+        return qc.invalidateQueries({ queryKey: [key] });
+      },
+    });
+  };
+
+  const useDelete = () => {
+    const qc = useQueryClient();
+    return useMutation({
+      mutationFn: (file: PoReply) => repo.remove(file),
+      onSuccess: (_, file) => {
+        qc.setQueryData<PoReply[]>([key], (prev = []) => prev.filter((r) => poFileIdOf(r) !== poFileIdOf(file)));
+        return qc.invalidateQueries({ queryKey: [key] });
+      },
+    });
+  };
+
+  return { useList, useUpload, useDelete };
 }
 
-export function useUploadPoReply() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args: { doc: Pick<ApprovalDoc, 'id' | 'docNo'>; file: File; actor: { id: string; name: string } }) =>
-      poReplyRepo.upload(args.doc, args.file, args.actor),
-    // 올린 즉시 해당 행에 보이게 캐시에 먼저 넣고, 서버 목록으로 다시 맞춘다.
-    onSuccess: (row) => {
-      qc.setQueryData<PoReply[]>([KEY], (prev = []) => [...prev.filter((r) => r.docId !== row.docId), row]);
-      return qc.invalidateQueries({ queryKey: [KEY] });
-    },
-  });
-}
+const replyHooks = poFileHooks('poArchiveReplies', poReplyRepo);
+export const usePoReplies = replyHooks.useList;
+export const useUploadPoReply = replyHooks.useUpload;
+export const useDeletePoReply = replyHooks.useDelete;
 
-export function useDeletePoReply() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (reply: PoReply) => poReplyRepo.remove(reply),
-    onSuccess: (_, reply) => {
-      qc.setQueryData<PoReply[]>([KEY], (prev = []) => prev.filter((r) => r.docId !== reply.docId));
-      return qc.invalidateQueries({ queryKey: [KEY] });
-    },
-  });
-}
+const taxInvoiceHooks = poFileHooks('poTaxInvoices', poTaxInvoiceRepo);
+export const usePoTaxInvoices = taxInvoiceHooks.useList;
+export const useUploadPoTaxInvoice = taxInvoiceHooks.useUpload;
+export const useDeletePoTaxInvoice = taxInvoiceHooks.useDelete;

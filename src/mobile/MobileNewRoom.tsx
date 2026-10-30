@@ -35,7 +35,7 @@ export default function MobileNewRoom() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="text-[15px] font-bold">새 대화</span>
         <button

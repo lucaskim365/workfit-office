@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
-import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
+import { useApprovalDoc, useDecideStep, useRecallApproval } from '@/features/gw/useApprovals';
 import { useAutoMarkPostRead, useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useMarkApprovalReadOnOpen } from '@/features/gw/useApprovalUnread';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -15,6 +15,7 @@ import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
+import { RecallConfirmModal, type ApprovedApproverInfo } from '@/modules/gw/approval/components/RecallConfirmModal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
@@ -113,6 +114,34 @@ export default function MobileApprovalDetail() {
 
   const myTurn = !!doc && isActiveApprover(doc, me);
 
+  // 회수 — 웹 ApprovalScreen과 같은 조건(기안자 + 진행중). 이미 승인한 사람이 있으면 사유 필수·알림 발송(repo가 처리).
+  const recallM = useRecallApproval();
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const canRecall = !!doc && doc.drafterId === me && doc.status === '진행중' && !myTurn;
+  const approvedApprovers: ApprovedApproverInfo[] = [];
+  if (doc) {
+    const seen = new Set<string>();
+    for (const s of doc.steps) {
+      if (s.kind === '참조' || s.decision !== '승인' || seen.has(s.approverId)) continue;
+      seen.add(s.approverId);
+      const u = users.find((x) => x.id === s.approverId);
+      approvedApprovers.push({ name: s.approverName || u?.name || s.approverId, position: s.approverPos || u?.position || null, dept: s.approverDept || u?.dept || null });
+    }
+  }
+
+  const confirmRecall = async (reason: string) => {
+    if (!doc) return;
+    setBusy(true);
+    try {
+      await recallM.mutateAsync({ id: doc.id, userId: me, reason });
+      setShowRecallModal(false);
+    } catch (e) {
+      window.alert(`회수 실패: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const { isAdmin, isExecutive: hasExecRole } = usePermission();
   const userObj = users.find((u) => u.id === me);
   const userPos = userObj?.position ?? '';
@@ -170,7 +199,7 @@ export default function MobileApprovalDetail() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center justify-between px-3 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center justify-between px-3 py-3 text-white">
         <div className="flex items-center gap-2">
           <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
           <span className="text-[15px] font-bold">전자결재 상세</span>
@@ -408,16 +437,41 @@ export default function MobileApprovalDetail() {
             </div>
           )}
 
-          {/* 반려 문서인 경우 하단 안내바 */}
-          {!myTurn && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송') && (
+          {/* 회수 — 내가 올린 진행중 문서 */}
+          {canRecall && (
+            <div className="shrink-0 border-t border-black/10 bg-white p-3 shadow-lg" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+              <button
+                type="button"
+                onClick={() => setShowRecallModal(true)}
+                disabled={busy}
+                className="w-full rounded-xl border border-amber-500/40 bg-amber-50 py-3 text-[15px] font-bold text-amber-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-xs"
+              >
+                {approvedApprovers.length > 0 ? '결재 회수' : '회수'}
+              </button>
+            </div>
+          )}
+
+          {/* 반려·회수 문서인 경우 하단 안내바 */}
+          {!myTurn && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송' || doc.status === '회수') && (
             <div className="shrink-0 border-t border-slate-200/80 bg-slate-50/90 p-3.5 text-center shadow-xs" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
               <p className="text-[12px] text-slate-600 flex items-center justify-center gap-1.5 font-medium">
                 <Info size={15} className="text-blue-500 shrink-0" strokeWidth={2.2} />
-                <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
+                <span>{doc.status === '회수' ? '회수' : '반려'} 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
               </p>
             </div>
           )}
         </>
+      )}
+
+      {showRecallModal && doc && (
+        <RecallConfirmModal
+          open
+          docTitle={doc.title}
+          approvedApprovers={approvedApprovers}
+          busy={busy}
+          onConfirm={confirmRecall}
+          onClose={() => setShowRecallModal(false)}
+        />
       )}
 
       {/* 승인/반려 확인 및 의견 입력 모달 */}

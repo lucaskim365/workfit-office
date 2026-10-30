@@ -3,6 +3,7 @@ import { chatRoomRepo, type CreateRoomInput } from '@/data/chatRoom/chatRoom.rep
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 import { CHAT_THREAD_KEY } from './useChatThread';
+import { chatPollInterval, useChatRealtime } from './chatRealtime';
 
 /**
  * 채팅방 목록 데이터 훅 — 화면이 repository 대신 호출하는 React 바인딩.
@@ -11,30 +12,32 @@ import { CHAT_THREAD_KEY } from './useChatThread';
 export const CHAT_ROOMS_KEY = 'chatRooms';
 export const CHAT_UNREAD_KEY = 'chatUnread';
 
-/**
- * 준실시간 폴링 주기(ms). 메신저 패널이 열려 있을 때만 쿼리가 마운트되므로
- * 유휴 비용은 없다. 탭 비활성 시 refetchInterval 은 자동 일시정지(기본값).
- * ([[메신저_개발_계획서.md]] Phase 2 — Option A 폴링)
- */
-export const CHAT_POLL_MS = 4000;
-
 /** 내가 참여한 방 목록(최근 메시지순). */
 export function useChatRooms(userId?: string) {
+  useChatRealtime();
   return useQuery({
     queryKey: [CHAT_ROOMS_KEY, userId ?? null],
     queryFn: () => chatRoomRepo.list(userId),
     enabled: !!userId,
-    refetchInterval: CHAT_POLL_MS,
+    refetchInterval: chatPollInterval, // 언제 다시 받는지는 chatRealtime.ts
   });
 }
 
-/** 방별 미읽음 수 맵(도출). */
+/** 방별 미읽음 수 맵(도출). 내가 참여한 방만 센다(방 목록은 같은 화면이 이미 받아 둔 캐시를 쓴다). */
 export function useUnreadCounts(userId?: string) {
+  useChatRealtime();
+  const qc = useQueryClient();
   return useQuery({
     queryKey: [CHAT_UNREAD_KEY, userId ?? null],
-    queryFn: () => chatMessageRepo.unreadByRoom(userId!),
+    queryFn: async () => {
+      const rooms = await qc.ensureQueryData({
+        queryKey: [CHAT_ROOMS_KEY, userId ?? null],
+        queryFn: () => chatRoomRepo.list(userId),
+      });
+      return chatMessageRepo.unreadByRoom(userId!, rooms.map((r) => r.id));
+    },
     enabled: !!userId,
-    refetchInterval: CHAT_POLL_MS,
+    refetchInterval: chatPollInterval, // 언제 다시 받는지는 chatRealtime.ts
   });
 }
 

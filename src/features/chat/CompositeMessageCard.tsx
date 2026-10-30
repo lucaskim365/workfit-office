@@ -50,7 +50,7 @@ export function CompositeMessageCard({
     >
       {/* 1. 상단 본문 텍스트 */}
       {hasText && (
-        <div className="text-[12.5px] leading-relaxed break-words [word-break:break-word] whitespace-pre-wrap px-0.5 pt-0.5">
+        <div className="chat-text-[12.5px] leading-relaxed break-words [word-break:break-word] whitespace-pre-wrap px-0.5 pt-0.5">
           <AutoLinkText text={text} />
         </div>
       )}
@@ -80,7 +80,7 @@ export function CompositeMessageCard({
       {/* 3. 일반 첨부파일 목록 (Teams 스타일 카드) */}
       {hasFiles && (
         <div className="space-y-1 pt-0.5">
-          <div className="text-[11px] font-bold opacity-75 px-1 flex items-center gap-1">
+          <div className="chat-text-[11px] font-bold opacity-75 px-1 flex items-center gap-1">
             <span>📎</span>
             <span>첨부파일 ({files.length}개)</span>
           </div>
@@ -98,10 +98,10 @@ export function CompositeMessageCard({
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {getFileIcon(att.name)}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-semibold text-ink leading-tight" title={att.name}>
+                    <div className="truncate chat-text-[12px] font-semibold text-ink leading-tight" title={att.name}>
                       {att.name}
                     </div>
-                    <div className="text-[10px] text-ink3 font-medium mt-0.5">
+                    <div className="chat-text-[10px] text-ink3 font-medium mt-0.5">
                       {fmtSize(att.size)}
                     </div>
                   </div>

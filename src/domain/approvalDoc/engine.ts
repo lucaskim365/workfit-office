@@ -298,6 +298,14 @@ export function isCompletedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
 }
 
 /**
+ * 내가 승인했고 결재가 끝난 문서(완료·시행대기·취소완료) — 결재 대기함의 '완료' 필터.
+ * 완료함의 '결재한 문서'와 같은 범위라, 결재한 문서를 완료함까지 가지 않고 결재 대기함에서 이어 볼 수 있다.
+ */
+export function isMyApprovedDone(doc: ApprovalDoc, userId: string): boolean {
+  return isCompletedBoxMatch(doc, userId) && doc.steps.some((s) => s.approverId === userId && s.decision === '승인');
+}
+
+/**
  * 결재함 분류(§7.2) — 문서가 userId 관점에서 특정 함(box)에 속하는가. 순수 도출.
  * repo(서버측 필터)와 features(클라 도출)가 **공유**해 단일 진실을 유지한다.
  */

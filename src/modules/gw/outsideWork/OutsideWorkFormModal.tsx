@@ -17,6 +17,7 @@ import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
+import { usePermission } from '@/features/auth/usePermission';
 import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 
@@ -39,9 +40,13 @@ const textareaClass =
  * 외근·출장 직접 등록·수정 — 결재 없이 본인이 올린다.
  * 저장하면 업무계획·캘린더에 보이고 근태·재실 상태에도 외근·출장으로 반영된다.
  */
-export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose, onSaved }: OutsideWorkFormModalProps) {
+export function OutsideWorkFormModal({ actor: baseActor, initialDate, work, users, onClose, onSaved }: OutsideWorkFormModalProps) {
+  // 관리자는 남의 직접 등록 건도 고칠 수 있다 — 그때 겹침 경고·동행자 판단은 등록한 사람 기준
+  const { isAdmin } = usePermission();
+  const actor: OutsideWorkActor = { ...baseActor, isAdmin };
+  const ownerId = work?.ownerUserId ?? actor.userId;
   // 같은 사람의 이미 잡힌 외근·출장(결재 완료 + 직접 등록) — 기간이 겹치면 경고만 한다(등록은 막지 않음)
-  const existing = useOutsideSchedulesOf(actor.userId, users.find((u) => u.id === actor.userId)?.name ?? '');
+  const existing = useOutsideSchedulesOf(ownerId, users.find((u) => u.id === ownerId)?.name ?? '');
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const create = useCreateOutsideWork();
   const update = useUpdateOutsideWork();
@@ -63,7 +68,7 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
   const [error, setError] = useState('');
 
   const saving = create.isPending || update.isPending;
-  const pickable = useMemo(() => users.filter((u) => u.id !== actor.userId), [users, actor.userId]);
+  const pickable = useMemo(() => users.filter((u) => u.id !== ownerId), [users, ownerId]);
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? id;
 
   /** 세부 구분을 고르면 시간을 맞춰 준다 — 종일·출장은 시간 없음, 오전/오후는 근무시간 반으로 */
@@ -101,7 +106,7 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
       endTime: allDay ? null : endTime,
       destination,
       purpose,
-      companionUserIds: companions.filter((id) => id !== actor.userId),
+      companionUserIds: companions.filter((id) => id !== ownerId),
       transportation,
       contact,
       memo,
@@ -179,7 +184,7 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose,
         </div>
 
         <Field label="시간">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
               <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
               종일

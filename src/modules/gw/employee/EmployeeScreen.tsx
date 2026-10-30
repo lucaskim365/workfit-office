@@ -14,6 +14,7 @@ import { describeBirthday } from '@/domain/birthday/engine';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { Button } from '@/shared/ui/Button';
 import {
+  DEPARTMENT_MEMBERS_KEY,
   useDepartmentMembers,
   useUpsertDepartmentMember,
   useRemoveDepartmentMember,
@@ -23,6 +24,12 @@ import {
   sanitizeJobTitle,
   makeDepartmentMemberId,
 } from '@/domain/departmentMember/engine';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Department } from '@/domain/department/schema';
+import { isDeptHeadTitle, releaseDeptHeadOnLeave, syncDeptHeadFromTitle } from '@/data/orgSync/orgSync';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
+import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
 import { DateInput } from '@/shared/ui/form/DateInput';
 
 export default function EmployeeScreen() {
@@ -36,6 +43,37 @@ export default function EmployeeScreen() {
   const { data: departmentMembers = [] } = useDepartmentMembers();
   const upsertDeptMember = useUpsertDepartmentMember();
   const removeDeptMember = useRemoveDepartmentMember();
+  const qc = useQueryClient();
+
+  /**
+   * 부서장 직책으로 발령하면 그 부서의 부서장도 바뀐다(부서/조직관리와 같은 기록) — 다른 사람이 부서장이면 먼저 묻는다.
+   * 위원회·부서장 직책이 아니면 묻지 않는다.
+   */
+  const confirmDeptHeadChange = (userId: string, dept: Department | undefined, title: string) => {
+    if (!dept || isCommitteeDept(dept) || !isDeptHeadTitle(title) || !dept.headUserId || dept.headUserId === userId) return true;
+    const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? id;
+    return window.confirm(
+      `'${dept.name}' 부서장이 ${nameOf(dept.headUserId)}에서 ${nameOf(userId)}(으)로 바뀝니다.\n${nameOf(dept.headUserId)}은(는) '${dept.name}' 부서장 직책에서 내려갑니다. 진행할까요?`,
+    );
+  };
+  /**
+   * 본직 부서 발령 시 그 부서 단체방에 초대한다. 이전 부서방에서는 빼지 않는다(나가기는 본인이 한다).
+   * 메신저 쪽 실패가 인사 저장을 실패로 보이게 하지 않도록 경고만 남긴다.
+   */
+  const joinDeptRoom = async (userId: string, dept: Department) => {
+    try {
+      const roomId = await chatRoomRepo.addMemberToDeptRoom(dept.id, userId);
+      if (!roomId) return;
+      await appendSystemMessage(roomId, `부서 발령으로 ${users.find((u) => u.id === userId)?.name ?? userId}님이 초대되었습니다`);
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+    } catch (e) {
+      console.warn('부서방 초대 실패:', (e as Error)?.message || e);
+    }
+  };
+  /** 부서장 연동 뒤 부서·사람 화면이 새 값을 읽게 한다. */
+  const refreshOrg = () => {
+    for (const key of ['departments', 'employeeProfiles', 'users', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] });
+  };
 
   // 필터 및 검색 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -338,6 +376,7 @@ export default function EmployeeScreen() {
     const targetDept = departments.find((d) => d.name === targetDeptName) || departments[0];
     const deptId = targetDept?.id || 'dept_default';
     const finalDuty = sanitizeJobTitle(targetDept, newEmpDuty || '팀원');
+    if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({
@@ -376,6 +415,14 @@ export default function EmployeeScreen() {
         order: 1,
         assignedAt: new Date().toISOString(),
       });
+      if (targetDept) {
+        try {
+          await syncDeptHeadFromTitle(targetUser.id, targetDept.id, '', finalDuty);
+        } finally {
+          refreshOrg();
+        }
+        await joinDeptRoom(targetUser.id, targetDept);
+      }
 
       setSelectedCreateUserId('');
       setNewEmpNo('');
@@ -440,6 +487,11 @@ export default function EmployeeScreen() {
 
     const targetDept = departments.find((d) => d.name === editEmpDept);
     const finalDuty = sanitizeJobTitle(targetDept || editEmpDept, editEmpDuty);
+    // 바꾸기 전 본직 부서·직책 — 부서장 연동(이동·강등) 판단용
+    const prevProfile = employeeProfiles.find((p) => p.userId === targetUser.id || p.id === targetUser.id);
+    const prevDeptId = prevProfile?.deptId ?? departmentMembers.find((m) => m.userId === targetUser.id && m.isPrimary)?.deptId ?? null;
+    const prevTitle = prevProfile?.jobTitle ?? '';
+    if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({
@@ -487,6 +539,17 @@ export default function EmployeeScreen() {
           order: 1,
           assignedAt: prevPrimary?.assignedAt || new Date().toISOString(),
         });
+
+        // 부서장 연동 — 다른 부서로 옮겼으면 예전 부서 부서장에서 빼고, 새 부서에서는 처음 발령처럼 본다
+        try {
+          const moved = !!prevDeptId && prevDeptId !== targetDept.id;
+          if (moved) await releaseDeptHeadOnLeave(targetUser.id, prevDeptId);
+          await syncDeptHeadFromTitle(targetUser.id, targetDept.id, moved ? '' : prevTitle, finalDuty);
+        } finally {
+          refreshOrg();
+        }
+        // 다른 부서로 옮겼거나 처음 발령이면 새 부서방에 초대(퇴직 처리 중이면 제외)
+        if (prevDeptId !== targetDept.id && editEmpStatus !== 'RETIRED') await joinDeptRoom(targetUser.id, targetDept);
       }
 
       setIsEditModalOpen(false);
@@ -512,6 +575,7 @@ export default function EmployeeScreen() {
     }
 
     const sanitizedDuty = sanitizeJobTitle(targetDept, newConcJobTitle);
+    if (!confirmDeptHeadChange(selectedUserId, targetDept, sanitizedDuty)) return;
     try {
       await upsertDeptMember.mutateAsync({
         id: makeDepartmentMemberId(selectedUserId, targetDept.id),
@@ -523,6 +587,11 @@ export default function EmployeeScreen() {
         order: 99,
         assignedAt: new Date().toISOString(),
       });
+      try {
+        await syncDeptHeadFromTitle(selectedUserId, targetDept.id, '', sanitizedDuty);
+      } finally {
+        refreshOrg();
+      }
       setNewConcDeptId('');
       setNewConcJobTitle('팀원');
       alert(`'${targetDept.name}' 겸직이 성공적으로 등록되었습니다.`);
@@ -535,7 +604,16 @@ export default function EmployeeScreen() {
   const handleRemoveConcurrentAffiliation = async (memberId: string, deptName: string) => {
     if (confirm(`'${deptName}' 겸직 소속을 해제하시겠습니까?`)) {
       try {
+        const member = departmentMembers.find((m) => m.id === memberId);
         await removeDeptMember.mutateAsync(memberId);
+        // 그 부서 부서장이었으면 부서장도 비운다
+        if (member) {
+          try {
+            await releaseDeptHeadOnLeave(member.userId, member.deptId);
+          } finally {
+            refreshOrg();
+          }
+        }
         alert(`'${deptName}' 겸직이 해제되었습니다.`);
       } catch (err: any) {
         alert(err.message || '겸직 해제 중 오류가 발생했습니다.');
@@ -723,22 +801,23 @@ export default function EmployeeScreen() {
               </div>
             </div>
 
-            {/* 임직원 목록 테이블 */}
-            <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
-              <table className="w-full text-left border-collapse text-[11.5px]">
+            {/* 임직원 목록 테이블 — 표 영역이 좁으면 덜 중요한 열부터 숨긴다(상세 창에서 볼 수 있음).
+                @container(inline-size 격리)라 표가 넓어도 페이지 너비를 밀어내지 않고 이 안에서만 가로 스크롤된다. */}
+            <div className="@container flex-1 overflow-auto rounded-lg border border-border bg-panel">
+              <table className="w-full whitespace-nowrap text-left border-collapse text-[11.5px]">
                 <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2 whitespace-nowrap">
                   <tr>
-                    <th className="py-2.5 px-3 text-center w-12">사진</th>
+                    <th className="hidden @min-[1030px]:table-cell py-2.5 px-3 text-center w-12">사진</th>
                     <th className="py-2.5 px-3 w-28">사번</th>
                     <th className="py-2.5 px-3 w-28">이름</th>
                     <th className="py-2.5 px-3 min-w-[140px]">부서</th>
                     <th className="py-2.5 px-3 w-24">직급</th>
                     <th className="py-2.5 px-3 w-24">직책</th>
-                    <th className="py-2.5 px-3 min-w-[180px]">업무 이메일</th>
-                    <th className="py-2.5 px-3 min-w-[180px]">개인 이메일</th>
-                    <th className="py-2.5 px-3 w-36">연락처</th>
+                    <th className="hidden @min-[680px]:table-cell py-2.5 px-3 min-w-[180px]">업무 이메일</th>
+                    <th className="hidden @min-[1030px]:table-cell py-2.5 px-3 min-w-[180px]">개인 이메일</th>
+                    <th className="hidden @min-[820px]:table-cell py-2.5 px-3 w-36">연락처</th>
                     <th className="py-2.5 px-3 text-center w-20">재직상태</th>
-                    <th className="py-2.5 px-3 text-center w-24">근태관리</th>
+                    <th className="hidden @min-[820px]:table-cell py-2.5 px-3 text-center w-24">근태관리</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -753,7 +832,7 @@ export default function EmployeeScreen() {
                             isSelected ? 'bg-teal-soft/10 font-semibold' : ''
                           }`}
                         >
-                          <td className="py-2 px-3 text-center">
+                          <td className="hidden @min-[1030px]:table-cell py-2 px-3 text-center">
                             <span className="mx-auto grid h-6.5 w-6.5 place-items-center rounded-full bg-teal-soft text-[10.5px] font-bold text-teal">
                               {e.name[0]}
                             </span>
@@ -772,7 +851,7 @@ export default function EmployeeScreen() {
                                   ).length;
                                   if (concCount > 0) {
                                     return (
-                                      <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                      <span className="rounded bg-slate-200 px-1.5 py-0.2 text-[9.5px] font-bold text-slate-700 border border-slate-300">
                                         +{concCount}겸직
                                       </span>
                                     );
@@ -784,9 +863,9 @@ export default function EmployeeScreen() {
                           </td>
                           <td className="py-2 px-3 text-[11.5px] text-ink2 whitespace-nowrap">{e.position}</td>
                           <td className="py-2 px-3 text-[11.5px] text-ink3 whitespace-nowrap">{e.duty}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">{e.email || '-'}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.personalEmail || '-'}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
+                          <td className="hidden @min-[680px]:table-cell py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">{e.email || '-'}</td>
+                          <td className="hidden @min-[1030px]:table-cell py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.personalEmail || '-'}</td>
+                          <td className="hidden @min-[820px]:table-cell py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
                           <td className="py-2 px-3 text-center">
                             <span
                               className={`inline-block rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
@@ -808,7 +887,7 @@ export default function EmployeeScreen() {
                                 : '재직'}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="hidden @min-[820px]:table-cell py-2 px-3 text-center">
                             <span
                               className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
                                 e.isAttendanceTarget
@@ -932,7 +1011,7 @@ export default function EmployeeScreen() {
                           className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${
                             selectedEmp.isAttendanceTarget
                               ? 'border-teal/20 bg-teal-soft/20 text-teal'
-                              : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                              : 'border-slate-300 bg-slate-100 text-slate-600'
                           }`}
                         >
                           {selectedEmp.isAttendanceTarget ? '대상 (ON)' : '제외 (OFF)'}
@@ -996,7 +1075,7 @@ export default function EmployeeScreen() {
                                   className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
                                     m.isPrimary
                                       ? 'bg-teal-soft text-teal border border-teal/20'
-                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600'
+                                      : 'bg-slate-200 text-slate-700 border border-slate-300'
                                   }`}
                                 >
                                   {m.isPrimary ? '주소속' : '겸직'}
@@ -1309,7 +1388,7 @@ export default function EmployeeScreen() {
                   className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
                     newEmpIsAttendanceTarget
                       ? 'border-teal bg-teal text-white shadow-xs'
-                      : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      : 'border-slate-300 bg-slate-100 text-slate-600'
                   }`}
                 >
                   <span>{newEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
@@ -1565,7 +1644,7 @@ export default function EmployeeScreen() {
                       className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
                         editEmpIsAttendanceTarget
                           ? 'border-teal bg-teal text-white shadow-xs'
-                          : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          : 'border-slate-300 bg-slate-100 text-slate-600'
                       }`}
                     >
                       <span>{editEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
@@ -1596,7 +1675,7 @@ export default function EmployeeScreen() {
                               className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-1.5 text-[11px]"
                             >
                               <div className="flex items-center gap-2">
-                                <span className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9.5px] font-bold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9.5px] font-bold text-slate-700 border border-slate-300">
                                   겸직
                                 </span>
                                 <span className="font-semibold text-ink">{m.deptName}</span>

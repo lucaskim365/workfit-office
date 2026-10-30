@@ -773,7 +773,7 @@ export function ApprovalLineBuilder({
                 className="flex items-center justify-between rounded-lg border border-border-hi bg-panel px-3 py-1.5 shadow-2xs hover:border-teal/50 transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="grid h-5 px-1.5 place-items-center rounded bg-slate-100 text-[9.5px] font-bold text-ink3 border border-border/70 select-none dark:bg-slate-800">
+                  <span className="grid h-5 px-1.5 place-items-center rounded bg-slate-100 text-[9.5px] font-bold text-ink3 border border-border/70 select-none">
                     참조
                   </span>
                   <span className="truncate text-[12px] font-semibold text-ink">

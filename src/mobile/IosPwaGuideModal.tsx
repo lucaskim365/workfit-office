@@ -195,7 +195,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
         style={{ color: '#1e293b' }}
       >
         {/* 상단 헤더 */}
-        <div className="flex items-center justify-between border-b border-slate-100 bg-[#101830] px-5 py-4 text-white">
+        <div className="m-header flex items-center justify-between border-b border-slate-100 px-5 py-4 text-white">
           <div className="flex items-center gap-2.5">
             <span className="text-[22px]">{selectedOs === 'ios' ? '🍎' : '🤖'}</span>
             <div>
@@ -359,7 +359,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                   {/* 1단계. 홈 화면에 앱 설치하기 */}
                   <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#101830] text-[12px] font-bold text-white">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-navy text-[12px] font-bold text-white">
                         1
                       </span>
                       <h3 className="text-[15px] font-bold text-slate-900">1단계. 워크핏 앱 홈 화면에 설치</h3>
@@ -435,7 +435,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                   {/* 2단계. 로그인 */}
                   <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#101830] text-[12px] font-bold text-white">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-navy text-[12px] font-bold text-white">
                         2
                       </span>
                       <h3 className="text-[15px] font-bold text-slate-900">2단계. 로그인</h3>
@@ -568,7 +568,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                   {/* 1단계. 홈 화면에 앱 설치하기 */}
                   <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#101830] text-[12px] font-bold text-white">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-navy text-[12px] font-bold text-white">
                         1
                       </span>
                       <h3 className="text-[15px] font-bold text-slate-900">1단계. 홈 화면에 앱 설치하기</h3>
@@ -621,7 +621,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                   {/* 2단계. 로그인 */}
                   <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#101830] text-[12px] font-bold text-white">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-navy text-[12px] font-bold text-white">
                         2
                       </span>
                       <h3 className="text-[15px] font-bold text-slate-900">2단계. 로그인</h3>
@@ -838,7 +838,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
 
             <button
               onClick={handleClose}
-              className="rounded-lg bg-[#101830] px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm transition hover:bg-[#1a2850] active:scale-[0.98]"
+              className="rounded-lg bg-navy px-5 py-2.5 text-[13.5px] font-bold text-white shadow-sm transition hover:opacity-90 active:scale-[0.98]"
             >
               닫기
             </button>

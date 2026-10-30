@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Car, CheckCircle2, FileText, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import { OUTSIDE_WORK_CATEGORY_LABELS, outsideKindLabel } from '@/domain/outsideWork/schema';
@@ -8,6 +8,7 @@ import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
 import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
+import { usePermission } from '@/features/auth/usePermission';
 
 interface OutsideWorkDetailModalProps {
   view: OutsideScheduleView;
@@ -48,6 +49,8 @@ function Row({ icon, children }: { icon: ReactNode; children: ReactNode }) {
  */
 export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, zClass }: OutsideWorkDetailModalProps) {
   const nav = useNavigate();
+  // PWA(/m)에서 열면 결재 문서도 PWA 결재 화면으로 연다
+  const inPwa = useLocation().pathname.startsWith('/m');
   const remove = useRemoveOutsideWork();
   const link = useLinkOutsideWork();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -56,8 +59,11 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
 
   const owner = users.find((u) => u.id === view.ownerUserId);
   const ownerLabel = [owner?.name ?? view.ownerName ?? '', owner?.position ?? ''].filter(Boolean).join(' ');
+  const { isAdmin } = usePermission();
+  const actor: OutsideWorkActor = { userId: viewer.userId, active: viewer.active, isAdmin };
   const isMine = view.ownerUserId === viewer.userId;
-  const canEdit = view.source === 'SELF' && isMine && viewer.active;
+  // 직접 등록 건은 본인과 관리자가 고치고 지운다. 결재 건과 연결은 본인만.
+  const canEdit = view.source === 'SELF' && (isMine || isAdmin) && viewer.active;
   const sameDept = Boolean(owner?.dept && viewer.dept && owner.dept === viewer.dept);
   const contact = view.contact ? (isMine || sameDept ? view.contact : maskContact(view.contact)) : '';
 
@@ -67,7 +73,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
 
   // [결재 건과 연결] 후보 — 기간이 겹치는 내 결재 완료 외근·출장
   const mySchedules = useOutsideSchedulesOf(viewer.userId, users.find((u) => u.id === viewer.userId)?.name ?? '');
-  const linkCandidates = canEdit
+  const linkCandidates = canEdit && isMine
     ? mySchedules.filter((v) => v.source === 'APPROVAL' && v.approval && v.startDate <= view.endDate && v.endDate >= view.startDate)
     : [];
 
@@ -86,7 +92,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
     if (!view.self) return;
     setError('');
     try {
-      await remove.mutateAsync({ actor: viewer, id: view.self.id });
+      await remove.mutateAsync({ actor, id: view.self.id });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '삭제하지 못했습니다.');
@@ -115,12 +121,13 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
       footer={(
         <>
           {view.approval && (
-            <Button variant="accent" onClick={() => { onClose(); nav(`/gw/approval?doc=${view.approval!.docNo || view.approval!.docId}`); }}>
+            <Button variant="accent" onClick={() => { onClose(); nav(inPwa ? `/m/approval/${view.approval!.docId}` : `/gw/approval?doc=${view.approval!.docNo || view.approval!.docId}`); }}>
               <FileText size={13} /> 결재 문서 보기
             </Button>
           )}
           {canEdit && !confirmDelete && (
             <>
+              {isMine && (
               <Button
                 onClick={() => setLinking((v) => !v)}
                 disabled={linkCandidates.length === 0}
@@ -128,6 +135,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
               >
                 <Link2 size={13} /> 결재 건과 연결
               </Button>
+              )}
               <Button variant="danger" onClick={() => setConfirmDelete(true)}>삭제</Button>
               <Button variant="primary" onClick={() => { onClose(); onEdit?.(view); }}>수정</Button>
             </>
@@ -183,7 +191,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
           </Row>
         )}
       </div>
-      {linking && canEdit && (
+      {linking && canEdit && isMine && (
         <div className="mt-3 space-y-1.5 rounded-lg border border-border bg-panel-alt/40 p-2.5">
           <p className="text-[11px] text-ink2">연결할 결재 문서를 고르세요. 연결하면 이 등록은 업무계획·캘린더·근태에서 빠지고 결재 건만 보입니다.</p>
           {linkCandidates.map((c) => (
