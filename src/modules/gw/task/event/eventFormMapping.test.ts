@@ -27,6 +27,7 @@ import {
   validateOutsideDraft,
   meetingPurpose,
   type EventFormState,
+  type EventKind,
 } from './eventFormMapping';
 
 const D = '2026-10-21';
@@ -254,7 +255,7 @@ test('일반 항목 초안 — 종일이면 시각 없음, 시간 항목은 구�
 test('일반 항목 검증 — 태그·제목·시간', () => {
   assert.equal(validateItemDraft(toItemDraft(createState({ tagId: '', title: 'a', range: { start: 0, end: 30 } })), ME, ME), '태그를 고르세요.');
   assert.equal(validateItemDraft(toItemDraft(createState({ range: { start: 0, end: 30 } })), ME, ME), '제목을 입력하세요.');
-  assert.equal(validateItemDraft(toItemDraft(createState({ title: 'a' })), ME, ME), '시간 항목에는 시작·종료 시각이 필요합니다.');
+  assert.equal(validateItemDraft(toItemDraft(createState({ title: 'a' })), ME, ME), '시간 항목에는 시작 시각이 필요합니다.');
 });
 
 // ── 세부 구분 → 시간 ─────────────────────────────────
@@ -448,4 +449,31 @@ test('지난 행선지 — 최근 것부터, 같은 곳은 한 번, 공백 제�
   );
   assert.deepEqual(list, ['대전 공장', '부산 본사']);
   assert.equal(recentDestinations([{ startDate: '1', destination: 'a' }, { startDate: '2', destination: 'b' }], 1).length, 1);
+});
+
+test('업무 종료 미정 — 시작만 있는 항목을 열면 openEnd, 30분 자리, 저장하면 종료 없음', () => {
+  const item: WorkPlanItem = {
+    id: 'WI-20261021-0002', ownerUserId: ME, date: D, allDay: false, startTime: '10:00', endTime: null,
+    tagId: 'WT-0001', title: '자료 정리', memo: '', createdBy: ME, createdAt: NOW, updatedAt: NOW,
+  };
+  const s = initialStateFromEntry({ ...entryBase, source: 'ITEM', item } as DayEntry, null);
+  assert.equal(s.openEnd, true);
+  assert.deepEqual(s.range, { start: 600, end: 630 });
+  const draft = toItemDraft(s);
+  assert.equal(draft.startTime, '10:00');
+  assert.equal(draft.endTime, null);
+  assert.equal(validateItemDraft(draft, ME, ME), null);
+  // 종료가 있는 항목은 openEnd 아님
+  assert.equal(toItemDraft(createState({ title: 'a', range: { start: 600, end: 660 } })).endTime, '11:00');
+});
+
+test('종료 미정 — 시간표로 시간을 바꾸면 풀리고, 회의로 바꾸면 풀린다', () => {
+  const open = createState({ title: 'a', range: { start: 600, end: 630 }, openEnd: true });
+  assert.equal(applyRangeChange(open, { start: 600, end: 690 }).openEnd, false);
+  const rule = { mode: 'create' as const, allowed: ['ITEM', 'MEETING'] as EventKind[] };
+  assert.equal(switchKind(open, 'MEETING', rule, POLICY).openEnd, false);
+  // 종일(시간 미정)이면 openEnd 는 저장에 영향이 없다
+  const allDay = toItemDraft({ ...open, allDay: true });
+  assert.equal(allDay.startTime, null);
+  assert.equal(allDay.endTime, null);
 });

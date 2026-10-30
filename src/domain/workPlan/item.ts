@@ -25,11 +25,12 @@ export const workPlanItemSchema = z.object({
     }
     return;
   }
-  if (!value.startTime || !value.endTime) {
-    ctx.addIssue({ code: 'custom', path: ['startTime'], message: '시간 항목에는 시작·종료 시각이 필요합니다.' });
+  // 종료는 비워 둘 수 있다(종료 미정 — 시작만 아는 업무)
+  if (!value.startTime) {
+    ctx.addIssue({ code: 'custom', path: ['startTime'], message: '시간 항목에는 시작 시각이 필요합니다.' });
     return;
   }
-  if (value.startTime >= value.endTime) {
+  if (value.endTime !== null && value.startTime >= value.endTime) {
     ctx.addIssue({ code: 'custom', path: ['endTime'], message: '종료 시각은 시작 시각보다 늦어야 합니다.' });
   }
 });

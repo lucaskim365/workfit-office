@@ -33,6 +33,8 @@ export interface EventFormState {
   endDate: string;
   allDay: boolean;
   range: MinuteRange | null;
+  /** 업무만 — 종료 미정(시작만 저장). range 는 시간표에 그릴 30분 자리 */
+  openEnd: boolean;
   memo: string;
   attendeeIds: string[];
   visibility: CalendarVisibility;
@@ -49,6 +51,12 @@ export interface EventFormState {
 
 const isOutsideKind = (kind: EventKind): kind is 'OUTSIDE' | 'TRIP' => kind === 'OUTSIDE' || kind === 'TRIP';
 
+/** 종료 미정 항목을 시간표에 그릴 자리 — 시작부터 30분 */
+export function openRangeOf(startTime: string): MinuteRange {
+  const start = toMinutes(startTime);
+  return { start, end: Math.min(start + 30, DAY_END) };
+}
+
 function rangeOf(startTime: string | null | undefined, endTime: string | null | undefined): MinuteRange | null {
   if (!startTime || !endTime) return null;
   return { start: toMinutes(startTime), end: toMinutes(endTime) };
@@ -63,6 +71,7 @@ function blankState(date: string): EventFormState {
     endDate: date,
     allDay: false,
     range: null,
+    openEnd: false,
     memo: '',
     attendeeIds: [],
     visibility: MEETING_DEFAULT_VISIBILITY,
@@ -145,7 +154,8 @@ export function initialStateFromEntry(entry: DayEntry, linkedRoomId: string | nu
       tagId: item.tagId,
       title: item.title,
       allDay: item.allDay,
-      range: item.allDay ? null : rangeOf(item.startTime, item.endTime),
+      range: item.allDay ? null : item.startTime && !item.endTime ? openRangeOf(item.startTime) : rangeOf(item.startTime, item.endTime),
+      openEnd: !item.allDay && Boolean(item.startTime) && !item.endTime,
       memo: item.memo,
     };
   }
@@ -197,8 +207,9 @@ export function applySubType(state: EventFormState, subType: string, policy: Sub
  * (근태 판정이 세부 구분을 보므로 시각과 구분이 어긋나지 않게). 출장은 세부 구분에 시간이 없어 그대로.
  */
 export function applyRangeChange(state: EventFormState, range: MinuteRange): EventFormState {
-  if (state.kind === 'OUTSIDE') return { ...state, range, allDay: false, subType: '시간 외근' };
-  return { ...state, range, allDay: false };
+  if (state.kind === 'OUTSIDE') return { ...state, range, allDay: false, subType: '시간 외근', openEnd: false };
+  // 시간표로 끝을 정하면 종료 미정은 풀린다
+  return { ...state, range, allDay: false, openEnd: false };
 }
 
 /** 날짜 바꾸기 — 여러 날 외근·출장은 종료일이 시작일보다 앞서지 않게. 빈 값이면 그대로. */
@@ -272,8 +283,8 @@ export function switchKind(
   if (rule.mode === 'create' && !rule.allowed.includes(next)) return state;
   if (rule.mode === 'edit' && !(isOutsideKind(state.kind) && isOutsideKind(next))) return state;
   if (isOutsideKind(next)) return applySubType({ ...state, kind: next }, OUTSIDE_WORK_SUBTYPES[next][0], policy);
-  // 회의는 시각이 필수
-  return { ...state, kind: next, allDay: next === 'MEETING' ? false : state.allDay };
+  // 회의는 시각이 필수, 종료 미정은 업무만
+  return { ...state, kind: next, allDay: next === 'MEETING' ? false : state.allDay, openEnd: next === 'ITEM' && state.openEnd };
 }
 
 function timesOf(state: EventFormState): { startTime: string | null; endTime: string | null } {
@@ -282,10 +293,12 @@ function timesOf(state: EventFormState): { startTime: string | null; endTime: st
 }
 
 export function toItemDraft(state: EventFormState): WorkPlanItemDraft {
+  const times = timesOf(state);
   return {
     date: state.date,
     allDay: state.allDay,
-    ...timesOf(state),
+    ...times,
+    endTime: state.openEnd ? null : times.endTime,
     tagId: state.tagId,
     title: state.title,
     memo: state.memo,

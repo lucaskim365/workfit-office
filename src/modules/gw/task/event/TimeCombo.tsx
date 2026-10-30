@@ -4,7 +4,7 @@ import { DAY_END, parseTimeInput, toHHmm } from '@/domain/workPlan/timeGrid';
 /** ↑·↓ 키로 옮기는 폭(분) */
 const ARROW_STEP = 15;
 
-const clockOf = (minutes: number) => (minutes >= DAY_END ? '24:00' : toHHmm(minutes));
+const clockOf = (minutes: number) => (minutes < 0 ? '미정' : minutes >= DAY_END ? '24:00' : toHHmm(minutes));
 
 interface TimeComboProps {
   'aria-label': string;
@@ -49,7 +49,7 @@ export function TimeCombo({
   // 목록을 열면 지금 값(또는 anchor)에 가장 가까운 칸을 가운데로
   useLayoutEffect(() => {
     const list = listRef.current;
-    const target = value ?? anchor;
+    const target = value !== null && value >= 0 ? value : anchor;
     if (!open || !list || target === undefined || options.length === 0) return;
     const nearest = options.reduce((best, o) => (Math.abs(o.minute - target) < Math.abs(best.minute - target) ? o : best));
     const el = list.querySelector<HTMLElement>(`[data-minute="${nearest.minute}"]`);
@@ -103,7 +103,7 @@ export function TimeCombo({
             e.nativeEvent.stopPropagation();
             setText(null);
             setOpen(false);
-          } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && value !== null) {
+          } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && value !== null && value >= 0) {
             e.preventDefault();
             setText(null);
             const next = value + (e.key === 'ArrowDown' ? ARROW_STEP : -ARROW_STEP);

@@ -85,6 +85,9 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
   }
 }
 
-export const timeOf = (entry: DayEntry) => (entry.allDay || !entry.startTime ? '종일' : entry.startTime);
+/** 시각 없는 칸 글 — 업무는 '미정'(시간을 모르는 일), 그 밖(외근·출장·휴가 등)은 '종일' */
+const noTimeOf = (entry: DayEntry) => (entry.source === 'ITEM' ? '미정' : '종일');
+export const timeOf = (entry: DayEntry) => (entry.allDay || !entry.startTime ? noTimeOf(entry) : entry.startTime);
+/** 종료 미정이면 '10:00~' */
 export const timeRangeOf = (entry: DayEntry) =>
-  entry.allDay || !entry.startTime ? '종일' : entry.endTime ? `${entry.startTime}~${entry.endTime}` : entry.startTime;
+  entry.allDay || !entry.startTime ? noTimeOf(entry) : `${entry.startTime}~${entry.endTime ?? ''}`;

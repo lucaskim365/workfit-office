@@ -22,9 +22,11 @@ test('종일이면 시각이 없어야 한다', () => {
   assert.equal(workPlanItemSchema.safeParse({ ...base, allDay: true, startTime: null, endTime: null }).success, true);
 });
 
-test('시간 항목은 시작·종료가 모두 필요하고 시작<종료', () => {
+test('시간 항목은 시작이 필요하고, 종료가 있으면 시작<종료 (종료 미정 허용)', () => {
   assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: '10:00', endTime: '10:00' }).success, false);
-  assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: '10:00', endTime: null }).success, false);
+  assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: '10:00', endTime: null }).success, true);
+  assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: null, endTime: '10:30' }).success, false);
+  assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: null, endTime: null }).success, false);
   assert.equal(workPlanItemSchema.safeParse({ ...base, startTime: '10:00', endTime: '10:30' }).success, true);
 });
 

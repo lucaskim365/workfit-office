@@ -22,6 +22,8 @@ export interface TimeGridBlock {
   end: number;
   label: string;
   tone: 'meeting' | 'outside' | 'trip' | 'leave' | 'item' | 'room';
+  /** 종료 미정 — 30분 자리로 그리고 아래를 흐리게 */
+  open?: boolean;
 }
 
 interface TimeGridProps {
@@ -31,6 +33,10 @@ interface TimeGridProps {
   blocks: TimeGridBlock[];
   value: MinuteRange | null;
   allDay: boolean;
+  /** 고른 시간이 종료 미정(업무) */
+  openEnd?: boolean;
+  /** 맨 위 종일 줄 이름 — 업무는 '미정' */
+  allDayLabel?: string;
   onChange: (range: MinuteRange) => void;
   mode: 'desktop' | 'touch';
 }
@@ -44,6 +50,8 @@ const DESKTOP_MAX_HEIGHT = 'calc(88vh / var(--font-scale, 1) - 18rem)';
 /** 마운트 시 맨 위에 올 시각(분) */
 const INITIAL_TOP = 8 * 60;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+/** 종료 미정 블록 — 아래로 갈수록 흐려져 끝이 열려 있음을 보인다 */
+const OPEN_FADE_CLASS = '[mask-image:linear-gradient(to_bottom,black_45%,transparent)] border-b-0';
 
 /** 시간표 블록 색 — 회의·외근·출장·휴가는 사람 상태 색([[statusColors]]) */
 const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
@@ -67,9 +75,11 @@ function scheduleTone(category: string | undefined): TimeGridBlock['tone'] {
 export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGridBlock[] {
   const blocks: TimeGridBlock[] = [];
   for (const entry of entries) {
-    if (entry.allDay || !entry.startTime || !entry.endTime) continue;
+    if (entry.allDay || !entry.startTime) continue;
     const start = toMinutes(entry.startTime);
-    const end = toMinutes(entry.endTime);
+    // 종료 미정(업무) — 시작부터 30분 자리
+    const open = !entry.endTime;
+    const end = entry.endTime ? toMinutes(entry.endTime) : Math.min(start + 30, DAY_END);
     if (end <= start) continue;
     const tone: TimeGridBlock['tone'] =
       entry.source === 'MEETING'
@@ -85,6 +95,7 @@ export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGr
       end,
       label: (ownerName ? `${ownerName} · ` : '') + entry.title,
       tone,
+      open,
     });
   }
   return blocks;
@@ -104,7 +115,7 @@ function dateLabel(date: string): string {
 
 type Drag = { kind: 'new' | 'move' | 'resize'; startMinute: number; base: MinuteRange | null };
 
-export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, mode }: TimeGridProps) {
+export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = false, allDayLabel = '종일', onChange, mode }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -125,6 +136,19 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
     const top = anchor !== null ? Math.min(Math.max(anchor - 60, 0), DAY_END - VISIBLE_HOURS * 60) : INITIAL_TOP;
     if (el) el.scrollTop = (top / DAY_END) * el.scrollHeight - 12;
   }, []);
+
+  // 왼쪽 칸에서 시각을 바꾸면(끌기 중이 아닐 때) 고른 시간이 보이게 스크롤
+  const valueStart = value && !allDay ? value.start : null;
+  const valueEnd = value && !allDay ? value.end : null;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || valueStart === null || valueEnd === null || dragRef.current) return;
+    const perMinute = el.scrollHeight / DAY_END;
+    const top = valueStart * perMinute;
+    const bottom = valueEnd * perMinute;
+    if (top >= el.scrollTop && bottom <= el.scrollTop + el.clientHeight) return;
+    el.scrollTop = Math.max(top - 60 * perMinute - 12, 0); // 맨 위 시각 글자가 잘리지 않게(마운트 때와 같은 여유)
+  }, [valueStart, valueEnd]);
 
   const laid = useMemo(() => layoutColumns(blocks), [blocks]);
   const pct = (minutes: number) => `${(minutes / DAY_END) * 100}%`;
@@ -200,7 +224,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
       </div>
 
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <span className="w-10 shrink-0 text-right text-[11px] text-ink3">종일</span>
+        <span className="w-10 shrink-0 text-right text-[11px] text-ink3">{allDayLabel}</span>
         <div className={`h-4 flex-1 rounded ${allDay ? 'bg-blue' : 'bg-panel-alt'}`} />
       </div>
 
@@ -249,7 +273,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
             {laid.map((b) => (
               <div
                 key={b.key}
-                className={`pointer-events-none absolute overflow-hidden rounded border px-1 text-[11px] leading-tight opacity-80 ${TONE_CLASS[b.tone]}`}
+                className={`pointer-events-none absolute overflow-hidden rounded border px-1 text-[11px] leading-tight opacity-80 ${TONE_CLASS[b.tone]} ${b.open ? OPEN_FADE_CLASS : ''}`}
                 style={{
                   top: pct(b.start),
                   height: pct(b.end - b.start),
@@ -263,7 +287,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
 
             {value && !allDay && (
               <div
-                className="absolute inset-x-1 z-10 flex flex-col rounded border border-blue bg-blue px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
+                className={`absolute inset-x-1 z-10 flex flex-col rounded border border-blue bg-blue px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm ${openEnd ? OPEN_FADE_CLASS : ''}`}
                 style={{
                   top: pct(value.start),
                   height: pct(value.end - value.start),
@@ -275,7 +299,9 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, onChange, 
                 }}
               >
                 <span className="truncate">
-                  {toHHmm(value.start)}~{value.end >= DAY_END ? '24:00' : toHHmm(value.end)} · {durationLabel(value)}
+                  {openEnd
+                    ? `${toHHmm(value.start)}~ · 종료 미정`
+                    : `${toHHmm(value.start)}~${value.end >= DAY_END ? '24:00' : toHHmm(value.end)} · ${durationLabel(value)}`}
                 </span>
                 <div
                   className={`absolute inset-x-0 flex cursor-ns-resize items-end justify-center ${mode === 'touch' ? '-bottom-2 h-5' : 'bottom-0 h-3'}`}

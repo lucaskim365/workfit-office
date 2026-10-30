@@ -138,6 +138,8 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
               blocks={blocks}
               value={state.range}
               allDay={state.allDay}
+              openEnd={state.kind === 'ITEM' && state.openEnd}
+              allDayLabel={state.kind === 'ITEM' ? '미정' : '종일'}
               onChange={form.setRange}
             />
           </Fold>

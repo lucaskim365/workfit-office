@@ -23,6 +23,8 @@ export type EventForm = ReturnType<typeof useWorkPlanEventForm>;
 const DEFAULT_LENGTH = 60;
 /** 길이 버튼(분) */
 const LENGTH_PRESETS = [30, 60, 90, 120] as const;
+/** 종료 목록의 '미정' 값 */
+const OPEN_END = -1;
 
 const textareaClass =
   'w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-ink3 focus:border-teal disabled:bg-panel-alt';
@@ -397,16 +399,25 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   const work = { start: toMinutes(policy.workStartTime), end: toMinutes(policy.workEndTime) };
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
+  const isItem = state.kind === 'ITEM';
   const range = state.range;
   const showTimes = isMeeting || !state.allDay;
+  // 업무만 — 종료 미정(시작만)
+  const openEnd = isItem && state.openEnd;
 
   // 시각 = 입력 + 30분 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
   const onStart = (start: number) => {
     if (start >= DAY_END) return;
     const length = range ? range.end - range.start : DEFAULT_LENGTH;
     form.setRange({ start, end: Math.min(start + Math.max(length, 1), DAY_END) });
+    // 시작만 옮긴 것 — 종료 미정은 그대로
+    if (openEnd) set('openEnd', true);
   };
   const onEnd = (end: number) => {
+    if (end === OPEN_END) {
+      set('openEnd', true);
+      return;
+    }
     if (!range || end <= range.start) return;
     form.setRange({ start: range.start, end });
   };
@@ -415,7 +426,9 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
     form.setRange({ start: range.start, end: Math.min(range.start + length, DAY_END) });
   };
   const startOptions = startTimeOptions(range?.start ?? null).map((minute) => ({ minute, label: toHHmm(minute) }));
-  const endOptions = range ? endTimeOptions(range.start, range.end) : [];
+  const endOptions = range
+    ? [...(isItem ? [{ minute: OPEN_END, label: '미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
+    : [];
   const dates = (
     <>
       <TextField
@@ -460,15 +473,16 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       <TimeCombo
         aria-label="종료 시각"
         className="w-[88px]"
-        value={range?.end ?? null}
+        value={openEnd ? OPEN_END : range?.end ?? null}
         options={endOptions}
+        anchor={range?.end}
         work={work}
         placeholder="종료"
         disabled={readOnly || !range}
         touch={stacked}
         onChange={onEnd}
       />
-      {range && range.end > range.start && (
+      {range && range.end > range.start && !openEnd && (
         <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
       )}
     </>
@@ -477,7 +491,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   const lengths = showTimes && range && !readOnly && (
     <div className="flex flex-wrap items-center gap-1" role="group" aria-label="길이">
       {LENGTH_PRESETS.map((length) => {
-        const active = range.end - range.start === length;
+        const active = !openEnd && range.end - range.start === length;
         return (
           <button
             key={length}
@@ -493,6 +507,18 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
           </button>
         );
       })}
+      {isItem && (
+        <button
+          type="button"
+          aria-pressed={openEnd}
+          onClick={() => set('openEnd', true)}
+          className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+            openEnd ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+          }`}
+        >
+          미정
+        </button>
+      )}
     </div>
   );
   const allDayToggle = !isMeeting && (
@@ -504,7 +530,8 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         disabled={readOnly}
         onChange={(e) => form.setAllDay(e.target.checked)}
       />
-      종일
+      {/* 업무는 시각 없음 = 시간을 모르는 일(날짜만) — 외근·출장의 종일은 근태와 이어져 그대로 */}
+      {isItem ? '시간 미정' : '종일'}
     </label>
   );
 
