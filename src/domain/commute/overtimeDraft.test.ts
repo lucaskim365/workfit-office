@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clockOf, markOvertimeTimes, overtimeFillOf, overtimeHours, workKindOf } from './overtimeDraft';
+import { clockOf, markOvertimeTimes, numberFieldInput, overtimeFillOf, overtimeHours, workKindOf } from './overtimeDraft';
 
 const policy = { workEndTime: '18:00', breakStartTime: '12:00', breakEndTime: '13:00', overtimeStartMin: 10 };
 
@@ -54,6 +54,17 @@ test('휴일은 휴게시간과 겹친 만큼만 뺀다', () => {
 
 test('자정을 넘긴 퇴근', () => {
   assert.equal(overtimeHours('연장', '09:00', '01:00', policy), 7);
+});
+
+test('근무 시간 칸만 소수점을 받고 점은 하나만 남긴다', () => {
+  assert.equal(numberFieldInput('workHours', '2.5'), '2.5');
+  assert.equal(numberFieldInput('workHours', '1.2.5'), '1.25');
+  assert.equal(numberFieldInput('workHours', '3시간'), '3');
+});
+
+test('다른 숫자 칸은 지금처럼 정수만 받는다', () => {
+  assert.equal(numberFieldInput('count', '2.5'), '25');
+  assert.equal(numberFieldInput('amount', '1,000'), '1000');
 });
 
 test('시각이 비면 계산하지 않는다', () => {

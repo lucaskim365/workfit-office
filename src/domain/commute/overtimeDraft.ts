@@ -9,6 +9,17 @@ export const OVERTIME_KIND_FIELD = 'workKind';
 
 export type OvertimeMark = '예정' | '수동 입력';
 
+/** 소수점을 받는 숫자 칸 — 근무 시간(1.5시간 등). 다른 숫자·금액 칸은 지금처럼 정수만 받는다. */
+const DECIMAL_NUMBER_KEYS = ['workHours'];
+export const acceptsDecimal = (key: string) => DECIMAL_NUMBER_KEYS.includes(key);
+
+/** 결재서식 숫자 칸의 입력값을 거른다 — 숫자만, 소수점 칸은 점 하나까지 */
+export function numberFieldInput(key: string, raw: string): string {
+  if (!acceptsDecimal(key)) return raw.replace(/[^0-9]/g, '');
+  const [whole, ...rest] = raw.replace(/[^0-9.]/g, '').split('.');
+  return rest.length > 0 ? `${whole}.${rest.join('')}` : whole;
+}
+
 export interface OvertimeFill {
   workKind: '휴일' | '연장';
   workStart: string;
