@@ -221,6 +221,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('signUrl', 512),
       S('signType', 16),
       S('photoUrl', 512),
+      S('photoThumbUrl', 512),
       S('activeChatRoomId', 64),
       S('resignedAt', 40),
       S('fcmToken', 256), // 예전 단일 토큰 — 서버 함수 전환기 동안 최근 기기 토큰을 같이 둔다

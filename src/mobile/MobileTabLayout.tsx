@@ -10,6 +10,7 @@ import MobileNotificationBell from './MobileNotificationBell';
 import MobileTabBar from './MobileTabBar';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
 import { loadGroupwareView, saveGroupwareView, type GroupwareViewMode } from './groupwarePrefs';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 /** 탭 화면이 Outlet 으로 받는 값 */
 export interface MobileTabContext {
@@ -96,7 +97,7 @@ export default function MobileTabLayout() {
             className="relative ml-0.5 flex items-center rounded-full p-0.5 active:scale-95"
           >
             {user?.photoUrl ? (
-              <img src={user.photoUrl} alt={user.name} className="h-8 w-8 rounded-full border border-white/30 object-cover" />
+              <img src={smallPhotoOf(user)} alt={user.name} className="h-8 w-8 rounded-full border border-white/30 object-cover" />
             ) : (
               <div className="grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold text-white shadow-xs" style={{ background: '#17a89a' }}>
                 {initials}

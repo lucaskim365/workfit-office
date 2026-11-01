@@ -19,6 +19,7 @@ import {
   Type,
 } from 'lucide-react';
 import { CHAT_TEXT_SIZES, setChatTextSize, useChatTextSize } from './chatTextSize';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 interface MobileUserMenuSheetProps {
   isOpen: boolean;
@@ -118,7 +119,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
           <div className="relative shrink-0">
             {user.photoUrl ? (
               <img
-                src={user.photoUrl}
+                src={smallPhotoOf(user)}
                 alt="프로필 사진"
                 className="h-13 w-13 rounded-full object-cover border-2 border-white shadow-sm dark:border-slate-800"
               />

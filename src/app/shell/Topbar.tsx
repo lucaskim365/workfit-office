@@ -18,6 +18,7 @@ import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { setShowTestAccounts, useShowTestAccounts } from '@/features/auth/testAccountToggle';
 import { isTestAccount } from '@/domain/user/testAccount';
 import defaultLogo from '@/assets/logo.png';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 interface TopbarProps {
   activeModuleId: string;
@@ -399,7 +400,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
           >
             <div className="grid h-full w-full place-items-center rounded-full bg-teal text-[11.5px] font-bold text-white overflow-hidden shadow-xs">
               {user?.photoUrl ? (
-                <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
+                <img src={smallPhotoOf(user)} alt="프로필 사진" className="h-full w-full object-cover" />
               ) : (
                 initials
               )}

@@ -60,12 +60,12 @@ function BasicInfoCard() {
     e.target.value = '';
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { setMsg(''); setErr('파일이 너무 큽니다. 5MB 이내로 선택하세요.'); return; }
-    void save(async () => { await updateProfile({ photoUrl: await upload(user.id, file) }); }, '프로필 사진이 저장되었습니다.', '업로드에 실패했습니다.');
+    void save(async () => { await updateProfile(await upload(user.id, file)); }, '프로필 사진이 저장되었습니다.', '업로드에 실패했습니다.');
   };
 
   const handleDelete = () => {
     if (!window.confirm('프로필 사진을 삭제하시겠습니까?')) return;
-    void save(() => updateProfile({ photoUrl: '' }), '프로필 사진이 삭제되었습니다.', '삭제에 실패했습니다.');
+    void save(() => updateProfile({ photoUrl: '', photoThumbUrl: '' }), '프로필 사진이 삭제되었습니다.', '삭제에 실패했습니다.');
   };
 
   const rows: Array<[string, string]> = [
