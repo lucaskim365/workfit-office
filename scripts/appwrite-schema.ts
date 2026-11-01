@@ -538,6 +538,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('securityLevel', 16),
       S('visibility', 16),
       BOOL('hideDocInfoOnComplete'),
+      SA('hiddenHeaderItems', 32), // 문서 종이에서 늘 숨기는 머리 항목(공문 등)
     ],
     indexes: [IX('code', ['code'])],
   },

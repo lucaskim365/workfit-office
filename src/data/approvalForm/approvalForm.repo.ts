@@ -155,6 +155,7 @@ export const approvalFormRepo = {
       visibility: form.visibility === '비공개' ? '비공개' : '부서',
       // 설정을 건드린 서식만 보냄(건드리지 않은 서식 저장은 예전과 같음)
       ...(typeof form.hideDocInfoOnComplete === 'boolean' ? { hideDocInfoOnComplete: form.hideDocInfoOnComplete } : {}),
+      ...(Array.isArray(form.hiddenHeaderItems) ? { hiddenHeaderItems: form.hiddenHeaderItems } : {}),
     };
 
     const parsed = approvalFormSchema.parse(sanitized);
