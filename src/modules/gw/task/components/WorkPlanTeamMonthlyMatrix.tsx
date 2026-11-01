@@ -592,7 +592,8 @@ export function WorkPlanTeamMonthlyMatrix({
                                 key={dayStr}
                                 // 위(일정) 칸을 누르면 일정 창, 아래 메모 칸은 CellMemo 가 받는다
                                 onClick={onCreate ? () => onCreate(dayStr, member) : undefined}
-                                className={`group/day p-2 align-top ${cellBorderClass} transition-colors min-h-[85px] relative ${cellBgClass} ${
+                                // h-px: 칸 안 div 가 행 높이를 꽉 채우게(h-full) — 줄이 늘면 위 일정 칸만 늘고 메모 칸은 바닥에 그대로
+                                className={`group/day h-px p-2 align-top ${cellBorderClass} transition-colors relative ${cellBgClass} ${
                                   onCreate ? 'cursor-pointer' : ''
                                 } ${!d.inCurrentMonth ? 'opacity-50' : ''}`}
                               >
@@ -619,20 +620,22 @@ export function WorkPlanTeamMonthlyMatrix({
                                     onOpen={onOpenEntry}
                                   />
                                 ))}
-                                {/* 1) 위 칸: 일정 — 여러 날 막대 자리 + 칩(종일 먼저, 시작 시각 순) */}
-                                {barLanes > 0 && <div style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
-                                <div className="min-h-[44px] space-y-1">
-                                  {entries.map((entry) => (
-                                    <EntryChip key={entry.key} entry={entry} onOpen={onOpenEntry} />
-                                  ))}
+                                <div className="flex h-full min-h-[85px] flex-col">
+                                  {/* 1) 위 칸: 일정 — 여러 날 막대 자리 + 칩(종일 먼저, 시작 시각 순). 남는 높이는 여기가 가진다 */}
+                                  {barLanes > 0 && <div className="shrink-0" style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
+                                  <div className="min-h-[36px] flex-1 space-y-1">
+                                    {entries.map((entry) => (
+                                      <EntryChip key={entry.key} entry={entry} onOpen={onOpenEntry} />
+                                    ))}
+                                  </div>
+                                  {/* 2) 아래 칸: 메모 — 바닥에 붙고 높이는 늘 같다. 내 칸은 눌러서 바로 고친다 */}
+                                  <CellMemo
+                                    key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
+                                    text={cell.memo}
+                                    label={`${member.name} ${d.monthNum}월 ${d.dayNum}일 메모`}
+                                    onSave={isMe && onSaveMemo ? (text) => onSaveMemo(dayStr, cell.memoPlan, text) : undefined}
+                                  />
                                 </div>
-                                {/* 2) 아래 칸: 메모 — 서식 없는 글. 내 칸은 눌러서 바로 고친다 */}
-                                <CellMemo
-                                  key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
-                                  text={cell.memo}
-                                  label={`${member.name} ${d.monthNum}월 ${d.dayNum}일 메모`}
-                                  onSave={isMe && onSaveMemo ? (text) => onSaveMemo(dayStr, cell.memoPlan, text) : undefined}
-                                />
                               </td>
                             );
                           })}
@@ -704,7 +707,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
 }
 
 /**
- * 칸 아래쪽 메모 칸 — 서식 없는 글, 3줄 넘으면 접어 둔다. 점선 위는 일정, 아래는 메모.
+ * 칸 아래쪽 메모 칸 — 서식 없는 글, 2줄 넘으면 접어 둔다. 점선 위는 일정, 아래는 메모.
  * `onSave`가 있으면(내 칸) 메모 칸을 눌러 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
  */
 function CellMemo({
@@ -774,7 +777,8 @@ function CellMemo({
             }
           : undefined
       }
-      className={`mt-1.5 min-h-[22px] border-t border-dashed border-border pt-1 ${
+      // 높이 고정(두 줄 + 더보기) — 줄이 늘어도 메모 칸은 그대로. 펼치거나 고칠 때만 늘어난다
+      className={`mt-1.5 shrink-0 border-t border-dashed border-border pt-1 ${draft !== null || expanded ? '' : 'h-[3.25rem] overflow-hidden'} ${
         onSave && draft === null ? 'cursor-text rounded-b hover:bg-panel-alt/60' : ''
       }`}
     >
@@ -807,7 +811,7 @@ function CellMemo({
         <>
           <div
             ref={ref}
-            className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'}`}
+            className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-2'}`}
           >
             {text}
           </div>
