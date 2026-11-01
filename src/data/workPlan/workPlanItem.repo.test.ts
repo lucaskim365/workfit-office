@@ -65,3 +65,22 @@ test('날짜 범위로 전원 것을 읽는다', async () => {
   assert.equal(rows.some((r) => r.id === b.id), true);
   assert.equal(rows.some((r) => r.id === c.id), false);
 });
+
+test('루틴 — 날짜마다 만들고, 이후 모두 고치기·지우기는 그 날짜부터만', async () => {
+  const routine = { id: 'WR-test-0001', freq: 'WEEKLY' as const, days: [1], until: '2026-11-30' };
+  const dates = ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23'];
+  const created = await workPlanItemRepo.createRoutine(owner, owner.userId, dates.map((date) => draft({ date, title: '주간 보고' })), routine);
+  assert.deepEqual(created.map((r) => r.date), dates);
+  assert.ok(created.every((r) => r.routine?.id === routine.id));
+
+  const third = created[2];
+  const updated = await workPlanItemRepo.updateFollowing(owner, third.id, draft({ date: '2026-12-25', title: '월간 보고', startTime: '14:00', endTime: '15:00' }));
+  assert.deepEqual(updated.map((r) => [r.date, r.title, r.startTime]), [['2026-11-16', '월간 보고', '14:00'], ['2026-11-23', '월간 보고', '14:00']]);
+
+  await assert.rejects(() => workPlanItemRepo.updateFollowing(other, third.id, draft()), (e) => e instanceof WorkPlanItemError && e.code === 'FORBIDDEN');
+
+  await workPlanItemRepo.removeFollowing(owner, created[1].id);
+  const left = await workPlanItemRepo.listRange({ from: '2026-11-01', to: '2026-11-30' });
+  const mine = left.filter((r) => r.routine?.id === routine.id);
+  assert.deepEqual(mine.map((r) => [r.date, r.title]), [['2026-11-02', '주간 보고']]);
+});

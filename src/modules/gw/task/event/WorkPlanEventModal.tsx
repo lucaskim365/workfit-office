@@ -11,6 +11,8 @@ import { Modal } from '@/shared/ui/Modal';
 import { EventFields, type EventForm } from './EventFields';
 import { FIXED_KINDS, dotClassOf, eventWhenLabel, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
 import { kindEnabled } from './entryRouting';
+import { RoutineFields, RoutineScopeFields } from './RoutineFields';
+import { defaultRoutineRule } from '@/domain/workPlan/routine';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
@@ -58,7 +60,9 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       {form.remove && (
         <div className="mr-auto">
           {confirmingDelete ? (
-            <Button variant="dangerSolid" disabled={form.saving} onClick={() => void remove()}>삭제 확인</Button>
+            <Button variant="dangerSolid" disabled={form.saving} onClick={() => void remove()}>
+              {form.editingRoutine && form.routineScope === 'following' ? '이후 모두 삭제' : '삭제 확인'}
+            </Button>
           ) : (
             <Button variant="danger" disabled={form.saving} onClick={() => setConfirmingDelete(true)}>삭제</Button>
           )}
@@ -108,6 +112,20 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     >
       <div className="flex flex-col">
         <KindToolbar form={form} target={target} />
+
+        {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
+        {form.routineRule && (
+          <RoutineFields start={state.date} rule={form.routineRule} onChange={form.setRoutineRule} />
+        )}
+        {state.kind === 'ITEM' && form.editingRoutine && (
+          <RoutineScopeFields
+            date={state.date}
+            routine={form.editingRoutine}
+            scope={form.routineScope}
+            onChange={form.setRoutineScope}
+            readOnly={readOnly}
+          />
+        )}
 
         {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
         {state.kind === 'TRIP' && (
@@ -196,6 +214,7 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
   }, [menuOpen]);
 
   const enabled = (kind: EventKind) => kindEnabled(kind, target, state.kind, readOnly);
+  const routineAllowed = !readOnly && target.mode === 'create' && state.kind === 'ITEM';
 
   const segClass = (active: boolean) =>
     `inline-flex items-center gap-1.5 border-r border-border px-3 py-1.5 text-[11.5px] font-semibold transition-colors last:border-r-0 disabled:cursor-not-allowed disabled:opacity-45 ${
@@ -291,7 +310,15 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
         <Bell size={12} />
         리마인드
       </Button>
-      <Button variant="ghost" size="sm" disabled>
+      {/* 루틴 — 새 일반 업무만(회의·외근·출장은 아직) */}
+      <Button
+        variant={form.routineRule ? 'accent' : 'ghost'}
+        size="sm"
+        disabled={!routineAllowed}
+        aria-pressed={Boolean(form.routineRule)}
+        title={routineAllowed ? '반복 일정으로 만들기' : '새 일반 업무만 반복할 수 있습니다'}
+        onClick={() => form.setRoutineRule(form.routineRule ? null : defaultRoutineRule(state.date))}
+      >
         <Repeat size={12} />
         루틴
       </Button>

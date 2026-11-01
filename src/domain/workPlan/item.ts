@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
+import { routineSchema } from './routine';
 
 // calendarEvent의 timeSchema와 같은 식 — 24:00은 받지 않는다.
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
@@ -15,6 +16,8 @@ export const workPlanItemSchema = z.object({
   tagId: z.string().min(1).max(64),
   title: z.string().trim().min(1, '제목을 입력하세요.').max(100),
   memo: z.string().trim().max(1_000),
+  /** 루틴(반복)으로 만든 항목 — 같은 id 끼리 '이후 모두' 고치기·지우기. 예전 항목은 없다 */
+  routine: routineSchema.nullable().optional(),
   createdBy: z.string().min(1),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

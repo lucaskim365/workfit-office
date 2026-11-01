@@ -21,6 +21,7 @@ import {
   Settings,
   LocateFixed,
   StickyNote,
+  Repeat,
 } from 'lucide-react';
 
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -675,6 +676,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
       {entry.outside?.source === 'APPROVAL' && (
         <Check size={8} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
       )}
+      {entry.item?.routine && <Repeat size={8} strokeWidth={3} className="shrink-0 opacity-40" aria-label="반복" />}
     </>
   );
   const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs ${badgeClass}`;

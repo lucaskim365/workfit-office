@@ -905,6 +905,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('createdBy', 64, true),
       S('createdAt', 40),
       S('updatedAt', 40),
+      // 루틴(반복)으로 만든 항목의 규칙·묶음 id(JSON 글). 루틴이 아닌 항목은 비워 둔다
+      S('routine', 300),
     ],
     indexes: [
       IX('wiOwner', ['ownerUserId']),
