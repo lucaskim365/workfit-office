@@ -142,7 +142,8 @@ export function WorkPlanTeamMonthlyMatrix({
     return me ? [me, ...allMembers.filter((m) => m.id !== actor.id)] : allMembers;
   }, [allMembers, actor.id]);
   // 현재 조회 중인 월 (YYYY-MM)
-  const currentMonth = month;
+  // 주 보기는 그 주 월요일이 든 달에서 그 주를 찾는다 — 화면의 달(month)과 상관없이
+  const currentMonth = weekStart ? weekStart.slice(0, 7) : month;
   const setCurrentMonth = (next: string | ((prev: string) => string)) =>
     onMonthChange(typeof next === 'function' ? next(month) : next);
   const currentWeekRef = useRef<HTMLTableRowElement | null>(null);

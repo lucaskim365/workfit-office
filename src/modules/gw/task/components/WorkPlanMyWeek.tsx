@@ -117,7 +117,8 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       </div>
 
       {/* 요일 머리 */}
-      <div className={`${gridCols} border-b border-border bg-panel-alt/60`}>
+      {/* 머리 줄·종일 줄도 시간표의 스크롤바 자리만큼 비워 열을 맞춘다(scrollbar-gutter) */}
+      <div className={`${gridCols} overflow-hidden border-b border-border bg-panel-alt/60 [scrollbar-gutter:stable]`}>
         <div />
         {days.map((d) => {
           const holiday = holidayOf(d.date);
@@ -139,7 +140,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       </div>
 
       {/* 종일·시간 미정 줄 */}
-      <div className={`${gridCols} border-b border-border`}>
+      <div className={`${gridCols} overflow-hidden border-b border-border [scrollbar-gutter:stable]`}>
         <div className="px-1 py-1 text-right text-[11px] text-ink3">종일</div>
         {days.map((d) => (
           <div
@@ -170,7 +171,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       </div>
 
       {/* 시간표 */}
-      <div ref={scrollRef} className="overflow-y-auto" style={{ height: 'max(24rem, calc(100vh / var(--font-scale, 1) - 22rem))' }}>
+      <div ref={scrollRef} className="overflow-y-auto [scrollbar-gutter:stable]" style={{ height: 'max(24rem, calc(100vh / var(--font-scale, 1) - 22rem))' }}>
         <div className={`${gridCols} relative`} style={{ height: `${24 * HOUR_REM}rem` }}>
           <div className="relative">
             {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (

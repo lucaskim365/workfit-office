@@ -24,7 +24,6 @@ import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
-import { WorkPlanAgenda } from './components/WorkPlanAgenda';
 import type { MinuteRange } from '@/domain/workPlan/timeGrid';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
@@ -40,13 +39,12 @@ import type { DepartmentMember } from '@/domain/departmentMember/schema';
 /** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo(인원 목록 → 칸 조립)를 깨지 않게 한 개만 둔다 */
 const NO_DEPARTMENT_MEMBERS: DepartmentMember[] = [];
 
-/** 보기 — 팀 주간(기본) / 팀 월간 표 / 내 주간 시간표 / 목록 */
-type WorkPlanView = 'teamWeek' | 'team' | 'week' | 'list';
+/** 보기 — 주간(기본, 전원 한 주) / 월간 표 / 내 주간 시간표 */
+type WorkPlanView = 'teamWeek' | 'team' | 'week';
 const VIEW_OPTIONS: Array<{ id: WorkPlanView; label: string }> = [
-  { id: 'teamWeek', label: '팀 주간' },
-  { id: 'team', label: '팀 월간' },
+  { id: 'teamWeek', label: '주간' },
+  { id: 'team', label: '월간' },
   { id: 'week', label: '내 주간' },
-  { id: 'list', label: '목록' },
 ];
 /** 고른 보기·밀도를 이 브라우저에 기억한다(없거나 막혀 있으면 기본값) */
 const VIEW_STORAGE_KEY = 'workPlan.view';
@@ -252,7 +250,7 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
-  const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week', 'list'], 'teamWeek'));
+  const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
     setViewState(next);
     writeStored(VIEW_STORAGE_KEY, next);
@@ -263,7 +261,7 @@ export default function WorkPlanScreen() {
     setDensityState(next);
     writeStored(DENSITY_STORAGE_KEY, next);
   };
-  /** 팀 주간·내 주간이 보고 있는 주의 월요일 */
+  /** 주간·내 주간이 보고 있는 주의 월요일 */
   const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? today));
   /** 하루 상세 옆 패널의 날짜(닫혀 있으면 null) */
   const [panelDate, setPanelDate] = useState<string | null>(null);
@@ -332,7 +330,7 @@ export default function WorkPlanScreen() {
     </div>
   );
 
-  // 보기 밀도 — 팀 표(주간·월간)에서만
+  // 보기 밀도 — 주간·월간 표에서만
   const densitySwitch = (
     <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기 밀도">
       {([['comfy', '편하게'], ['dense', '촘촘하게']] as const).map(([id, label]) => (
@@ -352,7 +350,7 @@ export default function WorkPlanScreen() {
     </div>
   );
 
-  // 부서 필터·검색 — 팀 표 상단 고정 바와 목록 머리에 함께 놓인다
+  // 부서 필터·검색 — 주간·월간 표 상단 고정 바에 놓인다
   const filters = (
     <>
       <select
@@ -434,7 +432,7 @@ export default function WorkPlanScreen() {
         )}
       </div>
 
-      {/* ── 메인 뷰: 팀 월간 / 내 주간 / 목록 ── */}
+      {/* ── 메인 뷰: 주간 / 월간 / 내 주간 ── */}
       {view === 'week' && (
         <WorkPlanMyWeek
           viewSwitch={viewSwitch}
@@ -444,20 +442,6 @@ export default function WorkPlanScreen() {
           cellOf={cellOf}
           onOpenEntry={handleOpenEntry}
           onCreate={actorActive ? handleCreate : undefined}
-        />
-      )}
-      {view === 'list' && (
-        <WorkPlanAgenda
-          viewSwitch={viewSwitch}
-          actor={actor}
-          today={today}
-          month={month}
-          onMonthChange={setMonth}
-          members={scopedMembers}
-          cellOf={cellOf}
-          onOpenEntry={handleOpenEntry}
-          onOpenDay={setPanelDate}
-          filters={filters}
         />
       )}
       {(view === 'team' || view === 'teamWeek') && (
@@ -492,7 +476,7 @@ export default function WorkPlanScreen() {
       />
       )}
 
-      {/* 하루 상세 옆 패널 — 날짜 머리(팀 월간·목록)를 누르면 */}
+      {/* 하루 상세 옆 패널 — 주간·월간에서 날짜 머리나 남의 칸을 누르면 */}
       {panelDate && view !== 'week' && (
         <WorkPlanDayPanel
           date={panelDate}
