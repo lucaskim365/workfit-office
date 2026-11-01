@@ -40,23 +40,34 @@ import type { DepartmentMember } from '@/domain/departmentMember/schema';
 /** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo(인원 목록 → 칸 조립)를 깨지 않게 한 개만 둔다 */
 const NO_DEPARTMENT_MEMBERS: DepartmentMember[] = [];
 
-/** 보기 — 팀 월간 표 / 내 주간 시간표 / 목록 */
-type WorkPlanView = 'team' | 'week' | 'list';
+/** 보기 — 팀 주간(기본) / 팀 월간 표 / 내 주간 시간표 / 목록 */
+type WorkPlanView = 'teamWeek' | 'team' | 'week' | 'list';
 const VIEW_OPTIONS: Array<{ id: WorkPlanView; label: string }> = [
+  { id: 'teamWeek', label: '팀 주간' },
   { id: 'team', label: '팀 월간' },
   { id: 'week', label: '내 주간' },
   { id: 'list', label: '목록' },
 ];
-/** 고른 보기를 이 브라우저에 기억한다(없거나 막혀 있으면 팀 월간) */
+/** 고른 보기·밀도를 이 브라우저에 기억한다(없거나 막혀 있으면 기본값) */
 const VIEW_STORAGE_KEY = 'workPlan.view';
-function readStoredView(): WorkPlanView {
+const DENSITY_STORAGE_KEY = 'workPlan.density';
+function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
-    const v = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    return v === 'week' || v === 'list' ? v : 'team';
+    const v = window.localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
   } catch {
-    return 'team';
+    return fallback;
   }
 }
+function writeStored(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // 저장이 막혀 있어도 이번 화면에서는 바뀐다
+  }
+}
+/** 저장 알림 토스트가 떠 있는 시간(ms) */
+const NOTICE_MS = 3000;
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -96,6 +107,12 @@ export default function WorkPlanScreen() {
   /** 결재 완료 외근·출장과 동행 외근 상세 — 수정은 등록 본인이 일정 창으로 */
   const [outsideDetail, setOutsideDetail] = useState<{ view: OutsideScheduleView; entry: DayEntry } | null>(null);
   const [notice, setNotice] = useState('');
+  // 저장 알림은 화면 아래 토스트 — 잠깐 보였다 사라진다
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   // 전사 공통 중요 일정 모달 상태
@@ -235,24 +252,27 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
-  const [view, setViewState] = useState<WorkPlanView>(readStoredView);
+  const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week', 'list'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
     setViewState(next);
-    try {
-      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
-    } catch {
-      // 저장이 막혀 있어도 이번 화면에서는 바뀐다
-    }
+    writeStored(VIEW_STORAGE_KEY, next);
   };
-  /** 내 주간이 보고 있는 주의 월요일 */
+  /** 보기 밀도 — 편하게(기본, 큰 글) / 촘촘하게 */
+  const [density, setDensityState] = useState<'comfy' | 'dense'>(() => readStored(DENSITY_STORAGE_KEY, ['comfy', 'dense'], 'comfy'));
+  const setDensity = (next: 'comfy' | 'dense') => {
+    setDensityState(next);
+    writeStored(DENSITY_STORAGE_KEY, next);
+  };
+  /** 팀 주간·내 주간이 보고 있는 주의 월요일 */
   const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? today));
   /** 하루 상세 옆 패널의 날짜(닫혀 있으면 null) */
   const [panelDate, setPanelDate] = useState<string | null>(null);
 
   /** 보고 있는 달 — 칸 조립(표·일정 창 시간표 공용)을 여기서 한 번 하고 표에 내려 준다 */
   const [month, setMonth] = useState(() => (initialDate ?? today).slice(0, 7));
-  // 내 주간은 그 주 월요일이 든 달 화면 범위(그 주 7일이 모두 든다)
-  const dataMonth = view === 'week' ? weekStart.slice(0, 7) : month;
+  // 주 보기는 그 주 월요일이 든 달 화면 범위(그 주 7일이 모두 든다)
+  const weekView = view === 'week' || view === 'teamWeek';
+  const dataMonth = weekView ? weekStart.slice(0, 7) : month;
   const monthDates = useMemo(() => {
     const base = monthGridDates(dataMonth);
     // 옆 패널에서 다른 달로 넘어가도 그날 칸이 있게 그 달 범위를 더한다
@@ -292,7 +312,47 @@ export default function WorkPlanScreen() {
 
   const loading = usersQuery.isLoading;
 
-  // 부서 필터·검색 — 팀 월간 상단 고정 바와 목록 머리에 함께 놓인다
+  // 보기 전환 — 각 보기의 상단 바 맨 앞에 놓인다
+  const viewSwitch = (
+    <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기">
+      {VIEW_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="radio"
+          aria-checked={view === option.id}
+          onClick={() => setView(option.id)}
+          className={`border-r border-border px-2.5 py-1.5 text-[11.5px] font-bold transition-colors last:border-r-0 ${
+            view === option.id ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // 보기 밀도 — 팀 표(주간·월간)에서만
+  const densitySwitch = (
+    <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기 밀도">
+      {([['comfy', '편하게'], ['dense', '촘촘하게']] as const).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          role="radio"
+          aria-checked={density === id}
+          onClick={() => setDensity(id)}
+          className={`border-r border-border px-2 py-1.5 text-[11px] font-semibold transition-colors last:border-r-0 ${
+            density === id ? 'bg-panel-alt text-ink' : 'text-ink3 hover:bg-panel-alt'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // 부서 필터·검색 — 팀 표 상단 고정 바와 목록 머리에 함께 놓인다
   const filters = (
     <>
       <select
@@ -349,25 +409,8 @@ export default function WorkPlanScreen() {
       <GwHead
         icon="🗓️"
         name="업무계획"
-        desc="팀원의 업무·회의·외근 일정을 날짜별로 함께 봅니다."
         right={
           <div className="flex items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기">
-              {VIEW_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={view === option.id}
-                  onClick={() => setView(option.id)}
-                  className={`border-r border-border px-3 py-1.5 text-[12px] font-bold transition-colors last:border-r-0 ${
-                    view === option.id ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
             {!authenticatedUser && (
               <select
                 value={actor.id}
@@ -384,15 +427,17 @@ export default function WorkPlanScreen() {
         }
       />
 
-      {notice && (
-        <div aria-live="polite" className="rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">
-          {notice}
-        </div>
-      )}
+      {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">
+        {notice && (
+          <div className="rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">{notice}</div>
+        )}
+      </div>
 
       {/* ── 메인 뷰: 팀 월간 / 내 주간 / 목록 ── */}
       {view === 'week' && (
         <WorkPlanMyWeek
+          viewSwitch={viewSwitch}
           actor={actor}
           weekStart={weekStart}
           onWeekChange={setWeekStart}
@@ -403,6 +448,7 @@ export default function WorkPlanScreen() {
       )}
       {view === 'list' && (
         <WorkPlanAgenda
+          viewSwitch={viewSwitch}
           actor={actor}
           today={today}
           month={month}
@@ -414,8 +460,12 @@ export default function WorkPlanScreen() {
           filters={filters}
         />
       )}
-      {view === 'team' && (
+      {(view === 'team' || view === 'teamWeek') && (
       <WorkPlanTeamMonthlyMatrix
+        viewSwitch={viewSwitch}
+        weekStart={view === 'teamWeek' ? weekStart : null}
+        onWeekChange={setWeekStart}
+        dense={density === 'dense'}
         actor={actor}
         todayStr={initialDate ?? today}
         members={scopedMembers}
@@ -428,7 +478,12 @@ export default function WorkPlanScreen() {
         onSaveMemo={actorActive ? handleSaveMemo : undefined}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
-        filters={filters}
+        filters={(
+          <>
+            {densitySwitch}
+            {filters}
+          </>
+        )}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }

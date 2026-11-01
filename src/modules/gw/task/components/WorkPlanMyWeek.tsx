@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import type { User } from '@/domain/user/schema';
@@ -24,6 +24,8 @@ export function mondayOf(date: string): string {
 }
 
 interface WorkPlanMyWeekProps {
+  /** 상단 바 맨 앞에 놓일 보기 전환 */
+  viewSwitch?: ReactNode;
   actor: User;
   /** 보고 있는 주의 월요일 */
   weekStart: string;
@@ -38,7 +40,7 @@ interface WorkPlanMyWeekProps {
  * 내 주간 — 7일 × 시간 세로 시간표(구글·아웃룩 주 보기). 맨 위 줄은 종일·시간 미정 일정,
  * 빈 시간을 누르면 그 30분 칸으로 새 일정, 블록을 누르면 상세.
  */
-export function WorkPlanMyWeek({ actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate }: WorkPlanMyWeekProps) {
+export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate }: WorkPlanMyWeekProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -98,6 +100,7 @@ export function WorkPlanMyWeek({ actor, weekStart, onWeekChange, cellOf, onOpenE
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-xs">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5">
+        {viewSwitch}
         <button type="button" aria-label="지난주" onClick={() => onWeekChange(shiftDate(weekStart, -7))} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
           <ChevronLeft size={16} />
         </button>

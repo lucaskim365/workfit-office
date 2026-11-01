@@ -9,6 +9,8 @@ import type { EntryKind } from './entryKind';
 import { AgendaRowItem, KindFilterChips, shiftDate } from './WorkPlanDayPanel';
 
 interface WorkPlanAgendaProps {
+  /** 상단 바 맨 앞에 놓일 보기 전환 */
+  viewSwitch?: ReactNode;
   actor: User;
   today: string;
   /** 보고 있는 달(YYYY-MM) */
@@ -25,7 +27,7 @@ interface WorkPlanAgendaProps {
 }
 
 /** 목록 — 한 달 일정을 날짜순으로(일정 있는 날만). 같은 회의·동행 외근은 한 줄, 갈래·나만 보기로 거른다. */
-export function WorkPlanAgenda({ actor, today, month, onMonthChange, members, cellOf, onOpenEntry, onOpenDay, filters }: WorkPlanAgendaProps) {
+export function WorkPlanAgenda({ viewSwitch, actor, today, month, onMonthChange, members, cellOf, onOpenEntry, onOpenDay, filters }: WorkPlanAgendaProps) {
   const [kind, setKind] = useState<EntryKind | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const todayRef = useRef<HTMLElement | null>(null);
@@ -55,6 +57,7 @@ export function WorkPlanAgenda({ actor, today, month, onMonthChange, members, ce
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-2.5 py-1.5">
         <div className="flex flex-wrap items-center gap-2">
+          {viewSwitch}
           <button type="button" aria-label="이전 달" onClick={() => onMonthChange(moveCalendarMonth(month, -1))} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
             <ChevronLeft size={16} />
           </button>
