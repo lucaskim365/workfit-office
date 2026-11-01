@@ -31,7 +31,7 @@ test('다른 함은 postReadDocIds 영향을 받지 않는다', () => {
   assert.equal(matchesBox(mk(), 'U1', '완료', undefined, undefined, ids), matchesBox(mk(), 'U1', '완료'));
 });
 
-test('결재 대기함 완료 필터: 내가 승인하고 끝난 문서만(완료·시행대기·취소완료)', () => {
+test('받은 결재함 완료 필터: 내가 승인하고 끝난 문서만(완료·시행대기·취소완료)', () => {
   assert.equal(isMyApprovedDone(mk(), 'AP'), true);
   assert.equal(isMyApprovedDone(mk({ status: '시행대기' }), 'AP'), true);
   assert.equal(isMyApprovedDone(mk({ status: '취소완료' }), 'AP'), true);
@@ -39,7 +39,7 @@ test('결재 대기함 완료 필터: 내가 승인하고 끝난 문서만(완�
   assert.equal(isMyApprovedDone(mk({ status: '반려' }), 'AP'), false);
 });
 
-test('결재 대기함 완료 필터: 내가 기안만 한 문서·결재선에 없는 문서는 빠진다', () => {
+test('받은 결재함 완료 필터: 내가 기안만 한 문서·결재선에 없는 문서는 빠진다', () => {
   assert.equal(isMyApprovedDone(mk(), 'DR'), false);
   assert.equal(isMyApprovedDone(mk(), 'U1'), false);
 });

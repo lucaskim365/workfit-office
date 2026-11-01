@@ -22,7 +22,7 @@ import { formCounts } from '@/modules/gw/approval/completedForms';
 const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
   '상신': 1,    // 상신함
   '참조': 2,    // 참조함
-  '대기': 3,    // 결재대기함
+  '대기': 3,    // 받은 결재함
   '반려': 4,    // 반려함
   '수신': 5,    // 수신함
   '완료': 6,    // 완료함
@@ -35,7 +35,7 @@ const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
 const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '상신', label: '상신함' },
   { key: '참조', label: '참조함' },
-  { key: '대기', label: '결재대기함' },
+  { key: '대기', label: '받은 결재함' },
   { key: '반려', label: '반려함' },
   { key: '수신', label: '수신함' },
   { key: '완료', label: '완료함' },
@@ -93,7 +93,7 @@ export default function MobileApprovalList() {
   const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
   const deptArchiveDocs = useDeptArchiveDocs(me);
 
-  // 일괄 승인 — 결재대기함 '결재대기중'(전부 내 차례)에서만. 승인은 웹과 같은 useBatchDecideStep(문서마다 내 차례인지 다시 확인).
+  // 일괄 승인 — 받은 결재함 '대기중'(전부 내 차례)에서만. 승인은 웹과 같은 useBatchDecideStep(문서마다 내 차례인지 다시 확인).
   const batchDecide = useBatchDecideStep();
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -185,7 +185,7 @@ export default function MobileApprovalList() {
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
 
-    // 1. 결재 대기함 필터링 — 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터, 웹과 같게)
+    // 1. 받은 결재함 필터링 — 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터, 웹과 같게)
     if (box === '대기') {
       const myDone = (byBox['완료'] ?? []).filter((d) => isMyApprovedDone(d, me));
       if (todoFilter === 'pending') {

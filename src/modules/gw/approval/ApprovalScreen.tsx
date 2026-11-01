@@ -79,7 +79,7 @@ const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
 const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
 const BOX_LABEL: Record<ApprovalBox, string> = {
-  대기: '결재 대기함',
+  대기: '받은 결재함',
   상신: '상신함',
   반려: '반려함',
   임시: '임시 저장함',
@@ -262,7 +262,7 @@ export default function ApprovalScreen() {
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
-    // 결재 대기함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
+    // 받은 결재함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
     if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
 
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
@@ -558,7 +558,7 @@ export default function ApprovalScreen() {
             {
               title: '결재함',
               boxes: [
-                { key: '대기', label: '결재 대기함' },
+                { key: '대기', label: '받은 결재함' },
                 { key: '반려', label: '반려함' },
                 { key: '후열', label: '후열함' },
               ] as const,
