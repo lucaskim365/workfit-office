@@ -36,7 +36,8 @@ export function OvertimeAutoFill({
   const record = useMemo(() => monthQuery.data?.find((r) => r.date === workDate) ?? null, [monthQuery.data, workDate]);
   const holidayName = holidays.find((h) => h.date === workDate)?.name;
 
-  const filledDate = useRef(clockOf(values.workStart) || clockOf(values.workEnd) ? workDate : '');
+  // 이미 값이 있는 문서(임시저장·반려 후 수정, 예전 서식으로 쓴 문서)는 처음 열 때 채우지 않는다 — 근무 시간을 지우지 않게
+  const filledDate = useRef(clockOf(values.workStart) || clockOf(values.workEnd) || values.workHours ? workDate : '');
   useEffect(() => {
     if (!ready) return;
     const next = overtimeFillOf(workDate, nowLocalIso().slice(0, 10), record, holidayName);
