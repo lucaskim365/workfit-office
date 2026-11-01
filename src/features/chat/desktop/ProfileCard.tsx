@@ -7,6 +7,7 @@ import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { useCreateRoom } from '@/features/chat/useChatRooms';
 import { getAvatarStyle } from '@/features/chat/avatarStyle';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /**
  * 대화방 프로필 명함 — 프로필 사진·이름을 누르면 그 옆에 작게 뜬다.
@@ -190,8 +191,9 @@ export function ProfileCardContent({
   return (
     <>
       <div className="flex items-center gap-3 bg-[#f2f8fc] px-4 py-3.5">
-        <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold">
+        <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="relative overflow-hidden grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold">
           {name[0] ?? '?'}
+          <ChatAvatarPhoto userId={userId} />
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">

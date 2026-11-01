@@ -171,8 +171,13 @@ async function handleRecall(userId, roomId, readUpTo, exceptToken, dbs, DB, log)
   // 회수 신호를 받아도 되는 기기에만 — 아이폰·PC·이 기능 전에 등록한 기기는 목록에 없어 빠진다
   // (아이폰 웹 푸시는 화면에 안 보이는 푸시가 쌓이면 알림 권한을 끊을 수 있다. PC 알림은 5초 뒤 스스로 닫힌다)
   const all = new Set([...(Array.isArray(u.fcmTokens) ? u.fcmTokens : []), u.fcmToken || ''].filter(Boolean));
-  const tokens = (Array.isArray(u.fcmTokensRecall) ? u.fcmTokensRecall : []).filter((t) => all.has(t) && t !== exceptToken);
-  if (tokens.length === 0) return { skipped: 'no-recall-tokens' };
+  const recall = Array.isArray(u.fcmTokensRecall) ? u.fcmTokensRecall : [];
+  const tokens = recall.filter((t) => all.has(t) && t !== exceptToken);
+  if (tokens.length === 0) {
+    // 왜 안 보냈는지 남긴다 — 기기 수만(토큰 값은 남기지 않는다)
+    log(`recall skip ${userId}: 전체 기기 ${all.size}, 회수 대상 ${recall.length}, 그중 지금 기기 목록에 있음 ${recall.filter((t) => all.has(t)).length}, 읽은 기기 제외 ${exceptToken && recall.includes(exceptToken) ? 1 : 0}`);
+    return { skipped: 'no-recall-tokens' };
+  }
   const res = await sendToTokens({
     data: { type: 'recall-chat', roomId: String(roomId), readUpTo: String(readUpTo) },
     // 채팅 알림과 같은 보관 시간 — 꺼져 있던 휴대폰이 켜지면 알림과 회수 신호를 함께 받는다

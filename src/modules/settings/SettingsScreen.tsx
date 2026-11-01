@@ -495,7 +495,7 @@ export default function SettingsScreen() {
                     <div className="flex flex-col">
                       <span className="text-[13px] font-bold text-ink">부재 상태 활성화 (대결 가동)</span>
                       <span className="text-[11px] text-ink3 mt-0.5">
-                        스위치를 켜면 지정된 부재 기간 동안 기안되는 결재 문서가 대결자의 대기함에 동시 전달됩니다.
+                        스위치를 켜면 지정된 부재 기간 동안 기안되는 결재 문서가 대결자의 받은 결재함에 동시 전달됩니다.
                       </span>
                     </div>
                     <button

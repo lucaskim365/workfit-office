@@ -19,7 +19,7 @@ export type ApprovalSearchScope = 'all' | ApprovalBox | '문서함';
 /** 검색 필터 칩 — PC·PWA 공용 목록 */
 export const APPROVAL_SEARCH_SCOPES: { key: ApprovalSearchScope; label: string }[] = [
   { key: 'all', label: '전체' },
-  { key: '대기', label: '결재대기' },
+  { key: '대기', label: '받은 결재' },
   { key: '상신', label: '기안/상신' },
   { key: '완료', label: '결재완료' },
   { key: '반려', label: '반려' },

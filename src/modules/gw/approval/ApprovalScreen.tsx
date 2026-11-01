@@ -5,7 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
-import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
+import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search, Settings } from 'lucide-react';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { correctSelection, resolveSelectedDoc } from './selection';
 import { arrangeList, docPosition, type ListOrder } from './listView';
@@ -58,6 +58,10 @@ import { ApprovalOpinionModal } from './components/ApprovalOpinionModal';
 import { RecallConfirmModal } from './components/RecallConfirmModal';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { DraftFormSelectModal } from './components/DraftFormSelectModal';
+import { CompletedFormsSettingsModal } from './components/CompletedFormsSettingsModal';
+import { formCounts, loadPinnedForms, pinnedForms, savePinnedForms } from './completedForms';
+import { useApprovalForms } from '@/features/gw/useApprovalForms';
+import { draftCatalogForms } from '@/domain/approvalForm/schema';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 
@@ -75,7 +79,7 @@ const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
 const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
 const BOX_LABEL: Record<ApprovalBox, string> = {
-  대기: '결재 대기함',
+  대기: '받은 결재함',
   상신: '상신함',
   반려: '반려함',
   임시: '임시 저장함',
@@ -124,14 +128,21 @@ export default function ApprovalScreen() {
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
-  const handleSelectBox = (newBox: ApprovalBox | '문서함') => {
+  // 완료함 아래 서식 바로가기 — 고른 서식(null = 완료함 전체)
+  const [completedForm, setCompletedForm] = useState<string | null>(null);
+  const [savedPinned, setSavedPinned] = useState<string[] | null>(() => loadPinnedForms(me));
+  const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
+  const { data: approvalForms = [] } = useApprovalForms();
+
+  const handleSelectBox = (newBox: ApprovalBox | '문서함', formCode: string | null = null) => {
     setBox(newBox);
+    setCompletedForm(formCode);
     setSelId(null);
-    if (newBox === '대기') setTodoFilter('pending');
+    if (newBox === '대기') setTodoFilter('all');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
     nextUrl.searchParams.delete('doc');
@@ -168,6 +179,7 @@ export default function ApprovalScreen() {
     if ('draftFilter' in t) setDraftFilter(t.draftFilter);
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
     if ('todoFilter' in t) setTodoFilter(t.todoFilter);
+    setCompletedForm(null);
     setBox(t.box);
   };
 
@@ -250,7 +262,7 @@ export default function ApprovalScreen() {
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
-    // 결재 대기함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
+    // 받은 결재함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
     if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
 
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
@@ -264,13 +276,14 @@ export default function ApprovalScreen() {
     if (box === '문서함') return deptArchiveDocs;
 
     if (box === '완료') {
+      const byForm = completedForm ? list.filter((d: ApprovalDoc) => d.docType === completedForm) : list;
       if (doneFilter === 'draft') {
-        return list.filter((d: ApprovalDoc) => d.drafterId === me);
+        return byForm.filter((d: ApprovalDoc) => d.drafterId === me);
       }
       if (doneFilter === 'approved') {
-        return list.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+        return byForm.filter((d: ApprovalDoc) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
       }
-      return list;
+      return byForm;
     }
     if (box === '상신') {
       if (draftFilter === 'progress') {
@@ -318,7 +331,27 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter]);
+  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm]);
+
+  // 완료함 서식 바로가기 — 서식 이름은 서식 마스터(code)에서, 없으면 docType 그대로
+  const completedDocs = useMemo(() => {
+    const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
+    const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
+    return allDocs.filter((d) => matchesBox(d, me, '완료', myDeptNameOrId, undefined, postReadIdsOf(me)));
+  }, [allDocs, me, org, userObj, recvPostReads]);
+  const formNameOf = (code: string) => approvalForms.find((f) => f.code === code)?.name ?? code;
+  const completedFormCounts = useMemo(() => formCounts(completedDocs), [completedDocs]);
+  const pinned = useMemo(() => pinnedForms(savedPinned, completedDocs), [savedPinned, completedDocs]);
+  const completedFormOptions = useMemo(() => {
+    const countOf = new Map(completedFormCounts.map((f) => [f.code, f.count]));
+    // 내 완료함에 문서가 있는 서식(많은 순) 다음에 아직 문서가 없는 활성 서식
+    const codes = [...completedFormCounts.map((f) => f.code), ...draftCatalogForms(approvalForms).map((f) => f.code)];
+    return [...new Set(codes)].map((code) => ({
+      code,
+      name: approvalForms.find((f) => f.code === code)?.name ?? code,
+      count: countOf.get(code) ?? 0,
+    }));
+  }, [completedFormCounts, approvalForms]);
 
   // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
   // 선택이 없으면 null — 목록만 보이고, 문서를 눌러야 상세가 열린다(맨 앞 문서 자동 열람 없음)
@@ -345,7 +378,7 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, rejectFilter, draftFilter]);
+  }, [box, doneFilter, todoFilter, rejectFilter, draftFilter, completedForm]);
 
   // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화.
   // **주소가 바뀔 때 한 번만** 적용한다. 결재 목록(allDocs)은 실시간으로 갱신되므로 그때마다
@@ -359,6 +392,7 @@ export default function ApprovalScreen() {
   useApplyDeepLinkOnce(deepLinkKey, !deepDocId || deepTargetDoc !== null, () => {
     const urlBox = deepBox;
 
+    setCompletedForm(null);
     // 1. URL에 box만 있는 경우
     if (!deepTargetDoc) {
       if (urlBox) setBox(urlBox);
@@ -524,7 +558,7 @@ export default function ApprovalScreen() {
             {
               title: '결재함',
               boxes: [
-                { key: '대기', label: '결재 대기함' },
+                { key: '대기', label: '받은 결재함' },
                 { key: '반려', label: '반려함' },
                 { key: '후열', label: '후열함' },
               ] as const,
@@ -624,11 +658,11 @@ export default function ApprovalScreen() {
                             : 'bg-ink3/15 text-ink2')
                           : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
-                  return (
+                  const row = (
                     <button
                       key={b}
                       onClick={() => handleSelectBox(b)}
-                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b ? 'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
@@ -646,6 +680,38 @@ export default function ApprovalScreen() {
                         </span>
                       )}
                     </button>
+                  );
+                  if (b !== '완료') return row;
+
+                  // 완료함 — 오른쪽 톱니바퀴로 아래에 둘 서식을 고르고, 서식별로 바로 본다
+                  return (
+                    <Fragment key={b}>
+                      <div className="flex items-center gap-0.5">
+                        <div className="min-w-0 flex-1">{row}</div>
+                        <button
+                          type="button"
+                          onClick={() => setShowCompletedFormsSettings(true)}
+                          title="완료함 서식 바로가기 설정"
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 hover:bg-panel-alt hover:text-teal transition-colors"
+                        >
+                          <Settings size={13} />
+                        </button>
+                      </div>
+                      {pinned.map((code) => {
+                        const active = box === '완료' && completedForm === code;
+                        const count = completedFormCounts.find((f) => f.code === code)?.count ?? 0;
+                        return (
+                          <button
+                            key={code}
+                            onClick={() => handleSelectBox('완료', code)}
+                            className={`flex w-full items-center justify-between gap-1 rounded-lg pl-8 pr-2.5 py-1 text-[12px] transition-colors ${active ? 'bg-teal-soft font-bold text-teal' : 'text-ink3 hover:bg-panel-alt hover:text-ink2'}`}
+                          >
+                            <span className="truncate whitespace-nowrap">{formNameOf(code)}</span>
+                            {count > 0 && <span className="shrink-0 text-[10px] font-bold">{count}</span>}
+                          </button>
+                        );
+                      })}
+                    </Fragment>
                   );
                 })}
               </div>
@@ -718,6 +784,7 @@ export default function ApprovalScreen() {
               ) : (
                 <span>
                   {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
+                  {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>
                 </span>
               )}
@@ -858,6 +925,25 @@ export default function ApprovalScreen() {
                     { key: 'completed', label: '완료' },
                   ]}
                 />
+              )}
+              {box === '완료' && (
+                // 서식 — 사이드바 바로가기와 같은 값. 여기서는 내 완료함에 있는 서식을 모두 고를 수 있다
+                <select
+                  value={completedForm ?? ''}
+                  onChange={(e) => setCompletedForm(e.target.value || null)}
+                  title="서식"
+                  className={`h-[26px] max-w-[160px] rounded-lg border px-2 text-[11.5px] font-bold outline-none cursor-pointer transition-colors ${completedForm ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel text-ink2 hover:border-teal'}`}
+                >
+                  <option value="">전체 서식</option>
+                  {completedForm && !completedFormCounts.some((f) => f.code === completedForm) && (
+                    <option value={completedForm}>{formNameOf(completedForm)} 0</option>
+                  )}
+                  {completedFormCounts.map((f) => (
+                    <option key={f.code} value={f.code}>
+                      {formNameOf(f.code)} {f.count}
+                    </option>
+                  ))}
+                </select>
               )}
               {box === '완료' && (
                 <FilterSegment
@@ -1068,6 +1154,20 @@ export default function ApprovalScreen() {
           }}
         />
       )}
+
+      <CompletedFormsSettingsModal
+        open={showCompletedFormsSettings}
+        options={completedFormOptions}
+        selected={pinned}
+        onClose={() => setShowCompletedFormsSettings(false)}
+        onSave={(codes) => {
+          savePinnedForms(me, codes);
+          setSavedPinned(codes);
+          setShowCompletedFormsSettings(false);
+          // 보고 있던 서식을 뺐으면 완료함 전체로
+          if (completedForm && !codes.includes(completedForm)) setCompletedForm(null);
+        }}
+      />
     </div>
   );
 }

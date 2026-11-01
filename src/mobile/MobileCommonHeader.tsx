@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, LayoutGrid, MessageSquare } from 'lucide-react';
 import MobileNotificationBell from './MobileNotificationBell';
+import { useMobileBack } from './useMobileBack';
 
 interface MobileCommonHeaderProps {
   title: string;
@@ -22,12 +23,13 @@ export default function MobileCommonHeader({
   rightAction,
 }: MobileCommonHeaderProps) {
   const nav = useNavigate();
+  const back = useMobileBack('/m');
 
   const handleBack = () => {
     if (onBack) {
       onBack();
     } else {
-      nav(-1);
+      back();
     }
   };
 
@@ -62,9 +64,9 @@ export default function MobileCommonHeader({
         {showHome && (
           <button
             type="button"
-            onClick={() => nav('/m')}
+            onClick={() => nav('/m/chat', { replace: true })}
             className="grid h-8 w-8 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white"
-            title="메신저 홈"
+            title="메신저"
           >
             <MessageSquare size={17} strokeWidth={2} />
           </button>
@@ -73,9 +75,9 @@ export default function MobileCommonHeader({
         {showLauncher && (
           <button
             type="button"
-            onClick={() => nav('/m/modules')}
+            onClick={() => nav('/m', { replace: true })}
             className="grid h-8 w-8 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white"
-            title="전체 모듈 메뉴"
+            title="그룹웨어 메뉴"
           >
             <LayoutGrid size={18} strokeWidth={2} />
           </button>

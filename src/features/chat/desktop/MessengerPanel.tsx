@@ -84,6 +84,7 @@ function downloadAttachment(att: Attachment) {
 }
 
 import { usePermission } from '@/features/auth/usePermission';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
 export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
@@ -261,9 +262,10 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
                 <div className="relative shrink-0">
                   <span
                     style={{ background: r.color + '22', color: r.color }}
-                    className="grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
+                    className="relative overflow-hidden grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
                   >
                     {isDirect ? display[0] : '👥'}
+                    <ChatAvatarPhoto userId={isDirect ? otherId : null} />
                   </span>
                   {isDirect && <PresenceDot presence={otherPresence} size="sm" />}
                 </div>
@@ -730,10 +732,11 @@ function MessengerThread({
                   else if (otherId) openProfile?.(otherId, e.currentTarget, displayName);
                 }}
                 title={isDirect ? `${displayName} 프로필` : showMemberList ? '참여자 목록 닫기' : '참여자 목록 보기'}
-                className="grid h-8 w-8 cursor-pointer place-items-center rounded-[10px] text-[14px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50"
+                className="relative overflow-hidden grid h-8 w-8 cursor-pointer place-items-center rounded-[10px] text-[14px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50"
                 style={{ background: room.color + '22', color: room.color }}
               >
                 {isDirect ? displayName[0] : '👥'}
+                <ChatAvatarPhoto userId={isDirect ? otherId : null} />
               </button>
               {isDirect && <PresenceDot presence={otherPresence} size="md" />}
             </div>
@@ -838,8 +841,9 @@ function MessengerThread({
                     className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-black/5 disabled:cursor-default"
                   >
                     <div className="relative shrink-0">
-                      <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
+                      <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="relative overflow-hidden grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
                         {m.name?.[0] ?? '?'}
+                        <ChatAvatarPhoto userId={m.id} />
                       </span>
                       <PresenceDot presence={p} size="sm" />
                     </div>
@@ -1329,9 +1333,10 @@ function CompositeMessageBubble({
               onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
               title={`${m.senderName ?? ''} 프로필`}
               style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }}
-              className="grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
+              className="relative overflow-hidden grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
             >
               {m.senderName?.[0] ?? '?'}
+              <ChatAvatarPhoto userId={m.senderId} />
             </button>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </div>
@@ -1630,9 +1635,10 @@ function MessageBubble({
               onClick={(e) => openProfile?.(m.senderId || '', e.currentTarget, m.senderName)}
               title={`${m.senderName ?? ''} 프로필`}
               style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }}
-              className="grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
+              className="relative overflow-hidden grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full text-[11px] font-bold hover:ring-2 hover:ring-[#4ea8de]/50 disabled:cursor-default disabled:hover:ring-0"
             >
               {m.senderName?.[0] ?? '?'}
+              <ChatAvatarPhoto userId={m.senderId} />
             </button>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </div>
@@ -1905,13 +1911,13 @@ function OrgTreeNode({
   isExpanded: (id: string) => boolean;
 }) {
   const { rankOf } = useOrgTree();
-  const { canDesignate } = useCanDesignate();
+  const { canChatWith } = useCanDesignate();
   const presenceMap = useAllUserPresences();
   const show = isExpanded(node.dept.id);
   const deptUsers = useMemo(() => {
-    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id) && canDesignate(u));
+    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id) && canChatWith(u));
     return filtered.sort((a, b) => rankOf(a.position) - rankOf(b.position));
-  }, [node.members, exclude, rankOf, canDesignate]);
+  }, [node.members, exclude, rankOf, canChatWith]);
 
   const hasContent = deptUsers.length > 0 || node.children.length > 0;
   if (!hasContent) return null;
@@ -1941,8 +1947,9 @@ function OrgTreeNode({
                 className="flex items-center gap-3 py-1.5 px-2 rounded-lg text-left hover:bg-panel-alt transition-colors w-full"
               >
                 <div className="relative shrink-0">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
+                  <span className="relative overflow-hidden grid h-7 w-7 place-items-center rounded-full bg-teal-soft text-[11px] font-bold text-teal">
                     {u.name[0]}
+                    <ChatAvatarPhoto userId={u.id} />
                   </span>
                   <PresenceDot presence={p} size="sm" />
                 </div>
