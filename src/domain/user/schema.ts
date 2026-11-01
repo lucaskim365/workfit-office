@@ -43,7 +43,7 @@ export const userSchema = z.object({
   signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
   /** 작은 프로필 사진(200px) — 목록·말풍선 등 작은 자리용. 크게 볼 때는 photoUrl(800px). 예전 사진은 비어 있다. */
-  photoThumbUrl: z.string().default(''),
+  photoThumbUrl: z.string().nullish().transform((v) => v ?? ''), // 칸을 나중에 추가해 예전 사용자는 DB 값이 null 이다
   activeChatRoomId: z.string().nullable().optional(),
   /**
    * 퇴사 처리 일시(ISO). 빈 문자열 = 재직/해당없음. Phase1 퇴사 처리에서 기록.
