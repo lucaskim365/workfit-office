@@ -26,8 +26,8 @@ import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
-import { useDepartments } from '@/features/department/useDepartments';
 import { DateInput } from '@/shared/ui/form/DateInput';
+import { useDepartments } from '@/features/department/useDepartments';
 
 export default function DocumentScreen() {
   const { user } = useAuth();

@@ -8,7 +8,27 @@ interface ModalProps {
   title?: ReactNode;
   footer?: ReactNode;
   width?: number;
+  /** 본문 안쪽 여백 없이 — 도구 막대·나뉜 칸처럼 본문이 가장자리까지 닿는 창 */
+  flush?: boolean;
+  /** 겹침 층(z-index 클래스). 없으면 ModalLayerProvider 값(기본 'z-50'). 모바일 앱 틀(z-[100]) 위에 띄울 때 'z-[110]' */
+  zClass?: string;
   children: ReactNode;
+}
+
+let openCount = 0;
+let saved = { html: '', body: '' };
+
+function lockScroll() {
+  if (openCount++ > 0) return;
+  saved = { html: document.documentElement.style.overflow, body: document.body.style.overflow };
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+
+function unlockScroll() {
+  if (--openCount > 0) return;
+  document.documentElement.style.overflow = saved.html;
+  document.body.style.overflow = saved.body;
 }
 
 /**
@@ -23,7 +43,7 @@ interface ModalProps {
 const ModalLayerContext = createContext('z-50');
 export const ModalLayerProvider = ModalLayerContext.Provider;
 
-export function Modal({ open, onClose, title, footer, width = 480, children }: ModalProps) {
+export function Modal({ open, onClose, title, footer, width = 480, flush = false, zClass, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -33,12 +53,21 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const layer = useContext(ModalLayerContext);
+  // 열려 있는 동안 뒤 화면 스크롤 막기 (모달이 겹쳐 열려도 마지막 것이 닫힐 때 풀림)
+  useEffect(() => {
+    if (!open) return;
+    lockScroll();
+    return unlockScroll;
+  }, [open]);
+
+  // 직접 준 층(zClass)이 먼저, 없으면 감싼 화면이 정한 층(ModalLayerProvider)
+  const contextLayer = useContext(ModalLayerContext);
+  const layer = zClass ?? contextLayer;
   if (!open) return null;
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${layer} flex items-center justify-center bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
+      className={`fixed inset-0 ${layer} flex items-center justify-center overscroll-contain bg-navy-deep/45 p-4 backdrop-blur-[1px]`}
       onMouseDown={onClose}
     >
       <div
@@ -60,7 +89,7 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
             </button>
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${flush ? '' : 'px-5 py-4'}`}>{children}</div>
         {footer && (
           <div className="flex flex-wrap justify-end gap-2 border-t border-border px-5 py-3.5">{footer}</div>
         )}

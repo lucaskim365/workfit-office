@@ -11,6 +11,7 @@ import { resolveUserDeptId } from '@/features/survey/useSurveyResponse';
 import { useMySurveys, useSurveyQuestions } from '@/features/survey/useSurveys';
 import { usePermission } from '@/features/auth/usePermission';
 import type { Survey } from '@/domain/survey/schema';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 import { assertRespondable } from '@/domain/survey/engine';
 import SurveyResponseForm from '@/modules/gw/survey/SurveyResponseForm';
 import MobileCommonHeader from './MobileCommonHeader';
@@ -41,6 +42,7 @@ export default function MobileSurveyScreen() {
   const mySurveys = mySurveysQuery.data ?? [];
   const questionsQuery = useSurveyQuestions(responding ? selectedSurvey?.id ?? null : null);
 
+  // 불러오기 실패를 빈 목록으로 보이면 "설문이 없다"·"아직 안 했다"로 오인한다.
   const queryError = departmentsQuery.error ?? respondentQuery.error ?? participationQuery.error
     ?? (activeTab === 'mine' ? mySurveysQuery.error : null);
   const loading = departmentsQuery.isLoading || respondentQuery.isLoading || participationQuery.isLoading
@@ -142,11 +144,13 @@ export default function MobileSurveyScreen() {
       {/* 2. 설문 목록 */}
       <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2.5">
         {notice && <p role="status" className="rounded-xl border border-teal/20 bg-teal-soft/20 p-3 text-[12px] font-semibold text-teal">{notice}</p>}
-        {loading ? <p className="py-12 text-center text-[12px] text-ink3">설문을 불러오는 중…</p> : queryError ? (
-          <div role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-[12px] text-rose-600">
-            <p>설문 정보를 불러오지 못했습니다. {queryError instanceof Error ? queryError.message : ''}</p>
-            <button type="button" onClick={retryLists} className="mt-2 font-bold underline">다시 불러오기</button>
+        {queryError ? (
+          <div role="alert" className="space-y-2">
+            <ErrorNotice message={queryError instanceof Error ? queryError.message : '설문 정보를 불러오지 못했습니다.'} />
+            <button type="button" onClick={retryLists} className="text-[12px] font-bold text-ink2 underline">다시 불러오기</button>
           </div>
+        ) : loading ? (
+          <div className="py-16 text-center text-[12px] font-semibold text-ink3">설문을 불러오는 중…</div>
         ) : list.length === 0 ? (
           <div className="py-16 text-center text-ink3 border border-dashed border-border/80 rounded-2xl bg-white/60">
             <BarChart3 size={28} className="mx-auto mb-1.5 text-ink3/40" />

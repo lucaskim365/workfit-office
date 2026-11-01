@@ -1,4 +1,10 @@
 import { useState, useMemo, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { reservationRepo } from '@/data/reservation/reservation.repo';
+import { ReservationError } from '@/domain/reservation/engine';
+import { RoomRollbackError, removeMeeting, saveMeeting } from '@/features/workPlan/meetingWithRoom';
+import { RESERVATION_KEY } from '@/features/resource/useReservations';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { CalendarEventError, type CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import {
@@ -12,6 +18,7 @@ import {
 } from '@/domain/calendarEvent/schema';
 import type { WorkProject } from '@/domain/workProject/schema';
 import {
+  CALENDAR_EVENTS_KEY,
   useCalendarEvents,
   useCreateCalendarEvent,
   useJoinMeeting,
@@ -56,6 +63,8 @@ interface CalendarEventModalProps {
   onClose: () => void;
   onSaved: (event: CalendarEvent) => void;
   onRemoved: (event: CalendarEvent) => void;
+  /** 창 겹침 층 — 모바일 앱 틀 위에 띄울 때만 넘긴다(기본 공통 Modal 값) */
+  zClass?: string;
 }
 
 /** 범위별 한 줄 설명. 고르기 전에 누가 보게 되는지 알려준다. */
@@ -81,8 +90,11 @@ export default function CalendarEventModal({
   onClose,
   onSaved,
   onRemoved,
+  zClass,
 }: CalendarEventModalProps) {
-  const { isOperator, isExecutive } = usePermission();
+  const { isOperator, isExecutive, isSuperAdmin } = usePermission();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const canManageCompanyEvent = isOperator || isExecutive;
 
   const usersQuery = useUsers();
@@ -211,7 +223,7 @@ export default function CalendarEventModal({
    * 화면에 띄울 오류 문구.
    */
   const errorText = (caught: unknown, fallback: string): string => {
-    if (caught instanceof CalendarEventError) return caught.message;
+    if (caught instanceof CalendarEventError || caught instanceof ReservationError || caught instanceof RoomRollbackError) return caught.message;
     console.error(caught);
     return fallback;
   };
@@ -241,6 +253,19 @@ export default function CalendarEventModal({
     }
 
     try {
+      // 회의실 예약이 연결된 회의는 예약도 함께 바꾼다. 연결 예약을 못 찾으면 일반 경로.
+      const linked = event?.reservationId ? await reservationRepo.get(event.reservationId) : null;
+      if (event && linked && user) {
+        const body = draft();
+        const saved = await saveMeeting(
+          { calendar: actor, user, isAdmin: isSuperAdmin },
+          { eventId: event.id, draft: body, roomId: linked.resourceId, purpose: body.memo?.trim() || '회의' },
+        );
+        void queryClient.invalidateQueries({ queryKey: [CALENDAR_EVENTS_KEY] });
+        void queryClient.invalidateQueries({ queryKey: [RESERVATION_KEY] });
+        onSaved(saved);
+        return;
+      }
       const saved = event
         ? await updateEvent.mutateAsync({ actor, id: event.id, draft: draft() })
         : await createEvent.mutateAsync({ actor, draft: draft() });
@@ -254,6 +279,14 @@ export default function CalendarEventModal({
     if (!event || !window.confirm(`‘${event.title}’ 일정을 삭제하시겠습니까?`)) return;
     setError('');
     try {
+      const linked = event.reservationId ? await reservationRepo.get(event.reservationId) : null;
+      if (linked && user) {
+        await removeMeeting({ calendar: actor, user, isAdmin: isSuperAdmin }, event);
+        void queryClient.invalidateQueries({ queryKey: [CALENDAR_EVENTS_KEY] });
+        void queryClient.invalidateQueries({ queryKey: [RESERVATION_KEY] });
+        onRemoved(event);
+        return;
+      }
       const removed = await removeEvent.mutateAsync({ actor, id: event.id });
       onRemoved(removed as CalendarEvent);
     } catch (caught) {
@@ -264,6 +297,7 @@ export default function CalendarEventModal({
   return (
     <Modal
       open
+      zClass={zClass}
       onClose={() => !pending && onClose()}
       title={
         isApprovalEvent

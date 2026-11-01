@@ -28,9 +28,9 @@ import {
   Calendar,
 } from 'lucide-react';
 import { won } from '../utils/approvalUtils';
+import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow } from './CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
-import { DateInput } from '@/shared/ui/form/DateInput';
 
 let cachedLogoDataUrl: string | null = null;
 

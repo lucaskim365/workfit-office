@@ -14,10 +14,14 @@ const normName = (name?: string | null) => (name ?? '').replace(/\s+/g, '');
  * 사람을 줄 세우는 화면은 `list.sort(compare)` 로 이 기준을 그대로 쓴다([[rosterOrder]]).
  * 대상 행에 사용자 ID 가 없으면(근태 CAPS 행 등) 이름으로 임원 여부를 찾는다.
  */
+/** 조회 전 빈 값 — 매 렌더 새 배열이 되어 정렬 기준 memo를 깨지 않게 한 개씩만 둔다 */
+const NO_GROUPS: RoleGroup[] = [];
+const NO_ORDER: string[] = [];
+
 export function useRosterOrder() {
   const org = useOrgTree();
-  const { data: groups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
-  const { data: manualOrder = [] } = useRosterOrderSetting();
+  const groups = (useRoleGroups() as { data: RoleGroup[] | undefined }).data ?? NO_GROUPS;
+  const manualOrder = useRosterOrderSetting().data ?? NO_ORDER;
 
   const deptIndex = useMemo(() => {
     const index = new Map<string, number>();

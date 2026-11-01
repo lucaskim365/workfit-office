@@ -397,6 +397,15 @@ export default function MobileCalendarScreen() {
                 icon: '📌',
                 badgeClass: 'bg-panel-alt text-ink2',
               };
+              // 휴가·외근·출장은 업무계획·웹과 같은 이름·색([[statusColors]]) — '외근·출장' 하나로 묶지 않는다
+              const tone =
+                evt.eventType === 'VACATION'
+                  ? { label: '휴가', badgeClass: PERSON_TONES.leave.chip }
+                  : evt.eventType === 'OUTSIDE'
+                    ? evt.title.startsWith('[출장]')
+                      ? { label: '출장', badgeClass: PERSON_TONES.trip.chip }
+                      : { label: '외근', badgeClass: PERSON_TONES.outside.chip }
+                    : { label: meta.label, badgeClass: meta.badgeClass };
 
               return (
                 <div
@@ -408,9 +417,9 @@ export default function MobileCalendarScreen() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[14px]">{meta.icon}</span>
                       <span
-                        className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${meta.badgeClass}`}
+                        className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${tone.badgeClass}`}
                       >
-                        {meta.label}
+                        {tone.label}
                       </span>
                       <h4 className="text-[13px] font-bold text-ink truncate max-w-[200px]">
                         {/* 제목의 [휴가]/[출장]/[외근] 접두어는 옆 배지와 겹치므로 뗀다 (웹과 동일) */}

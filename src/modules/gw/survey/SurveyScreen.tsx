@@ -28,6 +28,8 @@ import SurveyResponseForm from './SurveyResponseForm';
 import SurveyResult from './SurveyResult';
 import { defaultSurveyPeriod } from './surveyDate';
 import { Button } from '@/shared/ui/Button';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
+import { isReloginError } from '@/shared/lib/relogin';
 
 type TabId = 'participate' | 'mine';
 
@@ -39,7 +41,6 @@ const TAB_LABELS: Record<TabId, string> = {
 function LocalSurveyScreen() {
   const { user: authenticatedUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [demoUserId, setDemoUserId] = useState('U009');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -48,10 +49,8 @@ function LocalSurveyScreen() {
   const categoriesQuery = useCodeOptions(SURVEY_CATEGORY_GROUP_CODE);
   const users = usersQuery.data ?? [];
   const departments = useMemo(() => departmentsQuery.data ?? [], [departmentsQuery.data]);
-  const actor = authenticatedUser
-    ?? users.find((user) => user.id === demoUserId)
-    ?? users.find((user) => user.status === '사용')
-    ?? null;
+  // 설문 서버가 로그인 토큰으로 요청자를 정하므로 로그인 사용자만 쓴다(시연용 사용자 선택 제거).
+  const actor = authenticatedUser ?? null;
   const actorDeptId = useMemo(() => resolveUserDeptId(departments, actor), [departments, actor]);
 
   const mineQuery = useMySurveys(actor);
@@ -81,8 +80,11 @@ function LocalSurveyScreen() {
   const detail = openSurvey ?? respondSurvey ?? resultSurvey;
   const questionsQuery = useSurveyQuestions(detail?.id ?? null);
 
-  const loading = usersQuery.isLoading || departmentsQuery.isLoading || mineQuery.isLoading || respondentQuery.isLoading;
-  const queryError = usersQuery.error ?? departmentsQuery.error ?? mineQuery.error ?? respondentQuery.error;
+  // 참여 기록을 못 읽으면 모든 설문이 '미참여'로 보이므로 화면 전체 오류로 다룬다.
+  const loading = usersQuery.isLoading || departmentsQuery.isLoading || mineQuery.isLoading || respondentQuery.isLoading
+    || participationQuery.isLoading;
+  const queryError = usersQuery.error ?? departmentsQuery.error ?? mineQuery.error ?? respondentQuery.error
+    ?? participationQuery.error;
 
   const go = (params: Record<string, string>) => {
     setNotice('');
@@ -117,10 +119,23 @@ function LocalSurveyScreen() {
   };
 
   if (loading) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">전자설문을 불러오는 중…</div>;
-  if (queryError) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center px-5 text-center text-[12px] font-semibold text-red-500">전자설문 데이터를 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
+  if (queryError) {
+    const message = queryError instanceof Error ? queryError.message : '';
+    return (
+      <div className="mx-auto grid min-h-[calc(60vh/var(--font-scale,1))] max-w-md place-items-center px-5">
+        {isReloginError(queryError)
+          ? <ErrorNotice message={message} />
+          : <ErrorNotice message={`전자설문 데이터를 불러오지 못했습니다. ${message}`} />}
+      </div>
+    );
+  }
   if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   const questions = questionsQuery.data ?? [];
+  // 질문을 다 받기 전에는 상세 화면을 그리지 않는다. 빈 목록으로 편집기를 열고 저장하면 질문이 모두 지워진다.
+  // 한 번 받은 뒤 다시 불러오기가 실패해도 편집 중인 화면을 내리지 않도록 데이터 유무로 본다.
+  const questionsReady = questionsQuery.data !== undefined;
+  const questionsError = questionsQuery.error;
   const hasOpenToAnswer = inbox.some((row) => row.status === 'ACTIVE' && !(participationQuery.data ?? []).includes(row.id));
 
   return (
@@ -130,11 +145,6 @@ function LocalSurveyScreen() {
         name="전자설문"
         right={
           <div className="flex items-center gap-2">
-            {!authenticatedUser && (
-              <select value={actor.id} onChange={(event) => { setDemoUserId(event.target.value); go({ tab }); }} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
-                {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name} · {user.position || user.dept || '사원'}</option>)}
-              </select>
-            )}
             {canCreateSurvey(actor) && !detail && (
               <Button disabled={createDraft.isPending} onClick={createNew} variant="primary">+ 새 설문</Button>
             )}
@@ -143,7 +153,7 @@ function LocalSurveyScreen() {
       />
 
       {notice && <div className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2.5 text-[11px] font-semibold text-teal">{notice}</div>}
-      {error && <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+      {error && <ErrorNotice message={error} className="mt-4" />}
       {detailId && !detail && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-amber/20 bg-amber-soft/25 px-3 py-2.5 text-[11px] font-semibold text-amber">
           <span>설문을 찾을 수 없거나 현재 계정에 접근 권한이 없습니다.</span>
@@ -166,7 +176,18 @@ function LocalSurveyScreen() {
         )}
       >
         <main>
-        {respondSurvey && (
+        {detail && !questionsReady && (questionsError ? (
+          <div className="flex flex-col items-start gap-2">
+            <ErrorNotice message={questionsError instanceof Error ? `설문 질문을 불러오지 못했습니다. ${questionsError.message}` : '설문 질문을 불러오지 못했습니다.'} />
+            <div className="flex gap-2">
+              <Button onClick={() => questionsQuery.refetch()} variant="primary" size="sm">다시 불러오기</Button>
+              <Button onClick={() => go({ tab })} size="sm">목록으로</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid min-h-[calc(40vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">설문 질문을 불러오는 중…</div>
+        ))}
+        {questionsReady && respondSurvey && (
           <SurveyResponseForm
             key={respondSurvey.id}
             actor={actor}
@@ -177,22 +198,20 @@ function LocalSurveyScreen() {
             onBack={() => go({ tab: 'participate' })}
           />
         )}
-        {resultSurvey && (
+        {questionsReady && resultSurvey && (
           <SurveyResult
             key={resultSurvey.id}
             actor={actor}
             survey={resultSurvey}
             questions={questions}
-            users={users}
-            departments={departments}
             onBack={() => go({ tab })}
             onNotice={setNotice}
           />
         )}
-        {openSurvey && previewId && (
+        {questionsReady && openSurvey && previewId && (
           <SurveyPreview survey={openSurvey} questions={questions} onBack={() => go({ tab: 'mine' })} />
         )}
-        {openSurvey && editId && (
+        {questionsReady && openSurvey && editId && (
           <SurveyBuilder
             key={openSurvey.id}
             actor={actor}

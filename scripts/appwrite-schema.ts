@@ -845,6 +845,9 @@ const COLLECTIONS: CollectionDef[] = [
       BOOL('reminded', false),
       S('eventType', 32),
       SA('attendeeUserIds', 64),
+      // 회의 장소(직접 적은 글 또는 방 이름)와 연결된 회의실 예약 id
+      S('location', 100),
+      S('reservationId', 64),
     ],
     /*
       공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만
@@ -881,6 +884,45 @@ const COLLECTIONS: CollectionDef[] = [
       IX('wpOwner', ['ownerUserId']),
       IX('wpDate', ['date']),
     ],
+  },
+  {
+    id: 'workPlanItems',
+    name: '업무계획 항목',
+    /*
+      업무계획 항목형 개편 — 한 사람의 하루 칸 하나(제목·태그·시간). 전체 보기는 전원 공개고
+      고치는 건 본인 것만(repo가 막는다). 기존 workPlans(자유 텍스트)와는 별개 컬렉션이다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('ownerUserId', 64, true),
+      S('date', 40, true),
+      BOOL('allDay'),
+      S('startTime', 8),
+      S('endTime', 8),
+      S('tagId', 64, true),
+      S('title', 100, true),
+      S('memo', 1000),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('wiOwner', ['ownerUserId']),
+      IX('wiDate', ['date']),
+    ],
+  },
+  {
+    id: 'workPlanTags',
+    name: '업무계획 일반 태그',
+    /* 고정 태그(회의·외근·출장)는 코드에 있고 여기에는 관리자가 만든 일반 태그만 둔다. */
+    attributes: [
+      S('id', 64, true),
+      S('name', 10, true),
+      S('colorId', 32),
+      INT('order'),
+      BOOL('hidden', false),
+    ],
+    indexes: [],
   },
   {
     id: 'outsideWorks',
@@ -1165,6 +1207,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveys',
     name: '전자설문',
+    // 읽기만 공개, 쓰기는 Function survey 만(API 키) — 2026-10-14 설계 §5
+    permissions: [Permission.read(Role.any())],
     attributes: [
       S('id', 64, true),
       S('title', 100, true),
@@ -1193,6 +1237,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyQuestions',
     name: '설문 질문',
+    // 읽기만 공개, 쓰기는 Function survey 만(API 키) — 2026-10-14 설계 §5
+    permissions: [Permission.read(Role.any())],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1213,6 +1259,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyResponses',
     name: '설문 응답',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1227,6 +1275,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyAnswers',
     name: '설문 답변',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1246,6 +1296,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyParticipations',
     name: '설문 참여기록',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       // 문서 ID = `설문ID__사용자ID` — 중복 제출 경쟁에서 문서가 하나만 생기게 하는 결정적 키.
       S('id', 128, true),

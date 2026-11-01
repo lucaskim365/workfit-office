@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Car, CheckCircle2, FileText, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
-import { OUTSIDE_WORK_CATEGORY_LABELS } from '@/domain/outsideWork/schema';
+import { OUTSIDE_WORK_CATEGORY_LABELS, outsideKindLabel } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
 import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
@@ -18,6 +18,8 @@ interface OutsideWorkDetailModalProps {
   onClose: () => void;
   /** 직접 등록 건 수정 — 등록 모달을 여는 쪽이 처리한다 */
   onEdit?: (view: OutsideScheduleView) => void;
+  /** 창 겹침 층 — 모바일 앱 틀 위에 띄울 때만 넘긴다(기본 공통 Modal 값) */
+  zClass?: string;
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -45,7 +47,7 @@ function Row({ icon, children }: { icon: ReactNode; children: ReactNode }) {
  * 외근·출장 상세 — 결재 완료 건과 직접 등록 건 공용.
  * 결재 건은 결재 문서로 가는 길을, 본인 직접 등록 건은 수정·삭제를 준다.
  */
-export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }: OutsideWorkDetailModalProps) {
+export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, zClass }: OutsideWorkDetailModalProps) {
   const nav = useNavigate();
   // PWA(/m)에서 열면 결재 문서도 PWA 결재 화면으로 연다
   const inPwa = useLocation().pathname.startsWith('/m');
@@ -107,11 +109,12 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }:
   return (
     <Modal
       open
+      zClass={zClass}
       onClose={onClose}
       width={460}
       title={(
         <span className="flex items-center gap-2">
-          <span>[{OUTSIDE_WORK_CATEGORY_LABELS[view.category]}] {view.subType}</span>
+          <span>[{OUTSIDE_WORK_CATEGORY_LABELS[view.category]}] {outsideKindLabel(view.category, view.subType)}</span>
           {sourceBadge}
         </span>
       )}

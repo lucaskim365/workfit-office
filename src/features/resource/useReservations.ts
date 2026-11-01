@@ -4,7 +4,7 @@ import type { ReservationRequest } from '@/domain/reservation/schema';
 import type { User } from '@/domain/user/schema';
 import type { RescheduleInput } from '@/domain/reservation/engine';
 
-const RESERVATION_KEY = 'resource-reservations';
+export const RESERVATION_KEY = 'resource-reservations';
 
 export function useReservations(filter?: ReservationFilter) {
   return useQuery({ queryKey: [RESERVATION_KEY, filter ?? null], queryFn: () => reservationRepo.list(filter) });
