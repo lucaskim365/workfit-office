@@ -171,7 +171,7 @@ export const userRepo = {
   },
 
   /** 프로필 자기 수정 — 사용자가 직접 변경 가능한 필드만(이메일, 인감 URL, 서명 URL, 선택 타입, 프로필 사진). */
-  async updateProfile(id: string, patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string }): Promise<User> {
+  async updateProfile(id: string, patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string; photoThumbUrl?: string }): Promise<User> {
     const all = await this.listIncludingTestAccounts();
     const existing = all.find((u) => u.id === id);
     if (!existing) throw new Error('사용자를 찾을 수 없습니다.');

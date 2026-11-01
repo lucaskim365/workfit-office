@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { MANUAL_PRESENCE_STATUSES, USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import { User as UserIcon, Settings, MessageSquare } from 'lucide-react';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 interface UserMenuProps {
   onClose: () => void;
@@ -69,7 +70,7 @@ export function UserMenu({ onClose }: UserMenuProps) {
           <div className="relative">
             {user?.photoUrl ? (
               <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-teal/30 bg-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">
-                <img src={user.photoUrl} alt="프로필 사진" className="h-full w-full object-cover" />
+                <img src={smallPhotoOf(user)} alt="프로필 사진" className="h-full w-full object-cover" />
               </div>
             ) : (
               <div className="grid h-16 w-16 place-items-center rounded-full bg-teal text-[24px] font-bold text-white shadow-[0_2px_8px_rgba(23,168,154,0.35)]">

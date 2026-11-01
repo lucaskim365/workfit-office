@@ -213,6 +213,7 @@ export function ApprovalFormEditor({
       signUrl: '',
       signType: 'stamp',
       photoUrl: '',
+      photoThumbUrl: '',
       resignedAt: '',
       fcmToken: '',
       fcmTokens: [],

@@ -2,27 +2,33 @@ import { useState } from 'react';
 import { fileStorage } from '@/shared/lib/storage';
 
 const AVATAR_MAX_PX = 800;
+const AVATAR_THUMB_PX = 200;
 const AVATAR_JPEG_QUALITY = 0.85;
 
 /**
  * 프로필 사진 업로드 훅.
- * 브라우저에서 800×800px 이내로 줄여(JPEG) 파일 스토리지에 올리고 URL을 반환한다. 크게 보기에서 흐려지지 않을 크기.
+ * 한 장을 두 크기(JPEG)로 저장한다 — 크게 보기용 800px, 목록·말풍선 등 작은 자리용 200px(첫 로딩을 줄인다).
  * 저장 백엔드(Firebase / Garage(S3) / data URL 폴백)는 fileStorage 어댑터가 결정한다.
  */
 export function useUploadAvatar() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function upload(userId: string, file: File): Promise<string> {
+  async function upload(userId: string, file: File): Promise<{ photoUrl: string; photoThumbUrl: string }> {
     setUploading(true);
     setError(null);
     try {
-      const resized = await resizeImage(file, AVATAR_MAX_PX, AVATAR_MAX_PX);
-      const blob = await dataUrlToBlob(resized);
+      const [large, thumb] = await Promise.all(
+        [AVATAR_MAX_PX, AVATAR_THUMB_PX].map(async (px) => dataUrlToBlob(await resizeImage(file, px, px))),
+      );
       // 매번 새 주소로 — 같은 주소에 덮어쓰면 화면 주소가 안 바뀌어 예전 사진이 계속 보이고, 파일 저장소를 같이 쓰는 개발·운영이 같은 ID 끼리 서로 덮어쓴다
-      return await fileStorage.put(`avatars/${userId}/${Date.now()}.jpg`, blob, {
-        contentType: 'image/jpeg',
-      });
+      const stamp = Date.now();
+      const contentType = 'image/jpeg';
+      const [photoUrl, photoThumbUrl] = await Promise.all([
+        fileStorage.put(`avatars/${userId}/${stamp}.jpg`, large, { contentType }),
+        fileStorage.put(`avatars/${userId}/${stamp}_thumb.jpg`, thumb, { contentType }),
+      ]);
+      return { photoUrl, photoThumbUrl };
     } catch (e) {
       const msg = e instanceof Error ? e.message : '업로드에 실패했습니다.';
       setError(msg);

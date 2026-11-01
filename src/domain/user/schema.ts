@@ -42,6 +42,8 @@ export const userSchema = z.object({
   signUrl: z.string().optional().default(''),
   signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
+  /** 작은 프로필 사진(200px) — 목록·말풍선 등 작은 자리용. 크게 볼 때는 photoUrl(800px). 예전 사진은 비어 있다. */
+  photoThumbUrl: z.string().default(''),
   activeChatRoomId: z.string().nullable().optional(),
   /**
    * 퇴사 처리 일시(ISO). 빈 문자열 = 재직/해당없음. Phase1 퇴사 처리에서 기록.
@@ -95,5 +97,10 @@ export const userFormSchema = z.object({
   status: z.enum(USER_STATUS),
   password: z.string().max(50).optional(),
   photoUrl: z.string().optional(),
+  photoThumbUrl: z.string().optional(),
 });
 export type UserFormValues = z.infer<typeof userFormSchema>;
+
+/** 작은 자리에 쓸 프로필 사진 주소 — 작은 파일이 없는 예전 사진은 원본을 쓴다 */
+export const smallPhotoOf = (user?: { photoUrl?: string | null; photoThumbUrl?: string | null } | null): string =>
+  user?.photoThumbUrl || user?.photoUrl || '';

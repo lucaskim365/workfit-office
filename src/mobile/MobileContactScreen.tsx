@@ -16,6 +16,7 @@ import { PresenceDot } from '@/features/userPresence/PresenceIndicator';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useChatRooms, useCreateRoom } from '@/features/chat/useChatRooms';
 import MobileCommonHeader from './MobileCommonHeader';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 export default function MobileContactScreen() {
   const { user } = useAuth();
@@ -185,7 +186,7 @@ export default function MobileContactScreen() {
                     <div className="relative shrink-0">
                       {u.photoUrl ? (
                         <img
-                          src={u.photoUrl}
+                          src={smallPhotoOf(u)}
                           alt={u.name}
                           className="h-10 w-10 rounded-full object-cover border border-border"
                         />
