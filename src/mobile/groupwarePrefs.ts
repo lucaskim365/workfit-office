@@ -28,9 +28,9 @@ export function moveItem(order: string[], fromId: string, toId: string): string[
 
 export function loadGroupwareView(userId: string): GroupwareViewMode {
   try {
-    return localStorage.getItem(viewKey(userId)) === 'grid' ? 'grid' : 'list';
+    return localStorage.getItem(viewKey(userId)) === 'list' ? 'list' : 'grid';
   } catch {
-    return 'list';
+    return 'grid';
   }
 }
 
