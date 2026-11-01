@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { fileStorage } from '@/shared/lib/storage';
 
+const AVATAR_MAX_PX = 800;
+const AVATAR_JPEG_QUALITY = 0.85;
+
 /**
  * 프로필 사진 업로드 훅.
- * 브라우저에서 200×200px 이내로 리사이즈(PNG) 후 파일 스토리지에 업로드하고 URL을 반환.
+ * 브라우저에서 800×800px 이내로 줄여(JPEG) 파일 스토리지에 올리고 URL을 반환한다. 크게 보기에서 흐려지지 않을 크기.
  * 저장 백엔드(Firebase / Garage(S3) / data URL 폴백)는 fileStorage 어댑터가 결정한다.
  */
 export function useUploadAvatar() {
@@ -14,12 +17,11 @@ export function useUploadAvatar() {
     setUploading(true);
     setError(null);
     try {
-      // 이미지 리사이즈 (200×200 max, PNG 변환)
-      const resized = await resizeImage(file, 200, 200);
+      const resized = await resizeImage(file, AVATAR_MAX_PX, AVATAR_MAX_PX);
       const blob = await dataUrlToBlob(resized);
       // 매번 새 주소로 — 같은 주소에 덮어쓰면 화면 주소가 안 바뀌어 예전 사진이 계속 보이고, 파일 저장소를 같이 쓰는 개발·운영이 같은 ID 끼리 서로 덮어쓴다
-      return await fileStorage.put(`avatars/${userId}/${Date.now()}.png`, blob, {
-        contentType: 'image/png',
+      return await fileStorage.put(`avatars/${userId}/${Date.now()}.jpg`, blob, {
+        contentType: 'image/jpeg',
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '업로드에 실패했습니다.';
@@ -33,7 +35,7 @@ export function useUploadAvatar() {
   return { upload, uploading, error };
 }
 
-/** File → canvas 리사이즈 → base64 PNG */
+/** File → canvas 리사이즈 → base64 JPEG (투명한 부분은 흰색) */
 function resizeImage(file: File, maxW: number, maxH: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,8 +51,10 @@ function resizeImage(file: File, maxW: number, maxH: number): Promise<string> {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) { reject(new Error('Canvas 오류')); return; }
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/png'));
+        resolve(canvas.toDataURL('image/jpeg', AVATAR_JPEG_QUALITY));
       };
       img.onerror = reject;
       img.src = src;

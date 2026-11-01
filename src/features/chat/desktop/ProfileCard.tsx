@@ -8,6 +8,7 @@ import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { useCreateRoom } from '@/features/chat/useChatRooms';
 import { getAvatarStyle } from '@/features/chat/avatarStyle';
 import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
+import { ProfilePhotoViewer } from '@/features/chat/ProfilePhotoViewer';
 
 /**
  * 대화방 프로필 명함 — 프로필 사진·이름을 누르면 그 옆에 작게 뜬다.
@@ -158,6 +159,7 @@ export function ProfileCardContent({
   const presenceMap = useAllUserPresences();
   const createRoom = useCreateRoom();
   const [copied, setCopied] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   const user = users.find((u) => u.id === userId);
   const profile = profiles.find((p) => p.userId === userId || p.id === userId);
@@ -191,10 +193,18 @@ export function ProfileCardContent({
   return (
     <>
       <div className="flex items-center gap-3 bg-[#f2f8fc] px-4 py-3.5">
-        <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="relative overflow-hidden grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px] font-bold">
+        <button
+          type="button"
+          disabled={!user?.photoUrl}
+          onClick={() => setPhotoOpen(true)}
+          title={user?.photoUrl ? '사진 크게 보기' : undefined}
+          style={{ backgroundColor: avatar.bg, color: avatar.text }}
+          className="relative overflow-hidden grid h-11 w-11 shrink-0 cursor-zoom-in place-items-center rounded-full text-[17px] font-bold disabled:cursor-default"
+        >
           {name[0] ?? '?'}
           <ChatAvatarPhoto userId={userId} />
-        </span>
+        </button>
+        {photoOpen && user?.photoUrl && <ProfilePhotoViewer url={user.photoUrl} name={name} onClose={() => setPhotoOpen(false)} />}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-[14px] font-extrabold">{name}</span>
