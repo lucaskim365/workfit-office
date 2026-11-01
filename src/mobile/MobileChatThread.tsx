@@ -38,6 +38,7 @@ import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 // 아바타 색 — 웹·모바일 공용(features/chat/avatarStyle)
 export { getAvatarStyle } from '@/features/chat/avatarStyle';
 import { getAvatarStyle } from '@/features/chat/avatarStyle';
+import { useMobileBack } from './useMobileBack';
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
@@ -48,6 +49,7 @@ function unhideRoom(me: string, roomId: string) {
 export default function MobileChatThread() {
   const { roomId = '' } = useParams();
   const nav = useNavigate();
+  const back = useMobileBack('/m/chat');
   const { user } = useAuth();
   const { isAdmin: isSuperAdmin } = usePermission();
   const me = user!.id;
@@ -287,19 +289,19 @@ export default function MobileChatThread() {
     if (!room || leave.isPending) return;
     if (!window.confirm(`'${room.name}' 방에서 나가시겠어요?\n대화 내용은 보존됩니다.`)) return;
     await leave.mutateAsync({ roomId: room.id, userId: me, userName: meName });
-    nav('/m/chat');
+    back();
   };
   const onDelete = async () => {
     if (!room || remove.isPending) return;
     if (!window.confirm(`'${room.name}' 방을 삭제하시겠어요?\n목록에서 숨겨지지만 대화 내용은 보존됩니다.`)) return;
     await remove.mutateAsync({ roomId: room.id, adminId: me, adminName: meName });
-    nav('/m/chat');
+    back();
   };
   const onDeleteDirect = () => {
     if (!room) return;
     if (!window.confirm('채팅방을 목록에서 삭제하시겠어요?\n(새로운 대화를 시작하면 이전 대화가 다시 표시됩니다.)')) return;
     hideRoom(me, room.id);
-    nav('/m/chat');
+    back();
   };
 
   const menuActions: SheetAction[] = room
@@ -326,7 +328,7 @@ export default function MobileChatThread() {
 
         return (
           <header className="m-header flex shrink-0 items-center gap-1.5 px-2 py-3 text-white">
-            <button onClick={() => nav('/m/chat')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+            <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
             {isDirect && (
               <button
                 type="button"

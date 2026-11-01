@@ -14,6 +14,7 @@ import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } 
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { formCounts } from '@/modules/gw/approval/completedForms';
+import { useMobileBack } from './useMobileBack';
 
 /**
  * 모바일 PWA 전자결재 결재함 — 열람·결재 중심(Flutter 모바일과 동일 스코프).
@@ -74,6 +75,7 @@ export function statusColor(status: string): string {
 export default function MobileApprovalList() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const back = useMobileBack('/m');
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
@@ -277,7 +279,7 @@ export default function MobileApprovalList() {
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
       <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
-        <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+        <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
         <div className="ml-auto flex items-center gap-1">
           <MobileNotificationBell />

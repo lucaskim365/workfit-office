@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
 import MobileCommonHeader from './MobileCommonHeader';
+import { useMobileBack } from './useMobileBack';
 
 interface MobileComingSoonProps {
   title: string;
@@ -8,7 +8,7 @@ interface MobileComingSoonProps {
 }
 
 export default function MobileComingSoon({ title, icon, desc }: MobileComingSoonProps) {
-  const nav = useNavigate();
+  const back = useMobileBack('/m');
 
   return (
     <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
@@ -29,7 +29,7 @@ export default function MobileComingSoon({ title, icon, desc }: MobileComingSoon
 
         <button
           type="button"
-          onClick={() => nav('/m')}
+          onClick={back}
           className="mt-6 rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90 active:scale-95 transition-all"
         >
           전체 메뉴로 돌아가기

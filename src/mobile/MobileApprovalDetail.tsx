@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
@@ -20,6 +20,7 @@ import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
+import { useMobileBack } from './useMobileBack';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -34,7 +35,6 @@ const FALLBACK_CLOSING: Record<string, string> = {
  */
 export default function MobileApprovalDetail() {
   const { id } = useParams();
-  const nav = useNavigate();
   const { user } = useAuth();
   const me = user!.id;
   // 문서를 열면 읽음으로 기록(안읽음 표시 해제) — 알림으로 바로 들어온 경우 포함
@@ -70,7 +70,7 @@ export default function MobileApprovalDetail() {
     return () => observer.disconnect();
   }, [viewMode]);
 
-  const back = () => nav('/m/approval');
+  const back = useMobileBack('/m/approval');
 
   const nameOf = (approverId: string, snapshot?: string | null) =>
     snapshot || users.find((u) => u.id === approverId)?.name || approverId;

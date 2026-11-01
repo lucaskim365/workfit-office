@@ -4,6 +4,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useCreateRoom } from '@/features/chat/useChatRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MobileMemberPicker } from './MobileMemberPicker';
+import { useMobileBack } from './useMobileBack';
 
 /**
  * 모바일 새 대화 만들기 — 조직도에서 멤버 다중 선택.
@@ -13,6 +14,7 @@ export default function MobileNewRoom() {
   const { user } = useAuth();
   const me = user!.id;
   const nav = useNavigate();
+  const back = useMobileBack('/m/chat');
   const { data: users = [] } = useUsers();
   const create = useCreateRoom();
   const [selected, setSelected] = useState<string[]>([]);
@@ -36,7 +38,7 @@ export default function MobileNewRoom() {
   return (
     <div className="flex h-full flex-col" style={{ background: '#f2f8fc' }}>
       <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
-        <button onClick={() => nav('/m/chat')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+        <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="text-[15px] font-bold">새 대화</span>
         <button
           onClick={submit}
