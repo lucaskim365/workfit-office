@@ -582,18 +582,21 @@ export function WorkPlanTeamMonthlyMatrix({
                             return (
                               <td
                                 key={dayStr}
-                                onDoubleClick={onCreate ? () => onCreate(dayStr, member) : undefined}
+                                // 위(일정) 칸을 누르면 일정 창, 아래 메모 칸은 CellMemo 가 받는다
+                                onClick={onCreate ? () => onCreate(dayStr, member) : undefined}
                                 className={`group/day p-2 align-top ${cellBorderClass} transition-colors min-h-[85px] relative ${cellBgClass} ${
-                                  !d.inCurrentMonth ? 'opacity-50' : ''
-                                }`}
+                                  onCreate ? 'cursor-pointer' : ''
+                                } ${!d.inCurrentMonth ? 'opacity-50' : ''}`}
                               >
                                 {onCreate && (
                                   <button
                                     type="button"
                                     aria-label={`${member.name} ${d.monthNum}월 ${d.dayNum}일 일정 추가`}
                                     title="일정 추가"
-                                    onClick={() => onCreate(dayStr, member)}
-                                    onDoubleClick={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onCreate(dayStr, member);
+                                    }}
                                     className="absolute right-1 top-1 z-20 grid h-5 w-5 place-items-center rounded border border-border bg-panel text-ink2 opacity-0 shadow-2xs transition-opacity hover:border-teal/50 hover:text-teal focus:opacity-100 group-hover/day:opacity-100"
                                   >
                                     <Plus size={12} />
@@ -608,24 +611,20 @@ export function WorkPlanTeamMonthlyMatrix({
                                     onOpen={onOpenEntry}
                                   />
                                 ))}
+                                {/* 1) 위 칸: 일정 — 여러 날 막대 자리 + 칩(종일 먼저, 시작 시각 순) */}
                                 {barLanes > 0 && <div style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
-                                {/* 1) 칸 항목 칩 — 종일 먼저, 시작 시각 순 */}
-                                {entries.length > 0 && (
-                                  <div className="space-y-1">
-                                    {entries.map((entry) => (
-                                      <EntryChip key={entry.key} entry={entry} onOpen={onOpenEntry} />
-                                    ))}
-                                  </div>
-                                )}
-                                {/* 2) 메모 — 서식 없는 글. 내 칸은 눌러서 바로 고친다 */}
+                                <div className="min-h-[44px] space-y-1">
+                                  {entries.map((entry) => (
+                                    <EntryChip key={entry.key} entry={entry} onOpen={onOpenEntry} />
+                                  ))}
+                                </div>
+                                {/* 2) 아래 칸: 메모 — 서식 없는 글. 내 칸은 눌러서 바로 고친다 */}
                                 <CellMemo
                                   key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
                                   text={cell.memo}
                                   label={`${member.name} ${d.monthNum}월 ${d.dayNum}일 메모`}
-                                  divided={entries.length > 0}
                                   onSave={isMe && onSaveMemo ? (text) => onSaveMemo(dayStr, cell.memoPlan, text) : undefined}
                                 />
-                                {entries.length === 0 && !cell.memo && <div className="min-h-[50px] w-full" />}
                               </td>
                             );
                           })}
@@ -648,8 +647,6 @@ export function WorkPlanTeamMonthlyMatrix({
 const SPAN_LANE_HEIGHT = 20;
 /** 칸 안쪽 여백(p-2)과 같은 값 */
 const CELL_PADDING = 8;
-/** 메모 글을 한 번 눌렀을 때 더블클릭인지 기다리는 시간(ms) */
-const DOUBLE_CLICK_WAIT = 250;
 
 /** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
 function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntry) => void }) {
@@ -676,7 +673,8 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
   const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-bold shadow-2xs ${badgeClass}`;
   if (!openable) {
     return (
-      <div title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint} className={chipClass}>
+      // 누를 상세가 없는 칩 — 칸 누르기(새 일정 창)로 넘기지 않는다
+      <div title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint} className={chipClass} onClick={(e) => e.stopPropagation()}>
         {body}
       </div>
     );
@@ -688,8 +686,6 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
         e.stopPropagation();
         onOpen(entry);
       }}
-      // 칩을 두 번 눌러도 새 일정 창이 뜨지 않게
-      onDoubleClick={(e) => e.stopPropagation()}
       title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint}
       className={`${chipClass} cursor-pointer hover:brightness-95`}
     >
@@ -699,18 +695,16 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
 }
 
 /**
- * 칸 메모 — 서식 없는 글, 3줄 넘으면 접어 둔다. `onSave`가 있으면(내 칸) 글을 누르거나
- * 칸 오른쪽 위 메모 버튼으로 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
+ * 칸 아래쪽 메모 칸 — 서식 없는 글, 3줄 넘으면 접어 둔다. 점선 위는 일정, 아래는 메모.
+ * `onSave`가 있으면(내 칸) 메모 칸을 눌러 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
  */
 function CellMemo({
   text,
   label,
-  divided,
   onSave,
 }: {
   text: string | null;
   label: string;
-  divided: boolean;
   onSave?: (text: string) => Promise<void>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -727,22 +721,10 @@ function CellMemo({
   }, [text, expanded]);
 
   const startEdit = () => {
-    if (!onSave) return;
+    if (!onSave || draft !== null) return;
     setError('');
     setDraft(text ?? '');
   };
-
-  /*
-    메모 글 누르기 = 고치기, 칸 더블클릭 = 업무 추가. 더블클릭의 첫 번째 누름이 메모 고치기를 먼저 열지 않게
-    고치기는 잠깐 기다렸다 열고, 그 사이 두 번째 누름이 오면 취소한다(더블클릭은 칸으로 올려 보낸다).
-  */
-  const editTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(editTimer.current), []);
-  const startEditSoon = () => {
-    window.clearTimeout(editTimer.current);
-    editTimer.current = window.setTimeout(startEdit, DOUBLE_CLICK_WAIT);
-  };
-  const cancelEdit = () => window.clearTimeout(editTimer.current);
 
   const finish = async () => {
     if (draft === null || saving || !onSave) return;
@@ -761,101 +743,87 @@ function CellMemo({
     }
   };
 
-  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
-
-  if (draft !== null) {
-    return (
-      <div className={divided ? 'mt-1.5 border-t border-border/40 pt-1' : ''} onDoubleClick={stop}>
-        <textarea
-          aria-label={label}
-          autoFocus
-          value={draft}
-          maxLength={WORK_PLAN_MEMO_MAX}
-          disabled={saving}
-          rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
-          placeholder="메모"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => void finish()}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              setDraft(null);
-            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              void finish();
-            }
-          }}
-          className="w-full resize-none rounded border border-sky-300 bg-panel px-1.5 py-1 text-[10px] leading-relaxed text-ink outline-none focus:border-sky-400 disabled:opacity-60 dark:border-sky-700"
-        />
-        {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
-      </div>
-    );
-  }
-
-  if (!text) {
-    // 메모 없는 내 칸 — 마우스를 올리면 [+] 옆에 메모 버튼
-    return onSave ? (
-      <button
-        type="button"
-        aria-label={`${label} 쓰기`}
-        title="메모"
-        onClick={(e) => {
-          e.stopPropagation();
-          startEdit();
-        }}
-        onDoubleClick={stop}
-        className="absolute right-7 top-1 z-20 grid h-5 w-5 place-items-center rounded border border-border bg-panel text-ink2 opacity-0 shadow-2xs transition-opacity hover:border-teal/50 hover:text-teal focus:opacity-100 group-hover/day:opacity-100"
-      >
-        <StickyNote size={11} />
-      </button>
-    ) : null;
-  }
-
   return (
-    <div className={divided ? 'mt-1.5 border-t border-border/40 pt-1' : ''}>
-      <div
-        ref={ref}
-        role={onSave ? 'button' : undefined}
-        tabIndex={onSave ? 0 : undefined}
-        aria-label={onSave ? `${label} 고치기` : undefined}
-        title={onSave ? '눌러서 메모 고치기' : undefined}
-        onClick={
-          onSave
-            ? (e) => {
+    <div
+      role={onSave && draft === null ? 'button' : undefined}
+      tabIndex={onSave && draft === null ? 0 : undefined}
+      aria-label={onSave && draft === null ? `${label} ${text ? '고치기' : '쓰기'}` : undefined}
+      title={onSave && draft === null ? '눌러서 메모 쓰기' : undefined}
+      // 내 칸 메모 칸 누르기는 메모 고치기 — 칸 누르기(새 일정 창)로 넘기지 않는다
+      onClick={
+        onSave
+          ? (e) => {
+              e.stopPropagation();
+              startEdit();
+            }
+          : undefined
+      }
+      onKeyDown={
+        onSave && draft === null
+          ? (e) => {
+              if (e.key === 'Enter') startEdit();
+            }
+          : undefined
+      }
+      className={`mt-1.5 min-h-[22px] border-t border-dashed border-border pt-1 ${
+        onSave && draft === null ? 'cursor-text rounded-b hover:bg-panel-alt/60' : ''
+      }`}
+    >
+      {draft !== null ? (
+        <>
+          <textarea
+            aria-label={label}
+            autoFocus
+            value={draft}
+            maxLength={WORK_PLAN_MEMO_MAX}
+            disabled={saving}
+            rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
+            placeholder="메모"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void finish()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
                 e.stopPropagation();
-                if (e.detail > 1) return;
-                startEditSoon();
+                setDraft(null);
+              } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                void finish();
               }
-            : undefined
-        }
-        onKeyDown={
-          onSave
-            ? (e) => {
-                if (e.key === 'Enter') startEdit();
-              }
-            : undefined
-        }
-        onDoubleClick={onSave ? cancelEdit : undefined}
-        className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'} ${
-          onSave ? 'cursor-text rounded hover:bg-panel-alt/60' : ''
-        }`}
-      >
-        {text}
-      </div>
-      {(overflowing || expanded) && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded((v) => !v);
-          }}
-          onDoubleClick={(e) => e.stopPropagation()}
-          className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] font-semibold text-ink3 hover:text-ink2"
-        >
-          {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-          {expanded ? '접기' : '더보기'}
-        </button>
+            }}
+            className="w-full resize-none rounded border border-sky-300 bg-panel px-1.5 py-1 text-[10px] leading-relaxed text-ink outline-none focus:border-sky-400 disabled:opacity-60 dark:border-sky-700"
+          />
+          {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
+        </>
+      ) : text ? (
+        <>
+          <div
+            ref={ref}
+            className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-3'}`}
+          >
+            {text}
+          </div>
+          {(overflowing || expanded) && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              }}
+              className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] font-semibold text-ink3 hover:text-ink2"
+            >
+              {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              {expanded ? '접기' : '더보기'}
+            </button>
+          )}
+        </>
+      ) : (
+        onSave && (
+          <span className="flex items-center gap-1 text-[10px] text-ink3/60 opacity-0 transition-opacity group-hover/day:opacity-100">
+            <StickyNote size={10} />
+            메모
+          </span>
+        )
       )}
     </div>
   );
@@ -874,7 +842,6 @@ function OutsideSpanBar({ bar, entry, onOpen }: { bar: WeekBar; entry: DayEntry;
         e.stopPropagation();
         onOpen(entry);
       }}
-      onDoubleClick={(e) => e.stopPropagation()}
       title={`${label} (${range}${time ? ` · ${time}` : ''})`}
       className={`absolute z-10 flex items-center justify-between gap-1 border px-1.5 text-[9px] font-bold shadow-2xs cursor-pointer hover:brightness-95 ${badgeClass} ${
         bar.continuesBefore ? 'rounded-l-none border-l-0' : 'rounded-l'

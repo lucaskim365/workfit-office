@@ -3,8 +3,7 @@ import { Bell, CalendarDays, Check, ChevronDown, Repeat, UserRound } from 'lucid
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
-import type { DayCell, MemoPlanRef } from '@/domain/workPlan/dayEntries';
-import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
+import type { DayCell } from '@/domain/workPlan/dayEntries';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
@@ -24,8 +23,6 @@ interface WorkPlanEventModalProps {
   cellOf: (userId: string, date: string) => DayCell;
   onClose: () => void;
   onSaved: (message: string) => void;
-  /** 내 칸 메모 저장 — 주면 새 일정 창(내 칸) 아래에 그날 메모 칸이 붙는다 */
-  onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
 }
 
 /**
@@ -33,53 +30,13 @@ interface WorkPlanEventModalProps {
  * 위 도구 막대에서 종류(회의·외근·출장·일반 태그)를 고르고, 왼쪽에 입력, 오른쪽 세로 시간표로 시간을 고른다.
  * 다른 칸·일정을 열 때는 호출부가 `key`를 바꿔 다시 마운트한다(훅 규칙).
  */
-export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, onSaveMemo }: WorkPlanEventModalProps) {
+export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved }: WorkPlanEventModalProps) {
   const form = useWorkPlanEventForm(target, actor, deptId);
   const { state, readOnly } = form;
   const owner = useMemo(() => ownerOf(target, users), [target, users]);
   const entry = target.mode === 'create' ? null : target.entry;
   const blocks = useEventBlocks(form, target, actor, users, cellOf, owner);
   const { save, join, leave, remove, confirmingDelete, setConfirmingDelete } = useEventActions(form, onSaved, onClose);
-
-  // 그날 메모 — 내 칸을 새로 열 때만(칸 더블클릭·[+]). 창을 연 날짜의 메모를 고친다
-  const memoDate = target.mode === 'create' ? target.date : '';
-  const memoCell = memoDate && owner.id === actor.id && onSaveMemo ? cellOf(actor.id, memoDate) : null;
-  const initialMemo = memoCell?.memo ?? '';
-  const [memoDraft, setMemoDraft] = useState(initialMemo);
-  const [memoSaving, setMemoSaving] = useState(false);
-  const [memoError, setMemoError] = useState('');
-  const memoChanged = memoCell !== null && memoDraft.trim() !== initialMemo.trim();
-  // 제목(외근·출장은 제목·출장지)을 비워 두면 일정은 만들지 않고 메모만 저장한다
-  const hasEventInput = (isOutsideKind(state.kind) ? `${state.purpose}${state.destination}` : state.title).trim() !== '';
-  const busy = form.saving || memoSaving;
-
-  const saveMemoOnly = async () => {
-    if (!memoCell || !onSaveMemo) return false;
-    setMemoSaving(true);
-    setMemoError('');
-    try {
-      await onSaveMemo(memoDate, memoCell.memoPlan, memoDraft);
-      return true;
-    } catch (e) {
-      setMemoError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
-      return false;
-    } finally {
-      setMemoSaving(false);
-    }
-  };
-
-  const saveAll = async () => {
-    if (memoChanged && !hasEventInput) {
-      if (await saveMemoOnly()) {
-        onSaved('메모를 저장했습니다.');
-        onClose();
-      }
-      return;
-    }
-    // 메모를 먼저 저장 — 일정 저장이 실패해도 쓴 메모는 남고, 창도 열린 채라 다시 저장할 수 있다
-    if (memoChanged && !(await saveMemoOnly())) return;
-    await save();
-  };
 
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
   const when = eventWhenLabel(state.date, isOutsideKind(state.kind) ? state.endDate : undefined);
@@ -107,9 +64,9 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
           )}
         </div>
       )}
-      <Button disabled={busy} onClick={onClose}>취소</Button>
-      <Button variant="primary" disabled={busy} onClick={() => void saveAll()}>
-        {busy ? '저장 중…' : '저장'}
+      <Button disabled={form.saving} onClick={onClose}>취소</Button>
+      <Button variant="primary" disabled={form.saving} onClick={() => void save()}>
+        {form.saving ? '저장 중…' : '저장'}
       </Button>
     </>
   );
@@ -118,7 +75,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     <Modal
       open
       // 저장·삭제 중에는 ESC·바깥 클릭·X로 닫히지 않게
-      onClose={busy ? () => {} : onClose}
+      onClose={form.saving ? () => {} : onClose}
       width={760}
       flush
       title={(
@@ -208,31 +165,6 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
             />
           </div>
         </div>
-
-        {memoCell && (
-          <div className="border-t border-border px-5 py-3">
-            <label htmlFor="work-plan-day-memo" className="mb-1 block text-[11px] font-bold text-ink2">
-              {eventWhenLabel(memoDate).date} 메모
-            </label>
-            <textarea
-              id="work-plan-day-memo"
-              value={memoDraft}
-              maxLength={WORK_PLAN_MEMO_MAX}
-              disabled={busy}
-              rows={Math.min(6, Math.max(2, memoDraft.split('\n').length))}
-              placeholder="메모"
-              onChange={(e) => setMemoDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  void saveAll();
-                }
-              }}
-              className="w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[12px] leading-relaxed text-ink outline-none placeholder:text-ink3 focus:border-teal disabled:bg-panel-alt"
-            />
-            {memoError && <p role="alert" className="mt-1 text-[11px] font-semibold text-danger">{memoError}</p>}
-          </div>
-        )}
 
         {/* 저장 실패 이유 — 왼쪽 스크롤과 상관없이 바닥 바로 위에 늘 보이게 */}
         {form.error && (

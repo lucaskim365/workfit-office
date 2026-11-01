@@ -76,7 +76,7 @@ export function eventWhenLabel(date: string, endDate?: string): { date: string; 
   return { date: `${year}${dateLabel(date)}${range}`, week: w ? `${w.week}주차` : '' };
 }
 
-/** 시간표에 겹쳐 보일 그날 일정 — 주인 + (회의면) 참석자, 고른 회의실 예약. 고치는 일정 자신은 뺀다. */
+/** 시간표에 보일 그날 일정(종일·미정 포함) — 주인 + (회의면) 참석자, 고른 회의실 예약. 고치는 일정 자신은 뺀다. */
 export function useEventBlocks(
   form: EventForm,
   target: EventTarget,
@@ -103,7 +103,8 @@ export function useEventBlocks(
         seen.add(sourceId);
         return true;
       });
-      result.push(...entriesToBlocks(entries, name || undefined));
+      // 칸 주인 일정은 이름 없이, 회의 참석자 일정만 이름을 붙인다
+      result.push(...entriesToBlocks(entries, id === owner.id ? undefined : name || undefined));
     }
     result.push(...form.roomBlocks);
     return result;

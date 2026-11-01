@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEven
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { chipLook, timeRangeOf } from '../components/entryChipLook';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   DAY_END,
@@ -24,6 +25,12 @@ export interface TimeGridBlock {
   tone: 'meeting' | 'outside' | 'trip' | 'leave' | 'item' | 'room';
   /** 종료 미정 — 30분 자리로 그리고 아래를 흐리게 */
   open?: boolean;
+  /** 종일·시간 미정 — 시간 칸이 아니라 맨 위 종일 줄에 칩으로 */
+  allDay?: boolean;
+  /** 'HH:mm~HH:mm' — 블록 둘째 줄 */
+  time?: string;
+  /** 일반 업무 태그 색 점 */
+  dotClass?: string;
 }
 
 interface TimeGridProps {
@@ -59,7 +66,7 @@ const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
   outside: PERSON_TONES.outside.block,
   trip: PERSON_TONES.trip.block,
   leave: PERSON_TONES.leave.block,
-  item: 'border-border-hi bg-bg-deep text-ink3',
+  item: 'border-border-hi bg-panel text-ink2',
   // 회의실 예약 — 회의 색 점선
   room: `border-dashed bg-transparent ${PERSON_TONES.meeting.text} border-purple-500`,
 };
@@ -71,16 +78,17 @@ function scheduleTone(category: string | undefined): TimeGridBlock['tone'] {
   return 'outside';
 }
 
-/** 시간 있는 항목만 시간표 블록으로. 남의 시간표면 ownerName 을 앞에 붙인다 */
+/** 그날 항목 → 시간표 블록(종일·시간 미정은 allDay). 남의 시간표면 ownerName 을 앞에 붙인다 */
 export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGridBlock[] {
   const blocks: TimeGridBlock[] = [];
   for (const entry of entries) {
-    if (entry.allDay || !entry.startTime) continue;
-    const start = toMinutes(entry.startTime);
+    const allDay = entry.allDay || !entry.startTime;
+    const start = allDay ? 0 : toMinutes(entry.startTime!);
     // 종료 미정(업무) — 시작부터 30분 자리
-    const open = !entry.endTime;
-    const end = entry.endTime ? toMinutes(entry.endTime) : Math.min(start + 30, DAY_END);
-    if (end <= start) continue;
+    const open = !allDay && !entry.endTime;
+    const end = allDay ? 0 : entry.endTime ? toMinutes(entry.endTime) : Math.min(start + 30, DAY_END);
+    if (!allDay && end <= start) continue;
+    const { label, dotClass } = chipLook(entry);
     const tone: TimeGridBlock['tone'] =
       entry.source === 'MEETING'
         ? 'meeting'
@@ -93,9 +101,12 @@ export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGr
       key: ownerName ? `${ownerName}:${entry.key}` : entry.key,
       start,
       end,
-      label: (ownerName ? `${ownerName} · ` : '') + entry.title,
+      label: (ownerName ? `${ownerName} · ` : '') + label,
       tone,
       open,
+      allDay,
+      time: allDay ? undefined : timeRangeOf(entry),
+      dotClass,
     });
   }
   return blocks;
@@ -150,7 +161,8 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
     el.scrollTop = Math.max(top - 60 * perMinute - 12, 0); // 맨 위 시각 글자가 잘리지 않게(마운트 때와 같은 여유)
   }, [valueStart, valueEnd]);
 
-  const laid = useMemo(() => layoutColumns(blocks), [blocks]);
+  const laid = useMemo(() => layoutColumns(blocks.filter((b) => !b.allDay)), [blocks]);
+  const allDayBlocks = blocks.filter((b) => b.allDay);
   const pct = (minutes: number) => `${(minutes / DAY_END) * 100}%`;
 
   /** 포인터 세로 위치 → 분 (비율 계산: zoom 영향 없음) */
@@ -223,9 +235,23 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
         </button>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <span className="w-10 shrink-0 text-right text-[11px] text-ink3">{allDayLabel}</span>
-        <div className={`h-4 flex-1 rounded ${allDay ? 'bg-blue' : 'bg-panel-alt'}`} />
+      {/* 종일·시간 미정 줄 — 그날 종일 일정은 칩으로, 고른 일정이 종일이면 파란 칩 */}
+      <div className="flex items-start gap-2 border-b border-border px-2 py-1">
+        <span className="w-10 shrink-0 pt-0.5 text-right text-[11px] text-ink3">{allDayLabel}</span>
+        <div className="flex min-h-4 min-w-0 flex-1 flex-col gap-0.5">
+          {allDayBlocks.map((b) => (
+            <div
+              key={b.key}
+              title={b.label}
+              className={`flex items-center gap-1 truncate rounded border px-1.5 py-px text-[11px] font-semibold leading-tight ${TONE_CLASS[b.tone]}`}
+            >
+              {b.dotClass && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${b.dotClass}`} aria-hidden />}
+              <span className="truncate">{b.label}</span>
+            </div>
+          ))}
+          {allDay && <div className="h-4 rounded bg-blue" />}
+          {!allDay && allDayBlocks.length === 0 && <div className="h-4 rounded bg-panel-alt" />}
+        </div>
       </div>
 
       <div ref={scrollRef} className="relative overflow-y-auto"
@@ -273,15 +299,20 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
             {laid.map((b) => (
               <div
                 key={b.key}
-                className={`pointer-events-none absolute overflow-hidden rounded border px-1 text-[11px] leading-tight opacity-80 ${TONE_CLASS[b.tone]} ${b.open ? OPEN_FADE_CLASS : ''}`}
+                title={b.time ? `${b.label} (${b.time})` : b.label}
+                className={`pointer-events-none absolute overflow-hidden rounded border px-1 py-px text-[11px] leading-tight shadow-2xs ${TONE_CLASS[b.tone]} ${b.open ? OPEN_FADE_CLASS : ''}`}
                 style={{
                   top: pct(b.start),
                   height: pct(b.end - b.start),
-                  left: `${(b.col / b.cols) * 100}%`,
-                  width: `${100 / b.cols}%`,
+                  left: `calc(${(b.col / b.cols) * 100}% + 1px)`,
+                  width: `calc(${100 / b.cols}% - 2px)`,
                 }}
               >
-                <span className="block truncate">{b.label}</span>
+                <span className="flex items-center gap-1 font-semibold">
+                  {b.dotClass && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${b.dotClass}`} aria-hidden />}
+                  <span className="truncate">{b.label}</span>
+                </span>
+                {b.time && <span className="block truncate text-[10px] opacity-75">{b.time}</span>}
               </div>
             ))}
 
