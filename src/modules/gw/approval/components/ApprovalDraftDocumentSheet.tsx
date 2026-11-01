@@ -31,6 +31,7 @@ import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow } from './CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
+import { acceptsDecimal, numberFieldInput } from '@/domain/commute/overtimeDraft';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -1412,8 +1413,8 @@ function InlineFieldEditor({
           {field.type === '금액' && <span className="text-[11px] font-semibold text-[#666]">₩</span>}
           <input
             value={sv}
-            onChange={(e) => setVals({ [field.key]: e.target.value.replace(/[^0-9]/g, '') })}
-            inputMode="numeric"
+            onChange={(e) => setVals({ [field.key]: numberFieldInput(field.key, e.target.value) })}
+            inputMode={acceptsDecimal(field.key) ? 'decimal' : 'numeric'}
             placeholder={field.placeholder || (field.type === '금액' ? '0' : '')}
             className="w-full bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded"
           />

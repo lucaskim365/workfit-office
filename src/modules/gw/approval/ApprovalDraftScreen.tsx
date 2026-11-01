@@ -41,6 +41,8 @@ import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, Chec
 import { applyMasterToCurrent, hasMasterUpdate, serializeSheet } from './formFields/sheetModel';
 import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
 import { isEditableStatus } from '@/domain/approvalDoc/engine';
+import { OvertimeAutoFill } from './components/OvertimeAutoFill';
+import { clockOf, markOvertimeTimes, OVERTIME_KIND_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -973,6 +975,9 @@ function ApprovalDraftInner({
   const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
+  // 연장근로 신청서 자동 입력 — 서식에 근무 종류 칸이 있을 때만
+  const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_KIND_FIELD);
+  const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
   const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
 
@@ -1146,7 +1151,7 @@ function ApprovalDraftInner({
       amount: amountNum,
       body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
-      fieldValues: values,
+      fieldValues: isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values,
       attachments,
       recipients,
       relatedDocs,
@@ -1181,6 +1186,10 @@ function ApprovalDraftInner({
       if (!postApprovedAt) return '선조치 일시를 입력해 주세요.';
       if (new Date(postApprovedAt).getTime() > Date.now()) return '선조치 일시는 현재 시간보다 이전으로 설정해야 합니다.';
       if (!postApprovedById) return '선조치 구두/임시 승인자를 선택해 주세요.';
+    }
+
+    if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
+      return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
     }
 
     if (code === '휴가' || form?.code === '휴가') {
@@ -1597,6 +1606,9 @@ function ApprovalDraftInner({
                 </div>
               </div>
             </div>
+          )}
+          {isOvertimeAutoFill && /^\d{4}-\d{2}-\d{2}$/.test(String(values['workDate'] ?? '')) && (
+            <OvertimeAutoFill workDate={String(values['workDate'])} values={values} setVals={setVals} onFill={setOvertimeFill} />
           )}
           <ApprovalDraftDocumentSheet
             form={form}

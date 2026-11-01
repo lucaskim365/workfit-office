@@ -13,6 +13,7 @@ import { AutoResizeTextarea } from './formFields/AutoResizeTextarea';
 import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 import { calculateLeaveDays } from '@/domain/leave/policy';
+import { acceptsDecimal, numberFieldInput } from '@/domain/commute/overtimeDraft';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -150,7 +151,7 @@ export function DynamicField({
     case '금액':
       return (
         <>
-          <input value={sv} onChange={(e) => set({ [field.key]: e.target.value.replace(/[^0-9]/g, '') })} inputMode="numeric" placeholder={field.placeholder || (field.type === '금액' ? '예: 3000000' : '')} className={inp} />
+          <input value={sv} onChange={(e) => set({ [field.key]: numberFieldInput(field.key, e.target.value) })} inputMode={acceptsDecimal(field.key) ? 'decimal' : 'numeric'} placeholder={field.placeholder || (field.type === '금액' ? '예: 3000000' : '')} className={inp} />
           {field.type === '금액' && sv && <span className="mt-1 block text-[11px] text-ink3">₩{Number(sv).toLocaleString()}</span>}
         </>
       );
