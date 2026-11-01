@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, Fragment, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment, type ReactNode } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import {
@@ -13,8 +13,6 @@ import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Plus,
   Check,
   Calendar as CalendarIcon,
@@ -707,7 +705,7 @@ function EntryChip({ entry, onOpen }: { entry: DayEntry; onOpen: (entry: DayEntr
 }
 
 /**
- * 칸 아래쪽 메모 칸 — 서식 없는 글, 2줄 넘으면 접어 둔다. 점선 위는 일정, 아래는 메모.
+ * 칸 아래쪽 메모 칸 — 서식 없는 글. 기본 높이는 같고, 글이 길면 그만큼 늘어난다(칸·행도 같이). 점선 위는 일정, 아래는 메모.
  * `onSave`가 있으면(내 칸) 메모 칸을 눌러 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
  */
 function CellMemo({
@@ -719,18 +717,9 @@ function CellMemo({
   label: string;
   onSave?: (text: string) => Promise<void>;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || expanded) return;
-    setOverflowing(el.scrollHeight > el.clientHeight + 1);
-  }, [text, expanded]);
 
   const startEdit = () => {
     if (!onSave || draft !== null) return;
@@ -777,8 +766,8 @@ function CellMemo({
             }
           : undefined
       }
-      // 높이 고정(두 줄 + 더보기) — 줄이 늘어도 메모 칸은 그대로. 펼치거나 고칠 때만 늘어난다
-      className={`mt-1.5 shrink-0 border-t border-dashed border-border pt-1 ${draft !== null || expanded ? '' : 'h-[3.25rem] overflow-hidden'} ${
+      // 기본 높이(두 줄)는 늘 같고 글이 길면 늘어난다 — 옆 칸 때문에 행이 늘 때는 위 일정 칸이 늘어난다(shrink-0)
+      className={`mt-1.5 min-h-[2.5rem] shrink-0 border-t border-dashed border-border pt-1 ${
         onSave && draft === null ? 'cursor-text rounded-b hover:bg-panel-alt/60' : ''
       }`}
     >
@@ -808,28 +797,7 @@ function CellMemo({
           {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
         </>
       ) : text ? (
-        <>
-          <div
-            ref={ref}
-            className={`whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-2'}`}
-          >
-            {text}
-          </div>
-          {(overflowing || expanded) && (
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded((v) => !v);
-              }}
-              className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] font-semibold text-ink3 hover:text-ink2"
-            >
-              {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-              {expanded ? '접기' : '더보기'}
-            </button>
-          )}
-        </>
+        <div className="whitespace-pre-line break-words text-[10px] leading-relaxed text-ink3">{text}</div>
       ) : (
         onSave && (
           <span className="flex items-center gap-1 text-[10px] text-ink3/60 opacity-0 transition-opacity group-hover/day:opacity-100">
