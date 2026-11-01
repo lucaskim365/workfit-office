@@ -7,7 +7,7 @@ import {
 } from '@/domain/calendarEvent/calendarDate';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
-import type { DayCell, DayEntry, MemoPlanRef } from '@/domain/workPlan/dayEntries';
+import { hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
 import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
@@ -581,13 +581,10 @@ export function WorkPlanTeamMonthlyMatrix({
                       const weekDates = week.days.map((day) => day.dateStr);
                       const { bars: weekBars, entryOf, keys: barKeys } = weekBarsOf(member.id, weekDates);
                       const barLanes = weekBars.reduce((max, bar) => Math.max(max, bar.lane + 1), 0);
-                      // 계획 미작성 — 지나지 않은 주에서 평일(월~금)에 직접 쓴 업무·메모가 하나도 없으면
+                      // 계획 미작성 — 지나지 않은 주에서 평일(월~금)에 업무·메모·회의·외근·휴가가 하나도 없으면
                       const unwritten =
                         week.days[6].dateStr >= todayStr &&
-                        week.days.slice(0, 5).every((day) => {
-                          const c = cellOf(member.id, day.dateStr);
-                          return !c.memo && !c.entries.some((e) => e.source === 'ITEM');
-                        });
+                        week.days.slice(0, 5).every((day) => !hasPlannedDay(cellOf(member.id, day.dateStr)));
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
                         <tr
@@ -612,7 +609,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                 )}
                               </div>
                               {unwritten && (
-                                <span className="mt-0.5 rounded bg-amber-soft px-1 py-px text-[9px] font-bold text-amber" title="이번 주 평일에 쓴 업무·메모가 없습니다">
+                                <span className="mt-0.5 rounded bg-amber-soft px-1 py-px text-[9px] font-bold text-amber" title="이번 주 평일에 업무·메모·회의·외근·휴가가 없습니다">
                                   미작성
                                 </span>
                               )}

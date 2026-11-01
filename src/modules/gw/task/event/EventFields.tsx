@@ -534,12 +534,27 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       {isItem ? '시간 미정' : '종일'}
     </label>
   );
+  // 업무만 — 종일 = 회사 업무시간(근태 정책 출근~퇴근) 전체를 차지하는 일
+  const workDay = !state.allDay && !openEnd && range?.start === work.start && range?.end === work.end;
+  const workDayChip = isItem && !readOnly && work.end > work.start && (
+    <button
+      type="button"
+      aria-pressed={workDay}
+      onClick={() => form.setRange({ start: work.start, end: work.end })}
+      className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+        workDay ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+      }`}
+    >
+      종일 {policy.workStartTime}~{policy.workEndTime}
+    </button>
+  );
 
   if (stacked) {
     return (
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           {dates}
+          {workDayChip}
           {allDayToggle}
         </div>
         {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
@@ -552,6 +567,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       <div className="flex flex-wrap items-center gap-1.5">
         {dates}
         {times}
+        {workDayChip}
         {allDayToggle}
       </div>
       {lengths}
