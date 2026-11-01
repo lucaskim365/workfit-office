@@ -5,7 +5,7 @@ import { z } from 'zod';
   재상신(반려·회수 뒤)은 이미 받은 번호를 그대로 둔다. 결재 문서번호(AP-…)와는 별개다.
 */
 
-export const AUTO_NUMBER_DATE_PARTS = ['NONE', 'YYYY', 'YY', 'YYYYMM', 'YYMM', 'YYMMDD'] as const;
+export const AUTO_NUMBER_DATE_PARTS = ['NONE', 'YYYY', 'YY', 'YYYYMM', 'YYMM', 'YYYYMMDD', 'YYMMDD'] as const;
 export type AutoNumberDatePart = (typeof AUTO_NUMBER_DATE_PARTS)[number];
 export const AUTO_NUMBER_DATE_PART_LABEL: Record<AutoNumberDatePart, string> = {
   NONE: '날짜 없음',
@@ -13,7 +13,16 @@ export const AUTO_NUMBER_DATE_PART_LABEL: Record<AutoNumberDatePart, string> = {
   YY: '연도 (26)',
   YYYYMM: '연월 (202611)',
   YYMM: '연월 (2611)',
+  YYYYMMDD: '연월일 (20261101)',
   YYMMDD: '연월일 (261101)',
+};
+
+/** 부분을 잇는 기호 */
+export const AUTO_NUMBER_SEPARATORS = ['-', ' - ', ''] as const;
+export const AUTO_NUMBER_SEPARATOR_LABEL: Record<(typeof AUTO_NUMBER_SEPARATORS)[number], string> = {
+  '-': '붙여서 (A-B)',
+  ' - ': '띄어서 (A - B)',
+  '': '기호 없이 (AB)',
 };
 
 export const AUTO_NUMBER_RESETS = ['NEVER', 'YEAR', 'MONTH', 'DAY'] as const;
@@ -32,10 +41,25 @@ export const autoNumberConfigSchema = z.object({
   /** 순번 자릿수(앞을 0으로 채움) */
   digits: z.number().int().min(1).max(8).default(4),
   reset: z.enum(AUTO_NUMBER_RESETS).default('YEAR'),
+  /** 부분을 잇는 기호 */
+  separator: z.enum(AUTO_NUMBER_SEPARATORS).default('-'),
+  /** 순번 뒤에 붙는 글(예: '호') */
+  suffix: z.string().trim().max(5).default(''),
+  /** 이 번호를 문서번호로 표시(서식당 하나) — 결재 문서 고유번호(AP-…)는 그대로 두고 화면·인쇄에서 이 번호를 보인다 */
+  asDocNo: z.boolean().default(false),
 });
 export type AutoNumberConfig = z.infer<typeof autoNumberConfigSchema>;
 
-export const DEFAULT_AUTO_NUMBER: AutoNumberConfig = { prefix: '', datePart: 'YYYY', digits: 4, reset: 'YEAR' };
+/** 새 자동번호 칸의 기본 모양 — '20261101 - 01호'(매일 1번부터), 문서번호로 표시 */
+export const DEFAULT_AUTO_NUMBER: AutoNumberConfig = {
+  prefix: '',
+  datePart: 'YYYYMMDD',
+  digits: 2,
+  reset: 'DAY',
+  separator: ' - ',
+  suffix: '호',
+  asDocNo: true,
+};
 
 const pad = (n: number, len: number) => String(n).padStart(len, '0');
 
@@ -59,14 +83,17 @@ function datePartText(part: AutoNumberDatePart, d: Date): string {
       return `${yyyy}${mm}`;
     case 'YYMM':
       return `${yy}${mm}`;
+    case 'YYYYMMDD':
+      return `${yyyy}${mm}${dd}`;
     case 'YYMMDD':
       return `${yy}${mm}${dd}`;
   }
 }
 
-/** 'PO-2026-0001' — 접두어·날짜·순번을 '-'로 잇는다(빈 부분은 뺀다) */
+/** 'PO-2026-0001', '20261101 - 01호' — 접두어·날짜·순번(+뒤 글)을 기호로 잇는다(빈 부분은 뺀다) */
 export function formatAutoNumber(config: AutoNumberConfig, date: Date, seq: number): string {
-  return [config.prefix.trim(), datePartText(config.datePart, date), pad(seq, config.digits)].filter(Boolean).join('-');
+  const tail = `${pad(seq, config.digits)}${(config.suffix ?? '').trim()}`;
+  return [config.prefix.trim(), datePartText(config.datePart, date), tail].filter(Boolean).join(config.separator ?? '-');
 }
 
 /** 순번이 다시 1부터 시작하는 묶음 — 초기화 주기별 */

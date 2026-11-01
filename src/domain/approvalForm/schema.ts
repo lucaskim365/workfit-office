@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { autoNumberConfigSchema } from './autoNumber';
+import { letterheadConfigSchema } from './headerItems';
 
 /**
  * 결재서식(ApprovalForm) 도메인 스키마 — 단일 진실 공급원(SSOT).
@@ -29,6 +30,8 @@ export const FIELD_TYPES = [
   '표', // 동적 입력 테이블
   '직인', // 회사 직인 자리(입력 없음) — 있으면 결재란 대신 결재 완료 후 회사 직인
   '자동번호', // 입력 없음 — 상신할 때 서식별 규칙(autoNumber)으로 번호를 매긴다
+  '문서제목', // 문서 제목을 이 자리에 — 있으면 머리의 제목 줄 대신 여기서 입력·표시
+  '회사정보', // 입력 없음 — 회사 정보(주소·전화·팩스·홈페이지·이메일)와 연구소 주소 머리글
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
@@ -62,6 +65,8 @@ export const formFieldSchema = z.object({
   hideOnExternal: z.boolean().optional(),
   /** type='자동번호' 의 번호 모양(접두어·날짜·자릿수·초기화 주기) — [[autoNumber]] */
   autoNumber: autoNumberConfigSchema.optional(),
+  /** type='회사정보' 의 표시 항목과 연구소 주소 — [[headerItems]] */
+  letterhead: letterheadConfigSchema.optional(),
   /**
    * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
    * width/section 을 독립적으로 다르게 설정하기 위한 맵.
@@ -121,6 +126,8 @@ export const approvalFormSchema = z.object({
   visibility: z.enum(['부서', '비공개']).nullable().optional(),
   /** 결재 완료 문서에서 상단 자동 정보(문서번호·기안부서·기안자·기안일·완료일·보존연한) 숨김 — 대외 문서용 */
   hideDocInfoOnComplete: z.boolean().nullable().optional(),
+  /** 문서 종이에서 늘 숨기는 머리 항목(문서번호·기안부서 등) — 작성·결재 중·완료·인쇄 모두. 공문처럼 배치가 다른 서식용 */
+  hiddenHeaderItems: z.array(z.string()).nullable().optional(),
 });
 export type ApprovalForm = z.infer<typeof approvalFormSchema>;
 

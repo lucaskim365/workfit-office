@@ -6,10 +6,20 @@ import {
   AUTO_NUMBER_DATE_PART_LABEL,
   AUTO_NUMBER_RESETS,
   AUTO_NUMBER_RESET_LABEL,
+  AUTO_NUMBER_SEPARATORS,
+  AUTO_NUMBER_SEPARATOR_LABEL,
   DEFAULT_AUTO_NUMBER,
   autoNumberPreview,
   type AutoNumberConfig,
 } from '@/domain/approvalForm/autoNumber';
+import {
+  DEFAULT_LETTERHEAD,
+  HEADER_ITEMS,
+  HEADER_ITEM_LABEL,
+  LETTERHEAD_ITEMS,
+  LETTERHEAD_ITEM_LABEL,
+  type LetterheadConfig,
+} from '@/domain/approvalForm/headerItems';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
 import { useRouteRules } from '@/features/gw/useRouteRules';
@@ -74,10 +84,71 @@ function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onCh
             {AUTO_NUMBER_RESETS.map((r) => <option key={r} value={r}>{AUTO_NUMBER_RESET_LABEL[r]}</option>)}
           </select>
         </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">잇는 기호</span>
+          <select value={value.separator ?? '-'} onChange={(e) => onChange({ ...value, separator: e.target.value as AutoNumberConfig['separator'] })} className={sel}>
+            {AUTO_NUMBER_SEPARATORS.map((sep) => <option key={sep} value={sep}>{AUTO_NUMBER_SEPARATOR_LABEL[sep]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 뒤 글자</span>
+          <input
+            value={value.suffix ?? ''}
+            maxLength={5}
+            placeholder="예: 호"
+            onChange={(e) => onChange({ ...value, suffix: e.target.value.trim() })}
+            className={sel}
+          />
+        </label>
       </div>
+      <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-ink">
+        <input
+          type="checkbox"
+          checked={value.asDocNo ?? false}
+          onChange={(e) => onChange({ ...value, asDocNo: e.target.checked })}
+          className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+        />
+        이 번호를 문서번호로 표시
+      </label>
       <div className="rounded-lg bg-panel-alt px-2.5 py-1.5 text-[11.5px] text-ink2">
         첫 번호 <b className="font-mono text-ink">{autoNumberPreview(value)}</b>
       </div>
+    </div>
+  );
+}
+
+/** 회사 정보 칸 설정 — 보일 항목, 연구소 주소(회사 정보 화면에 없어 여기서 입력) */
+function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onChange: (v: LetterheadConfig) => void }) {
+  const toggle = (item: LetterheadConfig['items'][number], on: boolean) => {
+    const items = on ? LETTERHEAD_ITEMS.filter((i) => i === item || value.items.includes(i)) : value.items.filter((i) => i !== item);
+    onChange({ ...value, items });
+  };
+  return (
+    <div className="space-y-2 border-t border-border/60 pt-1.5">
+      <span className="block text-[10.5px] font-semibold text-ink3">보일 항목 (회사 정보 화면의 값)</span>
+      <div className="grid grid-cols-2 gap-1.5">
+        {LETTERHEAD_ITEMS.map((item) => (
+          <label key={item} className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink2">
+            <input
+              type="checkbox"
+              checked={value.items.includes(item)}
+              onChange={(e) => toggle(item, e.target.checked)}
+              className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+            />
+            {LETTERHEAD_ITEM_LABEL[item]}
+          </label>
+        ))}
+      </div>
+      <label className="block space-y-0.5">
+        <span className="block text-[10.5px] text-ink3">연구소 주소</span>
+        <input
+          value={value.labAddress}
+          maxLength={200}
+          placeholder="연구소 주소를 입력하세요"
+          onChange={(e) => onChange({ ...value, labAddress: e.target.value })}
+          className="w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal"
+        />
+      </label>
     </div>
   );
 }
@@ -190,7 +261,23 @@ const COMPONENT_PALETTE = [
     icon: '#️⃣',
     desc: '상신할 때 번호 자동 부여',
     defaultWidth: 'half' as const,
-    defaultLabel: '관리번호',
+    defaultLabel: '문서번호',
+  },
+  {
+    type: '문서제목' as FieldType,
+    label: '문서 제목',
+    icon: '🔤',
+    desc: '제목을 원하는 자리에',
+    defaultWidth: 'full' as const,
+    defaultLabel: '제목',
+  },
+  {
+    type: '회사정보' as FieldType,
+    label: '회사 정보',
+    icon: '🏢',
+    desc: '주소·연락처 머리글',
+    defaultWidth: 'full' as const,
+    defaultLabel: '회사 정보',
   },
 ];
 
@@ -420,7 +507,10 @@ export function ApprovalFormEditor({
       width: item.defaultWidth,
       isAmountKey: item.isAmountKey ?? false,
       options: item.options ? [...item.options] : [],
-      ...(item.type === '자동번호' ? { autoNumber: { ...DEFAULT_AUTO_NUMBER } } : {}),
+      ...(item.type === '자동번호'
+        ? { autoNumber: { ...DEFAULT_AUTO_NUMBER, asDocNo: !form.fields.some((f) => f.type === '자동번호' && f.autoNumber?.asDocNo) } }
+        : {}),
+      ...(item.type === '회사정보' ? { letterhead: { ...DEFAULT_LETTERHEAD, items: [...DEFAULT_LETTERHEAD.items] } } : {}),
     };
 
     set({ fields: [...form.fields, newField] });
@@ -861,7 +951,26 @@ export function ApprovalFormEditor({
                     {selectedField.type === '자동번호' && (
                       <AutoNumberSettings
                         value={selectedField.autoNumber ?? DEFAULT_AUTO_NUMBER}
-                        onChange={(autoNumber) => setField(selectedFieldIdx, { autoNumber })}
+                        onChange={(autoNumber) =>
+                          // 문서번호로 쓰는 번호는 서식에 하나 — 켜면 다른 자동번호 칸은 끈다
+                          set({
+                            fields: form.fields.map((f, idx) =>
+                              idx === selectedFieldIdx
+                                ? { ...f, autoNumber }
+                                : autoNumber.asDocNo && f.type === '자동번호' && f.autoNumber?.asDocNo
+                                  ? { ...f, autoNumber: { ...f.autoNumber, asDocNo: false } }
+                                  : f,
+                            ),
+                          })
+                        }
+                      />
+                    )}
+
+                    {/* '회사정보' — 보일 항목과 연구소 주소 */}
+                    {selectedField.type === '회사정보' && (
+                      <LetterheadSettings
+                        value={selectedField.letterhead ?? DEFAULT_LETTERHEAD}
+                        onChange={(letterhead) => setField(selectedFieldIdx, { letterhead })}
                       />
                     )}
 
@@ -996,6 +1105,29 @@ export function ApprovalFormEditor({
                     <span className="block text-[10.5px] text-ink3">상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명을 숨깁니다 (발주서 보관함·PDF 포함)</span>
                   </span>
                 </label>
+                <div className="space-y-1.5 border-t border-border/60 pt-2">
+                  <span className="block font-semibold text-ink">문서 머리 항목</span>
+                  <span className="block text-[10.5px] text-ink3">끈 항목은 작성·결재 중·완료·인쇄 모두에서 문서에 나오지 않습니다</span>
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    {HEADER_ITEMS.map((item) => {
+                      const hidden = (form.hiddenHeaderItems ?? []).includes(item);
+                      return (
+                        <label key={item} className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink2">
+                          <input
+                            type="checkbox"
+                            checked={!hidden}
+                            onChange={(e) => {
+                              const rest = (form.hiddenHeaderItems ?? []).filter((i) => i !== item);
+                              set({ hiddenHeaderItems: e.target.checked ? rest : [...rest, item] });
+                            }}
+                            className="accent-teal"
+                          />
+                          {HEADER_ITEM_LABEL[item]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* 기안 권한 및 보안 설정 */}

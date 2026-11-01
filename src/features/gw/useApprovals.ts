@@ -7,6 +7,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { departmentRepo } from '@/data/department/department.repo';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { postReadDocIdsFor } from '@/domain/approvalPostRead/engine';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
 
 /**
  * 전자결재 데이터 훅 — 화면(UI)이 repository 대신 호출하는 React 바인딩.
@@ -304,6 +305,7 @@ export function useCompletedDocsForSelection(params: {
         (d) =>
           d.title.toLowerCase().includes(kw) ||
           d.docNo.toLowerCase().includes(kw) ||
+          docNoOf(d).toLowerCase().includes(kw) ||
           (d.drafterName && d.drafterName.toLowerCase().includes(kw))
       );
     }

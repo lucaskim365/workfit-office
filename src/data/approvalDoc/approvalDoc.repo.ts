@@ -23,6 +23,7 @@ import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
+import { DOC_NO_VALUE_KEY, docNoOf } from '@/domain/approvalDoc/docNo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
@@ -425,10 +426,14 @@ async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldVal
   const values = { ...doc.fieldValues };
   const date = new Date();
   for (const field of fields) {
-    if (values[field.key] || !isFieldVisible(field.visibleIf, values)) continue;
+    if (!isFieldVisible(field.visibleIf, values)) continue;
     const config = field.autoNumber ?? DEFAULT_AUTO_NUMBER;
-    const seq = await counterRepo.next(autoNumberChannel(doc.docType, field.key, config, date));
-    values[field.key] = formatAutoNumber(config, date, seq);
+    if (!values[field.key]) {
+      const seq = await counterRepo.next(autoNumberChannel(doc.docType, field.key, config, date));
+      values[field.key] = formatAutoNumber(config, date, seq);
+    }
+    // 문서번호로 쓰는 번호 — 목록·머리에서 서식 없이도 보이게 문서 값에 함께 둔다(재상신에도 같은 번호)
+    if (config.asDocNo) values[DOC_NO_VALUE_KEY] = values[field.key];
   }
   return values;
 }
@@ -972,6 +977,7 @@ export const approvalDocRepo = {
         (d) =>
           d.title.toLowerCase().includes(kw) ||
           d.docNo.toLowerCase().includes(kw) ||
+          docNoOf(d).toLowerCase().includes(kw) ||
           (d.drafterName && d.drafterName.toLowerCase().includes(kw))
       );
     }

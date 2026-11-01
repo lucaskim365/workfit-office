@@ -64,6 +64,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { draftCatalogForms } from '@/domain/approvalForm/schema';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
 
 
 /**
@@ -872,7 +873,7 @@ export default function ApprovalScreen() {
                         </span>
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-ink3 truncate">
-                        <span className="font-mono text-ink2">{d.docNo || '임시문서'}</span>
+                        <span className="font-mono text-ink2">{d.docNo ? docNoOf(d) : '임시문서'}</span>
                         <span>·</span>
                         <span>{d.drafterName} ({d.drafterDept || d.docType})</span>
                         <span>·</span>
@@ -1049,7 +1050,7 @@ export default function ApprovalScreen() {
                             <DocStatusBadge doc={d} me={me} />
                           </div>
                           <div className="flex items-center justify-between text-[10.5px] text-ink3">
-                            <span className="truncate">{d.docNo} · {org_nameFallback(d)}</span>
+                            <span className="truncate">{docNoOf(d)} · {org_nameFallback(d)}</span>
                             <span>{fmtDateTime(d.submittedAt ?? d.createdAt)}</span>
                           </div>
                         </div>
@@ -1386,7 +1387,7 @@ function DocDetail({
               <h2 className="text-[16px] font-bold text-ink truncate">{doc.title}</h2>
             </div>
             <div className="text-[11.5px] text-ink3">
-              {doc.docNo} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
+              {docNoOf(doc)} · {doc.docType} · 기안 <span className="font-medium text-ink2">{nameOf(doc.drafterId)}</span>({doc.drafterDept}) · {fmtDateTime(doc.submittedAt ?? doc.createdAt)}
             </div>
             {(doc.amount != null || doc.form) && (
               <div className="pt-0.5 flex flex-wrap gap-1.5 text-[11px]">
@@ -1939,7 +1940,7 @@ function DocDetail({
             <div className="mt-4 space-y-4">
               <div className="rounded-xl bg-panel-alt/50 p-3 border border-border">
                 <div className="text-[11px] text-ink3 font-medium">문서 번호 / 제목</div>
-                <div className="text-[12.5px] font-bold text-ink mt-0.5">[{doc.docNo}] {doc.title}</div>
+                <div className="text-[12.5px] font-bold text-ink mt-0.5">[{docNoOf(doc)}] {doc.title}</div>
               </div>
 
               <div>

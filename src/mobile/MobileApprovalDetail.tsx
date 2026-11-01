@@ -21,6 +21,9 @@ import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView
 import { downloadFile } from '@/shared/lib/download';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 import { useMobileBack } from './useMobileBack';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
+import { titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { CompanyLetterhead } from '@/modules/gw/approval/components/CompanyLetterhead';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -269,7 +272,7 @@ export default function MobileApprovalDetail() {
                 <div className="flex items-center gap-1.5">
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>{doc.docType}</span>
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}>{doc.status}</span>
-                  <span className="ml-auto text-[11px] tabular-nums text-ink3">{doc.docNo}</span>
+                  <span className="ml-auto text-[11px] tabular-nums text-ink3">{docNoOf(doc)}</span>
                 </div>
                 <div className="mt-2.5 text-[17px] font-bold" style={{ color: '#101830' }}>{doc.title}</div>
                 <div className="my-3 h-px bg-black/10" />
@@ -702,6 +705,9 @@ function ApprovalBody({
   // 컬럼 body 를 본문 키 값으로 우선 — 'body' 키를 표 등 다른 종류가 쓰면 본문은 별도 키라 덮어쓰지 않는다
   const bodyKey = documentBodyKeyOf(form?.fields);
   if (doc.body) values[bodyKey] = doc.body;
+  // '문서제목' 칸 = 문서 제목
+  const titleField = titleFieldOf(form?.fields);
+  if (titleField) values[titleField.key] = doc.title;
 
   const rows: React.ReactNode[] = [];
 
@@ -731,6 +737,12 @@ function ApprovalBody({
       if (f.type === '직인') {
         pushSection();
         rows.push(<SealFieldRow key={f.key} label={f.label} stamped={doc.status === '완료'} />);
+        continue;
+      }
+
+      if (f.type === '회사정보') {
+        pushSection();
+        rows.push(<div key={f.key} className="py-1.5"><CompanyLetterhead field={f} /></div>);
         continue;
       }
 

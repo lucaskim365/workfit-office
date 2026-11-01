@@ -15,6 +15,7 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { formCounts } from '@/modules/gw/approval/completedForms';
 import { useMobileBack } from './useMobileBack';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
 
 /**
  * 모바일 PWA 전자결재 결재함 — 열람·결재 중심(Flutter 모바일과 동일 스코프).
@@ -829,7 +830,7 @@ function ApprovalRow({ doc, onOpen, isUnread, checked }: { doc: ApprovalDoc; onO
             안읽음
           </span>
         )}
-        <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{doc.docNo}</span>
+        <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{docNoOf(doc)}</span>
       </div>
       <div className="truncate text-[14px] font-bold text-ink">{doc.title}</div>
       <div className="flex items-center gap-2 text-[11px] text-ink3">

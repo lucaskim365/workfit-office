@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep, ApprovalRecipient, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField, type FieldValue } from '@/domain/approvalForm/schema';
@@ -32,6 +32,8 @@ import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow } from './CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { CompanyLetterhead } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -55,7 +57,7 @@ function korToday(): string {
 }
 
 interface LayoutBlock {
-  type: 'table' | 'longtext' | 'table-field' | 'seal';
+  type: 'table' | 'longtext' | 'table-field' | 'seal' | 'letterhead';
   section: string;
   fields: FormField[];
 }
@@ -274,6 +276,10 @@ export function ApprovalDraftDocumentSheet({
         blks.push({ type: 'seal', section: secName, fields: [f] });
         return;
       }
+      if (f.type === '회사정보') {
+        blks.push({ type: 'letterhead', section: secName, fields: [f] });
+        return;
+      }
       if (f.type === '장문') {
         blks.push({
           type: 'longtext',
@@ -369,10 +375,26 @@ export function ApprovalDraftDocumentSheet({
 
   let lastRenderedSection = '';
 
+  const titleField = titleFieldOf(form?.fields);
+  const sheetValues: Record<string, FieldValue> = titleField ? { ...values, [titleField.key]: title } : values;
+  const setSheetVals = (patch: Record<string, FieldValue>) => {
+    if (titleField && titleField.key in patch) {
+      const { [titleField.key]: nextTitle, ...rest } = patch;
+      setTitle(String(nextTitle ?? ''));
+      if (Object.keys(rest).length > 0) setVals(rest);
+      return;
+    }
+    setVals(patch);
+  };
+  // 문서번호로 쓰는 자동번호 칸 — 상신 때 매겨진다
+  const docNoField = form?.fields.find((f) => f.type === '자동번호' && f.autoNumber?.asDocNo);
+  const shownDocNo = docNoField ? String(values[docNoField.key] ?? '') : editDocNo ?? '';
+  const showDocTitle = headerShown(form, 'docTitle');
+
   return (
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
-      <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
+      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') ? 'flex' : 'hidden'}`}>
         <div className="flex items-center gap-2 h-full">
           <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
           <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">
@@ -380,8 +402,8 @@ export function ApprovalDraftDocumentSheet({
           </span>
         </div>
         <div className="text-[11px] font-medium text-[#888] flex items-center gap-2 self-center">
-          {editDocNo ? (
-            <span className="font-mono text-teal">{editDocNo}</span>
+          {shownDocNo ? (
+            <span className="font-mono text-teal">{shownDocNo}</span>
           ) : (
             <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px] text-[#666]">
               [기안 상신 시 자동 채번]
@@ -396,7 +418,7 @@ export function ApprovalDraftDocumentSheet({
       </div>
 
       {/* 2. 대형 문서 타이틀 & 우측 상단 실시간 결재 직인란 */}
-      <div className="relative mb-5 flex items-start justify-between gap-4">
+      <div className={`relative mb-5 flex items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'}`}>
         <h1
           onClick={() => {
             if (isDesignMode && onUpdateDocTitle) {
@@ -404,7 +426,7 @@ export function ApprovalDraftDocumentSheet({
               if (next !== null && next.trim()) onUpdateDocTitle(next.trim());
             }
           }}
-          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
+          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${showDocTitle ? '' : 'hidden'} ${isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
             }`}
           title={isDesignMode ? '클릭하여 격식 문서명(인쇄) 수정' : undefined}
         >
@@ -533,91 +555,103 @@ export function ApprovalDraftDocumentSheet({
         </div>
       )}
 
-      {/* 4. 문서 메타 정보 표 (좌측 상단 ApprovalDocMetaTable 규격과 100% 일치 + 인라인 편집) */}
-      <table className="w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
-        <tbody>
-          <tr>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              문서번호
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#666] text-[11.5px]">
-              {editDocNo || '(작성 완료 시 자동 발번)'}
-            </td>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              기안부서
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] text-[11.5px] font-medium">
-              {me.dept || '—'}
-            </td>
-          </tr>
-          <tr>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              기 안 자
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] text-[11.5px] font-medium">
-              {me.position ? `${me.name} ${me.position}` : me.name}
-            </td>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              기 안 일
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222] text-[11.5px]">
-              {korToday()}
-            </td>
-          </tr>
-          <tr>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              보존연한
-            </th>
-            <td className="border border-[#bbb] px-2 py-1 text-left align-middle text-[#222] text-[11.5px]">
-              <select
-                value={preservationPeriod}
-                onChange={(e) => setPreservationPeriod(e.target.value)}
-                className="w-full bg-transparent text-[11.5px] text-[#222] outline-none cursor-pointer"
-              >
-                <option value="1년">1년</option>
-                <option value="3년">3년</option>
-                <option value="5년">5년</option>
-                <option value="10년">10년</option>
-                <option value="영구">영구</option>
-              </select>
-            </td>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              공개범위
-            </th>
-            <td className="border border-[#bbb] px-2 py-1 text-left align-middle text-[#222] text-[11.5px]">
+      {/* 4. 문서 메타 정보 표 (ApprovalDocMetaTable 규격과 일치 + 인라인 편집) — 서식에서 끈 머리 항목은 빼고 두 칸씩 */}
+      {(() => {
+        const cells: Array<[string, React.ReactNode, string]> = [];
+        if (headerShown(form, 'docNo')) {
+          cells.push(['문서번호', shownDocNo || (docNoField ? '(상신 시 자동 발번)' : '(작성 완료 시 자동 발번)'), 'text-[#666]']);
+        }
+        if (headerShown(form, 'drafterDept')) cells.push(['기안부서', me.dept || '—', 'text-[#222] font-medium']);
+        if (headerShown(form, 'drafter')) cells.push(['기 안 자', me.position ? `${me.name} ${me.position}` : me.name, 'text-[#222] font-medium']);
+        if (headerShown(form, 'draftDate')) cells.push(['기 안 일', korToday(), 'text-[#222]']);
+        if (headerShown(form, 'preservation')) {
+          cells.push([
+            '보존연한',
+            (
+                    <select
+                      value={preservationPeriod}
+                      onChange={(e) => setPreservationPeriod(e.target.value)}
+                      className="w-full bg-transparent text-[11.5px] text-[#222] outline-none cursor-pointer"
+                    >
+                      <option value="1년">1년</option>
+                      <option value="3년">3년</option>
+                      <option value="5년">5년</option>
+                      <option value="10년">10년</option>
+                      <option value="영구">영구</option>
+                    </select>
+            ),
+            'text-[#222]',
+          ]);
+        }
+        const postToggle = (
+          <>
+                      {/* 긴급 후결 토글 */}
+                      {isPostApprovalSystemEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => setIsPostApproval(!isPostApproval)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ml-2 shrink-0 ${isPostApproval
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-[#eee] text-[#666] hover:bg-[#e0e0e0]'
+                            }`}
+                          title="사전 결재 없이 긴급 선조치한 후 사후 승인을 요청합니다"
+                        >
+                          {isPostApproval ? '긴급후결 ✓' : '후결신청'}
+                        </button>
+                      )}
+          </>
+        );
+        if (headerShown(form, 'visibility')) {
+          cells.push([
+            '공개범위',
+            (
               <div className="flex items-center justify-between">
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as any)}
-                  className="bg-transparent text-[11.5px] text-[#222] outline-none cursor-pointer flex-1"
-                  disabled={docCode === '채용' || docCode === '인사'}
-                >
-                  <option value="부서">부서 공개</option>
-                  <option value="비공개">비공개</option>
-                </select>
-                {/* 긴급 후결 토글 */}
-                {isPostApprovalSystemEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => setIsPostApproval(!isPostApproval)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ml-2 shrink-0 ${isPostApproval
-                      ? 'bg-rose-500 text-white'
-                      : 'bg-[#eee] text-[#666] hover:bg-[#e0e0e0]'
-                      }`}
-                    title="사전 결재 없이 긴급 선조치한 후 사후 승인을 요청합니다"
-                  >
-                    {isPostApproval ? '긴급후결 ✓' : '후결신청'}
-                  </button>
-                )}
+                      <select
+                        value={visibility}
+                        onChange={(e) => setVisibility(e.target.value as any)}
+                        className="bg-transparent text-[11.5px] text-[#222] outline-none cursor-pointer flex-1"
+                        disabled={docCode === '채용' || docCode === '인사'}
+                      >
+                        <option value="부서">부서 공개</option>
+                        <option value="비공개">비공개</option>
+                      </select>
+                {postToggle}
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            ),
+            'text-[#222]',
+          ]);
+        } else if (isPostApprovalSystemEnabled) {
+          cells.push(['긴급 후결', <div className="flex items-center">{postToggle}</div>, 'text-[#222]']);
+        }
+        if (cells.length === 0) return null;
+        const rows: Array<typeof cells> = [];
+        for (let i = 0; i < cells.length; i += 2) rows.push(cells.slice(i, i + 2));
+        return (
+          <table className="w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map(([label, node, tone]) => (
+                    <Fragment key={label}>
+                      <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                        {label}
+                      </th>
+                      <td colSpan={row.length === 1 ? 3 : 1} className={`border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[11.5px] ${tone}`}>
+                        {node}
+                      </td>
+                    </Fragment>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      })()}
 
       {/* 5. 문서 제목 및 금액 표 (ApprovalDocMetaTable과 100% 일치 + 인라인 인풋) */}
       <table className="mt-2 w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
         <tbody>
+          {!titleField && (
           <tr>
             <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-2 text-left align-middle text-[11px] font-bold text-[#444]">
               제 목 <span className="text-rose-500">*</span>
@@ -631,6 +665,7 @@ export function ApprovalDraftDocumentSheet({
               />
             </td>
           </tr>
+          )}
           {/* 금액 필드가 서식에 지정되어 있고 동적 상세에 포함되지 않은 경우 */}
           {amountField && !isAmountInDetails && (
             <tr>
@@ -867,6 +902,21 @@ export function ApprovalDraftDocumentSheet({
               return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={isDesignMode} />;
             }
 
+            // 회사 정보 머리글 — 서식 설계에서는 눌러서 칸 설정
+            if (block.type === 'letterhead') {
+              const f = block.fields[0];
+              const isSelected = isDesignMode && selectedFieldKey === f.key;
+              return (
+                <div
+                  key={blockIdx}
+                  onClick={() => { if (isDesignMode) onSelectFieldKey?.(f.key); }}
+                  className={isDesignMode ? `cursor-pointer rounded p-1.5 transition-all ${isSelected ? 'ring-2 ring-teal bg-teal-soft/20' : 'hover:ring-1 hover:ring-teal/40'}` : ''}
+                >
+                  <CompanyLetterhead field={f} />
+                </div>
+              );
+            }
+
             // A. 장문 블록 (longtext)
             if (block.type === 'longtext') {
               const f = block.fields[0];
@@ -1037,8 +1087,8 @@ export function ApprovalDraftDocumentSheet({
                       >
                         <InlineFieldEditor
                           field={f}
-                          values={values}
-                          setVals={setVals}
+                          values={sheetValues}
+                          setVals={setSheetVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
                           holidays={holidays}
@@ -1060,8 +1110,8 @@ export function ApprovalDraftDocumentSheet({
                       >
                         <InlineFieldEditor
                           field={next}
-                          values={values}
-                          setVals={setVals}
+                          values={sheetValues}
+                          setVals={setSheetVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
                           holidays={holidays}
@@ -1089,8 +1139,8 @@ export function ApprovalDraftDocumentSheet({
                       >
                         <InlineFieldEditor
                           field={f}
-                          values={values}
-                          setVals={setVals}
+                          values={sheetValues}
+                          setVals={setSheetVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
                           holidays={holidays}
@@ -1121,8 +1171,8 @@ export function ApprovalDraftDocumentSheet({
                     >
                       <InlineFieldEditor
                         field={f}
-                        values={values}
-                        setVals={setVals}
+                        values={sheetValues}
+                        setVals={setSheetVals}
                         org={org}
                         onOpenUserPicker={setActiveUserField}
                         holidays={holidays}
@@ -1301,7 +1351,7 @@ export function ApprovalDraftDocumentSheet({
       </table>
 
       {/* 12. 공문서 하단 격식 맺음말 및 기안자 서명/직인란 (ApprovalDocumentView와 100% 일치) */}
-      <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
+      <div className={`mt-8 text-center text-[12.5px] leading-loose text-[#222] ${headerShown(form, 'closing') ? '' : 'hidden'}`}>
         {closing.trim() && (
           <div
             onClick={() => {
@@ -1400,6 +1450,19 @@ function InlineFieldEditor({
   switch (field.type) {
     case '안내문':
       return <span className="text-[11px] text-[#777]">{field.placeholder || field.label}</span>;
+
+    case '문서제목':
+      return (
+        <input
+          value={sv}
+          onChange={(e) => setVals({ [field.key]: e.target.value })}
+          placeholder={field.placeholder || '문서 제목을 입력하세요'}
+          className="w-full bg-transparent px-1 py-1 text-[13px] font-bold text-[#111] placeholder:font-normal placeholder:text-[#aaa] outline-none focus:bg-teal/5 transition-colors rounded"
+        />
+      );
+
+    case '회사정보':
+      return <CompanyLetterhead field={field} />;
 
     case '자동번호':
       return sv
