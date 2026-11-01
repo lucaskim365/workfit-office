@@ -29,7 +29,7 @@ export default function MobileComingSoon({ title, icon, desc }: MobileComingSoon
 
         <button
           type="button"
-          onClick={() => nav('/m/modules')}
+          onClick={() => nav('/m')}
           className="mt-6 rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90 active:scale-95 transition-all"
         >
           전체 메뉴로 돌아가기

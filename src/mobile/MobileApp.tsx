@@ -13,7 +13,9 @@ import MobileChatThread from './MobileChatThread';
 import MobileNewRoom from './MobileNewRoom';
 import MobileApprovalList from './MobileApprovalList';
 import MobileApprovalDetail from './MobileApprovalDetail';
-import MobileModuleLauncher from './MobileModuleLauncher';
+import MobileGroupwareScreen from './MobileGroupwareScreen';
+import MobileTabLayout from './MobileTabLayout';
+import MobileWiddyScreen, { MobileWiddyProvider } from './MobileWiddyScreen';
 import MobileCommuteScreen from './MobileCommuteScreen';
 import MobileCommuteAdminScreen from './MobileCommuteAdminScreen';
 import MobileCalendarScreen from './MobileCalendarScreen';
@@ -32,7 +34,7 @@ import { ReloginDialog } from '@/app/auth/ReloginDialog';
 import { ModalLayerProvider } from '@/shared/ui/Modal';
 
 /**
- * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
+ * 모바일 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
  * 자체 로그인 게이트 + 기존 채팅 훅 재사용. iOS 는 "홈 화면에 추가" 시 앱처럼 실행/푸시.
  */
 export default function MobileApp() {
@@ -132,10 +134,17 @@ export default function MobileApp() {
         ) : !user ? (
           <MobileLogin />
         ) : (
+          <MobileWiddyProvider key={user.id}>
           <Routes>
-            <Route index element={<MobileChatList />} />
+            {/* 하단 탭 — 상단바·하단바가 있는 공통 틀. 채팅방 등 안쪽 화면은 틀 밖이라 자기 헤더만 쓴다 */}
+            <Route element={<MobileTabLayout />}>
+              <Route index element={<MobileGroupwareScreen />} />
+              <Route path="exec" element={<div className="grid h-full place-items-center text-[15px] font-semibold text-ink3">아직 준비 중입니다.</div>} />
+              <Route path="widdy" element={<MobileWiddyScreen />} />
+              <Route path="chat" element={<MobileChatList />} />
+            </Route>
             <Route path="notifications" element={<MobileNotificationsScreen />} />
-            <Route path="modules" element={<MobileModuleLauncher />} />
+            <Route path="modules" element={<Navigate to="/m" replace />} />
             <Route path="new" element={<MobileNewRoom />} />
             <Route path="room/:roomId" element={<MobileChatThread />} />
             <Route path="approval" element={<MobileApprovalList />} />
@@ -161,6 +170,7 @@ export default function MobileApp() {
 
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
+          </MobileWiddyProvider>
         )}
       </div>
 

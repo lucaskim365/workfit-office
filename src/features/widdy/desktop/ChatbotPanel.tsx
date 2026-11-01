@@ -37,8 +37,13 @@ function TypingDots() {
 }
 
 export function ChatbotPanel() {
+  return <ChatbotView chat={useWiddyChat()} />;
+}
+
+/** 대화 화면 — 대화 상태는 밖에서 받는다(PWA 는 탭을 옮겨도 대화가 남도록 앱 전체에 둔다). */
+export function ChatbotView({ chat }: { chat: ReturnType<typeof useWiddyChat> }) {
   const { user } = useAuth();
-  const { messages, send, isSending } = useWiddyChat();
+  const { messages, send, isSending } = chat;
   const [input, setInput] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
