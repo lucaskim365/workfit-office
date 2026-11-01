@@ -420,7 +420,7 @@ export default function WorkPlanScreen() {
 
       {/* 첫 사용 안내 — 처음 한 번만, 닫으면 다시 뜨지 않는다 */}
       {guideOpen && (
-        <div role="dialog" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-[55] w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
+        <div role="complementary" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-30 w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
           <h3 className="mb-2 text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
           <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
             <li><b className="text-ink">내 칸 위쪽</b>을 누르면 새 일정</li>
