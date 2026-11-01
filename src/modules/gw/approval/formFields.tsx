@@ -129,6 +129,13 @@ export function DynamicField({
     case '안내문':
       return <div className="rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] text-ink3">{field.placeholder || field.label}</div>;
 
+    case '자동번호':
+      return (
+        <div className={`${inp} bg-panel-alt ${sv ? 'font-semibold text-ink' : 'text-ink3'}`}>
+          {sv || '상신하면 자동으로 매겨집니다'}
+        </div>
+      );
+
     case '장문':
       return (
         <AutoResizeTextarea

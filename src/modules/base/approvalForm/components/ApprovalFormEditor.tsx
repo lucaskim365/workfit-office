@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { ApprovalForm, FormField, FieldType, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { FIELD_TYPES } from '@/domain/approvalForm/schema';
+import {
+  AUTO_NUMBER_DATE_PARTS,
+  AUTO_NUMBER_DATE_PART_LABEL,
+  AUTO_NUMBER_RESETS,
+  AUTO_NUMBER_RESET_LABEL,
+  DEFAULT_AUTO_NUMBER,
+  autoNumberPreview,
+  type AutoNumberConfig,
+} from '@/domain/approvalForm/autoNumber';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
 import { useRouteRules } from '@/features/gw/useRouteRules';
@@ -29,6 +38,49 @@ import {
 } from 'lucide-react';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
+
+/** 자동번호 칸 설정 — 모양을 바꾸면 새 순번(1번)부터 시작한다 */
+function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onChange: (v: AutoNumberConfig) => void }) {
+  const sel = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal';
+  return (
+    <div className="space-y-2 border-t border-border/60 pt-1.5">
+      <span className="block text-[10.5px] font-semibold text-ink3">번호 모양</span>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">접두어</span>
+          <input
+            value={value.prefix}
+            maxLength={20}
+            placeholder="예: PO"
+            onChange={(e) => onChange({ ...value, prefix: e.target.value.replace(/[^0-9A-Za-z가-힣_]/g, '') })}
+            className={sel}
+          />
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">날짜</span>
+          <select value={value.datePart} onChange={(e) => onChange({ ...value, datePart: e.target.value as AutoNumberConfig['datePart'] })} className={sel}>
+            {AUTO_NUMBER_DATE_PARTS.map((p) => <option key={p} value={p}>{AUTO_NUMBER_DATE_PART_LABEL[p]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 자릿수</span>
+          <select value={value.digits} onChange={(e) => onChange({ ...value, digits: Number(e.target.value) })} className={sel}>
+            {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}자리</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 초기화</span>
+          <select value={value.reset} onChange={(e) => onChange({ ...value, reset: e.target.value as AutoNumberConfig['reset'] })} className={sel}>
+            {AUTO_NUMBER_RESETS.map((r) => <option key={r} value={r}>{AUTO_NUMBER_RESET_LABEL[r]}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="rounded-lg bg-panel-alt px-2.5 py-1.5 text-[11.5px] text-ink2">
+        첫 번호 <b className="font-mono text-ink">{autoNumberPreview(value)}</b>
+      </div>
+    </div>
+  );
+}
 
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -131,6 +183,14 @@ const COMPONENT_PALETTE = [
     desc: '결재란 대신 결재 완료 후 회사 직인',
     defaultWidth: 'full' as const,
     defaultLabel: '주식회사 ○○○ 대표이사 ○○○',
+  },
+  {
+    type: '자동번호' as FieldType,
+    label: '자동 번호',
+    icon: '#️⃣',
+    desc: '상신할 때 번호 자동 부여',
+    defaultWidth: 'half' as const,
+    defaultLabel: '관리번호',
   },
 ];
 
@@ -360,6 +420,7 @@ export function ApprovalFormEditor({
       width: item.defaultWidth,
       isAmountKey: item.isAmountKey ?? false,
       options: item.options ? [...item.options] : [],
+      ...(item.type === '자동번호' ? { autoNumber: { ...DEFAULT_AUTO_NUMBER } } : {}),
     };
 
     set({ fields: [...form.fields, newField] });
@@ -795,6 +856,14 @@ export function ApprovalFormEditor({
                         <span>대외 문서에서 숨김</span>
                       </label>
                     </div>
+
+                    {/* '자동번호' — 번호 모양(접두어·날짜·자릿수·초기화 주기)과 미리보기 */}
+                    {selectedField.type === '자동번호' && (
+                      <AutoNumberSettings
+                        value={selectedField.autoNumber ?? DEFAULT_AUTO_NUMBER}
+                        onChange={(autoNumber) => setField(selectedFieldIdx, { autoNumber })}
+                      />
+                    )}
 
                     {/* '선택' 타입일 때 세부 옵션 */}
                     {selectedField.type === '선택' && (
