@@ -1401,6 +1401,11 @@ function InlineFieldEditor({
     case '안내문':
       return <span className="text-[11px] text-[#777]">{field.placeholder || field.label}</span>;
 
+    case '자동번호':
+      return sv
+        ? <span className="px-1 text-[12px] font-semibold text-[#222]">{sv}</span>
+        : <span className="px-1 text-[11px] text-[#999]">상신하면 자동으로 매겨집니다</span>;
+
     case '숫자':
     case '금액':
       return (

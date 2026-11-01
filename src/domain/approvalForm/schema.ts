@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { autoNumberConfigSchema } from './autoNumber';
 
 /**
  * 결재서식(ApprovalForm) 도메인 스키마 — 단일 진실 공급원(SSOT).
@@ -27,6 +28,7 @@ export const FIELD_TYPES = [
   '안내문', // 입력 없음(작성 가이드)
   '표', // 동적 입력 테이블
   '직인', // 회사 직인 자리(입력 없음) — 있으면 결재란 대신 결재 완료 후 회사 직인
+  '자동번호', // 입력 없음 — 상신할 때 서식별 규칙(autoNumber)으로 번호를 매긴다
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
@@ -58,6 +60,8 @@ export const formFieldSchema = z.object({
   isSecret: z.boolean().default(false),
   /** 대외 문서(결재 완료 후 거래처용 모양·발주서 PDF)에서 숨김 */
   hideOnExternal: z.boolean().optional(),
+  /** type='자동번호' 의 번호 모양(접두어·날짜·자릿수·초기화 주기) — [[autoNumber]] */
+  autoNumber: autoNumberConfigSchema.optional(),
   /**
    * 탭별 공통 필드 오버라이드 — 공통 필드(visibleIf=null)를 특정 탭에서 볼 때
    * width/section 을 독립적으로 다르게 설정하기 위한 맵.

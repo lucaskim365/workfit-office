@@ -3,7 +3,7 @@ import { MapPin, Plane, Users, type LucideIcon } from 'lucide-react';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
-import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { sourceIdOf, type DayCell } from '@/domain/workPlan/dayEntries';
 import { resolveTag, selectableGeneralTags, type WorkPlanTag } from '@/domain/workPlan/tag';
 import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
@@ -51,10 +51,7 @@ export function generalTagOf(tags: WorkPlanTag[], kind: EventKind, tagId: string
 /** 일반 태그 색 점 */
 export const dotClassOf = (colorId: string) => TAG_COLOR_PRESETS.find((p) => p.id === colorId)?.dotColor ?? 'bg-slate-500';
 
-/** 같은 일정이 여러 사람 칸에 나와도 한 번만 — 원본 id 기준 */
-export function sourceIdOf(entry: DayEntry): string {
-  return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;
-}
+export { sourceIdOf } from '@/domain/workPlan/dayEntries';
 
 /** 일정 주인 — 새 일정은 칸 주인, 기존 일정은 등록한 사람 */
 export function ownerOf(target: EventTarget, users: User[]): { id: string; name: string } {
@@ -76,7 +73,7 @@ export function eventWhenLabel(date: string, endDate?: string): { date: string; 
   return { date: `${year}${dateLabel(date)}${range}`, week: w ? `${w.week}주차` : '' };
 }
 
-/** 시간표에 겹쳐 보일 그날 일정 — 주인 + (회의면) 참석자, 고른 회의실 예약. 고치는 일정 자신은 뺀다. */
+/** 시간표에 보일 그날 일정(종일·미정 포함) — 주인 + (회의면) 참석자, 고른 회의실 예약. 고치는 일정 자신은 뺀다. */
 export function useEventBlocks(
   form: EventForm,
   target: EventTarget,
@@ -103,7 +100,8 @@ export function useEventBlocks(
         seen.add(sourceId);
         return true;
       });
-      result.push(...entriesToBlocks(entries, name || undefined));
+      // 칸 주인 일정은 이름 없이, 회의 참석자 일정만 이름을 붙인다
+      result.push(...entriesToBlocks(entries, id === owner.id ? undefined : name || undefined));
     }
     result.push(...form.roomBlocks);
     return result;

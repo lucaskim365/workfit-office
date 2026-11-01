@@ -33,6 +33,11 @@ export interface DayEntry {
   schedule?: StandardScheduleInfo;
 }
 
+/** 같은 일정이 여러 사람 칸에 나와도 한 번만 — 원본 id 기준 */
+export function sourceIdOf(entry: DayEntry): string {
+  return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;
+}
+
 export interface DayEntryInput {
   items: WorkPlanItem[];
   tags: WorkPlanTag[];

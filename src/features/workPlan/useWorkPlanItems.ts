@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { workPlanItemRepo, type WorkPlanItemActor } from '@/data/workPlan/workPlanItem.repo';
 import { workPlanTagRepo } from '@/data/workPlan/workPlanTag.repo';
 import type { WorkPlanItem, WorkPlanItemDraft } from '@/domain/workPlan/item';
+import type { Routine } from '@/domain/workPlan/routine';
 import type { WorkPlanTag, WorkPlanTagDraft } from '@/domain/workPlan/tag';
 
 const ITEM_KEY = 'workPlanItems';
@@ -41,6 +42,27 @@ export function useUpdateWorkPlanItem() {
 export function useRemoveWorkPlanItem() {
   return useItemMutation<{ actor: WorkPlanItemActor; id: string }, WorkPlanItem>(
     ({ actor, id }) => workPlanItemRepo.remove(actor, id),
+  );
+}
+
+/** 루틴(반복) — 날짜마다 항목을 만든다 */
+export function useCreateWorkPlanRoutine() {
+  return useItemMutation<{ actor: WorkPlanItemActor; ownerUserId: string; drafts: WorkPlanItemDraft[]; routine: Routine }, WorkPlanItem[]>(
+    ({ actor, ownerUserId, drafts, routine }) => workPlanItemRepo.createRoutine(actor, ownerUserId, drafts, routine),
+  );
+}
+
+/** 루틴 '이후 모두' 고치기 */
+export function useUpdateFollowingWorkPlanItems() {
+  return useItemMutation<{ actor: WorkPlanItemActor; id: string; draft: WorkPlanItemDraft }, WorkPlanItem[]>(
+    ({ actor, id, draft }) => workPlanItemRepo.updateFollowing(actor, id, draft),
+  );
+}
+
+/** 루틴 '이후 모두' 지우기 */
+export function useRemoveFollowingWorkPlanItems() {
+  return useItemMutation<{ actor: WorkPlanItemActor; id: string }, WorkPlanItem[]>(
+    ({ actor, id }) => workPlanItemRepo.removeFollowing(actor, id),
   );
 }
 

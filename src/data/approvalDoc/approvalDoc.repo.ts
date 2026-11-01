@@ -21,6 +21,8 @@ import {
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
+import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
+import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
@@ -412,6 +414,25 @@ async function handleCancelTargetOnAbort(doc: ApprovalDoc): Promise<void> {
   }
 }
 
+/**
+ * 서식의 '자동번호' 칸 중 아직 번호가 없는(보이는) 칸에 번호를 매긴다 — 상신 때. 재상신은 받은 번호를 그대로 둔다.
+ * 서식 마스터는 읽기만 한다. 번호는 counters 채널에서 원자 발급(동시 상신에도 겹치지 않음).
+ */
+async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldValues']> {
+  const form = (await approvalFormRepo.list()).find((f) => f.code === doc.docType);
+  const fields = (form?.fields ?? []).filter((f) => f.type === '자동번호');
+  if (fields.length === 0) return doc.fieldValues;
+  const values = { ...doc.fieldValues };
+  const date = new Date();
+  for (const field of fields) {
+    if (values[field.key] || !isFieldVisible(field.visibleIf, values)) continue;
+    const config = field.autoNumber ?? DEFAULT_AUTO_NUMBER;
+    const seq = await counterRepo.next(autoNumberChannel(doc.docType, field.key, config, date));
+    values[field.key] = formatAutoNumber(config, date, seq);
+  }
+  return values;
+}
+
 export const approvalDocRepo = {
   /** 전체 조회. */
   async list(): Promise<ApprovalDoc[]> {
@@ -553,6 +574,7 @@ export const approvalDocRepo = {
     const drafterUser = users.find((u) => u.id === userId);
     
     const next = submitDoc(cur, now());
+    next.fieldValues = await issueAutoNumbers(next);
     next.drafterSignUrl = drafterUser?.signUrl ?? null;
     next.drafterSealUrl = drafterUser?.sealUrl ?? null;
     next.drafterSignType = drafterUser?.signType ?? null;

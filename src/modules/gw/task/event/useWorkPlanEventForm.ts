@@ -9,6 +9,7 @@ import type { CalendarEvent, CalendarVisibility } from '@/domain/calendarEvent/s
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
+import { newRoutineId, routineDates, validateRoutineRule, type Routine, type RoutineRule } from '@/domain/workPlan/routine';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { usePermission } from '@/features/auth/usePermission';
@@ -19,7 +20,10 @@ import { RESERVATION_KEY } from '@/features/resource/useReservations';
 import { removeMeeting, roomAvailability, saveMeeting, toReservationWindow, type MeetingActors } from '@/features/workPlan/meetingWithRoom';
 import {
   useCreateWorkPlanItem,
+  useCreateWorkPlanRoutine,
+  useRemoveFollowingWorkPlanItems,
   useRemoveWorkPlanItem,
+  useUpdateFollowingWorkPlanItems,
   useUpdateWorkPlanItem,
   useWorkPlanTags,
 } from '@/features/workPlan/useWorkPlanItems';
@@ -51,6 +55,10 @@ export type { EventFormState, EventKind, EventTarget } from './eventFormMapping'
 export const ROOM_RELEASED_MESSAGE = '고른 시간에 이미 예약된 회의실이라 선택을 해제했습니다.';
 const ROOM_REQUIRED_MESSAGE = '회의실을 고르세요.';
 const NOT_EDITABLE_MESSAGE = '고칠 수 없는 일정입니다.';
+const ROUTINE_DATE_MESSAGE = "반복 일정의 날짜는 '이 일정만'으로 바꿀 수 있습니다.";
+
+/** 루틴 항목을 고치거나 지울 때 — 이 일정만 / 이 일정과 이후 모두 */
+export type RoutineScope = 'one' | 'following';
 const MEETING_ROOM_FILTER = { typeCode: 'ROOM', status: 'ACTIVE' } as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -103,6 +111,13 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   saving: boolean;
   save: () => Promise<boolean>;
   remove: (() => Promise<boolean>) | null;
+  /** 새 일반 업무의 루틴 규칙(끄면 null) */
+  routineRule: RoutineRule | null;
+  setRoutineRule: (rule: RoutineRule | null) => void;
+  /** 고치는 일반 업무가 루틴으로 만든 것이면 그 루틴 */
+  editingRoutine: Routine | null;
+  routineScope: RoutineScope;
+  setRoutineScope: (scope: RoutineScope) => void;
 } {
   const queryClient = useQueryClient();
   const { isSuperAdmin } = usePermission();
@@ -150,6 +165,13 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   const createItem = useCreateWorkPlanItem();
   const updateItem = useUpdateWorkPlanItem();
   const removeItem = useRemoveWorkPlanItem();
+  const createRoutine = useCreateWorkPlanRoutine();
+  const updateFollowing = useUpdateFollowingWorkPlanItems();
+  const removeFollowing = useRemoveFollowingWorkPlanItems();
+  const [routineRule, setRoutineRule] = useState<RoutineRule | null>(null);
+  const editingRoutine = item?.routine ?? null;
+  const [routineScope, setRoutineScope] = useState<RoutineScope>('one');
+  const following = Boolean(editingRoutine) && routineScope === 'following';
   const createOutside = useCreateOutsideWork();
   const updateOutside = useUpdateOutsideWork();
   const removeOutside = useRemoveOutsideWork();
@@ -359,8 +381,19 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     const draft = toItemDraft(state);
     const invalid = validateItemDraft(draft, ownerId, actor.id);
     if (invalid) return fail(invalid);
-    if (item) await updateItem.mutateAsync({ actor: itemActor, id: item.id, draft });
-    else await createItem.mutateAsync({ actor: itemActor, ownerUserId: ownerId, draft });
+    if (item && following) {
+      if (draft.date !== item.date) return fail(ROUTINE_DATE_MESSAGE);
+      await updateFollowing.mutateAsync({ actor: itemActor, id: item.id, draft });
+    } else if (item) {
+      await updateItem.mutateAsync({ actor: itemActor, id: item.id, draft });
+    } else if (routineRule) {
+      const invalidRule = validateRoutineRule(draft.date, routineRule);
+      if (invalidRule) return fail(invalidRule);
+      const drafts = routineDates(draft.date, routineRule).map((date) => ({ ...draft, date }));
+      await createRoutine.mutateAsync({ actor: itemActor, ownerUserId: ownerId, drafts, routine: { ...routineRule, id: newRoutineId() } });
+    } else {
+      await createItem.mutateAsync({ actor: itemActor, ownerUserId: ownerId, draft });
+    }
     return true;
   };
 
@@ -422,7 +455,9 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     if (!begin()) return false;
     setError('');
     try {
-      if (item) {
+      if (item && following) {
+        await removeFollowing.mutateAsync({ actor: itemActor, id: item.id });
+      } else if (item) {
         await removeItem.mutateAsync({ actor: itemActor, id: item.id });
       } else if (event) {
         try {
@@ -462,5 +497,10 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     saving,
     save,
     remove: target.mode === 'edit' ? removeEntry : null,
+    routineRule: state.kind === 'ITEM' && target.mode === 'create' ? routineRule : null,
+    setRoutineRule,
+    editingRoutine,
+    routineScope,
+    setRoutineScope,
   };
 }

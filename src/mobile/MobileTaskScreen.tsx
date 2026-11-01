@@ -30,6 +30,9 @@ import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
 import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
 import { useSaveWorkPlanMemo } from '@/features/workPlan/useWorkPlans';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
+import { collectDayRows, countRows } from '@/modules/gw/task/components/dayAgenda';
+import type { EntryKind } from '@/modules/gw/task/components/entryKind';
+import { AgendaRowItem, KindFilterChips } from '@/modules/gw/task/components/WorkPlanDayPanel';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
@@ -46,6 +49,10 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MOBILE_MODAL_Z = 'z-[110]';
 
 /** 'YYYY-MM-DD' 에 일수를 더한다(시간대 이동 없이 UTC 날짜 계산) */
+const WEEK_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+/** 고른 부서를 이 기기에 기억한다(PC와 같은 값) */
+const DEPT_STORAGE_KEY = 'workPlan.dept';
+
 function shiftDate(date: string, days: number): string {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
@@ -96,7 +103,24 @@ function MobileTaskBody({ actor }: { actor: User }) {
     return param && isValidCalendarDate(param) ? param : today;
   });
   const [view, setView] = useState<'me' | 'team'>('me');
-  const [deptFilter, setDeptFilter] = useState<string>('all');
+  /** 팀원 보기 — 사람별 / 시간순(그날 전원 일정을 한 목록, PC 하루 상세와 같음) */
+  const [teamMode, setTeamMode] = useState<'people' | 'timeline'>('people');
+  const [teamKind, setTeamKind] = useState<EntryKind | null>(null);
+  const [deptFilter, setDeptFilter] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(DEPT_STORAGE_KEY) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const changeDept = (value: string) => {
+    setDeptFilter(value);
+    try {
+      window.localStorage.setItem(DEPT_STORAGE_KEY, value);
+    } catch {
+      // 저장이 막혀 있어도 이번 화면에서는 바뀐다
+    }
+  };
 
   // 업무계획 로스터 원칙 — 퇴사자(미사용·퇴사일)는 빼고
   const users = useMemo(
@@ -174,6 +198,18 @@ function MobileTaskBody({ actor }: { actor: User }) {
 
   const myCell = cellOf(actor.id, selectedDate);
 
+  // 주 띠 — 고른 날이 든 주(월~일), 날마다 내 일정이 있는지
+  const weekDays = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    const monday = shiftDate(selectedDate, -((dow + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => shiftDate(monday, i));
+  }, [selectedDate]);
+  const teamRows = useMemo(
+    () => (view === 'team' && teamMode === 'timeline' ? collectDayRows([actor, ...displayedMembers], selectedDate, cellOf) : []),
+    [view, teamMode, actor, displayedMembers, selectedDate, cellOf],
+  );
+
   /** 내 메모 저장 — 비우면 지우고, 있으면 고치고, 없으면 만든다 */
   const saveMemo = useSaveWorkPlanMemo();
   const handleSaveMemo = async (text: string) => {
@@ -234,6 +270,30 @@ function MobileTaskBody({ actor }: { actor: User }) {
         </button>
       </div>
 
+      {/* 주 띠 — 그 주 7일, 눌러서 날짜를 고른다. 점 = 내 일정 있음 */}
+      <div className="grid shrink-0 grid-cols-7 gap-0.5 border-b border-border/70 bg-white px-2 py-1.5" role="tablist" aria-label="이번 주">
+        {weekDays.map((date, i) => {
+          const selected = date === selectedDate;
+          const hasMine = cellOf(actor.id, date).entries.length > 0;
+          const weekday = WEEK_LABELS[i];
+          const tone = i === 6 ? 'text-rose-600' : i === 5 ? 'text-blue-600' : 'text-ink';
+          return (
+            <button
+              key={date}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setSelectedDate(date)}
+              className={`flex flex-col items-center gap-0.5 rounded-lg py-1 ${selected ? 'bg-teal text-white' : `${tone} active:bg-panel-alt`}`}
+            >
+              <span className={`text-[10.5px] font-semibold ${selected ? '' : 'opacity-70'}`}>{weekday}</span>
+              <span className={`text-[14px] font-extrabold tabular-nums ${!selected && date === today ? 'text-sky-600' : ''}`}>{Number(date.slice(8))}</span>
+              <span className={`h-1 w-1 rounded-full ${hasMine ? (selected ? 'bg-white' : 'bg-teal') : 'bg-transparent'}`} aria-hidden />
+            </button>
+          );
+        })}
+      </div>
+
       {/* 나 / 팀원 전환 */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border/70 bg-white px-3 py-2">
         <div className="grid flex-1 grid-cols-2 gap-1 rounded-xl bg-panel-alt p-1" role="tablist" aria-label="보기">
@@ -284,7 +344,7 @@ function MobileTaskBody({ actor }: { actor: User }) {
             {deptList.length > 1 && (
               <select
                 value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
+                onChange={(e) => changeDept(e.target.value)}
                 aria-label="부서 필터"
                 className="w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] font-bold text-ink shadow-2xs outline-none"
               >
@@ -297,7 +357,31 @@ function MobileTaskBody({ actor }: { actor: User }) {
               </select>
             )}
 
-            {displayedMembers.length === 0 ? (
+            {/* 사람별 / 시간순 */}
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-panel-alt p-1" role="tablist" aria-label="팀원 보기">
+              {([['people', '사람별'], ['timeline', '시간순']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={teamMode === key}
+                  onClick={() => setTeamMode(key)}
+                  className={`rounded-lg py-1.5 text-[12px] font-bold ${teamMode === key ? 'bg-white text-ink shadow-2xs' : 'text-ink3'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {teamMode === 'timeline' ? (
+              <div className="space-y-2 rounded-2xl border border-border/80 bg-white p-3 shadow-2xs">
+                <KindFilterChips counts={countRows(teamRows)} value={teamKind} onChange={setTeamKind} />
+                {(teamKind ? teamRows.filter((r) => r.kind === teamKind) : teamRows).map((row) => (
+                  <AgendaRowItem key={row.key} row={row} onOpen={handleOpenEntry} />
+                ))}
+                {teamRows.length === 0 && <p className="py-6 text-center text-[12px] text-ink3">일정이 없습니다.</p>}
+              </div>
+            ) : displayedMembers.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/80 bg-white/70 p-8 text-center text-ink3">
                 <UserIcon size={24} className="mx-auto mb-1 text-ink3/40" />
                 <p className="text-[12px] font-bold text-ink">표시할 팀원이 없습니다.</p>
