@@ -1911,13 +1911,13 @@ function OrgTreeNode({
   isExpanded: (id: string) => boolean;
 }) {
   const { rankOf } = useOrgTree();
-  const { canDesignate } = useCanDesignate();
+  const { canChatWith } = useCanDesignate();
   const presenceMap = useAllUserPresences();
   const show = isExpanded(node.dept.id);
   const deptUsers = useMemo(() => {
-    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id) && canDesignate(u));
+    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id) && canChatWith(u));
     return filtered.sort((a, b) => rankOf(a.position) - rankOf(b.position));
-  }, [node.members, exclude, rankOf, canDesignate]);
+  }, [node.members, exclude, rankOf, canChatWith]);
 
   const hasContent = deptUsers.length > 0 || node.children.length > 0;
   if (!hasContent) return null;

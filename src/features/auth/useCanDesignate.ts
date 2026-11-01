@@ -16,5 +16,7 @@ export function useCanDesignate() {
   const canDesignate = useCallback((target: TestAccountLike) => isTestSide(target) === viewerIsTest, [viewerIsTest]);
   /** 부서 노드를 선택 후보로 보여줄지 — 테스트 부서는 테스트 계정에게만. */
   const canDesignateDept = useCallback((deptName?: string | null) => !isTestDeptName(deptName) || viewerIsTest, [viewerIsTest]);
-  return useMemo(() => ({ canDesignate, canDesignateDept, viewerIsTest }), [canDesignate, canDesignateDept, viewerIsTest]);
+  /** 메신저 대화 상대 — 개발 서버에서는 테스트 계정과 임직원 계정도 대화할 수 있다(운영 빌드에서는 canDesignate 와 같다). 푸시·명함 등을 실제 계정과 테스트하기 위함. */
+  const canChatWith = useCallback((target: TestAccountLike) => import.meta.env?.DEV === true || canDesignate(target), [canDesignate]);
+  return useMemo(() => ({ canDesignate, canDesignateDept, canChatWith, viewerIsTest }), [canDesignate, canDesignateDept, canChatWith, viewerIsTest]);
 }
