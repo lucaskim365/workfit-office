@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { chipLook, timeRangeOf } from '../components/entryChipLook';
+import { entryKindOf } from '../components/entryKind';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   DAY_END,
@@ -61,7 +62,7 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const OPEN_FADE_CLASS = '[mask-image:linear-gradient(to_bottom,black_45%,transparent)] border-b-0';
 
 /** 시간표 블록 색 — 회의·외근·출장·휴가는 사람 상태 색([[statusColors]]) */
-const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
+export const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
   meeting: PERSON_TONES.meeting.block,
   outside: PERSON_TONES.outside.block,
   trip: PERSON_TONES.trip.block,
@@ -70,13 +71,6 @@ const TONE_CLASS: Record<TimeGridBlock['tone'], string> = {
   // 회의실 예약 — 회의 색 점선
   room: `border-dashed bg-transparent ${PERSON_TONES.meeting.text} border-purple-500`,
 };
-
-/** 외근·결재 일정 → 외근/출장/휴가 */
-function scheduleTone(category: string | undefined): TimeGridBlock['tone'] {
-  if (category === 'TRIP') return 'trip';
-  if (category === 'LEAVE') return 'leave';
-  return 'outside';
-}
 
 /** 그날 항목 → 시간표 블록(종일·시간 미정은 allDay). 남의 시간표면 ownerName 을 앞에 붙인다 */
 export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGridBlock[] {
@@ -89,14 +83,7 @@ export function entriesToBlocks(entries: DayEntry[], ownerName?: string): TimeGr
     const end = allDay ? 0 : entry.endTime ? toMinutes(entry.endTime) : Math.min(start + 30, DAY_END);
     if (!allDay && end <= start) continue;
     const { label, dotClass } = chipLook(entry);
-    const tone: TimeGridBlock['tone'] =
-      entry.source === 'MEETING'
-        ? 'meeting'
-        : entry.source === 'OUTSIDE'
-          ? scheduleTone(entry.outside?.category)
-          : entry.source === 'APPROVAL'
-            ? scheduleTone(entry.schedule?.category)
-            : 'item';
+    const tone: TimeGridBlock['tone'] = entryKindOf(entry);
     blocks.push({
       key: ownerName ? `${ownerName}:${entry.key}` : entry.key,
       start,

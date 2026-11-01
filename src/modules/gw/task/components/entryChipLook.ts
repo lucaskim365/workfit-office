@@ -3,6 +3,7 @@ import type { CalendarEventType } from '@/domain/calendarEvent/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
+import { isLeave } from './entryKind';
 import { outsideChipLabel } from './outsideChipLabel';
 
 /* 업무계획 칸 항목의 글·색 — PC 표 칩과 모바일 목록이 같이 쓴다. */
@@ -85,10 +86,6 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
   }
 }
 
-/** 휴가 — 종류(연차·반차 등)가 제목에 있으므로 시각 칸은 비운다 */
-const isLeave = (entry: DayEntry) =>
-  (entry.source === 'APPROVAL' && entry.schedule?.category === 'LEAVE') ||
-  (entry.source === 'CALENDAR' && entry.event?.eventType === 'VACATION');
 /** 시각 없는 칸 글 — 업무는 '미정'(시간을 모르는 일), 그 밖(외근·출장 등)은 '종일' */
 const noTimeOf = (entry: DayEntry) => (entry.source === 'ITEM' ? '미정' : '종일');
 export const timeOf = (entry: DayEntry) =>

@@ -85,6 +85,10 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onOpenConfig?: () => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
+  /** 날짜 머리 누르기 → 하루 상세 옆 패널 */
+  onOpenDay?: (date: string) => void;
+  /** 옆 패널에 열린 날짜 — 머리에 표시 */
+  selectedDate?: string | null;
 }
 
 export function WorkPlanTeamMonthlyMatrix({
@@ -101,6 +105,8 @@ export function WorkPlanTeamMonthlyMatrix({
   onOpenCompanySchedule,
   onOpenConfig,
   filters,
+  onOpenDay,
+  selectedDate,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
   const currentMonth = month;
@@ -307,13 +313,14 @@ export function WorkPlanTeamMonthlyMatrix({
           <th
             key={d.dateStr}
             onClick={() => {
-              if (isOtherMonth) {
-                setCurrentMonth(targetMonth);
-              }
+              if (onOpenDay) onOpenDay(d.dateStr);
+              else if (isOtherMonth) setCurrentMonth(targetMonth);
             }}
-            title={d.holidayName}
+            title={onOpenDay ? `${d.holidayName ? `${d.holidayName} · ` : ''}하루 상세 보기` : d.holidayName}
             className={`${dayColBorderClass(d.isToday)} px-1.5 py-1 transition-colors ${tint} ${tone} ${
-              isOtherMonth ? 'opacity-45 hover:opacity-100 cursor-pointer' : ''
+              isOtherMonth ? 'opacity-45 hover:opacity-100' : ''
+            } ${onOpenDay || isOtherMonth ? 'cursor-pointer hover:bg-panel-alt' : ''} ${
+              selectedDate === d.dateStr ? 'shadow-[inset_0_-2px_0_0] shadow-teal' : ''
             }`}
           >
             <div className="flex min-w-0 items-center justify-center gap-1 leading-none">

@@ -22,6 +22,10 @@ import { WorkPlanEventModal } from './event/WorkPlanEventModal';
 import type { EventTarget } from './event/eventFormMapping';
 import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
+import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
+import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
+import { WorkPlanAgenda } from './components/WorkPlanAgenda';
+import type { MinuteRange } from '@/domain/workPlan/timeGrid';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
@@ -35,6 +39,24 @@ import type { DepartmentMember } from '@/domain/departmentMember/schema';
 
 /** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo(인원 목록 → 칸 조립)를 깨지 않게 한 개만 둔다 */
 const NO_DEPARTMENT_MEMBERS: DepartmentMember[] = [];
+
+/** 보기 — 팀 월간 표 / 내 주간 시간표 / 목록 */
+type WorkPlanView = 'team' | 'week' | 'list';
+const VIEW_OPTIONS: Array<{ id: WorkPlanView; label: string }> = [
+  { id: 'team', label: '팀 월간' },
+  { id: 'week', label: '내 주간' },
+  { id: 'list', label: '목록' },
+];
+/** 고른 보기를 이 브라우저에 기억한다(없거나 막혀 있으면 팀 월간) */
+const VIEW_STORAGE_KEY = 'workPlan.view';
+function readStoredView(): WorkPlanView {
+  try {
+    const v = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return v === 'week' || v === 'list' ? v : 'team';
+  } catch {
+    return 'team';
+  }
+}
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -213,9 +235,30 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
+  const [view, setViewState] = useState<WorkPlanView>(readStoredView);
+  const setView = (next: WorkPlanView) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // 저장이 막혀 있어도 이번 화면에서는 바뀐다
+    }
+  };
+  /** 내 주간이 보고 있는 주의 월요일 */
+  const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? today));
+  /** 하루 상세 옆 패널의 날짜(닫혀 있으면 null) */
+  const [panelDate, setPanelDate] = useState<string | null>(null);
+
   /** 보고 있는 달 — 칸 조립(표·일정 창 시간표 공용)을 여기서 한 번 하고 표에 내려 준다 */
   const [month, setMonth] = useState(() => (initialDate ?? today).slice(0, 7));
-  const monthDates = useMemo(() => monthGridDates(month), [month]);
+  // 내 주간은 그 주 월요일이 든 달 화면 범위(그 주 7일이 모두 든다)
+  const dataMonth = view === 'week' ? weekStart.slice(0, 7) : month;
+  const monthDates = useMemo(() => {
+    const base = monthGridDates(dataMonth);
+    // 옆 패널에서 다른 달로 넘어가도 그날 칸이 있게 그 달 범위를 더한다
+    if (!panelDate || base.includes(panelDate)) return base;
+    return [...new Set([...base, ...monthGridDates(panelDate.slice(0, 7))])].sort();
+  }, [dataMonth, panelDate]);
   const { cellOf, workPlans } = useDayEntryIndex({ actor, deptId, members: scopedMembers, dates: monthDates });
 
   const actorActive = actor?.status === '사용';
@@ -224,10 +267,11 @@ export default function WorkPlanScreen() {
     setEventModal((prev) => ({ key: (prev?.key ?? 0) + 1, target }));
   };
 
-  /** 칸 더블클릭·[+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30 */
-  const handleCreate = (date: string, member: User) => {
+  /** 칸 누르기·[+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30. 주간 시간표는 누른 시각(range) */
+  const handleCreate = (date: string, member: User, range?: MinuteRange) => {
     if (!actor) return;
-    openEventModal(createTarget(date, member, actor, today, new Date()));
+    const target = createTarget(date, member, actor, today, new Date());
+    openEventModal(range ? { ...target, initialRange: range } : target);
   };
 
   /** 내 칸 메모 저장 — 비우면 지우고, 있으면 고치고, 없으면 만든다 */
@@ -248,17 +292,82 @@ export default function WorkPlanScreen() {
 
   const loading = usersQuery.isLoading;
 
+  // 부서 필터·검색 — 팀 월간 상단 고정 바와 목록 머리에 함께 놓인다
+  const filters = (
+    <>
+      <select
+        value={deptFilter}
+        onChange={(e) => setDeptFilter(e.target.value)}
+        title="부서 필터"
+        className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
+      >
+        <option value="all">전체 부서 ({roster.length}명)</option>
+        {departments.map((d) => (
+          <option key={d} value={d}>
+            {d} ({roster.filter((u) => u.dept === d).length}명)
+          </option>
+        ))}
+      </select>
+      <div className="relative w-[180px]">
+        <input
+          type="text"
+          value={searchKeyword}
+          onChange={(e) => setSearchKeyword(e.target.value)}
+          placeholder="이름 또는 부서 검색..."
+          className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
+        />
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
+        {searchKeyword && (
+          <button
+            type="button"
+            onClick={() => setSearchKeyword('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      {canEditRosterOrder && (
+        <button
+          type="button"
+          onClick={() => setIsOrderOpen(true)}
+          title="인원 정렬 순서 편집 (관리자 전용, 전사 적용)"
+          className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink hover:border-teal/50"
+        >
+          ↕ 정렬 순서
+        </button>
+      )}
+    </>
+  );
+
   if (loading) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">불러오는 중…</div>;
   if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 space-y-4">
+    // 옆 패널이 열리면 넓은 화면에서는 그만큼 비켜서 표를 가리지 않는다
+    <div className={`mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 space-y-4 ${panelDate && view !== 'week' ? 'xl:pr-[396px]' : ''}`}>
       <GwHead
         icon="🗓️"
         name="업무계획"
         desc="팀원의 업무·회의·외근 일정을 날짜별로 함께 봅니다."
         right={
           <div className="flex items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기">
+              {VIEW_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={view === option.id}
+                  onClick={() => setView(option.id)}
+                  className={`border-r border-border px-3 py-1.5 text-[12px] font-bold transition-colors last:border-r-0 ${
+                    view === option.id ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             {!authenticatedUser && (
               <select
                 value={actor.id}
@@ -281,7 +390,31 @@ export default function WorkPlanScreen() {
         </div>
       )}
 
-      {/* ── 메인 뷰: 월간 종합 뷰 ── */}
+      {/* ── 메인 뷰: 팀 월간 / 내 주간 / 목록 ── */}
+      {view === 'week' && (
+        <WorkPlanMyWeek
+          actor={actor}
+          weekStart={weekStart}
+          onWeekChange={setWeekStart}
+          cellOf={cellOf}
+          onOpenEntry={handleOpenEntry}
+          onCreate={actorActive ? handleCreate : undefined}
+        />
+      )}
+      {view === 'list' && (
+        <WorkPlanAgenda
+          actor={actor}
+          today={today}
+          month={month}
+          onMonthChange={setMonth}
+          members={scopedMembers}
+          cellOf={cellOf}
+          onOpenEntry={handleOpenEntry}
+          onOpenDay={setPanelDate}
+          filters={filters}
+        />
+      )}
+      {view === 'team' && (
       <WorkPlanTeamMonthlyMatrix
         actor={actor}
         todayStr={initialDate ?? today}
@@ -295,56 +428,29 @@ export default function WorkPlanScreen() {
         onSaveMemo={actorActive ? handleSaveMemo : undefined}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
-        filters={(
-          <>
-            <select
-              value={deptFilter}
-              onChange={(e) => setDeptFilter(e.target.value)}
-              title="부서 필터"
-              className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
-            >
-              <option value="all">전체 부서 ({roster.length}명)</option>
-              {departments.map((d) => (
-                <option key={d} value={d}>
-                  {d} ({roster.filter((u) => u.dept === d).length}명)
-                </option>
-              ))}
-            </select>
-            <div className="relative w-[180px]">
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="이름 또는 부서 검색..."
-                className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
-              />
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
-              {searchKeyword && (
-                <button
-                  type="button"
-                  onClick={() => setSearchKeyword('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            {canEditRosterOrder && (
-              <button
-                type="button"
-                onClick={() => setIsOrderOpen(true)}
-                title="인원 정렬 순서 편집 (관리자 전용, 전사 적용)"
-                className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink hover:border-teal/50"
-              >
-                ↕ 정렬 순서
-              </button>
-            )}
-          </>
-        )}
+        filters={filters}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }
+        onOpenDay={setPanelDate}
+        selectedDate={panelDate}
       />
+      )}
+
+      {/* 하루 상세 옆 패널 — 날짜 머리(팀 월간·목록)를 누르면 */}
+      {panelDate && view !== 'week' && (
+        <WorkPlanDayPanel
+          date={panelDate}
+          today={today}
+          actor={actor}
+          members={scopedMembers}
+          cellOf={cellOf}
+          onDateChange={setPanelDate}
+          onClose={() => setPanelDate(null)}
+          onOpenEntry={handleOpenEntry}
+          onCreate={actorActive ? handleCreate : undefined}
+        />
+      )}
 
       {/* 업무계획 일정 창 — 일반·회의·외근·출장 */}
       {eventModal && (

@@ -3,7 +3,7 @@ import { MapPin, Plane, Users, type LucideIcon } from 'lucide-react';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
-import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
+import { sourceIdOf, type DayCell } from '@/domain/workPlan/dayEntries';
 import { resolveTag, selectableGeneralTags, type WorkPlanTag } from '@/domain/workPlan/tag';
 import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
@@ -51,10 +51,7 @@ export function generalTagOf(tags: WorkPlanTag[], kind: EventKind, tagId: string
 /** 일반 태그 색 점 */
 export const dotClassOf = (colorId: string) => TAG_COLOR_PRESETS.find((p) => p.id === colorId)?.dotColor ?? 'bg-slate-500';
 
-/** 같은 일정이 여러 사람 칸에 나와도 한 번만 — 원본 id 기준 */
-export function sourceIdOf(entry: DayEntry): string {
-  return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;
-}
+export { sourceIdOf } from '@/domain/workPlan/dayEntries';
 
 /** 일정 주인 — 새 일정은 칸 주인, 기존 일정은 등록한 사람 */
 export function ownerOf(target: EventTarget, users: User[]): { id: string; name: string } {
