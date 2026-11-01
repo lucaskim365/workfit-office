@@ -49,6 +49,17 @@ const VIEW_OPTIONS: Array<{ id: WorkPlanView; label: string }> = [
 /** 고른 보기·밀도를 이 브라우저에 기억한다(없거나 막혀 있으면 기본값) */
 const VIEW_STORAGE_KEY = 'workPlan.view';
 const DENSITY_STORAGE_KEY = 'workPlan.density';
+/** 고른 부서(모바일과 같은 값) */
+const DEPT_STORAGE_KEY = 'workPlan.dept';
+/** 첫 사용 안내를 닫았는지 */
+const GUIDE_STORAGE_KEY = 'workPlan.guideSeen';
+function readStoredText(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
     const v = window.localStorage.getItem(key);
@@ -133,7 +144,17 @@ export default function WorkPlanScreen() {
   );
 
   // ── 부서 및 검색 필터 ──
-  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [deptFilter, setDeptFilterState] = useState<string>(() => readStoredText(DEPT_STORAGE_KEY) || 'all');
+  const setDeptFilter = (value: string) => {
+    setDeptFilterState(value);
+    writeStored(DEPT_STORAGE_KEY, value);
+  };
+  /** 첫 사용 안내 — 한 번 닫으면 다시 뜨지 않는다 */
+  const [guideOpen, setGuideOpen] = useState(() => !readStoredText(GUIDE_STORAGE_KEY));
+  const closeGuide = () => {
+    setGuideOpen(false);
+    writeStored(GUIDE_STORAGE_KEY, '1');
+  };
   const [searchKeyword, setSearchKeyword] = useState<string>('');
 
   const create = useCreateWorkPlan();
@@ -201,8 +222,8 @@ export default function WorkPlanScreen() {
 
     const kw = searchKeyword.trim().toLowerCase();
 
-    // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합)
-    if (deptFilter !== 'all') {
+    // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합). 기억해 둔 부서가 없어졌으면 전체
+    if (deptFilter !== 'all' && departments.includes(deptFilter)) {
       const matchedUsers: User[] = [];
       const seenUserIds = new Set<string>();
 
@@ -248,7 +269,7 @@ export default function WorkPlanScreen() {
 
     // 2. 전체(all) 필터
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
-  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
+  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster, departments]);
 
   const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
@@ -424,6 +445,24 @@ export default function WorkPlanScreen() {
           </div>
         }
       />
+
+      {/* 첫 사용 안내 — 처음 한 번만, 닫으면 다시 뜨지 않는다 */}
+      {guideOpen && (
+        <div role="dialog" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-[55] w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
+          <h3 className="mb-2 text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
+          <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
+            <li><b className="text-ink">내 칸 위쪽</b>을 누르면 새 일정</li>
+            <li><b className="text-ink">칸 아래 메모</b>를 누르면 그 자리에서 메모</li>
+            <li><b className="text-ink">날짜·남의 칸</b>을 누르면 그날 전체 일정</li>
+            <li><b className="text-ink">루틴</b>으로 반복 업무를 한 번에</li>
+          </ul>
+          <div className="mt-3 flex justify-end">
+            <button type="button" onClick={closeGuide} className="rounded-lg bg-teal px-3 py-1.5 text-[12px] font-bold text-white">
+              알겠어요
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">

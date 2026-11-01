@@ -12,6 +12,8 @@ import { EventFields, type EventForm } from './EventFields';
 import { FIXED_KINDS, dotClassOf, eventWhenLabel, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
 import { kindEnabled } from './entryRouting';
 import { TimeGrid } from './TimeGrid';
+import { RoutineFields, RoutineScopeFields } from './RoutineFields';
+import { defaultRoutineRule } from '@/domain/workPlan/routine';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
 interface MobileWorkPlanEventSheetProps {
@@ -96,11 +98,34 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
             </div>
             {subtitle && <p className="truncate text-[12px] font-semibold text-ink2">{subtitle}</p>}
           </div>
-          <MoreMenu open={menuOpen} onOpenChange={setMenuOpen} />
+          <MoreMenu
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            routineAllowed={!readOnly && target.mode === 'create' && state.kind === 'ITEM'}
+            routineOn={Boolean(form.routineRule)}
+            onToggleRoutine={() => {
+              form.setRoutineRule(form.routineRule ? null : defaultRoutineRule(state.date));
+              setMenuOpen(false);
+            }}
+          />
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <KindRow form={form} target={target} />
+
+          {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
+          {form.routineRule && (
+            <RoutineFields start={state.date} rule={form.routineRule} onChange={form.setRoutineRule} />
+          )}
+          {state.kind === 'ITEM' && form.editingRoutine && (
+            <RoutineScopeFields
+              date={state.date}
+              routine={form.editingRoutine}
+              scope={form.routineScope}
+              onChange={form.setRoutineScope}
+              readOnly={readOnly}
+            />
+          )}
 
           {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
           {state.kind === 'TRIP' && (
@@ -221,8 +246,20 @@ function Fold({ label, open, onToggle, children }: { label: string; open: boolea
   );
 }
 
-/** ⋯ 메뉴 — 리마인드·루틴은 나중 기능이라 자리만(비활성) */
-function MoreMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** ⋯ 메뉴 — 루틴(새 일반 업무만). 리마인드는 나중 기능이라 자리만(비활성) */
+function MoreMenu({
+  open,
+  onOpenChange,
+  routineAllowed,
+  routineOn,
+  onToggleRoutine,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  routineAllowed: boolean;
+  routineOn: boolean;
+  onToggleRoutine: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -251,9 +288,16 @@ function MoreMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: 
             <Bell size={14} />
             리마인드
           </button>
-          <button type="button" role="menuitem" disabled className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-[12.5px] font-semibold text-ink3 opacity-60">
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={routineOn}
+            disabled={!routineAllowed}
+            onClick={onToggleRoutine}
+            className={`flex w-full items-center gap-2 rounded px-2.5 py-2 text-[12.5px] font-semibold disabled:opacity-50 ${routineOn ? 'bg-blue-soft text-blue' : 'text-ink2 active:bg-panel-alt'}`}
+          >
             <Repeat size={14} />
-            루틴
+            {routineOn ? '루틴 끄기' : '루틴'}
           </button>
         </div>
       )}

@@ -587,6 +587,13 @@ export function WorkPlanTeamMonthlyMatrix({
                       const weekDates = week.days.map((day) => day.dateStr);
                       const { bars: weekBars, entryOf, keys: barKeys } = weekBarsOf(member.id, weekDates);
                       const barLanes = weekBars.reduce((max, bar) => Math.max(max, bar.lane + 1), 0);
+                      // 계획 미작성 — 지나지 않은 주에서 평일(월~금)에 직접 쓴 업무·메모가 하나도 없으면
+                      const unwritten =
+                        week.days[6].dateStr >= todayStr &&
+                        week.days.slice(0, 5).every((day) => {
+                          const c = cellOf(member.id, day.dateStr);
+                          return !c.memo && !c.entries.some((e) => e.source === 'ITEM');
+                        });
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
                         <tr
@@ -610,6 +617,11 @@ export function WorkPlanTeamMonthlyMatrix({
                                   </span>
                                 )}
                               </div>
+                              {unwritten && (
+                                <span className="mt-0.5 rounded bg-amber-soft px-1 py-px text-[9px] font-bold text-amber" title="이번 주 평일에 쓴 업무·메모가 없습니다">
+                                  미작성
+                                </span>
+                              )}
                               <span className="text-[9px] text-ink3 truncate max-w-[80px] mt-0.5">
                                 {/* 업무계획 한정: 대표이사 서브라벨을 '위원회'로 표시 */}
                                 {member.name === '대표이사' || member.position === '대표이사' || member.jobTitle === '대표이사'
