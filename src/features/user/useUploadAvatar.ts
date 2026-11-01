@@ -17,7 +17,8 @@ export function useUploadAvatar() {
       // 이미지 리사이즈 (200×200 max, PNG 변환)
       const resized = await resizeImage(file, 200, 200);
       const blob = await dataUrlToBlob(resized);
-      return await fileStorage.put(`avatars/${userId}/avatar.png`, blob, {
+      // 매번 새 주소로 — 같은 주소에 덮어쓰면 화면 주소가 안 바뀌어 예전 사진이 계속 보이고, 파일 저장소를 같이 쓰는 개발·운영이 같은 ID 끼리 서로 덮어쓴다
+      return await fileStorage.put(`avatars/${userId}/${Date.now()}.png`, blob, {
         contentType: 'image/png',
       });
     } catch (e) {

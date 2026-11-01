@@ -14,6 +14,7 @@ import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { chatTextScaleStyle, useChatTextSize } from './chatTextSize';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /** 모바일 채팅방 목록 — 검색·상대 이름·상단 고정·숨김·새 대화. */
 export default function MobileChatList() {
@@ -124,9 +125,10 @@ export default function MobileChatList() {
                 <div className="relative shrink-0">
                   <span
                     style={{ background: (r.color || '#101830') + '22', color: r.color || '#101830' }}
-                    className="grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
+                    className="relative overflow-hidden grid h-9 w-9 place-items-center rounded-[10px] text-[15px] font-bold"
                   >
                     {isDirect ? r.displayName[0] : r.type === 'dept' ? '🏢' : r.type === 'group' ? '👥' : (r.displayName[0] ?? '#')}
+                    <ChatAvatarPhoto userId={isDirect ? otherId : null} />
                   </span>
                   {isDirect && <PresenceDot presence={otherPresence} size="sm" />}
                 </div>

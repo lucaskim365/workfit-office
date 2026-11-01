@@ -5,6 +5,7 @@ import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndi
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useUsers } from '@/features/user/useUsers';
 import { getAvatarStyle } from '@/features/chat/avatarStyle';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /**
  * 모바일 대화방 명함 — 프로필 사진·이름을 누르면 아래에서 올라온다. 내용은 웹 명함과 같다(ProfileCardContent).
@@ -86,8 +87,9 @@ export function MobileMemberSheet({
                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left active:bg-panel-alt"
               >
                 <span className="relative shrink-0">
-                  <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold">
+                  <span style={{ backgroundColor: avatar.bg, color: avatar.text }} className="relative overflow-hidden grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold">
                     {m.name?.[0] ?? '?'}
+                    <ChatAvatarPhoto userId={m.id} />
                   </span>
                   <PresenceDot presence={p} size="sm" />
                 </span>

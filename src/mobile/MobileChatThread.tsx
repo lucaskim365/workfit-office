@@ -39,6 +39,7 @@ import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 export { getAvatarStyle } from '@/features/chat/avatarStyle';
 import { getAvatarStyle } from '@/features/chat/avatarStyle';
 import { useMobileBack } from './useMobileBack';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
@@ -338,9 +339,10 @@ export default function MobileChatThread() {
               >
                 <span
                   style={{ background: (room?.color || '#101830') + '33', color: '#fff' }}
-                  className="grid h-8 w-8 place-items-center rounded-[10px] text-[13px] font-bold border border-white/20"
+                  className="relative overflow-hidden grid h-8 w-8 place-items-center rounded-[10px] text-[13px] font-bold border border-white/20"
                 >
                   {displayName[0] ?? '?'}
+                  <ChatAvatarPhoto userId={otherId} />
                 </span>
                 <PresenceDot presence={otherPresence} size="sm" />
               </button>
@@ -825,8 +827,9 @@ function CompositeMessageBubble({
             title={`${m.senderName ?? ''} 프로필`}
             className="relative shrink-0 self-end"
           >
-            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="relative overflow-hidden grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
               {m.senderName?.[0] ?? '?'}
+              <ChatAvatarPhoto userId={m.senderId} />
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </button>
@@ -1123,8 +1126,9 @@ function MessageBubble({
             title={`${m.senderName ?? ''} 프로필`}
             className="relative shrink-0 self-end"
           >
-            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
+            <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="relative overflow-hidden grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
+              <ChatAvatarPhoto userId={m.senderId} />
             </span>
             <PresenceDot presence={presenceMap[m.senderId || '']} size="sm" />
           </button>

@@ -3,6 +3,7 @@ import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /**
  * 조직도 트리 다중 선택 — 새 대화 만들기·멤버 초대 공용(모바일).
@@ -58,8 +59,9 @@ function OrgTreeNode({
                 className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left active:bg-panel-alt"
               >
                 <div className="relative shrink-0">
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">
+                  <span className="relative overflow-hidden grid h-8 w-8 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">
                     {u.name[0]}
+                    <ChatAvatarPhoto userId={u.id} />
                   </span>
                   <PresenceDot presence={p} size="sm" />
                 </div>
