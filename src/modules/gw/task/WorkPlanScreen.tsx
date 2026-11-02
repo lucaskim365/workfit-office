@@ -26,7 +26,7 @@ import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
-import type { MinuteRange } from '@/domain/workPlan/timeGrid';
+import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
@@ -315,13 +315,13 @@ export default function WorkPlanScreen() {
     await saveMemo.mutateAsync({ actor: { userId: actor.id, active: actorActive }, ownerUserId: actor.id, date, memoPlan, text });
   };
 
-  /** 내 일반 업무를 다른 날로 옮긴다 — 날짜만 바뀐다 */
-  const handleMoveItem = (item: WorkPlanItem, date: string) => {
+  /** 내 일반 업무를 옮긴다 — 날짜와, 시간표에서 옮겼다면 시각만 바뀐다 */
+  const handleMoveItem = (item: WorkPlanItem, date: string, range?: MinuteRange) => {
     if (!actor) return;
     updateItem.mutate(
-      { actor: { userId: actor.id, active: actorActive }, id: item.id, draft: movedDraft(item, date) },
+      { actor: { userId: actor.id, active: actorActive }, id: item.id, draft: movedDraft(item, date, range) },
       {
-        onSuccess: () => setNotice(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일로 옮겼습니다.`),
+        onSuccess: () => setNotice(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${range ? ` ${toHHmm(range.start)}` : ''}(으)로 옮겼습니다.`),
         onError: (e) => setNotice(e instanceof Error ? e.message : '옮기지 못했습니다.'),
       },
     );
@@ -468,6 +468,7 @@ export default function WorkPlanScreen() {
           cellOf={cellOf}
           onOpenEntry={handleOpenEntry}
           onCreate={actorActive ? handleCreate : undefined}
+          onMoveItem={actorActive ? handleMoveItem : undefined}
         />
       )}
       {(view === 'team' || view === 'teamWeek') && (
