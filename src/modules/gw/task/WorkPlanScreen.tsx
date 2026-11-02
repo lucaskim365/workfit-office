@@ -48,7 +48,6 @@ const VIEW_OPTIONS: Array<{ id: WorkPlanView; label: string }> = [
 ];
 /** 고른 보기·밀도를 이 브라우저에 기억한다(없거나 막혀 있으면 기본값) */
 const VIEW_STORAGE_KEY = 'workPlan.view';
-const DENSITY_STORAGE_KEY = 'workPlan.density';
 /** 고른 부서(모바일과 같은 값) */
 const DEPT_STORAGE_KEY = 'workPlan.dept';
 /** 첫 사용 안내를 닫았는지 */
@@ -276,15 +275,9 @@ export default function WorkPlanScreen() {
     setViewState(next);
     writeStored(VIEW_STORAGE_KEY, next);
   };
-  /** 보기 밀도 — 편하게(기본, 큰 글) / 촘촘하게 */
-  const [density, setDensityState] = useState<'comfy' | 'dense'>(() => readStored(DENSITY_STORAGE_KEY, ['comfy', 'dense'], 'comfy'));
-  const setDensity = (next: 'comfy' | 'dense') => {
-    setDensityState(next);
-    writeStored(DENSITY_STORAGE_KEY, next);
-  };
   /** 주간·내 주간이 보고 있는 주의 월요일 */
   const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? today));
-  /** 하루 상세 옆 패널의 날짜(닫혀 있으면 null) */
+  /** 하루 상세 팝업의 날짜(닫혀 있으면 null) */
   const [panelDate, setPanelDate] = useState<string | null>(null);
 
   /** 보고 있는 달 — 칸 조립(표·일정 창 시간표 공용)을 여기서 한 번 하고 표에 내려 준다 */
@@ -294,7 +287,7 @@ export default function WorkPlanScreen() {
   const dataMonth = weekView ? weekStart.slice(0, 7) : month;
   const monthDates = useMemo(() => {
     const base = monthGridDates(dataMonth);
-    // 옆 패널에서 다른 달로 넘어가도 그날 칸이 있게 그 달 범위를 더한다
+    // 하루 상세 팝업에서 다른 달로 넘어가도 그날 칸이 있게 그 달 범위를 더한다
     if (!panelDate || base.includes(panelDate)) return base;
     return [...new Set([...base, ...monthGridDates(panelDate.slice(0, 7))])].sort();
   }, [dataMonth, panelDate]);
@@ -346,26 +339,6 @@ export default function WorkPlanScreen() {
           }`}
         >
           {option.label}
-        </button>
-      ))}
-    </div>
-  );
-
-  // 보기 밀도 — 주간·월간 표에서만
-  const densitySwitch = (
-    <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기 밀도">
-      {([['comfy', '편하게'], ['dense', '촘촘하게']] as const).map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          role="radio"
-          aria-checked={density === id}
-          onClick={() => setDensity(id)}
-          className={`border-r border-border px-2 py-1.5 text-[11px] font-semibold transition-colors last:border-r-0 ${
-            density === id ? 'bg-panel-alt text-ink' : 'text-ink3 hover:bg-panel-alt'
-          }`}
-        >
-          {label}
         </button>
       ))}
     </div>
@@ -423,8 +396,7 @@ export default function WorkPlanScreen() {
   if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   return (
-    // 옆 패널이 열리면 넓은 화면에서는 그만큼 비켜서 표를 가리지 않는다
-    <div className={`mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 space-y-4 ${panelDate && view !== 'week' ? 'xl:pr-[396px]' : ''}`}>
+    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 space-y-4">
       <GwHead
         icon="🗓️"
         name="업무계획"
@@ -448,7 +420,7 @@ export default function WorkPlanScreen() {
 
       {/* 첫 사용 안내 — 처음 한 번만, 닫으면 다시 뜨지 않는다 */}
       {guideOpen && (
-        <div role="dialog" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-[55] w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
+        <div role="complementary" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-30 w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
           <h3 className="mb-2 text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
           <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
             <li><b className="text-ink">내 칸 위쪽</b>을 누르면 새 일정</li>
@@ -488,7 +460,6 @@ export default function WorkPlanScreen() {
         viewSwitch={viewSwitch}
         weekStart={view === 'teamWeek' ? weekStart : null}
         onWeekChange={setWeekStart}
-        dense={density === 'dense'}
         actor={actor}
         todayStr={initialDate ?? today}
         members={scopedMembers}
@@ -501,12 +472,7 @@ export default function WorkPlanScreen() {
         onSaveMemo={actorActive ? handleSaveMemo : undefined}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
-        filters={(
-          <>
-            {densitySwitch}
-            {filters}
-          </>
-        )}
+        filters={filters}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }
@@ -515,7 +481,7 @@ export default function WorkPlanScreen() {
       />
       )}
 
-      {/* 하루 상세 옆 패널 — 주간·월간에서 날짜 머리나 남의 칸을 누르면 */}
+      {/* 하루 상세 팝업 — 주간·월간에서 날짜 머리나 남의 칸을 누르면 */}
       {panelDate && view !== 'week' && (
         <WorkPlanDayPanel
           date={panelDate}

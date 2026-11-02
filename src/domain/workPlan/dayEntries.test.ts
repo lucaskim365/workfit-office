@@ -4,7 +4,7 @@ import type { StandardScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import type { Reservation } from '@/domain/reservation/schema';
-import { buildDayEntries, indexDayEntries, type DayEntryInput } from './dayEntries';
+import { buildDayEntries, hasPlannedDay, indexDayEntries, type DayEntryInput } from './dayEntries';
 import type { WorkPlanItem } from './item';
 
 const D = '2026-10-20';
@@ -149,4 +149,29 @@ test('메모는 서식 없이, 원본 문서 참조와 함께 — 빈 글이어�
 test('못 찾는 태그는 기타', () => {
   const cell = buildDayEntries('U011', D, { ...empty(), items: [item({ tagId: 'WT-9999' })] });
   assert.deepEqual(cell.entries[0].tag, { name: '기타', colorId: 'slate', unknown: true });
+});
+
+test('hasPlannedDay: 업무·메모·회의·외근·휴가 중 하나라도 있으면 계획이 있는 날', () => {
+  const blank = buildDayEntries('U011', D, empty());
+  assert.equal(hasPlannedDay(blank), false);
+  assert.equal(hasPlannedDay(buildDayEntries('U011', D, { ...empty(), items: [item()] })), true);
+  // 회의 — 주최자도 참석자도
+  assert.equal(hasPlannedDay(buildDayEntries('U011', D, { ...empty(), events: [event()] })), true);
+  assert.equal(hasPlannedDay(buildDayEntries('U012', D, { ...empty(), events: [event()] })), true);
+  // 직접 등록 외근(동행 포함)
+  assert.equal(hasPlannedDay(buildDayEntries('U012', D, { ...empty(), outsideWorks: [outside()] })), true);
+  // 결재 완료 휴가·외근·출장
+  assert.equal(hasPlannedDay(buildDayEntries('U011', D, { ...empty(), approvedSchedules: [schedule()] })), true);
+  assert.equal(
+    hasPlannedDay(buildDayEntries('U011', D, { ...empty(), approvedSchedules: [schedule({ category: 'TRIP', docType: '출장' })] })),
+    true,
+  );
+});
+
+test('hasPlannedDay: 캘린더의 휴가·외근 일정은 계획, 사내행사만 있으면 계획이 없는 날', () => {
+  const vacation = buildDayEntries('U011', D, { ...empty(), events: [event({ eventType: 'VACATION', title: '연차', attendeeUserIds: [] })] });
+  assert.equal(hasPlannedDay(vacation), true);
+  const companyEvent = buildDayEntries('U011', D, { ...empty(), events: [event({ eventType: 'COMPANY_EVENT', title: '창립기념일', attendeeUserIds: [] })] });
+  assert.equal(companyEvent.entries.length, 1);
+  assert.equal(hasPlannedDay(companyEvent), false);
 });

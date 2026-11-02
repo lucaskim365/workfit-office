@@ -208,6 +208,15 @@ export function indexDayEntries(input: DayEntryInput, dates: string[]): (userId:
   };
 }
 
+/**
+ * 그날 계획이 있는지 — 직접 쓴 업무·메모, 회의, 외근·출장, 휴가 중 하나라도 있으면 있다.
+ * 사내행사(전사 일정)는 본인 계획이 아니라 세지 않는다. '미작성' 표시 판단에 쓴다.
+ */
+export function hasPlannedDay(cell: DayCell): boolean {
+  if (cell.memo) return true;
+  return cell.entries.some((e) => e.source !== 'CALENDAR' || e.event?.eventType !== 'COMPANY_EVENT');
+}
+
 export function buildDayEntries(userId: string, date: string, input: DayEntryInput): DayCell {
   return indexDayEntries(input, [date])(userId, date);
 }

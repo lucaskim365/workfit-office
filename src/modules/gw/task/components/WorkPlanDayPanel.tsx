@@ -106,7 +106,7 @@ interface WorkPlanDayPanelProps {
 }
 
 /**
- * 하루 상세 옆 패널 — 날짜 머리를 누르면 오른쪽에 그날 모든 사람의 일정을 시간순으로 펼친다.
+ * 하루 상세 팝업 — 날짜 머리나 남의 칸을 누르면 가운데 창에 그날 모든 사람의 일정을 시간순으로 펼친다.
  * 표를 가리지 않게 화면 오른쪽에 붙고, 위 요약 칩으로 갈래(회의·외근·출장·휴가·업무)를 걸러 본다.
  */
 export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateChange, onClose, onOpenEntry, onCreate }: WorkPlanDayPanelProps) {
@@ -122,16 +122,20 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('[role="dialog"]')) onClose();
+      // 위에 일정 창이 또 떠 있으면 그 창이 먼저 닫힌다
+      if (e.key === 'Escape' && !e.defaultPrevented && document.querySelectorAll('[role="dialog"]').length <= 1) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   return (
-    <aside
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <section
+      role="dialog"
+      aria-modal="true"
       aria-label={`${dateLabel(date)} 일정`}
-      className="fixed bottom-0 right-0 top-[var(--shell-top)] z-40 flex w-[min(380px,100vw)] flex-col border-l border-border bg-panel shadow-xl"
+      className="flex max-h-[min(720px,calc(100vh-2rem))] w-[min(460px,100%)] flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
     >
       <div className="flex items-center gap-1 border-b border-border px-3 py-2">
         <button type="button" aria-label="전날" onClick={() => onDateChange(shiftDate(date, -1))} className="rounded p-1 text-ink2 hover:bg-panel-alt">
@@ -189,6 +193,7 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
           </section>
         )}
       </div>
-    </aside>
+    </section>
+    </div>
   );
 }

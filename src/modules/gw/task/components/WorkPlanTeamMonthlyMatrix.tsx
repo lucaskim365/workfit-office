@@ -7,7 +7,7 @@ import {
 } from '@/domain/calendarEvent/calendarDate';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
-import type { DayCell, DayEntry, MemoPlanRef } from '@/domain/workPlan/dayEntries';
+import { hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
 import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
@@ -85,25 +85,20 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onOpenConfig?: () => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
-  /** 날짜 머리 누르기 → 하루 상세 옆 패널 */
+  /** 날짜 머리 누르기 → 하루 상세 팝업 */
   onOpenDay?: (date: string) => void;
-  /** 옆 패널에 열린 날짜 — 머리에 표시 */
+  /** 하루 상세에 열린 날짜 — 머리에 표시 */
   selectedDate?: string | null;
   /** 주 보기 — 주어지면 그 월요일이 든 한 주만 그리고 상단 바는 주 이동 */
   weekStart?: string | null;
   onWeekChange?: (monday: string) => void;
   /** 상단 바 맨 앞에 놓일 보기 전환 */
   viewSwitch?: ReactNode;
-  /** 촘촘하게(작은 글) — 기본은 편하게 */
-  dense?: boolean;
 }
 
-/** 보기 밀도별 글 크기 — 편하게(기본) / 촘촘하게(예전 크기) */
-const DENSITY = {
-  comfy: { chip: 'text-[11px] py-[3px]', time: 'text-[10px]', memo: 'text-[11.5px]', mark: 10, bar: 'text-[10.5px]' },
-  dense: { chip: 'text-[9px] py-0.5', time: 'text-[8px]', memo: 'text-[10px]', mark: 8, bar: 'text-[9px]' },
-} as const;
-type DensityLook = (typeof DENSITY)[keyof typeof DENSITY];
+/** 칸 안 글 크기 */
+const LOOK = { chip: 'text-[11px] py-[3px]', time: 'text-[10px]', memo: 'text-[11.5px]', mark: 10, bar: 'text-[10.5px]' } as const;
+type DensityLook = typeof LOOK;
 
 /** 'YYYY-MM-DD' 에 일수를 더한다(UTC) */
 const plusDays = (date: string, days: number) => {
@@ -133,9 +128,8 @@ export function WorkPlanTeamMonthlyMatrix({
   weekStart = null,
   onWeekChange,
   viewSwitch,
-  dense = false,
 }: WorkPlanTeamMonthlyMatrixProps) {
-  const look = dense ? DENSITY.dense : DENSITY.comfy;
+  const look = LOOK;
   // 내 행은 주마다 맨 위에
   const members = useMemo(() => {
     const me = allMembers.find((m) => m.id === actor.id);
@@ -587,13 +581,10 @@ export function WorkPlanTeamMonthlyMatrix({
                       const weekDates = week.days.map((day) => day.dateStr);
                       const { bars: weekBars, entryOf, keys: barKeys } = weekBarsOf(member.id, weekDates);
                       const barLanes = weekBars.reduce((max, bar) => Math.max(max, bar.lane + 1), 0);
-                      // 계획 미작성 — 지나지 않은 주에서 평일(월~금)에 직접 쓴 업무·메모가 하나도 없으면
+                      // 계획 미작성 — 지나지 않은 주에서 평일(월~금)에 업무·메모·회의·외근·휴가가 하나도 없으면
                       const unwritten =
                         week.days[6].dateStr >= todayStr &&
-                        week.days.slice(0, 5).every((day) => {
-                          const c = cellOf(member.id, day.dateStr);
-                          return !c.memo && !c.entries.some((e) => e.source === 'ITEM');
-                        });
+                        week.days.slice(0, 5).every((day) => !hasPlannedDay(cellOf(member.id, day.dateStr)));
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
                         <tr
@@ -618,7 +609,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                 )}
                               </div>
                               {unwritten && (
-                                <span className="mt-0.5 rounded bg-amber-soft px-1 py-px text-[9px] font-bold text-amber" title="이번 주 평일에 쓴 업무·메모가 없습니다">
+                                <span className="mt-0.5 rounded bg-amber-soft px-1 py-px text-[9px] font-bold text-amber" title="이번 주 평일에 업무·메모·회의·외근·휴가가 없습니다">
                                   미작성
                                 </span>
                               )}
@@ -647,7 +638,7 @@ export function WorkPlanTeamMonthlyMatrix({
                               ? 'bg-blue-50/40 dark:bg-blue-950/20'
                               : 'bg-transparent hover:bg-panel-alt/20';
                             const cellBorderClass = dayColBorderClass(d.isToday);
-                            // 내 칸을 누르면 새 일정, 남의 칸을 누르면 그날 상세(옆 패널)
+                            // 내 칸을 누르면 새 일정, 남의 칸을 누르면 그날 상세(팝업)
                             const onCellClick = isMe
                               ? onCreate ? () => onCreate(dayStr, member) : undefined
                               : onOpenDay ? () => onOpenDay(dayStr) : undefined;
