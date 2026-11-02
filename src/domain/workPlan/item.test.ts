@@ -42,6 +42,14 @@ test('메모 1000자 초과 실패', () => {
   assert.equal(workPlanItemSchema.safeParse({ ...base, memo: 'a'.repeat(1000) }).success, true);
 });
 
+test('시간표에서 옮기면 시각도 바뀌고, 종료 미정은 그대로 남고, 24시는 23:59로 저장한다', () => {
+  const base = { id: 'WI-20261102-0001', ownerUserId: 'U1', date: '2026-11-02', allDay: false, startTime: '09:00', endTime: '10:00', tagId: 't', title: '보고서', memo: '', createdBy: 'U1', createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' };
+  const moved = movedDraft(base, '2026-11-03', { start: 840, end: 930 });
+  assert.deepEqual([moved.date, moved.startTime, moved.endTime], ['2026-11-03', '14:00', '15:30']);
+  assert.equal(movedDraft({ ...base, endTime: null }, '2026-11-03', { start: 840, end: 870 }).endTime, null);
+  assert.equal(movedDraft(base, '2026-11-03', { start: 1380, end: 1440 }).endTime, '23:59');
+});
+
 test('옮기면 날짜만 바뀌고 시각·태그·제목·메모는 그대로다', () => {
   const draft = movedDraft({ id: 'WI-20261102-0001', ownerUserId: 'U1', date: '2026-11-02', allDay: false, startTime: '09:00', endTime: '10:00', tagId: 't', title: '보고서', memo: '메모', createdBy: 'U1', createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' }, '2026-11-05');
   assert.deepEqual(draft, { date: '2026-11-05', allDay: false, startTime: '09:00', endTime: '10:00', tagId: 't', title: '보고서', memo: '메모' });
