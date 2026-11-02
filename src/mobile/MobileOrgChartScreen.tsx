@@ -17,6 +17,7 @@ import {
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
+import { displayEmpNo, publicEmailOf } from '@/domain/user/publicContact';
 import MobileCommonHeader from './MobileCommonHeader';
 import MobileSeatLayoutView from './MobileSeatLayoutView';
 
@@ -531,7 +532,7 @@ function EmergencyContactMobileView({
           u.dept.includes('위원회') ||
           u.name === '대표이사';
         const phone = isPrivate ? '' : (profile?.phone || (u as any).phone || '');
-        const email = isPrivate ? '' : (u.email || '');
+        const email = publicEmailOf(u) ?? (isPrivate ? '' : (u.email || ''));
 
         return {
           id: u.id,
@@ -539,7 +540,7 @@ function EmergencyContactMobileView({
           dept: u.dept,
           position: u.position,
           jobTitle: u.jobTitle || '',
-          empNo: u.empNo || '—',
+          empNo: displayEmpNo(u) || '—',
           phone,
           email,
           isPrivate,
@@ -631,11 +632,12 @@ function EmployeeDetailModal({
     user.name === '대표이사';
 
   const phone = isPrivate ? '' : (profile?.phone || (user as any).phone || '');
-  const email = isPrivate ? '' : (user.email || '');
+  const email = publicEmailOf(user) ?? (isPrivate ? '' : (user.email || ''));
+  const empNo = displayEmpNo(user);
 
   const handleCopyEmpNo = () => {
-    if (!user.empNo) return;
-    void navigator.clipboard.writeText(user.empNo);
+    if (!empNo) return;
+    void navigator.clipboard.writeText(empNo);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -679,13 +681,13 @@ function EmployeeDetailModal({
             <div className="mt-0.5 text-[12px] font-bold text-teal">
               {user.dept} · {user.position} {user.jobTitle && `(${user.jobTitle})`}
             </div>
-            {user.empNo && (
+            {empNo && (
               <button
                 type="button"
                 onClick={handleCopyEmpNo}
                 className="mt-1 flex items-center gap-1 text-[10px] text-ink3 font-mono hover:text-ink transition-colors"
               >
-                <span>사번: #{user.empNo}</span>
+                <span>사번: #{empNo}</span>
                 {copied ? <Check size={11} className="text-teal" /> : <Copy size={11} />}
               </button>
             )}
