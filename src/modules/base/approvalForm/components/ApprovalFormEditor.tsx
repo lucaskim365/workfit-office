@@ -18,8 +18,10 @@ import {
   HEADER_ITEM_LABEL,
   LETTERHEAD_ITEMS,
   LETTERHEAD_ITEM_LABEL,
+  letterheadSiteOptions,
   type LetterheadConfig,
 } from '@/domain/approvalForm/headerItems';
+import { useCompanySites } from '@/features/companySite/useCompanySites';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
 import { useRouteRules } from '@/features/gw/useRouteRules';
@@ -117,11 +119,20 @@ function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onCh
   );
 }
 
-/** 회사 정보 칸 설정 — 보일 항목, 연구소 주소(회사 정보 화면에 없어 여기서 입력) */
+/** 회사 정보 칸 설정 — 보일 항목, 사업장 주소로 보일 사업장(회사 정보 화면의 사업장 현황) */
 function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onChange: (v: LetterheadConfig) => void }) {
+  const { data: sites } = useCompanySites();
+  const siteOptions = letterheadSiteOptions(sites);
   const toggle = (item: LetterheadConfig['items'][number], on: boolean) => {
     const items = on ? LETTERHEAD_ITEMS.filter((i) => i === item || value.items.includes(i)) : value.items.filter((i) => i !== item);
     onChange({ ...value, items });
+  };
+  // 고른 목록이 없으면(처음) 전부 보이는 상태 — 하나를 끄면 그때부터 고른 목록으로 저장
+  const siteOn = (name: string) => !value.siteNames || value.siteNames.includes(name);
+  const toggleSite = (name: string, on: boolean) => {
+    const current = siteOptions.map((s) => s.name).filter(siteOn);
+    const next = on ? siteOptions.map((s) => s.name).filter((n) => n === name || current.includes(n)) : current.filter((n) => n !== name);
+    onChange({ ...value, siteNames: next });
   };
   return (
     <div className="space-y-2 border-t border-border/60 pt-1.5">
@@ -139,16 +150,29 @@ function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onCh
           </label>
         ))}
       </div>
-      <label className="block space-y-0.5">
-        <span className="block text-[10.5px] text-ink3">연구소 주소</span>
-        <input
-          value={value.labAddress}
-          maxLength={200}
-          placeholder="연구소 주소를 입력하세요"
-          onChange={(e) => onChange({ ...value, labAddress: e.target.value })}
-          className="w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal"
-        />
-      </label>
+      {value.items.includes('labAddress') && (
+        <div className="space-y-1">
+          <span className="block text-[10.5px] text-ink3">보일 사업장 (회사 정보의 사업장 현황)</span>
+          {siteOptions.length === 0 ? (
+            <p className="text-[11px] text-ink3">회사 정보에 주소가 있는 사업장이 없습니다</p>
+          ) : (
+            siteOptions.map((site) => (
+              <label key={site.name} className="flex cursor-pointer items-start gap-1.5 text-[11.5px] text-ink2">
+                <input
+                  type="checkbox"
+                  checked={siteOn(site.name)}
+                  onChange={(e) => toggleSite(site.name, e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+                />
+                <span className="min-w-0">
+                  <span className="font-semibold text-ink">{site.name}</span>
+                  <span className="block break-words text-[10.5px] text-ink3">{site.addr}</span>
+                </span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
