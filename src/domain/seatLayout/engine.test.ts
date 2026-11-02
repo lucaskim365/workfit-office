@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addBlock, assignSeat, canPlace, nextBlockId, placeBlock, rectFromCells, rectsOverlap, removeBlock, resizeGrid, updateBlock } from './engine';
+import { addBlock, assignSeat, canPlace, nextBlockId, placeBlock, rectFromCells, rectsOverlap, removeBlock, resizeGrid, seatPersonMatches, updateBlock } from './engine';
 import { buildHqTemplateGrid } from './template';
 import type { SeatBlock, SeatGrid } from './schema';
 
@@ -8,6 +8,15 @@ const block = (id: string, col: number, row: number, colSpan = 4, rowSpan = 2, u
   id, kind: 'seat', col, row, colSpan, rowSpan, userId, label: '',
 });
 const grid = (...blocks: SeatBlock[]): SeatGrid => ({ cols: 20, rows: 10, blocks });
+
+test('좌석 찾기는 이름·부서·직급에서 찾고 직급이 없어도 된다', () => {
+  const person = { name: '홍길동', dept: 'AX PMO팀', position: '차장' };
+  assert.equal(seatPersonMatches(person, '길동'), true);
+  assert.equal(seatPersonMatches(person, 'ax'), true);
+  assert.equal(seatPersonMatches(person, '차장'), true);
+  assert.equal(seatPersonMatches(person, '부장'), false);
+  assert.equal(seatPersonMatches({ name: '홍길동', dept: 'AX', position: null }, '부장'), false);
+});
 
 test('겹침 판정 — 맞닿기만 하면 겹치지 않는다', () => {
   assert.equal(rectsOverlap(block('a', 0, 0), block('b', 4, 0)), false);

@@ -3,7 +3,7 @@ import { LayoutTemplate, Minus, MousePointer2, Pencil, Plus, Search, Square, Tra
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { User } from '@/domain/user/schema';
 import { SEAT_BLOCK_KIND_LABELS, type SeatBlock, type SeatBlockKind, type SeatGrid, type SeatLayout } from '@/domain/seatLayout/schema';
-import { addBlock, assignSeat, canPlace, placeBlock, rectFromCells, removeBlock, resizeGrid, updateBlock, type CellRect } from '@/domain/seatLayout/engine';
+import { addBlock, assignSeat, canPlace, placeBlock, rectFromCells, removeBlock, resizeGrid, seatPersonMatches, updateBlock, type CellRect } from '@/domain/seatLayout/engine';
 import { buildHqTemplateGrid } from '@/domain/seatLayout/template';
 import { USER_PRESENCE_META, USER_PRESENCE_STATUSES, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import { useRemoveSeatLayout, useSaveSeatLayout, useSeatLayouts } from '@/features/seatLayout/useSeatLayouts';
@@ -12,10 +12,10 @@ import { usePermission } from '@/features/auth/usePermission';
 import { Button } from '@/shared/ui/Button';
 
 /** 한 칸 크기(px, 확대 100% 기준) — 엑셀 한 열 = 4칸, 한 행 = 2칸 */
-const UNIT_W = 36;
-const UNIT_H = 28;
+export const UNIT_W = 36;
+export const UNIT_H = 28;
 /** 배치도 확대 단계(%) — 기본은 '맞춤'(화면 폭에 맞춘 배율) */
-const ZOOM_STEPS = [50, 60, 75, 90, 100, 125, 150];
+export const ZOOM_STEPS = [50, 60, 75, 90, 100, 125, 150];
 const FIT_MIN = 50;
 
 type Tool = 'select' | SeatBlockKind;
@@ -88,20 +88,8 @@ export function SeatLayoutView({
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const statusOf = (userId: string): UserPresenceStatus => presences[userId]?.status ?? 'OFFLINE';
 
-  /** 이 배치도에 앉은 사람들의 근태 집계 */
-  const statusCounts = useMemo(() => {
-    const counts = new Map<UserPresenceStatus, number>();
-    for (const b of grid?.blocks ?? []) {
-      if (!b.userId || !userMap.has(b.userId)) continue;
-      const st = presences[b.userId]?.status ?? 'OFFLINE';
-      counts.set(st, (counts.get(st) ?? 0) + 1);
-    }
-    return counts;
-  }, [grid, userMap, presences]);
-
   const kw = keyword.trim().toLowerCase();
-  const matches = (u: User | undefined) =>
-    Boolean(u && (u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw) || (u.position ?? '').toLowerCase().includes(kw)));
+  const matches = (u: User | undefined) => Boolean(u && seatPersonMatches(u, kw));
 
   const setGrid = (fn: (g: SeatGrid) => SeatGrid) => setDraft((d) => (d ? { ...d, grid: fn(d.grid) } : d));
 
@@ -288,19 +276,12 @@ export function SeatLayoutView({
         )}
 
         {shown && !editing && (
-          <div className="flex flex-wrap items-center gap-2.5 border-l border-border pl-3 text-[10.5px] font-semibold text-ink3">
-            {USER_PRESENCE_STATUSES.map((st) => {
-              const n = statusCounts.get(st) ?? 0;
-              if (!n) return null;
-              const meta = USER_PRESENCE_META[st];
-              return (
-                <span key={st} className="inline-flex items-center gap-1">
-                  <span className={`h-2 w-2 rounded-full ${meta.dotColor}`} />
-                  {meta.label} <b className="text-ink2">{n}</b>
-                </span>
-              );
-            })}
-          </div>
+          <SeatStatusCounts
+            blocks={grid?.blocks ?? []}
+            userMap={userMap}
+            presences={presences}
+            className="flex flex-wrap items-center gap-2.5 border-l border-border pl-3 text-[10.5px] font-semibold text-ink3"
+          />
         )}
 
         {editing && (
@@ -466,6 +447,45 @@ export function SeatLayoutView({
   );
 }
 
+/** 이 배치도에 앉은 사람들의 근태 집계 */
+export function SeatStatusCounts({
+  blocks,
+  userMap,
+  presences,
+  className,
+}: {
+  blocks: SeatBlock[];
+  userMap: Map<string, User>;
+  presences: ReturnType<typeof useAllUserPresences>;
+  className: string;
+}) {
+  const counts = useMemo(() => {
+    const next = new Map<UserPresenceStatus, number>();
+    for (const b of blocks) {
+      if (!b.userId || !userMap.has(b.userId)) continue;
+      const st = presences[b.userId]?.status ?? 'OFFLINE';
+      next.set(st, (next.get(st) ?? 0) + 1);
+    }
+    return next;
+  }, [blocks, userMap, presences]);
+
+  return (
+    <div className={className}>
+      {USER_PRESENCE_STATUSES.map((st) => {
+        const n = counts.get(st) ?? 0;
+        if (!n) return null;
+        const meta = USER_PRESENCE_META[st];
+        return (
+          <span key={st} className="inline-flex items-center gap-1">
+            <span className={`h-2 w-2 rounded-full ${meta.dotColor}`} />
+            {meta.label} <b className="text-ink2">{n}</b>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function GridStepper({ label, value, onMinus, onPlus }: { label: string; value: number; onMinus: () => void; onPlus: () => void }) {
   return (
     <span className="flex items-center rounded-lg border border-border">
@@ -478,7 +498,7 @@ function GridStepper({ label, value, onMinus, onPlus }: { label: string; value: 
 }
 
 /** 격자 위 블록 한 개 — 좌석(이름·직급, 부서, 근태) / 공간 / 글자 */
-function SeatBlockBox({
+export function SeatBlockBox({
   block,
   rect,
   uw,
