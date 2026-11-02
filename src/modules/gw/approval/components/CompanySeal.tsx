@@ -1,12 +1,23 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
+import { markUrlOf } from '@/domain/companyMark/schema';
+
+/** 이 문서가 쓸 직인(회사 로고·직인 목록의 id) — 없으면 대표 직인. 문서 보기·작성 화면이 서식 설정으로 감싼다 */
+const SealMarkContext = createContext<string | undefined>(undefined);
+export function SealMarkProvider({ markId, children }: { markId: string | undefined; children: ReactNode }) {
+  return <SealMarkContext.Provider value={markId}>{children}</SealMarkContext.Provider>;
+}
 
 /**
- * 회사 직인 — 결재 완료(stamped)이고 회사 정보에 직인이 등록돼 있으면 이미지, 아니면 흐린 "(직인)" 자리 표시.
+ * 회사 직인 — 결재 완료(stamped)이고 직인이 등록돼 있으면 이미지, 아니면 흐린 "(직인)" 자리 표시.
+ * 서식이 고른 직인이 있으면 그것, 없으면 회사 정보의 대표 직인.
  */
 export function SealImage({ stamped, size = 64 }: { stamped: boolean; size?: number }) {
   const { data: info } = useCompanyInfo();
-  const url = info?.sealUrl;
+  const { data: marks } = useCompanyMarks();
+  const markId = useContext(SealMarkContext);
+  const url = markUrlOf(marks, 'seal', markId, info?.sealUrl);
   if (stamped && url) {
     // maxWidth none — 글자 끝에 띄운 칸처럼 폭이 0인 곳에서도 공통 스타일(img max-width:100%)에 눌려 폭 0으로 사라지지 않게
     return (

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_LETTERHEAD, headerShown, letterheadLines, letterheadSiteOptions, sealTextOf, titleFieldOf, withSealTexts } from './headerItems';
+import { DEFAULT_LETTERHEAD, headerShown, letterheadEntries, letterheadLines, letterheadSiteOptions, sealTextOf, titleFieldOf, withSealTexts } from './headerItems';
 import { docNoOf, DOC_NO_VALUE_KEY } from '../approvalDoc/docNo';
 
 test('머리 항목 — 목록에 없는 서식(기존 서식)은 모두 보인다', () => {
@@ -67,4 +67,33 @@ test('직인 문구 고정 — 상신할 때 그 시점 문구를 값에 남겨,
   assert.deepEqual(withSealTexts(fields, { seal: '대표이사' }), { seal: '대표이사' });
   const values = { to: 'x' };
   assert.equal(withSealTexts([{ key: 'to', label: '수신', type: '텍스트' }], values), values);
+});
+
+const COMPANY = { address: '서울 동작구 7층', tel: '02-467', fax: '02-468', homepage: 'www.workfit.kr', email: 'a@workfit.kr' };
+const SITES2 = [{ name: '연구소', addr: '서울 동작구 9층', active: true }];
+
+test('회사 정보 머리글 — 항목 이름은 서식에서 바꾼 이름, 비우면 기본 이름', () => {
+  const lines = letterheadLines(
+    { ...DEFAULT_LETTERHEAD, labels: { address: 'AI Factory base Camp', 'site:연구소': 'AI Factory 기업부설 연구소', tel: '  ' } },
+    COMPANY,
+    SITES2,
+  );
+  assert.deepEqual(lines.slice(0, 3).map((l) => l.label), ['AI Factory base Camp', 'AI Factory 기업부설 연구소', '대표전화']);
+});
+
+test('회사 정보 머리글 — 고른 순서대로, 순서 목록에 없는 줄은 기본 순서로 뒤에', () => {
+  const lines = letterheadLines({ ...DEFAULT_LETTERHEAD, order: ['email', 'site:연구소', 'address'] }, COMPANY, SITES2);
+  assert.deepEqual(lines.map((l) => l.key), ['email', 'site:연구소', 'address', 'tel', 'fax', 'homepage']);
+});
+
+test('회사 정보 머리글 — 한 줄 전체로 고른 줄 표시', () => {
+  const lines = letterheadLines({ ...DEFAULT_LETTERHEAD, fullRow: ['address', 'site:연구소'] }, COMPANY, SITES2);
+  assert.deepEqual(lines.filter((l) => l.full).map((l) => l.key), ['address', 'site:연구소']);
+});
+
+test('회사 정보 설정 목록 — 값이 비어도 고를 수 있게 모든 후보를, 켜짐 여부와 함께', () => {
+  const entries = letterheadEntries({ ...DEFAULT_LETTERHEAD, items: ['address', 'labAddress', 'tel'], siteNames: [] }, { address: 'x' }, SITES2);
+  assert.deepEqual(entries.map((e) => [e.key, e.shown]), [
+    ['address', true], ['site:연구소', false], ['tel', true], ['fax', false], ['homepage', false], ['email', false],
+  ]);
 });

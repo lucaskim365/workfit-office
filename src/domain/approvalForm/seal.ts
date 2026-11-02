@@ -10,6 +10,11 @@ export function isSealForm(fields: FormField[] | undefined): boolean {
   );
 }
 
+/** 문서가 쓸 직인 — 직인 칸·직인 표 칸 중 처음으로 직인을 고른 칸의 것. 없으면 undefined(대표 직인) */
+export function sealMarkIdOf(fields: FormField[] | undefined): string | undefined {
+  return (fields ?? []).find((f) => f.markId && isSealForm([f]))?.markId;
+}
+
 /** 결재가 끝난 문서(시행대기 포함) — 직인 서식은 결재란을 절대 보이지 않는다 */
 const SEAL_DONE_STATUSES = ['완료', '시행대기', '취소완료'];
 /** 일반 서식이 종이에 결재란을 보이는 상태(진행 중에는 상세 화면의 결재선 흐름도로 본다) */

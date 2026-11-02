@@ -422,6 +422,13 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    id: 'companyMarks',
+    name: '회사 로고·직인',
+    // 회사 정보 화면에서 여러 개 등록, 대표는 companyInfo.logoUrl·sealUrl 에 복사. 결재서식은 칸마다 id 를 고른다
+    attributes: [S('id', 64, true), S('kind', 16, true), S('name', 64, true), S('url', 1000, true), S('path', 300), INT('order')],
+    indexes: [],
+  },
+  {
     id: 'commonCodes',
     name: '공통코드',
     attributes: [

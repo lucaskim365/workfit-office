@@ -63,6 +63,8 @@ export const formFieldSchema = z.object({
   isSecret: z.boolean().default(false),
   /** 대외 문서(결재 완료 후 거래처용 모양·발주서 PDF)에서 숨김 */
   hideOnExternal: z.boolean().optional(),
+  /** type='직인'·직인 칸이 있는 '표' — 쓸 직인(회사 로고·직인 목록 id). 없으면 대표 직인 */
+  markId: z.string().max(64).optional(),
   /** type='자동번호' 의 번호 모양(접두어·날짜·자릿수·초기화 주기) — [[autoNumber]] */
   autoNumber: autoNumberConfigSchema.optional(),
   /** type='회사정보' 의 표시 항목과 연구소 주소 — [[headerItems]] */

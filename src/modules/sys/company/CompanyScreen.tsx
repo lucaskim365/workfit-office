@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Pill } from '@/shared/ui/Pill';
 import { Toggle } from '@/shared/ui/Toggle';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
-import { useCompanyInfo, useSaveCompanyInfo, useUploadCompanyLogo, useUploadCompanySeal } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyInfo, useSaveCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { CompanyMarkList } from './CompanyMarkList';
 import type { CompanyInfo } from '@/domain/companyInfo/schema';
 import { useCompanySites, useSaveCompanySite, useRemoveCompanySite } from '@/features/companySite/useCompanySites';
 import type { CompanySite } from '@/domain/companySite/schema';
@@ -56,44 +57,6 @@ export default function CompanyScreen() {
     setForm((f) => (f ? { ...f, [k]: v } : f));
   const infoDirty = !!form && !!info && JSON.stringify(form) !== JSON.stringify(info);
 
-  // 회사 로고 업로드 — 이미지는 Storage, 결과 URL·경로는 폼에 반영(자동저장이 Firestore에 영구화).
-  const uploadLogo = useUploadCompanyLogo();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const onPickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = ''; // 같은 파일 재선택 허용
-    if (!f) return;
-    if (!f.type.startsWith('image/')) { alert('이미지 파일만 업로드할 수 있습니다.'); return; }
-    if (f.size > 5 * 1024 * 1024) { alert('5MB 이하 이미지만 업로드할 수 있습니다.'); return; }
-    uploadLogo.mutate(
-      { file: f, prevPath: form?.logoPath || undefined },
-      {
-        onSuccess: ({ url, path }) => setForm((f0) => (f0 ? { ...f0, logoUrl: url, logoPath: path } : f0)),
-        onError: () => alert('로고 업로드에 실패했습니다. 네트워크·Storage 설정을 확인하세요.'),
-      },
-    );
-  };
-  const onRemoveLogo = () => setForm((f0) => (f0 ? { ...f0, logoUrl: '', logoPath: '' } : f0));
-
-  // 회사 직인 — 직인 서식 문서가 결재 완료되면 찍힘
-  const uploadSeal = useUploadCompanySeal();
-  const sealRef = useRef<HTMLInputElement>(null);
-  const onPickSeal = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    if (!f.type.startsWith('image/')) { alert('이미지 파일만 업로드할 수 있습니다.'); return; }
-    if (f.size > 5 * 1024 * 1024) { alert('5MB 이하 이미지만 업로드할 수 있습니다.'); return; }
-    uploadSeal.mutate(
-      { file: f, prevPath: form?.sealPath || undefined },
-      {
-        onSuccess: ({ url, path }) => setForm((f0) => (f0 ? { ...f0, sealUrl: url, sealPath: path } : f0)),
-        onError: () => alert('직인 업로드에 실패했습니다.'),
-      },
-    );
-  };
-  const onRemoveSeal = () => setForm((f0) => (f0 ? { ...f0, sealUrl: '', sealPath: '' } : f0));
-
   // 사업장 인라인 편집 — name(PK)별로 변경분을 draft에 보관, 저장 시 Firestore로 영구 반영.
   const { data: sites, isLoading } = useCompanySites();
   const saveSite = useSaveCompanySite();
@@ -117,6 +80,24 @@ export default function CompanyScreen() {
     });
     setNeu({ kind: '제조장', active: true });
     setAdding(false);
+  };
+  // 사업장명 고치기 — 이름이 문서 키라 새 이름으로 저장한 뒤 예전 이름을 지운다(입력을 마칠 때 한 번)
+  const onRename = async (oldName: string, input: HTMLInputElement) => {
+    const next = input.value.trim();
+    if (!next || next === oldName) { input.value = oldName; return; }
+    if (rows.some((r) => r.name === next)) { alert('이미 존재하는 사업장명입니다.'); input.value = oldName; return; }
+    const base = rows.find((r) => r.name === oldName);
+    if (!base) return;
+    const pendingEdit = draft[oldName];
+    // 예전 이름으로 자동저장이 다시 일어나지 않게 먼저 비운다
+    setDraft((d) => { const n = { ...d }; delete n[oldName]; return n; });
+    try {
+      await saveSite.mutateAsync({ ...base, ...pendingEdit, name: next });
+      await removeSite.mutateAsync(oldName);
+    } catch {
+      alert('사업장명을 바꾸지 못했습니다.');
+      input.value = oldName;
+    }
   };
   const onRemove = (name: string) => {
     if (!window.confirm(`'${name}' 사업장을 삭제하시겠습니까?\n삭제 후 되돌릴 수 없습니다.`)) return;
@@ -212,66 +193,18 @@ export default function CompanyScreen() {
             <FRow label="보고서 머리말"><TextField value={v('reportHeader')} onChange={(e) => set('reportHeader', e.target.value)} /></FRow>
             <FRow label="문서 푸터"><TextField value={v('docFooter')} onChange={(e) => set('docFooter', e.target.value)} /></FRow>
             <FRow label="회사 로고" multiline>
-              <div className="flex items-center gap-3">
-                <div className="flex h-[60px] w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border border-[#2b313d] bg-[#3a414f] p-2 text-[11px] font-bold text-white/55">
-                  {form?.logoUrl
-                    ? <img src={form.logoUrl} alt="회사 로고" className="h-full w-full object-contain" />
-                    : 'LOGO'}
-                </div>
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      disabled={uploadLogo.isPending}
-                      className="rounded-md border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink transition-colors hover:bg-panel-alt disabled:opacity-50"
-                    >
-                      {uploadLogo.isPending ? '업로드 중…' : form?.logoUrl ? '변경' : '이미지 선택'}
-                    </button>
-                    {form?.logoUrl && !uploadLogo.isPending && (
-                      <button
-                        type="button"
-                        onClick={onRemoveLogo}
-                        className="rounded-md border border-border-hi px-2.5 py-1 text-[11px] font-bold text-danger transition-colors hover:border-danger hover:bg-danger/10"
-                      >
-                        제거
-                      </button>
-                    )}
-                  </div>
-                  <span className="text-[10.5px] text-ink3">PNG · 권장 240×80px · 5MB 이하<br />보고서·로그인 화면에 사용</span>
-                </div>
-                <input ref={fileRef} type="file" accept="image/*" onChange={onPickLogo} className="hidden" />
-              </div>
+              <CompanyMarkList
+                kind="logo"
+                representative={{ url: form?.logoUrl ?? '', path: form?.logoPath ?? '' }}
+                onChooseRepresentative={(m) => setForm((f0) => (f0 ? { ...f0, logoUrl: m.url, logoPath: m.path } : f0))}
+              />
             </FRow>
             <FRow label="회사 직인" multiline>
-              <div className="flex items-center gap-3">
-                <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-hi bg-white p-1 text-[11px] font-bold text-ink3">
-                  {form?.sealUrl ? <img src={form.sealUrl} alt="회사 직인" className="h-full w-full object-contain" /> : '직인'}
-                </div>
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => sealRef.current?.click()}
-                      disabled={uploadSeal.isPending}
-                      className="rounded-md border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-bold text-ink transition-colors hover:bg-panel-alt disabled:opacity-50"
-                    >
-                      {uploadSeal.isPending ? '업로드 중…' : form?.sealUrl ? '변경' : '이미지 선택'}
-                    </button>
-                    {form?.sealUrl && !uploadSeal.isPending && (
-                      <button
-                        type="button"
-                        onClick={onRemoveSeal}
-                        className="rounded-md border border-border-hi px-2.5 py-1 text-[11px] font-bold text-danger transition-colors hover:border-danger hover:bg-danger/10"
-                      >
-                        제거
-                      </button>
-                    )}
-                  </div>
-                  <span className="text-[10.5px] text-ink3">배경 없는 PNG · 5MB 이하<br />직인 서식 문서의 결재 완료 시 사용</span>
-                </div>
-                <input ref={sealRef} type="file" accept="image/*" onChange={onPickSeal} className="hidden" />
-              </div>
+              <CompanyMarkList
+                kind="seal"
+                representative={{ url: form?.sealUrl ?? '', path: form?.sealPath ?? '' }}
+                onChooseRepresentative={(m) => setForm((f0) => (f0 ? { ...f0, sealUrl: m.url, sealPath: m.path } : f0))}
+              />
             </FRow>
             <div className="flex items-center justify-between border-t border-border pt-3">
               <div><div className="text-[12.5px] font-bold text-ink">민감정보 마스킹</div><div className="mt-0.5 text-[10.5px] text-ink3">사업자번호·연락처 마스킹 표기</div></div>
@@ -309,7 +242,19 @@ export default function CompanyScreen() {
               const s = { ...s0, ...draft[s0.name] };
               return (
                 <tr key={s0.name} style={{ background: i % 2 ? '#f7f9fc' : '#fff' }}>
-                  <td className={`${td('left')} font-bold text-ink`}>{s.name}</td>
+                  <td className={td('left')}>
+                    <input
+                      aria-label="사업장명"
+                      defaultValue={s0.name}
+                      maxLength={128}
+                      onBlur={(e) => void onRename(s0.name, e.currentTarget)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        if (e.key === 'Escape') { e.currentTarget.value = s0.name; e.currentTarget.blur(); }
+                      }}
+                      className={`${CELL} font-bold`}
+                    />
+                  </td>
                   <td className={td('left')}>
                     <select value={s.kind} onChange={(e) => edit(s0.name, { kind: e.target.value })} className={CELL}>
                       {SITE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}

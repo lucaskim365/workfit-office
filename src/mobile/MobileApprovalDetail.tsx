@@ -14,7 +14,8 @@ import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
-import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
+import { SealFieldRow, SealMarkProvider } from '@/modules/gw/approval/components/CompanySeal';
+import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { RecallConfirmModal, type ApprovedApproverInfo } from '@/modules/gw/approval/components/RecallConfirmModal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
@@ -799,7 +800,11 @@ function ApprovalBody({
   }
 
   if (rows.length === 0) return <div className="text-[13px] text-ink">(본문 없음)</div>;
-  return <div className="flex flex-col">{rows}</div>;
+  return (
+    <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
+      <div className="flex flex-col">{rows}</div>
+    </SealMarkProvider>
+  );
 }
 
 /** 표(表) 필드 렌더 — { cols, rows, headerValues } 구조. 병합 및 셀 단위 마스킹 처리 완벽 이식. */

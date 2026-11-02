@@ -29,7 +29,8 @@ import {
 } from 'lucide-react';
 import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
-import { SealFieldRow } from './CompanySeal';
+import { SealFieldRow, SealMarkProvider } from './CompanySeal';
+import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
@@ -388,6 +389,7 @@ export function ApprovalDraftDocumentSheet({
   const showDocTitle = headerShown(form, 'docTitle');
 
   return (
+    <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
       <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') ? 'flex' : 'hidden'}`}>
@@ -1423,6 +1425,7 @@ export function ApprovalDraftDocumentSheet({
         />
       )}
     </div>
+    </SealMarkProvider>
   );
 }
 

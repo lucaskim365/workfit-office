@@ -63,6 +63,16 @@ export const letterheadConfigSchema = z.object({
   siteNames: z.array(z.string().max(100)).max(50).optional(),
   /** 맨 위 가운데에 회사 로고(회사 정보 화면에 등록한 로고) — 공문처럼 상단 바를 끈 서식용 */
   showLogo: z.boolean().optional(),
+  /** 쓸 로고(회사 로고·직인 목록 id) — 없으면 대표 로고 */
+  logoId: z.string().max(64).optional(),
+  /** 줄 키(address·tel… / site:사업장명)별로 서식에서 바꾼 이름 — 비우면 기본 이름 */
+  labels: z.record(z.string().max(120), z.string().max(40)).optional(),
+  /** 줄 순서(줄 키) — 목록에 없는 줄은 기본 순서로 뒤에 */
+  order: z.array(z.string().max(120)).max(60).optional(),
+  /** 한 줄에 놓을 개수(1~4) — 없으면 1 */
+  columns: z.number().int().min(1).max(4).optional(),
+  /** 열 수와 상관없이 혼자 한 줄을 차지하는 줄(줄 키) */
+  fullRow: z.array(z.string().max(120)).max(60).optional(),
 });
 export type LetterheadConfig = z.infer<typeof letterheadConfigSchema>;
 export const DEFAULT_LETTERHEAD: LetterheadConfig = { items: [...LETTERHEAD_ITEMS], labAddress: '' };
@@ -90,32 +100,74 @@ export function letterheadSiteOptions<S extends LetterheadSite>(sites: S[] | nul
 const sameAddress = (a: string, b: string) => a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
 
 export interface LetterheadLine {
+  /** 줄 키 — address·tel… 또는 site:사업장명 */
   key: string;
   item: LetterheadItem;
   label: string;
   value: string;
+  /** 혼자 한 줄 전체 */
+  full: boolean;
+}
+
+/** 서식 설정 목록의 한 줄 — 값이 비었거나 꺼져 있어도 후보로 보인다 */
+export interface LetterheadEntry extends LetterheadLine {
+  /** 바꾸지 않은 이름(회사 정보 화면의 이름) */
+  defaultLabel: string;
+  /** 서식에서 켰는지 */
+  shown: boolean;
+  /** 회사 주소와 같은 주소라 겹치지 않게 빼는 사업장 */
+  duplicate: boolean;
 }
 
 /**
- * 머리글 줄 — 값이 빈 항목은 뺀다. 사업장 주소는 사업장마다 한 줄(사업장명 + 주소)이고,
- * 회사 주소를 함께 보일 때 그와 같은 주소의 사업장(본사 등)은 겹치지 않게 뺀다.
+ * 회사 정보 칸의 모든 후보 줄 — 고른 순서대로. 사업장 주소는 사업장마다 한 줄(사업장명 + 주소).
+ * 서식 편집기는 이 목록으로 켜기·이름·순서·한 줄 전체를 정하고, 문서는 letterheadLines 로 보인다.
+ */
+export function letterheadEntries(
+  config: LetterheadConfig,
+  company: LetterheadCompany | null | undefined,
+  sites: LetterheadSite[] | null | undefined,
+): LetterheadEntry[] {
+  const companyAddress = config.items.includes('address') ? (company?.address ?? '').trim() : '';
+  const make = (key: string, item: LetterheadItem, defaultLabel: string, value: string, shown: boolean, duplicate = false): LetterheadEntry => {
+    const custom = config.labels?.[key]?.trim();
+    return { key, item, defaultLabel, label: custom || defaultLabel, value: value.trim(), shown, duplicate, full: config.fullRow?.includes(key) ?? false };
+  };
+  const base = LETTERHEAD_ITEMS.flatMap((item): LetterheadEntry[] => {
+    const itemOn = config.items.includes(item);
+    if (item === 'labAddress') {
+      return letterheadSiteOptions(sites).map((s) =>
+        make(
+          `site:${s.name}`,
+          item,
+          s.name,
+          s.addr,
+          itemOn && (!config.siteNames || config.siteNames.includes(s.name)),
+          Boolean(companyAddress) && sameAddress(s.addr, companyAddress),
+        ),
+      );
+    }
+    return [make(item, item, LETTERHEAD_ITEM_LABEL[item], company?.[item] ?? '', itemOn)];
+  });
+  const rank = (key: string) => {
+    const i = config.order?.indexOf(key) ?? -1;
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  // 정렬은 안정적이라 순서 목록에 없는 줄은 기본 순서를 지킨다
+  return [...base].sort((a, b) => rank(a.key) - rank(b.key));
+}
+
+/**
+ * 문서에 보일 머리글 줄 — 켜져 있고 값이 있는 줄만. 회사 주소를 함께 보일 때 그와 같은 주소의 사업장(본사 등)은 뺀다.
  */
 export function letterheadLines(
   config: LetterheadConfig,
   company: LetterheadCompany | null | undefined,
   sites: LetterheadSite[] | null | undefined,
 ): LetterheadLine[] {
-  const companyAddress = config.items.includes('address') ? (company?.address ?? '').trim() : '';
-  return LETTERHEAD_ITEMS.filter((item) => config.items.includes(item)).flatMap((item): LetterheadLine[] => {
-    if (item === 'labAddress') {
-      return letterheadSiteOptions(sites)
-        .filter((s) => !config.siteNames || config.siteNames.includes(s.name))
-        .filter((s) => !companyAddress || !sameAddress(s.addr, companyAddress))
-        .map((s) => ({ key: `site:${s.name}`, item, label: s.name, value: s.addr.trim() }));
-    }
-    const value = (company?.[item] ?? '').trim();
-    return value ? [{ key: item, item, label: LETTERHEAD_ITEM_LABEL[item], value }] : [];
-  });
+  return letterheadEntries(config, company, sites)
+    .filter((e) => e.shown && e.value && !e.duplicate)
+    .map(({ key, item, label, value, full }) => ({ key, item, label, value, full }));
 }
 
 /** 직인 칸 문구 — 서식에 적은 문구가 기본값이고, 기안할 때 문서마다 고친 문구(값)가 있으면 그것 */

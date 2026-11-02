@@ -17,10 +17,14 @@ import {
   HEADER_ITEMS,
   HEADER_ITEM_LABEL,
   LETTERHEAD_ITEMS,
-  LETTERHEAD_ITEM_LABEL,
-  letterheadSiteOptions,
+  letterheadEntries,
   type LetterheadConfig,
+  type LetterheadEntry,
 } from '@/domain/approvalForm/headerItems';
+import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
+import { marksOf } from '@/domain/companyMark/schema';
+import { isSealForm } from '@/domain/approvalForm/seal';
 import { useCompanySites } from '@/features/companySite/useCompanySites';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
@@ -119,69 +123,139 @@ function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onCh
   );
 }
 
-/** 회사 정보 칸 설정 — 보일 항목, 사업장 주소로 보일 사업장(회사 정보 화면의 사업장 현황) */
+/** 직인 칸 설정 — 쓸 직인. 고르지 않으면 대표 직인(지운 직인을 골라 뒀어도 대표로) */
+function SealMarkSelect({ value, onChange }: { value: string | undefined; onChange: (v: string | undefined) => void }) {
+  const { data: marks } = useCompanyMarks();
+  const seals = marksOf(marks, 'seal');
+  const current = value && seals.some((m) => m.id === value) ? value : '';
+  return (
+    <label className="block space-y-0.5 border-t border-border/60 pt-1.5">
+      <span className="block text-[10.5px] font-semibold text-ink3">쓸 직인</span>
+      <select
+        value={current}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className="w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal"
+      >
+        <option value="">대표 직인</option>
+        {seals.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/** 회사 정보 칸 설정 — 로고, 한 줄에 놓을 개수, 줄마다 켜기·이름·한 줄 전체·순서(사업장 주소는 회사 정보의 사업장 현황) */
 function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onChange: (v: LetterheadConfig) => void }) {
   const { data: sites } = useCompanySites();
-  const siteOptions = letterheadSiteOptions(sites);
-  const toggle = (item: LetterheadConfig['items'][number], on: boolean) => {
-    const items = on ? LETTERHEAD_ITEMS.filter((i) => i === item || value.items.includes(i)) : value.items.filter((i) => i !== item);
-    onChange({ ...value, items });
+  const { data: company } = useCompanyInfo();
+  const { data: marks } = useCompanyMarks();
+  const logos = marksOf(marks, 'logo');
+  const entries = letterheadEntries(value, company, sites);
+  const siteKeys = entries.filter((e) => e.item === 'labAddress').map((e) => e.key);
+  const nameOfSite = (key: string) => key.slice('site:'.length);
+
+  const setShown = (entry: LetterheadEntry, on: boolean) => {
+    if (entry.item !== 'labAddress') {
+      const items = on ? LETTERHEAD_ITEMS.filter((i) => i === entry.item || value.items.includes(i)) : value.items.filter((i) => i !== entry.item);
+      onChange({ ...value, items });
+      return;
+    }
+    // 사업장 — 켠 사업장 목록으로 저장(처음엔 목록이 없어 전부 켜진 상태)
+    const current = entries.filter((e) => e.item === 'labAddress' && e.shown).map((e) => e.key);
+    const next = on ? siteKeys.filter((k) => k === entry.key || current.includes(k)) : current.filter((k) => k !== entry.key);
+    const items = value.items.includes('labAddress') ? value.items : LETTERHEAD_ITEMS.filter((i) => i === 'labAddress' || value.items.includes(i));
+    onChange({ ...value, items, siteNames: next.map(nameOfSite) });
   };
-  // 고른 목록이 없으면(처음) 전부 보이는 상태 — 하나를 끄면 그때부터 고른 목록으로 저장
-  const siteOn = (name: string) => !value.siteNames || value.siteNames.includes(name);
-  const toggleSite = (name: string, on: boolean) => {
-    const current = siteOptions.map((s) => s.name).filter(siteOn);
-    const next = on ? siteOptions.map((s) => s.name).filter((n) => n === name || current.includes(n)) : current.filter((n) => n !== name);
-    onChange({ ...value, siteNames: next });
+  const setLabel = (key: string, text: string) => {
+    const labels = { ...(value.labels ?? {}) };
+    if (text.trim()) labels[key] = text;
+    else delete labels[key];
+    onChange({ ...value, labels });
   };
+  const setFull = (key: string, on: boolean) => {
+    const full = (value.fullRow ?? []).filter((k) => k !== key);
+    onChange({ ...value, fullRow: on ? [...full, key] : full });
+  };
+  const move = (index: number, step: -1 | 1) => {
+    const order = entries.map((e) => e.key);
+    const target = index + step;
+    if (target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    onChange({ ...value, order });
+  };
+  const logoChoice = !value.showLogo ? 'none' : value.logoId && logos.some((l) => l.id === value.logoId) ? value.logoId : 'rep';
+  const setLogo = (choice: string) => {
+    if (choice === 'none') onChange({ ...value, showLogo: false, logoId: undefined });
+    else if (choice === 'rep') onChange({ ...value, showLogo: true, logoId: undefined });
+    else onChange({ ...value, showLogo: true, logoId: choice });
+  };
+  const selectCls = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal';
+  const iconBtn = 'grid h-6 w-6 shrink-0 place-items-center rounded border border-border text-ink2 hover:bg-panel-alt disabled:opacity-30';
+
   return (
-    <div className="space-y-2 border-t border-border/60 pt-1.5">
-      <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
-        <input
-          type="checkbox"
-          checked={Boolean(value.showLogo)}
-          onChange={(e) => onChange({ ...value, showLogo: e.target.checked })}
-          className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
-        />
-        회사 로고 (맨 위 가운데)
-      </label>
-      <span className="block text-[10.5px] font-semibold text-ink3">보일 항목 (회사 정보 화면의 값)</span>
-      <div className="grid grid-cols-2 gap-1.5">
-        {LETTERHEAD_ITEMS.map((item) => (
-          <label key={item} className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink2">
-            <input
-              type="checkbox"
-              checked={value.items.includes(item)}
-              onChange={(e) => toggle(item, e.target.checked)}
-              className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
-            />
-            {LETTERHEAD_ITEM_LABEL[item]}
-          </label>
-        ))}
+    <div className="space-y-2.5 border-t border-border/60 pt-1.5">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block space-y-0.5">
+          <span className="block text-[10.5px] font-semibold text-ink3">로고 (맨 위 가운데)</span>
+          <select value={logoChoice} onChange={(e) => setLogo(e.target.value)} className={selectCls}>
+            <option value="none">표시 안 함</option>
+            <option value="rep">대표 로고</option>
+            {logos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </label>
+        <label className="block space-y-0.5">
+          <span className="block text-[10.5px] font-semibold text-ink3">한 줄에 놓을 개수</span>
+          <select
+            value={value.columns ?? 1}
+            onChange={(e) => onChange({ ...value, columns: Number(e.target.value) })}
+            className={selectCls}
+          >
+            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}개</option>)}
+          </select>
+        </label>
       </div>
-      {value.items.includes('labAddress') && (
-        <div className="space-y-1">
-          <span className="block text-[10.5px] text-ink3">보일 사업장 (회사 정보의 사업장 현황)</span>
-          {siteOptions.length === 0 ? (
-            <p className="text-[11px] text-ink3">회사 정보에 주소가 있는 사업장이 없습니다</p>
-          ) : (
-            siteOptions.map((site) => (
-              <label key={site.name} className="flex cursor-pointer items-start gap-1.5 text-[11.5px] text-ink2">
+
+      <div className="space-y-1.5">
+        <span className="block text-[10.5px] font-semibold text-ink3">항목 (켜기 · 이름 · 한 줄 전체 · 순서)</span>
+        {entries.map((entry, index) => (
+          <div key={entry.key} className="rounded-lg border border-border/70 px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                aria-label={`${entry.defaultLabel} 보이기`}
+                checked={entry.shown}
+                onChange={(e) => setShown(entry, e.target.checked)}
+                className="h-3.5 w-3.5 shrink-0 rounded text-teal focus:ring-teal"
+              />
+              <input
+                aria-label={`${entry.defaultLabel} 이름`}
+                value={value.labels?.[entry.key] ?? ''}
+                placeholder={entry.defaultLabel}
+                maxLength={40}
+                onChange={(e) => setLabel(entry.key, e.target.value)}
+                className="min-w-0 flex-1 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[11.5px] text-ink outline-none focus:border-teal"
+              />
+              <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[10.5px] text-ink2">
                 <input
                   type="checkbox"
-                  checked={siteOn(site.name)}
-                  onChange={(e) => toggleSite(site.name, e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+                  checked={entry.full}
+                  onChange={(e) => setFull(entry.key, e.target.checked)}
+                  className="h-3 w-3 rounded text-teal focus:ring-teal"
                 />
-                <span className="min-w-0">
-                  <span className="font-semibold text-ink">{site.name}</span>
-                  <span className="block break-words text-[10.5px] text-ink3">{site.addr}</span>
-                </span>
+                한 줄 전체
               </label>
-            ))
-          )}
-        </div>
-      )}
+              <button type="button" aria-label="위로" disabled={index === 0} onClick={() => move(index, -1)} className={iconBtn}>
+                <ChevronUp size={13} />
+              </button>
+              <button type="button" aria-label="아래로" disabled={index === entries.length - 1} onClick={() => move(index, 1)} className={iconBtn}>
+                <ChevronDown size={13} />
+              </button>
+            </div>
+            <div className="mt-0.5 truncate pl-5 text-[10.5px] text-ink3">
+              {entry.duplicate ? '회사 주소와 같은 주소' : entry.value || '값 없음'}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1000,7 +1074,12 @@ export function ApprovalFormEditor({
                       />
                     )}
 
-                    {/* '회사정보' — 보일 항목과 연구소 주소 */}
+                    {/* 직인 칸·직인 표 칸 — 쓸 직인(회사 정보에 등록한 직인 중), 고르지 않으면 대표 직인 */}
+                    {isSealForm([selectedField]) && (
+                      <SealMarkSelect value={selectedField.markId} onChange={(markId) => setField(selectedFieldIdx, { markId })} />
+                    )}
+
+                    {/* '회사정보' — 로고·배치·항목 */}
                     {selectedField.type === '회사정보' && (
                       <LetterheadSettings
                         value={selectedField.letterhead ?? DEFAULT_LETTERHEAD}

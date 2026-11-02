@@ -18,9 +18,9 @@ import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
-import { SealFieldRow } from './components/CompanySeal';
+import { SealFieldRow, SealMarkProvider } from './components/CompanySeal';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
-import { isSealForm, stampTableShown } from '@/domain/approvalForm/seal';
+import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
@@ -479,7 +479,7 @@ export function ApprovalDocumentView({
   const hasSecretFields = form?.fields.some(f => f.isSecret);
 
   return (
-    <>
+    <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
       {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
       {hasSecretFields && (
         <div className="mx-auto mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl max-w-[800px] flex items-center justify-between text-[11.5px] font-bold text-amber-800 print:hidden shadow-2xs">
@@ -1036,7 +1036,7 @@ export function ApprovalDocumentView({
           <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
         )}
       </div>
-    </>
+    </SealMarkProvider>
   );
 }
 
