@@ -17,6 +17,7 @@ import { getKoreanHoliday, requiredWorkSpan, timeToMinutes } from '@/domain/comm
 import type { CommuteRecord } from '@/domain/commute/schema';
 import { describeCommuteRecord, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileLeaveHistory from './MobileLeaveHistory';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
 
@@ -569,6 +570,9 @@ export default function MobileCommuteScreen() {
             </div>
           )}
         </div>
+
+        {/* 5. 연차 변동·휴가 신청 이력 */}
+        <MobileLeaveHistory balance={leaveBalance} holidayMap={holidayMap} />
       </div>
     </div>
   );

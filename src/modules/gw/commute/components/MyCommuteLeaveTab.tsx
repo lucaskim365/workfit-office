@@ -6,7 +6,7 @@ import { useLeave } from '@/features/gw/useLeave';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { calculateLeaveDays, isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { annualLeaveHistoryDocs, calculateLeaveDays } from '@/domain/leave/policy';
 import { describeCommuteRecord, leaveChip } from '@/domain/commute/statusDisplay';
 import { StatusBadges } from '@/features/commute/StatusBadge';
 import { StatusBadge } from '@/features/commute/StatusBadge';
@@ -147,9 +147,7 @@ export function MyCommuteLeaveTab({
   // 4. 연차 및 휴가 결재 문서들
   const goDoc = (d: ApprovalDoc) => nav(`/gw/approval?doc=${d.docNo || d.id}`);
 
-  const annualLeaveHistoryDocs = useMemo(() => {
-    return bal.myDocs.filter((d) => d.status === '완료' && (isAnnualLeaveDeduction(d.form?.leaveType) || d.form?.leaveType === '대체휴무'));
-  }, [bal.myDocs]);
+  const annualHistoryDocs = useMemo(() => annualLeaveHistoryDocs(bal.myDocs), [bal.myDocs]);
 
   const filteredRequests = useMemo(() => {
     if (requestFilter === '전체') return bal.myDocs;
@@ -680,12 +678,12 @@ export function MyCommuteLeaveTab({
                         <td className="p-2 text-right text-[10.5px] text-ink3 font-medium">관리자 부여</td>
                       </tr>
                     ))}
-                    {annualLeaveHistoryDocs.length === 0 && bal.substituteHoliday.detailList.length === 0 ? (
+                    {annualHistoryDocs.length === 0 && bal.substituteHoliday.detailList.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-6 text-center text-ink3">사용 완료된 연차가 없습니다.</td>
                       </tr>
                     ) : (
-                      annualLeaveHistoryDocs.map((d) => {
+                      annualHistoryDocs.map((d) => {
                         const usedDays = calculateLeaveDays({
                           leaveType: d.form?.leaveType,
                           startDate: d.form?.startDate,
