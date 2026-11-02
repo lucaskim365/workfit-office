@@ -30,7 +30,6 @@ import {
 import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow } from './CompanySeal';
-import { isSealForm } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
@@ -228,9 +227,6 @@ export function ApprovalDraftDocumentSheet({
 
   const amountField = form ? amountFieldOf(form) : undefined;
   const amountLabel = amountField?.label ?? '금 액';
-
-  // 직인 서식 — 결재란 대신 결재 완료 후 회사 직인
-  const sealForm = isSealForm(form?.fields);
 
   // 정렬된 결재 단계 (직인용)
   const stampSteps = useMemo(() => {
@@ -459,30 +455,21 @@ export function ApprovalDraftDocumentSheet({
             </div>
           )}
           {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
-          {onStampTableClick && !isDesignMode && !sealForm && stampSteps.length === 0 && (
+          {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
             <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
               + 결재선 지정
             </div>
           )}
-          {sealForm ? (
-            // 문서에는 결재란이 들어가지 않음 — 결재선 지정·규칙 설정 진입만 남김(인쇄 제외)
-            <div className="grid h-[56px] min-w-[150px] place-items-center rounded border border-dashed border-[#bbb] px-3 text-center text-[11px] font-semibold text-[#888] print:hidden">
-              <span>결재란 대신 회사 직인</span>
-              <span className="text-[10.5px] font-medium">
-                {isDesignMode ? '결재선 규칙 설정' : stampSteps.length > 0 ? `결재선 ${stampSteps.length}명` : '+ 결재선 지정'}
-              </span>
-            </div>
-          ) : (
-            <ApprovalStampTable
-              steps={stampSteps}
-              nameOf={nameOf}
-              posOf={posOf}
-              sealOf={sealOf}
-              isSignatureOf={isSignatureOf}
-              allowCurrentSignature
-              isPostApproval={isPostApproval}
-            />
-          )}
+          {/* 직인 서식도 결재가 끝나기 전에는 결재란을 보인다 — 완료되면 문서에서 결재란 대신 회사 직인([[seal]]) */}
+          <ApprovalStampTable
+            steps={stampSteps}
+            nameOf={nameOf}
+            posOf={posOf}
+            sealOf={sealOf}
+            isSignatureOf={isSignatureOf}
+            allowCurrentSignature
+            isPostApproval={isPostApproval}
+          />
         </div>
       </div>
 
