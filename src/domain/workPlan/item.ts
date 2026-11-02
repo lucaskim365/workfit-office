@@ -40,3 +40,9 @@ export const workPlanItemSchema = z.object({
 
 export type WorkPlanItem = z.infer<typeof workPlanItemSchema>;
 export type WorkPlanItemDraft = Pick<WorkPlanItem, 'date' | 'allDay' | 'startTime' | 'endTime' | 'tagId' | 'title' | 'memo'>;
+
+/** 항목을 다른 날로 옮긴 내용 — 날짜만 바뀌고 시각·태그·제목·메모는 그대로다 */
+export function movedDraft(item: WorkPlanItem, date: string): WorkPlanItemDraft {
+  const { allDay, startTime, endTime, tagId, title, memo } = item;
+  return { date, allDay, startTime, endTime, tagId, title, memo };
+}

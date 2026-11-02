@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
+import { movedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -115,6 +117,7 @@ export default function WorkPlanScreen() {
   /** 결재 완료 외근·출장과 동행 외근 상세 — 수정은 등록 본인이 일정 창으로 */
   const [outsideDetail, setOutsideDetail] = useState<{ view: OutsideScheduleView; entry: DayEntry } | null>(null);
   const [notice, setNotice] = useState('');
+  const updateItem = useUpdateWorkPlanItem();
   // 저장 알림은 화면 아래 토스트 — 잠깐 보였다 사라진다
   useEffect(() => {
     if (!notice) return;
@@ -312,6 +315,18 @@ export default function WorkPlanScreen() {
     await saveMemo.mutateAsync({ actor: { userId: actor.id, active: actorActive }, ownerUserId: actor.id, date, memoPlan, text });
   };
 
+  /** 내 일반 업무를 다른 날로 옮긴다 — 날짜만 바뀐다 */
+  const handleMoveItem = (item: WorkPlanItem, date: string) => {
+    if (!actor) return;
+    updateItem.mutate(
+      { actor: { userId: actor.id, active: actorActive }, id: item.id, draft: movedDraft(item, date) },
+      {
+        onSuccess: () => setNotice(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일로 옮겼습니다.`),
+        onError: (e) => setNotice(e instanceof Error ? e.message : '옮기지 못했습니다.'),
+      },
+    );
+  };
+
   /** 칩 클릭 — 수정·보기 일정 창, 결재·동행 외근 상세, 회의 외 캘린더 일정 창([[entryRouting]]) */
   const handleOpenEntry = (entry: DayEntry) => {
     if (!actor) return;
@@ -469,6 +484,7 @@ export default function WorkPlanScreen() {
         workPlans={workPlans}
         onCreate={actorActive ? handleCreate : undefined}
         onOpenEntry={handleOpenEntry}
+        onMoveItem={actorActive ? handleMoveItem : undefined}
         onSaveMemo={actorActive ? handleSaveMemo : undefined}
         onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
