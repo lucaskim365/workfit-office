@@ -19,6 +19,8 @@ const INITIAL_TOP = 8 * 60;
 /** 시간표를 끄는 동안 위아래 끝에 가까워지면 저절로 스크롤한다 */
 const AUTO_SCROLL_EDGE = 40;
 const AUTO_SCROLL_STEP = 12;
+/** 이만큼(px) 움직여야 끌기로 본다 — 그보다 적으면 누르기(일정 창) */
+const DRAG_THRESHOLD = 4;
 
 /** 시간표에서 끌고 있는 내 업무 — 놓으면 date·range 로 저장한다 */
 interface BlockDrag {
@@ -27,6 +29,10 @@ interface BlockDrag {
   baseDate: string;
   base: MinuteRange;
   startMinute: number;
+  startX: number;
+  startY: number;
+  /** 실제로 끌었는가 — 끌었으면 제자리에 놓아도 일정 창을 열지 않는다 */
+  moved: boolean;
   date: string;
   range: MinuteRange;
 }
@@ -54,12 +60,16 @@ interface WorkPlanMyWeekProps {
 }
 
 /**
- * 내 주간 — 7일 × 시간 세로 시간표(구글·아웃룩 주 보기). 맨 위 줄은 종일·시간 미정 일정,
+ * 내 주간 — 7일 × 시간 세로 시간표(구글·아웃룩 주 보기). 페이지 전체가 스크롤되고 주차·요일·종일 줄은 위에 남는다.
+ * 맨 위 줄은 종일·시간 미정 일정,
  * 빈 시간을 누르면 그 30분 칸으로 새 일정, 블록을 누르면 상세.
  * 내 일반 업무는 끌어서 시간·요일을 옮긴다(길이는 그대로, 놓을 때 저장, 이번 주 안에서만).
  */
 export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem }: WorkPlanMyWeekProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  /** 위에 남는 주차·요일·종일 줄 */
+  const stickyRef = useRef<HTMLDivElement>(null);
+  /** 처음 보일 시각 표시 — 이 자리로 페이지를 스크롤한다 */
+  const startAnchorRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<BlockDrag | null>(null);
   /** 끌고 놓은 뒤 따라오는 클릭이 일정 창을 열지 않게 */
@@ -98,10 +108,12 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
   const hasToday = days.some((d) => d.date === today);
 
   useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const anchor = startAnchorRef.current;
+    if (!anchor) return;
     const top = hasToday ? Math.max(nowMinute - 60, 0) : INITIAL_TOP;
-    el.scrollTop = (top / DAY_END) * el.scrollHeight - 8;
+    anchor.style.top = `${(top / DAY_END) * 100}%`;
+    anchor.style.scrollMarginTop = `${(stickyRef.current?.offsetHeight ?? 0) + 8}px`;
+    anchor.scrollIntoView({ block: 'start' });
     // 주가 바뀔 때만 맞춘다(1분마다 움직이지 않게)
   }, [weekStart]);
 
@@ -143,32 +155,33 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
     e.currentTarget.setPointerCapture(e.pointerId);
     suppressClick.current = false;
     const base = { start: block.start, end: block.end };
-    setDrag({ block, item, baseDate: date, base, startMinute: minuteAt(e.clientY), date, range: base });
+    setDrag({ block, item, baseDate: date, base, startMinute: minuteAt(e.clientY), startX: e.clientX, startY: e.clientY, moved: false, date, range: base });
   };
 
   const moveDrag = (e: ReactPointerEvent) => {
     if (!drag) return;
-    const area = scrollRef.current?.getBoundingClientRect();
-    if (area && scrollRef.current) {
-      if (e.clientY < area.top + AUTO_SCROLL_EDGE) scrollRef.current.scrollTop -= AUTO_SCROLL_STEP;
-      else if (e.clientY > area.bottom - AUTO_SCROLL_EDGE) scrollRef.current.scrollTop += AUTO_SCROLL_STEP;
-    }
-    setDrag({ ...drag, date: dateAt(e.clientX), range: moveRange(drag.base, minuteAt(e.clientY) - drag.startMinute) });
+    const moved = drag.moved || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= DRAG_THRESHOLD;
+    if (!moved) return;
+    const top = stickyRef.current?.getBoundingClientRect().bottom ?? 0;
+    if (e.clientY < top + AUTO_SCROLL_EDGE) window.scrollBy(0, -AUTO_SCROLL_STEP);
+    else if (e.clientY > window.innerHeight - AUTO_SCROLL_EDGE) window.scrollBy(0, AUTO_SCROLL_STEP);
+    setDrag({ ...drag, moved, date: dateAt(e.clientX), range: moveRange(drag.base, minuteAt(e.clientY) - drag.startMinute) });
   };
 
   const finishDrag = () => {
     if (!drag) return;
     setDrag(null);
+    suppressClick.current = drag.moved;
     const changed = drag.date !== drag.baseDate || drag.range.start !== drag.base.start;
-    if (!changed) return;
-    suppressClick.current = true;
-    onMoveItem?.(drag.item, drag.date, drag.range);
+    if (changed) onMoveItem?.(drag.item, drag.date, drag.range);
   };
 
   const gridCols = 'grid grid-cols-[3.25rem_repeat(7,minmax(0,1fr))]';
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-xs">
+    <div className="rounded-xl border border-border bg-panel shadow-xs">
+      {/* 위에 남는 줄 — 조상에 overflow 를 두면 sticky 가 풀린다 */}
+      <div ref={stickyRef} className="sticky top-[var(--shell-top)] z-40 rounded-t-xl bg-panel">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5">
         {viewSwitch}
         <button type="button" aria-label="지난주" onClick={() => onWeekChange(shiftDate(weekStart, -7))} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
@@ -187,8 +200,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       </div>
 
       {/* 요일 머리 */}
-      {/* 머리 줄·종일 줄도 시간표의 스크롤바 자리만큼 비워 열을 맞춘다(scrollbar-gutter) */}
-      <div className={`${gridCols} overflow-hidden border-b border-border bg-panel-alt/60 [scrollbar-gutter:stable]`}>
+      <div className={`${gridCols} overflow-hidden border-b border-border bg-panel-alt/60`}>
         <div />
         {days.map((d) => {
           const holiday = holidayOf(d.date);
@@ -210,7 +222,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       </div>
 
       {/* 종일·시간 미정 줄 */}
-      <div className={`${gridCols} overflow-hidden border-b border-border [scrollbar-gutter:stable]`}>
+      <div className={`${gridCols} overflow-hidden border-b border-border`}>
         <div className="px-1 py-1 text-right text-[11px] text-ink3">종일</div>
         {days.map((d) => (
           <div
@@ -262,8 +274,10 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
         ))}
       </div>
 
+      </div>
+
       {/* 시간표 */}
-      <div ref={scrollRef} className="overflow-y-auto [scrollbar-gutter:stable]" style={{ height: 'max(24rem, calc(100vh / var(--font-scale, 1) - 22rem))' }}>
+      <div className="overflow-hidden rounded-b-xl">
         <div
           ref={gridRef}
           className={`${gridCols} relative ${drag ? 'select-none' : ''}`}
@@ -310,7 +324,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
                         }
                         if (entry) onOpenEntry(entry);
                       }}
-                      className={`absolute overflow-hidden rounded border px-1 py-px text-left text-[11px] leading-tight shadow-2xs hover:brightness-95 ${TONE_CLASS[b.tone]} ${item ? 'cursor-grab' : ''} ${drag?.block.key === b.key ? 'opacity-40' : ''}`}
+                      className={`absolute overflow-hidden rounded border px-1 py-px text-left text-[11px] leading-tight shadow-2xs hover:brightness-95 ${TONE_CLASS[b.tone]} ${item ? 'cursor-grab' : ''} ${drag?.moved && drag.block.key === b.key ? 'opacity-40' : ''}`}
                       style={{
                         top: pct(b.start),
                         height: pct(b.end - b.start),
@@ -327,7 +341,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
                   );
                 })}
                 {/* 끌고 있는 자리 미리 보기 */}
-                {drag?.date === d.date && (
+                {drag?.moved && drag.date === d.date && (
                   <div
                     aria-hidden
                     className={`pointer-events-none absolute inset-x-0.5 z-20 overflow-hidden rounded border-2 border-teal px-1 py-px text-[11px] leading-tight shadow-md ${TONE_CLASS[drag.block.tone]}`}
@@ -348,6 +362,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
               </div>
             );
           })}
+          <div ref={startAnchorRef} aria-hidden className="pointer-events-none absolute" />
         </div>
       </div>
     </div>
