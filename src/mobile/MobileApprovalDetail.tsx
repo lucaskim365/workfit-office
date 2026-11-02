@@ -15,6 +15,7 @@ import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
+import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { RecallConfirmModal, type ApprovedApproverInfo } from '@/modules/gw/approval/components/RecallConfirmModal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
@@ -736,7 +737,7 @@ function ApprovalBody({
 
       if (f.type === '직인') {
         pushSection();
-        rows.push(<SealFieldRow key={f.key} label={f.label} stamped={doc.status === '완료'} />);
+        rows.push(<SealFieldRow key={f.key} label={sealTextOf(f, doc.fieldValues)} stamped={doc.status === '완료'} />);
         continue;
       }
 

@@ -19,6 +19,7 @@ import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 import { SealFieldRow } from './components/CompanySeal';
+import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
@@ -695,7 +696,7 @@ export function ApprovalDocumentView({
               }
 
               if (block.type === 'seal') {
-                return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={doc.status === '완료'} />;
+                return <SealFieldRow key={blockIdx} label={sealTextOf(block.fields[0], doc.fieldValues)} stamped={doc.status === '완료'} />;
               }
 
               if (block.type === 'letterhead') {

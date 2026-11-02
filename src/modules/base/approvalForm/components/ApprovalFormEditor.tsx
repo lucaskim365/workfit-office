@@ -136,6 +136,15 @@ function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onCh
   };
   return (
     <div className="space-y-2 border-t border-border/60 pt-1.5">
+      <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
+        <input
+          type="checkbox"
+          checked={Boolean(value.showLogo)}
+          onChange={(e) => onChange({ ...value, showLogo: e.target.checked })}
+          className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+        />
+        회사 로고 (맨 위 가운데)
+      </label>
       <span className="block text-[10.5px] font-semibold text-ink3">보일 항목 (회사 정보 화면의 값)</span>
       <div className="grid grid-cols-2 gap-1.5">
         {LETTERHEAD_ITEMS.map((item) => (

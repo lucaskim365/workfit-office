@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_LETTERHEAD, headerShown, letterheadLines, letterheadSiteOptions, titleFieldOf } from './headerItems';
+import { DEFAULT_LETTERHEAD, headerShown, letterheadLines, letterheadSiteOptions, sealTextOf, titleFieldOf, withSealTexts } from './headerItems';
 import { docNoOf, DOC_NO_VALUE_KEY } from '../approvalDoc/docNo';
 
 test('머리 항목 — 목록에 없는 서식(기존 서식)은 모두 보인다', () => {
@@ -52,4 +52,19 @@ test('회사 정보 머리글 — 사업장 선택지는 사용 중이고 주소
 test('보이는 문서번호 — 문서번호로 쓰는 자동번호가 있으면 그것, 없으면 AP 번호', () => {
   assert.equal(docNoOf({ docNo: 'AP-261101-001', fieldValues: {} }), 'AP-261101-001');
   assert.equal(docNoOf({ docNo: 'AP-261101-001', fieldValues: { [DOC_NO_VALUE_KEY]: '20261101 - 01호' } }), '20261101 - 01호');
+});
+
+test('직인 문구 — 문서에 고친 문구가 있으면 그것, 없거나 비면 서식의 문구', () => {
+  const field = { key: 'seal', label: '워크핏 주식회사 AX지능화본부장' };
+  assert.equal(sealTextOf(field, {}), '워크핏 주식회사 AX지능화본부장');
+  assert.equal(sealTextOf(field, { seal: '  ' }), '워크핏 주식회사 AX지능화본부장');
+  assert.equal(sealTextOf(field, { seal: '워크핏 주식회사 대표이사' }), '워크핏 주식회사 대표이사');
+});
+
+test('직인 문구 고정 — 상신할 때 그 시점 문구를 값에 남겨, 나중에 서식 문구가 바뀌어도 문서는 그대로', () => {
+  const fields = [{ key: 'seal', label: '워크핏 주식회사 AX지능화본부장', type: '직인' }, { key: 'to', label: '수신', type: '텍스트' }];
+  assert.deepEqual(withSealTexts(fields, { to: '무한콘트롤' }), { to: '무한콘트롤', seal: '워크핏 주식회사 AX지능화본부장' });
+  assert.deepEqual(withSealTexts(fields, { seal: '대표이사' }), { seal: '대표이사' });
+  const values = { to: 'x' };
+  assert.equal(withSealTexts([{ key: 'to', label: '수신', type: '텍스트' }], values), values);
 });

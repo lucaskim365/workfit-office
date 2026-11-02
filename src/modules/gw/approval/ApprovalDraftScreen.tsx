@@ -11,6 +11,7 @@ import {
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
+import { withSealTexts } from '@/domain/approvalForm/headerItems';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
@@ -1152,7 +1153,8 @@ function ApprovalDraftInner({
       amount: amountNum,
       body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
-      fieldValues: isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values,
+      // 직인 문구는 상신 시점 값으로 남긴다 — 나중에 서식 문구가 바뀌어도 낸 문서의 명의는 그대로
+      fieldValues: withSealTexts(form?.fields, isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values),
       attachments,
       recipients,
       relatedDocs,

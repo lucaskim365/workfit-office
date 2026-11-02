@@ -61,6 +61,8 @@ export const letterheadConfigSchema = z.object({
   labAddress: z.string().max(200).default(''),
   /** 보일 사업장 이름 — 없으면 사용 중인 사업장 전부 */
   siteNames: z.array(z.string().max(100)).max(50).optional(),
+  /** 맨 위 가운데에 회사 로고(회사 정보 화면에 등록한 로고) — 공문처럼 상단 바를 끈 서식용 */
+  showLogo: z.boolean().optional(),
 });
 export type LetterheadConfig = z.infer<typeof letterheadConfigSchema>;
 export const DEFAULT_LETTERHEAD: LetterheadConfig = { items: [...LETTERHEAD_ITEMS], labAddress: '' };
@@ -114,4 +116,22 @@ export function letterheadLines(
     const value = (company?.[item] ?? '').trim();
     return value ? [{ key: item, item, label: LETTERHEAD_ITEM_LABEL[item], value }] : [];
   });
+}
+
+/** 직인 칸 문구 — 서식에 적은 문구가 기본값이고, 기안할 때 문서마다 고친 문구(값)가 있으면 그것 */
+export function sealTextOf(field: { key: string; label: string }, values: Record<string, unknown> | null | undefined): string {
+  const v = values?.[field.key];
+  return typeof v === 'string' && v.trim() ? v : field.label;
+}
+
+/** 상신할 값에 직인 칸 문구를 채운다 — 고치지 않았으면 그 시점의 서식 문구. 직인 칸이 없으면 받은 값 그대로 */
+export function withSealTexts<V>(
+  fields: Array<{ key: string; label: string; type: string }> | null | undefined,
+  values: Record<string, V | string>,
+): Record<string, V | string> {
+  const seals = (fields ?? []).filter((f) => f.type === '직인');
+  if (seals.length === 0) return values;
+  const out = { ...values };
+  for (const f of seals) out[f.key] = sealTextOf(f, values);
+  return out;
 }

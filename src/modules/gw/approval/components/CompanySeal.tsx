@@ -16,11 +16,25 @@ export function SealImage({ stamped, size = 64 }: { stamped: boolean; size?: num
   return <span className="text-[12px] font-semibold text-[#bbb] select-none">(직인)</span>;
 }
 
-/** 직인 필드 — 라벨 문구(예: 주식회사 ○○ 대표이사 ○○○) 끝에 직인이 겹쳐 찍힘 */
-export function SealFieldRow({ label, stamped }: { label: string; stamped: boolean }) {
+/**
+ * 직인 필드 — 문구(예: 주식회사 ○○ 대표이사 ○○○) 끝에 직인이 겹쳐 찍힘.
+ * onLabelChange 를 주면(기안 중) 문구를 그 자리에서 고칠 수 있다 — 서식 문구가 기본값.
+ */
+export function SealFieldRow({ label, stamped, onLabelChange }: { label: string; stamped: boolean; onLabelChange?: (v: string) => void }) {
   return (
     <div className="flex items-center justify-end py-3">
-      <span className="text-[15px] font-bold tracking-[0.05em] text-[#111]">{label}</span>
+      {onLabelChange ? (
+        <input
+          aria-label="발신 명의"
+          value={label}
+          maxLength={100}
+          onChange={(e) => onLabelChange(e.target.value)}
+          size={Math.max(8, label.length + 2)}
+          className="min-w-0 max-w-full rounded border border-dashed border-[#ccc] bg-transparent px-1.5 py-0.5 text-right text-[15px] font-bold tracking-[0.05em] text-[#111] outline-none focus:border-teal"
+        />
+      ) : (
+        <span className="text-[15px] font-bold tracking-[0.05em] text-[#111]">{label}</span>
+      )}
       <span className="relative -ml-3 inline-flex h-[72px] w-[72px] items-center justify-center">
         <SealImage stamped={stamped} size={72} />
       </span>

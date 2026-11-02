@@ -898,8 +898,19 @@ export function ApprovalDraftDocumentSheet({
             }
 
             // 직인 블록 — 서식 설계 미리보기에서는 등록된 직인을 보여 줌, 기안 중에는 자리만
+            // 기안 중에는 문구(서식 문구가 기본값)를 문서마다 고칠 수 있다
             if (block.type === 'seal') {
-              return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={isDesignMode} />;
+              const f = block.fields[0];
+              if (isDesignMode) return <SealFieldRow key={blockIdx} label={f.label} stamped />;
+              const typed = values[f.key];
+              return (
+                <SealFieldRow
+                  key={blockIdx}
+                  label={typeof typed === 'string' ? typed : f.label}
+                  stamped={false}
+                  onLabelChange={(v) => setVals({ [f.key]: v })}
+                />
+              );
             }
 
             // 회사 정보 머리글 — 서식 설계에서는 눌러서 칸 설정
