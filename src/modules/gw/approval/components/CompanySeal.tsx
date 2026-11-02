@@ -29,7 +29,8 @@ export function SealFieldRow({ label, stamped, onLabelChange }: { label: string;
           value={label}
           maxLength={100}
           onChange={(e) => onLabelChange(e.target.value)}
-          size={Math.max(8, label.length + 2)}
+          // 한글은 글자 폭이 넓어 size(영문 기준)로는 잘린다 — 글자 수만큼 em 으로
+          style={{ width: `${Math.max(8, label.length) * 1.1 + 1}em` }}
           className="min-w-0 max-w-full rounded border border-dashed border-[#ccc] bg-transparent px-1.5 py-0.5 text-right text-[15px] font-bold tracking-[0.05em] text-[#111] outline-none focus:border-teal"
         />
       ) : (
