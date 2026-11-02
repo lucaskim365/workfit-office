@@ -518,18 +518,21 @@ export default function MobileChatThread() {
           );
         })}
       </div>
-      {showScrollBtn && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-black/5 active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
-          style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
-        >
-          ⬇ 최근 메시지
-          {hasNewMsg && (
-            <span className="w-2 h-2 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
-          )}
-        </button>
-      )}
+      {/* 높이 0 기준점 — 입력창이 길어져도 버튼이 항상 입력창 바로 위에 뜬다 */}
+      <div className="relative h-0 shrink-0">
+        {showScrollBtn && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-black/5 active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
+            style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
+          >
+            ⬇ 최근 메시지
+            {hasNewMsg && (
+              <span className="w-2 h-2 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
+            )}
+          </button>
+        )}
+      </div>
 
       {readonly ? (
         <div className="shrink-0 border-t border-black/10 bg-black/[0.03] px-4 py-3 text-center text-[11.5px] text-ink3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
