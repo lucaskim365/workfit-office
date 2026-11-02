@@ -13,7 +13,7 @@ import { AutoResizeTextarea } from './formFields/AutoResizeTextarea';
 import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 import { calculateLeaveDays } from '@/domain/leave/policy';
-import { acceptsDecimal, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -163,7 +163,7 @@ export function DynamicField({
       );
 
     case '날짜':
-      return <DateInput value={sv} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
+      return <DateInput value={sv} restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
 
     case '기간': {
       const start = sv;

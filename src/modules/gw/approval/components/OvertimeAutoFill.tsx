@@ -9,7 +9,7 @@ import { nowLocalIso } from '@/shared/lib/datetime';
 import type { FieldValue } from '@/domain/approvalForm/schema';
 
 /**
- * 연장근로 신청서 — 근무 일자를 고르면 내 근태 기록으로 칸을 채우고 안내를 보인다.
+ * 휴일근로 신청서 — 근무 일자를 고르면 내 근태 기록으로 칸을 채우고 안내를 보인다.
  * 날짜가 바뀔 때만 채우므로 작성자가 고친 값은 덮어쓰지 않는다(임시저장·수정 중인 문서는 처음 열 때 채우지 않는다).
  */
 export function OvertimeAutoFill({
@@ -50,7 +50,7 @@ export function OvertimeAutoFill({
   }, [ready, workDate, record, holidayName]);
 
   // 시각이나 종류가 바뀌면 근무 시간을 다시 계산한다(직접 고친 근무 시간은 그다음 시각 변경 전까지 둔다)
-  const kind = String(values.workKind ?? '');
+  const kind = String(values.workKind || '휴일');
   const start = String(values.workStart ?? '');
   const end = String(values.workEnd ?? '');
   useEffect(() => {

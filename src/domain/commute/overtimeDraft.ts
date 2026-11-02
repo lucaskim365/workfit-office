@@ -2,10 +2,12 @@ import type { CommutePolicy } from '@/domain/commutePolicy/schema';
 import type { CommuteRecord } from './schema';
 
 /**
- * 연장근로 신청서 자동 입력 — 근무 일자의 내 근태 기록으로 근무 종류·출퇴근 시각·근무 시간을 채운다.
- * 칸은 서식의 키로 찾는다(workKind·workStart·workEnd·workHours). workKind 칸이 없는 서식은 자동 입력을 하지 않는다.
+ * 휴일근로 신청서(서식 코드 '휴일근무', 예전 문서는 '연장근로') 자동 입력 — 근무 일자의 내 근태 기록으로 출퇴근 시각·근무 시간을 채운다.
+ * 칸은 서식의 키로 찾는다(workDate·workStart·workEnd·workHours). workStart 칸이 없는 서식은 자동 입력을 하지 않는다.
  */
-export const OVERTIME_KIND_FIELD = 'workKind';
+export const OVERTIME_AUTOFILL_FIELD = 'workStart';
+/** 주말·공휴일만 고를 수 있는 근무 일자 칸 */
+export const HOLIDAY_WORK_DATE_KEY = 'workDate';
 
 export type OvertimeMark = '예정' | '수동 입력';
 

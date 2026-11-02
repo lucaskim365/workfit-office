@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMonthGrid, dayTone, isDateSelectable, shiftMonth } from './datePickerGrid';
+import { buildMonthGrid, dayTone, isDateSelectable, isRestDay, shiftMonth } from './datePickerGrid';
+
+test('주말과 공휴일 관리에 등록된 날만 쉬는 날이다', () => {
+  const holidays = new Set(['2026-10-09']); // 금요일 한글날
+  assert.equal(isRestDay('2026-10-31', holidays), true); // 토
+  assert.equal(isRestDay('2026-11-01', holidays), true); // 일
+  assert.equal(isRestDay('2026-10-09', holidays), true);
+  assert.equal(isRestDay('2026-10-30', holidays), false); // 평일
+});
 
 test('buildMonthGrid — 일요일부터 6주 42칸, 앞뒤 달 날짜 포함', () => {
   const cells = buildMonthGrid(2026, 10); // 2026-10-01 = 목요일

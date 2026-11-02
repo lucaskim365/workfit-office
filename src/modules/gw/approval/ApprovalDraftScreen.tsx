@@ -42,7 +42,8 @@ import { applyMasterToCurrent, hasMasterUpdate, serializeSheet } from './formFie
 import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
 import { isEditableStatus } from '@/domain/approvalDoc/engine';
 import { OvertimeAutoFill } from './components/OvertimeAutoFill';
-import { clockOf, markOvertimeTimes, OVERTIME_KIND_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
+import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
+import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -975,8 +976,8 @@ function ApprovalDraftInner({
   const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
-  // 연장근로 신청서 자동 입력 — 서식에 근무 종류 칸이 있을 때만
-  const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_KIND_FIELD);
+  // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
+  const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
   const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
   const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
@@ -1188,6 +1189,9 @@ function ApprovalDraftInner({
       if (!postApprovedById) return '선조치 구두/임시 승인자를 선택해 주세요.';
     }
 
+    if (forSubmit && isOvertimeAutoFill && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
+      return '근무 일자는 주말이나 공휴일만 선택할 수 있습니다.';
+    }
     if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
       return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
     }

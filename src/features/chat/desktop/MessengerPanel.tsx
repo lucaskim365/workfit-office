@@ -30,6 +30,7 @@ import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
+import { useWindowActive } from '@/shared/lib/useWindowActive';
 import { ProfileCardHost, useOpenProfileCard } from './ProfileCard';
 
 /** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
@@ -606,11 +607,13 @@ function MessengerThread({
   };
 
   // 읽음 처리 — 들어올 때뿐 아니라 방을 열어 둔 동안 새로 온 메시지도(안 그러면 보낸 사람 쪽 숫자가 안 줄어든다)
+  // 다른 창·탭을 보는 동안은 읽음으로 치지 않는다 — 돌아오면 그때 읽음 처리(windowActive 가 바뀌며 다시 돈다)
+  const windowActive = useWindowActive();
   const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
   useEffect(() => {
-    if (myUnreadCount > 0) markRead.mutate({ roomId: room.id, userId: me });
+    if (windowActive && myUnreadCount > 0) markRead.mutate({ roomId: room.id, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUnreadCount, room.id, me]);
+  }, [myUnreadCount, room.id, me, windowActive]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== room.id) {

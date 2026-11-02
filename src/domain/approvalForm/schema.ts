@@ -159,6 +159,9 @@ export function documentBodyKeyOf(fields?: Array<Pick<FormField, 'key' | 'type'>
 
 /** 기존 문서 취소 전용 서식 코드 — 문서 상세의 [취소 기안]으로만 작성한다. */
 export const CANCEL_FORM_CODE = '취소신청';
+/** 휴일근로 신청서와, 그 전에 쓰던 연장근로 신청서 코드 */
+const HOLIDAY_WORK_FORM_CODE = '휴일근무';
+const LEGACY_OVERTIME_FORM_CODE = '연장근로';
 
 type FormIdentity = Pick<ApprovalForm, 'id' | 'code' | 'active'>;
 const isCancelForm = (form: FormIdentity) => form.code === CANCEL_FORM_CODE || form.id === CANCEL_FORM_CODE;
@@ -170,7 +173,10 @@ export function draftableForms<T extends FormIdentity>(forms: T[]): T[] {
 
 /** 서식 선택 목록 — 취소신청서는 기존 문서 취소 전용이라 뺀다. */
 export function draftCatalogForms<T extends FormIdentity>(forms: T[]): T[] {
-  return draftableForms(forms).filter((form) => !isCancelForm(form));
+  const active = draftableForms(forms).filter((form) => !isCancelForm(form));
+  // 휴일근무 서식이 생기면 옛 연장근로 서식은 목록에서 뺀다 — 켜 둔 채라 반려·회수 문서는 그대로 재상신할 수 있다
+  const replaced = active.some((form) => form.code === HOLIDAY_WORK_FORM_CODE);
+  return replaced ? active.filter((form) => form.code !== LEGACY_OVERTIME_FORM_CODE) : active;
 }
 
 /** 서식의 금액 필드(있으면) — 상신 시 이 값을 amount 로 승격. */

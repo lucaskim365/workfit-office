@@ -31,7 +31,7 @@ import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow } from './CompanySeal';
 import { isSealForm } from '@/domain/approvalForm/seal';
-import { acceptsDecimal, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
 
@@ -1493,6 +1493,7 @@ function InlineFieldEditor({
       return (
         <DateInput
           value={sv}
+          restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY}
           onChange={(e) => setVals({ [field.key]: e.target.value })}
           className="bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer"
         />

@@ -39,6 +39,12 @@ export function isDateSelectable(date: string, min?: string, max?: string): bool
   return true;
 }
 
+/** 주말이거나 공휴일 관리에 등록된 날인지 */
+export function isRestDay(date: string, holidays: { has(date: string): boolean }): boolean {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return day === 0 || day === 6 || holidays.has(date);
+}
+
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const d = new Date(year, month - 1 + delta, 1);
   return { year: d.getFullYear(), month: d.getMonth() + 1 };
