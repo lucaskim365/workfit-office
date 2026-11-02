@@ -33,6 +33,14 @@ export interface DayEntry {
   schedule?: StandardScheduleInfo;
 }
 
+/**
+ * 끌어서 다른 날로 옮길 수 있는 항목인가 — 내 일반 업무만.
+ * 회의는 참석자·회의실이, 외근·출장·휴가는 결재가 달려 있어 날짜만 바꿀 수 없다.
+ */
+export function canMoveEntry(entry: DayEntry, actorId: string): boolean {
+  return entry.source === 'ITEM' && entry.item?.ownerUserId === actorId;
+}
+
 /** 같은 일정이 여러 사람 칸에 나와도 한 번만 — 원본 id 기준 */
 export function sourceIdOf(entry: DayEntry): string {
   return entry.item?.id ?? entry.event?.id ?? entry.outside?.self?.id ?? entry.outside?.approval?.docId ?? entry.key;

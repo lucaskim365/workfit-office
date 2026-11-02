@@ -1,13 +1,14 @@
 import { useState, useMemo, useRef, useEffect, Fragment, type ReactNode } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
+import type { WorkPlanItem } from '@/domain/workPlan/item';
 import {
   buildCalendarMonth,
   moveCalendarMonth,
 } from '@/domain/calendarEvent/calendarDate';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
-import { hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
+import { canMoveEntry, hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
 import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
@@ -72,6 +73,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onCreate?: (date: string, member: User) => void;
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
+  /** 내 일반 업무를 끌어서 다른 날로 옮긴다. 없으면(사용 중이 아닌 계정) 끌 수 없다 */
+  onMoveItem?: (item: WorkPlanItem, date: string) => void;
   /** 내 칸 메모 저장. 없으면(사용 중이 아닌 계정) 메모는 보기만. 실패하면 이유를 담아 throw */
   onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
   /** 보고 있는 달(YYYY-MM) — 화면이 들고 칸 조립 범위로도 쓴다 */
@@ -119,6 +122,7 @@ export function WorkPlanTeamMonthlyMatrix({
   workPlans: monthlyPlans,
   onCreate,
   onOpenEntry,
+  onMoveItem,
   onSaveMemo,
   onOpenCompanySchedule,
   onOpenConfig,
@@ -130,6 +134,13 @@ export function WorkPlanTeamMonthlyMatrix({
   viewSwitch,
 }: WorkPlanTeamMonthlyMatrixProps) {
   const look = LOOK;
+  /** 끌고 있는 내 업무와, 놓으려는 내 칸의 날짜 */
+  const [draggedItem, setDraggedItem] = useState<WorkPlanItem | null>(null);
+  const [dropDate, setDropDate] = useState<string | null>(null);
+  const endDrag = () => {
+    setDraggedItem(null);
+    setDropDate(null);
+  };
   // 내 행은 주마다 맨 위에
   const members = useMemo(() => {
     const me = allMembers.find((m) => m.id === actor.id);
@@ -642,16 +653,28 @@ export function WorkPlanTeamMonthlyMatrix({
                             const onCellClick = isMe
                               ? onCreate ? () => onCreate(dayStr, member) : undefined
                               : onOpenDay ? () => onOpenDay(dayStr) : undefined;
+                            // 끌고 있는 업무는 내 칸에만 놓을 수 있다
+                            const droppable = isMe && draggedItem !== null;
 
                             return (
                               <td
                                 key={dayStr}
+                                onDragOver={droppable ? (e) => {
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = 'move';
+                                  if (dropDate !== dayStr) setDropDate(dayStr);
+                                } : undefined}
+                                onDrop={droppable ? (e) => {
+                                  e.preventDefault();
+                                  if (draggedItem.date !== dayStr) onMoveItem?.(draggedItem, dayStr);
+                                  endDrag();
+                                } : undefined}
                                 // 위(일정) 칸 누르기 — 내 칸은 일정 창, 남의 칸은 하루 상세. 아래 메모 칸은 CellMemo 가 받는다
                                 onClick={onCellClick}
                                 // h-px: 칸 안 div 가 행 높이를 꽉 채우게(h-full) — 줄이 늘면 위 일정 칸만 늘고 메모 칸은 바닥에 그대로
                                 className={`group/day h-px p-2 align-top ${cellBorderClass} transition-colors relative ${cellBgClass} ${
                                   onCellClick ? 'cursor-pointer' : ''
-                                } ${!d.inCurrentMonth ? 'opacity-50' : ''}`}
+                                } ${!d.inCurrentMonth ? 'opacity-50' : ''} ${droppable && dropDate === dayStr ? 'ring-2 ring-inset ring-teal' : ''}`}
                               >
                                 {onCreate && (
                                   <button
@@ -681,9 +704,26 @@ export function WorkPlanTeamMonthlyMatrix({
                                   {/* 1) 위 칸: 일정 — 여러 날 막대 자리 + 칩(종일 먼저, 시작 시각 순). 남는 높이는 여기가 가진다 */}
                                   {barLanes > 0 && <div className="shrink-0" style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
                                   <div className="min-h-[36px] flex-1 space-y-1">
-                                    {entries.map((entry) => (
-                                      <EntryChip key={entry.key} entry={entry} onOpen={onOpenEntry} look={look} />
-                                    ))}
+                                    {entries.map((entry) => {
+                                      const chip = <EntryChip entry={entry} onOpen={onOpenEntry} look={look} />;
+                                      const item = entry.item;
+                                      if (!onMoveItem || !item || !canMoveEntry(entry, actor.id)) return <Fragment key={entry.key}>{chip}</Fragment>;
+                                      return (
+                                        <div
+                                          key={entry.key}
+                                          draggable
+                                          onDragStart={(e) => {
+                                            e.dataTransfer.effectAllowed = 'move';
+                                            e.dataTransfer.setData('text/plain', item.title);
+                                            setDraggedItem(item);
+                                          }}
+                                          onDragEnd={endDrag}
+                                          className={draggedItem?.id === item.id ? 'opacity-50' : ''}
+                                        >
+                                          {chip}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                   {/* 2) 아래 칸: 메모 — 바닥에 붙고 높이는 늘 같다. 내 칸은 눌러서 바로 고친다 */}
                                   <CellMemo

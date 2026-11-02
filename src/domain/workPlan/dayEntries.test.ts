@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { canMoveEntry, type DayEntry as MovableEntry } from './dayEntries';
 import test from 'node:test';
 import type { StandardScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
@@ -174,4 +175,13 @@ test('hasPlannedDay: 캘린더의 휴가·외근 일정은 계획, 사내행사�
   const companyEvent = buildDayEntries('U011', D, { ...empty(), events: [event({ eventType: 'COMPANY_EVENT', title: '창립기념일', attendeeUserIds: [] })] });
   assert.equal(companyEvent.entries.length, 1);
   assert.equal(hasPlannedDay(companyEvent), false);
+});
+
+test('끌어서 옮길 수 있는 것은 내 일반 업무뿐이다', () => {
+  const entry = (source: MovableEntry['source'], ownerUserId?: string) => ({ source, item: ownerUserId ? { ownerUserId } : undefined }) as MovableEntry;
+  assert.equal(canMoveEntry(entry('ITEM', 'me'), 'me'), true);
+  assert.equal(canMoveEntry(entry('ITEM', 'other'), 'me'), false);
+  assert.equal(canMoveEntry(entry('MEETING'), 'me'), false);
+  assert.equal(canMoveEntry(entry('OUTSIDE'), 'me'), false);
+  assert.equal(canMoveEntry(entry('APPROVAL'), 'me'), false);
 });
