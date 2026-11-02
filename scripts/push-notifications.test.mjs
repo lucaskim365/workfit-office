@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { allowsPush } from '../appwrite/functions/push-notifications/src/prefs.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 function serverFixture() {
   const sent = [];
   const context = vm.createContext({
+    allowsPush,
     admin: { apps: [{}], messaging: () => ({
       sendEachForMulticast: async (payload) => {
         sent.push(payload);
@@ -47,6 +49,17 @@ test('채팅 발송: 메시지 시각(at)을 실어 휴대폰이 회수 신호�
   const { context, db, sent } = serverFixture();
   await context.handleChat({ roomId: 'ROOM', senderId: 'sender', text: '안녕', type: 'text', at: '2026-10-29T10:00:00' }, db, 'test', () => {});
   assert.equal(sent[0].data.at, '2026-10-29T10:00:00');
+});
+
+test('채팅 발송: 메신저 알림을 끈 사람에게는 보내지 않는다', async () => {
+  const { context, sent } = serverFixture();
+  const db = {
+    getDocument: async (_database, collection, id) => collection === 'chatRooms'
+      ? { name: '팀 채팅', members: ['sender', 'on', 'off'] }
+      : { fcmToken: `${id}-token`, notificationPrefs: id === 'off' ? '{"chat":false}' : null },
+  };
+  await context.handleChat({ roomId: 'ROOM', senderId: 'sender', text: '안녕', type: 'text' }, db, 'test', () => {});
+  assert.deepEqual(Array.from(sent[0].tokens), ['on-token']);
 });
 
 test('회수: 부른 사람의 회수 가능 기기에만, 읽은 기기 자신은 빼고, 읽은 시각을 실어 보냄', async () => {

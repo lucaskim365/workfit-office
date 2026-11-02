@@ -28,6 +28,8 @@ import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo
 import type { User } from '@/domain/user/schema';
 import type { UserAbsenceConfig } from '@/domain/absence/schema';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
+import { NOTIFICATION_PREF_ROWS, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
+import { useNotificationPrefs, useSaveNotificationPrefs } from '@/features/notification/useNotificationPrefs';
 
 export default function SettingsScreen() {
   const { user: me } = useAuth();
@@ -38,11 +40,11 @@ export default function SettingsScreen() {
   const [pointColor, setPointColor] = useState(() => loadUserTheme(me?.id).pointColor);
   const [btnColor, setBtnColor] = useState(() => loadUserTheme(me?.id).btnColor);
 
-  // Notification states (mock)
-  const [notiMute, setNotiMute] = useState(false);
-  const [notiPush, setNotiPush] = useState(true);
-  const [notiChat, setNotiChat] = useState(true);
-  const [notiApproval, setNotiApproval] = useState(true);
+  // 알림 설정 — 저장 전까지는 화면에서만 바꾼다
+  const { prefs: savedNotiPrefs } = useNotificationPrefs(me?.id);
+  const saveNotiPrefs = useSaveNotificationPrefs(me?.id);
+  const [notiDraft, setNotiDraft] = useState<NotificationPrefs | null>(null);
+  const notiPrefs = notiDraft ?? savedNotiPrefs;
 
   // Font scale states (사용자별 안전 격리)
   const [fontScale, setFontScale] = useState(() => loadUserTheme(me?.id).fontScale);
@@ -372,69 +374,34 @@ export default function SettingsScreen() {
               </div>
 
               <div className="w-full max-w-xl flex flex-col gap-4">
-                {/* 전체 음소거 */}
-                <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-panel-alt/50">
-                  <div className="flex flex-col">
-                    <span className="text-[12.5px] font-bold text-ink">모든 알림 방해금지 (Mute)</span>
-                    <span className="text-[10px] text-ink3 mt-0.5">모든 알림의 수신을 일시적으로 음소거합니다.</span>
+                {NOTIFICATION_PREF_ROWS.map((row) => (
+                  <div key={row.key} className="flex items-center justify-between p-4 border border-border rounded-xl bg-panel-alt/50">
+                    <div className="flex flex-col">
+                      <span className="text-[12.5px] font-bold text-ink">{row.label}</span>
+                      <span className="text-[10px] text-ink3 mt-0.5">{row.desc}</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={notiPrefs[row.key]}
+                      onChange={(e) => setNotiDraft({ ...notiPrefs, [row.key]: e.target.checked })}
+                      className="w-4 h-4 accent-teal cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={notiMute}
-                    onChange={(e) => setNotiMute(e.target.checked)}
-                    className="w-4 h-4 accent-teal cursor-pointer"
-                  />
-                </div>
-
-                {/* 푸시 알림 */}
-                <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-panel-alt/50">
-                  <div className="flex flex-col">
-                    <span className="text-[12.5px] font-bold text-ink">모바일 웹 푸시(FCM) 수신</span>
-                    <span className="text-[10px] text-ink3 mt-0.5">모바일 브라우저 PWA 알림을 실시간 수신합니다.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={notiPush}
-                    onChange={(e) => setNotiPush(e.target.checked)}
-                    className="w-4 h-4 accent-teal cursor-pointer"
-                  />
-                </div>
-
-                {/* 메신저 알림 */}
-                <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-panel-alt/50">
-                  <div className="flex flex-col">
-                    <span className="text-[12.5px] font-bold text-ink">메신저 알림 수신</span>
-                    <span className="text-[10px] text-ink3 mt-0.5">신규 1:1 및 그룹 대화 메세지 도착 시 알림을 받습니다.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={notiChat}
-                    onChange={(e) => setNotiChat(e.target.checked)}
-                    className="w-4 h-4 accent-teal cursor-pointer"
-                  />
-                </div>
-
-                {/* 전자결재 알림 */}
-                <div className="flex items-center justify-between p-4 border border-border rounded-xl bg-panel-alt/50">
-                  <div className="flex flex-col">
-                    <span className="text-[12.5px] font-bold text-ink">전자결재 알림 수신</span>
-                    <span className="text-[10px] text-ink3 mt-0.5">내 결재 차례, 최종 승인/반려 시 알림을 받습니다.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={notiApproval}
-                    onChange={(e) => setNotiApproval(e.target.checked)}
-                    className="w-4 h-4 accent-teal cursor-pointer"
-                  />
-                </div>
+                ))}
 
                 {/* 하단 저장 버튼 */}
                 <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
                   <button
-                    onClick={() => alert('알림 수신 설정이 성공적으로 저장되었습니다.')}
-                    className="px-5 py-2 rounded-lg bg-teal text-white text-[12px] font-bold shadow-sm hover:opacity-90 transition-all"
+                    disabled={saveNotiPrefs.isPending}
+                    onClick={() =>
+                      saveNotiPrefs.mutate(notiPrefs, {
+                        onSuccess: () => { setNotiDraft(null); alert('알림 수신 설정이 저장되었습니다.'); },
+                        onError: () => alert('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
+                      })
+                    }
+                    className="px-5 py-2 rounded-lg bg-teal text-white text-[12px] font-bold shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
                   >
-                    알림 설정 저장
+                    {saveNotiPrefs.isPending ? '저장 중…' : '알림 설정 저장'}
                   </button>
                 </div>
               </div>

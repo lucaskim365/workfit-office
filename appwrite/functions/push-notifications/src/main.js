@@ -29,6 +29,7 @@
 import { Client, Databases } from 'node-appwrite';
 import admin from 'firebase-admin';
 import { resolveUserId } from './token.js';
+import { allowsPush } from './prefs.js';
 
 // firebase-admin 1회 초기화(FCM 발송 전용).
 function ensureAdmin() {
@@ -39,10 +40,14 @@ function ensureAdmin() {
   return admin;
 }
 
-/** 이 사람의 모든 기기 토큰 — users.fcmTokens + 예전 단일 칸 fcmToken (중복·빈 값 제외). */
-async function getUserTokens(dbs, DB, uid, log) {
+/**
+ * 이 사람의 모든 기기 토큰 — users.fcmTokens + 예전 단일 칸 fcmToken (중복·빈 값 제외).
+ * 이 종류(메신저·결재 등)의 알림을 끈 사람은 빈 목록이라 발송에서 빠진다.
+ */
+async function getUserTokens(dbs, DB, uid, log, type) {
   try {
     const u = await dbs.getDocument(DB, 'users', uid);
+    if (!allowsPush(u?.notificationPrefs, type)) return [];
     const list = Array.isArray(u?.fcmTokens) ? u.fcmTokens : [];
     return [...new Set([...list, u?.fcmToken || ''].filter(Boolean))];
   } catch (e) {
@@ -137,7 +142,7 @@ async function handleChatMessage(msg, dbs, DB, log) {
   const owners = new Map(); // token → userId
   await Promise.all(
     recipientIds.map(async (uid) => {
-      for (const token of await getUserTokens(dbs, DB, uid, log)) owners.set(token, uid);
+      for (const token of await getUserTokens(dbs, DB, uid, log, '메신저')) owners.set(token, uid);
     }),
   );
   if (owners.size === 0) return { skipped: 'no-tokens', room: roomId };
@@ -192,10 +197,10 @@ async function handleNotification(noti, dbs, DB, log) {
   const userId = noti?.userId;
   if (!userId) return { skipped: 'no-user' };
 
-  const tokens = await getUserTokens(dbs, DB, userId, log);
+  const type = noti.type || '시스템';
+  const tokens = await getUserTokens(dbs, DB, userId, log, type);
   if (tokens.length === 0) return { skipped: 'no-token', user: userId };
 
-  const type = noti.type || '시스템';
   const title = noti.title || '새 알림';
   const body = noti.text || '';
   const linkUrl = noti.linkUrl || '';
