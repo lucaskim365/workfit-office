@@ -2,9 +2,12 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useHolidays } from '@/features/holiday/useHolidays';
-import { buildMonthGrid, dayTone, isDateSelectable, shiftMonth, toDateStr, type DayTone } from './datePickerGrid';
+import { buildMonthGrid, dayTone, isDateSelectable, isRestDay, shiftMonth, toDateStr, type DayTone } from './datePickerGrid';
 
-type DateInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>;
+type DateInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+  /** 주말·공휴일 관리에 등록된 날만 고를 수 있다(직접 입력 불가, 달력으로만) */
+  restDaysOnly?: boolean;
+};
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const TONE_TEXT: Record<DayTone, string> = { holiday: 'text-danger', sun: 'text-danger', sat: 'text-blue', normal: 'text-ink' };
@@ -17,7 +20,7 @@ const LAYOUT_CLASS = /^!?(w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span|sel
  * 날짜 입력칸 — 브라우저 기본 달력 대신 주말·공휴일 색이 구분되는 달력을 띄움.
  * 실제 값은 기존 <input type="date"> 그대로라 value/onChange/react-hook-form register 를 똑같이 쓸 수 있다.
  */
-export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ className = '', disabled, readOnly, ...rest }, ref) => {
+export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ className = '', disabled, readOnly, restDaysOnly = false, ...rest }, ref) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const setRefs = useCallback(
@@ -39,11 +42,11 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ classNa
         ref={setRefs}
         type="date"
         disabled={disabled}
-        readOnly={readOnly || touch}
+        readOnly={readOnly || touch || restDaysOnly}
         {...rest}
         onClick={(e) => {
           rest.onClick?.(e);
-          if (!locked && touch) setOpen(true);
+          if (!locked && (touch || restDaysOnly)) setOpen(true);
         }}
         className={`${className} !pr-8 [&::-webkit-calendar-picker-indicator]:hidden`}
       />
@@ -57,7 +60,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ classNa
       >
         <CalendarDays size={14} />
       </button>
-      {open && <DatePopup input={inputRef} onClose={() => setOpen(false)} />}
+      {open && <DatePopup input={inputRef} restDaysOnly={restDaysOnly} onClose={() => setOpen(false)} />}
     </span>
   );
 });
@@ -70,7 +73,7 @@ function commitValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function DatePopup({ input, onClose }: { input: React.RefObject<HTMLInputElement | null>; onClose: () => void }) {
+function DatePopup({ input, onClose, restDaysOnly }: { input: React.RefObject<HTMLInputElement | null>; onClose: () => void; restDaysOnly: boolean }) {
   const el = input.current;
   const value = el?.value ?? '';
   const min = el?.min || undefined;
@@ -116,10 +119,11 @@ function DatePopup({ input, onClose }: { input: React.RefObject<HTMLInputElement
 
   const { data: holidays = [] } = useHolidays(String(view.year));
   const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
+  const canPick = (date: string): boolean => isDateSelectable(date, min, max) && (!restDaysOnly || isRestDay(date, holidayMap));
   const cells = useMemo(() => buildMonthGrid(view.year, view.month), [view]);
   const move = (delta: number) => setView((v) => shiftMonth(v.year, v.month, delta));
   const pick = (date: string) => {
-    if (!input.current || !isDateSelectable(date, min, max)) return;
+    if (!input.current || !canPick(date)) return;
     commitValue(input.current, date);
     onClose();
   };
@@ -152,7 +156,7 @@ function DatePopup({ input, onClose }: { input: React.RefObject<HTMLInputElement
         ))}
         {cells.map((c) => {
           const selected = c.date === value;
-          const enabled = isDateSelectable(c.date, min, max);
+          const enabled = canPick(c.date);
           const holidayName = holidayMap.get(c.date);
           const tone = selected ? 'text-white' : TONE_TEXT[dayTone(c.date, c.weekday, holidayMap)];
           return (
@@ -175,7 +179,7 @@ function DatePopup({ input, onClose }: { input: React.RefObject<HTMLInputElement
       <div className="mt-1.5 flex justify-end border-t border-border pt-1.5">
         <button
           type="button"
-          disabled={!isDateSelectable(today, min, max)}
+          disabled={!canPick(today)}
           onClick={() => pick(today)}
           className="rounded-md px-2.5 py-1 text-[11.5px] font-bold text-teal hover:bg-teal/10 disabled:opacity-40"
         >
