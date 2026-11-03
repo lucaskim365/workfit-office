@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { ArrowLeft, Eye, FileSpreadsheet, History, PenLine, Save, X } from 'lucide-react';
+import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
@@ -15,6 +16,7 @@ import {
   validateApprovalSheet,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { SheetCellPanel } from './SheetCellPanel';
+import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/modules/gw/approval/sheetForm/repeatRows';
 
 /**
@@ -66,6 +68,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [note, setNote] = useState('');
   const [side, setSide] = useState<'cell' | 'history'>('cell');
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
+  const [trial, setTrial] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNew = !form.id;
@@ -147,7 +150,11 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       </>
     );
     const marks: { t: string; cls: string; title: string }[] = [];
-    if (p.input) marks.push({ t: '입력', cls: 'bg-amber-400/90 text-white', title: '입력 칸' });
+    if (p.input) marks.push({ t: `입력·${INPUT_SHORT_LABELS[p.input.type] ?? ''}`, cls: 'bg-amber-400/90 text-white', title: '입력 칸 — 기안 화면에서 이 종류의 입력 도구가 뜹니다' });
+    // 비어 있는 입력 칸에는 기안 화면에서 뜰 입력 도구 모양을 흐리게
+    const col = sheet.cols[c];
+    const emptyInput = p.input && col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
+    const inputLook = emptyInput && p.input ? <InputLook input={p.input} /> : null;
     if (p.name) marks.push({ t: cellNameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) marks.push({ t: '프로젝트', cls: 'bg-sky-500 text-white', title: `프로젝트 값 채우기: ${bindLabel(p.bind)}` });
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
@@ -156,6 +163,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (!marks.length) return repeatMark || null;
     return (
       <>
+        {inputLook}
         {repeatMark}
         <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
           {marks.map((m) => (
@@ -219,6 +227,15 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
           >
             <Eye className="h-3.5 w-3.5" />
             <span>문서 모양</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrial(true)}
+            title="지금 편집 중인 서식을 기안 화면처럼 열어 입력해 봅니다(저장되지 않음)"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink cursor-pointer"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            <span>기안 미리보기</span>
           </button>
           <button
             type="button"
@@ -343,6 +360,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         </div>
       </div>
 
+      {trial && <DraftTrial sheet={sheet} onClose={() => setTrial(false)} />}
+
       {preview && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-6"
@@ -436,6 +455,56 @@ function VersionHistory({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * 기안 미리보기 — 편집 중인 틀을 기안 화면과 같은 부품(SheetDraftForm)으로 연다.
+ * 입력 도구·숫자 칸·수식·반복 구간 행 추가를 그대로 써 볼 수 있고, 입력한 값은 어디에도 저장하지 않는다.
+ */
+function DraftTrial({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [issues, setIssues] = useState<string[]>([]);
+  // 열 때 한 번만 초점(Esc 로 닫기) — 그릴 때마다 초점을 가져오면 칸 입력이 끊긴다
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => boxRef.current?.focus(), []);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-6"
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      tabIndex={-1}
+      ref={boxRef}
+    >
+      <div className="w-full max-w-[880px] rounded-xl bg-panel p-4 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[13px] font-bold text-ink">기안 미리보기</div>
+            <div className="text-[11px] text-ink3">기안자가 보는 화면 그대로입니다. 입력해 봐도 저장되지 않습니다.</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setValues({})} className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink2 hover:text-ink">
+              입력 지우기
+            </button>
+            <button type="button" onClick={onClose} className="rounded p-1 text-ink3 hover:bg-panel-alt" aria-label="닫기">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="bg-[#878d90] p-4">
+          <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">
+            <SheetDraftForm
+              formId="미리보기"
+              version={1}
+              template={sheet}
+              values={values}
+              onFields={(f) => setValues((v) => ({ ...v, ...f }))}
+              onIssues={setIssues}
+            />
+          </div>
+        </div>
+        {issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
+      </div>
     </div>
   );
 }

@@ -200,10 +200,15 @@ export interface SheetDraftFormProps {
   onFields: (fields: Record<string, string>) => void;
   /** 상신 전 검사용 — 숫자 칸에 숫자가 아닌 값이 든 칸 주소 */
   onIssues?: (invalidCells: string[]) => void;
+  /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기의 '기안 미리보기'(편집 중인 틀, 저장 안 함) */
+  template?: Sheet;
 }
 
-export function SheetDraftForm({ formId, version, values, onFields, onIssues }: SheetDraftFormProps) {
-  const { data: loaded, isLoading, error } = useFormVersionSheet(formId, version);
+export function SheetDraftForm({ formId, version, values, onFields, onIssues, template }: SheetDraftFormProps) {
+  const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
+  const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
+  const isLoading = !template && fetched.isLoading;
+  const error = template ? null : fetched.error;
   const org = useOrgTree();
   const key = versionKey(formId, version);
   const rawValues = values[SHEET_VALUES_KEY];
