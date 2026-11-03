@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { SheetView, displayValue, parseNumber, recalculate, setCellValue, type Sheet } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetView, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
 import { Plus, Trash2 } from 'lucide-react';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
@@ -72,7 +72,7 @@ function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: st
   );
 }
 
-function CellField({ input, sheet, r, c, onSet }: { input: CellInput; sheet: Sheet; r: number; c: number; onSet: (text: string) => void }) {
+function CellField({ input, sheet, r, c, width, onSet }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string) => void }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
   switch (input.type) {
@@ -131,6 +131,11 @@ function CellField({ input, sheet, r, c, onSet }: { input: CellInput; sheet: She
       );
     default:
       // text·user·dept — 사람·부서 고르기는 조직도 연결 때 바꾼다
+      // 셀에 맞춤 칸 — 줄을 바꾸지 않고 글씨를 줄여 칸에 맞춘다(엑셀과 같음). 아니면 넘칠 때 줄바꿈하며 행이 늘어난다
+      if (sheet.styles[`${r}:${col}`]?.shrink) {
+        const size = shrinkFontSize(raw, sheet.styles[`${r}:${col}`], width);
+        return <input value={raw} onChange={(e) => onSet(e.target.value)} className={FIELD} style={{ ...INHERIT, ...(size ? { fontSize: size } : {}) }} />;
+      }
       return <AutoTextarea value={raw} onChange={onSet} singleLine />;
   }
 }
@@ -197,7 +202,10 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
           sheet={sheet}
           renderCell={(r, c) => {
             const input = draftInputOf(sheet, r, c);
-            return input ? <CellField input={input} sheet={sheet} r={r} c={c} onSet={(t) => set(r, c, t)} /> : undefined;
+            if (!input) return undefined;
+            const span = sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1;
+            const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
+            return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t) => set(r, c, t)} />;
           }}
           renderOverlay={(r, c) => {
             // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 인쇄에는 안 나옴

@@ -5,7 +5,7 @@
  * - 업무 규칙(결재 칸 등)은 모르며, 쓰는 쪽이 판단 함수·칸 표시·도구 모음 끝 버튼을 넘겨준다
  * - 되돌리기(Ctrl+Z)·다시 실행(Ctrl+Y)은 편집기 안에서 관리한다
  */
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { colLetter } from './formula';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, recalculate, type CellStyle, type Sheet } from './model';
 import {
@@ -22,7 +22,7 @@ import {
   type BorderPreset,
   type CellRange,
 } from './ops';
-import { SHEET_COLORS, cellCss, defaultAlign, displayValue, renderStyle } from './style';
+import { SHEET_COLORS, cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize } from './style';
 
 export interface SheetSelection {
   range: CellRange;
@@ -266,6 +266,45 @@ export function SheetEditor({
     focusGrid();
   };
 
+  // 칸 편집 상자 — 고친 칸 자리에 띄운다(병합 칸은 병합 크기). 글에 맞춰 넓이·높이를 늘린다
+  const [editBox, setEditBox] = useState<{ left: number; top: number; width: number; height: number; fontSize?: string; fontWeight?: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!editing || editSource !== 'cell') {
+      setEditBox(null);
+      return;
+    }
+    const grid = gridRef.current;
+    const td = grid?.querySelector<HTMLElement>(`[data-cell="${editing.r}:${editing.c}"]`);
+    if (!grid || !td) return;
+    const g = grid.getBoundingClientRect();
+    const t = td.getBoundingClientRect();
+    const cs = getComputedStyle(td);
+    // 화면 크기 배율(CSS zoom — 글자 크기 설정)이 걸려 있으면 화면 좌표가 배율만큼 커져 있다 — 배치 단위로 되돌린다
+    const scale = grid.offsetWidth > 0 ? g.width / grid.offsetWidth : 1;
+    setEditBox({
+      left: (t.left - g.left) / scale + grid.scrollLeft,
+      top: (t.top - g.top) / scale + grid.scrollTop,
+      width: t.width / scale,
+      height: t.height / scale,
+      fontSize: cs.fontSize,
+      fontWeight: Number(cs.fontWeight) || undefined,
+    });
+  }, [editing, editSource]);
+  useLayoutEffect(() => {
+    const el = cellInputRef.current;
+    const grid = gridRef.current;
+    if (!el || !grid || !editBox) return;
+    // 한 줄로 쓴 폭을 재고, 칸보다 넓으면 오른쪽으로 넓힌다. 시트 끝까지 넘으면 그 폭에서 줄을 바꾼다
+    const maxWidth = Math.max(editBox.width, grid.scrollWidth - editBox.left - 2);
+    el.style.whiteSpace = 'pre';
+    el.style.width = `${editBox.width}px`;
+    el.style.height = 'auto';
+    const wanted = el.scrollWidth + 4;
+    if (wanted > editBox.width) el.style.width = `${Math.min(wanted, maxWidth)}px`;
+    if (wanted > maxWidth) el.style.whiteSpace = 'pre-wrap';
+    el.style.height = `${Math.max(editBox.height, el.scrollHeight)}px`;
+  }, [draft, editBox]);
+
   const cancelEdit = () => {
     setEditing(null);
     setPicked(null);
@@ -361,7 +400,7 @@ export function SheetEditor({
   const focusCell = anchorOf(focus);
   const focusStyle = styleAt(focusCell.r, focusCell.c);
   const style = (patch: Partial<CellStyle>) => update((s) => applyStyle(s, range, patch));
-  const toggle = (key: 'bold' | 'italic' | 'underline') => {
+  const toggle = (key: 'bold' | 'italic' | 'underline' | 'shrink') => {
     let all = true;
     for (let r = range.r1; r <= range.r2; r++) for (let c = range.c1; c <= range.c2; c++) if (!styleAt(r, c)?.[key]) all = false;
     style({ [key]: all ? undefined : true });
@@ -590,6 +629,14 @@ export function SheetEditor({
           </button>
           <button type="button" className={`${btn(!!focusStyle?.underline)} underline`} onClick={() => toggle('underline')} title="밑줄 (Ctrl+U)">
             가
+          </button>
+          <button
+            type="button"
+            className={`${btn(!!focusStyle?.shrink)} text-[10.5px]`}
+            onClick={() => toggle('shrink')}
+            title="셀에 맞춤 — 한 줄 글이 칸보다 길면 글씨를 줄여 칸에 맞춥니다(줄바꿈이 든 글은 제외, 엑셀과 같음)"
+          >
+            맞춤
           </button>
           <select
             value={focusStyle?.fontSize ?? ''}
@@ -827,6 +874,7 @@ export function SheetEditor({
                   return (
                     <td
                       key={col}
+                      data-cell={`${r}:${c}`}
                       rowSpan={m && m.rowSpan > 1 ? m.rowSpan : undefined}
                       colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
                       onMouseDown={(e) => onCellMouseDown(e, { r, c })}
@@ -838,26 +886,18 @@ export function SheetEditor({
                       style={{
                         textAlign: defaultAlign(computed, r, col),
                         ...cellCss(renderStyle(value, r, c, m?.rowSpan, m?.colSpan)),
+                        ...(() => {
+                          // 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다
+                          const w = cols.slice(c, c + (m?.colSpan ?? 1)).reduce((sum, k) => sum + colW(k), 0);
+                          const size = shrinkFontSize(displayValue(computed, r, col), value.styles[key], w);
+                          return size ? { fontSize: size, whiteSpace: 'nowrap' as const } : {};
+                        })(),
                         ...(isFocus && !isEditing ? { outline: '2px solid var(--color-teal, #0f766e)', outlineOffset: '-2px' } : {}),
                         ...(isPicked ? { outline: '2px dashed #2563eb', outlineOffset: '-2px' } : {}),
                         ...(!design && !locked ? { backgroundColor: value.styles[key]?.bg ?? '#fffdf0' } : {}),
                       }}
                     >
-                      {isEditing && editSource === 'cell' ? (
-                        <textarea
-                          ref={cellInputRef}
-                          value={draft}
-                          rows={Math.max(1, draft.split('\n').length)}
-                          onChange={(e) => {
-                            setDraft(e.target.value);
-                            caretRef.current = e.target.selectionStart ?? e.target.value.length;
-                            pickRef.current = null;
-                          }}
-                          onSelect={(e) => (caretRef.current = (e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-                          onKeyDown={onEditorKeyDown}
-                          className="block w-full resize-none bg-white font-mono text-[12px] text-ink outline-2 outline-teal"
-                        />
-                      ) : (
+                      {isEditing && editSource === 'cell' ? null : (
                         <>
                           {isEditing ? draft : displayValue(computed, r, col)}
                           {renderBadge?.(r, c)}
@@ -889,6 +929,31 @@ export function SheetEditor({
             ))}
           </tbody>
         </table>
+        {editing && editSource === 'cell' && editBox && (
+          // 엑셀처럼 칸을 넘는 글은 오른쪽으로 넓어지고, 시트 끝에 닿으면 줄을 바꿔 아래로 늘어난다(다른 칸 위에 뜸)
+          <textarea
+            ref={cellInputRef}
+            value={draft}
+            rows={1}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              caretRef.current = e.target.selectionStart ?? e.target.value.length;
+              pickRef.current = null;
+            }}
+            onSelect={(e) => (caretRef.current = (e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+            onKeyDown={onEditorKeyDown}
+            className="absolute z-[5] resize-none overflow-hidden bg-white px-1 text-[#222] shadow-md outline-2 outline-teal"
+            style={{
+              left: editBox.left,
+              top: editBox.top,
+              minWidth: editBox.width,
+              minHeight: editBox.height,
+              fontSize: editBox.fontSize,
+              fontWeight: editBox.fontWeight,
+              lineHeight: 1.35,
+            }}
+          />
+        )}
         {guideWidth !== undefined && (
           <div
             aria-hidden

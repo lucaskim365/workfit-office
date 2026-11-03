@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellBorder, cellCss, displayValue, defaultAlign, SHEET_COLORS } from './style';
+import { cellBorder, cellCss, displayValue, defaultAlign, shrinkFontSize, SHEET_COLORS } from './style';
 import { createSheet, cellKey } from './model';
 
 test('엑셀 색 그대로', () => {
@@ -86,4 +86,10 @@ test('그릴 테두리 — 직접 지운 쪽(없음)은 이웃 선보다 우선,
   s.merges = [{ startRow: 1, startCol: 0, rowSpan: 1, colSpan: 3 }];
   s.styles[cellKey(1, a)] = { border: { r: 'thick', b: 'thin' } }; // 대표 칸에만 저장된 선(옛 데이터)
   assert.deepEqual(cellBorder(s, 1, 0, 1, 3), { b: 'thin', r: 'thick' });
+});
+
+test('셀에 맞춤 — 줄바꿈이 든 글·셀에 맞춤 아닌 칸·짧은 글은 줄이지 않음 (글 폭 재기는 브라우저에서만)', () => {
+  assert.equal(shrinkFontSize('한 줄\n두 줄', { shrink: true }, 10), undefined);
+  assert.equal(shrinkFontSize('아주 긴 글자입니다', {}, 10), undefined);
+  assert.equal(shrinkFontSize('', { shrink: true }, 10), undefined);
 });

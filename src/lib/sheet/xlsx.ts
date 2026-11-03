@@ -205,6 +205,8 @@ function readStyles(xml: XmlNode | undefined, theme: string[], warn: (msg: strin
     const h = align?.attrs.horizontal;
     if (h === 'left' || h === 'right') style.align = h;
     else if (h === 'center' || h === 'centerContinuous') style.align = 'center';
+    const sh = align?.attrs.shrinkToFit;
+    if (sh === '1' || sh === 'true') style.shrink = true;
     const v = align?.attrs.vertical;
     if (v === 'top' || v === 'bottom') style.valign = v;
     else if (v === 'center') style.valign = 'middle';

@@ -56,6 +56,40 @@ export function cellCss(style?: CellStyle): CSSProperties {
   return css;
 }
 
+/** 기본 글씨 크기(px) — 편집기·보기 표의 text-[12px] */
+export const BASE_FONT_PX = 12;
+/** 셀에 맞춤으로 줄일 수 있는 가장 작은 글씨(px) */
+const MIN_SHRINK_PX = 5;
+/** 칸 안쪽 여백(좌우 px-1 + 테두리) */
+const CELL_PADDING_PX = 10;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+let measureFamily = '';
+/** 글 폭 재기(브라우저에서만) — 못 재면 null */
+function textWidth(text: string, px: number, bold: boolean): number | null {
+  if (typeof document === 'undefined') return null;
+  if (measureCtx === undefined) {
+    measureCtx = document.createElement('canvas').getContext('2d');
+    measureFamily = getComputedStyle(document.body).fontFamily || 'sans-serif';
+  }
+  if (!measureCtx) return null;
+  measureCtx.font = `${bold ? '700 ' : ''}${px}px ${measureFamily}`;
+  return measureCtx.measureText(text).width;
+}
+
+/**
+ * 셀에 맞춤 글씨 크기 — 셀에 맞춤 칸의 한 줄 글이 칸 폭(widthPx)보다 길면 줄인 크기('9.5px'), 아니면 undefined.
+ * 줄바꿈이 든 글은 줄이지 않는다(엑셀: Alt+Enter 로 줄을 바꾸면 '텍스트 줄 바꿈'이 켜지고 셀에 맞춤은 꺼짐)
+ */
+export function shrinkFontSize(text: string, style: CellStyle | undefined, widthPx: number): string | undefined {
+  if (!style?.shrink || !text || text.includes('\n')) return undefined;
+  const px = style.fontSize ? (style.fontSize * 4) / 3 : BASE_FONT_PX;
+  const w = textWidth(text, px, !!style.bold);
+  const room = widthPx - CELL_PADDING_PX;
+  if (w === null || room <= 0 || w <= room) return undefined;
+  return `${Math.max(MIN_SHRINK_PX, Math.floor((px * room) / w * 10) / 10)}px`;
+}
+
 /** 부동소수 오차를 걷어 낸 고정 자릿수 */
 const fixed = (n: number, d: number) => Number(n.toFixed(10)).toFixed(d);
 

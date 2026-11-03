@@ -23,6 +23,8 @@ export interface CellStyle {
   bg?: string; // '#rrggbb'
   align?: 'left' | 'center' | 'right';
   valign?: 'top' | 'middle' | 'bottom';
+  /** 셀에 맞춤(엑셀 Shrink to fit) — 한 줄 글이 칸보다 길면 글씨를 줄여 칸 폭에 맞춘다. 줄바꿈이 든 글엔 적용 안 됨(엑셀과 같음) */
+  shrink?: boolean;
   /** currency: 콤마, percent: 값×100 에 % (엑셀과 같음 — 0.613 → 61.3%) */
   numFmt?: 'general' | 'currency' | 'percent';
   /** 숫자 표시 서식의 소수 자릿수(반올림). 없으면 금액은 있는 그대로, 백분율은 최대 2자리 */

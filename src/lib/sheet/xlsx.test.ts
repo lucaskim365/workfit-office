@@ -205,13 +205,14 @@ const STYLES2 = `<?xml version="1.0"?><styleSheet ${NS}>
 <fill><patternFill patternType="solid"><fgColor theme="0"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor theme="4" tint="0.79998168889431442"/></patternFill></fill></fills>
 <borders count="1"><border/></borders>
-<cellXfs count="6">
+<cellXfs count="7">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
 <xf numFmtId="0" fontId="0" fillId="2" borderId="0"/>
 <xf numFmtId="0" fontId="0" fillId="3" borderId="0"/>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="0"/>
 <xf numFmtId="179" fontId="0" fillId="0" borderId="0"/>
 <xf numFmtId="2" fontId="0" fillId="0" borderId="0"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0"><alignment vertical="center" shrinkToFit="1"/></xf>
 </cellXfs></styleSheet>`;
 
 const THEME = `<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="Office">
@@ -222,6 +223,7 @@ const THEME = `<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlform
 const SHEET2 = `<sheetData>
 <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>노랑</t></is></c><c r="B1" s="2" t="inlineStr"><is><t>흰</t></is></c><c r="C1" s="3" t="inlineStr"><is><t>테마</t></is></c></row>
 <row r="2"><c r="A2" s="4"><v>0.6133338785</v></c><c r="B2" s="5"><v>3.14159</v></c><c r="C2"><f>TODAY()</f><v>46000</v></c><c r="F2" t="inlineStr"><is><t>인쇄 밖</t></is></c></row>
+<row r="3"><c r="A3" s="6" t="inlineStr"><is><t>맞춤</t></is></c></row>
 <row r="5"><c r="A5" t="inlineStr"><is><t>인쇄 밖</t></is></c></row>
 </sheetData>`;
 
@@ -229,7 +231,7 @@ const WB_PRINT = (sheetXml: string) => {
   const files = workbook(sheetXml, { 'xl/styles.xml': STYLES2, 'xl/theme/theme1.xml': THEME });
   files['xl/workbook.xml'] = files['xl/workbook.xml'].replace(
     '</workbook>',
-    `<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'발주서'!$A$1:$C$2</definedName></definedNames></workbook>`
+    `<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'발주서'!$A$1:$C$3</definedName></definedNames></workbook>`
   );
   return files;
 };
@@ -252,8 +254,14 @@ test('엑셀 불러오기 — 소수 자릿수, TODAY, 인쇄 영역 밖은 버�
   assert.equal(at(sheet, 'A2'), '0.6133338785'); // 값은 그대로, 표시만 61.3%
   assert.match(at(sheet, 'C2'), /^\d{4}-\d{2}-\d{2}$/); // TODAY() 계산됨
   assert.equal(formulaAt(sheet, 'C2'), '=TODAY()');
-  assert.equal(sheet.rows.length, 2);
+  assert.equal(sheet.rows.length, 3);
   assert.equal(sheet.cols.length, 3);
-  assert.ok(warnings.some((w) => w.includes('인쇄 영역(A1:C2)')));
+  assert.ok(warnings.some((w) => w.includes('인쇄 영역(A1:C3)')));
   assert.ok(!warnings.some((w) => w.includes('수식')));
+});
+
+test('엑셀 불러오기 — 셀에 맞춤(shrinkToFit)', async () => {
+  const { sheet } = await importXlsx(await zip(WB_PRINT(SHEET2)));
+  assert.equal(styleAt(sheet, 'A3')?.shrink, true);
+  assert.equal(styleAt(sheet, 'A1')?.shrink, undefined);
 });

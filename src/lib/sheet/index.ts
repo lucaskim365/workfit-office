@@ -49,7 +49,7 @@ export {
   type BorderPreset,
   type PasteOptions,
 } from './ops';
-export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, SHEET_COLORS } from './style';
+export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, shrinkFontSize, SHEET_COLORS } from './style';
 export { importXlsx, XlsxError, type XlsxImport, type XlsxOptions } from './xlsx';
 export { SheetEditor, type SheetEditorProps, type SheetSelection } from './SheetEditor';
 export { SheetView, type SheetViewProps } from './SheetView';

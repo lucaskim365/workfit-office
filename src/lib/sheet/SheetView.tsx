@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Sheet } from './model';
-import { cellCss, defaultAlign, displayValue, renderStyle } from './style';
+import { cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize } from './style';
 
 export interface SheetViewProps {
   /** 계산까지 끝난 시트(값이 rows 에 들어 있어야 한다) */
@@ -25,6 +25,12 @@ export interface SheetViewProps {
 export function SheetView({ sheet, hidden, hiddenText = '비공개', renderCell, renderOverlay, fitWidth, className = '' }: SheetViewProps) {
   const { cols, rows, merges } = sheet;
   const widthOf = (col: string) => sheet.colWidths[col] ?? DEFAULT_COL_WIDTH;
+  /** 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다 */
+  const fitted = (r: number, c: number, col: string, span: number) => {
+    const w = cols.slice(c, c + span).reduce((sum, k) => sum + widthOf(k), 0);
+    const size = shrinkFontSize(displayValue(sheet, r, col), sheet.styles[`${r}:${col}`], w);
+    return size ? { fontSize: size, whiteSpace: 'nowrap' as const } : {};
+  };
   const total = cols.reduce((sum, col) => sum + widthOf(col), 0);
   const scale = fitWidth && total > fitWidth ? fitWidth / total : 1;
   const mergeAt = (r: number, c: number) =>
@@ -54,7 +60,11 @@ export function SheetView({ sheet, hidden, hiddenText = '비공개', renderCell,
                     rowSpan={m && m.rowSpan > 1 ? m.rowSpan : undefined}
                     colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
                     className="relative overflow-hidden px-1 align-middle whitespace-pre-wrap break-words"
-                    style={{ textAlign: defaultAlign(sheet, r, col), ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan)) }}
+                    style={{
+                      textAlign: defaultAlign(sheet, r, col),
+                      ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan)),
+                      ...fitted(r, c, col, m?.colSpan ?? 1),
+                    }}
                   >
                     {secret ? <span className="italic text-[#999]">{hiddenText}</span> : (renderCell?.(r, c) ?? displayValue(sheet, r, col))}
                     {renderOverlay?.(r, c)}
