@@ -160,7 +160,7 @@ test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸
   assert.equal(errs.length, 3);
   assert.match(errs[0], /^A1: 선택 칸/);
   assert.match(errs[1], /^B1: 수식 칸/);
-  assert.match(errs[2], /^A2: '금액키'/);
+  assert.match(errs[2], /^A2: '금액 키'/);
 
   let ok = createSheet(2, 2);
   ok = setCellMeta(ok, APPROVAL_NS.input, 0, 0, { type: 'currency' });

@@ -134,8 +134,8 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
         <select className={inp} value={props.name ?? ''} onChange={(e) => onChange(setCellName(sheet, focus.r, focus.c, e.target.value || undefined))}>
           <option value="">이름 없음</option>
           {COMMON_CELL_NAMES.map((n) => (
-            <option key={n.key} value={n.key}>
-              {n.label} — {n.hint}
+            <option key={n.key} value={n.key} title={n.hint}>
+              {n.label}
             </option>
           ))}
           {props.name && !COMMON_CELL_NAMES.some((n) => n.key === props.name) && (

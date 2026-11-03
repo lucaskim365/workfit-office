@@ -191,7 +191,7 @@ export function bindLabel(source: string): string {
  * 본문(body)·휴가 기간 같은 연동 이름은 휴가원 등을 시트로 옮길 때(§11.7-5) 더한다. 저장 키(amount)는 바꾸지 말 것.
  */
 export const COMMON_CELL_NAMES: { key: string; label: string; hint: string }[] = [
-  { key: 'amount', label: '금액키', hint: '문서 금액 — 결재선 규칙의 금액 조건이 읽음(기존 서식의 금액키와 같음)' },
+  { key: 'amount', label: '금액 키', hint: '문서 금액 — 결재선 규칙의 금액 조건이 읽음(기존 서식의 금액키와 같음)' },
 ];
 
 export function cellNameLabel(key: string): string {
@@ -312,7 +312,7 @@ export function validateApprovalSheet(s: Sheet): string[] {
     if (name === 'amount') {
       const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
       const numeric = input ? input.type === 'number' || input.type === 'currency' : s.formulas[key] !== undefined;
-      if (!numeric) errors.push(`${cellAddress(p.r, p.c)}: '금액키' 칸은 숫자·금액 입력 칸이거나 수식 칸이어야 합니다.`);
+      if (!numeric) errors.push(`${cellAddress(p.r, p.c)}: '금액 키' 칸은 숫자·금액 입력 칸이거나 수식 칸이어야 합니다.`);
     }
   });
   return errors;
