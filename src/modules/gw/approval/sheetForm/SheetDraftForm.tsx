@@ -199,6 +199,12 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
             const input = draftInputOf(sheet, r, c);
             return input ? <CellField input={input} sheet={sheet} r={r} c={c} onSet={(t) => set(r, c, t)} /> : undefined;
           }}
+          renderOverlay={(r, c) => {
+            // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 인쇄에는 안 나옴
+            if (c !== 0) return null;
+            const sec = sections.find((x) => r >= x.first && r <= x.last);
+            return sec ? <span aria-hidden title={`${sec.label} — 아래 [행 추가]로 줄을 늘립니다`} className="absolute inset-y-0 left-0 w-[3px] bg-violet-500 print:hidden" /> : null;
+          }}
         />
       </div>
       {sections.length > 0 && (
@@ -209,7 +215,8 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
             const added = extras[sec.id] ?? 0;
             return (
               <div key={sec.id} className="flex items-center gap-1.5 text-[11px]">
-                <span className="font-semibold text-[#444]">{sec.label}</span>
+                <span className="inline-block h-3 w-[3px] rounded-sm bg-violet-500" aria-hidden />
+                <span className="font-semibold text-violet-700">{sec.label}</span>
                 <span className="text-[#888]">{rows}줄</span>
                 {added > 0 && (
                   <button

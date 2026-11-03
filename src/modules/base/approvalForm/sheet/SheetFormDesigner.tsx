@@ -284,7 +284,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         <div className="min-w-0 rounded-xl border border-border bg-panel p-2">
           <SheetEditor
             value={sheet}
-            onChange={(next) => setSheet(healRepeatSections(next))}
+            onChange={setSheet}
+            normalize={healRepeatSections}
             mode="design"
             canMerge={canMergeApprovalRange}
             canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}

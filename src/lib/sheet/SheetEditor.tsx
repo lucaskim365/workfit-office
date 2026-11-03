@@ -55,6 +55,8 @@ export interface SheetEditorProps {
   guideWidth?: number;
   /** 편집기 높이(CSS 값). 기본 520px */
   height?: string;
+  /** 편집할 때마다 쓰는 쪽 규칙으로 다듬기(예: 반복 구간 이어 붙이기) — 다듬은 결과가 한 번의 편집으로 되돌리기에 들어간다 */
+  normalize?: (s: Sheet) => Sheet;
 }
 
 type Cell = { r: number; c: number };
@@ -117,6 +119,7 @@ export function SheetEditor({
   onNotice,
   guideWidth,
   height = '520px',
+  normalize,
 }: SheetEditorProps) {
   const design = mode === 'design';
   const [anchor, setAnchor] = useState<Cell>({ r: 0, c: 0 });
@@ -167,8 +170,9 @@ export function SheetEditor({
     seenRef.current = next;
     onChange(next);
   };
-  const commit = (next: Sheet) => {
-    if (next === value) return;
+  const commit = (raw: Sheet) => {
+    if (raw === value) return;
+    const next = normalize ? normalize(raw) : raw;
     undoStack.current = [...undoStack.current.slice(-(HISTORY_LIMIT - 1)), value];
     redoStack.current = [];
     emit(next);
@@ -186,6 +190,27 @@ export function SheetEditor({
     undoStack.current.push(value);
     emit(next);
   };
+
+  // 격자 밖(속성 패널의 고르기·체크·버튼 등)에 초점이 있어도 Ctrl+Z / Ctrl+Shift+Z·Ctrl+Y 가 편집기에 듣게.
+  // 글을 쓰는 중(입력란·글 상자)이면 그 글의 되돌리기(브라우저 기본)를 그대로 둔다
+  const historyRef = useRef({ undo, redo });
+  historyRef.current = { undo, redo };
+  useEffect(() => {
+    const TEXT_INPUT_SKIP = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color', 'range']);
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.code !== 'KeyZ' && e.code !== 'KeyY') return;
+      const t = e.target as HTMLElement | null;
+      const typing =
+        !!t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !TEXT_INPUT_SKIP.has((t as HTMLInputElement).type)));
+      if (typing) return;
+      e.preventDefault();
+      if (e.code === 'KeyY' || e.shiftKey) historyRef.current.redo();
+      else historyRef.current.undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // ── 칸 ─────────────────────────────────────────────────
   const mergeAt = (r: number, c: number) =>
@@ -369,7 +394,8 @@ export function SheetEditor({
   const onGridKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (editing) return;
     const ctrl = e.ctrlKey || e.metaKey;
-    const key = e.key.toLowerCase();
+    // 한글 입력 상태에선 e.key 가 'ㅋ'처럼 오므로 단축키는 물리 키(e.code)로 본다
+    const key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : e.key.toLowerCase();
     const moves: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
     if (moves[e.key]) {
       e.preventDefault();
