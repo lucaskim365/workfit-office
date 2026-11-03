@@ -5,7 +5,7 @@ import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
-import { selectableGeneralTags } from '@/domain/workPlan/tag';
+import { selectableGeneralTags, ETC_TAG_ID } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { EventFields, type EventForm } from './EventFields';
@@ -305,7 +305,7 @@ function MoreMenu({
   );
 }
 
-/** 종류 줄 — [회의|외근|출장|일반 ▾] 네 칸(가로 스크롤 없음). 일반 ▾ 은 아래에 태그 목록을 펼친다. */
+/** 종류 줄 — [회의|외근|출장|기타|일반 ▾] 다섯 칸(가로 스크롤 없음). 일반 ▾ 은 아래에 태그 목록을 펼친다. */
 function KindRow({ form, target }: { form: EventForm; target: EventTarget }) {
   const { state, readOnly } = form;
   const tagsQuery = useWorkPlanTags();
@@ -321,6 +321,7 @@ function KindRow({ form, target }: { form: EventForm; target: EventTarget }) {
     }`;
 
   const currentTag = generalTagOf(tags, state.kind, state.tagId);
+  const isEtc = state.kind === 'ITEM' && state.tagId === ETC_TAG_ID;
 
   const pickTag = (tagId: string) => {
     form.set('tagId', tagId);
@@ -330,7 +331,7 @@ function KindRow({ form, target }: { form: EventForm; target: EventTarget }) {
 
   return (
     <div className="border-b border-border bg-panel-alt px-4 py-2.5">
-      <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="일정 종류">
+      <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="일정 종류">
         {FIXED_KINDS.map(({ kind, label, Icon }) => (
           <button
             key={kind}
@@ -351,11 +352,22 @@ function KindRow({ form, target }: { form: EventForm; target: EventTarget }) {
         <button
           type="button"
           role="radio"
-          aria-checked={state.kind === 'ITEM'}
+          aria-checked={isEtc}
+          disabled={!enabled('ITEM')}
+          className={cellClass(isEtc)}
+          onClick={() => pickTag(ETC_TAG_ID)}
+        >
+          <MoreHorizontal size={14} className="shrink-0" />
+          기타
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={state.kind === 'ITEM' && !isEtc}
           aria-haspopup="listbox"
           aria-expanded={tagsOpen}
           disabled={!enabled('ITEM')}
-          className={cellClass(state.kind === 'ITEM')}
+          className={cellClass(state.kind === 'ITEM' && !isEtc)}
           onClick={() => setTagsOpen((v) => !v)}
         >
           {currentTag && <span className={`h-2 w-2 shrink-0 rounded-full ${dotClassOf(currentTag.colorId)}`} />}

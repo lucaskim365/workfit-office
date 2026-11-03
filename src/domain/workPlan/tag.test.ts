@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertTagNameAvailable, resolveTag, selectableGeneralTags, reorderGeneralTags, WorkPlanTagError, type WorkPlanTag } from './tag';
+import { assertTagNameAvailable, ETC_TAG_ID, isFixedTagId, resolveTag, selectableGeneralTags, reorderGeneralTags, WorkPlanTagError, type WorkPlanTag } from './tag';
 
 const tag = (over: Partial<WorkPlanTag> = {}): WorkPlanTag => ({
   id: 'WT-0001', name: '보고', colorId: 'teal', order: 0, hidden: false, ...over,
@@ -70,4 +70,10 @@ test('순서 바꿈 — 맨 끝이거나 없는 태그면 null', () => {
   assert.equal(reorderGeneralTags(list, 'WT-0001', 'up'), null);
   assert.equal(reorderGeneralTags(list, 'WT-0002', 'down'), null);
   assert.equal(reorderGeneralTags(list, 'WT-9999', 'up'), null);
+});
+
+test('기타는 고정 태그 — 이름·색이 정해져 있고 같은 이름의 일반 태그를 만들 수 없다', () => {
+  assert.deepEqual(resolveTag([], ETC_TAG_ID), { id: 'ETC', name: '기타', colorId: 'amber', fixed: true, unknown: false });
+  assert.equal(isFixedTagId(ETC_TAG_ID), true);
+  assert.throws(() => assertTagNameAvailable([], '기타'));
 });
