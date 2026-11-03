@@ -51,3 +51,5 @@ export {
 } from './ops';
 export { cellCss, displayValue, defaultAlign, SHEET_COLORS } from './style';
 export { importXlsx, XlsxError, type XlsxImport, type XlsxOptions } from './xlsx';
+export { SheetEditor, type SheetEditorProps, type SheetSelection } from './SheetEditor';
+export { SheetView, type SheetViewProps } from './SheetView';
