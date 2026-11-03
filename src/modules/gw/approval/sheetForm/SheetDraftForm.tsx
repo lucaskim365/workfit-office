@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetView, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Plus, Trash2 } from 'lucide-react';
+import { Building2, Plus, Trash2, X } from 'lucide-react';
+import { DateInput } from '@/shared/ui/form/DateInput';
+import { useOrgTree } from '@/features/gw/useOrgTree';
+import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
+import { SelectorDialog } from '../components/DraftRecipientSection';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
 import {
@@ -72,7 +76,39 @@ function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: st
   );
 }
 
-function CellField({ input, sheet, r, c, width, onSet }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string) => void }) {
+/** 사람 칸 — 기존 서식 '사용자'와 같은 [임직원 검색] → 조직도 고르기. 칸에는 '이름 (부서)'로 남긴다 */
+function UserField({ value, onSet, org }: { value: string; onSet: (text: string) => void; org: ReturnType<typeof useOrgTree> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className={`${FIELD} flex items-center gap-1`}>
+      <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-1 rounded px-1 text-left hover:bg-[#f0f4f4] print:px-0" style={INHERIT}>
+        {value ? <span className="truncate">{value}</span> : <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-teal print:hidden"><Building2 size={12} />임직원 검색</span>}
+      </button>
+      {value && (
+        <button type="button" onClick={() => onSet('')} className="text-[#999] hover:text-rose-500 print:hidden" title="지우기">
+          <X size={12} />
+        </button>
+      )}
+      {open && (
+        <SelectorDialog
+          title="임직원 선택"
+          org={org}
+          singleSelect
+          deptOnly={false}
+          onConfirm={(items) => {
+            const picked = items.find((i) => i.type === 'user');
+            const u = picked ? org.userById(picked.id) : null;
+            if (u) onSet(u.dept ? `${u.name} (${u.dept})` : u.name);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </span>
+  );
+}
+
+function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
   switch (input.type) {
@@ -82,15 +118,13 @@ function CellField({ input, sheet, r, c, width, onSet }: { input: CellInput; she
     case 'currency':
       return <NumberInput raw={raw} shown={displayValue(sheet, r, col)} invalid={raw.trim() !== '' && parseNumber(raw) === null} onChange={onSet} />;
     case 'date':
-      return <input type="date" value={/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''} onChange={(e) => onSet(e.target.value)} className={FIELD} style={INHERIT} />;
+      return <DateInput value={/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''} onChange={(e) => onSet(e.target.value)} className={FIELD} style={INHERIT} />;
     case 'dateRange': {
       const [from = '', to = ''] = raw.split('~').map((x) => x.trim());
       const set = (a: string, b: string) => onSet(a || b ? `${a} ~ ${b}` : '');
       return (
-        <span className="flex items-center gap-1">
-          <input type="date" value={from} onChange={(e) => set(e.target.value, to)} className={FIELD} style={INHERIT} />
-          <span>~</span>
-          <input type="date" value={to} onChange={(e) => set(from, e.target.value)} className={FIELD} style={INHERIT} />
+        <span className="block [&>div>button]:!rounded-none [&>div>button]:!border-0 [&>div>button]:!bg-[#fffbe8] [&>div>button]:!px-1 [&>div>button]:!py-0.5 [&>div>button]:!text-[length:inherit] print:[&>div>button]:!bg-transparent print:[&>div>button_svg]:hidden">
+          <CalendarRangePicker start={from} end={to} onChange={(a, b) => set(a, b)} floating />
         </span>
       );
     }
@@ -129,8 +163,23 @@ function CellField({ input, sheet, r, c, width, onSet }: { input: CellInput; she
           <input type="checkbox" checked={raw === CHECK_MARK} onChange={(e) => onSet(e.target.checked ? CHECK_MARK : '')} className="h-3.5 w-3.5 accent-teal" />
         </span>
       );
+    case 'user':
+      return <UserField value={raw} onSet={onSet} org={org} />;
+    case 'dept':
+      // 기존 서식 '부서'와 같은 부서 목록
+      return (
+        <select value={raw} onChange={(e) => onSet(e.target.value)} className={`${FIELD} print:appearance-none`} style={INHERIT}>
+          <option value="">부서 선택</option>
+          {org.depts.map((d) => (
+            <option key={d.id} value={d.name}>
+              {d.name}
+            </option>
+          ))}
+          {raw && !org.depts.some((d) => d.name === raw) && <option value={raw}>{raw}</option>}
+        </select>
+      );
     default:
-      // text·user·dept — 사람·부서 고르기는 조직도 연결 때 바꾼다
+      // text
       // 셀에 맞춤 칸 — 줄을 바꾸지 않고 글씨를 줄여 칸에 맞춘다(엑셀과 같음). 아니면 넘칠 때 줄바꿈하며 행이 늘어난다
       if (sheet.styles[`${r}:${col}`]?.shrink) {
         const size = shrinkFontSize(raw, sheet.styles[`${r}:${col}`], width);
@@ -153,6 +202,7 @@ export interface SheetDraftFormProps {
 
 export function SheetDraftForm({ formId, version, values, onFields, onIssues }: SheetDraftFormProps) {
   const { data: loaded, isLoading, error } = useFormVersionSheet(formId, version);
+  const org = useOrgTree();
   const key = versionKey(formId, version);
   const rawValues = values[SHEET_VALUES_KEY];
   const rawRows = values[SHEET_ROWS_KEY];
@@ -205,7 +255,7 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
             if (!input) return undefined;
             const span = sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1;
             const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
-            return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t) => set(r, c, t)} />;
+            return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t) => set(r, c, t)} org={org} />;
           }}
           renderOverlay={(r, c) => {
             // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 인쇄에는 안 나옴

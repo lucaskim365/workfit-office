@@ -1,8 +1,12 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { Calendar } from 'lucide-react';
 import { daysBetween } from './utils';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { dayTone, type DayTone } from '@/shared/ui/form/datePickerGrid';
+
+/** 달력 크기(w-72·높이 대략) — 고정 위치에서 화면 밖으로 나가지 않게 */
+const POPUP_W = 288;
+const POPUP_H = 330;
 
 const TONE_TEXT: Record<DayTone, string> = { holiday: 'text-danger', sun: 'text-danger', sat: 'text-blue', normal: 'text-ink' };
 
@@ -11,6 +15,11 @@ interface CalendarRangePickerProps {
   end: string;
   onChange: (start: string, end: string) => void;
   singleDateOnly?: boolean;
+  /**
+   * 달력을 화면에 고정해 띄운다 — 감싼 칸이 밖을 잘라도(시트 칸·가로 스크롤 영역) 달력이 보이게.
+   * 기본(false)은 지금처럼 버튼 아래에 붙는다
+   */
+  floating?: boolean;
 }
 
 export function CalendarRangePicker({
@@ -18,9 +27,26 @@ export function CalendarRangePicker({
   end,
   onChange,
   singleDateOnly = false,
+  floating = false,
 }: CalendarRangePickerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  // 고정 위치 — 화면 배율(--font-scale) 안이라 좌표를 배율로 나눈다(DateInput 과 같음). 스크롤하면 닫는다
+  useLayoutEffect(() => {
+    if (!floating || !open || !containerRef.current) return;
+    const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
+    const r = containerRef.current.getBoundingClientRect();
+    const vw = window.innerWidth / zoom;
+    const vh = window.innerHeight / zoom;
+    const below = r.bottom / zoom + 4;
+    const top = below + POPUP_H > vh && r.top / zoom - POPUP_H - 4 > 0 ? r.top / zoom - POPUP_H - 4 : below;
+    setPos({ left: Math.max(4, Math.min(r.left / zoom, vw - POPUP_W - 4)), top });
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    return () => window.removeEventListener('scroll', close, true);
+  }, [floating, open]);
 
   const [currentDate, setCurrentDate] = useState(() => {
     const initial = start ? new Date(start) : new Date();
@@ -126,7 +152,10 @@ export function CalendarRangePicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 mt-1 z-50 w-72 rounded-xl border border-border bg-panel p-3 shadow-xl">
+        <div
+          className={`${floating ? 'fixed z-[400]' : 'absolute left-0 mt-1 z-50'} w-72 rounded-xl border border-border bg-panel p-3 shadow-xl`}
+          style={floating ? { left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' } : undefined}
+        >
           <div className="flex justify-between items-center mb-2.5">
             <button
               type="button"
