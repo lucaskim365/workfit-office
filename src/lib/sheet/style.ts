@@ -107,12 +107,13 @@ export function cellBorder(s: Sheet, r: number, c: number, rowSpan = 1, colSpan 
   const result: Border = {};
   const sides: Record<Side, BorderW | undefined> = {
     t: along(c, c2, (cc) => [at(r, cc)?.t, at(r - 1, cc)?.b]),
-    b: along(c, c2, (cc) => [at(r2, cc)?.b, at(r2 + 1, cc)?.t]),
+    b: along(c, c2, (cc) => [at(r2, cc)?.b, at(r2 + 1, cc)?.t, own?.b]),
     l: along(r, r2, (rr) => [at(rr, c)?.l, at(rr, c - 1)?.r]),
-    r: along(r, r2, (rr) => [at(rr, c2)?.r, at(rr, c2 + 1)?.l]),
+    r: along(r, r2, (rr) => [at(rr, c2)?.r, at(rr, c2 + 1)?.l, own?.r]),
   };
   (Object.keys(sides) as Side[]).forEach((k) => {
-    const w = sides[k] ?? (own?.[k] === 'none' ? 'none' : undefined);
+    // 칸에 직접 '없음'을 지정한 쪽은 지운 것 — 이웃 칸 선보다 우선
+    const w = own?.[k] === 'none' ? 'none' : sides[k];
     if (w) result[k] = w;
   });
   return Object.keys(result).length ? result : undefined;

@@ -69,6 +69,11 @@ const BORDER_PRESETS: Array<{ preset: BorderPreset; label: string }> = [
   { preset: 'all', label: '모든 테두리' },
   { preset: 'outer', label: '바깥 테두리' },
   { preset: 'thickOuter', label: '굵은 바깥 테두리' },
+  { preset: 'top', label: '위쪽 테두리' },
+  { preset: 'bottom', label: '아래쪽 테두리' },
+  { preset: 'left', label: '왼쪽 테두리' },
+  { preset: 'right', label: '오른쪽 테두리' },
+  { preset: 'thickBottom', label: '굵은 아래쪽 테두리' },
   { preset: 'none', label: '테두리 없음' },
 ];
 

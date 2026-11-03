@@ -77,3 +77,14 @@ test('그릴 테두리 — 이웃 칸 선과 병합 가장자리 칸 선을 모�
   assert.deepEqual(cellBorder(s, 1, 2), { t: 'thick' }); // 위 C1(가려진 칸)의 아래 선
   assert.equal(cellBorder(s, 2, 3), undefined);
 });
+
+test('그릴 테두리 — 직접 지운 쪽(없음)은 이웃 선보다 우선, 병합 대표 칸 자신의 선도 그림', () => {
+  const s = createSheet(2, 3);
+  const [a, b] = s.cols;
+  s.styles[cellKey(0, a)] = { border: { r: 'thin' } };
+  s.styles[cellKey(0, b)] = { border: { l: 'none' } };
+  assert.deepEqual(cellBorder(s, 0, 1), { l: 'none' });
+  s.merges = [{ startRow: 1, startCol: 0, rowSpan: 1, colSpan: 3 }];
+  s.styles[cellKey(1, a)] = { border: { r: 'thick', b: 'thin' } }; // 대표 칸에만 저장된 선(옛 데이터)
+  assert.deepEqual(cellBorder(s, 1, 0, 1, 3), { b: 'thin', r: 'thick' });
+});

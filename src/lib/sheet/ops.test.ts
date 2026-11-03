@@ -172,3 +172,31 @@ test('부가 정보 설정·삭제', () => {
   assert.deepEqual(setColMeta(s, 'secret', 1, true).colMeta, { secret: { b: true } });
   assert.deepEqual(s.cellMeta, {}); // 입력 불변
 });
+
+test('테두리 — 한쪽만(위·아래·왼쪽·오른쪽·굵은 아래), 병합 블록은 통째로', () => {
+  const p = sheet(3, ['A', 'B', 'C']);
+  const g = { r1: 0, c1: 0, r2: 1, c2: 1 };
+  const top = applyBorder(p, g, 'top');
+  assert.deepEqual(top.styles['0:A'].border, { t: 'thin' });
+  assert.equal(top.styles['1:A'], undefined);
+  assert.deepEqual(applyBorder(p, g, 'bottom').styles['1:B'].border, { b: 'thin' });
+  assert.deepEqual(applyBorder(p, g, 'left').styles['1:A'].border, { l: 'thin' });
+  assert.equal(applyBorder(p, g, 'left').styles['1:B'], undefined);
+  assert.deepEqual(applyBorder(p, g, 'right').styles['0:B'].border, { r: 'thin' });
+  assert.deepEqual(applyBorder(p, g, 'thickBottom').styles['1:A'].border, { b: 'thick' });
+  // A1:C1 병합 — 대표 칸(A1)만 골라도 오른쪽 선은 블록 끝(C1)에
+  const merged = { ...p, merges: [{ startRow: 0, startCol: 0, rowSpan: 1, colSpan: 3 }] };
+  const r = applyBorder(merged, { r1: 0, c1: 0, r2: 0, c2: 0 }, 'outer');
+  assert.deepEqual(r.styles['0:C'].border, { t: 'thin', b: 'thin', r: 'thin' });
+  assert.deepEqual(r.styles['0:A'].border, { t: 'thin', b: 'thin', l: 'thin' });
+});
+
+test('테두리 없음 — 범위 바깥 이웃 칸이 맞닿은 쪽에 그린 선도 지운다', () => {
+  let p = sheet(3, ['A', 'B', 'C']);
+  p = applyBorder(p, { r1: 0, c1: 0, r2: 2, c2: 2 }, 'all');
+  const n = applyBorder(p, { r1: 1, c1: 1, r2: 1, c2: 1 }, 'none');
+  assert.deepEqual(n.styles['1:B'].border, { t: 'none', r: 'none', b: 'none', l: 'none' });
+  assert.deepEqual(n.styles['0:B'].border, { t: 'thin', r: 'thin', l: 'thin' }); // 위 칸의 아래 선 지움
+  assert.deepEqual(n.styles['1:A'].border, { t: 'thin', b: 'thin', l: 'thin' }); // 왼쪽 칸의 오른쪽 선 지움
+  assert.deepEqual(n.styles['0:A'].border, { t: 'thin', r: 'thin', b: 'thin', l: 'thin' }); // 맞닿지 않은 칸은 그대로
+});

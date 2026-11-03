@@ -4,7 +4,7 @@
  * - 병합, 셀 서식·테두리, 값/수식 입력, 탭 구분 텍스트 붙여넣기, 부가 정보 설정
  */
 import { shiftFormula, type ShiftAction } from './formula';
-import { cellKey, newColKey, type CellStyle, type Merge, type MetaMap, type Sheet } from './model';
+import { cellKey, newColKey, type BorderW, type CellStyle, type Merge, type MetaMap, type Sheet } from './model';
 
 export interface CellRange {
   r1: number;
@@ -13,7 +13,7 @@ export interface CellRange {
   c2: number;
 }
 
-export type BorderPreset = 'all' | 'outer' | 'thickOuter' | 'none';
+export type BorderPreset = 'all' | 'outer' | 'thickOuter' | 'top' | 'bottom' | 'left' | 'right' | 'thickBottom' | 'none';
 
 type RowMap = (r: number) => number | null;
 
@@ -245,23 +245,89 @@ export function applyStyle(s: Sheet, range: CellRange, patch: Partial<CellStyle>
 }
 
 /** 엑셀 테두리 버튼과 같은 4가지 — 바깥 테두리는 안쪽 변을 건드리지 않음 */
-export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): Sheet {
-  const g = normRange(range);
-  const styles = { ...s.styles };
-  eachCell(g, (r, c) => {
-    const key = cellKey(r, s.cols[c]);
-    const cur = styles[key] ?? {};
-    let border = { ...(cur.border ?? {}) };
-    if (preset === 'all') border = { t: 'thin', r: 'thin', b: 'thin', l: 'thin' };
-    else if (preset === 'none') border = { t: 'none', r: 'none', b: 'none', l: 'none' };
-    else {
-      const w = preset === 'thickOuter' ? 'thick' : 'thin';
-      if (r === g.r1) border.t = w;
-      if (r === g.r2) border.b = w;
-      if (c === g.c1) border.l = w;
-      if (c === g.c2) border.r = w;
+/** 범위를 걸친 병합 블록 전체가 들어가게 넓힌다(엑셀처럼 병합 칸은 한 덩어리) */
+function expandToMerges(s: Sheet, range: CellRange): CellRange {
+  let g = normRange(range);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const m of s.merges) {
+      if (!intersects(m, g)) continue;
+      const next = {
+        r1: Math.min(g.r1, m.startRow),
+        r2: Math.max(g.r2, m.startRow + m.rowSpan - 1),
+        c1: Math.min(g.c1, m.startCol),
+        c2: Math.max(g.c2, m.startCol + m.colSpan - 1),
+      };
+      if (next.r1 !== g.r1 || next.r2 !== g.r2 || next.c1 !== g.c1 || next.c2 !== g.c2) {
+        g = next;
+        changed = true;
+      }
     }
-    if (Object.keys(border).length > 0) styles[key] = { ...cur, border };
+  }
+  return g;
+}
+
+/**
+ * 테두리 — 모든·바깥·굵은 바깥·한쪽(위·아래·왼쪽·오른쪽)·굵은 아래·없음.
+ * 범위는 걸친 병합 블록까지 넓힌다. '없음'은 범위 바깥 이웃 칸이 맞닿은 쪽에 그린 선도 지운다
+ * (화면은 이웃 칸 선도 모아 그리므로 — style.ts cellBorder)
+ */
+export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): Sheet {
+  const g = expandToMerges(s, range);
+  const styles = { ...s.styles };
+  const setSide = (r: number, c: number, side: 't' | 'r' | 'b' | 'l', w: BorderW | undefined) => {
+    const col = s.cols[c];
+    if (col === undefined || r < 0 || r >= s.rows.length) return;
+    const key = cellKey(r, col);
+    const cur = styles[key] ?? {};
+    const border = { ...(cur.border ?? {}) };
+    if (w === undefined) {
+      if (border[side] === undefined) return;
+      delete border[side];
+    } else border[side] = w;
+    styles[key] = { ...cur, border };
+  };
+  eachCell(g, (r, c) => {
+    const top = r === g.r1;
+    const bottom = r === g.r2;
+    const left = c === g.c1;
+    const right = c === g.c2;
+    switch (preset) {
+      case 'all':
+        (['t', 'r', 'b', 'l'] as const).forEach((k) => setSide(r, c, k, 'thin'));
+        break;
+      case 'none':
+        (['t', 'r', 'b', 'l'] as const).forEach((k) => setSide(r, c, k, 'none'));
+        if (top) setSide(r - 1, c, 'b', undefined);
+        if (bottom) setSide(r + 1, c, 't', undefined);
+        if (left) setSide(r, c - 1, 'r', undefined);
+        if (right) setSide(r, c + 1, 'l', undefined);
+        break;
+      case 'outer':
+      case 'thickOuter': {
+        const w = preset === 'thickOuter' ? 'thick' : 'thin';
+        if (top) setSide(r, c, 't', w);
+        if (bottom) setSide(r, c, 'b', w);
+        if (left) setSide(r, c, 'l', w);
+        if (right) setSide(r, c, 'r', w);
+        break;
+      }
+      case 'top':
+        if (top) setSide(r, c, 't', 'thin');
+        break;
+      case 'bottom':
+        if (bottom) setSide(r, c, 'b', 'thin');
+        break;
+      case 'thickBottom':
+        if (bottom) setSide(r, c, 'b', 'thick');
+        break;
+      case 'left':
+        if (left) setSide(r, c, 'l', 'thin');
+        break;
+      case 'right':
+        if (right) setSide(r, c, 'r', 'thin');
+        break;
+    }
   });
   return { ...s, styles };
 }
