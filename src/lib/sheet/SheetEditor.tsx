@@ -836,12 +836,13 @@ export function SheetEditor({
                               aria-hidden
                               className="pointer-events-none absolute inset-0 z-[1]"
                               style={{
-                                backgroundColor: 'rgba(15, 118, 110, 0.18)',
+                                backgroundColor: 'rgba(15, 118, 110, 0.14)',
+                                // 바깥 가장자리는 굵게, 안쪽 칸 경계는 가늘게 — 덧칠에 격자선이 묻히지 않게
                                 boxShadow: [
                                   r === range.r1 ? 'inset 0 2px 0 #0f766e' : '',
-                                  r + (m?.rowSpan ?? 1) - 1 >= range.r2 ? 'inset 0 -2px 0 #0f766e' : '',
+                                  r + (m?.rowSpan ?? 1) - 1 >= range.r2 ? 'inset 0 -2px 0 #0f766e' : 'inset 0 -1px 0 rgba(15, 118, 110, 0.55)',
                                   c === range.c1 ? 'inset 2px 0 0 #0f766e' : '',
-                                  c + (m?.colSpan ?? 1) - 1 >= range.c2 ? 'inset -2px 0 0 #0f766e' : '',
+                                  c + (m?.colSpan ?? 1) - 1 >= range.c2 ? 'inset -2px 0 0 #0f766e' : 'inset -1px 0 0 rgba(15, 118, 110, 0.55)',
                                 ]
                                   .filter(Boolean)
                                   .join(', ') || undefined,
