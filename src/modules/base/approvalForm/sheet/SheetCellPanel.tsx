@@ -12,6 +12,7 @@ import {
   type CellInput,
   type CellInputType,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
+import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
 
 /**
  * 시트 서식 편집기 — 고른 칸의 결재 속성(입력 칸·칸 이름·불러오기·잠금·비공개·직인).
@@ -164,6 +165,64 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
           hint="결재가 끝나면 이 칸에 회사 직인을 찍습니다."
         />
       </div>
+
+      <RepeatPanel sheet={sheet} selection={selection} onChange={onChange} />
+    </div>
+  );
+}
+
+/** 반복 구간 — 고른 행들을 기안자가 행 추가·삭제하는 구간으로 */
+function RepeatPanel({ sheet, selection, onChange }: { sheet: Sheet; selection: SheetSelection; onChange: (next: Sheet) => void }) {
+  const { range, focus } = selection;
+  const r1 = Math.min(range.r1, range.r2);
+  const r2 = Math.max(range.r1, range.r2);
+  const current = repeatSectionAt(sheet, focus.r);
+  const [label, setLabel] = useState('');
+  useEffect(() => setLabel(current?.label ?? ''), [current?.id, current?.label]);
+
+  return (
+    <div className="space-y-1.5 border-t border-border pt-2.5">
+      <div className="text-[11px] font-bold text-ink2">반복 구간</div>
+      {current ? (
+        <>
+          <div className="text-[11px] text-ink3">
+            <span className="font-semibold text-violet-600">{current.label}</span> · {current.first + 1}~{current.last + 1}행 — 기안자가 구간 끝에 행을 추가·삭제합니다.
+          </div>
+          <div className="flex gap-1.5">
+            <input
+              className={inp}
+              value={label}
+              maxLength={30}
+              onChange={(e) => setLabel(e.target.value)}
+              onBlur={() => label.trim() && label.trim() !== current.label && onChange(renameRepeatSection(sheet, current.id, label.trim()))}
+              placeholder="구간 이름(예: 품목)"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(clearRepeatSection(sheet, current.id))}
+              className="shrink-0 rounded-lg border border-border px-2.5 text-[11px] font-semibold text-ink2 hover:text-rose-600"
+            >
+              해제
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="text-[10.5px] leading-snug text-ink3">
+            품목 표처럼 문서마다 줄 수가 다른 행을 고르고 지정하면, 기안자가 [행 추가]·[행 삭제]로 줄 수를 바꿉니다. 행 전체가 늘어나므로 같은 행에 나란히 있는 표도 함께 늘어납니다.
+          </div>
+          <div className="flex gap-1.5">
+            <input className={inp} value={label} maxLength={30} onChange={(e) => setLabel(e.target.value)} placeholder="구간 이름(예: 품목)" />
+            <button
+              type="button"
+              onClick={() => onChange(setRepeatSection(sheet, r1, r2, label || '반복 구간'))}
+              className="shrink-0 rounded-lg bg-violet-500 px-2.5 text-[11px] font-bold text-white hover:opacity-90"
+            >
+              {r1 + 1 === r2 + 1 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`} 지정
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

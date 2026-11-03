@@ -4,6 +4,7 @@ import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
 import { SHEET_PAGE_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
+import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from './repeatRows';
 
 /** 시트 서식으로 쓴 문서인가 — 서식 버전이 남아 있으면 */
 export function isSheetDoc(fieldValues: Record<string, unknown> | undefined): boolean {
@@ -31,7 +32,12 @@ export function SheetDocView({
   const ver = parseVersionKey(String(fieldValues[SHEET_VERSION_KEY] ?? ''));
   const { data: loaded, isLoading, error } = useFormVersionSheet(ver?.formId ?? null, ver?.version ?? null);
   const rawValues = fieldValues[SHEET_VALUES_KEY];
-  const sheet = useMemo(() => (loaded?.sheet ? applyValues(loaded.sheet, readSheetValues(rawValues), { recalc: false }) : null), [loaded, rawValues]);
+  const rawRows = fieldValues[SHEET_ROWS_KEY];
+  // 반복 구간은 문서가 붙인 줄 수만큼 펼친 뒤 값을 얹는다
+  const sheet = useMemo(
+    () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false }) : null),
+    [loaded, rawValues, rawRows]
+  );
 
   if (!ver) return null;
   if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;

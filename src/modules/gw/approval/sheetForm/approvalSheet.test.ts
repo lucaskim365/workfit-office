@@ -50,7 +50,7 @@ test('이름 칸에는 수식이 들어가지 않는다', () => {
 });
 
 test('이름공간 값은 바뀌지 않는다', () => {
-  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal' });
+  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal', repeat: 'repeat' });
 });
 
 /** 2×3: A1 라벨(잠금 없음, 입력 아님) · B1 입력+이름 amount · C1 입력+잠금 · A2 입력 · B2 수식 =B1*2 */

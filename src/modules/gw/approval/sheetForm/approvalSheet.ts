@@ -13,6 +13,8 @@ export const APPROVAL_NS = {
   lock: 'lock',
   secret: 'secret',
   seal: 'seal',
+  /** 반복 구간(행) — rowMeta, 값 { id, label } */
+  repeat: 'repeat',
 } as const;
 
 export type CellInputType =
@@ -346,11 +348,13 @@ export function readSheetValues(raw: unknown): SheetValues {
  * 문서 fieldValues 로 저장할 것 — 칸 값(JSON), 서식 버전, 이름 붙은 칸 값(body·amount 등).
  * 이름 붙은 칸 값은 연동 기능이 이름으로 읽는다(지금은 amount → 문서 금액 → 결재선 금액 조건).
  */
-export function sheetDocFields(s: Sheet, formVersion: string): Record<string, string> {
+export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<string, number> = {}): Record<string, string> {
   return {
     ...namedValues(s),
     [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),
     [SHEET_VERSION_KEY]: formVersion,
+    // 반복 구간에 붙인 줄 수(repeatRows.ts SHEET_ROWS_KEY) — 없어도 키는 남겨 줄을 다 지운 뒤 옛 값이 남지 않게
+    __rows: JSON.stringify(rowExtras),
   };
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { SheetView, displayValue, parseNumber, recalculate, setCellValue, type Sheet } from '@/lib/sheet';
+import { Plus, Trash2 } from 'lucide-react';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
 import {
@@ -12,6 +13,7 @@ import {
   sheetDocFields,
   type CellInput,
 } from './approvalSheet';
+import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, readRowExtras, removeRepeatRow, repeatSections } from './repeatRows';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -148,15 +150,19 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
   const { data: loaded, isLoading, error } = useFormVersionSheet(formId, version);
   const key = versionKey(formId, version);
   const rawValues = values[SHEET_VALUES_KEY];
+  const rawRows = values[SHEET_ROWS_KEY];
+  const extras = useMemo(() => readRowExtras(rawRows), [rawRows]);
+  // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
   const sheet = useMemo(
-    () => (loaded?.sheet ? applyValues(loaded.sheet, readSheetValues(rawValues), { recalc: true }) : null),
-    [loaded, rawValues]
+    () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, extras), readSheetValues(rawValues), { recalc: true }) : null),
+    [loaded, rawValues, extras]
   );
+  const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
 
   // 처음 열 때 서식 버전·수식 결과를 문서 값에 남긴다(아무것도 안 쓰고 저장해도 어느 틀인지 알게)
   const needsInit = !!sheet && values['__formVersion'] !== key;
   useEffect(() => {
-    if (sheet && needsInit) onFields(sheetDocFields(sheet, key));
+    if (sheet && needsInit) onFields(sheetDocFields(sheet, key, extras));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsInit]);
 
@@ -171,19 +177,64 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
   const set = (r: number, c: number, text: string) => {
     // 기안자가 쓴 '='는 수식이 아니라 글자 — 수식은 서식 틀에만 있다
     const next = setCellValue(sheet, r, c, text, { allowFormula: false });
-    onFields(sheetDocFields(recalculate(next), key));
+    onFields(sheetDocFields(recalculate(next), key, extras));
+  };
+
+  /** 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다 */
+  const changeRows = (id: string, add: boolean) => {
+    if (!loaded?.sheet) return;
+    const fn = add ? addRepeatRow : removeRepeatRow;
+    const next = fn(loaded.sheet, extras, readSheetValues(rawValues), id);
+    const expanded = applyValues(expandRepeats(loaded.sheet, next.extras), next.values, { recalc: true });
+    onFields(sheetDocFields(expanded, key, next.extras));
   };
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
-    <div className="overflow-x-auto">
-      <SheetView
-        sheet={sheet}
-        renderCell={(r, c) => {
-          const input = draftInputOf(sheet, r, c);
-          return input ? <CellField input={input} sheet={sheet} r={r} c={c} onSet={(t) => set(r, c, t)} /> : undefined;
-        }}
-      />
+    <div>
+      <div className="overflow-x-auto">
+        <SheetView
+          sheet={sheet}
+          renderCell={(r, c) => {
+            const input = draftInputOf(sheet, r, c);
+            return input ? <CellField input={input} sheet={sheet} r={r} c={c} onSet={(t) => set(r, c, t)} /> : undefined;
+          }}
+        />
+      </div>
+      {sections.length > 0 && (
+        // 반복 구간 줄 수 — 기존 서식 '표'의 [행 추가]·[행 삭제]와 같다(마지막 줄을 지운다). 인쇄에는 나오지 않음
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 print:hidden">
+          {sections.map((sec) => {
+            const rows = sec.last - sec.first + 1;
+            const added = extras[sec.id] ?? 0;
+            return (
+              <div key={sec.id} className="flex items-center gap-1.5 text-[11px]">
+                <span className="font-semibold text-[#444]">{sec.label}</span>
+                <span className="text-[#888]">{rows}줄</span>
+                {added > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => changeRows(sec.id, false)}
+                    title="마지막 줄 삭제"
+                    className="flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold text-rose-500 hover:bg-rose-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    행 삭제
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => changeRows(sec.id, true)}
+                  className="flex items-center gap-0.5 rounded bg-teal-soft/40 px-2 py-0.5 font-bold text-teal hover:bg-teal-soft/70"
+                >
+                  <Plus className="h-3 w-3" />
+                  행 추가
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

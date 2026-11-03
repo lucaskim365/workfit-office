@@ -15,6 +15,7 @@ import {
   validateApprovalSheet,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { SheetCellPanel } from './SheetCellPanel';
+import { healRepeatSections, repeatIssues, repeatSections } from '@/modules/gw/approval/sheetForm/repeatRows';
 
 /**
  * 시트 서식 편집기(관리자) — 엑셀 불러오기, 틀 편집, 칸 속성, 버전 저장.
@@ -110,7 +111,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (isNew && forms.some((f) => f.code.toLowerCase() === code.toLowerCase())) {
       return setMsg({ kind: 'err', text: `서식 코드 '${code}'는 이미 쓰고 있습니다. 다른 코드를 정해 주세요.` });
     }
-    const errors = validateApprovalSheet(sheet);
+    const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet)];
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
 
@@ -130,8 +131,21 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   };
 
   // ── 칸 표시(편집 격자 안) ──
+  const sections = useMemo(() => repeatSections(sheet), [sheet]);
   const badge = (r: number, c: number) => {
     const p = approvalCellProps(sheet, r, c);
+    // 반복 구간 — 첫 열 왼쪽에 보라색 띠, 첫 행에 이름
+    const sec = c === 0 ? sections.find((x) => r >= x.first && r <= x.last) : undefined;
+    const repeatMark = sec && (
+      <>
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-violet-500" />
+        {r === sec.first && (
+          <span title={`반복 구간: ${sec.label} (${sec.first + 1}~${sec.last + 1}행) — 기안자가 행을 추가·삭제`} className="pointer-events-none absolute left-1 top-0.5 rounded-sm bg-violet-500 px-1 text-[8.5px] font-bold leading-[13px] text-white">
+            반복 · {sec.label}
+          </span>
+        )}
+      </>
+    );
     const marks: { t: string; cls: string; title: string }[] = [];
     if (p.input) marks.push({ t: '입력', cls: 'bg-amber-400/90 text-white', title: '입력 칸' });
     if (p.name) marks.push({ t: cellNameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
@@ -139,15 +153,18 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
-    if (!marks.length) return null;
+    if (!marks.length) return repeatMark || null;
     return (
-      <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
-        {marks.map((m) => (
-          <span key={m.t} title={m.title} className={`rounded-sm px-1 text-[8.5px] font-bold leading-[13px] ${m.cls}`}>
-            {m.t}
-          </span>
-        ))}
-      </span>
+      <>
+        {repeatMark}
+        <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
+          {marks.map((m) => (
+            <span key={m.t} title={m.title} className={`rounded-sm px-1 text-[8.5px] font-bold leading-[13px] ${m.cls}`}>
+              {m.t}
+            </span>
+          ))}
+        </span>
+      </>
     );
   };
 
@@ -267,7 +284,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         <div className="min-w-0 rounded-xl border border-border bg-panel p-2">
           <SheetEditor
             value={sheet}
-            onChange={setSheet}
+            onChange={(next) => setSheet(healRepeatSections(next))}
             mode="design"
             canMerge={canMergeApprovalRange}
             canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}
@@ -285,7 +302,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                 A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
               </div>
             )}
-            <div>세로 점선 = A4 세로 인쇄 폭. 칸 이름·불러오기·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다.</div>
+            <div>세로 점선 = A4 세로 인쇄 폭. 칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다. 보라색 띠 = 반복 구간(기안자가 행 추가·삭제).</div>
           </div>
         </div>
 
