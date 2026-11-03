@@ -107,7 +107,7 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
         <div className="py-8 text-center text-[12px] text-ink3">로딩 중...</div>
       ) : formRules.length === 0 ? (
         <div className="py-12 text-center text-[12px] border border-dashed border-border rounded-xl text-ink3">
-          등록된 서식 전용 규칙이 없습니다. 기본 전결 규칙이나 폴백이 적용됩니다.
+          등록된 서식 전용 규칙이 없습니다. 기본 결재 규칙이나 폴백이 적용됩니다.
         </div>
       ) : (
         <div className="space-y-2">

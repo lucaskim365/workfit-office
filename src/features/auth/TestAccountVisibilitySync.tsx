@@ -17,13 +17,15 @@ export function TestAccountVisibilitySync() {
   const { isSuperAdmin } = useSecurityContext();
   const superAdminShowsTestAccounts = useShowTestAccounts();
   const qc = useQueryClient();
+  // 개발 서버에서는 일반 임직원 계정도 테스트 계정이 보여야 메신저로 서로 대화해 볼 수 있다(최고관리자는 상단 토글 그대로)
   const canSee =
     !!user &&
+    ((import.meta.env.DEV && !isSuperAdmin) ||
     canViewerSeeTestAccounts({
       isTestViewer: isTestAccount(user) || isKnownTestUserId(user.id),
       isSuperAdmin,
       superAdminShowsTestAccounts,
-    });
+    }));
 
   // 렌더 중에 반영해 같은 렌더의 하위 화면 조회가 바로 이 값을 쓰게 한다(같은 값 반복 설정은 무해).
   const changed = setViewerCanSeeTestAccounts(canSee);

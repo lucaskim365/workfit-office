@@ -1,6 +1,6 @@
 import { getCellMergeInfo } from './utils';
 import { normalizeTablePayload, type SheetPayload } from './sheetModel';
-import { CellSealOverlay } from '../components/CompanySeal';
+import { CellSealSlot } from '../components/CompanySeal';
 import { cellCss, defaultAlign, displayCellValue, isLegacyHeaderCell, isSecretCell } from './sheetStyle';
 
 /**
@@ -18,7 +18,44 @@ export function resolveViewSheet(placeholder: string | undefined, docValue: unkn
   }
   if (!parsed || !Array.isArray(parsed.rows)) return master;
   const doc = normalizeTablePayload(parsed, master.cols);
-  return { ...doc, secretCols: Array.from(new Set([...doc.secretCols, ...master.secretCols])) };
+  return {
+    ...doc,
+    cellStyles: inheritSealCells(master, doc),
+    secretCols: Array.from(new Set([...doc.secretCols, ...master.secretCols])),
+  };
+}
+
+/** 직인 칸이 하나라도 있는 표 — 칸 밖으로 넘치는 직인이 잘리지 않게 감싸는 상자를 조정할 때 쓴다 */
+export function hasSealCell(sheet: Pick<SheetPayload, 'cellStyles'>): boolean {
+  return Object.values(sheet.cellStyles).some((st) => st?.seal);
+}
+
+/**
+ * 직인 칸 지정 전에 기안한 문서 — 서식의 직인 칸을 보기에서만 이어 붙임 (DB 값은 그대로)
+ * 서식 직인 칸과 글자가 같은 칸을 찾고, 없으면 같은 자리 칸에 찍음
+ */
+function inheritSealCells(master: SheetPayload, doc: SheetPayload): SheetPayload['cellStyles'] {
+  const hasSeal = (s: SheetPayload) => Object.values(s.cellStyles).some((st) => st?.seal);
+  if (hasSeal(doc) || !hasSeal(master)) return doc.cellStyles;
+
+  const text = (s: SheetPayload, key: string) => {
+    const [r, col] = key.split(':');
+    return String(s.rows[Number(r)]?.[col] ?? '').trim();
+  };
+  const next = { ...doc.cellStyles };
+  for (const [key, st] of Object.entries(master.cellStyles)) {
+    if (!st?.seal) continue;
+    const col = key.slice(key.indexOf(':') + 1);
+    const want = text(master, key);
+    let target: string | null = null;
+    if (want) {
+      const r = doc.rows.findIndex((row) => String(row[col] ?? '').trim() === want);
+      if (r >= 0) target = `${r}:${col}`;
+    }
+    if (!target && doc.cols.includes(col) && Number(key.split(':')[0]) < doc.rows.length) target = key;
+    if (target) next[target] = { ...next[target], seal: true };
+  }
+  return next;
 }
 
 interface SheetViewProps {
@@ -66,11 +103,10 @@ export function SheetView({ sheet, allSecret, isMaskingActive, maskValue, minWid
                   rowSpan={rowSpan > 1 ? rowSpan : undefined}
                   colSpan={colSpan > 1 ? colSpan : undefined}
                   title={blurred ? '보안 필드입니다. 열람 권한이 없습니다.' : undefined}
-                  className={`${baseCell} ${style?.seal ? 'relative' : ''} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
+                  className={`${baseCell} ${blurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`}
                   style={{ textAlign: defaultAlign(sheet, rIdx, col), ...cellCss(style) }}
                 >
-                  {text}
-                  {style?.seal && <CellSealOverlay stamped={sealStamped} />}
+                  {style?.seal ? <CellSealSlot stamped={sealStamped}>{text}</CellSealSlot> : text}
                 </td>
               );
             })}

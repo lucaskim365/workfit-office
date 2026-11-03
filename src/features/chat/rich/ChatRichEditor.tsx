@@ -34,7 +34,7 @@ export interface ChatRichEditorHandle {
 interface ChatRichEditorProps {
   placeholder?: string;
   disabled?: boolean;
-  /** 확장 편집기 모드 — 서식 도구 막대를 보이고 Enter 는 줄바꿈(전송은 Ctrl+Enter) */
+  /** 확장 편집기 모드 — 서식 도구 막대를 보인다 */
   expanded?: boolean;
   members?: MentionCandidate[];
   /** 수정할 때의 처음 문서와 그 메시지의 첨부(본문 속 사진 주소를 찾는다) */
@@ -45,6 +45,8 @@ interface ChatRichEditorProps {
   onFiles?: (files: File[]) => void;
   /** 내용이 바뀔 때(비었는지) */
   onEmptyChange?: (empty: boolean) => void;
+  /** 내용이 바뀔 때 — 저장 문서 형태(사진 미리보기 주소 제외) */
+  onChange?: (doc: RichNode) => void;
   /** 편집 영역 최대 높이(px) */
   maxHeight?: number;
   /** 편집 영역 최소 높이(px) — 서식 모드에서 입력창을 넓힐 때 */
@@ -110,23 +112,22 @@ interface MentionState {
  * - 마크다운 단축 입력: **굵게**, *기울임*, ~~취소선~~, `코드`, ``` 코드 블록, # 제목, > 인용, - 목록, 1. 목록
  * - 사진: 붙여넣기·끌어놓기·첨부 버튼 → 커서 자리에 들어간다(본문 속 사진)
  * - @멘션: 방 참여자 목록에서 고른다
- * - Enter 전송 / Shift+Enter 줄바꿈. 목록·코드 블록·표 안에서는 Enter 가 줄바꿈이다.
- *   확장 모드에서는 Enter 가 줄바꿈이고 Ctrl+Enter 로 보낸다.
+ * - Enter 는 줄바꿈, Ctrl+Enter(맥은 Cmd+Enter)로 보낸다 — 실수로 Enter 를 눌러 보내지 않게.
  */
 export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorProps>(function ChatRichEditor(
-  { placeholder, disabled, expanded = false, members = [], initialDoc, initialAttachments, onSubmit, onFiles, onEmptyChange, maxHeight = 160, minHeight = 0, toolbarContainer },
+  { placeholder, disabled, expanded = false, members = [], initialDoc, initialAttachments, onSubmit, onFiles, onEmptyChange, onChange, maxHeight = 160, minHeight = 0, toolbarContainer },
   ref,
 ) {
   /** 아직 올리지 않은 사진: id → 파일 / 미리보기 주소 */
   const pendingRef = useRef(new Map<string, { file: File; url: string }>());
   const membersRef = useRef(members);
   membersRef.current = members;
-  const expandedRef = useRef(expanded);
-  expandedRef.current = expanded;
   const submitRef = useRef(onSubmit);
   submitRef.current = onSubmit;
   const onFilesRef = useRef(onFiles);
   onFilesRef.current = onFiles;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
 
@@ -137,20 +138,13 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
     setMention(next);
   };
 
-  /** Enter 전송 규칙 */
+  /** 전송은 Ctrl+Enter 만 — Enter 는 기본 동작(줄바꿈) */
   const SubmitKeys = Extension.create({
     name: 'chatSubmitKeys',
     priority: 1000,
     addKeyboardShortcuts() {
       return {
         'Mod-Enter': () => {
-          submitRef.current();
-          return true;
-        },
-        Enter: ({ editor }) => {
-          if (expandedRef.current || mentionRef.current) return false;
-          // 목록·코드 블록 안에서는 줄바꿈(기본 동작)
-          if (editor.isActive('codeBlock') || editor.isActive('listItem')) return false;
           submitRef.current();
           return true;
         },
@@ -260,7 +254,10 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
         return true;
       },
     },
-    onUpdate: ({ editor: ed }) => onEmptyChange?.(ed.isEmpty),
+    onUpdate: ({ editor: ed }) => {
+      onEmptyChange?.(ed.isEmpty);
+      onChangeRef.current?.(stripImageSrc(ed.getJSON() as RichNode));
+    },
   });
   const editorRef = useRef<Editor | null>(null);
   editorRef.current = editor;

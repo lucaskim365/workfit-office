@@ -6,6 +6,8 @@ import { overlapsRange } from '@/domain/outsideWork/view';
 export interface OutsideWorkActor {
   userId: string;
   active: boolean;
+  /** 관리자(슈퍼관리자)는 남의 직접 등록 건도 고치고 지울 수 있다 */
+  isAdmin?: boolean;
 }
 
 export interface OutsideWorkFilter {
@@ -44,11 +46,14 @@ function requireActive(actor: OutsideWorkActor): void {
   if (!actor.active) throw new OutsideWorkError('FORBIDDEN', '사용 중인 계정만 외근·출장을 등록할 수 있습니다.');
 }
 
-/** 고치고 지우는 건 등록한 본인만 — 근태에 반영되는 기록이라 남이 대신 바꾸지 못하게 한다. */
-function findOwned(rows: OutsideWork[], actor: OutsideWorkActor, id: string): OutsideWork {
+/**
+ * 고치고 지우는 건 등록한 본인과 관리자만 — 근태에 반영되는 기록이라 남이 대신 바꾸지 못하게 한다.
+ * 결재 건과 연결(link)은 본인만 한다(allowAdmin=false).
+ */
+function findOwned(rows: OutsideWork[], actor: OutsideWorkActor, id: string, allowAdmin = true): OutsideWork {
   const row = rows.find((r) => r.id === id);
   if (!row) throw new OutsideWorkError('NOT_FOUND', '외근·출장 기록을 찾을 수 없습니다.');
-  if (row.ownerUserId !== actor.userId) throw new OutsideWorkError('FORBIDDEN', '본인이 등록한 외근·출장만 고칠 수 있습니다.');
+  if (row.ownerUserId !== actor.userId && !(allowAdmin && actor.isAdmin)) throw new OutsideWorkError('FORBIDDEN', '본인이 등록한 외근·출장만 고칠 수 있습니다.');
   return row;
 }
 
@@ -84,7 +89,7 @@ export const outsideWorkRepo = {
   async link(actor: OutsideWorkActor, id: string, approvalDocId: string): Promise<OutsideWork> {
     requireActive(actor);
     if (!approvalDocId.trim()) throw new OutsideWorkError('INVALID_INPUT', '연결할 결재 문서를 고르세요.');
-    const current = findOwned(await backend.loadAll(), actor, id);
+    const current = findOwned(await backend.loadAll(), actor, id, false);
     const linked = parseWork({ ...current, linkedApprovalDocId: approvalDocId, updatedAt: new Date().toISOString() });
     await backend.save(linked);
     return { ...linked };

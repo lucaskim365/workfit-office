@@ -7,7 +7,7 @@ import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
-import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
 import logoImg from '@/assets/logo.png';
@@ -18,8 +18,12 @@ import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
-import { SealFieldRow } from './components/CompanySeal';
-import { isSealForm } from '@/domain/approvalForm/seal';
+import { SealFieldRow, SealMarkProvider } from './components/CompanySeal';
+import { sealTextOf } from '@/domain/approvalForm/headerItems';
+import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
+import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { CompanyLetterhead } from './components/CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -57,11 +61,14 @@ export function ApprovalDocumentView({
   formOverride,
   currentUser,
   isPreview = false,
+  external = false,
 }: {
   doc: ApprovalDoc;
   formOverride?: ApprovalForm;
   currentUser?: { id: string; dept?: string };
   isPreview?: boolean;
+  /** 서식 설정과 상관없이 대외 문서 모양으로(결재 완료 문서) — 거래처로 보내는 발주서 PDF 등 */
+  external?: boolean;
 }) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -325,7 +332,11 @@ export function ApprovalDocumentView({
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
   // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
-  const externalDoc = !!form?.hideDocInfoOnComplete && doc.status === '완료';
+  const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
+  // '문서제목' 칸은 문서 제목을 보여 준다
+  const titleField = titleFieldOf(form?.fields);
+  const viewValues = titleField ? { ...doc.fieldValues, [titleField.key]: doc.title } : doc.fieldValues;
+  const showDocTitle = headerShown(form, 'docTitle');
 
   const closing = (form?.closing !== undefined && form?.closing !== null)
     ? form.closing
@@ -343,7 +354,7 @@ export function ApprovalDocumentView({
   );
 
   interface LayoutBlock {
-    type: 'table' | 'longtext' | 'table-field' | 'seal';
+    type: 'table' | 'longtext' | 'table-field' | 'seal' | 'letterhead';
     section: string;
     fields: FormField[];
   }
@@ -351,6 +362,8 @@ export function ApprovalDocumentView({
   const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
       if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      // 대외 문서에서 숨기기로 한 필드
+      if (externalDoc && f.hideOnExternal) return false;
       if (f.visibleIf) {
         const parts = f.visibleIf.split(':');
         if (parts.length === 2) {
@@ -383,6 +396,10 @@ export function ApprovalDocumentView({
       const { section: secName, width: fw } = getEffectiveProps(f);
       if (f.type === '직인') {
         blks.push({ type: 'seal', section: secName, fields: [f] });
+        return;
+      }
+      if (f.type === '회사정보') {
+        blks.push({ type: 'letterhead', section: secName, fields: [f] });
         return;
       }
       if (f.type === '장문') {
@@ -436,7 +453,7 @@ export function ApprovalDocumentView({
       effectiveFieldProps: getEffectiveProps,
       longTextFields: longTexts,
     };
-  }, [form, doc.fieldValues, amountField]);
+  }, [form, doc.fieldValues, amountField, externalDoc]);
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
@@ -462,7 +479,7 @@ export function ApprovalDocumentView({
   const hasSecretFields = form?.fields.some(f => f.isSecret);
 
   return (
-    <>
+    <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
       {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
       {hasSecretFields && (
         <div className="mx-auto mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl max-w-[800px] flex items-center justify-between text-[11.5px] font-bold text-amber-800 print:hidden shadow-2xs">
@@ -499,13 +516,13 @@ export function ApprovalDocumentView({
       {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
       <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
-        {!externalDoc && (
+        {!externalDoc && headerShown(form, 'topBar') && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
           <div className="flex items-center gap-2 h-full">
             <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
             <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
           </div>
-          <div className="text-[11px] text-[#888] self-center">{doc.docNo || ''}</div>
+          <div className="text-[11px] text-[#888] self-center">{doc.docNo ? docNoOf(doc) : ''}</div>
         </div>
         )}
 
@@ -567,9 +584,10 @@ export function ApprovalDocumentView({
           </div>
         )}
 
-        <div className="relative mb-5 flex items-start justify-between gap-4">
-          <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
-          {!externalDoc && !isSealForm(form?.fields) && (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
+        <div className={`relative mb-5 flex items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'}`}>
+          {showDocTitle && <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>}
+          {/* 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]] */}
+          {!externalDoc && stampTableShown(doc.status, isSealForm(form?.fields)) && (
             <div className="relative">
               <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
@@ -661,6 +679,7 @@ export function ApprovalDocumentView({
 
         <ApprovalDocMetaTable
           doc={doc}
+          hidden={externalDoc}
           form={form}
           drafterName={drafterName}
           drafterPos={drafterPos}
@@ -678,12 +697,16 @@ export function ApprovalDocumentView({
               }
 
               if (block.type === 'seal') {
-                return <SealFieldRow key={blockIdx} label={block.fields[0].label} stamped={doc.status === '완료'} />;
+                return <SealFieldRow key={blockIdx} label={sealTextOf(block.fields[0], doc.fieldValues)} stamped={doc.status === '완료'} />;
+              }
+
+              if (block.type === 'letterhead') {
+                return <CompanyLetterhead key={blockIdx} field={block.fields[0]} />;
               }
 
               if (block.type === 'longtext') {
                 const f = block.fields[0];
-                const rawVal = fieldText(f, doc.fieldValues, org);
+                const rawVal = fieldText(f, viewValues, org);
                 const val = maskValue(rawVal, f.isSecret);
                 const isBlurred = f.isSecret && isMaskingActive;
                 return (
@@ -715,10 +738,15 @@ export function ApprovalDocumentView({
 
               if (block.type === 'table-field') {
                 const isHalf = effectiveFieldProps(block.fields[0]).width === 'half';
+                const sheets = block.fields.map((f) => resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options));
+                // 직인 칸이 있으면 상자가 직인을 자르지 않게 — 직인은 칸 위아래(제목 줄 포함)로 넘쳐 찍힌다
+                const sealed = sheets.some(hasSealCell);
+                const clip = sealed ? '' : 'overflow-hidden';
+                const scrollX = sealed ? '' : 'overflow-x-auto';
 
-                const renderTableOnly = (f: FormField) => (
+                const renderTableOnly = (f: FormField, i: number) => (
                   <SheetView
-                    sheet={resolveViewSheet(f.placeholder, doc.fieldValues[f.key], f.options)}
+                    sheet={sheets[i]}
                     allSecret={f.isSecret}
                     isMaskingActive={isMaskingActive}
                     maskValue={maskValue}
@@ -735,18 +763,18 @@ export function ApprovalDocumentView({
                       </div>
                     )}
                     {isHalf ? (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break">
-                        {block.fields.map((f) => {
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip} grid grid-cols-2 gap-0 divide-x divide-[#bbb] print-avoid-break`}>
+                        {block.fields.map((f, i) => {
                           const hasLabel = !!(f.label && f.label.trim());
                           return (
                             <div key={f.key} className="flex flex-col">
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center">
+                                <div className={`text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] text-center ${i === 0 ? 'rounded-tl-lg' : 'rounded-tr-lg'}`}>
                                   {f.label}
                                 </div>
                               )}
-                              <div className="overflow-x-auto">
-                                {renderTableOnly(f)}
+                              <div className={scrollX}>
+                                {renderTableOnly(f, i)}
                               </div>
                             </div>
                           );
@@ -754,21 +782,21 @@ export function ApprovalDocumentView({
                         {block.fields.length === 1 && <div />}
                       </div>
                     ) : (
-                      <div className="border border-[#bbb] bg-white rounded-lg overflow-hidden">
+                      <div className={`border border-[#bbb] bg-white rounded-lg ${clip}`}>
                         {(() => {
                           const hasLabel = !!(block.fields[0].label && block.fields[0].label.trim());
                           return (
                             <>
                               {hasLabel && (
-                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb]">
+                                <div className="text-[11px] font-bold text-black bg-[#f5f5f5] py-1.5 px-3 border-b border-[#bbb] rounded-t-lg">
                                   {block.fields[0].label}
                                 </div>
                               )}
                             </>
                           );
                         })()}
-                        <div className="overflow-x-auto">
-                          {renderTableOnly(block.fields[0])}
+                        <div className={scrollX}>
+                          {renderTableOnly(block.fields[0], 0)}
                         </div>
                       </div>
                     )}
@@ -782,7 +810,7 @@ export function ApprovalDocumentView({
 
               for (let i = 0; i < fields.length; i++) {
                 const f = fields[i];
-                const rawVal = fieldText(f, doc.fieldValues, org);
+                const rawVal = fieldText(f, viewValues, org);
                 const val = maskValue(rawVal, f.isSecret);
                 const { width: fw } = effectiveFieldProps(f);
 
@@ -790,7 +818,7 @@ export function ApprovalDocumentView({
                   const next = fields[i + 1];
                   const { width: nw } = next ? effectiveFieldProps(next) : { width: 'full' as const };
                   if (next && nw === 'half') {
-                    const rawNextVal = fieldText(next, doc.fieldValues, org);
+                    const rawNextVal = fieldText(next, viewValues, org);
                     const nextVal = maskValue(rawNextVal, next.isSecret);
                     tableRows.push(
                       <MetaRow
@@ -839,14 +867,14 @@ export function ApprovalDocumentView({
         )}
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-        {longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
+        {!externalDoc && longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
           <div className="mt-3 min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
             {bodyText}
           </div>
         )}
 
         {/* 첨부파일 영역 */}
-        {doc.attachments && doc.attachments.length > 0 && (
+        {!externalDoc && doc.attachments && doc.attachments.length > 0 && (
           <table className="mt-4 w-full border-collapse text-[12px]">
             <tbody>
               <tr>
@@ -923,7 +951,7 @@ export function ApprovalDocumentView({
 
 
         {/* 관련 문서 연동 영역 */}
-        {accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
+        {!externalDoc && accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
           <table className="mt-2 w-full border-collapse text-[12px]">
             <tbody>
               <tr>
@@ -955,7 +983,7 @@ export function ApprovalDocumentView({
           </table>
         )}
 
-        {!externalDoc && (
+        {!externalDoc && headerShown(form, 'closing') && (
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
           {closing.trim() && <div>{closing}</div>}
           <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
@@ -1008,7 +1036,7 @@ export function ApprovalDocumentView({
           <RelatedDocDetailModal docId={activeRelatedDocId} onClose={() => setActiveRelatedDocId(null)} />
         )}
       </div>
-    </>
+    </SealMarkProvider>
   );
 }
 

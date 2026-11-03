@@ -1,17 +1,21 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Settings, X, Info, Search } from 'lucide-react';
+import { ClipboardCheck, Settings, X, Info, Search, Check, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useApprovalBoxes } from '@/features/gw/useApprovals';
+import { useApprovalBoxes, useBatchDecideStep } from '@/features/gw/useApprovals';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import MobileNotificationBell from './MobileNotificationBell';
-import { currentApproverIds } from '@/domain/approvalDoc/engine';
+import { byRecent, currentApproverIds, isMyApprovedDone } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } from '@/domain/approvalDoc/search';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { useApprovalForms } from '@/features/gw/useApprovalForms';
+import { formCounts } from '@/modules/gw/approval/completedForms';
+import { useMobileBack } from './useMobileBack';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
 
 /**
  * 모바일 PWA 전자결재 결재함 — 열람·결재 중심(Flutter 모바일과 동일 스코프).
@@ -20,7 +24,7 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
   '상신': 1,    // 상신함
   '참조': 2,    // 참조함
-  '대기': 3,    // 결재대기함
+  '대기': 3,    // 받은 결재함
   '반려': 4,    // 반려함
   '수신': 5,    // 수신함
   '완료': 6,    // 완료함
@@ -33,7 +37,7 @@ const BOX_PRIORITY: Record<ApprovalBox | '문서함', number> = {
 const FIXED_BOXES: { key: ApprovalBox | '문서함'; label: string }[] = [
   { key: '상신', label: '상신함' },
   { key: '참조', label: '참조함' },
-  { key: '대기', label: '결재대기함' },
+  { key: '대기', label: '받은 결재함' },
   { key: '반려', label: '반려함' },
   { key: '수신', label: '수신함' },
   { key: '완료', label: '완료함' },
@@ -72,19 +76,36 @@ export function statusColor(status: string): string {
 export default function MobileApprovalList() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const back = useMobileBack('/m');
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
+  // 완료함 서식 — null = 전체 서식. 아래에서 올라오는 목록으로 고른다(PC 완료함의 서식 드롭다운과 같다)
+  const [doneForm, setDoneForm] = useState<string | null>(null);
+  const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
+  const { data: approvalForms = [] } = useApprovalForms();
+  const formNameOf = (code: string) => approvalForms.find((f) => f.code === code)?.name ?? code;
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   // 안읽음(대기·참조·수신·반려·후열) — 웹과 같은 DB 기록·같은 규칙
   const unreadState = useApprovalUnread(me, byBox, isLoading);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
   const deptArchiveDocs = useDeptArchiveDocs(me);
+
+  // 일괄 승인 — 받은 결재함 '대기중'(전부 내 차례)에서만. 승인은 웹과 같은 useBatchDecideStep(문서마다 내 차례인지 다시 확인).
+  const batchDecide = useBatchDecideStep();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false);
+  const [batchComment, setBatchComment] = useState('');
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
 
 
   // 1. 내가 즉시 승인/결재해야 할 활성 대기 건수 (전임자 승계 건 포함)
@@ -167,8 +188,9 @@ export default function MobileApprovalList() {
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
 
-    // 1. 결재 대기함 필터링
+    // 1. 받은 결재함 필터링 — 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터, 웹과 같게)
     if (box === '대기') {
+      const myDone = (byBox['완료'] ?? []).filter((d) => isMyApprovedDone(d, me));
       if (todoFilter === 'pending') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
@@ -178,10 +200,12 @@ export default function MobileApprovalList() {
       if (todoFilter === 'progress') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me);
+          return d.status === '진행중' && !approvers.includes(me);
         });
       }
-      return rawDocs;
+      if (todoFilter === 'done') return myDone;
+      const ids = new Set(rawDocs.map((d) => d.id));
+      return [...rawDocs, ...myDone.filter((d) => !ids.has(d.id))].sort(byRecent);
     }
 
     // 2. 상신함 필터링
@@ -196,9 +220,10 @@ export default function MobileApprovalList() {
 
     // 3. 기결재 완료함 필터링
     if (box === '완료') {
-      if (doneFilter === 'draft') return rawDocs.filter((d) => d.drafterId === me);
-      if (doneFilter === 'approved') return rawDocs.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
-      return rawDocs;
+      const byForm = doneForm ? rawDocs.filter((d) => d.docType === doneForm) : rawDocs;
+      if (doneFilter === 'draft') return byForm.filter((d) => d.drafterId === me);
+      if (doneFilter === 'approved') return byForm.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
+      return byForm;
     }
 
 
@@ -221,7 +246,9 @@ export default function MobileApprovalList() {
     }
 
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, rejectFilter, me, deptArchiveDocs]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, doneForm, rejectFilter, me, deptArchiveDocs]);
+
+  const doneFormCounts = useMemo(() => formCounts(byBox['완료'] ?? []), [byBox]);
 
   // 검색 — 규칙은 domain/approvalDoc/search(PC 와 공용). 검색어가 있을 때만 결과 목록을 보인다.
   const searchResults = useMemo(
@@ -231,10 +258,29 @@ export default function MobileApprovalList() {
 
   const isSearching = searchQuery.trim().length > 0;
 
+  const canBatchApprove = !isSearching && box === '대기' && todoFilter === 'pending' && docs.length > 0;
+  // 승인되어 목록에서 빠진 문서는 선택에서도 뺀다
+  const batchIds = selectedIds.filter((id) => docs.some((d) => d.id === id));
+  const allSelected = docs.length > 0 && batchIds.length === docs.length;
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const runBatchApprove = async () => {
+    if (batchIds.length === 0) return;
+    try {
+      await batchDecide.mutateAsync({ docIds: batchIds, userId: me, comment: batchComment.trim() || '일괄 승인 처리되었습니다.' });
+      setShowBatchConfirm(false);
+      setBatchComment('');
+      exitSelectMode();
+    } catch (e) {
+      window.alert(`일괄 승인 중 오류가 발생했습니다: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
-        <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
+      <header className="m-header flex shrink-0 items-center gap-2 px-2 py-3 text-white">
+        <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
         <div className="ml-auto flex items-center gap-1">
           <MobileNotificationBell />
@@ -338,9 +384,11 @@ export default function MobileApprovalList() {
               key={b.key}
               onClick={() => {
                 setBox(b.key);
-                setTodoFilter('pending');
+                exitSelectMode();
+                setTodoFilter('all');
                 setDraftFilter('all');
                 setDoneFilter('all');
+                setDoneForm(null);
                 setRejectFilter('all');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
@@ -369,14 +417,17 @@ export default function MobileApprovalList() {
 
       {box === '대기' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
-          {(['pending', 'progress', 'all'] as const).map((f) => {
-            const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
+          {(['all', 'pending', 'progress', 'done'] as const).map((f) => {
+            const label = f === 'pending' ? '대기중' : f === 'progress' ? '진행중' : f === 'done' ? '완료' : '전체';
             const active = todoFilter === f;
             return (
               <button
                 key={f}
-                onClick={() => setTodoFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                onClick={() => {
+                  setTodoFilter(f);
+                  exitSelectMode();
+                }}
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#3b82f6] text-white shadow-sm shadow-[#3b82f6]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
@@ -405,7 +456,7 @@ export default function MobileApprovalList() {
               <button
                 key={f}
                 onClick={() => setDraftFilter(f)}
-                className={`flex-1 rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
+                className={`flex-1 min-w-0 whitespace-nowrap rounded-xl py-2 text-[12px] font-bold transition-all flex items-center justify-center gap-1 ${
                   active ? 'bg-[#2563eb] text-white shadow-sm shadow-[#2563eb]/20' : 'bg-black/5 text-ink3 hover:bg-black/10'
                 }`}
               >
@@ -444,8 +495,20 @@ export default function MobileApprovalList() {
           })}
         </div>
       )}
-
-
+      {box === '완료' && (
+        <div className="shrink-0 border-b border-black/5 bg-white px-2.5 pb-2.5 select-none">
+          <button
+            type="button"
+            onClick={() => setIsFormSheetOpen(true)}
+            className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-[12px] font-bold transition-all ${
+              doneForm ? 'border-[#3b82f6] bg-[#3b82f6]/10 text-[#2563eb]' : 'border-black/10 bg-white text-ink2'
+            }`}
+          >
+            <span className="truncate">서식: {doneForm ? formNameOf(doneForm) : '전체'}</span>
+            <ChevronDown size={15} className="shrink-0" />
+          </button>
+        </div>
+      )}
 
       {box === '반려' && (
         <div className="flex shrink-0 border-b border-black/5 bg-white p-2.5 gap-2 select-none">
@@ -510,17 +573,50 @@ export default function MobileApprovalList() {
                 {box === '대기' ? '결재할 문서가 없습니다.' : '문서가 없습니다.'}
               </div>
             ) : (
-              docs.map((d) => (
-                <ApprovalRow
-                  key={d.id}
-                  doc={d}
-                  isUnread={unreadState.isUnreadInBox(box, d.id)}
-                  onOpen={() => {
-                    unreadState.markRead(d.id);
-                    nav(`/m/approval/${d.id}`);
-                  }}
-                />
-              ))
+              <>
+                {canBatchApprove && (
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12px]">
+                    {selectMode ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIds(allSelected ? [] : docs.map((d) => d.id))}
+                          className="font-bold text-[#2563eb]"
+                        >
+                          {allSelected ? '전체 해제' : '전체 선택'}
+                        </button>
+                        <span className="text-ink3">{batchIds.length}건 선택</span>
+                        <button type="button" onClick={exitSelectMode} className="ml-auto font-bold text-ink3">
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-ink3">여러 건을 한 번에 승인할 수 있습니다.</span>
+                        <button type="button" onClick={() => setSelectMode(true)} className="ml-auto font-bold text-[#2563eb]">
+                          선택
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {docs.map((d) => (
+                  <ApprovalRow
+                    key={d.id}
+                    doc={d}
+                    isUnread={unreadState.isUnreadInBox(box, d.id)}
+                    checked={selectMode && canBatchApprove ? batchIds.includes(d.id) : undefined}
+                    onOpen={() => {
+                      if (selectMode && canBatchApprove) {
+                        toggleSelect(d.id);
+                        return;
+                      }
+                      unreadState.markRead(d.id);
+                      nav(`/m/approval/${d.id}`);
+                    }}
+                  />
+                ))}
+              </>
             )}
           </>
         )}
@@ -534,6 +630,99 @@ export default function MobileApprovalList() {
             <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
           </p>
         </div>
+      )}
+
+      {selectMode && canBatchApprove && (
+        <div className="shrink-0 border-t border-black/10 bg-white p-3 shadow-lg" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+          <button
+            type="button"
+            onClick={() => setShowBatchConfirm(true)}
+            disabled={batchIds.length === 0 || batchDecide.isPending}
+            className="w-full rounded-xl py-3 text-[15px] font-bold text-white active:scale-[0.98] transition-all disabled:opacity-40 shadow-sm"
+            style={{ background: '#16a34a' }}
+          >
+            {batchIds.length > 0 ? `${batchIds.length}건 일괄 승인` : '승인할 문서를 선택하세요'}
+          </button>
+        </div>
+      )}
+
+      {showBatchConfirm && createPortal(
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 p-4" onClick={() => !batchDecide.isPending && setShowBatchConfirm(false)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-slate-100 px-5 py-3.5 text-[15px] font-bold text-ink">일괄 승인</div>
+            <div className="space-y-3 px-5 py-4">
+              <p className="text-[13px] font-semibold text-ink">
+                선택한 <span className="text-[#16a34a]">{batchIds.length}건</span>을 모두 승인합니다.
+              </p>
+              <p className="text-[11.5px] text-amber-700">승인 후에는 취소하거나 되돌릴 수 없습니다.</p>
+              <textarea
+                value={batchComment}
+                onChange={(e) => setBatchComment(e.target.value)}
+                placeholder="의견 (선택 · 비우면 '일괄 승인 처리되었습니다.')"
+                rows={3}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-ink outline-none focus:border-[#16a34a] focus:bg-white"
+              />
+            </div>
+            <div className="flex gap-2.5 border-t border-slate-100 p-3">
+              <button
+                type="button"
+                onClick={() => setShowBatchConfirm(false)}
+                disabled={batchDecide.isPending}
+                className="flex-1 rounded-xl border border-black/10 py-2.5 text-[14px] font-bold text-ink2 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={runBatchApprove}
+                disabled={batchDecide.isPending || batchIds.length === 0}
+                className="flex-1 rounded-xl py-2.5 text-[14px] font-bold text-white disabled:opacity-50"
+                style={{ background: '#16a34a' }}
+              >
+                {batchDecide.isPending ? '승인 중…' : '승인'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isFormSheetOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50" onClick={() => setIsFormSheetOpen(false)}>
+          <div
+            className="flex max-h-[70vh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-black/5 px-5 py-3.5">
+              <span className="text-[15px] font-bold text-ink">서식 선택</span>
+              <button onClick={() => setIsFormSheetOpen(false)} className="p-1 text-ink3">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-2">
+              {[{ code: null as string | null, count: (byBox['완료'] ?? []).length }, ...doneFormCounts].map((f) => {
+                const active = doneForm === f.code;
+                return (
+                  <button
+                    key={f.code ?? '__all'}
+                    type="button"
+                    onClick={() => {
+                      setDoneForm(f.code);
+                      setIsFormSheetOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13.5px] ${active ? 'bg-[#3b82f6]/10 font-bold text-[#2563eb]' : 'text-ink active:bg-black/5'}`}
+                  >
+                    <span className="grid w-4 shrink-0 place-items-center">{active && <Check size={15} strokeWidth={3} />}</span>
+                    <span className="min-w-0 flex-1 truncate">{f.code ? formNameOf(f.code) : '전체 서식'}</span>
+                    <span className="shrink-0 text-[12px] text-ink3">{f.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {isSettingsOpen && createPortal(
@@ -606,7 +795,8 @@ export default function MobileApprovalList() {
   );
 }
 
-function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () => void; isUnread?: boolean }) {
+/** checked 를 주면(선택 모드) 왼쪽에 체크 표시가 붙는다. */
+function ApprovalRow({ doc, onOpen, isUnread, checked }: { doc: ApprovalDoc; onOpen: () => void; isUnread?: boolean; checked?: boolean }) {
   const drafter = doc.drafterName || doc.drafterId;
   
   let statusText: string = doc.status === '시행대기' ? '완료' : doc.status === '시행반송' ? '반려' : doc.status;
@@ -615,8 +805,16 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
   return (
     <button
       onClick={onOpen}
-      className="flex w-full flex-col gap-1 border-b border-slate-100 bg-white px-4 py-3 text-left active:bg-slate-50 transition-colors"
+      className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left active:bg-slate-50 transition-colors ${checked ? 'bg-emerald-50/60' : 'bg-white'}`}
     >
+      {checked !== undefined && (
+        <span
+          className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 ${checked ? 'border-[#16a34a] bg-[#16a34a] text-white' : 'border-slate-300 bg-white'}`}
+        >
+          {checked && <Check size={13} strokeWidth={3} />}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex items-center gap-1.5">
         <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>
           {doc.docType}
@@ -632,7 +830,7 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
             안읽음
           </span>
         )}
-        <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{doc.docNo}</span>
+        <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{docNoOf(doc)}</span>
       </div>
       <div className="truncate text-[14px] font-bold text-ink">{doc.title}</div>
       <div className="flex items-center gap-2 text-[11px] text-ink3">
@@ -641,6 +839,7 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
           {doc.drafterDept ? ` · ${doc.drafterDept}` : ''}
         </span>
         <span className="ml-auto shrink-0 tabular-nums">{fmtDocDate(doc.submittedAt ?? doc.createdAt)}</span>
+      </div>
       </div>
     </button>
   );

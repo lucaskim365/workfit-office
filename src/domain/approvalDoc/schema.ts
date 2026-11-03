@@ -22,6 +22,7 @@ export const DOC_TYPES = ['기안', '품의', '지출결의', '휴가'] as const
 /** 문서 상태(§4.4 상태머신). */
 export const DOC_STATUS = ['임시저장', '진행중', '반려', '완료', '회수', '삭제', '긴급 조치 사후 검토 반려', '시행대기', '시행반송', '취소완료'] as const;
 /** 결재 구분 — 각 결재선 노드의 역할(§4.2). */
+/** 전결은 2026-10-23 시스템에서 없앴다 — 예전 문서를 읽기 위해서만 값으로 남긴다(새 결재선에는 안 들어감). */
 export const STEP_KINDS = ['결재', '합의', '참조', '전결', '대결'] as const;
 /** 노드 결정. */
 export const STEP_DECISIONS = ['대기', '승인', '반려', '보류'] as const;
@@ -49,7 +50,7 @@ export const approvalStepSchema = z.object({
   parallelGroup: z.string().nullable().default(null),
   /** 승인 방식 — 'sequential' (순차) | 'parallel' (병렬) */
   executionType: z.enum(['sequential', 'parallel']).optional().default('sequential'),
-  /** 결재 구분(§4.2). 참조=열람만(진행 막지 않음), 전결=승인 시 상위 생략 완료. */
+  /** 결재 구분(§4.2). 참조=열람만(진행 막지 않음). 전결=예전 문서 기록용. */
   kind: z.enum(STEP_KINDS),
   /** 결재자 users.id(FK). */
   approverId: z.string().min(1),
@@ -169,7 +170,7 @@ export const approvalDocSchema = z.object({
   status: z.enum(DOC_STATUS).default('임시저장'),
   /** 결재선(임베드, §5.2). */
   steps: z.array(approvalStepSchema).default([]),
-  /** 금액(지출결의·품의) → 전결규정 매칭 키. */
+  /** 금액(지출결의·품의) → 결재 규칙 매칭 키. */
   amount: z.number().nullable().default(null),
   /** 본문. */
   body: z.string().default(''),

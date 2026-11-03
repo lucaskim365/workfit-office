@@ -70,7 +70,8 @@ export const systemLogRepo = {
         detail: `시스템 로그인 성공 (소속: ${user.dept || '미지정'})`,
         ip: typeof window !== 'undefined' ? `${window.navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Web'} Client` : '127.0.0.1',
       };
-      await backend.save(systemLogSchema.parse(logItem));
+      // 늘 새 ID 라 바로 만든다 — save(수정 먼저, 없으면 만들기)는 첫 수정이 매번 404 로 실패해 콘솔에 오류가 남았다
+      await backend.insert(systemLogSchema.parse(logItem));
     } catch (err) {
       console.error('Failed to record login log:', err);
     }

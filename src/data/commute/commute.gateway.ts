@@ -96,7 +96,34 @@ const parseRows = <T>(rows: unknown[], schema: { safeParse: (v: unknown) => { su
     return parsed.success && parsed.data ? [parsed.data] : [];
   });
 
+/** 화면을 열 때 한 번에 받는 것(caps-ingest 'bootstrap'). 각 값은 따로 부를 때와 같다. */
+export interface CommuteBootstrap {
+  viewer: CommuteViewer;
+  employees: CommuteEmployee[];
+  /** 내 사번을 모르거나 볼 수 없으면 null */
+  myMonth: CommuteRecord[] | null;
+  /** includeAll 이 아니면 null */
+  monthAll: CommuteRecord[] | null;
+}
+
 export const commuteGateway = {
+  /**
+   * 화면을 열 때 필요한 것을 요청 하나로 — 내 열람 범위·볼 수 있는 직원·내 한 달(·관리자면 전 직원 한 달).
+   * 따로 부르면 요청 4~5개가 동시에 서버를 붙잡고 기다려 30초씩 멈췄다(caps-ingest 'bootstrap' 주석).
+   */
+  async bootstrap(month: string, includeAll: boolean): Promise<CommuteBootstrap> {
+    const data = await call<{ viewer: unknown; employees: unknown[]; myMonth: unknown[] | null; monthAll: unknown[] | null }>(
+      'bootstrap',
+      { month, includeAll },
+    );
+    return {
+      viewer: commuteViewerSchema.parse(data.viewer),
+      employees: parseRows(data.employees ?? [], commuteEmployeeSchema),
+      myMonth: data.myMonth ? parseRows(data.myMonth, commuteRecordSchema) : null,
+      monthAll: data.monthAll ? parseRows(data.monthAll, commuteRecordSchema) : null,
+    };
+  },
+
   /** 내 열람 범위. 화면이 자기 권한을 스스로 판정하지 않도록 서버에 물어본다. */
   async viewerScope(): Promise<CommuteViewer> {
     return commuteViewerSchema.parse(await call<unknown>('viewerScope'));

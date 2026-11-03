@@ -175,9 +175,9 @@ export default function ProfileScreen() {
     if (file.size > 5 * 1024 * 1024) { setAvatarErr('파일이 너무 큽니다. 5MB 이내로 선택하세요.'); return; }
     setAvatarErr(''); setAvatarMsg('');
     try {
-      const url = await uploadAvatar(user.id, file);
-      setAvatarPreview(url);
-      await updateProfile({ photoUrl: url });
+      const photo = await uploadAvatar(user.id, file);
+      setAvatarPreview(photo.photoUrl);
+      await updateProfile(photo);
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       setAvatarMsg('프로필 사진이 저장되었습니다.');
     } catch (e) {
@@ -190,7 +190,7 @@ export default function ProfileScreen() {
     if (!window.confirm('프로필 사진을 삭제하시겠습니까?')) return;
     setAvatarErr(''); setAvatarMsg('');
     try {
-      await updateProfile({ photoUrl: '' });
+      await updateProfile({ photoUrl: '', photoThumbUrl: '' });
       setAvatarPreview('');
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       setAvatarMsg('프로필 사진이 삭제되었습니다.');

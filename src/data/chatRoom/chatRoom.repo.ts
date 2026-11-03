@@ -315,6 +315,18 @@ export const chatRoomRepo = {
     return targets.map((r) => r.id);
   },
 
+  /**
+   * 부서 발령 — 그 부서의 살아있는 부서방에 그 사람을 넣는다. 넣었으면 방 ID, 이미 있거나 방이 없으면 null.
+   * 이전 부서방에서는 빼지 않는다(인수인계 등으로 계속 쓸 수 있게 — 나가기는 본인이 한다).
+   * 방이 아직 없으면 다음 개설 때 부서원으로 들어가므로 여기서 만들지 않는다.
+   */
+  async addMemberToDeptRoom(deptId: string, userId: string): Promise<string | null> {
+    const room = (await backend.loadAll()).find((r) => !r.deletedAt && deptIdOfRoom(r) === deptId);
+    if (!room || room.members.includes(userId)) return null;
+    await backend.save({ ...room, members: [...room.members, userId] });
+    return room.id;
+  },
+
   /** 부서 삭제 — 그 부서방을 일반 단체방으로 바꾼다(이름·참여자·대화 유지). 바뀐 방 ID 목록을 돌려준다. */
   async detachDeptRoom(deptId: string): Promise<string[]> {
     const rows = await this.list(undefined, { includeDeleted: true });

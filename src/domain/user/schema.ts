@@ -42,6 +42,8 @@ export const userSchema = z.object({
   signUrl: z.string().optional().default(''),
   signType: z.enum(['stamp', 'signature']).optional().default('stamp'),
   photoUrl: z.string().default(''),
+  /** 작은 프로필 사진(200px) — 목록·말풍선 등 작은 자리용. 크게 볼 때는 photoUrl(800px). 예전 사진은 비어 있다. */
+  photoThumbUrl: z.string().nullish().transform((v) => v ?? ''), // 칸을 나중에 추가해 예전 사용자는 DB 값이 null 이다
   activeChatRoomId: z.string().nullable().optional(),
   /**
    * 퇴사 처리 일시(ISO). 빈 문자열 = 재직/해당없음. Phase1 퇴사 처리에서 기록.
@@ -53,6 +55,16 @@ export const userSchema = z.object({
    * 스키마에 명시해 웹 저장 시에도 보존되도록 함(과거엔 파싱에서 탈락).
    */
   fcmToken: z.string().default(''),
+  /**
+   * 기기별 FCM 토큰 목록 — PC·휴대폰 등 여러 기기에서 모두 알림을 받는다.
+   * fcmToken은 서버 함수 전환기 동안 가장 최근 기기 토큰을 같이 둔다.
+   * 일반 저장(save)에서는 빼고 토큰 전용 함수(updateFcmToken 등)만 쓴다.
+   */
+  fcmTokens: z.array(z.string()).default([]),
+  /** 회수 신호를 받아도 되는 기기 토큰(안드로이드 휴대폰만 — 아이폰·PC 제외) — domain/user/pushTokens withRecallToken */
+  fcmTokensRecall: z.array(z.string()).default([]),
+  /** 알림 설정 JSON — domain/notificationPrefs. 칸을 나중에 추가해 예전 사용자는 DB 값이 null 이다. 일반 저장(save)에서는 뺀다 */
+  notificationPrefs: z.string().nullish(),
   /**
    * 다중 소속(겸직) 확장 스키마 (User.dept 단일 구조의 점진적 확장 대비).
    */
@@ -87,5 +99,10 @@ export const userFormSchema = z.object({
   status: z.enum(USER_STATUS),
   password: z.string().max(50).optional(),
   photoUrl: z.string().optional(),
+  photoThumbUrl: z.string().optional(),
 });
 export type UserFormValues = z.infer<typeof userFormSchema>;
+
+/** 작은 자리에 쓸 프로필 사진 주소 — 작은 파일이 없는 예전 사진은 원본을 쓴다 */
+export const smallPhotoOf = (user?: { photoUrl?: string | null; photoThumbUrl?: string | null } | null): string =>
+  user?.photoThumbUrl || user?.photoUrl || '';

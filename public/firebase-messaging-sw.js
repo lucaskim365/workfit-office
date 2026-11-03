@@ -19,11 +19,48 @@ const messaging = firebase.messaging();
 self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+/**
+ * PC 알림은 5초 뒤 스스로 닫는다(화면 구석에 쌓이지 않게).
+ * 휴대폰 알림은 닫지 않는다 — 읽을 때까지 알림창에 남고, 읽으면 회수 신호·앱 복귀 때 정리된다.
+ * (휴대폰은 화면이 꺼지면 서비스워커가 멈춰 타이머가 울리지 않기도 해서 믿을 수도 없었다)
+ */
+const DESKTOP_NOTIFICATION_MS = 5_000;
+
 async function expireNotification(id, tag) {
-  await new Promise((resolve) => setTimeout(resolve, 10_000));
+  await new Promise((resolve) => setTimeout(resolve, DESKTOP_NOTIFICATION_MS));
   const notifications = await self.registration.getNotifications({ tag });
   for (const notification of notifications) {
     if (notification.data?.workfitNotificationId === id) notification.close();
+  }
+}
+
+/**
+ * 방별로 어디까지 읽었는지(메시지 시각 at) — 다른 기기에서 읽어 회수 신호가 온 값.
+ * 회수 신호가 그 메시지의 알림보다 먼저 도착해도, 늦게 온 알림을 이것으로 거른다.
+ */
+const readUpToKey = (roomId) => `/read-up-to/${encodeURIComponent(roomId)}`;
+async function readUpToOf(roomId) {
+  try {
+    const r = await (await caches.open('workfit-meta')).match(readUpToKey(roomId));
+    return r ? await r.text() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/** 다른 기기에서 그 방을 readUpTo 까지 읽었다 — 기록하고, 그 시각까지의 그 방 알림을 닫는다. */
+async function recallChat(roomId, readUpTo) {
+  if (!roomId || !readUpTo) return;
+  try {
+    if (readUpTo > (await readUpToOf(roomId))) {
+      await (await caches.open('workfit-meta')).put(readUpToKey(roomId), new Response(readUpTo));
+    }
+  } catch (e) {
+    /* 기록 실패 — 지금 떠 있는 알림은 그래도 닫는다 */
+  }
+  for (const old of await self.registration.getNotifications({ tag: roomId })) {
+    const at = old.data?.at || '';
+    if (!at || at <= readUpTo) old.close();
   }
 }
 
@@ -31,6 +68,18 @@ async function expireNotification(id, tag) {
 messaging.onBackgroundMessage(async (payload) => {
   const n = payload.notification || {};
   const data = payload.data || {};
+  /**
+   * 회수 신호 — 다른 기기에서 읽은 대화방의 알림을 닫는다(새 알림이 아니다).
+   * 안드로이드 휴대폰에만 온다(서버가 users.fcmTokensRecall 로 거른다. 아이폰은 받으면 권한이 끊길 수 있다).
+   * 닫고 나서 떠 있는 알림이 하나도 없으면 크롬은 이 푸시를 '알림 없는 푸시'로 세고, 사이트별 허용량을 넘기면
+   * "백그라운드에서 업데이트됨" 알림을 대신 띄운다. 그래서 화면이 신호를 몰아서 보낸다(messaging.ts).
+   */
+  if (data.type === 'recall-chat') {
+    await recallChat(data.roomId, data.readUpTo);
+    return;
+  }
+  // 이미 다른 기기에서 읽은 메시지(회수 신호가 먼저 도착) — 띄우지 않는다
+  if (data.roomId && data.at && data.at <= (await readUpToOf(data.roomId))) return;
   const isChat = Boolean(data.roomId);
   const bodyText = n.body || data.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
   const id = `${Date.now()}-${Math.random()}`;
@@ -39,7 +88,8 @@ messaging.onBackgroundMessage(async (payload) => {
     body: bodyText,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    data: { ...data, workfitNotificationId: id },
+    // shownAt: 휴대폰 앱이 안 읽은 수로 알림을 정리할 때, 그 수를 받은 뒤에 뜬 알림은 건드리지 않게
+    data: { ...data, workfitNotificationId: id, shownAt: Date.now() },
     /**
      * 같은 대상의 알림은 겹쳐 쌓지 않고 하나로 합친다.
      *
@@ -51,7 +101,7 @@ messaging.onBackgroundMessage(async (payload) => {
     renotify: Boolean(data.roomId || data.docId),
   });
   // FCM은 반환한 Promise를 push 이벤트의 waitUntil에 연결한다.
-  await expireNotification(id, tag);
+  if ((await getClientMode()) === 'desktop') await expireNotification(id, tag);
 });
 
 // 기기 모드(desktop/pwa) 저장 — 열린 창이 없는 "콜드 클릭"의 목적지를 정한다.
@@ -61,6 +111,11 @@ self.addEventListener('message', (event) => {
   const d = event.data || {};
   if (d.type === 'workfit-expire-notification' && typeof d.id === 'string') {
     event.waitUntil(expireNotification(d.id, d.tag));
+    return;
+  }
+  // 앱이 화면에 있을 때 받은 회수 신호 — 페이지가 넘겨준다(messaging.ts onForegroundMessage)
+  if (d.type === 'workfit-recall-chat') {
+    event.waitUntil(recallChat(d.roomId, d.readUpTo));
     return;
   }
   if (d.type === 'workfit-mode' && d.mode) {

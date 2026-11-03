@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
-import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
+import { useApprovalDoc, useDecideStep, useRecallApproval } from '@/features/gw/useApprovals';
 import { useAutoMarkPostRead, useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useMarkApprovalReadOnOpen } from '@/features/gw/useApprovalUnread';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -13,12 +13,19 @@ import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
-import { SheetView, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
-import { SealFieldRow } from '@/modules/gw/approval/components/CompanySeal';
+import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
+import { SealFieldRow, SealMarkProvider } from '@/modules/gw/approval/components/CompanySeal';
+import { sealMarkIdOf } from '@/domain/approvalForm/seal';
+import { sealTextOf } from '@/domain/approvalForm/headerItems';
+import { RecallConfirmModal, type ApprovedApproverInfo } from '@/modules/gw/approval/components/RecallConfirmModal';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
+import { useMobileBack } from './useMobileBack';
+import { docNoOf } from '@/domain/approvalDoc/docNo';
+import { titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { CompanyLetterhead } from '@/modules/gw/approval/components/CompanyLetterhead';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -33,7 +40,6 @@ const FALLBACK_CLOSING: Record<string, string> = {
  */
 export default function MobileApprovalDetail() {
   const { id } = useParams();
-  const nav = useNavigate();
   const { user } = useAuth();
   const me = user!.id;
   // 문서를 열면 읽음으로 기록(안읽음 표시 해제) — 알림으로 바로 들어온 경우 포함
@@ -69,7 +75,7 @@ export default function MobileApprovalDetail() {
     return () => observer.disconnect();
   }, [viewMode]);
 
-  const back = () => nav('/m/approval');
+  const back = useMobileBack('/m/approval');
 
   const nameOf = (approverId: string, snapshot?: string | null) =>
     snapshot || users.find((u) => u.id === approverId)?.name || approverId;
@@ -112,6 +118,34 @@ export default function MobileApprovalDetail() {
   };
 
   const myTurn = !!doc && isActiveApprover(doc, me);
+
+  // 회수 — 웹 ApprovalScreen과 같은 조건(기안자 + 진행중). 이미 승인한 사람이 있으면 사유 필수·알림 발송(repo가 처리).
+  const recallM = useRecallApproval();
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const canRecall = !!doc && doc.drafterId === me && doc.status === '진행중' && !myTurn;
+  const approvedApprovers: ApprovedApproverInfo[] = [];
+  if (doc) {
+    const seen = new Set<string>();
+    for (const s of doc.steps) {
+      if (s.kind === '참조' || s.decision !== '승인' || seen.has(s.approverId)) continue;
+      seen.add(s.approverId);
+      const u = users.find((x) => x.id === s.approverId);
+      approvedApprovers.push({ name: s.approverName || u?.name || s.approverId, position: s.approverPos || u?.position || null, dept: s.approverDept || u?.dept || null });
+    }
+  }
+
+  const confirmRecall = async (reason: string) => {
+    if (!doc) return;
+    setBusy(true);
+    try {
+      await recallM.mutateAsync({ id: doc.id, userId: me, reason });
+      setShowRecallModal(false);
+    } catch (e) {
+      window.alert(`회수 실패: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const { isAdmin, isExecutive: hasExecRole } = usePermission();
   const userObj = users.find((u) => u.id === me);
@@ -170,7 +204,7 @@ export default function MobileApprovalDetail() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
-      <header className="flex shrink-0 items-center justify-between px-3 py-3 text-white" style={{ background: '#101830' }}>
+      <header className="m-header flex shrink-0 items-center justify-between px-3 py-3 text-white">
         <div className="flex items-center gap-2">
           <button onClick={back} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
           <span className="text-[15px] font-bold">전자결재 상세</span>
@@ -240,7 +274,7 @@ export default function MobileApprovalDetail() {
                 <div className="flex items-center gap-1.5">
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#dbeafe', color: '#1e40af' }}>{doc.docType}</span>
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold" style={{ background: `${statusColor(doc.status)}1f`, color: statusColor(doc.status) }}>{doc.status}</span>
-                  <span className="ml-auto text-[11px] tabular-nums text-ink3">{doc.docNo}</span>
+                  <span className="ml-auto text-[11px] tabular-nums text-ink3">{docNoOf(doc)}</span>
                 </div>
                 <div className="mt-2.5 text-[17px] font-bold" style={{ color: '#101830' }}>{doc.title}</div>
                 <div className="my-3 h-px bg-black/10" />
@@ -408,16 +442,41 @@ export default function MobileApprovalDetail() {
             </div>
           )}
 
-          {/* 반려 문서인 경우 하단 안내바 */}
-          {!myTurn && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송') && (
+          {/* 회수 — 내가 올린 진행중 문서 */}
+          {canRecall && (
+            <div className="shrink-0 border-t border-black/10 bg-white p-3 shadow-lg" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+              <button
+                type="button"
+                onClick={() => setShowRecallModal(true)}
+                disabled={busy}
+                className="w-full rounded-xl border border-amber-500/40 bg-amber-50 py-3 text-[15px] font-bold text-amber-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-xs"
+              >
+                {approvedApprovers.length > 0 ? '결재 회수' : '회수'}
+              </button>
+            </div>
+          )}
+
+          {/* 반려·회수 문서인 경우 하단 안내바 */}
+          {!myTurn && (doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송' || doc.status === '회수') && (
             <div className="shrink-0 border-t border-slate-200/80 bg-slate-50/90 p-3.5 text-center shadow-xs" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
               <p className="text-[12px] text-slate-600 flex items-center justify-center gap-1.5 font-medium">
                 <Info size={15} className="text-blue-500 shrink-0" strokeWidth={2.2} />
-                <span>반려 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
+                <span>{doc.status === '회수' ? '회수' : '반려'} 문서의 <strong className="text-slate-800 font-bold">편집 및 재상신</strong>은 <strong className="text-blue-600 font-bold">PC 웹</strong>에서 진행해 주시기 바랍니다.</span>
               </p>
             </div>
           )}
         </>
+      )}
+
+      {showRecallModal && doc && (
+        <RecallConfirmModal
+          open
+          docTitle={doc.title}
+          approvedApprovers={approvedApprovers}
+          busy={busy}
+          onConfirm={confirmRecall}
+          onClose={() => setShowRecallModal(false)}
+        />
       )}
 
       {/* 승인/반려 확인 및 의견 입력 모달 */}
@@ -648,6 +707,9 @@ function ApprovalBody({
   // 컬럼 body 를 본문 키 값으로 우선 — 'body' 키를 표 등 다른 종류가 쓰면 본문은 별도 키라 덮어쓰지 않는다
   const bodyKey = documentBodyKeyOf(form?.fields);
   if (doc.body) values[bodyKey] = doc.body;
+  // '문서제목' 칸 = 문서 제목
+  const titleField = titleFieldOf(form?.fields);
+  if (titleField) values[titleField.key] = doc.title;
 
   const rows: React.ReactNode[] = [];
 
@@ -676,7 +738,13 @@ function ApprovalBody({
 
       if (f.type === '직인') {
         pushSection();
-        rows.push(<SealFieldRow key={f.key} label={f.label} stamped={doc.status === '완료'} />);
+        rows.push(<SealFieldRow key={f.key} label={sealTextOf(f, doc.fieldValues)} stamped={doc.status === '완료'} />);
+        continue;
+      }
+
+      if (f.type === '회사정보') {
+        pushSection();
+        rows.push(<div key={f.key} className="py-1.5"><CompanyLetterhead field={f} /></div>);
         continue;
       }
 
@@ -732,7 +800,11 @@ function ApprovalBody({
   }
 
   if (rows.length === 0) return <div className="text-[13px] text-ink">(본문 없음)</div>;
-  return <div className="flex flex-col">{rows}</div>;
+  return (
+    <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
+      <div className="flex flex-col">{rows}</div>
+    </SealMarkProvider>
+  );
 }
 
 /** 표(表) 필드 렌더 — { cols, rows, headerValues } 구조. 병합 및 셀 단위 마스킹 처리 완벽 이식. */
@@ -750,7 +822,8 @@ function renderTable(
   if (sheet.cols.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto my-1.5 rounded-lg border border-black/10">
+    // 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다
+    <div className={`overflow-x-auto my-1.5 rounded-lg border border-black/10 ${hasSealCell(sheet) ? 'py-3' : ''}`}>
       <SheetView
         sheet={sheet}
         allSecret={f.isSecret}

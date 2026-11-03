@@ -61,6 +61,38 @@ html {
   color: var(--color-teal-text) !important;
 }
 
+/*
+  PWA(/m) 상단바 — 웹 상단바와 같은 테마 색(--color-header-bg / --color-header-text).
+  상단바 안의 흰 글씨·반투명 흰 배경·테두리는 남색 바탕에 맞춰 만든 것이라, 테마 글자색 기준으로 바꿔
+  밝은 테마에서도 보이게 한다. 배경을 직접 지정한 아바타·배지(style 배경, 색 있는 bg-)는 흰 글씨를 그대로 둔다.
+*/
+.m-header {
+  background: var(--color-header-bg) !important;
+  color: var(--color-header-text) !important;
+}
+.m-header .text-white:not([style*='background']):not([class*='bg-teal']):not([class*='bg-amber']):not([class*='bg-red']):not([class*='bg-danger']):not([class*='bg-emerald']):not([class*='bg-blue']):not([class*='bg-navy']),
+.m-header .hover\:text-white:hover {
+  color: var(--color-header-text) !important;
+}
+.m-header .text-white\/90 {
+  color: color-mix(in srgb, var(--color-header-text) 90%, transparent) !important;
+}
+.m-header .text-white\/80 {
+  color: color-mix(in srgb, var(--color-header-text) 80%, transparent) !important;
+}
+.m-header .text-white\/60 {
+  color: color-mix(in srgb, var(--color-header-text) 60%, transparent) !important;
+}
+.m-header :is(.bg-white\/10, .bg-white\/15, .bg-white\/20, .hover\:bg-white\/5:hover, .hover\:bg-white\/10:hover, .hover\:bg-white\/20:hover) {
+  background-color: color-mix(in srgb, var(--color-header-text) 10%, transparent) !important;
+}
+.m-header :is(.border-white\/10, .border-white\/20, .border-white\/30) {
+  border-color: color-mix(in srgb, var(--color-header-text) 25%, transparent) !important;
+}
+.m-header .hover\:ring-white\/30:hover {
+  --tw-ring-color: color-mix(in srgb, var(--color-header-text) 30%, transparent) !important;
+}
+
 
 html,
 body,
@@ -179,7 +211,7 @@ body {
 
 /* ──────────────────────────────────────────────────────────────
    전자결재 문서 인쇄 — 인쇄 시 결재 문서(.approval-print)만 남기고 앱 UI를 숨긴다.
-   visibility 트릭으로 레이아웃을 보존하며 문서만 노출.
+   문서와 그 바깥 틀만 남기고 나머지는 자리째 뺀다(display:none).
    ────────────────────────────────────────────────────────────── */
 @media print {
   /* 모든 부모 컨테이너의 높이, 스크롤바, 레이아웃 절대위치 제한을 제거하여 여러 페이지 인쇄 보장 */
@@ -198,6 +230,12 @@ body {
   .approval-print,
   .approval-print * {
     visibility: visible !important;
+  }
+
+  /* 보이지 않게만 하면(visibility) 숨은 목록·메신저 등이 자리를 그대로 차지해 문서 뒤에 빈 페이지가 여러 장 생긴다.
+     문서도, 문서를 감싼 틀도 아닌 것은 자리째 뺀다. (:has 를 모르는 브라우저는 이 규칙만 무시하고 위 방식으로 인쇄) */
+  body *:not(.approval-print, .approval-print *, :has(.approval-print)) {
+    display: none !important;
   }
 
   .approval-print {
@@ -293,10 +331,18 @@ body {
 }
 
 /*
+  PWA 메신저 글자 크기 — `chat-text-[13px]` 은 13px 에 화면이 깐 --chat-text-scale(보통 1·크게 1.2·아주 크게 1.4)을 곱한다.
+  배율을 깔지 않는 웹 메신저에서는 text-[13px] 과 같다. (src/mobile/chatTextSize.ts)
+*/
+@utility chat-text-* {
+  font-size: calc(--value([length]) * var(--chat-text-scale, 1));
+}
+
+/*
   메신저 서식 메시지(rich) — 입력 편집기(.chat-rich .ProseMirror)와 보낸 메시지(.chat-rich)가 같은 모양을 쓴다.
   Tailwind 기본값이 목록·제목 모양을 지우므로 여기서 되살린다.
 */
-.chat-rich { font-size: 12.5px; line-height: 1.6; word-break: break-word; }
+.chat-rich { font-size: calc(12.5px * var(--chat-text-scale, 1)); line-height: 1.6; word-break: break-word; }
 .chat-rich .ProseMirror { outline: none; white-space: pre-wrap; }
 .chat-rich p { margin: 0; min-height: 1.6em; }
 .chat-rich h1 { font-size: 1.35em; font-weight: 800; margin: 0.3em 0 0.15em; }

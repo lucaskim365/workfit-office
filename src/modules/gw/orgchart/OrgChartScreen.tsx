@@ -4,6 +4,7 @@ import { SeatLayoutView } from './SeatLayoutView';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
+import { displayEmpNo, hasDisplayEmpNo, publicEmailOf } from '@/domain/user/publicContact';
 import { Button } from '@/shared/ui/Button';
 
 // 테스트 계정 숨김은 사람 목록 repo 가 접속자 기준으로 처리한다([[testAccountVisibility]]).
@@ -143,7 +144,7 @@ export default function OrgChartScreen() {
                   )}
                 </div>
                 <div className="mt-1 rounded border border-border bg-panel-alt px-2 py-0.5 font-mono text-[10px] font-bold text-ink2">
-                  사번: {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? '비공개' : (selectedUser.empNo ? `#${selectedUser.empNo}` : '-')}
+                  사번: {(selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회')) && !hasDisplayEmpNo(selectedUser) ? '비공개' : (displayEmpNo(selectedUser) ? `#${displayEmpNo(selectedUser)}` : '-')}
                 </div>
 
                 <div className="mt-4 space-y-1 text-center">
@@ -199,15 +200,15 @@ export default function OrgChartScreen() {
 
                   <div>
                     <span className="block text-[11px] text-ink3">업무 이메일</span>
-                    {selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회') ? (
+                    {(selectedUser.position.includes('대표') || selectedUser.dept === '대표이사' || selectedUser.dept.includes('위원회')) && !publicEmailOf(selectedUser) ? (
                       <span className="mt-1 block font-mono text-[11px] text-ink3 italic">비공개</span>
                     ) : (
                       <a
-                        href={`mailto:${selectedUser.email}`}
+                        href={`mailto:${publicEmailOf(selectedUser) ?? selectedUser.email}`}
                         className="mt-1 flex items-center gap-1 font-mono font-semibold text-teal hover:underline break-all"
                       >
                         <Mail size={12} className="shrink-0" />
-                        <span>{selectedUser.email || '-'}</span>
+                        <span>{publicEmailOf(selectedUser) ?? (selectedUser.email || '-')}</span>
                       </a>
                     )}
                   </div>
@@ -527,7 +528,7 @@ function VisualDiagramOrgChart({
                         <td className="px-5 py-1 font-bold text-slate-900">
                           <span>{m.name}</span>
                           {m.isConcurrent && !isVirtual && (
-                            <span className="ml-1.5 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                            <span className="ml-1.5 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                               겸직
                             </span>
                           )}
@@ -572,7 +573,7 @@ function VisualDiagramOrgChart({
                           <td className="px-3.5 py-0.5 font-bold text-slate-900">
                             <span>{m.name}</span>
                             {m.isConcurrent && (
-                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                 겸직
                               </span>
                             )}
@@ -612,7 +613,7 @@ function VisualDiagramOrgChart({
                           <td className="px-3.5 py-0.5 font-bold text-slate-900">
                             <span>{m.name}</span>
                             {m.isConcurrent && (
-                              <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                 겸직
                               </span>
                             )}
@@ -695,7 +696,7 @@ function VisualDiagramOrgChart({
                               <td className="py-1 font-bold text-slate-900">
                                 <span>{m.name}</span>
                                 {m.isConcurrent && (
-                                  <span className="ml-1 rounded bg-slate-200 dark:bg-slate-700 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                  <span className="ml-1 rounded bg-slate-200 px-1 py-0.2 text-[8.5px] font-bold text-slate-600 border border-slate-300">
                                     겸직
                                   </span>
                                 )}
@@ -813,14 +814,14 @@ function EmergencyContactView({
       return {
         userId: u.id,
         no: idx + 1,
-        empNo: u.empNo || '—',
+        empNo: displayEmpNo(u) || '—',
         name: u.name,
         engName: engName || '—',
         department: u.dept,
         position: u.position,
         duty: u.jobTitle || '',
         phone: isPrivate ? '' : phone,
-        email: isPrivate ? '' : email,
+        email: publicEmailOf(u) ?? (isPrivate ? '' : email),
         isTopLeader: idx === 0 || u.position.includes('대표') || u.dept === '대표이사',
       };
     });

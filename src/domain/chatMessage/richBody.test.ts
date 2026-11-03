@@ -75,3 +75,9 @@ test('빈 본문 판정 — 사진만 있어도 보낼 수 있다', () => {
   assert.equal(isEmptyRich(doc(p())), true);
   assert.equal(isEmptyRich(doc(p({ type: 'image', attrs: { attachmentId: 'a1' } }))), false);
 });
+
+test('평문 요약: Enter 로 만든 빈 줄은 그대로 남는다(앞뒤 빈 줄만 걷음)', () => {
+  assert.equal(plainTextOfRich(doc(p(t('앞 문장')), p(), p(t('뒷 문장')))), '앞 문장\n\n뒷 문장');
+  assert.equal(plainTextOfRich(doc(p(t('하나')), p(), p(), p(t('둘')))), '하나\n\n\n둘');
+  assert.equal(plainTextOfRich(doc(p(), p(t('가운데')), p())), '가운데');
+});

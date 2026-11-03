@@ -365,7 +365,7 @@ export default function AuthScreen() {
                         {g.name}
                       </span>
                       {g.isSystem ? (
-                        <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9.5px] font-bold text-ink3 border border-border">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px] font-bold text-ink3 border border-border">
                           시스템
                         </span>
                       ) : (

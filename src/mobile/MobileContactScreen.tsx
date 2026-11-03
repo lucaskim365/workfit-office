@@ -16,6 +16,7 @@ import { PresenceDot } from '@/features/userPresence/PresenceIndicator';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useChatRooms, useCreateRoom } from '@/features/chat/useChatRooms';
 import MobileCommonHeader from './MobileCommonHeader';
+import { smallPhotoOf } from '@/domain/user/schema';
 
 export default function MobileContactScreen() {
   const { user } = useAuth();
@@ -185,7 +186,7 @@ export default function MobileContactScreen() {
                     <div className="relative shrink-0">
                       {u.photoUrl ? (
                         <img
-                          src={u.photoUrl}
+                          src={smallPhotoOf(u)}
                           alt={u.name}
                           className="h-10 w-10 rounded-full object-cover border border-border"
                         />
@@ -300,7 +301,7 @@ export default function MobileContactScreen() {
                     <button
                       type="button"
                       onClick={() => handleStartChat(u.id)}
-                      className="flex items-center justify-center gap-1 rounded-xl bg-[#101830] py-1.5 text-[11px] font-bold text-white hover:bg-[#1a264a] active:scale-95 transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center justify-center gap-1 rounded-xl bg-navy py-1.5 text-[11px] font-bold text-white hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-2xs"
                       title="1:1 대화"
                     >
                       <MessageSquare size={13} />

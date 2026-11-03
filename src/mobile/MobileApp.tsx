@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
+import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
 import { onForegroundMessage } from '@/shared/lib/messaging';
-import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/shared/lib/transientPushNotification';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
 import MobileNotificationsScreen from './MobileNotificationsScreen';
@@ -12,7 +13,9 @@ import MobileChatThread from './MobileChatThread';
 import MobileNewRoom from './MobileNewRoom';
 import MobileApprovalList from './MobileApprovalList';
 import MobileApprovalDetail from './MobileApprovalDetail';
-import MobileModuleLauncher from './MobileModuleLauncher';
+import MobileGroupwareScreen from './MobileGroupwareScreen';
+import MobileTabLayout from './MobileTabLayout';
+import MobileWiddyScreen, { MobileWiddyProvider } from './MobileWiddyScreen';
 import MobileCommuteScreen from './MobileCommuteScreen';
 import MobileCommuteAdminScreen from './MobileCommuteAdminScreen';
 import MobileCalendarScreen from './MobileCalendarScreen';
@@ -24,16 +27,28 @@ import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
 import MobileGalleryScreen from './MobileGalleryScreen';
 import MobileOrgChartScreen from './MobileOrgChartScreen';
+import MobileProfileScreen from './MobileProfileScreen';
 import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 import { ReloginDialog } from '@/app/auth/ReloginDialog';
+import { ModalLayerProvider } from '@/shared/ui/Modal';
 
 /**
- * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
+ * 모바일 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
  * 자체 로그인 게이트 + 기존 채팅 훅 재사용. iOS 는 "홈 화면에 추가" 시 앱처럼 실행/푸시.
  */
 export default function MobileApp() {
   const { user, loading } = useAuth();
+
+  // 웹과 같은 테마 색 — 이 기기에 저장된 테마(없으면 웹 기본). 글씨 배율은 PWA 에서 항상 1이라 색만 적용하고,
+  // 휴대폰 상단 상태바 색(안드로이드)도 상단바 색에 맞춘다.
+  useEffect(() => {
+    const theme = loadUserTheme(user?.id);
+    applyTheme(theme.headerBg, theme.pointColor, theme.btnColor);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.headerBg);
+  }, [user?.id]);
+  // 읽은 대화방의 푸시 알림 정리(아이폰은 회수 신호를 받지 않아 이걸로만 정리된다)
+  useCloseReadChatNotifications(user?.id);
   const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
 
@@ -73,6 +88,7 @@ export default function MobileApp() {
 
   // 포그라운드 수신 → 알림 표시. 서비스워커 showNotification 을 쓰면 iOS PWA 에서도
   // 표시되고, 탭 시 라우팅은 SW 의 notificationclick(결재/채팅 딥링크)이 처리한다.
+  // 휴대폰 알림은 스스로 닫지 않는다 — 읽을 때까지 남고, 읽으면 회수 신호·useCloseReadChatNotifications 가 닫는다.
   useEffect(() => {
     if (!user) return;
     void onForegroundMessage(async (p) => {
@@ -81,7 +97,8 @@ export default function MobileApp() {
         if (shouldSuppressChatPopup(p.roomId)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
         const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
-        const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl };
+        // at·shownAt: 읽은 방 알림 정리 기준(서비스워커 recallChat, closeReadChatNotifications)
+        const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl, at: p.at, shownAt: Date.now() };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
           const options: NotificationOptions & { renotify: boolean } = {
@@ -92,11 +109,10 @@ export default function MobileApp() {
             tag: p.roomId || p.docId || undefined,
             renotify: Boolean(p.roomId || p.docId),
           };
-          await showTransientPushNotification(reg, p.title, options);
+          await reg.showNotification(p.title, options);
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
-          const notification = new Notification(p.title, { body, icon: '/icons/icon-192.png' });
-          setTimeout(() => notification.close(), PUSH_NOTIFICATION_DURATION_MS);
+          new Notification(p.title, { body, icon: '/icons/icon-192.png' });
         }
       } catch {
         /* iOS 등 미지원 환경 무시 */
@@ -105,21 +121,30 @@ export default function MobileApp() {
   }, [user]);
 
   return (
+    // 웹 공용 모달(일정·외근 창 등)이 이 셸(z-[100]) 뒤에 깔리지 않도록 층을 올린다
+    <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
-        style={{ background: '#101830', paddingTop: 'env(safe-area-inset-top)' }}
+        style={{ background: 'var(--color-header-bg)', paddingTop: 'env(safe-area-inset-top)' }}
       >
         {loading ? (
           <div className="grid flex-1 place-items-center text-[13px] text-ink3">불러오는 중…</div>
         ) : !user ? (
           <MobileLogin />
         ) : (
+          <MobileWiddyProvider key={user.id}>
           <Routes>
-            <Route index element={<MobileChatList />} />
+            {/* 하단 탭 — 상단바·하단바가 있는 공통 틀. 채팅방 등 안쪽 화면은 틀 밖이라 자기 헤더만 쓴다 */}
+            <Route element={<MobileTabLayout />}>
+              <Route index element={<MobileGroupwareScreen />} />
+              <Route path="exec" element={<div className="grid h-full place-items-center text-[15px] font-semibold text-ink3">아직 준비 중입니다.</div>} />
+              <Route path="widdy" element={<MobileWiddyScreen />} />
+              <Route path="chat" element={<MobileChatList />} />
+            </Route>
             <Route path="notifications" element={<MobileNotificationsScreen />} />
-            <Route path="modules" element={<MobileModuleLauncher />} />
+            <Route path="modules" element={<Navigate to="/m" replace />} />
             <Route path="new" element={<MobileNewRoom />} />
             <Route path="room/:roomId" element={<MobileChatThread />} />
             <Route path="approval" element={<MobileApprovalList />} />
@@ -141,9 +166,11 @@ export default function MobileApp() {
             <Route path="gallery" element={<MobileGalleryScreen />} />
             <Route path="project" element={<MobileComingSoon title="프로젝트" icon="📗" desc="전사 프로젝트 협업 및 진행 관리 기능으로, 개발 로드맵에 따라 순차 오픈 예정입니다." />} />
             <Route path="orgchart" element={<MobileOrgChartScreen />} />
+            <Route path="profile" element={<MobileProfileScreen />} />
 
             <Route path="*" element={<Navigate to="/m" replace />} />
           </Routes>
+          </MobileWiddyProvider>
         )}
       </div>
 
@@ -154,5 +181,6 @@ export default function MobileApp() {
         onDismissToday={() => setShowGuide(false)}
       />
     </div>
+    </ModalLayerProvider>
   );
 }

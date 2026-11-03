@@ -23,8 +23,11 @@ export const FALLBACK_ADMIN_USER: User = {
   signUrl: '',
   signType: 'stamp',
   photoUrl: '',
+  photoThumbUrl: '',
   resignedAt: '',
   fcmToken: '',
+  fcmTokens: [],
+  fcmTokensRecall: [],
   assignments: [],
 };
 

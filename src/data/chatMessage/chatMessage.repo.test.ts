@@ -34,3 +34,14 @@ test('24시간이 지난 메시지는 저장 단계에서도 거부된다', asyn
   await chatMessageRepo.append(msg({ id: 'del-4', at: new Date(Date.now() - 25 * 3600 * 1000).toISOString() }));
   await assert.rejects(chatMessageRepo.deleteMessage('del-4', me), /24시간/);
 });
+
+test('읽음 처리 중에 새 메시지가 와서 다시 불리면, 끝난 뒤 그 메시지까지 읽음 처리한다', async () => {
+  const other = { senderId: 'U011', senderName: '김승기', roomId: 'room-read' };
+  await chatMessageRepo.append(msg({ id: 'read-1', ...other }));
+  const first = chatMessageRepo.markRead('room-read', me.id);
+  await chatMessageRepo.append(msg({ id: 'read-2', ...other }));
+  const second = chatMessageRepo.markRead('room-read', me.id);
+  await Promise.all([first, second]);
+  const rows = await chatMessageRepo.listByRoom('room-read');
+  assert.deepEqual(rows.map((m) => m.readBy.includes(me.id)), [true, true]);
+});

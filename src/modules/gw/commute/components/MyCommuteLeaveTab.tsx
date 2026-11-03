@@ -6,11 +6,12 @@ import { useLeave } from '@/features/gw/useLeave';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { calculateLeaveDays, isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { annualLeaveHistoryDocs, calculateLeaveDays } from '@/domain/leave/policy';
 import { describeCommuteRecord, leaveChip } from '@/domain/commute/statusDisplay';
 import { StatusBadges } from '@/features/commute/StatusBadge';
 import { StatusBadge } from '@/features/commute/StatusBadge';
 import { Button } from '@/shared/ui/Button';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 import {
   Calendar as CalendarIcon,
   List,
@@ -146,9 +147,7 @@ export function MyCommuteLeaveTab({
   // 4. 연차 및 휴가 결재 문서들
   const goDoc = (d: ApprovalDoc) => nav(`/gw/approval?doc=${d.docNo || d.id}`);
 
-  const annualLeaveHistoryDocs = useMemo(() => {
-    return bal.myDocs.filter((d) => d.status === '완료' && (isAnnualLeaveDeduction(d.form?.leaveType) || d.form?.leaveType === '대체휴무'));
-  }, [bal.myDocs]);
+  const annualHistoryDocs = useMemo(() => annualLeaveHistoryDocs(bal.myDocs), [bal.myDocs]);
 
   const filteredRequests = useMemo(() => {
     if (requestFilter === '전체') return bal.myDocs;
@@ -349,7 +348,7 @@ export function MyCommuteLeaveTab({
             </div>
             <div className="flex justify-between py-0.5">
               <span className="text-ink3">사용한 휴가</span>
-              <span className="font-bold text-emerald-600 tabular-nums">{monthSummary.leaveDays}일</span>
+              <span className={`font-bold tabular-nums ${PERSON_TONES.leave.text}`}>{monthSummary.leaveDays}일</span>
             </div>
             <div className="flex justify-between py-0.5">
               <span className="text-ink3">지각 / 결근</span>
@@ -667,7 +666,7 @@ export function MyCommuteLeaveTab({
                       <tr key={`sub-${subItem.id}`} className="hover:bg-panel-alt/20 transition-colors">
                         <td className="p-2 text-ink3 font-medium">{subItem.occurrenceDate}</td>
                         <td className="p-2">
-                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-extrabold text-emerald-600 border border-emerald-500/25">
+                          <span className={`rounded border px-1.5 py-0.5 font-extrabold ${PERSON_TONES.leave.badge}`}>
                             대체휴무
                           </span>
                         </td>
@@ -679,12 +678,12 @@ export function MyCommuteLeaveTab({
                         <td className="p-2 text-right text-[10.5px] text-ink3 font-medium">관리자 부여</td>
                       </tr>
                     ))}
-                    {annualLeaveHistoryDocs.length === 0 && bal.substituteHoliday.detailList.length === 0 ? (
+                    {annualHistoryDocs.length === 0 && bal.substituteHoliday.detailList.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-6 text-center text-ink3">사용 완료된 연차가 없습니다.</td>
                       </tr>
                     ) : (
-                      annualLeaveHistoryDocs.map((d) => {
+                      annualHistoryDocs.map((d) => {
                         const usedDays = calculateLeaveDays({
                           leaveType: d.form?.leaveType,
                           startDate: d.form?.startDate,

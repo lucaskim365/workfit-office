@@ -27,6 +27,7 @@ export const GW_APP_META: Record<string, GwAppMeta> = {
   'work-plan': { name: '업무계획', icon: '🗓️', desc: '개인 업무 계획 & 실무 로스터: 직원별 일일 업무 계획(To-Do) 작성 및 부서별 일일 실무 진행 현황을 공유합니다.' },
   commute: { name: '근태·휴가', icon: '⏱️', desc: '출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다.' },
   gallery: { name: '회사 갤러리', icon: '🖼️', desc: '사내 행사, 전사 이벤트 및 프로젝트 활동 기록을 공유하는 회사 갤러리입니다.' },
+  'meal-ticket': { name: '식권 대장', icon: '🎫', desc: '날짜별 식권 받은 사람을 체크하고 입고·발행·남은 식권을 관리합니다.' },
 };
 
 /**
@@ -46,6 +47,7 @@ export const GW_READY_APPS = new Set([
   // 'task', // 프로젝트 - 준비중 비활성화
   'survey',
   'gallery',
+  'meal-ticket',
   // 메일 - 준비중 비활성화
   // 'mail',
   'employee', // 인명관리 활성화

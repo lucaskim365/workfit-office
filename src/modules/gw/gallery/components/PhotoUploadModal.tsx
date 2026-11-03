@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { GalleryFolder } from '@/domain/gallery/schema';
 import { Camera, X, Upload, Loader2 } from 'lucide-react';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface PhotoUploadModalProps {
   isOpen: boolean;
@@ -204,8 +205,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
               <label className="block text-[12px] font-bold text-ink mb-1.5">
                 촬영 / 행사 일자 <span className="text-danger">*</span>
               </label>
-              <input
-                type="date"
+              <DateInput
                 aria-label="촬영 / 행사 일자"
                 disabled={mobile && isUploading}
                 value={eventDate}

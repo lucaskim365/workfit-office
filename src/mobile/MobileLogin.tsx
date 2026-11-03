@@ -29,7 +29,7 @@ export default function MobileLogin() {
   const env = checkDeviceEnvironment();
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-7" style={{ background: '#101830' }}>
+    <div className="m-header flex flex-1 flex-col items-center justify-center px-7">
       <img src="/icons/icon-192.png" alt="워크핏" className="h-20 w-20 rounded-[22px]" />
       <h1 className="mt-4 text-[20px] font-extrabold text-white">워크핏 메신저</h1>
       <p className="mt-1 text-[12px] text-white/60">사내 전용 메신저 &amp; 전자결재</p>

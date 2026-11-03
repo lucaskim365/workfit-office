@@ -11,6 +11,7 @@ import {
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
+import { withSealTexts } from '@/domain/approvalForm/headerItems';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
@@ -41,6 +42,9 @@ import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, Chec
 import { applyMasterToCurrent, hasMasterUpdate, serializeSheet } from './formFields/sheetModel';
 import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
 import { isEditableStatus } from '@/domain/approvalDoc/engine';
+import { OvertimeAutoFill } from './components/OvertimeAutoFill';
+import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
+import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -973,6 +977,9 @@ function ApprovalDraftInner({
   const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
+  // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
+  const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
+  const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
   const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
 
@@ -1146,7 +1153,8 @@ function ApprovalDraftInner({
       amount: amountNum,
       body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
-      fieldValues: values,
+      // 직인 문구는 상신 시점 값으로 남긴다 — 나중에 서식 문구가 바뀌어도 낸 문서의 명의는 그대로
+      fieldValues: withSealTexts(form?.fields, isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values),
       attachments,
       recipients,
       relatedDocs,
@@ -1181,6 +1189,13 @@ function ApprovalDraftInner({
       if (!postApprovedAt) return '선조치 일시를 입력해 주세요.';
       if (new Date(postApprovedAt).getTime() > Date.now()) return '선조치 일시는 현재 시간보다 이전으로 설정해야 합니다.';
       if (!postApprovedById) return '선조치 구두/임시 승인자를 선택해 주세요.';
+    }
+
+    if (forSubmit && isOvertimeAutoFill && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
+      return '근무 일자는 주말이나 공휴일만 선택할 수 있습니다.';
+    }
+    if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
+      return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
     }
 
     if (code === '휴가' || form?.code === '휴가') {
@@ -1583,7 +1598,7 @@ function ApprovalDraftInner({
         {/* 중앙 A4 문서 캔버스 (배경색 #878d90으로 백색 A4 용지와 완벽한 대비 및 세로 스크롤) */}
         <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex flex-col items-center bg-[#878d90] transition-colors">
           {cancelTargetDoc && (
-            <div className="mx-auto mb-5 w-full max-w-[800px] rounded-xl border border-rose-500/40 bg-rose-50/95 dark:bg-zinc-900 p-4 text-[12px] text-rose-950 dark:text-rose-200 shadow-md backdrop-blur-xs flex items-center justify-between animate-fade-in">
+            <div className="mx-auto mb-5 w-full max-w-[800px] rounded-xl border border-rose-500/40 bg-rose-50/95 p-4 text-[12px] text-rose-950 shadow-md backdrop-blur-xs flex items-center justify-between animate-fade-in">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
                 <div>
@@ -1597,6 +1612,9 @@ function ApprovalDraftInner({
                 </div>
               </div>
             </div>
+          )}
+          {isOvertimeAutoFill && /^\d{4}-\d{2}-\d{2}$/.test(String(values['workDate'] ?? '')) && (
+            <OvertimeAutoFill workDate={String(values['workDate'])} values={values} setVals={setVals} onFill={setOvertimeFill} />
           )}
           <ApprovalDraftDocumentSheet
             form={form}

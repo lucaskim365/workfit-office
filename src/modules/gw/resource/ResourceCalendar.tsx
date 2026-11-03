@@ -6,6 +6,7 @@ import type { User } from '@/domain/user/schema';
 import { ReservationStatusBadge, ResourceStatusBadge } from './ResourceBadges';
 import { addDays, formatResourceTime, isSameLocalDate, startOfWeek, toDateInput } from './resourceDate';
 import { resourceMinuteOfDay } from '@/domain/reservation/time';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface ResourceCalendarProps {
   resources: Resource[];
@@ -67,7 +68,7 @@ export default function ResourceCalendar({ resources, reservations, users, onRes
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-panel p-3 shadow-sm">
         <button type="button" onClick={() => moveDate(-1)} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">‹</button>
-        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] font-semibold text-ink outline-none focus:border-teal" />
+        <DateInput value={date} onChange={(event) => setDate(event.target.value)} className="h-8 rounded-lg border border-border bg-panel px-2.5 text-[11px] font-semibold text-ink outline-none focus:border-teal" />
         <button type="button" onClick={() => setDate(toDateInput(new Date()))} className="h-8 rounded-lg border border-border px-3 text-[11px] font-bold text-ink2 hover:bg-panel-alt">오늘</button>
         <button type="button" onClick={() => moveDate(1)} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">›</button>
         <span className="mx-1 h-5 w-px bg-border" />

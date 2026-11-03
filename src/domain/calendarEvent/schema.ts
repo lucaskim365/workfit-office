@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCalendarDate } from './calendarDate';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
 
@@ -24,10 +25,10 @@ export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
 
 export const CALENDAR_EVENT_TYPE_LABELS: Record<CalendarEventType, { label: string; icon: string; badgeClass: string }> = {
   GENERAL: { label: '일반 일정', icon: '📝', badgeClass: 'bg-slate-500/10 text-slate-600 border-slate-500/20' },
-  MEETING: { label: '회의·미팅', icon: '👥', badgeClass: 'bg-purple-500/10 text-purple-600 border-purple-500/20' },
+  MEETING: { label: '회의·미팅', icon: '👥', badgeClass: PERSON_TONES.meeting.badge },
   COMPANY_EVENT: { label: '사내행사', icon: '🎉', badgeClass: 'bg-teal-500/10 text-teal-600 border-teal-500/20' },
-  OUTSIDE: { label: '외근·출장', icon: '🔵', badgeClass: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
-  VACATION: { label: '휴가·부재', icon: '🏖️', badgeClass: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  OUTSIDE: { label: '외근·출장', icon: '🔵', badgeClass: PERSON_TONES.outside.badge },
+  VACATION: { label: '휴가·부재', icon: '🏖️', badgeClass: PERSON_TONES.leave.badge },
 };
 
 export const calendarEventSchema = z.object({
@@ -62,6 +63,10 @@ export const calendarEventSchema = z.object({
    * (오늘 날짜만 훑음) 밖이라 실제로 다시 보내지지 않는다.
    */
   reminded: z.boolean().default(false),
+  /** 회의 장소 — 직접 적은 글(회의실 예약 시 방 이름). 예전 일정에는 없어 null로 읽는다. */
+  location: z.string().trim().max(100).nullable().default(null),
+  /** 이 회의가 잡은 회의실 예약 id. 예약 없는 일정은 null. */
+  reservationId: z.string().max(64).nullable().default(null),
 }).superRefine((value, ctx) => {
   if (value.allDay && (value.startTime !== null || value.endTime !== null)) {
     ctx.addIssue({ code: 'custom', path: ['startTime'], message: '종일 일정에는 시작·종료 시각을 지정할 수 없습니다.' });
@@ -88,8 +93,11 @@ export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarVisibility = (typeof CALENDAR_VISIBILITIES)[number];
 export type CalendarEventDraft = Omit<
   CalendarEvent,
-  'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded' | 'eventType' | 'attendeeUserIds'
+  'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'reminded' | 'eventType' | 'attendeeUserIds' | 'location' | 'reservationId'
 > & {
   eventType?: CalendarEventType;
   attendeeUserIds?: string[];
+  /** 안 넣으면 repo update가 기존 값을 유지한다(기존 창은 이 칸을 모른다). */
+  location?: string | null;
+  reservationId?: string | null;
 };

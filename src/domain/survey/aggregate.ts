@@ -66,6 +66,8 @@ export function aggregateSurveyResult(
   const submittedAtById = new Map(responses.map((response) => [response.id, response.submittedAt]));
   const answersByQuestion = new Map<string, SurveyAnswer[]>();
   for (const answer of answers) {
+    // 응답 문서가 없는 답변은 끝나지 않은 제출의 잔여물이다(응답을 마지막에 저장한다).
+    if (!submittedAtById.has(answer.responseId)) continue;
     const bucket = answersByQuestion.get(answer.questionId);
     if (bucket) bucket.push(answer);
     else answersByQuestion.set(answer.questionId, [answer]);
@@ -126,4 +128,14 @@ export function aggregateSurveyResult(
     participationRate: ratioOf(responses.length, audienceCount),
     questions: results,
   };
+}
+
+/**
+ * 결과 화면에 보내는 값 — 서버가 집계해 준다.
+ * 익명 설문은 주관식의 응답 ID를 비우고 순서를 섞어서 보낸다.
+ */
+export interface SurveyResultView {
+  summary: SurveyResultSummary;
+  /** responseId → 표시 이름. 기명 설문을 작성자·관리자가 볼 때만 채운다. 익명이면 빈 객체. */
+  respondents: Record<string, string>;
 }

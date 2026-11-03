@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { releasePushTokenOnSignOut } from '@/shared/lib/messaging';
 import { authRepo } from '@/data/auth/auth.repo';
 import { userRepo } from '@/data/user/user.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
@@ -31,7 +32,7 @@ interface AuthState {
   /** 로그인 사용자의 비밀번호 변경(현재 비번 검증 후 DB 영구화). 실패 시 AuthError throw. */
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** 프로필 자기 수정(이메일, 인감 URL, 서명 URL, 선택 타입, 프로필 사진). 저장 후 세션 user 상태도 최신화. */
-  updateProfile: (patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string }) => Promise<void>;
+  updateProfile: (patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string; photoThumbUrl?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -111,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOutUser() {
+    // 이 기기로 이 계정 알림이 계속 오지 않게 기기 목록에서 뺀다(기다리지 않음)
+    if (user?.id) void releasePushTokenOnSignOut(user.id);
     localStorage.removeItem(SESSION_KEY);
     clearWiddyToken();
     if (typeof window !== 'undefined') {
@@ -135,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated); // 세션 내 비밀번호 최신화(이후 변경 검증 정확)
   }
 
-  async function updateProfile(patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string }) {
+  async function updateProfile(patch: { email?: string; sealUrl?: string; signUrl?: string; signType?: 'stamp' | 'signature'; photoUrl?: string; photoThumbUrl?: string }) {
     if (!user) throw new Error('로그인 상태가 아닙니다.');
     const updated = await userRepo.updateProfile(user.id, patch);
     setUser(updated);

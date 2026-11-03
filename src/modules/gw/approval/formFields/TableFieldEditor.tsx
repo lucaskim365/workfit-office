@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { getCellMergeInfo } from './utils';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { TableCellTextarea } from './TableCellTextarea';
 import { SheetEditor } from './SheetEditor';
-import { CellSealOverlay } from '../components/CompanySeal';
+import { CellSealSlot } from '../components/CompanySeal';
+import { hasSealCell } from './SheetView';
 import {
   normalizeTablePayload,
   recalculateSheet,
@@ -36,6 +37,11 @@ export function sheetOfField(field: FormField, value: FieldValue | undefined): S
   if (field.placeholder) return normalizeTablePayload(field.placeholder, fallbackCols);
   const empty = Object.fromEntries(fallbackCols.map((c) => [c, '']));
   return normalizeTablePayload({ cols: fallbackCols, rows: [empty, { ...empty }, { ...empty }] }, fallbackCols);
+}
+
+/** 직인 칸이면 칸 내용 오른쪽에 직인 자리를 붙인다 */
+function withSeal(seal: boolean | undefined, stamped: boolean, content: ReactNode): ReactNode {
+  return seal ? <CellSealSlot stamped={stamped}>{content}</CellSealSlot> : content;
 }
 
 export function TableFieldEditor({
@@ -159,7 +165,8 @@ export function TableFieldEditor({
       </div>
 
       {/* 실물 문서와 같은 표 (인라인 내용 입력 가능) */}
-      <div className="w-full overflow-x-auto bg-white rounded border border-[#ddd]">
+      {/* 가로 스크롤 상자는 위아래로 넘친 직인도 잘라 내므로, 직인 칸이 있으면 상자 안 위아래에 직인이 넘칠 자리를 둔다 */}
+      <div className={`w-full overflow-x-auto bg-white rounded border border-[#ddd] ${hasSealCell(effective) ? 'py-3' : ''}`}>
         <table className="w-full table-fixed border-collapse text-left text-[11.5px] border-none">
           <colgroup>
             {cols.map((col, cIdx) => (
@@ -191,7 +198,7 @@ export function TableFieldEditor({
                       }`}
                       style={cellCss(style)}
                     >
-                      {isCalculated ? (
+                      {withSeal(style?.seal, isDesignMode, isCalculated ? (
                         <div
                           className="flex items-center justify-between w-full px-2 py-1.5 cursor-default select-none"
                           title={isDesignMode && formulaInfo ? `수식: ${formulaInfo.expression}` : undefined}
@@ -218,8 +225,7 @@ export function TableFieldEditor({
                           placeholder={numeric ? '0' : ''}
                           className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}
                         />
-                      )}
-                      {style?.seal && <CellSealOverlay stamped={isDesignMode} />}
+                      ))}
                     </td>
                   );
                 })}

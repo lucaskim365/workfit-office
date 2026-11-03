@@ -13,6 +13,7 @@ import { AutoResizeTextarea } from './formFields/AutoResizeTextarea';
 import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 import { calculateLeaveDays } from '@/domain/leave/policy';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -26,6 +27,7 @@ export {
   type CellMerge,
   type OrgLite,
 } from './formFields/utils';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[12.5px] text-ink outline-none focus:border-teal';
 
@@ -128,6 +130,19 @@ export function DynamicField({
     case '안내문':
       return <div className="rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] text-ink3">{field.placeholder || field.label}</div>;
 
+    case '문서제목':
+      return <div className={`${inp} text-ink3`}>위 제목 칸에 쓴 제목이 이 자리에 들어갑니다</div>;
+
+    case '회사정보':
+      return <div className={`${inp} text-ink3`}>회사 정보(주소·연락처)가 자동으로 들어갑니다</div>;
+
+    case '자동번호':
+      return (
+        <div className={`${inp} bg-panel-alt ${sv ? 'font-semibold text-ink' : 'text-ink3'}`}>
+          {sv || '상신하면 자동으로 매겨집니다'}
+        </div>
+      );
+
     case '장문':
       return (
         <AutoResizeTextarea
@@ -142,13 +157,13 @@ export function DynamicField({
     case '금액':
       return (
         <>
-          <input value={sv} onChange={(e) => set({ [field.key]: e.target.value.replace(/[^0-9]/g, '') })} inputMode="numeric" placeholder={field.placeholder || (field.type === '금액' ? '예: 3000000' : '')} className={inp} />
+          <input value={sv} onChange={(e) => set({ [field.key]: numberFieldInput(field.key, e.target.value) })} inputMode={acceptsDecimal(field.key) ? 'decimal' : 'numeric'} placeholder={field.placeholder || (field.type === '금액' ? '예: 3000000' : '')} className={inp} />
           {field.type === '금액' && sv && <span className="mt-1 block text-[11px] text-ink3">₩{Number(sv).toLocaleString()}</span>}
         </>
       );
 
     case '날짜':
-      return <input type="date" value={sv} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
+      return <DateInput value={sv} restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
 
     case '기간': {
       const start = sv;

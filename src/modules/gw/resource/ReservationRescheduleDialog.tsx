@@ -5,6 +5,7 @@ import type { Reservation } from '@/domain/reservation/schema';
 import type { Resource } from '@/domain/resource/schema';
 import { planReschedule, type RescheduleInput } from '@/domain/reservation/engine';
 import { combineLocalDateTime, formatResourceDateTime, formatResourceTime, toDateInput } from './resourceDate';
+import { DateInput } from '@/shared/ui/form/DateInput';
 
 interface ReservationRescheduleDialogProps {
   reservation: Reservation;
@@ -75,7 +76,7 @@ export default function ReservationRescheduleDialog({ reservation, resource, onC
         <div className="grid grid-cols-3 gap-2">
           <label>
             <span className={labelClass}>날짜</span>
-            <input type="date" required value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} />
+            <DateInput required value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} />
           </label>
           <label>
             <span className={labelClass}>시작</span>

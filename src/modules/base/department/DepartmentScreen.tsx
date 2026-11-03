@@ -3,8 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
 import { useUsers } from '@/features/user/useUsers';
 import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
-import { departmentDeleteBlocker, setPersonJobTitle } from '@/data/orgSync/orgSync';
-import { usePositions } from '@/features/position/usePositions';
+import { assignDeptHead, departmentDeleteBlocker } from '@/data/orgSync/orgSync';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
@@ -27,7 +26,6 @@ export default function DepartmentScreen() {
 
   const { data: rows = [], isLoading } = useDepartments();
   const { data: users = [] } = useUsers();
-  const { data: positions = [] } = usePositions();
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
   const qc = useQueryClient();
@@ -74,12 +72,6 @@ export default function DepartmentScreen() {
     return `D${String(n).padStart(3, '0')}`;
   };
 
-  const getRank = (userId: string) => {
-    const user = users.find((u) => u.id === userId);
-    if (!user) return 9;
-    const pos = positions.find((p) => p.name === user.position);
-    return pos ? pos.rank : 9;
-  };
 
   const save = async () => {
     if (!sel) return;
@@ -102,46 +94,23 @@ export default function DepartmentScreen() {
       ? (oldDept?.order ?? sel.order ?? rows.length + 1)
       : (rows.reduce((max, d) => Math.max(max, d.order || 0), 0) + 1);
 
+    // 부서장은 assignDeptHead 가 직책과 함께 바꾼다 — 여기서는 기존 값 그대로 두고 나머지 칸만 저장
     await upsert.mutateAsync({
       ...sel,
       id: targetId,
       order: targetOrder,
       parentId: sel.parentId || null,
-      headUserId: sel.headUserId || null,
+      headUserId: oldHeadUserId ?? null,
     });
 
-    if (sel.headUserId) {
-      let newJob = '팀장';
-      if (sel.deptType === '본부') {
-        newJob = '본부장';
-      } else if (sel.deptType === '위원회') {
-        newJob = '위원장';
-      } else {
-        const rank = getRank(sel.headUserId);
-        newJob = rank >= 3 ? '팀장' : '임원';
-      }
-      await setPersonJobTitle(sel.headUserId, newJob);
-
-      const deptUser = users.find((u) => u.id === sel.headUserId);
-      if (deptUser) {
-        // 기존 해당 부서의 부서장(팀장/본부장/위원장) 자격을 가진 다른 유저들을 팀원으로 원상복구
-        const others = users.filter((u) => u.dept === deptUser.dept && ['팀장', '본부장', '위원장'].includes(u.jobTitle) && u.id !== sel.headUserId);
-        for (const other of others) {
-          await setPersonJobTitle(other.id, '팀원');
-        }
-      }
+    const nextHeadUserId = sel.headUserId || null;
+    try {
+      // 같은 부서장으로 다시 저장해도 직책을 다시 맞춘다(어긋난 부서 바로잡기)
+      if (nextHeadUserId || (oldHeadUserId ?? null) !== nextHeadUserId) await assignDeptHead(targetId, nextHeadUserId);
+    } finally {
+      qc.invalidateQueries({ queryKey: ['departments'] });
+      refreshPeople();
     }
-
-    if (oldHeadUserId && oldHeadUserId !== sel.headUserId) {
-      const isStillHead = rows.some((d) => d.id !== sel.id && d.headUserId === oldHeadUserId);
-      if (!isStillHead) {
-        const rank = getRank(oldHeadUserId);
-        const newJob = rank >= 3 ? '팀원' : '임원';
-        await setPersonJobTitle(oldHeadUserId, newJob);
-      }
-    }
-
-    refreshPeople();
     setMsg('저장되었습니다.');
     setSel(null);
   };
@@ -161,8 +130,6 @@ export default function DepartmentScreen() {
     const blocker = await departmentDeleteBlocker(dept, rows);
     if (blocker) return window.alert(blocker);
     if (!window.confirm(`'${dept?.name ?? id}' 부서를 삭제할까요?\n부서 단체방은 대화를 보존한 채 일반 단체방으로 바뀝니다.`)) return;
-    const headUserId = dept?.headUserId;
-
     await remove.mutateAsync(id);
 
     try {
@@ -173,14 +140,7 @@ export default function DepartmentScreen() {
       console.warn('부서방 전환 실패:', (e as Error)?.message || e);
     }
 
-    if (headUserId) {
-      const isStillHead = rows.some((d) => d.id !== id && d.headUserId === headUserId);
-      if (!isStillHead) {
-        const rank = getRank(headUserId);
-        const newJob = rank >= 3 ? '팀원' : '임원';
-        await setPersonJobTitle(headUserId, newJob);
-      }
-    }
+    // 소속 인원·겸직자가 있으면 삭제가 막히므로, 여기까지 온 부서장은 이 부서에 직책이 없다 — 본직 직책은 건드리지 않는다
     refreshPeople();
 
     if (sel?.id === id) setSel(null);

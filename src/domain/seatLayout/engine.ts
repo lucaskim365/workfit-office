@@ -8,6 +8,11 @@ export interface CellRect {
   rowSpan: number;
 }
 
+/** 좌석의 사람이 찾기 말(소문자)에 걸리는가 — 이름·부서·직급 */
+export function seatPersonMatches(person: { name: string; dept: string; position?: string | null }, keyword: string): boolean {
+  return [person.name, person.dept, person.position ?? ''].some((text) => text.toLowerCase().includes(keyword));
+}
+
 /** 두 칸 범위가 겹치는가 */
 export function rectsOverlap(a: CellRect, b: CellRect): boolean {
   return a.col < b.col + b.colSpan && b.col < a.col + a.colSpan && a.row < b.row + b.rowSpan && b.row < a.row + a.rowSpan;

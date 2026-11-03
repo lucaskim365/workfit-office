@@ -7,6 +7,7 @@ import { NOTIFICATION_TYPE_META, type LiveNotification } from '@/domain/liveNoti
 import { notificationPermission } from '@/shared/lib/messaging';
 import MobileCommonHeader from './MobileCommonHeader';
 import { mobileNotificationLink } from './notificationLink';
+import { pushUnavailableGuide } from './pushGuide';
 
 export default function MobileNotificationsScreen() {
   const { user } = useAuth();
@@ -18,13 +19,18 @@ export default function MobileNotificationsScreen() {
   const unread = rows.filter((n) => !n.read).length;
   const busy = markOne.isPending || markAll.isPending;
   const [permission, setPermission] = useState(notificationPermission);
+  const unavailable = pushUnavailableGuide();
   useEffect(() => {
+    // 설치한 앱은 설정에서 돌아올 때 focus가 잘 안 와서 visibilitychange로도 다시 읽는다
     const refresh = () => setPermission(notificationPermission());
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('workfit-push-enabled', refresh);
     window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.removeEventListener('workfit-push-enabled', refresh);
       window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -51,8 +57,11 @@ export default function MobileNotificationsScreen() {
         rightAction={<button type="button" disabled={!unread || busy} onClick={readAll} className="rounded-lg px-2 py-2 text-[11px] font-bold disabled:opacity-40">모두 읽음</button>} />
       <div className="flex-1 overflow-y-auto">
         <div className="m-3 rounded-xl border border-slate-200 bg-white p-3 text-[12px] text-slate-600">
-          <p>{permission === 'denied' ? '알림이 차단되어 있습니다. 기기 또는 브라우저 설정에서 알림을 허용해 주세요.' : permission === 'granted' ? '이 기기에서 알림을 허용한 상태입니다.' : '푸시를 켜면 새 알림을 바로 받아볼 수 있어요.'}</p>
-          {permission !== 'denied' && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('workfit-enable-push'))} className="mt-2 font-bold text-teal-700">{permission === 'granted' ? '알림 연결 다시 설정' : '알림 켜기'}</button>}
+          <p>{unavailable ? unavailable.title : permission === 'denied' ? '이 기기에서 알림이 차단되어 있습니다. 설정에서 직접 허용해야 알림을 받을 수 있어요.' : permission === 'granted' ? '이 기기에서 알림을 허용한 상태입니다.' : '푸시를 켜면 새 알림을 바로 받아볼 수 있어요.'}</p>
+          {/* 차단·앱 안 브라우저면 누르면 푸는 방법 안내가 뜬다 */}
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('workfit-enable-push'))} className="mt-2 font-bold text-teal-700">
+            {unavailable || permission === 'denied' ? '알림 켜는 방법 보기' : permission === 'granted' ? '알림 연결 다시 설정' : '알림 켜기'}
+          </button>
         </div>
         {notice && <p role="alert" className="px-4 py-2 text-[12px] text-red-600">{notice}</p>}
         {rows.length === 0 ? <div className="flex flex-col items-center gap-3 py-20 text-slate-400"><Bell size={30} /><p className="text-[13px]">수신된 알림이 없습니다.</p></div> :

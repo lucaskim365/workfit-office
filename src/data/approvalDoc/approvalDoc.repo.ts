@@ -21,6 +21,9 @@ import {
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
+import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
+import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
+import { DOC_NO_VALUE_KEY, docNoOf } from '@/domain/approvalDoc/docNo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
@@ -412,6 +415,29 @@ async function handleCancelTargetOnAbort(doc: ApprovalDoc): Promise<void> {
   }
 }
 
+/**
+ * 서식의 '자동번호' 칸 중 아직 번호가 없는(보이는) 칸에 번호를 매긴다 — 상신 때. 재상신은 받은 번호를 그대로 둔다.
+ * 서식 마스터는 읽기만 한다. 번호는 counters 채널에서 원자 발급(동시 상신에도 겹치지 않음).
+ */
+async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldValues']> {
+  const form = (await approvalFormRepo.list()).find((f) => f.code === doc.docType);
+  const fields = (form?.fields ?? []).filter((f) => f.type === '자동번호');
+  if (fields.length === 0) return doc.fieldValues;
+  const values = { ...doc.fieldValues };
+  const date = new Date();
+  for (const field of fields) {
+    if (!isFieldVisible(field.visibleIf, values)) continue;
+    const config = field.autoNumber ?? DEFAULT_AUTO_NUMBER;
+    if (!values[field.key]) {
+      const seq = await counterRepo.next(autoNumberChannel(doc.docType, field.key, config, date));
+      values[field.key] = formatAutoNumber(config, date, seq);
+    }
+    // 문서번호로 쓰는 번호 — 목록·머리에서 서식 없이도 보이게 문서 값에 함께 둔다(재상신에도 같은 번호)
+    if (config.asDocNo) values[DOC_NO_VALUE_KEY] = values[field.key];
+  }
+  return values;
+}
+
 export const approvalDocRepo = {
   /** 전체 조회. */
   async list(): Promise<ApprovalDoc[]> {
@@ -553,6 +579,7 @@ export const approvalDocRepo = {
     const drafterUser = users.find((u) => u.id === userId);
     
     const next = submitDoc(cur, now());
+    next.fieldValues = await issueAutoNumbers(next);
     next.drafterSignUrl = drafterUser?.signUrl ?? null;
     next.drafterSealUrl = drafterUser?.sealUrl ?? null;
     next.drafterSignType = drafterUser?.signType ?? null;
@@ -671,12 +698,12 @@ export const approvalDocRepo = {
           linkUrl: `/gw/approval?doc=${next.id}`,
         });
 
-        // 전결자(최종 결재자)에게 완료 알림
+        // 최종 결재자에게 완료 알림
         await notificationRepo.create({
           userId: userId,
           type: '결재',
           title: '결재 완료',
-          text: `[${next.title}] 문서 결재를 최종 승인(전결) 처리하였습니다.`,
+          text: `[${next.title}] 문서 결재를 최종 승인 처리하였습니다.`,
           senderName: '시스템',
           linkUrl: `/gw/approval?doc=${next.id}`,
         });
@@ -950,6 +977,7 @@ export const approvalDocRepo = {
         (d) =>
           d.title.toLowerCase().includes(kw) ||
           d.docNo.toLowerCase().includes(kw) ||
+          docNoOf(d).toLowerCase().includes(kw) ||
           (d.drafterName && d.drafterName.toLowerCase().includes(kw))
       );
     }

@@ -86,6 +86,8 @@ export function fieldText(field: FormField, values: Record<string, FieldValue>, 
     }
     case '체크':
       return v === true ? '예' : '아니오';
+    case '회사정보':
+      return '';
     case '사용자':
       return org?.users.find((u) => u.id === v)?.name ?? (v ? String(v) : '—');
     default:

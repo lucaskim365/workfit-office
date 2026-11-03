@@ -11,13 +11,15 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { useLeave } from '@/features/gw/useLeave';
-import { useCommuteEmployees, useCommuteMonth } from '@/features/commute/useCommute';
+import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { getKoreanHoliday, requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import { describeCommuteRecord, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileLeaveHistory from './MobileLeaveHistory';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
+import { PERSON_TONES } from '@/shared/theme/statusColors';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
@@ -93,25 +95,29 @@ export default function MobileCommuteScreen() {
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
-  // 사원 정보 매핑 (commute empId)
-  const { data: employees = [] } = useCommuteEmployees();
-  const currentEmp = useMemo(() => {
+  /*
+    화면을 열 때(달력 월을 바꿀 때) 내 범위·직원·그 달 내 근태를 요청 하나로 받는다(useCommuteBootstrap).
+    따로 부르면 직원 목록을 받은 뒤 근태를 또 묻느라 기다림이 두 번이고, 요청이 동시에 몰리면 서버 작업자가 모자라
+    30초씩 멈출 수 있다(데스크톱 근태 화면과 같은 이유). 아래 각 조회는 이게 끝난 뒤 채워진 캐시를 쓴다.
+  */
+  const boot = useCommuteBootstrap(selectedMonth, false);
+  const { data: viewer } = useCommuteViewer({ enabled: boot.isSettled });
+  const { data: employees = [] } = useCommuteEmployees({ enabled: boot.isSettled });
+
+  // 내 근태 사번 — 서버가 알려준 사번을 먼저, 없으면 받은 직원 목록에서 이름(공백 무시)·사번으로(데스크톱과 같은 규칙)
+  const myEmpId = useMemo(() => {
+    if (!viewer) return null;
+    if (viewer.empId) return viewer.empId;
     const norm = (s?: string | null) => (s || '').replace(/\s+/g, '');
     const empNo = user?.empNo ? Number(user.empNo) : null;
-    return employees.find((e) => (user?.name && norm(e.name) === norm(user.name)) || (empNo !== null && e.empId === empNo));
-  }, [employees, user?.name]);
+    return employees.find((e) => (user?.name && norm(e.name) === norm(user.name)) || (empNo !== null && e.empId === empNo))?.empId ?? null;
+  }, [viewer, employees, user?.name, user?.empNo]);
 
   // 오늘이 속한 달의 기록 (오늘 요약 카드용)
-  const { data: currentMonthRows = [] } = useCommuteMonth(
-    currentEmp?.empId ?? null,
-    currentMonthStr
-  );
+  const { data: currentMonthRows = [] } = useCommuteMonth(myEmpId, currentMonthStr, { enabled: boot.isSettled });
 
   // 달력에서 선택한 월의 근태 기록
-  const { data: selectedMonthRows = [] } = useCommuteMonth(
-    currentEmp?.empId ?? null,
-    selectedMonth
-  );
+  const { data: selectedMonthRows = [] } = useCommuteMonth(myEmpId, selectedMonth, { enabled: boot.isSettled });
 
   // 근태 판정(정책·공휴일·승인 결재) — 데스크톱과 같은 엔진으로 다시 판정한다
   const { policy, holidayMap, approvalDaysOf, evaluate } = useCommuteEvaluation();
@@ -119,10 +125,10 @@ export default function MobileCommuteScreen() {
   const evaluateDate = useCallback(
     (dateStr: string, rows: CommuteRecord[]) =>
       evaluate(
-        rows.find((r) => r.date === dateStr) ?? { empId: currentEmp?.empId ?? 0, date: dateStr, inAt: null, outAt: null },
+        rows.find((r) => r.date === dateStr) ?? { empId: myEmpId ?? 0, date: dateStr, inAt: null, outAt: null },
         myApprovalDays,
       ),
-    [evaluate, myApprovalDays, currentEmp?.empId],
+    [evaluate, myApprovalDays, myEmpId],
   );
 
   // 휴가 밸런스 조회
@@ -252,8 +258,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('ONLINE', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'ONLINE'
-                  ? 'bg-emerald-500 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-emerald-500/10 hover:text-emerald-600'
+                  ? `${PERSON_TONES.work.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               🏢 업무 중
@@ -263,8 +269,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('FOCUS', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'FOCUS'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-amber-500/10 hover:text-amber-600'
+                  ? `${PERSON_TONES.focus.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               🎯 집중 근무
@@ -275,8 +281,8 @@ export default function MobileCommuteScreen() {
               onClick={() => handleQuickStatus('AWAY', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
                 presence.status === 'AWAY'
-                  ? 'bg-yellow-400 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-yellow-400/10 hover:text-yellow-700'
+                  ? `${PERSON_TONES.away.dot} text-white shadow-xs`
+                  : 'bg-panel-alt text-ink2 hover:bg-bg-deep hover:text-ink'
               }`}
             >
               ☕ 자리비움
@@ -564,6 +570,9 @@ export default function MobileCommuteScreen() {
             </div>
           )}
         </div>
+
+        {/* 5. 연차 변동·휴가 신청 이력 */}
+        <MobileLeaveHistory balance={leaveBalance} holidayMap={holidayMap} />
       </div>
     </div>
   );

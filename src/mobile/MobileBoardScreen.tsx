@@ -360,7 +360,7 @@ export default function MobileBoardScreen() {
       {/* 상세 화면에서 [수정]으로 열 때 상세 위에 떠야 해서 한 단계 위에 둔다 */}
       {isWriteOpen && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-in fade-in slide-in-from-bottom duration-200">
-          <header className="flex items-center justify-between border-b border-border px-3.5 py-3 shrink-0 bg-[#101830] text-white">
+          <header className="m-header flex items-center justify-between border-b border-border px-3.5 py-3 shrink-0 text-white">
             <div className="flex items-center gap-1.5">
               <PenSquare size={15} className="text-teal-soft" />
               <span className="text-[13px] font-bold">{editing ? '게시글 수정' : '새 게시글 작성'}</span>
@@ -520,7 +520,7 @@ export default function MobileBoardScreen() {
       {selectedPost && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white animate-in fade-in slide-in-from-bottom duration-200">
           {/* 모달 상단 헤더 */}
-          <header className="flex items-center justify-between border-b border-border px-3 py-3 shrink-0" style={{ background: '#101830', color: '#fff' }}>
+          <header className="m-header flex items-center justify-between border-b border-border px-3 py-3 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-bold truncate">게시글 상세</span>
             </div>

@@ -1,3 +1,4 @@
+import { useCallback, useSyncExternalStore } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
@@ -5,8 +6,11 @@ import type { Attachment, ChatMessage, ReplyPreview } from '@/domain/chatMessage
 import { RICH_BODY_MAX_CHARS, imageIdsOfRich, mentionIdsOfRich, plainTextOfRich, sanitizeRichDoc, type RichNode } from '@/domain/chatMessage/richBody';
 import { notificationRepo } from '@/data/notification/notification.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
-import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
+import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from './useChatRooms';
 import { buildAttachmentBatch } from './attachmentBatch';
+import { CHAT_POLL_FALLBACK_MS, chatPollInterval, fetchThread, useChatRealtime } from './chatRealtime';
+import { loadMessagesSince, loadOlderMessages, subscribeThreadWindows, threadWindowOf } from './threadWindow';
+import { requestChatNotificationRecall } from '@/shared/lib/messaging';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -14,14 +18,44 @@ import { buildAttachmentBatch } from './attachmentBatch';
  */
 export const CHAT_THREAD_KEY = 'chatThread';
 
-/** 방의 메시지(시간 오름차순). */
+/** 방의 메시지(시간 오름차순) — 최근 100건부터, 위로 올리면 더 받는다(useThreadPaging). */
 export function useChatThread(roomId?: string) {
+  useChatRealtime();
+  const qc = useQueryClient();
+  const key = [CHAT_THREAD_KEY, roomId ?? null];
   return useQuery({
-    queryKey: [CHAT_THREAD_KEY, roomId ?? null],
-    queryFn: () => chatMessageRepo.listByRoom(roomId!),
+    queryKey: key,
+    queryFn: () => fetchThread(roomId!, () => qc.getQueryData<ChatMessage[]>(key)),
     enabled: !!roomId,
-    refetchInterval: CHAT_POLL_MS,
+    refetchInterval: chatPollInterval,
   });
+}
+
+/**
+ * 방 메시지 나눠 받기 상태와 더 받기.
+ * - loadOlder: 위로 올렸을 때 옛 메시지 한 쪽(100건)
+ * - loadSince: 그 시각까지 한 번에(검색 결과·답장 원문으로 이동할 때)
+ */
+export function useThreadPaging(roomId: string) {
+  const qc = useQueryClient();
+  const w = useSyncExternalStore(subscribeThreadWindows, () => threadWindowOf(roomId));
+  const loadOlder = useCallback(() => loadOlderMessages(qc, roomId), [qc, roomId]);
+  const loadSince = useCallback((at: string) => loadMessagesSince(qc, roomId, at), [qc, roomId]);
+  return { hasOlder: w.hasOlder, loading: w.loading, loadOlder, loadSince };
+}
+
+/**
+ * 방 메시지 미리 받기 — 목록에서 방을 누르는 순간(손가락이 닿을 때) 시작해, 방 화면이 뜰 때 이미 받아 둔 상태로.
+ * 방금 받은 게 있으면 다시 받지 않는다.
+ */
+export function usePrefetchChatThread() {
+  const qc = useQueryClient();
+  return (roomId: string) =>
+    void qc.prefetchQuery({
+      queryKey: [CHAT_THREAD_KEY, roomId],
+      queryFn: () => fetchThread(roomId, () => qc.getQueryData<ChatMessage[]>([CHAT_THREAD_KEY, roomId])),
+      staleTime: CHAT_POLL_FALLBACK_MS,
+    });
 }
 
 interface SendVars {
@@ -145,15 +179,28 @@ export function useUpdateMessageReactions(roomId: string) {
   });
 }
 
-/** 방 진입 시 읽음 처리 — 미읽음 배지 클리어. */
+/** 방 파일함 — 파일 첨부 메시지 전부(안 받은 옛 메시지 포함). 파일함을 열었을 때만 받는다. */
+export function useRoomFiles(roomId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [CHAT_THREAD_KEY, roomId, 'files'],
+    queryFn: () => chatMessageRepo.listWithAttachment(roomId),
+    enabled,
+  });
+}
+
+/**
+ * 방 진입 시 읽음 처리 — 미읽음 배지 클리어.
+ * 실제로 읽음으로 바꾼 메시지가 있으면 내 안드로이드 휴대폰의 그 방 푸시 알림을 그 시각까지 닫아 달라고 서버에 알린다.
+ */
 export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ roomId, userId }: { roomId: string; userId: string }) =>
       chatMessageRepo.markRead(roomId, userId),
-    onSuccess: () => {
+    onSuccess: (readUpTo, { roomId }) => {
+      if (readUpTo) requestChatNotificationRecall(roomId, readUpTo);
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
-      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
     },
   });
 }

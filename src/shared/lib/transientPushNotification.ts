@@ -1,4 +1,5 @@
-export const PUSH_NOTIFICATION_DURATION_MS = 10_000;
+/** PC 알림이 떠 있는 시간 — 서비스워커(public/firebase-messaging-sw.js DESKTOP_NOTIFICATION_MS)와 같은 값 */
+export const PUSH_NOTIFICATION_DURATION_MS = 5_000;
 
 /** 같은 방의 다음 알림을 이전 타이머가 닫지 않도록 표시마다 구분한다. */
 export async function showTransientPushNotification(

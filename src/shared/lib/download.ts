@@ -15,7 +15,9 @@ export async function downloadFile(url: string, filename: string): Promise<void>
 
   try {
     // 2. fetch로 Blob을 받아 로컬 Blob URL 생성 (Same-Origin 전환으로 a.download 100% 보장)
-    const response = await fetch(url);
+    //    no-store: 화면(<img> 등)이 먼저 받아 둔 캐시에는 CORS 허용 헤더가 없을 수 있어
+    //    재사용하면 CORS 실패로 폴백된다(발주서 PDF 직인 누락과 같은 원인).
+    const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP error ${response.status}`);
     const blob = await response.blob();
     const blobUrl = window.URL.createObjectURL(blob);

@@ -186,3 +186,19 @@ test('참여자로 지정된 회의 일정과 사내행사는 대상 사용자�
   await calendarEventRepo.remove(owner, meeting.id);
   await calendarEventRepo.remove(owner, companyEvent.id);
 });
+
+test('draft에 location·reservationId가 없으면 기존 값 유지', async () => {
+  const created = await calendarEventRepo.create(owner, draft('장소 있는 회의', { eventType: 'MEETING', location: '3층 대회의실', reservationId: 'R-1' }));
+  assert.equal(created.location, '3층 대회의실');
+  assert.equal(created.reservationId, 'R-1');
+  const updated = await calendarEventRepo.update(owner, created.id, draft('제목만 바꿈', { eventType: 'MEETING' }));
+  assert.equal(updated.title, '제목만 바꿈');
+  assert.equal(updated.location, '3층 대회의실');
+  assert.equal(updated.reservationId, 'R-1');
+});
+
+test('새 일정은 두 칸이 null', async () => {
+  const created = await calendarEventRepo.create(owner, draft('장소 없는 일정'));
+  assert.equal(created.location, null);
+  assert.equal(created.reservationId, null);
+});

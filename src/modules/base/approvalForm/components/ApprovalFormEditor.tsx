@@ -1,6 +1,31 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { ApprovalForm, FormField, FieldType, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { FIELD_TYPES } from '@/domain/approvalForm/schema';
+import {
+  AUTO_NUMBER_DATE_PARTS,
+  AUTO_NUMBER_DATE_PART_LABEL,
+  AUTO_NUMBER_RESETS,
+  AUTO_NUMBER_RESET_LABEL,
+  AUTO_NUMBER_SEPARATORS,
+  AUTO_NUMBER_SEPARATOR_LABEL,
+  DEFAULT_AUTO_NUMBER,
+  autoNumberPreview,
+  type AutoNumberConfig,
+} from '@/domain/approvalForm/autoNumber';
+import {
+  DEFAULT_LETTERHEAD,
+  HEADER_ITEMS,
+  HEADER_ITEM_LABEL,
+  LETTERHEAD_ITEMS,
+  letterheadEntries,
+  type LetterheadConfig,
+  type LetterheadEntry,
+} from '@/domain/approvalForm/headerItems';
+import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
+import { marksOf } from '@/domain/companyMark/schema';
+import { isSealForm } from '@/domain/approvalForm/seal';
+import { useCompanySites } from '@/features/companySite/useCompanySites';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useUsers } from '@/features/user/useUsers';
 import { useRouteRules } from '@/features/gw/useRouteRules';
@@ -29,6 +54,211 @@ import {
 } from 'lucide-react';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
+
+/** 자동번호 칸 설정 — 모양을 바꾸면 새 순번(1번)부터 시작한다 */
+function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onChange: (v: AutoNumberConfig) => void }) {
+  const sel = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal';
+  return (
+    <div className="space-y-2 border-t border-border/60 pt-1.5">
+      <span className="block text-[10.5px] font-semibold text-ink3">번호 모양</span>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">접두어</span>
+          <input
+            value={value.prefix}
+            maxLength={20}
+            placeholder="예: PO"
+            onChange={(e) => onChange({ ...value, prefix: e.target.value.replace(/[^0-9A-Za-z가-힣_]/g, '') })}
+            className={sel}
+          />
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">날짜</span>
+          <select value={value.datePart} onChange={(e) => onChange({ ...value, datePart: e.target.value as AutoNumberConfig['datePart'] })} className={sel}>
+            {AUTO_NUMBER_DATE_PARTS.map((p) => <option key={p} value={p}>{AUTO_NUMBER_DATE_PART_LABEL[p]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 자릿수</span>
+          <select value={value.digits} onChange={(e) => onChange({ ...value, digits: Number(e.target.value) })} className={sel}>
+            {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}자리</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 초기화</span>
+          <select value={value.reset} onChange={(e) => onChange({ ...value, reset: e.target.value as AutoNumberConfig['reset'] })} className={sel}>
+            {AUTO_NUMBER_RESETS.map((r) => <option key={r} value={r}>{AUTO_NUMBER_RESET_LABEL[r]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">잇는 기호</span>
+          <select value={value.separator ?? '-'} onChange={(e) => onChange({ ...value, separator: e.target.value as AutoNumberConfig['separator'] })} className={sel}>
+            {AUTO_NUMBER_SEPARATORS.map((sep) => <option key={sep} value={sep}>{AUTO_NUMBER_SEPARATOR_LABEL[sep]}</option>)}
+          </select>
+        </label>
+        <label className="space-y-0.5">
+          <span className="block text-[10.5px] text-ink3">순번 뒤 글자</span>
+          <input
+            value={value.suffix ?? ''}
+            maxLength={5}
+            placeholder="예: 호"
+            onChange={(e) => onChange({ ...value, suffix: e.target.value.trim() })}
+            className={sel}
+          />
+        </label>
+      </div>
+      <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-ink">
+        <input
+          type="checkbox"
+          checked={value.asDocNo ?? false}
+          onChange={(e) => onChange({ ...value, asDocNo: e.target.checked })}
+          className="h-3.5 w-3.5 rounded text-teal focus:ring-teal"
+        />
+        이 번호를 문서번호로 표시
+      </label>
+      <div className="rounded-lg bg-panel-alt px-2.5 py-1.5 text-[11.5px] text-ink2">
+        첫 번호 <b className="font-mono text-ink">{autoNumberPreview(value)}</b>
+      </div>
+    </div>
+  );
+}
+
+/** 직인 칸 설정 — 쓸 직인. 고르지 않으면 대표 직인(지운 직인을 골라 뒀어도 대표로) */
+function SealMarkSelect({ value, onChange }: { value: string | undefined; onChange: (v: string | undefined) => void }) {
+  const { data: marks } = useCompanyMarks();
+  const seals = marksOf(marks, 'seal');
+  const current = value && seals.some((m) => m.id === value) ? value : '';
+  return (
+    <label className="block space-y-0.5 border-t border-border/60 pt-1.5">
+      <span className="block text-[10.5px] font-semibold text-ink3">쓸 직인</span>
+      <select
+        value={current}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className="w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal"
+      >
+        <option value="">대표 직인</option>
+        {seals.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/** 회사 정보 칸 설정 — 로고, 한 줄에 놓을 개수, 줄마다 켜기·이름·한 줄 전체·순서(사업장 주소는 회사 정보의 사업장 현황) */
+function LetterheadSettings({ value, onChange }: { value: LetterheadConfig; onChange: (v: LetterheadConfig) => void }) {
+  const { data: sites } = useCompanySites();
+  const { data: company } = useCompanyInfo();
+  const { data: marks } = useCompanyMarks();
+  const logos = marksOf(marks, 'logo');
+  const entries = letterheadEntries(value, company, sites);
+  const siteKeys = entries.filter((e) => e.item === 'labAddress').map((e) => e.key);
+  const nameOfSite = (key: string) => key.slice('site:'.length);
+
+  const setShown = (entry: LetterheadEntry, on: boolean) => {
+    if (entry.item !== 'labAddress') {
+      const items = on ? LETTERHEAD_ITEMS.filter((i) => i === entry.item || value.items.includes(i)) : value.items.filter((i) => i !== entry.item);
+      onChange({ ...value, items });
+      return;
+    }
+    // 사업장 — 켠 사업장 목록으로 저장(처음엔 목록이 없어 전부 켜진 상태)
+    const current = entries.filter((e) => e.item === 'labAddress' && e.shown).map((e) => e.key);
+    const next = on ? siteKeys.filter((k) => k === entry.key || current.includes(k)) : current.filter((k) => k !== entry.key);
+    const items = value.items.includes('labAddress') ? value.items : LETTERHEAD_ITEMS.filter((i) => i === 'labAddress' || value.items.includes(i));
+    onChange({ ...value, items, siteNames: next.map(nameOfSite) });
+  };
+  const setLabel = (key: string, text: string) => {
+    const labels = { ...(value.labels ?? {}) };
+    if (text.trim()) labels[key] = text;
+    else delete labels[key];
+    onChange({ ...value, labels });
+  };
+  const setFull = (key: string, on: boolean) => {
+    const full = (value.fullRow ?? []).filter((k) => k !== key);
+    onChange({ ...value, fullRow: on ? [...full, key] : full });
+  };
+  const move = (index: number, step: -1 | 1) => {
+    const order = entries.map((e) => e.key);
+    const target = index + step;
+    if (target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    onChange({ ...value, order });
+  };
+  const logoChoice = !value.showLogo ? 'none' : value.logoId && logos.some((l) => l.id === value.logoId) ? value.logoId : 'rep';
+  const setLogo = (choice: string) => {
+    if (choice === 'none') onChange({ ...value, showLogo: false, logoId: undefined });
+    else if (choice === 'rep') onChange({ ...value, showLogo: true, logoId: undefined });
+    else onChange({ ...value, showLogo: true, logoId: choice });
+  };
+  const selectCls = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal';
+  const iconBtn = 'grid h-6 w-6 shrink-0 place-items-center rounded border border-border text-ink2 hover:bg-panel-alt disabled:opacity-30';
+
+  return (
+    <div className="space-y-2.5 border-t border-border/60 pt-1.5">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block space-y-0.5">
+          <span className="block text-[10.5px] font-semibold text-ink3">로고 (맨 위 가운데)</span>
+          <select value={logoChoice} onChange={(e) => setLogo(e.target.value)} className={selectCls}>
+            <option value="none">표시 안 함</option>
+            <option value="rep">대표 로고</option>
+            {logos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </label>
+        <label className="block space-y-0.5">
+          <span className="block text-[10.5px] font-semibold text-ink3">한 줄에 놓을 개수</span>
+          <select
+            value={value.columns ?? 1}
+            onChange={(e) => onChange({ ...value, columns: Number(e.target.value) })}
+            className={selectCls}
+          >
+            {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}개</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="space-y-1.5">
+        <span className="block text-[10.5px] font-semibold text-ink3">항목 (켜기 · 이름 · 한 줄 전체 · 순서)</span>
+        {entries.map((entry, index) => (
+          <div key={entry.key} className="rounded-lg border border-border/70 px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                aria-label={`${entry.defaultLabel} 보이기`}
+                checked={entry.shown}
+                onChange={(e) => setShown(entry, e.target.checked)}
+                className="h-3.5 w-3.5 shrink-0 rounded text-teal focus:ring-teal"
+              />
+              <input
+                aria-label={`${entry.defaultLabel} 이름`}
+                value={value.labels?.[entry.key] ?? ''}
+                placeholder={entry.defaultLabel}
+                maxLength={40}
+                onChange={(e) => setLabel(entry.key, e.target.value)}
+                className="min-w-0 flex-1 rounded border border-border-hi bg-panel px-1.5 py-0.5 text-[11.5px] text-ink outline-none focus:border-teal"
+              />
+              <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[10.5px] text-ink2">
+                <input
+                  type="checkbox"
+                  checked={entry.full}
+                  onChange={(e) => setFull(entry.key, e.target.checked)}
+                  className="h-3 w-3 rounded text-teal focus:ring-teal"
+                />
+                한 줄 전체
+              </label>
+              <button type="button" aria-label="위로" disabled={index === 0} onClick={() => move(index, -1)} className={iconBtn}>
+                <ChevronUp size={13} />
+              </button>
+              <button type="button" aria-label="아래로" disabled={index === entries.length - 1} onClick={() => move(index, 1)} className={iconBtn}>
+                <ChevronDown size={13} />
+              </button>
+            </div>
+            <div className="mt-0.5 truncate pl-5 text-[10.5px] text-ink3">
+              {entry.duplicate ? '회사 주소와 같은 주소' : entry.value || '값 없음'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -132,6 +362,30 @@ const COMPONENT_PALETTE = [
     defaultWidth: 'full' as const,
     defaultLabel: '주식회사 ○○○ 대표이사 ○○○',
   },
+  {
+    type: '자동번호' as FieldType,
+    label: '자동 번호',
+    icon: '#️⃣',
+    desc: '상신할 때 번호 자동 부여',
+    defaultWidth: 'half' as const,
+    defaultLabel: '문서번호',
+  },
+  {
+    type: '문서제목' as FieldType,
+    label: '문서 제목',
+    icon: '🔤',
+    desc: '제목을 원하는 자리에',
+    defaultWidth: 'full' as const,
+    defaultLabel: '제목',
+  },
+  {
+    type: '회사정보' as FieldType,
+    label: '회사 정보',
+    icon: '🏢',
+    desc: '주소·연락처 머리글',
+    defaultWidth: 'full' as const,
+    defaultLabel: '회사 정보',
+  },
 ];
 
 interface ApprovalFormEditorProps {
@@ -168,7 +422,7 @@ export function ApprovalFormEditor({
   // 상단 주 탭: 'design' (도구함 & 필드 속성) vs 'config' (서식 메타/보안/결재규칙)
   const [activeMainTab, setActiveMainTab] = useState<'design' | 'config'>('design');
 
-  // 결재선 규칙(전결규정) 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
+  // 결재선 규칙 모달 표시 상태 (A4 직인란 클릭 또는 환경설정에서 오픈)
   const [showRouteRuleModal, setShowRouteRuleModal] = useState(false);
 
   // 현재 선택된 필드 인덱스 (기본값은 0번째 필드)
@@ -213,8 +467,11 @@ export function ApprovalFormEditor({
       signUrl: '',
       signType: 'stamp',
       photoUrl: '',
+      photoThumbUrl: '',
       resignedAt: '',
       fcmToken: '',
+      fcmTokens: [],
+      fcmTokensRecall: [],
     };
   }, [user]);
 
@@ -245,7 +502,7 @@ export function ApprovalFormEditor({
       {
         seq: 3,
         approverId: 'dummy_exec',
-        kind: '전결',
+        kind: '결재',
         decision: '대기',
         parallelGroup: null,
         executionType: 'sequential',
@@ -358,6 +615,10 @@ export function ApprovalFormEditor({
       width: item.defaultWidth,
       isAmountKey: item.isAmountKey ?? false,
       options: item.options ? [...item.options] : [],
+      ...(item.type === '자동번호'
+        ? { autoNumber: { ...DEFAULT_AUTO_NUMBER, asDocNo: !form.fields.some((f) => f.type === '자동번호' && f.autoNumber?.asDocNo) } }
+        : {}),
+      ...(item.type === '회사정보' ? { letterhead: { ...DEFAULT_LETTERHEAD, items: [...DEFAULT_LETTERHEAD.items] } } : {}),
     };
 
     set({ fields: [...form.fields, newField] });
@@ -775,7 +1036,56 @@ export function ApprovalFormEditor({
                         />
                         <span>보안 필드</span>
                       </label>
+
+                      <label
+                        className="flex items-center gap-1.5 cursor-pointer text-ink3 hover:text-ink"
+                        title="결재 완료 후 대외 문서 모양(발주서 PDF 등)에서는 이 필드를 보이지 않음"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedField.hideOnExternal ?? false}
+                          onChange={(e) =>
+                            setField(selectedFieldIdx, {
+                              hideOnExternal: e.target.checked || undefined,
+                            })
+                          }
+                          className="text-teal focus:ring-teal h-3.5 w-3.5 rounded"
+                        />
+                        <span>대외 문서에서 숨김</span>
+                      </label>
                     </div>
+
+                    {/* '자동번호' — 번호 모양(접두어·날짜·자릿수·초기화 주기)과 미리보기 */}
+                    {selectedField.type === '자동번호' && (
+                      <AutoNumberSettings
+                        value={selectedField.autoNumber ?? DEFAULT_AUTO_NUMBER}
+                        onChange={(autoNumber) =>
+                          // 문서번호로 쓰는 번호는 서식에 하나 — 켜면 다른 자동번호 칸은 끈다
+                          set({
+                            fields: form.fields.map((f, idx) =>
+                              idx === selectedFieldIdx
+                                ? { ...f, autoNumber }
+                                : autoNumber.asDocNo && f.type === '자동번호' && f.autoNumber?.asDocNo
+                                  ? { ...f, autoNumber: { ...f.autoNumber, asDocNo: false } }
+                                  : f,
+                            ),
+                          })
+                        }
+                      />
+                    )}
+
+                    {/* 직인 칸·직인 표 칸 — 쓸 직인(회사 정보에 등록한 직인 중), 고르지 않으면 대표 직인 */}
+                    {isSealForm([selectedField]) && (
+                      <SealMarkSelect value={selectedField.markId} onChange={(markId) => setField(selectedFieldIdx, { markId })} />
+                    )}
+
+                    {/* '회사정보' — 로고·배치·항목 */}
+                    {selectedField.type === '회사정보' && (
+                      <LetterheadSettings
+                        value={selectedField.letterhead ?? DEFAULT_LETTERHEAD}
+                        onChange={(letterhead) => setField(selectedFieldIdx, { letterhead })}
+                      />
+                    )}
 
                     {/* '선택' 타입일 때 세부 옵션 */}
                     {selectedField.type === '선택' && (
@@ -908,6 +1218,29 @@ export function ApprovalFormEditor({
                     <span className="block text-[10.5px] text-ink3">상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명을 숨깁니다 (발주서 보관함·PDF 포함)</span>
                   </span>
                 </label>
+                <div className="space-y-1.5 border-t border-border/60 pt-2">
+                  <span className="block font-semibold text-ink">문서 머리 항목</span>
+                  <span className="block text-[10.5px] text-ink3">끈 항목은 작성·결재 중·완료·인쇄 모두에서 문서에 나오지 않습니다</span>
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    {HEADER_ITEMS.map((item) => {
+                      const hidden = (form.hiddenHeaderItems ?? []).includes(item);
+                      return (
+                        <label key={item} className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink2">
+                          <input
+                            type="checkbox"
+                            checked={!hidden}
+                            onChange={(e) => {
+                              const rest = (form.hiddenHeaderItems ?? []).filter((i) => i !== item);
+                              set({ hiddenHeaderItems: e.target.checked ? rest : [...rest, item] });
+                            }}
+                            className="accent-teal"
+                          />
+                          {HEADER_ITEM_LABEL[item]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* 기안 권한 및 보안 설정 */}
@@ -957,7 +1290,7 @@ export function ApprovalFormEditor({
                 <div className="rounded-xl border border-border bg-panel p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-[12.5px] font-bold text-ink">결재선(전결) 규칙 설정</div>
+                      <div className="text-[12.5px] font-bold text-ink">결재선 규칙 설정</div>
                       <div className="text-[10.5px] text-ink3 mt-0.5">
                         등록된 서식 전용 규칙: <span className="text-teal font-bold">{formRulesCount}개</span>
                       </div>

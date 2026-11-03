@@ -48,6 +48,7 @@ docs/keys.md
 
 # 개인 작업 메모(jwheo/BACKLOG.md 등). 공용 문서는 docs/·implement/ 에 둔다.
 jwheo/*.md
+jwshin/*.md
 
 # 메일 개발용으로 옆에 둔 MailHub 실소스 (별도 저장소).
 # 자체 .git, node_modules, 그리고 암호화 키(.env.local)와 앱 비밀번호가 든
@@ -69,4 +70,6 @@ scratch/
 # run-app 스킬 로그인 정보(관리자 계정 비밀번호) — 저장소에 올리지 않는다
 .claude/skills/run-app/login.local.json
 
+# superpowers 실행 작업 공간(진행 기록)
 .superpowers/
+appwrite/functions/survey/dist/
