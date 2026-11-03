@@ -19,6 +19,7 @@ import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 import { SealFieldRow, SealMarkProvider } from './components/CompanySeal';
+import { SheetDocView, isSheetDoc } from './sheetForm/SheetDocView';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
@@ -344,6 +345,8 @@ export function ApprovalDocumentView({
   const amountField = form ? amountFieldOf(form) : undefined;
   // 'body' 키를 표 등 다른 종류가 쓰는 서식은 본문이 별도 키에 있다(그 전에 상신된 문서의 doc.body 에 섞여 들어간 표 데이터는 본문으로 보이지 않게 한다)
   const bodyKey = documentBodyKeyOf(form?.fields);
+  // 시트 서식 문서 — 본문은 시트 안에 있으므로 따로 그리지 않는다
+  const sheetDoc = isSheetDoc(doc.fieldValues);
   const bodyText = bodyKey === RESERVED_BODY_KEY ? doc.body : String(doc.fieldValues?.[bodyKey] ?? '');
   const amountLabel = amountField?.label ?? '금 액';
   const steps = useMemo(() =>
@@ -687,6 +690,12 @@ export function ApprovalDocumentView({
           amountLabel={amountLabel}
         />
 
+        {sheetDoc && (
+          <div className="mt-3">
+            <SheetDocView fieldValues={doc.fieldValues} masked={isMaskingActive} stamped={doc.status === '완료'} />
+          </div>
+        )}
+
         {/* 서식 동적 상세 블록 렌더링 (순서 보존 및 섹션별 테이블/독립 장문박스 배치) */}
         {blocks.length > 0 && (
           <div className="space-y-3.5 mt-2">
@@ -867,7 +876,7 @@ export function ApprovalDocumentView({
         )}
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-        {!externalDoc && longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
+        {!externalDoc && !sheetDoc && longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
           <div className="mt-3 min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
             {bodyText}
           </div>

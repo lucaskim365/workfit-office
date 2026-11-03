@@ -71,7 +71,7 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
 
       <Row
         label="입력 칸"
-        hint={isFormula ? '수식 칸은 입력 칸으로 정할 수 없습니다(기안자가 쓰면 수식이 지워짐).' : '기안자가 값을 쓰는 칸. 정하지 않은 칸은 글자·수식 그대로 보입니다.'}
+        hint={isFormula ? '수식 칸은 입력 칸으로 정할 수 없습니다(기안자가 쓰면 수식이 지워짐).' : '기안자가 값을 쓰는 칸. 숫자만 받기·드롭다운 같은 입력 규칙은 기안 화면에서 적용됩니다(여기 관리 편집에서는 모든 칸을 고칠 수 있음).'}
       >
         <select
           className={inp}
@@ -99,9 +99,21 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
         </Row>
       )}
 
-      <Row label="데이터 불러오기" hint="기안을 시작할 때 채웁니다. 입력 칸이면 기안자가 고쳐 쓸 수 있고, 상신할 때 값으로 저장됩니다.">
-        <select className={inp} value={props.bind ?? ''} onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}>
-          <option value="">불러오지 않음</option>
+      <Row
+        label="프로젝트 값 채우기"
+        hint={
+          BIND_GROUPS.length
+            ? '기안자가 서식에서 프로젝트를 고르면 이 칸을 그 프로젝트의 값으로 채웁니다. 입력 칸이면 고쳐 쓸 수 있습니다.'
+            : '준비 중 — 기안자가 프로젝트를 고르면 계약일자·고객사명 같은 칸을 한꺼번에 채우는 기능입니다. 프로젝트 관리 항목을 정한 뒤 열립니다.'
+        }
+      >
+        <select
+          className={inp}
+          value={props.bind ?? ''}
+          disabled={!BIND_GROUPS.length && !props.bind}
+          onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}
+        >
+          <option value="">채우지 않음</option>
           {BIND_GROUPS.map((g) => (
             <optgroup key={g.label} label={g.label}>
               {g.items.map((i) => (
@@ -111,9 +123,7 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
               ))}
             </optgroup>
           ))}
-          <optgroup label="사업 (항목 준비 중)">
-            <option disabled value="project">사업 정보 — 프로젝트 관리 항목을 정한 뒤 열립니다</option>
-          </optgroup>
+          {props.bind && !BIND_GROUPS.some((g) => g.items.some((i) => i.value === props.bind)) && <option value={props.bind}>{props.bind} (지금은 없는 항목)</option>}
         </select>
       </Row>
 

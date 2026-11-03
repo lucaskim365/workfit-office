@@ -114,7 +114,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
 
-    const header: ApprovalForm = { ...form, id: code, code, name, fields: [], active: false };
+    const header: ApprovalForm = { ...form, id: code, code, name, fields: [] };
     try {
       setMsg({ kind: 'info', text: '저장 중…' });
       const res = await save.mutateAsync({ form: header, sheet, baseVersion, note: note.trim() || undefined, user: { id: user.id, name: user.name } });
@@ -135,7 +135,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     const marks: { t: string; cls: string; title: string }[] = [];
     if (p.input) marks.push({ t: '입력', cls: 'bg-amber-400/90 text-white', title: '입력 칸' });
     if (p.name) marks.push({ t: cellNameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
-    if (p.bind) marks.push({ t: '불러옴', cls: 'bg-sky-500 text-white', title: bindLabel(p.bind) });
+    if (p.bind) marks.push({ t: '프로젝트', cls: 'bg-sky-500 text-white', title: `프로젝트 값 채우기: ${bindLabel(p.bind)}` });
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
@@ -178,10 +178,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
               {baseVersion !== null && <span className="rounded bg-teal-soft px-1.5 font-mono text-[10px] font-bold text-teal">v{baseVersion}</span>}
               {dirty && <span className="text-[10.5px] font-bold text-amber-600">저장 안 됨</span>}
             </div>
-            <span className="text-[10.5px] text-ink3">엑셀처럼 틀을 만들고, 기안자가 쓸 칸을 '입력 칸'으로 정합니다 · 기안 연결은 다음 단계(지금은 사용 안 함으로 저장)</span>
+            <span className="text-[10.5px] text-ink3">엑셀처럼 틀을 만들고, 기안자가 쓸 칸을 '입력 칸'으로 정합니다 · 사용을 켜면 기안 서식 목록에 나옵니다</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <label className="mr-1 flex cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-ink2" title="켜면 기안 서식 목록에 나옵니다">
+            <input type="checkbox" checked={form.active} onChange={(e) => set({ active: e.target.checked })} className="h-3.5 w-3.5 accent-teal" />
+            <span>사용</span>
+          </label>
           <input ref={fileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={onFile} />
           <button
             type="button"

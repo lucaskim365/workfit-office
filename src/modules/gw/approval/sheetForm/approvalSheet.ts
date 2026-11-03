@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { cellKey, colLetter, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
+import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
 
 /** 시트 부가 정보 이름공간 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const APPROVAL_NS = {
@@ -34,17 +34,12 @@ export interface CellInput {
   options?: string[];
 }
 
-/** cellMeta.bind 값 — 기안 시작 때 채우는 데이터 */
-export type BindSource =
-  | 'company.name'
-  | 'company.bizNo'
-  | 'company.ceo'
-  | 'company.address'
-  | 'company.phone'
-  | 'company.fax'
-  | 'draft.drafter'
-  | 'draft.dept'
-  | 'draft.date';
+/**
+ * cellMeta.bind 값 — '출처.항목'. 지금 쓰는 출처는 프로젝트뿐(project.계약일자 등):
+ * 기안자가 서식에서 프로젝트를 고르면 이 값이 붙은 칸들을 그 프로젝트 값으로 한꺼번에 채운다.
+ * 프로젝트 항목은 프로젝트 관리 데이터가 정해진 뒤 BIND_GROUPS 에 더한다(§11.4).
+ */
+export type BindSource = `project.${string}`;
 
 /** 이 이름공간의 칸이 든 행·열은 기안자가 지울 수 없음 */
 const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal];
@@ -176,28 +171,11 @@ export const CELL_INPUT_LABELS: Record<CellInputType, string> = {
   dept: '부서',
 };
 
-/** 데이터 불러오기 출처 — 묶음별. 사업(project.*)은 담당자 프로젝트 관리 엑셀을 받은 뒤 항목을 정한다(§11.4) */
-export const BIND_GROUPS: { label: string; items: { value: BindSource; label: string }[] }[] = [
-  {
-    label: '우리 회사',
-    items: [
-      { value: 'company.name', label: '회사명' },
-      { value: 'company.bizNo', label: '사업자등록번호' },
-      { value: 'company.ceo', label: '대표자' },
-      { value: 'company.address', label: '주소' },
-      { value: 'company.phone', label: '전화' },
-      { value: 'company.fax', label: '팩스' },
-    ],
-  },
-  {
-    label: '기안 정보',
-    items: [
-      { value: 'draft.drafter', label: '기안자' },
-      { value: 'draft.dept', label: '기안 부서' },
-      { value: 'draft.date', label: '기안일' },
-    ],
-  },
-];
+/**
+ * 프로젝트 값 채우기 항목 — 묶음별. 프로젝트 관리 데이터(담당 차장 엑셀)를 받은 뒤 항목을 정한다(§11.4).
+ * 비어 있는 동안 서식 편집기는 이 칸을 '준비 중'으로 보여 준다.
+ */
+export const BIND_GROUPS: { label: string; items: { value: BindSource; label: string }[] }[] = [];
 
 export function bindLabel(source: string): string {
   for (const g of BIND_GROUPS) {
@@ -342,3 +320,74 @@ export function validateApprovalSheet(s: Sheet): string[] {
 
 /** A4 세로 인쇄 폭(px, 좌우 여백 10mm) — 서식 편집기의 안내선, 문서 보기의 맞춤 폭 */
 export const SHEET_PAGE_WIDTH = 718;
+
+// ── 기안·문서 저장 (§11.2) ──
+
+/** 문서 fieldValues 에 시트 값·서식 버전을 담는 키 — 저장 데이터의 키이므로 바꾸지 말 것 */
+export const SHEET_VALUES_KEY = '__values';
+export const SHEET_VERSION_KEY = '__formVersion';
+
+/** 체크 칸에 넣는 값 */
+export const CHECK_MARK = '✓';
+
+/** fieldValues.__values(JSON 글자) → 칸 값. 없거나 깨졌으면 빈 값 */
+export function readSheetValues(raw: unknown): SheetValues {
+  if (typeof raw !== 'string' || !raw) return {};
+  try {
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
+    return Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v === 'string')) as SheetValues;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 문서 fieldValues 로 저장할 것 — 칸 값(JSON), 서식 버전, 이름 붙은 칸 값(body·amount 등).
+ * 이름 붙은 칸 값은 목록 미리보기·검색·금액별 결재선이 그대로 읽는다.
+ */
+export function sheetDocFields(s: Sheet, formVersion: string): Record<string, string> {
+  return {
+    ...namedValues(s),
+    [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),
+    [SHEET_VERSION_KEY]: formVersion,
+  };
+}
+
+/** 기안자가 이 칸에 쓰는 입력 종류 — 고칠 수 없는 칸이면 undefined */
+export function draftInputOf(s: Sheet, r: number, c: number): CellInput | undefined {
+  if (!isDraftEditable(s, r, c)) return undefined;
+  return approvalCellProps(s, r, c).input;
+}
+
+/** 숫자·금액 입력 칸인데 숫자로 읽히지 않는 칸 주소 — 상신 전 검사 */
+export function invalidNumberCells(s: Sheet): string[] {
+  const out: string[] = [];
+  Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach(([key, v]) => {
+    const type = (v as CellInput).type;
+    if (type !== 'number' && type !== 'currency') return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const col = key.slice(i + 1);
+    const c = s.cols.indexOf(col);
+    const raw = String(s.rows[r]?.[col] ?? '').trim();
+    if (c >= 0 && raw !== '' && parseNumber(raw) === null) out.push(cellAddress(r, c));
+  });
+  return out;
+}
+
+/** 비공개 칸인가 — 칸·행·열 어느 쪽에든 비공개가 걸려 있으면 */
+export function isSecretCell(s: Sheet, r: number, c: number): boolean {
+  const col = s.cols[c];
+  if (col === undefined) return false;
+  return (
+    s.cellMeta[APPROVAL_NS.secret]?.[cellKey(r, col)] === true ||
+    s.rowMeta[APPROVAL_NS.secret]?.[String(r)] === true ||
+    s.colMeta[APPROVAL_NS.secret]?.[col] === true
+  );
+}
+
+/** 회사 직인 자리인가 */
+export function isSealCell(s: Sheet, r: number, c: number): boolean {
+  return approvalCellProps(s, r, c).seal;
+}

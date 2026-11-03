@@ -13,6 +13,8 @@ export interface SheetViewProps {
   /** 가릴 칸 — true 면 값 대신 hiddenText */
   hidden?: (r: number, c: number) => boolean;
   hiddenText?: string;
+  /** 칸 내용을 바꿔 그림(예: 작성 화면의 입력 상자). undefined 를 돌려주면 보통처럼 값 */
+  renderCell?: (r: number, c: number) => ReactNode | undefined;
   /** 칸 위에 덧그릴 것(예: 직인 그림) */
   renderOverlay?: (r: number, c: number) => ReactNode;
   /** 이 폭(px)보다 넓으면 비율로 줄인다 */
@@ -20,7 +22,7 @@ export interface SheetViewProps {
   className?: string;
 }
 
-export function SheetView({ sheet, hidden, hiddenText = '비공개', renderOverlay, fitWidth, className = '' }: SheetViewProps) {
+export function SheetView({ sheet, hidden, hiddenText = '비공개', renderCell, renderOverlay, fitWidth, className = '' }: SheetViewProps) {
   const { cols, rows, merges } = sheet;
   const widthOf = (col: string) => sheet.colWidths[col] ?? DEFAULT_COL_WIDTH;
   const total = cols.reduce((sum, col) => sum + widthOf(col), 0);
@@ -54,7 +56,7 @@ export function SheetView({ sheet, hidden, hiddenText = '비공개', renderOverl
                     className="relative overflow-hidden px-1 align-middle whitespace-pre-wrap break-words"
                     style={{ textAlign: defaultAlign(sheet, r, col), ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan)) }}
                   >
-                    {secret ? <span className="italic text-[#999]">{hiddenText}</span> : displayValue(sheet, r, col)}
+                    {secret ? <span className="italic text-[#999]">{hiddenText}</span> : (renderCell?.(r, c) ?? displayValue(sheet, r, col))}
                     {renderOverlay?.(r, c)}
                   </td>
                 );

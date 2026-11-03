@@ -136,15 +136,10 @@ export default function ApprovalFormScreen() {
 
   // 원클릭 사용/중지 상태 토글
   const toggleActive = async (form: ApprovalForm) => {
-    // 시트 서식은 기안·결재 화면 연결(3단계) 전이라 켜면 빈 서식으로 기안된다
-    if (!form.active && sheetVersions.has(form.id)) {
-      alert('시트 서식은 기안 화면 연결 작업이 끝난 뒤 사용할 수 있습니다. 지금은 편집·저장만 됩니다.');
-      return;
-    }
     await upsert.mutateAsync({ ...form, active: !form.active });
   };
 
-  // 새 시트 서식 추가(엑셀 불러오기·시트 편집)
+  // 새 시트 서식 추가(엑셀 불러오기·시트 편집) — 다 만들 때까지 기안 목록에 나오지 않게 처음엔 사용 안 함
   const handleAddSheetForm = () => {
     setSheetSel({ form: { ...blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null), fields: [], active: false }, version: null });
     setMsg('');

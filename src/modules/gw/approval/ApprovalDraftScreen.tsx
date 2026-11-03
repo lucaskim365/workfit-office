@@ -28,6 +28,10 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
 import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
+import { SheetDraftForm } from './sheetForm/SheetDraftForm';
+import { SHEET_VERSION_KEY } from './sheetForm/approvalSheet';
+import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
 import { usePermission } from '@/features/auth/usePermission';
 import { fileStorage } from '@/shared/lib/storage';
@@ -977,6 +981,11 @@ function ApprovalDraftInner({
   const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
+  // 시트 서식 — 이 문서가 이미 쓴 버전이 있으면 그 틀, 없으면 서식의 최신 버전(§11.2)
+  const { latest: sheetLatest } = useSheetFormVersions();
+  const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
+  const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : (sheetLatest.get(form.id) ?? null);
+  const sheetIssuesRef = useRef<string[]>([]);
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
   const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
@@ -1176,6 +1185,9 @@ function ApprovalDraftInner({
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+    if (sheetVersion !== null && sheetIssuesRef.current.length > 0) {
+      return `숫자 칸에 숫자가 아닌 값이 있습니다: ${sheetIssuesRef.current.slice(0, 5).join(', ')}`;
+    }
 
     if (isPostApprovalSystemEnabled && isPostApproval) {
       if (!postApprovalActionTaken.trim() && !postApprovalReason.trim()) {
@@ -1659,6 +1671,21 @@ function ApprovalDraftInner({
             editDocNo={editDoc?.docNo}
             lastSavedAt={autosavedAt}
             onStampTableClick={() => setLineModalOpen(true)}
+            sheetBody={
+              form && sheetVersion !== null ? (
+                <SheetDraftForm
+                  formId={form.id}
+                  version={sheetVersion}
+                  values={values}
+                  onFields={(fields) => {
+                    setVals(fields);
+                    // 결재 금액 칸 → 금액별 결재선 규칙이 읽는 금액
+                    if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
+                  }}
+                  onIssues={(cells) => (sheetIssuesRef.current = cells)}
+                />
+              ) : undefined
+            }
           />
         </div>
 

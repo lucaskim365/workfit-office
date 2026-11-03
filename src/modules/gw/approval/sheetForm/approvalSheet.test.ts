@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
-import { APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue } from '@/lib/sheet';
 
 function base(): Sheet {
@@ -168,4 +168,39 @@ test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸
   ok = setCellValue(ok, 1, 1, '=A1*2');
   ok = setCellName(ok, 1, 1, 'body'); // 수식 칸에 이름 — 문제 없음
   assert.deepEqual(validateApprovalSheet(ok), []);
+});
+
+test('문서 저장 — 칸 값·서식 버전·이름 붙은 칸 값을 fieldValues 로, 다시 읽기', () => {
+  const tpl = form();
+  const s = setCellValue(tpl, 0, 1, '1500');
+  const fields = sheetDocFields(s, '발주@v3');
+  assert.equal(fields[SHEET_VERSION_KEY], '발주@v3');
+  assert.equal(fields.amount, '1500'); // 칸 이름 amount
+  const vals = readSheetValues(fields[SHEET_VALUES_KEY]);
+  const [, b] = s.cols;
+  assert.equal(vals[cellKey(0, b)], '1500');
+  assert.equal(vals[cellKey(1, b)], '3000'); // 수식 결과도 남김
+  assert.deepEqual(readSheetValues('깨진 {'), {});
+  assert.deepEqual(readSheetValues(undefined), {});
+  assert.deepEqual(readSheetValues('{"a":1,"b":"x"}'), { b: 'x' }); // 글자만
+});
+
+test('기안 입력 종류 — 고칠 수 있는 칸만, 숫자 칸 검사', () => {
+  const tpl = form();
+  assert.deepEqual(draftInputOf(tpl, 0, 1), { type: 'currency' });
+  assert.equal(draftInputOf(tpl, 0, 2), undefined); // 잠금
+  assert.equal(draftInputOf(tpl, 0, 0), undefined); // 라벨
+  assert.deepEqual(invalidNumberCells(setCellValue(tpl, 0, 1, '천원')), ['B1']);
+  assert.deepEqual(invalidNumberCells(setCellValue(tpl, 0, 1, '1,500')), []);
+  assert.deepEqual(invalidNumberCells(tpl), []); // 빈 칸은 괜찮음
+});
+
+test('비공개 칸 — 칸·행·열', () => {
+  let s = createSheet(3, 3);
+  s = setCellMeta(s, APPROVAL_NS.secret, 0, 0, true);
+  s = { ...s, rowMeta: { secret: { '1': true } }, colMeta: { secret: { [s.cols[2]]: true } } };
+  assert.equal(isSecretCell(s, 0, 0), true);
+  assert.equal(isSecretCell(s, 1, 1), true);
+  assert.equal(isSecretCell(s, 2, 2), true);
+  assert.equal(isSecretCell(s, 2, 1), false);
 });

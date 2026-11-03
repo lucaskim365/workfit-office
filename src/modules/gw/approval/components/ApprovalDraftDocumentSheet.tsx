@@ -110,6 +110,8 @@ export interface ApprovalDraftDocumentSheetProps {
   onUpdateDocTitle?: (v: string) => void;
   onUpdateClosing?: (v: string) => void;
   onStampTableClick?: () => void;
+  /** 시트 서식 본문 — 있으면 서식 항목 대신 이것을 그린다 */
+  sheetBody?: React.ReactNode;
 }
 
 export function ApprovalDraftDocumentSheet({
@@ -157,6 +159,7 @@ export function ApprovalDraftDocumentSheet({
   onUpdateDocTitle,
   onUpdateClosing,
   onStampTableClick,
+  sheetBody,
 }: ApprovalDraftDocumentSheetProps) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -1198,6 +1201,9 @@ export function ApprovalDraftDocumentSheet({
           })}
         </div>
       )}
+
+      {/* 8. 시트 서식 본문 */}
+      {sheetBody && <div className="mt-3">{sheetBody}</div>}
 
       {/* 9. 첨부파일 영역 (ApprovalDocumentView와 100% 일치 표 규격 + 드래그앤드롭 업로더) */}
       <table className="mt-4 w-full border-collapse text-[12px] table-fixed">
