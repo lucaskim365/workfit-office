@@ -46,5 +46,6 @@ export {
   setColMeta,
   type CellRange,
   type BorderPreset,
+  type PasteOptions,
 } from './ops';
 export { cellCss, displayValue, defaultAlign, SHEET_COLORS } from './style';

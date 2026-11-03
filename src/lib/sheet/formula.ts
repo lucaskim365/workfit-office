@@ -1,8 +1,9 @@
 /**
  * 시트 수식 계산기 (엑셀 문법의 작은 부분집합)
  * - 숫자·"글자"·TRUE/FALSE·셀(A1, $A$1)·범위(함수 인자에서만)·함수·괄호
- * - 연산 우선순위(낮은 것부터): 비교(= <> < > <= >=) → 결합(&) → + - → * / → 단항 -
- * - 함수: SUM·AVERAGE·MIN·MAX·ROUND·IF
+ * - 연산 우선순위(낮은 것부터): 비교(= <> < > <= >=) → 결합(&) → + - → * / → ^ → 단항 - → 퍼센트(%)
+ *   엑셀처럼 단항 -가 ^보다 먼저라 -2^2 = 4, ^는 왼쪽부터라 2^3^2 = 64
+ * - 함수: SUM·AVERAGE·MIN·MAX·COUNT·COUNTA·SUMIF·ROUND·ROUNDUP·ROUNDDOWN·ABS·IF·IFERROR
  * - eval 없이 토큰화 → 구문 나무 → 계산. 잘못된 식은 FormulaError
  */
 
@@ -81,7 +82,7 @@ type Tok = (
 ) & { start: number; end: number };
 
 const OPS2 = ['<>', '<=', '>='];
-const OPS1 = '+-*/&=<>(),:';
+const OPS1 = '+-*/&=<>(),:^%';
 
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
@@ -168,6 +169,7 @@ type Node =
   | { t: 'ref'; r: number; c: number }
   | { t: 'range'; r1: number; c1: number; r2: number; c2: number }
   | { t: 'neg'; a: Node }
+  | { t: 'pct'; a: Node }
   | { t: 'bin'; op: string; a: Node; b: Node }
   | { t: 'call'; name: string; args: Node[] };
 
@@ -203,7 +205,17 @@ function parse(tokens: Tok[]): Node {
       pos++;
       return unary();
     }
-    return primary();
+    return postfix();
+  };
+
+  // 뒤에 붙는 % — 100으로 나눔(엑셀과 같음, 50%% = 0.0025)
+  const postfix = (): Node => {
+    let a = primary();
+    while (isOp('%')) {
+      pos++;
+      a = { t: 'pct', a };
+    }
+    return a;
   };
 
   // 함수 인자: 'A1:B3' 범위 또는 식
@@ -264,7 +276,8 @@ function parse(tokens: Tok[]): Node {
     }
   };
 
-  const term = binLevel(['*', '/'], unary);
+  const power = binLevel(['^'], unary);
+  const term = binLevel(['*', '/'], power);
   const additive = binLevel(['+', '-'], term);
   const concat = binLevel(['&'], additive);
   const expr = binLevel(CMP_OPS, concat);
@@ -349,6 +362,8 @@ function evalNode(n: Node, get: CellGetter): Val {
       throw new FormulaError(); // 범위는 함수 인자에서만
     case 'neg':
       return -toNum(evalNode(n.a, get));
+    case 'pct':
+      return toNum(evalNode(n.a, get)) / 100;
     case 'bin': {
       const a = evalNode(n.a, get);
       const b = evalNode(n.b, get);
@@ -364,6 +379,8 @@ function evalNode(n: Node, get: CellGetter): Val {
           const x = toNum(a);
           return d === 0 ? 0 : x / d;
         }
+        case '^':
+          return Math.pow(toNum(a), toNum(b));
         case '&':
           return textOf(a) + textOf(b);
         default: {
@@ -395,8 +412,91 @@ function numbersOf(args: Node[], get: CellGetter): number[] {
   return out;
 }
 
+/** 범위 인자의 각 칸 값 (범위가 아니면 FormulaError) */
+function rangeCells(a: Node, get: CellGetter): Array<{ r: number; c: number; v: Val }> {
+  if (a.t !== 'range') throw new FormulaError();
+  const out: Array<{ r: number; c: number; v: Val }> = [];
+  for (let r = a.r1; r <= a.r2; r++) for (let c = a.c1; c <= a.c2; c++) out.push({ r, c, v: cellValue(get(r, c)) });
+  return out;
+}
+
+/** 소수 자리에서 0에서 먼 쪽(up)·가까운 쪽(down)으로 자름 */
+function roundDir(x: number, digits: number, up: boolean): number {
+  const f = Math.pow(10, Math.trunc(digits));
+  const scaled = Number((Math.abs(x) * f).toFixed(8));
+  return (Math.sign(x) * (up ? Math.ceil(scaled) : Math.floor(scaled))) / f;
+}
+
+const CRITERIA_OPS = ['>=', '<=', '<>', '>', '<', '='];
+
+/** SUMIF 조건 — '>100'·'<>완료'·'완료'(같음). 숫자로 읽히면 숫자로 비교 */
+function matchesCriteria(v: Val, criteria: Val): boolean {
+  const text = textOf(criteria);
+  const op = CRITERIA_OPS.find((o) => text.startsWith(o)) ?? '=';
+  const rest = text.startsWith(op) ? text.slice(op.length) : text;
+  const n = parseNumber(rest);
+  const target: Val = n === null ? rest : n;
+  if (v === BLANK && rest === '') return op === '=';
+  const c = compare(v, target);
+  return op === '=' ? c === 0 : op === '<>' ? c !== 0 : op === '<' ? c < 0 : op === '>' ? c > 0 : op === '<=' ? c <= 0 : c >= 0;
+}
+
 function callFn(name: string, args: Node[], get: CellGetter): Val {
   switch (name) {
+    case 'COUNT': {
+      let n = 0;
+      for (const a of args) {
+        if (a.t === 'range') n += rangeCells(a, get).filter((x) => typeof x.v === 'number' || x.v instanceof NumText).length;
+        else {
+          const v = evalNode(a, get);
+          if (typeof v === 'number' || v instanceof NumText) n++;
+        }
+      }
+      return n;
+    }
+    case 'COUNTA': {
+      let n = 0;
+      for (const a of args) {
+        if (a.t === 'range') n += rangeCells(a, get).filter((x) => x.v !== BLANK).length;
+        else if (evalNode(a, get) !== BLANK) n++;
+      }
+      return n;
+    }
+    case 'SUMIF': {
+      if (args.length < 2 || args.length > 3) throw new FormulaError();
+      const range = args[0];
+      const sumRange = args[2] ?? range;
+      if (range.t !== 'range' || sumRange.t !== 'range') throw new FormulaError();
+      const criteria = evalNode(args[1], get);
+      let total = 0;
+      for (const cell of rangeCells(range, get)) {
+        if (!matchesCriteria(cell.v, criteria)) continue;
+        const v = cellValue(get(sumRange.r1 + (cell.r - range.r1), sumRange.c1 + (cell.c - range.c1)));
+        if (typeof v === 'number') total += v;
+        else if (v instanceof NumText) total += v.n;
+      }
+      return total;
+    }
+    case 'ROUNDUP':
+    case 'ROUNDDOWN': {
+      if (args.length < 1 || args.length > 2) throw new FormulaError();
+      const x = toNum(evalNode(args[0], get));
+      return roundDir(x, args[1] ? toNum(evalNode(args[1], get)) : 0, name === 'ROUNDUP');
+    }
+    case 'ABS':
+      if (args.length !== 1) throw new FormulaError();
+      return Math.abs(toNum(evalNode(args[0], get)));
+    case 'IFERROR': {
+      if (args.length !== 2) throw new FormulaError();
+      try {
+        const v = evalNode(args[0], get);
+        if (typeof v === 'number' && !Number.isFinite(v)) throw new FormulaError();
+        return v;
+      } catch (e) {
+        if (!(e instanceof FormulaError)) throw e;
+        return evalNode(args[1], get);
+      }
+    }
     case 'SUM':
       return numbersOf(args, get).reduce((x, y) => x + y, 0);
     case 'AVERAGE': {

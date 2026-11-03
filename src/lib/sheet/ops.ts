@@ -266,14 +266,33 @@ export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): S
   return { ...s, styles };
 }
 
-/** 엑셀 등에서 복사한 탭 구분 텍스트를 (r, c)부터 붙여넣기 — 넘치면 행·열 추가 */
-export function pasteTsv(s: Sheet, r: number, c: number, text: string): Sheet {
+export interface PasteOptions {
+  /** false면 시트 밖으로 넘치는 부분을 버린다(행·열을 늘리지 않음). 기본 true */
+  grow?: boolean;
+  /** false인 칸은 건너뛴다 — 잠긴 칸 등 */
+  canWrite?: (r: number, c: number) => boolean;
+  /** false인 칸은 '='로 시작해도 값으로 넣는다 — 수식을 받지 않는 칸 */
+  allowFormula?: (r: number, c: number) => boolean;
+}
+
+/** 엑셀 등에서 복사한 탭 구분 텍스트를 (r, c)부터 붙여넣기 — 기본은 넘치면 행·열 추가 */
+export function pasteTsv(s: Sheet, r: number, c: number, text: string, opts: PasteOptions = {}): Sheet {
   const lines = text.replace(/\r?\n$/, '').split(/\r?\n/).map((l) => l.split('\t'));
   const width = Math.max(...lines.map((l) => l.length));
   let next = s;
-  while (next.rows.length < r + lines.length) next = insertRow(next, next.rows.length);
-  while (next.cols.length < c + width) next = insertCol(next, next.cols.length);
-  lines.forEach((cells, i) => cells.forEach((v, j) => (next = setCellValue(next, r + i, c + j, v))));
+  if (opts.grow !== false) {
+    while (next.rows.length < r + lines.length) next = insertRow(next, next.rows.length);
+    while (next.cols.length < c + width) next = insertCol(next, next.cols.length);
+  }
+  lines.forEach((cells, i) =>
+    cells.forEach((v, j) => {
+      const rr = r + i;
+      const cc = c + j;
+      if (rr >= next.rows.length || cc >= next.cols.length) return;
+      if (opts.canWrite && !opts.canWrite(rr, cc)) return;
+      next = setCellValue(next, rr, cc, v, { allowFormula: opts.allowFormula ? opts.allowFormula(rr, cc) : true });
+    })
+  );
   return next;
 }
 

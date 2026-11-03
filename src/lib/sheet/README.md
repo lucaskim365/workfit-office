@@ -38,12 +38,12 @@ s = insertRow(s, 0);                         // 값은 B4로 따라 내려감
 
 - 수식: `evaluateFormula`, `shiftFormula`, `parseNumber`, `valueText`, `colLetter`, `colIndex`, `FormulaError`, `FORMULA_ERROR`
 - 데이터: `createSheet`, `parseSheet`, `serializeSheet`, `recalculate`, `sheetSignature`, `cellKey`, `newColKey`
-- 조작(모두 새 시트를 돌려주는 순수 함수): `insertRow`, `deleteRow`, `insertCol`, `deleteCol`, `mergeRange`, `unmergeAt`, `setCellValue`, `applyStyle`, `applyBorder`, `pasteTsv`, `setCellMeta`, `setRowMeta`, `setColMeta`
+- 조작(모두 새 시트를 돌려주는 순수 함수): `insertRow`, `deleteRow`, `insertCol`, `deleteCol`, `mergeRange`, `unmergeAt`, `setCellValue`, `applyStyle`, `applyBorder`, `pasteTsv`(옵션: 늘리지 않기·칸별 쓰기/수식 허용), `setCellMeta`, `setRowMeta`, `setColMeta`
 - 표시: `cellCss`, `displayValue`, `defaultAlign`, `SHEET_COLORS`
 
 ## 지원 수식
 
-- 연산: `+ - * /`, 결합 `&`, 비교 `= <> < > <= >=`, 괄호, 단항 `-`
+- 연산: `+ - * / ^`, 퍼센트 `%`, 결합 `&`, 비교 `= <> < > <= >=`, 괄호, 단항 `-` (엑셀처럼 `-2^2 = 4`)
 - 참조: `A1`, 절대 참조 `$A$1`, 범위 `A1:C3`(함수 인자에서)
-- 함수: `SUM`, `AVERAGE`, `MIN`, `MAX`, `ROUND`, `IF`
+- 함수: `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTA`, `SUMIF`, `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `ABS`, `IF`, `IFERROR`
 - 규칙: 0으로 나누면 0, 순환 참조는 0, 잘못된 식은 `#오류`, 숫자로 안 읽히는 글자로 산술하면 `#오류`, `IF`의 거짓값을 생략하면 빈 칸, 병합에 가려진 칸은 빈 칸으로 읽음

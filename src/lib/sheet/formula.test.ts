@@ -134,3 +134,32 @@ test('숫자 해석 — 콤마는 세 자리 묶음만, 중간 공백은 숫자 
   const g = [['010 1234 5678', '5']];
   assert.equal(evaluateFormula('=SUM(A1:B1)', (r, c) => g[r]?.[c] ?? ''), 5);
 });
+
+test('엑셀 연산 — %·^·우선순위', () => {
+  assert.equal(evaluateFormula('=A1*10%', get), 1);
+  assert.equal(evaluateFormula('=50%%', get), 0.005);
+  assert.equal(evaluateFormula('=2^3', get), 8);
+  assert.equal(evaluateFormula('=-2^2', get), 4);
+  assert.equal(evaluateFormula('=2^3^2', get), 64);
+  assert.equal(evaluateFormula('=1+2*3^2', get), 19);
+  assert.equal(evaluateFormula('=(1+1)%', get), 0.02);
+});
+
+test('추가 함수 — COUNT·COUNTA·SUMIF·ROUNDUP·ROUNDDOWN·ABS·IFERROR', () => {
+  assert.equal(evaluateFormula('=COUNT(A1:C2)', get), 4); // 10·20·1,200·₩3,000
+  assert.equal(evaluateFormula('=COUNTA(A1:C2)', get), 5); // 빈 칸 1개 제외
+  assert.equal(evaluateFormula('=SUMIF(A1:B1,">15")', get), 20);
+  assert.equal(evaluateFormula('=SUMIF(A2:A2,"A",B2:B2)', get), 1200);
+  assert.equal(evaluateFormula('=SUMIF(A1:B1,10)', get), 10);
+  assert.equal(evaluateFormula('=ROUNDUP(1.21,1)', get), 1.3);
+  assert.equal(evaluateFormula('=ROUNDDOWN(-1.29,1)', get), -1.2);
+  assert.equal(evaluateFormula('=ROUNDUP(1234,-2)', get), 1300);
+  assert.equal(evaluateFormula('=ABS(-A1)', get), 10);
+  assert.equal(evaluateFormula('=IFERROR(A2+1,"없음")', get), '없음');
+  assert.equal(evaluateFormula('=IFERROR(A1+1,0)', get), 11);
+  assert.throws(() => evaluateFormula('=SUMIF(A1,1)', get), FormulaError);
+});
+
+test('행 추가 시 ^·% 가 든 수식도 참조만 옮김', () => {
+  assert.equal(shiftFormula('=A2^2*10%', { type: 'row_add', atIndex: 0 }), '=A3^2*10%');
+});
