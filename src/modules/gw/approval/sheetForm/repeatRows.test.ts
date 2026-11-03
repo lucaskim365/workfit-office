@@ -102,7 +102,7 @@ test('검사 — 끊긴 구간, 구간 안 칸 이름', () => {
   assert.ok(repeatIssues(s).some((m) => m.includes('끊겼습니다')));
   let t = itemForm();
   t = setCellMeta(t, APPROVAL_NS.name, 1, 3, 'amount');
-  assert.ok(repeatIssues(t).some((m) => m.includes('칸 이름')));
+  assert.ok(repeatIssues(t).some((m) => m.includes('금액 키')));
   assert.deepEqual(repeatIssues(itemForm()), []);
 });
 

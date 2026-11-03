@@ -75,6 +75,15 @@ export function useApprovalBoxes(userId: string | undefined): ApprovalBoxes {
   }, [q.data, q.isLoading, userId, userDeptNameOrId, postReadDocIds]);
 }
 
+/**
+ * 이미 받아 둔 전체 문서 목록(캐시)에서 문서 하나 찾기 — 새로 구독하지 않는다.
+ * 같은 화면 어딘가에서 useAllApprovals/useApprovalDoc 이 목록을 받아 두었을 때 쓴다(없으면 null)
+ */
+export function useCachedApprovalLookup(): (id: string) => ApprovalDoc | null {
+  const qc = useQueryClient();
+  return (id) => qc.getQueryData<ApprovalDoc[]>([KEY])?.find((d) => d.id === id) ?? null;
+}
+
 /** 단일 문서 상세(전체 캐시에서 도출 — 목록과 동일 원천으로 낙관적 갱신 즉시 반영). */
 export function useApprovalDoc(id: string | null | undefined): ApprovalDoc | null {
   const q = useAllApprovals();

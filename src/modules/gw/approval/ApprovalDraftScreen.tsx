@@ -14,8 +14,8 @@ import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, 
 import { withSealTexts } from '@/domain/approvalForm/headerItems';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
-import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
-import { useActiveApprovalForms } from '@/features/gw/useApprovalForms';
+import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc, useCachedApprovalLookup } from '@/features/gw/useApprovals';
+import { useActiveApprovalForms, useApprovalForms } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useLeave } from '@/features/gw/useLeave';
@@ -28,7 +28,9 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
 import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
-import { SheetDraftForm } from './sheetForm/SheetDraftForm';
+import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
+import { isSheetDoc } from './sheetForm/SheetDocView';
+import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
 import { SHEET_VERSION_KEY } from './sheetForm/approvalSheet';
 import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
@@ -986,6 +988,25 @@ function ApprovalDraftInner({
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
   const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : (sheetLatest.get(form.id) ?? null);
   const sheetIssuesRef = useRef<string[]>([]);
+  // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
+  const findDoc = useCachedApprovalLookup();
+  const { data: allForms = [] } = useApprovalForms();
+  const relatedSources = useMemo<RelatedSource[]>(
+    () =>
+      relatedDocs.map((rd) => ({
+        id: rd.docId,
+        label: `${rd.docNo} ${rd.title}`,
+        load: () => {
+          const d = findDoc(rd.docId);
+          if (!d) return null;
+          if (isSheetDoc(d.fieldValues)) return readNamed(d.fieldValues[SHEET_NAMED_KEY]);
+          const f = allForms.find((x) => x.code === d.docType);
+          return f ? namedFromLegacy(f.fields, d.fieldValues) : null;
+        },
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [relatedDocs, allForms]
+  );
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
   const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
@@ -1683,6 +1704,7 @@ function ApprovalDraftInner({
                     if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
+                  relatedSources={relatedSources}
                 />
               ) : undefined
             }

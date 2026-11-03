@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, Plus, Trash2, X } from 'lucide-react';
+import { Building2, Download, Plus, Trash2, X } from 'lucide-react';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
@@ -18,6 +18,7 @@ import {
   sheetDocFields,
   type CellInput,
 } from './approvalSheet';
+import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from './relatedImport';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, readRowExtras, removeRepeatRow, repeatSections } from './repeatRows';
 
 /**
@@ -202,9 +203,18 @@ export interface SheetDraftFormProps {
   onIssues?: (invalidCells: string[]) => void;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기의 '기안 미리보기'(편집 중인 틀, 저장 안 함) */
   template?: Sheet;
+  /** 값을 가져올 수 있는 관련 문서 — load 는 그 문서의 이름 값(없으면 null) */
+  relatedSources?: RelatedSource[];
 }
 
-export function SheetDraftForm({ formId, version, values, onFields, onIssues, template }: SheetDraftFormProps) {
+export interface RelatedSource {
+  id: string;
+  /** 단추에 보일 이름(문서번호·제목) */
+  label: string;
+  load: () => NamedValues | null;
+}
+
+export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [] }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
   const isLoading = !template && fetched.isLoading;
@@ -218,7 +228,12 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
   const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
   const emit = (s: Sheet, rowExtras: typeof extras, refMap: Record<string, string>) =>
-    onFields({ ...sheetDocFields(s, key, rowExtras), [SHEET_REFS_KEY]: JSON.stringify(refMap) });
+    onFields({
+      ...sheetDocFields(s, key, rowExtras),
+      [SHEET_REFS_KEY]: JSON.stringify(refMap),
+      // 이름 붙은 칸 값 — 다른 문서가 '관련 문서 값 가져오기'로 읽는다
+      [SHEET_NAMED_KEY]: JSON.stringify(collectNamed(s)),
+    });
   // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
   const sheet = useMemo(
     () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, extras), readSheetValues(rawValues), { recalc: true }) : null),
@@ -254,6 +269,19 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
     emit(recalculate(next), extras, refMap);
   };
 
+  /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
+  const importFrom = (src: RelatedSource) => {
+    if (!loaded?.sheet) return;
+    const named = src.load();
+    if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
+    const res = importNamed(loaded.sheet, extras, readSheetValues(rawValues), refs, named);
+    if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
+    if (!confirm(`'${src.label}'에서 ${res.filled.join(', ')} 값을 가져옵니다.
+이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
+    emit(sheetWith(loaded.sheet, res), res.extras, res.refs);
+  };
+  const canImport = !!loaded?.sheet && hasImportableNames(loaded.sheet) && relatedSources.length > 0;
+
   /** 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다 */
   const changeRows = (id: string, add: boolean) => {
     if (!loaded?.sheet) return;
@@ -268,6 +296,24 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
     <div>
+      {canImport && (
+        // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 같은 이름 칸 값을 복사(§11.4). 인쇄에는 안 나옴
+        <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded border border-dashed border-teal/40 bg-teal-soft/20 px-2 py-1.5 text-[11px] print:hidden">
+          <span className="font-semibold text-[#444]">관련 문서 값 가져오기</span>
+          {relatedSources.map((src) => (
+            <button
+              key={src.id}
+              type="button"
+              onClick={() => importFrom(src)}
+              className="flex max-w-[260px] items-center gap-1 rounded bg-white px-2 py-0.5 font-semibold text-teal shadow-xs hover:bg-teal-soft/60"
+              title={`${src.label}의 같은 이름 칸 값을 가져옵니다`}
+            >
+              <Download className="h-3 w-3 shrink-0" />
+              <span className="truncate">{src.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <SheetView
           sheet={sheet}

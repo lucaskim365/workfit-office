@@ -18,6 +18,8 @@ import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSect
  * 시트 서식 편집기 — 고른 칸의 결재 속성(입력 칸·칸 이름·불러오기·잠금·비공개·직인).
  * 보이는 값은 초점 칸 기준이고, 바꾸면 고른 범위 전체에 넣는다(칸 이름만 초점 칸 하나에).
  */
+/** 칸 이름 고르기에서 '직접 쓰기' 항목 값 */
+const CUSTOM = '__custom__';
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-50';
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -62,6 +64,21 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
+
+  // 칸 이름 직접 쓰기 — 시스템 이름(금액 키)과 겹치거나 '__'로 시작하는 이름은 받지 않는다(저장 키와 섞이지 않게)
+  const [customNameMode, setCustomNameMode] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  useEffect(() => {
+    setCustomNameMode(false);
+    setNameDraft('');
+  }, [focus.r, focus.c]);
+  const commitCustomName = () => {
+    const name = nameDraft.trim();
+    setCustomNameMode(false);
+    setNameDraft('');
+    if (!name || name.startsWith('__') || COMMON_CELL_NAMES.some((n) => n.key === name || n.label === name)) return;
+    onChange(setCellName(sheet, focus.r, focus.c, name));
+  };
 
   return (
     <div className="space-y-3.5 text-[12px]">
@@ -130,19 +147,43 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
 
       <Row
         label="칸 이름"
-        hint={multi ? '칸 이름은 한 칸에만 붙습니다(지금 초점 칸).' : '다른 기능이 이 칸 값을 찾는 이름. 한 서식에 하나씩만 붙고, 다른 칸에 붙이면 옮겨집니다.'}
+        hint={
+          multi
+            ? '칸 이름은 한 칸에만 붙습니다(지금 초점 칸).'
+            : "다른 기능·다른 문서가 이 칸 값을 찾는 이름(서식에 하나씩). 금액 키는 결재선 금액, 직접 쓴 이름(예: 품명·공급가액)은 '관련 문서 값 가져오기'에서 같은 이름 칸끼리 복사됩니다. 반복 구간 안이면 그 열의 이름."
+        }
       >
-        <select className={inp} value={props.name ?? ''} onChange={(e) => onChange(setCellName(sheet, focus.r, focus.c, e.target.value || undefined))}>
+        <select
+          className={inp}
+          value={customNameMode ? CUSTOM : (props.name ?? '')}
+          onChange={(e) => {
+            if (e.target.value === CUSTOM) return setCustomNameMode(true);
+            setCustomNameMode(false);
+            onChange(setCellName(sheet, focus.r, focus.c, e.target.value || undefined));
+          }}
+        >
           <option value="">이름 없음</option>
           {COMMON_CELL_NAMES.map((n) => (
             <option key={n.key} value={n.key} title={n.hint}>
               {n.label}
             </option>
           ))}
-          {props.name && !COMMON_CELL_NAMES.some((n) => n.key === props.name) && (
-            <option value={props.name}>{props.name === 'body' ? '본문' : props.name} (지금은 쓰지 않는 이름 — 지워 주세요)</option>
-          )}
+          {props.name && props.name !== 'body' && !COMMON_CELL_NAMES.some((n) => n.key === props.name) && <option value={props.name}>{props.name}</option>}
+          {props.name === 'body' && <option value="body">본문 (지금은 쓰지 않는 이름 — 지워 주세요)</option>}
+          <option value={CUSTOM}>직접 쓰기…</option>
         </select>
+        {customNameMode && (
+          <input
+            className={inp}
+            autoFocus
+            maxLength={30}
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && commitCustomName()}
+            onBlur={commitCustomName}
+            placeholder="이름(예: 품명) 쓰고 Enter"
+          />
+        )}
       </Row>
 
       <div className="space-y-0.5 border-t border-border pt-2.5">

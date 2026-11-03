@@ -94,10 +94,20 @@ export function repeatIssues(s: Sheet): string[] {
     if (seen.has(x.id)) errors.push(`반복 구간 '${x.label}'이 중간에 끊겼습니다. 구간 행을 다시 골라 지정해 주세요.`);
     seen.add(x.id);
   });
-  Object.keys(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach((key) => {
-    const r = Number(key.slice(0, key.indexOf(':')));
+  // 구간 안 칸 이름은 그 구간의 '열 이름'(관련 문서 값 가져오기) — 한 열에 하나만. 금액 키는 한 값이라 구간 밖에
+  const colNames = new Map<string, string>();
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
     const x = sections.find((sec) => r >= sec.first && r <= sec.last);
-    if (x) errors.push(`반복 구간 '${x.label}' 안의 칸에는 칸 이름(금액 키 등)을 붙일 수 없습니다. 합계처럼 구간 밖 칸에 붙여 주세요.`);
+    if (!x) return;
+    if (name === 'amount') {
+      errors.push(`반복 구간 '${x.label}' 안의 칸에는 금액 키를 붙일 수 없습니다. 합계처럼 구간 밖 칸에 붙여 주세요.`);
+      return;
+    }
+    const colKey = `${x.id}|${key.slice(i + 1)}`;
+    if (colNames.has(colKey)) errors.push(`반복 구간 '${x.label}'의 한 열에 칸 이름이 둘입니다('${colNames.get(colKey)}', '${String(name)}'). 열마다 하나만 붙여 주세요.`);
+    else colNames.set(colKey, String(name));
   });
   return errors;
 }

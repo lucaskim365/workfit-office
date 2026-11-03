@@ -354,8 +354,11 @@ export function readSheetValues(raw: unknown): SheetValues {
  * 이름 붙은 칸 값은 연동 기능이 이름으로 읽는다(지금은 amount → 문서 금액 → 결재선 금액 조건).
  */
 export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<string, number> = {}): Record<string, string> {
+  // 시스템 이름(금액 키 등)만 문서 맨 위 칸으로 — 연동이 그 키로 읽는다. 직접 쓴 이름은 __named 에만(relatedImport.ts)
+  const system = new Set(COMMON_CELL_NAMES.map((n) => n.key));
+  const named = Object.fromEntries(Object.entries(namedValues(s)).filter(([k]) => system.has(k)));
   return {
-    ...namedValues(s),
+    ...named,
     [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),
     [SHEET_VERSION_KEY]: formVersion,
     // 반복 구간에 붙인 줄 수(repeatRows.ts SHEET_ROWS_KEY) — 없어도 키는 남겨 줄을 다 지운 뒤 옛 값이 남지 않게
