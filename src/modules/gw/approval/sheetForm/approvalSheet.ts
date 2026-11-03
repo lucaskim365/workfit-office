@@ -187,11 +187,11 @@ export function bindLabel(source: string): string {
 
 /**
  * 칸 이름 — 시스템이 정한 목록에서만 고른다(연동이 이 이름으로 값을 찾음). 화면에는 한글 이름만.
- * 지금은 모든 서식 공통 이름만. 연동 유형별 이름(휴가 기간 등)은 대체 서식 단계(§11.7-5)에서 더한다.
+ * 지금 읽는 기능이 있는 이름만 둔다: 금액키(기존 서식의 '금액키'와 같은 역할 — 문서 금액이 되어 결재선 규칙의 금액 조건이 읽음).
+ * 본문(body)·휴가 기간 같은 연동 이름은 휴가원 등을 시트로 옮길 때(§11.7-5) 더한다. 저장 키(amount)는 바꾸지 말 것.
  */
 export const COMMON_CELL_NAMES: { key: string; label: string; hint: string }[] = [
-  { key: 'body', label: '본문', hint: '문서 목록 미리보기·검색에 쓰는 글' },
-  { key: 'amount', label: '결재 금액', hint: '금액별 결재선 규칙이 읽는 금액' },
+  { key: 'amount', label: '금액키', hint: '문서 금액 — 결재선 규칙의 금액 조건이 읽음(기존 서식의 금액키와 같음)' },
 ];
 
 export function cellNameLabel(key: string): string {
@@ -312,7 +312,7 @@ export function validateApprovalSheet(s: Sheet): string[] {
     if (name === 'amount') {
       const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
       const numeric = input ? input.type === 'number' || input.type === 'currency' : s.formulas[key] !== undefined;
-      if (!numeric) errors.push(`${cellAddress(p.r, p.c)}: '결재 금액' 칸은 숫자·금액 입력 칸이거나 수식 칸이어야 합니다.`);
+      if (!numeric) errors.push(`${cellAddress(p.r, p.c)}: '금액키' 칸은 숫자·금액 입력 칸이거나 수식 칸이어야 합니다.`);
     }
   });
   return errors;
@@ -344,7 +344,7 @@ export function readSheetValues(raw: unknown): SheetValues {
 
 /**
  * 문서 fieldValues 로 저장할 것 — 칸 값(JSON), 서식 버전, 이름 붙은 칸 값(body·amount 등).
- * 이름 붙은 칸 값은 목록 미리보기·검색·금액별 결재선이 그대로 읽는다.
+ * 이름 붙은 칸 값은 연동 기능이 이름으로 읽는다(지금은 amount → 문서 금액 → 결재선 금액 조건).
  */
 export function sheetDocFields(s: Sheet, formVersion: string): Record<string, string> {
   return {

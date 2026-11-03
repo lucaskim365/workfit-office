@@ -1679,7 +1679,7 @@ function ApprovalDraftInner({
                   values={values}
                   onFields={(fields) => {
                     setVals(fields);
-                    // 결재 금액 칸 → 금액별 결재선 규칙이 읽는 금액
+                    // 금액키 칸 → 문서 금액(결재선 규칙의 금액 조건이 읽음)
                     if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}

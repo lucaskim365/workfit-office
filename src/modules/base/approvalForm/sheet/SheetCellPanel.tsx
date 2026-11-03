@@ -138,6 +138,9 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
               {n.label} — {n.hint}
             </option>
           ))}
+          {props.name && !COMMON_CELL_NAMES.some((n) => n.key === props.name) && (
+            <option value={props.name}>{props.name === 'body' ? '본문' : props.name} (지금은 쓰지 않는 이름 — 지워 주세요)</option>
+          )}
         </select>
       </Row>
 

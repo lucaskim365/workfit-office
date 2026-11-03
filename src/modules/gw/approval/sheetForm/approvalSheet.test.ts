@@ -148,7 +148,7 @@ test('칸 이름은 서식에 하나 — 다른 칸에 붙이면 옛 칸에서 �
   assert.equal(s.cellMeta.name, undefined);
 });
 
-test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸, 숫자 아닌 결재 금액', () => {
+test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸, 숫자 아닌 금액키', () => {
   assert.equal(validateApprovalSheet(createSheet(2, 2)).length, 1);
   let s = createSheet(2, 3);
   s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'select', options: [' '] });
@@ -160,7 +160,7 @@ test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸
   assert.equal(errs.length, 3);
   assert.match(errs[0], /^A1: 선택 칸/);
   assert.match(errs[1], /^B1: 수식 칸/);
-  assert.match(errs[2], /^A2: '결재 금액'/);
+  assert.match(errs[2], /^A2: '금액키'/);
 
   let ok = createSheet(2, 2);
   ok = setCellMeta(ok, APPROVAL_NS.input, 0, 0, { type: 'currency' });
