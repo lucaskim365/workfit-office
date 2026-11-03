@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
-import { APPROVAL_NS, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue } from '@/lib/sheet';
 
 function base(): Sheet {
@@ -115,4 +115,57 @@ test('값만 뽑아 틀에 다시 얹으면 같은 문서, 상신 문서는 저�
 test('이름 붙은 칸 값은 이름으로 복사', () => {
   const s = setApprovalCellValue(form(), 0, 1, '5,000');
   assert.deepEqual(namedValues(s), { amount: '5,000' });
+});
+
+test('칸 속성 — 범위에 넣고 빼기, 병합에 가려진 칸은 건너뜀', () => {
+  let s = createSheet(3, 3);
+  s = { ...s, merges: [{ startRow: 0, startCol: 0, rowSpan: 1, colSpan: 2 }] };
+  const all = { r1: 0, c1: 0, r2: 1, c2: 1 };
+  s = setApprovalProp(s, all, APPROVAL_NS.input, { type: 'text' });
+  const [a, b] = s.cols;
+  assert.ok(s.cellMeta.input[cellKey(0, a)]);
+  assert.equal(s.cellMeta.input[cellKey(0, b)], undefined); // 가려진 칸
+  assert.ok(s.cellMeta.input[cellKey(1, a)]);
+  assert.ok(s.cellMeta.input[cellKey(1, b)]);
+  assert.deepEqual(approvalCellProps(s, 1, 1).input, { type: 'text' });
+  s = setApprovalProp(s, all, APPROVAL_NS.input, undefined);
+  assert.equal(s.cellMeta.input, undefined);
+  s = setApprovalProp(s, { r1: 2, c1: 2, r2: 2, c2: 2 }, APPROVAL_NS.lock, true);
+  assert.equal(approvalCellProps(s, 2, 2).lock, true);
+  s = setApprovalProp(s, { r1: 2, c1: 2, r2: 2, c2: 2 }, APPROVAL_NS.lock, false);
+  assert.equal(approvalCellProps(s, 2, 2).lock, false);
+});
+
+test('칸 이름은 서식에 하나 — 다른 칸에 붙이면 옛 칸에서 떨어진다', () => {
+  let s = createSheet(2, 2);
+  s = setCellName(s, 0, 0, 'amount');
+  s = setCellName(s, 1, 1, 'amount');
+  assert.equal(approvalCellProps(s, 0, 0).name, undefined);
+  assert.equal(approvalCellProps(s, 1, 1).name, 'amount');
+  s = setCellName(s, 1, 1, 'body'); // 한 칸엔 이름 하나
+  assert.deepEqual(Object.values(s.cellMeta.name), ['body']);
+  s = setCellName(s, 1, 1, undefined);
+  assert.equal(s.cellMeta.name, undefined);
+});
+
+test('저장 전 검사 — 입력 칸 없음, 빈 선택 칸, 수식 입력 칸, 숫자 아닌 결재 금액', () => {
+  assert.equal(validateApprovalSheet(createSheet(2, 2)).length, 1);
+  let s = createSheet(2, 3);
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'select', options: [' '] });
+  s = setCellValue(s, 0, 1, '=1+1');
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'number' });
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 0, { type: 'text' });
+  s = setCellName(s, 1, 0, 'amount');
+  const errs = validateApprovalSheet(s);
+  assert.equal(errs.length, 3);
+  assert.match(errs[0], /^A1: 선택 칸/);
+  assert.match(errs[1], /^B1: 수식 칸/);
+  assert.match(errs[2], /^A2: '결재 금액'/);
+
+  let ok = createSheet(2, 2);
+  ok = setCellMeta(ok, APPROVAL_NS.input, 0, 0, { type: 'currency' });
+  ok = setCellName(ok, 0, 0, 'amount');
+  ok = setCellValue(ok, 1, 1, '=A1*2');
+  ok = setCellName(ok, 1, 1, 'body'); // 수식 칸에 이름 — 문제 없음
+  assert.deepEqual(validateApprovalSheet(ok), []);
 });

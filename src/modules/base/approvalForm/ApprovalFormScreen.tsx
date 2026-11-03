@@ -8,10 +8,12 @@ import {
   useRemoveApprovalFolder,
 } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
 import { ApprovalFormCatalog } from './components/ApprovalFormCatalog';
+import { SheetFormDesigner } from './sheet/SheetFormDesigner';
 import { Pencil, Trash2, Folder, Layers } from 'lucide-react';
 
 export default function ApprovalFormScreen() {
@@ -28,6 +30,17 @@ export default function ApprovalFormScreen() {
   // 현재 편집 중인 서식 (null 이면 카탈로그 목록 뷰, 객체면 전용 A4 위지윅 디자이너 뷰)
   const [sel, setSel] = useState<ApprovalForm | null>(null);
   const [msg, setMsg] = useState('');
+  // 시트 서식 편집 중이면 그 서식과 열 때의 최신 버전(새 시트 서식은 null)
+  const [sheetSel, setSheetSel] = useState<{ form: ApprovalForm; version: number | null } | null>(null);
+  const { latest: sheetVersions } = useSheetFormVersions();
+
+  /** 서식 열기 — 시트 서식(버전이 있는 서식)은 시트 편집기로, 나머지는 기존 편집기로 */
+  const openForm = (form: ApprovalForm) => {
+    const v = sheetVersions.get(form.id);
+    if (v !== undefined) setSheetSel({ form, version: v });
+    else setSel(form);
+    setMsg('');
+  };
 
   // 현재 선택된 폴더 필터 (null 이면 전체, 'root' 이면 루트 미지정 서식들)
   const [selFolderId, setSelFolderId] = useState<string | null>(null);
@@ -113,13 +126,28 @@ export default function ApprovalFormScreen() {
   };
 
   const duplicate = (form: ApprovalForm) => {
+    if (sheetVersions.has(form.id)) {
+      alert('시트 서식 복사는 아직 지원하지 않습니다. 새 시트 서식을 만들고 엑셀 불러오기를 써 주세요.');
+      return;
+    }
     setSel({ ...form, id: '', code: `${form.code}_사본`, name: `${form.name} 사본`, system: false, order: 99 });
     setMsg('');
   };
 
   // 원클릭 사용/중지 상태 토글
   const toggleActive = async (form: ApprovalForm) => {
+    // 시트 서식은 기안·결재 화면 연결(3단계) 전이라 켜면 빈 서식으로 기안된다
+    if (!form.active && sheetVersions.has(form.id)) {
+      alert('시트 서식은 기안 화면 연결 작업이 끝난 뒤 사용할 수 있습니다. 지금은 편집·저장만 됩니다.');
+      return;
+    }
     await upsert.mutateAsync({ ...form, active: !form.active });
+  };
+
+  // 새 시트 서식 추가(엑셀 불러오기·시트 편집)
+  const handleAddSheetForm = () => {
+    setSheetSel({ form: { ...blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null), fields: [], active: false }, version: null });
+    setMsg('');
   };
 
   // 새 서식 추가
@@ -195,7 +223,15 @@ export default function ApprovalFormScreen() {
   return (
     <div className="flex flex-col gap-3.5 relative">
       {/* 1. 편집 모드일 때: 전용 전체화면 위지윅 디자이너 */}
-      {sel ? (
+      {sheetSel ? (
+        <SheetFormDesigner
+          form={sheetSel.form}
+          version={sheetSel.version}
+          forms={forms}
+          folders={folders}
+          onClose={() => setSheetSel(null)}
+        />
+      ) : sel ? (
         <ApprovalFormEditor
           form={sel}
           folders={folders}
@@ -221,12 +257,21 @@ export default function ApprovalFormScreen() {
                 기준 정보 / 결재서식 관리 · 전사 전자결재 문서 양식 및 위지윅 A4 디자인 관리
               </p>
             </div>
-            <button
-              onClick={handleAddNewForm}
-              className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white shadow-xs hover:opacity-90 cursor-pointer"
-            >
-              + 새 서식 추가
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAddSheetForm}
+                title="엑셀 양식을 불러오거나 엑셀처럼 직접 그려 만드는 서식 (기안 연결 준비 중)"
+                className="rounded-lg border border-border bg-panel px-3.5 py-2 text-[12.5px] font-bold text-ink2 shadow-xs hover:text-ink cursor-pointer"
+              >
+                + 시트 서식 (엑셀)
+              </button>
+              <button
+                onClick={handleAddNewForm}
+                className="rounded-lg bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white shadow-xs hover:opacity-90 cursor-pointer"
+              >
+                + 새 서식 추가
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-[260px_1fr] items-start gap-3.5">
@@ -299,15 +344,17 @@ export default function ApprovalFormScreen() {
                           <button
                             key={f.id}
                             type="button"
-                            onClick={() => {
-                              setSel(f);
-                              setMsg('');
-                            }}
+                            onClick={() => openForm(f)}
                             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-panel-alt transition-colors cursor-pointer"
                           >
                             <span className="text-[13px]">{f.icon || '📄'}</span>
                             <span className="min-w-0 flex-1 truncate text-[11.5px]">
                               {f.name}
+                              {sheetVersions.has(f.id) && (
+                                <span className="ml-1 rounded bg-sky-500/15 px-1 py-0.2 text-[8px] font-bold text-sky-600">
+                                  시트
+                                </span>
+                              )}
                               {f.system && (
                                 <span className="ml-1 rounded bg-ink3/10 px-1 py-0.2 text-[8px] font-bold text-ink3">
                                   기본
@@ -383,15 +430,17 @@ export default function ApprovalFormScreen() {
                             <button
                               key={formItem.id}
                               type="button"
-                              onClick={() => {
-                                setSel(formItem);
-                                setMsg('');
-                              }}
+                              onClick={() => openForm(formItem)}
                               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-panel-alt transition-colors cursor-pointer"
                             >
                               <span className="text-[13px]">{formItem.icon || '📄'}</span>
                               <span className="min-w-0 flex-1 truncate text-[11.5px]">
                                 {formItem.name}
+                                {sheetVersions.has(formItem.id) && (
+                                  <span className="ml-1 rounded bg-sky-500/15 px-1 py-0.2 text-[8px] font-bold text-sky-600">
+                                    시트
+                                  </span>
+                                )}
                                 {formItem.system && (
                                   <span className="ml-1 rounded bg-ink3/10 px-1 py-0.2 text-[8px] font-bold text-ink3">
                                     기본
@@ -421,10 +470,8 @@ export default function ApprovalFormScreen() {
               forms={forms}
               folders={folders}
               selFolderId={selFolderId}
-              onSelectForm={(formItem) => {
-                setSel(formItem);
-                setMsg('');
-              }}
+              onSelectForm={openForm}
+              sheetVersions={sheetVersions}
               onAddNewForm={handleAddNewForm}
               onToggleActive={toggleActive}
               onDuplicate={duplicate}

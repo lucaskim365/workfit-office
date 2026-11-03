@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { cellKey, pasteTsv, recalculate, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
+import { cellKey, colLetter, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
 
 /** 시트 부가 정보 이름공간 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const APPROVAL_NS = {
@@ -158,3 +158,187 @@ export function namedValues(s: Sheet): Record<string, string> {
   });
   return out;
 }
+
+// ── 서식 편집기(관리자)용 — 칸 속성 이름표·읽기·쓰기·저장 전 검사 ──
+
+/** 입력 칸 종류 이름표 (화면 표시 순서) */
+export const CELL_INPUT_LABELS: Record<CellInputType, string> = {
+  text: '한 줄 글',
+  multiline: '여러 줄 글',
+  number: '숫자',
+  currency: '금액',
+  date: '날짜',
+  dateRange: '기간',
+  select: '선택(하나)',
+  multiSelect: '선택(여러 개)',
+  checkbox: '체크',
+  user: '사람',
+  dept: '부서',
+};
+
+/** 데이터 불러오기 출처 — 묶음별. 사업(project.*)은 담당자 프로젝트 관리 엑셀을 받은 뒤 항목을 정한다(§11.4) */
+export const BIND_GROUPS: { label: string; items: { value: BindSource; label: string }[] }[] = [
+  {
+    label: '우리 회사',
+    items: [
+      { value: 'company.name', label: '회사명' },
+      { value: 'company.bizNo', label: '사업자등록번호' },
+      { value: 'company.ceo', label: '대표자' },
+      { value: 'company.address', label: '주소' },
+      { value: 'company.phone', label: '전화' },
+      { value: 'company.fax', label: '팩스' },
+    ],
+  },
+  {
+    label: '기안 정보',
+    items: [
+      { value: 'draft.drafter', label: '기안자' },
+      { value: 'draft.dept', label: '기안 부서' },
+      { value: 'draft.date', label: '기안일' },
+    ],
+  },
+];
+
+export function bindLabel(source: string): string {
+  for (const g of BIND_GROUPS) {
+    const hit = g.items.find((i) => i.value === source);
+    if (hit) return `${g.label} · ${hit.label}`;
+  }
+  return source;
+}
+
+/**
+ * 칸 이름 — 시스템이 정한 목록에서만 고른다(연동이 이 이름으로 값을 찾음). 화면에는 한글 이름만.
+ * 지금은 모든 서식 공통 이름만. 연동 유형별 이름(휴가 기간 등)은 대체 서식 단계(§11.7-5)에서 더한다.
+ */
+export const COMMON_CELL_NAMES: { key: string; label: string; hint: string }[] = [
+  { key: 'body', label: '본문', hint: '문서 목록 미리보기·검색에 쓰는 글' },
+  { key: 'amount', label: '결재 금액', hint: '금액별 결재선 규칙이 읽는 금액' },
+];
+
+export function cellNameLabel(key: string): string {
+  return COMMON_CELL_NAMES.find((n) => n.key === key)?.label ?? key;
+}
+
+/** 한 칸의 결재 속성 */
+export interface ApprovalCellProps {
+  input?: CellInput;
+  name?: string;
+  bind?: string;
+  lock: boolean;
+  secret: boolean;
+  seal: boolean;
+}
+
+const metaAt = (s: Sheet, ns: string, r: number, c: number): unknown => {
+  const col = s.cols[c];
+  return col === undefined ? undefined : s.cellMeta[ns]?.[cellKey(r, col)];
+};
+
+export function approvalCellProps(s: Sheet, r: number, c: number): ApprovalCellProps {
+  const input = metaAt(s, APPROVAL_NS.input, r, c) as CellInput | undefined;
+  const name = metaAt(s, APPROVAL_NS.name, r, c);
+  const bind = metaAt(s, APPROVAL_NS.bind, r, c);
+  return {
+    input: input && typeof input === 'object' ? input : undefined,
+    name: typeof name === 'string' ? name : undefined,
+    bind: typeof bind === 'string' ? bind : undefined,
+    lock: metaAt(s, APPROVAL_NS.lock, r, c) === true,
+    secret: metaAt(s, APPROVAL_NS.secret, r, c) === true,
+    seal: metaAt(s, APPROVAL_NS.seal, r, c) === true,
+  };
+}
+
+/** 범위 안의 칸 — 병합에 가려진 칸은 빼고 대표 칸만 */
+function visibleCells(s: Sheet, range: CellRange): { r: number; c: number }[] {
+  const r1 = Math.min(range.r1, range.r2);
+  const r2 = Math.max(range.r1, range.r2);
+  const c1 = Math.min(range.c1, range.c2);
+  const c2 = Math.max(range.c1, range.c2);
+  const out: { r: number; c: number }[] = [];
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      const covered = s.merges.some(
+        (m) => r >= m.startRow && r < m.startRow + m.rowSpan && c >= m.startCol && c < m.startCol + m.colSpan && !(r === m.startRow && c === m.startCol)
+      );
+      if (!covered) out.push({ r, c });
+    }
+  }
+  return out;
+}
+
+/**
+ * 범위의 모든 칸에 속성 하나를 넣거나 뺀다(value undefined/false → 뺌).
+ * 칸 이름은 서식에 하나뿐이어야 하므로 이 함수가 아니라 setCellName 을 쓴다.
+ */
+export function setApprovalProp(
+  s: Sheet,
+  range: CellRange,
+  ns: typeof APPROVAL_NS.input | typeof APPROVAL_NS.bind | typeof APPROVAL_NS.lock | typeof APPROVAL_NS.secret | typeof APPROVAL_NS.seal,
+  value: CellInput | string | boolean | undefined
+): Sheet {
+  const v = value === false || value === '' ? undefined : value;
+  return visibleCells(s, range).reduce((acc, { r, c }) => setCellMeta(acc, ns, r, c, v), s);
+}
+
+/** 칸 이름 붙이기 — 같은 이름이 다른 칸에 있으면 그 칸에서 뗀다(이름은 서식에 하나) */
+export function setCellName(s: Sheet, r: number, c: number, name: string | undefined): Sheet {
+  const col = s.cols[c];
+  if (col === undefined) return s;
+  const key = cellKey(r, col);
+  const rec = { ...(s.cellMeta[APPROVAL_NS.name] ?? {}) };
+  Object.keys(rec).forEach((k) => {
+    if (k === key || (name && rec[k] === name)) delete rec[k];
+  });
+  if (name) rec[key] = name;
+  const cellMeta = { ...s.cellMeta };
+  if (Object.keys(rec).length > 0) cellMeta[APPROVAL_NS.name] = rec;
+  else delete cellMeta[APPROVAL_NS.name];
+  return { ...s, cellMeta };
+}
+
+/** 칸 주소(A1) — 안내 문구용 */
+export function cellAddress(r: number, c: number): string {
+  return `${colLetter(c)}${r + 1}`;
+}
+
+/**
+ * 서식 저장 전 검사 — 기안이 안 되거나 연동이 틀어질 설정을 막는다.
+ * 돌려준 문구가 하나라도 있으면 저장하지 않는다.
+ */
+export function validateApprovalSheet(s: Sheet): string[] {
+  const errors: string[] = [];
+  const at = (key: string) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    return { r, c, ok: c >= 0 && r >= 0 && r < s.rows.length };
+  };
+  if (!Object.keys(s.cellMeta[APPROVAL_NS.input] ?? {}).length) {
+    errors.push('입력 칸이 하나도 없습니다. 기안자가 쓸 칸을 골라 \'입력 칸\'으로 정해 주세요.');
+  }
+  Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach(([key, v]) => {
+    const p = at(key);
+    if (!p.ok) return;
+    const input = v as CellInput;
+    if ((input.type === 'select' || input.type === 'multiSelect') && !(input.options ?? []).some((o) => o.trim())) {
+      errors.push(`${cellAddress(p.r, p.c)}: 선택 칸에 고를 항목이 없습니다.`);
+    }
+    if (s.formulas[key] !== undefined) {
+      errors.push(`${cellAddress(p.r, p.c)}: 수식 칸은 입력 칸이 될 수 없습니다(기안자가 쓰면 수식이 지워짐).`);
+    }
+  });
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const p = at(key);
+    if (!p.ok) return;
+    if (name === 'amount') {
+      const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
+      const numeric = input ? input.type === 'number' || input.type === 'currency' : s.formulas[key] !== undefined;
+      if (!numeric) errors.push(`${cellAddress(p.r, p.c)}: '결재 금액' 칸은 숫자·금액 입력 칸이거나 수식 칸이어야 합니다.`);
+    }
+  });
+  return errors;
+}
+
+/** A4 세로 인쇄 폭(px, 좌우 여백 10mm) — 서식 편집기의 안내선, 문서 보기의 맞춤 폭 */
+export const SHEET_PAGE_WIDTH = 718;

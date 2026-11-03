@@ -615,6 +615,26 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    id: 'approvalFormVersions',
+    name: '결재 시트 서식 버전',
+    /*
+      시트 서식의 틀(배치·병합·너비·서식·수식·칸 속성) — 서식을 저장할 때마다 한 벌씩 쌓고 고치지 않는다.
+      문서에는 값만 저장하고(fieldValues.__values) 어느 버전 위에 썼는지(__formVersion)를 남긴다.
+      $id = safeDocId(`${formId}@v${version}`). 서식 머리(이름·코드·폴더·권한)는 approvalForms 에 그대로.
+      기존 서식은 이 컬렉션에 버전이 없으므로 영향 없음(시트 서식 = 버전이 1개 이상인 서식).
+    */
+    attributes: [
+      S('formId', 64, true),
+      INT('version', true, undefined, 1),
+      J('sheet', 1_000_000),
+      S('note', 255),
+      S('createdBy', 64, true),
+      S('createdByName', 64),
+      S('createdAt', 40, true),
+    ],
+    indexes: [IX('formId', ['formId'])],
+  },
+  {
     id: 'approvalFolders',
     name: '결재 서식 폴더',
     attributes: [S('id', 64, true), S('name', 128, true), INT('order')],

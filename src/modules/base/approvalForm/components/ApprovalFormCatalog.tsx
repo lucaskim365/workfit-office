@@ -19,6 +19,8 @@ interface ApprovalFormCatalogProps {
   folders: ApprovalFolder[];
   selFolderId: string | null;
   onSelectForm: (form: ApprovalForm) => void;
+  /** 시트 서식 id → 최신 버전 번호 (시트 배지·입력 필드 대신 버전 표시) */
+  sheetVersions?: Map<string, number>;
   onAddNewForm: () => void;
   onToggleActive: (form: ApprovalForm) => void;
   onDuplicate: (form: ApprovalForm) => void;
@@ -30,6 +32,7 @@ export function ApprovalFormCatalog({
   folders,
   selFolderId,
   onSelectForm,
+  sheetVersions,
   onAddNewForm,
   onToggleActive,
   onDuplicate,
@@ -252,6 +255,11 @@ export function ApprovalFormCatalog({
                           <h3 className="truncate text-[13.5px] font-bold text-ink group-hover:text-teal transition-colors">
                             {formItem.name}
                           </h3>
+                          {sheetVersions?.has(formItem.id) && (
+                            <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.2 text-[9px] font-extrabold text-sky-600">
+                              시트
+                            </span>
+                          )}
                           {formItem.system && (
                             <span className="shrink-0 rounded bg-ink3/10 px-1.5 py-0.2 text-[9px] font-extrabold text-ink3">
                               기본
@@ -297,9 +305,9 @@ export function ApprovalFormCatalog({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-ink3">
-                      <span>입력 필드:</span>
+                      <span>{sheetVersions?.has(formItem.id) ? '시트 틀:' : '입력 필드:'}</span>
                       <span className="font-semibold text-ink2">
-                        {formItem.fields?.length ?? 0}개 항목
+                        {sheetVersions?.has(formItem.id) ? `v${sheetVersions.get(formItem.id)}` : `${formItem.fields?.length ?? 0}개 항목`}
                       </span>
                     </div>
                   </div>
@@ -329,14 +337,16 @@ export function ApprovalFormCatalog({
                     정렬순서: {formItem.order ?? 99}
                   </span>
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onDuplicate(formItem)}
-                      title="서식 복사"
-                      className="rounded p-1 text-ink3 hover:bg-panel hover:text-ink transition-colors cursor-pointer"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
+                    {!sheetVersions?.has(formItem.id) && (
+                      <button
+                        type="button"
+                        onClick={() => onDuplicate(formItem)}
+                        title="서식 복사"
+                        className="rounded p-1 text-ink3 hover:bg-panel hover:text-ink transition-colors cursor-pointer"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {!formItem.system && (
                       <button
                         type="button"

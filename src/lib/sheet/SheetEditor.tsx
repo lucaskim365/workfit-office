@@ -149,24 +149,36 @@ export function SheetEditor({
   }, [range.r1, range.r2, range.c1, range.c2, focus.r, focus.c]);
 
   // ── 변경·되돌리기 ───────────────────────────────────────
+  // 편집기가 마지막으로 내보낸(또는 받은) 값. 쓰는 쪽이 바깥에서 값을 바꾸면(칸 속성 패널·엑셀 불러오기 등)
+  // 그 직전 값을 되돌리기 목록에 넣어, 바깥 변경도 Ctrl+Z 로 되돌릴 수 있게 한다
+  const seenRef = useRef(value);
+  if (value !== seenRef.current) {
+    undoStack.current = [...undoStack.current.slice(-(HISTORY_LIMIT - 1)), seenRef.current];
+    redoStack.current = [];
+    seenRef.current = value;
+  }
+  const emit = (next: Sheet) => {
+    seenRef.current = next;
+    onChange(next);
+  };
   const commit = (next: Sheet) => {
     if (next === value) return;
     undoStack.current = [...undoStack.current.slice(-(HISTORY_LIMIT - 1)), value];
     redoStack.current = [];
-    onChange(next);
+    emit(next);
   };
   const update = (fn: (s: Sheet) => Sheet) => commit(fn(value));
   const undo = () => {
     const prev = undoStack.current.pop();
     if (!prev) return;
     redoStack.current.push(value);
-    onChange(prev);
+    emit(prev);
   };
   const redo = () => {
     const next = redoStack.current.pop();
     if (!next) return;
     undoStack.current.push(value);
-    onChange(next);
+    emit(next);
   };
 
   // ── 칸 ─────────────────────────────────────────────────
@@ -447,7 +459,7 @@ export function SheetEditor({
     const move = (ev: globalThis.MouseEvent) => {
       const size = Math.max(kind === 'col' ? 24 : 16, Math.round(startSize + (kind === 'col' ? ev.clientX : ev.clientY) - start));
       latest = kind === 'col' ? { ...base, colWidths: { ...base.colWidths, [key]: size } } : { ...base, rowHeights: { ...base.rowHeights, [key]: size } };
-      onChange(latest);
+      emit(latest);
     };
     const up = () => {
       window.removeEventListener('mousemove', move);
