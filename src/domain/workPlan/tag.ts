@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
 
-/** 고정 태그 — 회의·외근·출장은 이름·색을 바꾸거나 지울 수 없다. 색은 사람 상태 색([[statusColors]]). */
+/** 고정 태그 — 회의·외근·출장·기타는 이름·색을 바꾸거나 지울 수 없다. 색은 사람 상태 색([[statusColors]]). */
 export const FIXED_WORK_PLAN_TAGS = [
   { id: 'MEETING', name: '회의', colorId: PERSON_TONES.meeting.tagColorId },
   { id: 'OUTSIDE', name: '외근', colorId: PERSON_TONES.outside.tagColorId },
   { id: 'TRIP', name: '출장', colorId: PERSON_TONES.trip.tagColorId },
+  // 기타 — 일반 업무(항목)로 저장하고 태그만 고정. 종류 줄에 따로 버튼이 있다
+  { id: 'ETC', name: '기타', colorId: 'amber' },
 ] as const;
+
+/** 종류 줄의 '기타' 버튼이 고르는 고정 태그 */
+export const ETC_TAG_ID = 'ETC';
 
 export type FixedTagId = (typeof FIXED_WORK_PLAN_TAGS)[number]['id'];
 

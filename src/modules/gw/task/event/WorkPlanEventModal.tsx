@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, CalendarDays, Check, ChevronDown, Repeat, UserRound } from 'lucide-react';
+import { Bell, CalendarDays, Check, ChevronDown, Repeat, UserRound, MoreHorizontal } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
-import { selectableGeneralTags } from '@/domain/workPlan/tag';
+import { selectableGeneralTags, ETC_TAG_ID } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
@@ -222,6 +222,7 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
     }`;
 
   const currentTag = generalTagOf(tags, state.kind, state.tagId);
+  const isEtc = state.kind === 'ITEM' && state.tagId === ETC_TAG_ID;
 
   const pickTag = (tagId: string) => {
     form.set('tagId', tagId);
@@ -259,11 +260,22 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
           <button
             type="button"
             role="radio"
-            aria-checked={state.kind === 'ITEM'}
+            aria-checked={isEtc}
+            disabled={!enabled('ITEM')}
+            className={segClass(isEtc)}
+            onClick={() => pickTag(ETC_TAG_ID)}
+          >
+            <MoreHorizontal size={13} />
+            기타
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={state.kind === 'ITEM' && !isEtc}
             aria-haspopup="listbox"
             aria-expanded={menuOpen}
             disabled={!enabled('ITEM')}
-            className={segClass(state.kind === 'ITEM')}
+            className={segClass(state.kind === 'ITEM' && !isEtc)}
             onClick={() => setMenuOpen((v) => !v)}
           >
             {currentTag && <span className={`h-2 w-2 rounded-full ${dotClassOf(currentTag.colorId)}`} />}

@@ -4,7 +4,7 @@ import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
 import { sourceIdOf, type DayCell } from '@/domain/workPlan/dayEntries';
-import { resolveTag, selectableGeneralTags, type WorkPlanTag } from '@/domain/workPlan/tag';
+import { resolveTag, selectableGeneralTags, type WorkPlanTag, ETC_TAG_ID } from '@/domain/workPlan/tag';
 import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import type { EventForm } from './EventFields';
@@ -43,7 +43,8 @@ export const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: strin
  * 아직 못 골랐으면(새 일정에서 태그를 읽는 중 등) 첫 일반 태그.
  */
 export function generalTagOf(tags: WorkPlanTag[], kind: EventKind, tagId: string): { name: string; colorId: string } | null {
-  if (kind !== 'ITEM') return null;
+  // 기타는 따로 버튼이 있어 [일반 ▾] 은 이름 없이 '일반'으로 둔다
+  if (kind !== 'ITEM' || tagId === ETC_TAG_ID) return null;
   if (tagId && tags.length > 0) return resolveTag(tags, tagId);
   return selectableGeneralTags(tags)[0] ?? null;
 }
