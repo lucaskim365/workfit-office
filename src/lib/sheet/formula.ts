@@ -3,7 +3,8 @@
  * - 숫자·"글자"·TRUE/FALSE·셀(A1, $A$1)·범위(함수 인자에서만)·함수·괄호
  * - 연산 우선순위(낮은 것부터): 비교(= <> < > <= >=) → 결합(&) → + - → * / → ^ → 단항 - → 퍼센트(%)
  *   엑셀처럼 단항 -가 ^보다 먼저라 -2^2 = 4, ^는 왼쪽부터라 2^3^2 = 64
- * - 함수: SUM·AVERAGE·MIN·MAX·COUNT·COUNTA·SUMIF·ROUND·ROUNDUP·ROUNDDOWN·ABS·IF·IFERROR
+ * - 함수: SUM·AVERAGE·MIN·MAX·COUNT·COUNTA·SUMIF·ROUND·ROUNDUP·ROUNDDOWN·ABS·IF·IFERROR·TODAY
+ *   TODAY()는 계산하는 날의 날짜 글자(YYYY-MM-DD, 이 컴퓨터 기준)
  * - eval 없이 토큰화 → 구문 나무 → 계산. 잘못된 식은 FormulaError
  */
 
@@ -517,6 +518,12 @@ function callFn(name: string, args: Node[], get: CellGetter): Val {
       const f = Math.pow(10, Math.trunc(args[1] ? toNum(evalNode(args[1], get)) : 0));
       // 엑셀처럼 0.5는 0에서 먼 쪽으로
       return (Math.sign(x) * Math.round(Number((Math.abs(x) * f).toFixed(8)))) / f;
+    }
+    case 'TODAY': {
+      if (args.length !== 0) throw new FormulaError();
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     }
     case 'IF': {
       if (args.length < 2 || args.length > 3) throw new FormulaError();

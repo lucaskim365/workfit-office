@@ -23,7 +23,10 @@ export interface CellStyle {
   bg?: string; // '#rrggbb'
   align?: 'left' | 'center' | 'right';
   valign?: 'top' | 'middle' | 'bottom';
+  /** currency: 콤마, percent: 값×100 에 % (엑셀과 같음 — 0.613 → 61.3%) */
   numFmt?: 'general' | 'currency' | 'percent';
+  /** 숫자 표시 서식의 소수 자릿수(반올림). 없으면 금액은 있는 그대로, 백분율은 최대 2자리 */
+  decimals?: number;
   border?: { t?: BorderW; r?: BorderW; b?: BorderW; l?: BorderW };
 }
 

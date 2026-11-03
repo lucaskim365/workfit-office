@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Sheet } from './model';
-import { cellCss, defaultAlign, displayValue } from './style';
+import { cellCss, defaultAlign, displayValue, renderStyle } from './style';
 
 export interface SheetViewProps {
   /** 계산까지 끝난 시트(값이 rows 에 들어 있어야 한다) */
@@ -45,7 +45,6 @@ export function SheetView({ sheet, hidden, hiddenText = '비공개', renderOverl
               {cols.map((col, c) => {
                 const m = mergeAt(r, c);
                 if (m && (m.startRow !== r || m.startCol !== c)) return null;
-                const key = `${r}:${col}`;
                 const secret = hidden?.(r, c) ?? false;
                 return (
                   <td
@@ -53,7 +52,7 @@ export function SheetView({ sheet, hidden, hiddenText = '비공개', renderOverl
                     rowSpan={m && m.rowSpan > 1 ? m.rowSpan : undefined}
                     colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
                     className="relative overflow-hidden px-1 align-middle whitespace-pre-wrap break-words"
-                    style={{ textAlign: defaultAlign(sheet, r, col), ...cellCss(sheet.styles[key]) }}
+                    style={{ textAlign: defaultAlign(sheet, r, col), ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan)) }}
                   >
                     {secret ? <span className="italic text-[#999]">{hiddenText}</span> : displayValue(sheet, r, col)}
                     {renderOverlay?.(r, c)}

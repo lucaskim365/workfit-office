@@ -195,3 +195,65 @@ test('엑셀이 아닌 파일·빈 시트는 알기 쉬운 오류', async () => 
   await assert.rejects(importXlsx(await zip({ 'a.txt': 'x' })), XlsxError);
   await assert.rejects(importXlsx(await zip(workbook('<sheetData/>'))), (e) => e instanceof XlsxError && e.message.includes('내용이 없습니다'));
 });
+
+// ── 색인 색·테마 색(밝기)·자릿수·인쇄 영역 ──
+const STYLES2 = `<?xml version="1.0"?><styleSheet ${NS}>
+<numFmts count="1"><numFmt numFmtId="179" formatCode="0.0%"/></numFmts>
+<fonts count="2"><font><sz val="11"/><color theme="1"/></font><font><color theme="4" tint="-0.249977111117893"/></font></fonts>
+<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor indexed="13"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor theme="0"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor theme="4" tint="0.79998168889431442"/></patternFill></fill></fills>
+<borders count="1"><border/></borders>
+<cellXfs count="6">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+<xf numFmtId="0" fontId="0" fillId="2" borderId="0"/>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="0"/>
+<xf numFmtId="0" fontId="1" fillId="4" borderId="0"/>
+<xf numFmtId="179" fontId="0" fillId="0" borderId="0"/>
+<xf numFmtId="2" fontId="0" fillId="0" borderId="0"/>
+</cellXfs></styleSheet>`;
+
+const THEME = `<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="Office">
+<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+<a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1>
+</a:clrScheme></a:themeElements></a:theme>`;
+
+const SHEET2 = `<sheetData>
+<row r="1"><c r="A1" s="1" t="inlineStr"><is><t>노랑</t></is></c><c r="B1" s="2" t="inlineStr"><is><t>흰</t></is></c><c r="C1" s="3" t="inlineStr"><is><t>테마</t></is></c></row>
+<row r="2"><c r="A2" s="4"><v>0.6133338785</v></c><c r="B2" s="5"><v>3.14159</v></c><c r="C2"><f>TODAY()</f><v>46000</v></c><c r="F2" t="inlineStr"><is><t>인쇄 밖</t></is></c></row>
+<row r="5"><c r="A5" t="inlineStr"><is><t>인쇄 밖</t></is></c></row>
+</sheetData>`;
+
+const WB_PRINT = (sheetXml: string) => {
+  const files = workbook(sheetXml, { 'xl/styles.xml': STYLES2, 'xl/theme/theme1.xml': THEME });
+  files['xl/workbook.xml'] = files['xl/workbook.xml'].replace(
+    '</workbook>',
+    `<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'발주서'!$A$1:$C$2</definedName></definedNames></workbook>`
+  );
+  return files;
+};
+
+test('엑셀 불러오기 — 옛 색인 색·테마 색(밝기 조절)·흰 배경 생략', async () => {
+  const { sheet, warnings } = await importXlsx(await zip(WB_PRINT(SHEET2)));
+  assert.equal(styleAt(sheet, 'A1')?.bg, '#ffff00'); // indexed 13
+  assert.equal(styleAt(sheet, 'B1'), undefined); // theme 0(흰색) 배경은 문서 바탕과 같아 두지 않음
+  assert.equal(styleAt(sheet, 'C1')?.bg, '#dce6f2'); // accent1 + 80% 밝게 (엑셀 #dce6f1 — 반올림 차이 1)
+  assert.equal(styleAt(sheet, 'C1')?.color, '#376092'); // accent1 25% 어둡게
+  assert.ok(!warnings.some((w) => w.includes('색')));
+});
+
+test('엑셀 불러오기 — 소수 자릿수, TODAY, 인쇄 영역 밖은 버림', async () => {
+  const { sheet, warnings } = await importXlsx(await zip(WB_PRINT(SHEET2)));
+  assert.deepEqual(
+    [styleAt(sheet, 'A2')?.numFmt, styleAt(sheet, 'A2')?.decimals, styleAt(sheet, 'B2')?.numFmt, styleAt(sheet, 'B2')?.decimals],
+    ['percent', 1, undefined, 2]
+  );
+  assert.equal(at(sheet, 'A2'), '0.6133338785'); // 값은 그대로, 표시만 61.3%
+  assert.match(at(sheet, 'C2'), /^\d{4}-\d{2}-\d{2}$/); // TODAY() 계산됨
+  assert.equal(formulaAt(sheet, 'C2'), '=TODAY()');
+  assert.equal(sheet.rows.length, 2);
+  assert.equal(sheet.cols.length, 3);
+  assert.ok(warnings.some((w) => w.includes('인쇄 영역(A1:C2)')));
+  assert.ok(!warnings.some((w) => w.includes('수식')));
+});

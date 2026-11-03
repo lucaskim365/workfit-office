@@ -22,7 +22,7 @@ import {
   type BorderPreset,
   type CellRange,
 } from './ops';
-import { SHEET_COLORS, cellCss, defaultAlign, displayValue } from './style';
+import { SHEET_COLORS, cellCss, defaultAlign, displayValue, renderStyle } from './style';
 
 export interface SheetSelection {
   range: CellRange;
@@ -805,7 +805,7 @@ export function SheetEditor({
                       } ${!design && !locked ? 'cursor-text' : ''}`}
                       style={{
                         textAlign: defaultAlign(computed, r, col),
-                        ...cellCss(value.styles[key]),
+                        ...cellCss(renderStyle(value, r, c, m?.rowSpan, m?.colSpan)),
                         ...(isFocus && !isEditing ? { outline: '2px solid var(--color-teal, #0f766e)', outlineOffset: '-2px' } : {}),
                         ...(isPicked ? { outline: '2px dashed #2563eb', outlineOffset: '-2px' } : {}),
                         ...(!design && !locked && !selected ? { backgroundColor: value.styles[key]?.bg ?? '#fffdf0' } : {}),

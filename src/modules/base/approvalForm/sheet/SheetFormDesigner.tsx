@@ -3,7 +3,7 @@ import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react'
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
-import { SheetEditor, SheetView, createSheet, importXlsx, recalculate, type Sheet, type SheetSelection } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, createSheet, importXlsx, recalculate, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
@@ -68,6 +68,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNew = !form.id;
+  const sheetWidth = sheet.cols.reduce((sum, col) => sum + (sheet.colWidths[col] ?? DEFAULT_COL_WIDTH), 0);
+  const pageScale = sheetWidth > SHEET_PAGE_WIDTH ? SHEET_PAGE_WIDTH / sheetWidth : 1;
   const dirty = sheet !== savedSheet || JSON.stringify(form) !== JSON.stringify(savedForm);
   const set = (patch: Partial<ApprovalForm>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -273,8 +275,13 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             guideWidth={SHEET_PAGE_WIDTH}
             height="calc(100vh - 330px)"
           />
-          <div className="px-1 pt-1.5 text-[10.5px] text-ink3">
-            세로 점선 = A4 세로 인쇄 폭. 칸 이름·불러오기·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다.
+          <div className="space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3">
+            {pageScale < 1 && (
+              <div className="font-semibold text-amber-700 dark:text-amber-400">
+                A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
+              </div>
+            )}
+            <div>세로 점선 = A4 세로 인쇄 폭. 칸 이름·불러오기·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다.</div>
           </div>
         </div>
 

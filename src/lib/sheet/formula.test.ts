@@ -163,3 +163,10 @@ test('추가 함수 — COUNT·COUNTA·SUMIF·ROUNDUP·ROUNDDOWN·ABS·IFERROR',
 test('행 추가 시 ^·% 가 든 수식도 참조만 옮김', () => {
   assert.equal(shiftFormula('=A2^2*10%', { type: 'row_add', atIndex: 0 }), '=A3^2*10%');
 });
+
+test('TODAY — 오늘 날짜 글자, 인자는 받지 않음', () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  assert.equal(evaluateFormula('=TODAY()', () => ''), `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+  assert.throws(() => evaluateFormula('=TODAY(1)', () => ''));
+});

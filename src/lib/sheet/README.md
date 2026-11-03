@@ -40,7 +40,7 @@ s = insertRow(s, 0);                         // 값은 B4로 따라 내려감
 - 데이터: `createSheet`, `parseSheet`, `serializeSheet`, `recalculate`, `sheetSignature`, `cellKey`, `newColKey`
 - 조작(모두 새 시트를 돌려주는 순수 함수): `insertRow`, `deleteRow`, `insertCol`, `deleteCol`, `mergeRange`, `unmergeAt`, `setCellValue`, `applyStyle`, `applyBorder`, `pasteTsv`(옵션: 늘리지 않기·칸별 쓰기/수식 허용), `setCellMeta`, `setRowMeta`, `setColMeta`
 - 표시: `cellCss`, `displayValue`, `defaultAlign`, `SHEET_COLORS`
-- 엑셀 불러오기: `importXlsx(bytes)` → `{ sheet, warnings }` — 첫 시트의 값·병합·너비·높이·글꼴·배경·정렬·테두리·숫자 표시·수식. 외부 라이브러리 없이 브라우저 기본 압축 해제(`DecompressionStream`)로 읽는다. 계산 못 하는 수식은 저장된 값만, 테마 색·그림·차트·메모는 가져오지 않음
+- 엑셀 불러오기: `importXlsx(bytes)` → `{ sheet, warnings }` — 첫 시트의 값·병합·너비·높이·글꼴·배경·정렬·테두리·숫자 표시·수식. 외부 라이브러리 없이 브라우저 기본 압축 해제(`DecompressionStream`)로 읽는다. 색은 rgb·옛 색인 색·테마 색(밝기 포함), 숫자 서식의 소수 자릿수, 인쇄 영역이 있으면 그 안만. 계산 못 하는 수식은 저장된 값만, 그림·차트·메모·조건부 서식은 가져오지 않음
 - 화면: `SheetEditor`(머리글·격자·도구 모음·수식 입력줄. `mode` 'design' 은 틀까지, 'input' 은 `canEditCell` 이 허락한 칸의 값만) · `SheetView`(머리글 없이 문서 모양, `fitWidth` 로 비율 맞춤)
   - 되돌리기(Ctrl+Z)·다시 실행(Ctrl+Y)은 편집기가 관리한다. 쓰는 쪽이 `value` 를 바깥에서 바꿔도(속성 패널·엑셀 불러오기 등) 바꾸기 전 값이 되돌리기 목록에 들어간다
   - 업무 규칙은 모른다 — 병합·행/열 삭제 허락(`canMerge`·`canDeleteRow`·`canDeleteCol`), 값 넣기·붙여넣기(`setValue`·`paste`), 칸 표시(`renderBadge`)를 쓰는 쪽이 넘긴다
@@ -49,5 +49,5 @@ s = insertRow(s, 0);                         // 값은 B4로 따라 내려감
 
 - 연산: `+ - * / ^`, 퍼센트 `%`, 결합 `&`, 비교 `= <> < > <= >=`, 괄호, 단항 `-` (엑셀처럼 `-2^2 = 4`)
 - 참조: `A1`, 절대 참조 `$A$1`, 범위 `A1:C3`(함수 인자에서)
-- 함수: `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTA`, `SUMIF`, `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `ABS`, `IF`, `IFERROR`
+- 함수: `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTA`, `SUMIF`, `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `ABS`, `IF`, `IFERROR`, `TODAY`(계산하는 날 — 상신된 문서는 다시 계산하지 않으므로 상신일로 남음)
 - 규칙: 0으로 나누면 0, 순환 참조는 0, 잘못된 식은 `#오류`, 숫자로 안 읽히는 글자로 산술하면 `#오류`, `IF`의 거짓값을 생략하면 빈 칸, 병합에 가려진 칸은 빈 칸으로 읽음
