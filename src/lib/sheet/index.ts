@@ -4,6 +4,7 @@
 export {
   evaluateFormula,
   shiftFormula,
+  translateFormula,
   parseNumber,
   valueText,
   colLetter,
@@ -49,3 +50,4 @@ export {
   type PasteOptions,
 } from './ops';
 export { cellCss, displayValue, defaultAlign, SHEET_COLORS } from './style';
+export { importXlsx, XlsxError, type XlsxImport, type XlsxOptions } from './xlsx';

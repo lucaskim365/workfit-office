@@ -603,6 +603,29 @@ export function shiftFormula(expression: string, action: ShiftAction): string {
   return out;
 }
 
+/**
+ * 수식을 다른 칸으로 복사할 때처럼 상대 참조만 (dr, dc)만큼 옮긴다 — $ 붙은 쪽은 그대로.
+ * 엑셀의 공유 수식(한 수식을 여러 칸에 나눠 쓴 것)을 칸마다 풀 때 쓴다. 시트 밖으로 나가면 #REF!
+ */
+export function translateFormula(expression: string, dr: number, dc: number): string {
+  let tokens: Tok[];
+  try {
+    tokens = tokenize(expression);
+  } catch {
+    return expression;
+  }
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  for (const t of tokens) {
+    if (t.kind !== 'ref') continue;
+    const row = t.rowAbs ? t.row : t.row + dr;
+    const col = t.colAbs ? t.col : t.col + dc;
+    edits.push({ start: t.start, end: t.end, text: row < 0 || col < 0 ? '#REF!' : refText(t, row, col) });
+  }
+  let out = expression;
+  for (let k = edits.length - 1; k >= 0; k--) out = out.slice(0, edits[k].start) + edits[k].text + out.slice(edits[k].end);
+  return out;
+}
+
 /** 수식 계산 — 앞의 '='는 있어도 없어도 됨 */
 export function evaluateFormula(expression: string, get: CellGetter): SheetValue {
   const src = expression.trim().replace(/^=/, '');

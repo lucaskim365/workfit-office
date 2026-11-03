@@ -40,6 +40,7 @@ s = insertRow(s, 0);                         // 값은 B4로 따라 내려감
 - 데이터: `createSheet`, `parseSheet`, `serializeSheet`, `recalculate`, `sheetSignature`, `cellKey`, `newColKey`
 - 조작(모두 새 시트를 돌려주는 순수 함수): `insertRow`, `deleteRow`, `insertCol`, `deleteCol`, `mergeRange`, `unmergeAt`, `setCellValue`, `applyStyle`, `applyBorder`, `pasteTsv`(옵션: 늘리지 않기·칸별 쓰기/수식 허용), `setCellMeta`, `setRowMeta`, `setColMeta`
 - 표시: `cellCss`, `displayValue`, `defaultAlign`, `SHEET_COLORS`
+- 엑셀 불러오기: `importXlsx(bytes)` → `{ sheet, warnings }` — 첫 시트의 값·병합·너비·높이·글꼴·배경·정렬·테두리·숫자 표시·수식. 외부 라이브러리 없이 브라우저 기본 압축 해제(`DecompressionStream`)로 읽는다. 계산 못 하는 수식은 저장된 값만, 테마 색·그림·차트·메모는 가져오지 않음
 
 ## 지원 수식
 
