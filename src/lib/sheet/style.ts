@@ -21,10 +21,13 @@ export const SHEET_COLORS: Array<{ label: string; text: string; bg: string }> = 
 
 const isHex = (v?: string): v is string => !!v && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
 
+/**
+ * 'none'(테두리 없음)은 그린 선만 없는 것 — 엑셀처럼 편집기의 기본 격자선은 보인다(격자선은 화면에만, 문서·인쇄엔 없음).
+ * 이웃 칸 선보다 우선하는 것은 cellBorder 가 처리한다.
+ */
 function borderCss(w?: BorderW): string | undefined {
   if (w === 'thin') return '1px solid #333';
   if (w === 'thick') return '2px solid #111';
-  if (w === 'none') return '1px hidden transparent';
   return undefined;
 }
 

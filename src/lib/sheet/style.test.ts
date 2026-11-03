@@ -23,8 +23,7 @@ test('테두리', () => {
   assert.deepEqual(cellCss({ border: { t: 'thin', b: 'thick', l: 'none' } }), {
     borderTop: '1px solid #333',
     borderBottom: '2px solid #111',
-    borderLeft: '1px hidden transparent',
-  });
+  }); // 없음은 그린 선이 없을 뿐 — 편집기 격자선은 보임(엑셀과 같음)
 });
 
 test('숫자 표시와 기본 정렬', () => {
