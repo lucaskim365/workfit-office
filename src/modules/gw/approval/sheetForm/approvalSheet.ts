@@ -328,6 +328,11 @@ export const SHEET_PAGE_WIDTH = 718;
 /** 문서 fieldValues 에 시트 값·서식 버전을 담는 키 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const SHEET_VALUES_KEY = '__values';
 export const SHEET_VERSION_KEY = '__formVersion';
+/**
+ * 사람 칸이 가리키는 사용자 ID — { 칸 키: 사용자 ID } JSON. 칸 값은 기안 당시의 '이름 (부서)'라
+ * 문서 보기·인쇄는 그대로 두고(결재 당시 모습), 동명이인 구분·알림·연동은 이 ID 로 한다
+ */
+export const SHEET_REFS_KEY = '__refs';
 
 /** 체크 칸에 넣는 값 */
 export const CHECK_MARK = '✓';

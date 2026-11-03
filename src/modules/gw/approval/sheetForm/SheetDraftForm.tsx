@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { DEFAULT_COL_WIDTH, SheetView, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
 import { Building2, Plus, Trash2, X } from 'lucide-react';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -9,6 +9,7 @@ import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
 import {
   CHECK_MARK,
+  SHEET_REFS_KEY,
   SHEET_VALUES_KEY,
   applyValues,
   draftInputOf,
@@ -77,7 +78,7 @@ function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: st
 }
 
 /** 사람 칸 — 기존 서식 '사용자'와 같은 [임직원 검색] → 조직도 고르기. 칸에는 '이름 (부서)'로 남긴다 */
-function UserField({ value, onSet, org }: { value: string; onSet: (text: string) => void; org: ReturnType<typeof useOrgTree> }) {
+function UserField({ value, onSet, org }: { value: string; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const [open, setOpen] = useState(false);
   return (
     <span className={`${FIELD} flex items-center gap-1`}>
@@ -98,7 +99,8 @@ function UserField({ value, onSet, org }: { value: string; onSet: (text: string)
           onConfirm={(items) => {
             const picked = items.find((i) => i.type === 'user');
             const u = picked ? org.userById(picked.id) : null;
-            if (u) onSet(u.dept ? `${u.name} (${u.dept})` : u.name);
+            // 칸에는 기안 당시 '이름 (부서)', 사용자 ID 는 따로(__refs)
+            if (u) onSet(u.dept ? `${u.name} (${u.dept})` : u.name, u.id);
             setOpen(false);
           }}
           onClose={() => setOpen(false)}
@@ -108,7 +110,7 @@ function UserField({ value, onSet, org }: { value: string; onSet: (text: string)
   );
 }
 
-function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string) => void; org: ReturnType<typeof useOrgTree> }) {
+function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
   switch (input.type) {
@@ -207,6 +209,11 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
   const rawValues = values[SHEET_VALUES_KEY];
   const rawRows = values[SHEET_ROWS_KEY];
   const extras = useMemo(() => readRowExtras(rawRows), [rawRows]);
+  const rawRefs = values[SHEET_REFS_KEY];
+  const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
+  /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
+  const emit = (s: Sheet, rowExtras: typeof extras, refMap: Record<string, string>) =>
+    onFields({ ...sheetDocFields(s, key, rowExtras), [SHEET_REFS_KEY]: JSON.stringify(refMap) });
   // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
   const sheet = useMemo(
     () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, extras), readSheetValues(rawValues), { recalc: true }) : null),
@@ -217,7 +224,7 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
   // 처음 열 때 서식 버전·수식 결과를 문서 값에 남긴다(아무것도 안 쓰고 저장해도 어느 틀인지 알게)
   const needsInit = !!sheet && values['__formVersion'] !== key;
   useEffect(() => {
-    if (sheet && needsInit) onFields(sheetDocFields(sheet, key, extras));
+    if (sheet && needsInit) emit(sheet, extras, refs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsInit]);
 
@@ -229,10 +236,17 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
   if (isLoading) return <div className="py-10 text-center text-[12px] text-[#888]">서식을 불러오는 중…</div>;
   if (error || !sheet) return <div className="py-10 text-center text-[12px] text-rose-600">서식 틀(v{version})을 읽지 못했습니다.</div>;
 
-  const set = (r: number, c: number, text: string) => {
+  const set = (r: number, c: number, text: string, ref?: string) => {
     // 기안자가 쓴 '='는 수식이 아니라 글자 — 수식은 서식 틀에만 있다
     const next = setCellValue(sheet, r, c, text, { allowFormula: false });
-    onFields(sheetDocFields(recalculate(next), key, extras));
+    let refMap = refs;
+    if (draftInputOf(sheet, r, c)?.type === 'user') {
+      const k = cellKey(r, sheet.cols[c]);
+      refMap = { ...refs };
+      if (ref && text) refMap[k] = ref;
+      else delete refMap[k];
+    }
+    emit(recalculate(next), extras, refMap);
   };
 
   /** 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다 */
@@ -240,8 +254,10 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
     if (!loaded?.sheet) return;
     const fn = add ? addRepeatRow : removeRepeatRow;
     const next = fn(loaded.sheet, extras, readSheetValues(rawValues), id);
+    // 사람 칸 ID 도 값과 같은 규칙으로 행을 옮긴다
+    const nextRefs = fn(loaded.sheet, extras, refs, id).values;
     const expanded = applyValues(expandRepeats(loaded.sheet, next.extras), next.values, { recalc: true });
-    onFields(sheetDocFields(expanded, key, next.extras));
+    emit(expanded, next.extras, nextRefs);
   };
 
   return (
@@ -255,7 +271,7 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues }: 
             if (!input) return undefined;
             const span = sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1;
             const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
-            return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t) => set(r, c, t)} org={org} />;
+            return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t, ref) => set(r, c, t, ref)} org={org} />;
           }}
           renderOverlay={(r, c) => {
             // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 인쇄에는 안 나옴
