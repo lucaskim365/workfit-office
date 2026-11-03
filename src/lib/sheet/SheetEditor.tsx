@@ -143,6 +143,7 @@ export function SheetEditor({
   }, []);
 
   const range = norm(anchor, focus);
+  const multiSelected = range.r1 !== range.r2 || range.c1 !== range.c2;
   useEffect(() => {
     onSelect?.({ range, focus });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -801,14 +802,14 @@ export function SheetEditor({
                       onMouseEnter={() => onCellMouseEnter({ r, c })}
                       onDoubleClick={() => startEdit({ r, c })}
                       className={`relative overflow-hidden border border-[#e2e2e2] px-1 align-middle whitespace-pre-wrap break-words text-[#222] ${
-                        selected && !isEditing ? 'bg-teal-soft/35' : ''
-                      } ${!design && !locked ? 'cursor-text' : ''}`}
+                        !design && !locked ? 'cursor-text' : ''
+                      }`}
                       style={{
                         textAlign: defaultAlign(computed, r, col),
                         ...cellCss(renderStyle(value, r, c, m?.rowSpan, m?.colSpan)),
                         ...(isFocus && !isEditing ? { outline: '2px solid var(--color-teal, #0f766e)', outlineOffset: '-2px' } : {}),
                         ...(isPicked ? { outline: '2px dashed #2563eb', outlineOffset: '-2px' } : {}),
-                        ...(!design && !locked && !selected ? { backgroundColor: value.styles[key]?.bg ?? '#fffdf0' } : {}),
+                        ...(!design && !locked ? { backgroundColor: value.styles[key]?.bg ?? '#fffdf0' } : {}),
                       }}
                     >
                       {isEditing && editSource === 'cell' ? (
@@ -829,6 +830,24 @@ export function SheetEditor({
                         <>
                           {isEditing ? draft : displayValue(computed, r, col)}
                           {renderBadge?.(r, c)}
+                          {selected && multiSelected && (
+                            // 여러 칸 선택 — 칸 배경색 위에 덧칠하고, 범위 바깥 테두리를 진하게(배경색 있는 칸에서도 보이게)
+                            <span
+                              aria-hidden
+                              className="pointer-events-none absolute inset-0 z-[1]"
+                              style={{
+                                backgroundColor: 'rgba(15, 118, 110, 0.18)',
+                                boxShadow: [
+                                  r === range.r1 ? 'inset 0 2px 0 #0f766e' : '',
+                                  r + (m?.rowSpan ?? 1) - 1 >= range.r2 ? 'inset 0 -2px 0 #0f766e' : '',
+                                  c === range.c1 ? 'inset 2px 0 0 #0f766e' : '',
+                                  c + (m?.colSpan ?? 1) - 1 >= range.c2 ? 'inset -2px 0 0 #0f766e' : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(', ') || undefined,
+                              }}
+                            />
+                          )}
                         </>
                       )}
                     </td>
