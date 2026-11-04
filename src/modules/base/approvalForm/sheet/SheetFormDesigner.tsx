@@ -121,9 +121,12 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     e.target.value = '';
     if (!file) return;
     const hasContent = sheet.rows.some((row) => Object.values(row).some((v) => v !== ''));
-    if (hasContent && !confirm(`지금 시트를 '${file.name}' 내용으로 바꿉니다. 칸 속성도 모두 지워집니다(Ctrl+Z 로 되돌릴 수 있음). 계속할까요?`)) return;
+    // 문서 정보 표(기안자·제목 등 칸)가 있던 시트면 불러온 엑셀 위에 다시 넣는다 — 새 서식은 이 표로 시작하므로 엑셀만 넣어도 유지
+    const keepInfo = sheetHeaderItems(sheet).length > 0;
+    if (hasContent && !confirm(`지금 시트를 '${file.name}' 내용으로 바꿉니다. 칸 속성도 모두 지워집니다${keepInfo ? '(문서 정보 표는 엑셀 위에 기본 모양으로 다시 넣음)' : ''}. Ctrl+Z 로 되돌릴 수 있습니다. 계속할까요?`)) return;
     try {
-      const { sheet: imported, warnings } = await importXlsx(new Uint8Array(await file.arrayBuffer()));
+      const { sheet: fromXlsx, warnings } = await importXlsx(new Uint8Array(await file.arrayBuffer()));
+      const imported = keepInfo ? insertDocInfoBlock(fromXlsx) : fromXlsx;
       setSheet(imported);
       // 엑셀 양식엔 보통 제목이 들어 있다 — 문서 머리의 큰 제목과 겹치지 않게 끈다(서식 정보에서 다시 켤 수 있음)
       setForm((f) => ({ ...f, hiddenHeaderItems: [...new Set([...(f.hiddenHeaderItems ?? []), 'docTitle'])] }));
@@ -132,7 +135,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${imported.rows.length}행 × ${imported.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. 문서번호·기안자·제목 같은 문서 정보도 시트 안에 두려면 편집 도구의 [문서 정보 표 넣기]를 누르세요. (문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
+        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서번호·기안자·제목 같은 문서 정보도 시트 안에 두려면 편집 도구의 [문서 정보 표 넣기]를 누르세요. '}(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
         list: warnings,
       });
     } catch (err) {
