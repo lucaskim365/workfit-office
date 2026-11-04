@@ -93,3 +93,12 @@ test('셀에 맞춤 — 줄바꿈이 든 글·셀에 맞춤 아닌 칸·짧은 �
   assert.equal(shrinkFontSize('아주 긴 글자입니다', {}, 10), undefined);
   assert.equal(shrinkFontSize('', { shrink: true }, 10), undefined);
 });
+
+test('그릴 테두리 — 병합 블록 위·옆 칸은 대표 칸에만 저장된 블록 가장자리 선을 알아본다', () => {
+  const s = createSheet(2, 3);
+  const [, b] = s.cols;
+  // B2:C2 병합, 위쪽 선은 대표 칸 B2 에만(엑셀이 흔히 저장하는 방식)
+  s.merges = [{ startRow: 1, startCol: 1, rowSpan: 1, colSpan: 2 }];
+  s.styles[cellKey(1, b)] = { border: { t: 'thin' } };
+  assert.deepEqual(cellBorder(s, 0, 2), { b: 'thin' }); // C1 아래 = 가려진 C2 의 위(대표 칸 선)
+});

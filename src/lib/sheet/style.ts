@@ -127,9 +127,27 @@ type Side = keyof Border;
  * 둘 다 여기서 막는다. 저장 데이터는 바꾸지 않는다.
  */
 export function cellBorder(s: Sheet, r: number, c: number, rowSpan = 1, colSpan = 1): CellStyle['border'] {
-  const at = (rr: number, cc: number): Border | undefined => {
+  const raw = (rr: number, cc: number): Border | undefined => {
     const col = s.cols[cc];
     return col === undefined || rr < 0 ? undefined : s.styles[`${rr}:${col}`]?.border;
+  };
+  /**
+   * 칸의 테두리 — 병합에 가려진 칸은 병합 블록 가장자리에 있으면 대표 칸의 그 쪽 선도 갖는다.
+   * (엑셀은 블록의 위·왼쪽 선을 대표 칸에만 두기도 해서, 블록 위 칸이 아래 선을 찾을 때 가려진 칸만 보면 놓친다)
+   */
+  const at = (rr: number, cc: number): Border | undefined => {
+    const own = raw(rr, cc);
+    const m = s.merges.find((x) => rr >= x.startRow && rr < x.startRow + x.rowSpan && cc >= x.startCol && cc < x.startCol + x.colSpan);
+    if (!m || (m.startRow === rr && m.startCol === cc)) return own;
+    const anchor = raw(m.startRow, m.startCol);
+    if (!anchor) return own;
+    const edge: Border = {
+      ...(rr === m.startRow && anchor.t ? { t: anchor.t } : {}),
+      ...(rr === m.startRow + m.rowSpan - 1 && anchor.b ? { b: anchor.b } : {}),
+      ...(cc === m.startCol && anchor.l ? { l: anchor.l } : {}),
+      ...(cc === m.startCol + m.colSpan - 1 && anchor.r ? { r: anchor.r } : {}),
+    };
+    return { ...edge, ...own };
   };
   const strongest = (ws: Array<BorderW | undefined>): BorderW | undefined =>
     ws.includes('thick') ? 'thick' : ws.includes('thin') ? 'thin' : undefined;

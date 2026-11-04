@@ -885,7 +885,22 @@ export function SheetEditor({
                       }`}
                       style={{
                         textAlign: defaultAlign(computed, r, col),
-                        ...cellCss(renderStyle(value, r, c, m?.rowSpan, m?.colSpan)),
+                        ...(() => {
+                          // 테두리는 칸 안쪽 그림자로 — 칸에 위치 지정(relative)이 있어 표 겹침 테두리로 그리면 크롬이 배경색을
+                          // 이웃 테두리 위에 칠하고, A열 왼쪽 선은 행 번호 칸의 격자선에 진다. 한 선은 한 칸만 그린다:
+                          // 오른쪽·아래는 늘, 왼쪽·위는 맨 앞 열·맨 위 행일 때만(이웃 선은 cellBorder 가 이미 모아 둠)
+                          const rs = renderStyle(value, r, c, m?.rowSpan, m?.colSpan);
+                          const b = rs?.border;
+                          const w = (x?: string) => (x === 'thick' ? 2 : x === 'thin' ? 1 : 0);
+                          const color = (x?: string) => (x === 'thick' ? '#111' : '#333');
+                          const shadows = [
+                            w(b?.r) && `inset -${w(b?.r)}px 0 0 ${color(b?.r)}`,
+                            w(b?.b) && `inset 0 -${w(b?.b)}px 0 ${color(b?.b)}`,
+                            c === 0 && w(b?.l) && `inset ${w(b?.l)}px 0 0 ${color(b?.l)}`,
+                            r === 0 && w(b?.t) && `inset 0 ${w(b?.t)}px 0 ${color(b?.t)}`,
+                          ].filter(Boolean);
+                          return { ...cellCss(rs ? { ...rs, border: undefined } : undefined), ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}) };
+                        })(),
                         ...(() => {
                           // 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다
                           const w = cols.slice(c, c + (m?.colSpan ?? 1)).reduce((sum, k) => sum + colW(k), 0);
