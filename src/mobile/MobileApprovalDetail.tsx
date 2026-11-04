@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
+import { SheetDocView, isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from '@/modules/gw/approval/sheetForm/approvalSheet';
+import { isFullHeaderSheet } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import { CompanyLogo } from '@/modules/gw/approval/components/CompanyLetterhead';
+import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
+import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -56,6 +61,10 @@ export default function MobileApprovalDetail() {
   const legacyForm = forms.find((f) => f.code === doc?.docType);
   // 시트 문서는 기존 양식 항목을 그리지 않는다(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
   const form = legacyForm && isSheetDoc(doc?.fieldValues) ? { ...legacyForm, fields: [] } : legacyForm;
+  // 시트 문서가 쓴 서식 버전 — 문서 머리 전체(맺음말 포함)가 시트 안에 있으면 아래 맺음말을 따로 그리지 않는다
+  const sheetVer = parseVersionKey(String(doc?.fieldValues?.[SHEET_VERSION_KEY] ?? ''));
+  const { data: sheetTpl } = useFormVersionSheet(sheetVer?.formId ?? null, sheetVer?.version ?? null);
+  const sheetFullHeader = isFullHeaderSheet(sheetTpl?.sheet);
   const decide = useDecideStep();
   const [modalDecision, setModalDecision] = useState<'승인' | '반려' | null>(null);
   const [modalComment, setModalComment] = useState('');
@@ -378,10 +387,15 @@ export default function MobileApprovalDetail() {
               <div>
                 <div className="mb-2 text-[14px] font-bold" style={{ color: '#101830' }}>본문</div>
                 <Card>
-                  <ApprovalBody doc={doc} form={form} users={users} isMaskingActive={isMaskingActive} maskValue={maskValue} />
-                  
-                  {/* 맺음말 격식 보완 */}
-                  <div className="mt-4 pt-3 border-t border-black/5 text-center">
+                  {isSheetDoc(doc.fieldValues) ? (
+                    // 시트 서식 문서 — PC 문서 보기와 같은 부품을 휴대폰 폭에 맞춰 줄여 그린다
+                    <MobileSheetBody doc={doc} masked={isMaskingActive} drafterName={doc.drafterName || nameOf(doc.drafterId)} />
+                  ) : (
+                    <ApprovalBody doc={doc} form={form} users={users} isMaskingActive={isMaskingActive} maskValue={maskValue} />
+                  )}
+
+                  {/* 맺음말 격식 보완 — 문서 머리 전체(맺음말 포함)가 든 시트 문서는 시트 안에 있으므로 뺀다 */}
+                  <div className={`mt-4 pt-3 border-t border-black/5 text-center ${isSheetDoc(doc.fieldValues) && sheetFullHeader ? 'hidden' : ''}`}>
                     <div className="text-[11.5px] italic text-ink3 leading-relaxed">
                       {form?.closing || FALLBACK_CLOSING[doc.docType] || '위와 같이 신청하오니 재가하여 주시기 바랍니다.'}
                     </div>
@@ -693,6 +707,49 @@ function fmtAmount(n: number): string {
  * 서식 미로드 시 freeform body 폴백, 전부 비면 '(본문 없음)'.
  * (데스크톱 ApprovalDocumentView 와 동일한 fieldText 규칙 및 마스킹/보안 정책 재사용)
  */
+/**
+ * 시트 서식 문서 본문(휴대폰) — PC 와 같은 SheetDocView 를 칸 폭에 맞춰 줄인다(작은 글씨는 손가락으로 확대).
+ * 결재란 칸은 휴대폰에선 위 '결재선' 카드가 대신하므로 비워 둔다.
+ */
+function MobileSheetBody({ doc, masked, drafterName }: { doc: ApprovalDoc; masked: boolean; drafterName: string }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(320);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setWidth(Math.max(240, el.clientWidth));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={boxRef} className="w-full overflow-hidden bg-white">
+      <SheetDocView
+        fieldValues={doc.fieldValues}
+        masked={masked}
+        stamped={doc.status === '완료'}
+        // 테두리 2px 만큼 덜 — 꽉 채우면 감싼 상자(overflow-hidden)가 맨 오른쪽 선을 잘라 먹는다
+        fitWidth={width - 2}
+        docInfo={{
+          drafter: drafterName,
+          dept: doc.drafterDept ?? '',
+          date: korDateText(doc.submittedAt ?? doc.createdAt),
+          docNo: docNoOf(doc),
+          completedDate: doc.completedAt ? korDateText(doc.completedAt) : '',
+          title: doc.title,
+          preservation: doc.preservationPeriod ?? '',
+          visibility: VISIBILITY_LABEL[doc.visibility ?? ''] ?? doc.visibility ?? '',
+        }}
+        slots={{
+          logo: <CompanyLogo height={22} />,
+          drafterSign: <span className="font-bold">기안자 {drafterName}</span>,
+        }}
+      />
+    </div>
+  );
+}
+
 function ApprovalBody({
   doc,
   form,
