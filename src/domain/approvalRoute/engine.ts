@@ -19,6 +19,8 @@ const RANK_FALLBACK: Record<string, number> = { 대표이사: 1, 상무이사: 2
 export interface RouteContext {
   drafter: User;
   docType: string;
+  /** 연동 유형(시트 서식이 대체한 기존 서식 코드) — 있으면 그 서식의 결재선 규칙도 이어받는다 */
+  linkType?: string | null;
   amount: number | null;
   users: User[];
   depts: Department[];
@@ -245,7 +247,7 @@ export function resolveRoute(ctx: RouteContext): RouteResult {
   const rules = [...ctx.rules].sort((a, b) => a.priority - b.priority);
 
   const rule = rules.find((r) => {
-    const isDocTypeMatch = r.docType === '전체' || r.docType === ctx.docType;
+    const isDocTypeMatch = r.docType === '전체' || r.docType === ctx.docType || (!!ctx.linkType && r.docType === ctx.linkType);
     const isScopeMatch = scopeMatches(r.deptScope, ctx.drafter, org);
     
     const rank = org.rankOf(ctx.drafter.position);

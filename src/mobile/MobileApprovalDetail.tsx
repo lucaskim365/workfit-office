@@ -26,6 +26,7 @@ import { useMobileBack } from './useMobileBack';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from '@/modules/gw/approval/components/CompanyLetterhead';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -281,7 +282,7 @@ export default function MobileApprovalDetail() {
                 <InfoRow label="기안자" value={`${doc.drafterName || nameOf(doc.drafterId)}${doc.drafterDept ? ` (${doc.drafterDept})` : ''}`} />
                 <InfoRow label="기안일시" value={fmtDocDate(doc.submittedAt ?? doc.createdAt)} />
                 {doc.amount != null && <InfoRow label="금액" value={`${fmtAmount(doc.amount)} 원`} />}
-                {doc.docType === '휴가' && doc.form && (
+                {docLinkType(doc) === '휴가' && doc.form && (
                   <>
                     <InfoRow label="휴가종류" value={doc.form.leaveType} />
                     <InfoRow label="기간" value={`${doc.form.startDate} ~ ${doc.form.endDate}${doc.form.days ? ` (${doc.form.days}일)` : ''}`} />

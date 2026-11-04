@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
-import { SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue } from '@/lib/sheet';
 
 function base(): Sheet {
@@ -203,4 +203,56 @@ test('비공개 칸 — 칸·행·열', () => {
   assert.equal(isSecretCell(s, 1, 1), true);
   assert.equal(isSecretCell(s, 2, 2), true);
   assert.equal(isSecretCell(s, 2, 1), false);
+});
+
+test('연동 칸 — 기간 칸은 period·period__end 로 나누고, 사람 칸은 사용자 ID, __link 함께', () => {
+  let s = createSheet(3, 2);
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['연차', '반차'] });
+  s = setCellName(s, 0, 1, 'leaveType');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'dateRange' });
+  s = setCellName(s, 1, 1, 'period');
+  s = setCellMeta(s, APPROVAL_NS.input, 2, 1, { type: 'user' });
+  s = setCellName(s, 2, 1, 'substituteId');
+  const [, b] = s.cols;
+  s = setCellValue(s, 0, 1, '연차');
+  s = setCellValue(s, 1, 1, '2026-11-10 ~ 2026-11-12');
+  s = setCellValue(s, 2, 1, '신지웅 (부설기술연구소)');
+  assert.deepEqual(linkFieldValues(s, '휴가', { [cellKey(2, b)]: 'U029' }), {
+    __link: '휴가',
+    leaveType: '연차',
+    period: '2026-11-10',
+    period__end: '2026-11-12',
+    substituteId: 'U029',
+  });
+  assert.deepEqual(linkFieldValues(s, null), {}); // 대체 서식이 없으면 아무것도 안 넣음
+});
+
+test('대체 서식 검사 — 꼭 있어야 할 연동 칸', () => {
+  let s = createSheet(2, 2);
+  assert.equal(linkIssues(s, '휴가').length, 2); // 휴가 종류·휴가 기간
+  s = setCellName(s, 0, 0, 'leaveType');
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'select', options: ['연차'] });
+  s = setCellName(s, 1, 0, 'period');
+  assert.deepEqual(linkIssues(s, '휴가'), []);
+  assert.deepEqual(linkIssues(s, null), []);
+  assert.equal(nameLabel('period'), '휴가 기간');
+  assert.equal(nameLabel('amount'), '금액 키');
+  assert.equal(nameLabel('품명'), '품명');
+});
+
+test('휴가원 대체 — 휴가 종류 칸은 선택 칸, 항목은 휴가 정책 이름만', () => {
+  let s = createSheet(2, 2);
+  s = setCellName(s, 0, 1, 'leaveType');
+  s = setCellName(s, 1, 1, 'period');
+  assert.ok(linkIssues(s, '휴가').some((m) => m.includes('선택 칸')));
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['연차', '반차(오전)'] });
+  assert.ok(linkIssues(s, '휴가').some((m) => m.includes('반차(오전)')));
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['연차', '오전반차', '반반차'] });
+  assert.deepEqual(linkIssues(s, '휴가'), []);
+});
+
+test('시스템 계산 칸 — 휴가 일수(주말 제외, 반차 0.5)', () => {
+  assert.deepEqual(linkSystemValues('휴가', { leaveType: '연차', period: '2026-11-13', period__end: '2026-11-17' }, []), { period__days: '3' });
+  assert.deepEqual(linkSystemValues('휴가', { leaveType: '오전반차', period: '2026-11-13', period__end: '2026-11-17' }, []), { period__days: '0.5' });
+  assert.deepEqual(linkSystemValues('외근', { period: '2026-11-13' }, []), {});
 });

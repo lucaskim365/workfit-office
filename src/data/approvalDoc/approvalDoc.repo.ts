@@ -31,6 +31,7 @@ import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { approvalPostReadRepo } from '@/data/approvalPostRead/approvalPostRead.repo';
 import { postReadDocIdsFor } from '@/domain/approvalPostRead/engine';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 /**
  * 전자결재 문서 Repository — 채번(counters) + **순수 엔진**(domain/approvalDoc/engine)
@@ -45,7 +46,8 @@ const COLL = 'approvalDocs';
 function migrateDoc(data: any): any {
   if (!data) return data;
   let form = data.form;
-  if (data.docType !== '휴가' || !form || !form.leaveType) {
+  // 휴가 문서(시트 휴가원은 연동 유형으로)만 휴가 양식(form)을 둔다
+  if (docLinkType(data) !== '휴가' || !form || !form.leaveType) {
     form = null;
   }
   let status = data.status;

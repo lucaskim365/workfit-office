@@ -28,7 +28,7 @@ const backend = createCrudBackend<ApprovalFormVersion>({
 });
 
 /** 틀(sheet) 없이 읽을 칸 — 목록·배지용. 틀은 클 수 있어 필요한 버전만 따로 읽는다 */
-const HEAD_FIELDS = ['formId', 'version', 'note', 'createdBy', 'createdByName', 'createdAt'];
+const HEAD_FIELDS = ['formId', 'version', 'note', 'link', 'createdBy', 'createdByName', 'createdAt'];
 
 const headOf = ({ sheet: _sheet, ...head }: ApprovalFormVersion): ApprovalFormVersion => head;
 const byVersionDesc = (a: ApprovalFormVersion, b: ApprovalFormVersion) => b.version - a.version;
@@ -57,7 +57,7 @@ export const approvalFormVersionRepo = {
   },
 
   /** 새 버전 쌓기 — 번호는 지금 최신 + 1. 다른 사람이 같은 번호를 먼저 쓰면 다시 매긴다 */
-  async add(input: { formId: string; sheet: Sheet; note?: string; createdBy: string; createdByName?: string }): Promise<ApprovalFormVersion> {
+  async add(input: { formId: string; sheet: Sheet; note?: string; link?: string | null; createdBy: string; createdByName?: string }): Promise<ApprovalFormVersion> {
     for (let attempt = 0; ; attempt++) {
       const latest = (await this.listForForm(input.formId))[0]?.version ?? 0;
       const row: ApprovalFormVersion = {
@@ -65,6 +65,7 @@ export const approvalFormVersionRepo = {
         version: latest + 1,
         sheet: input.sheet,
         note: input.note?.slice(0, 255) || null,
+        link: input.link || null,
         createdBy: input.createdBy,
         createdByName: input.createdByName ?? null,
         createdAt: new Date().toISOString(),

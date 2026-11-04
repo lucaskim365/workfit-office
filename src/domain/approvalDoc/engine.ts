@@ -1,4 +1,5 @@
 import type { ApprovalBox, ApprovalDoc, ApprovalRecipient, ApprovalStep, StepDecision } from './schema';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 /**
  * 전자결재 상태전이 엔진 — **순수함수**. UI·DB 를 전혀 모른다.
@@ -274,7 +275,7 @@ export function getEffectiveRecipients(doc: ApprovalDoc): ApprovalRecipient[] {
 /** 수신함 판정: 완료(및 레거시 시행대기, 취소완료)된 문서 중 특정 자격(수신처 지정 등)이 매칭되는 문서 (레거시 시행처 포함) */
 export function isReceivedBoxMatch(doc: ApprovalDoc, userId: string, userDeptName?: string): boolean {
   if (doc.status !== '완료' && doc.status !== '시행대기' && doc.status !== '취소완료') return false;
-  const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(doc.docType);
+  const isExecutorDrafter = doc.drafterId === userId && ['외근', '국내출장', '해외출장', '인장날인', '공문발송'].includes(docLinkType(doc));
   const effectiveRecipients = getEffectiveRecipients(doc);
   const isCustomRecipient = effectiveRecipients.some((r) => {
     if (r.type === 'user') return r.id === userId;

@@ -4,6 +4,7 @@ import { isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@
 import type { ApprovedLeaveInfo } from './engine';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { outsideWorkToDayInfo } from '@/domain/outsideWork/view';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 /** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 + 직접 등록 외근·출장 목록. 같은 날 여러 건을 모두 담는다. */
 export type ApprovalDayMap = Map<string, ApprovedLeaveInfo[]>;
@@ -57,7 +58,7 @@ export const HOLIDAY_WORK_DOC_TYPES: readonly string[] = ['휴일근무', '휴�
 
 /** 휴일근무 신청 문서의 근무 일자 범위. 일자가 없거나 취소 기안이면 null. */
 function holidayWorkRange(doc: ApprovalDoc): { start: string; end: string } | null {
-  if (doc.cancelTargetDocId || !HOLIDAY_WORK_DOC_TYPES.includes(doc.docType)) return null;
+  if (doc.cancelTargetDocId || !HOLIDAY_WORK_DOC_TYPES.includes(docLinkType(doc))) return null;
   const f = doc.fieldValues ?? {};
   const start = String(f['workDate'] || f['period'] || f['startDate'] || f['date'] || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return null;

@@ -9,6 +9,7 @@
 
 import type { ApprovalDoc, DocStatus } from '@/domain/approvalDoc/schema';
 import { getDefaultTimeWindow, calculateLeaveDays, type CalculateLeaveDaysOptions } from './policy';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 export interface NormalizedLeaveRecord {
   docId: string;
@@ -67,7 +68,7 @@ export function normalizeLegacyLeaveDoc(
   opts?: { holidays?: CalculateLeaveDaysOptions['holidays'] },
 ): NormalizedLeaveRecord | null {
   // 휴가 문서가 아니거나 삭제된 문서 제외
-  if (doc.docType !== '휴가') return null;
+  if (docLinkType(doc) !== '휴가') return null;
 
   const form = doc.form;
   const fieldValues = (doc as any).fieldValues;

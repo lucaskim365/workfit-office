@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Eye, FileSpreadsheet, History, PenLine, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
@@ -10,7 +11,10 @@ import {
   approvalCellProps,
   bindLabel,
   canMergeApprovalRange,
-  cellNameLabel,
+  LINK_TYPES,
+  linkIssues,
+  linkSystemValues,
+  nameLabel,
   isStructureLocked,
   setApprovalCellValue,
   validateApprovalSheet,
@@ -52,10 +56,10 @@ export function SheetFormDesigner(props: Props) {
       </div>
     );
   }
-  return <Designer {...props} initial={loaded?.sheet ?? createSheet(20, 8)} />;
+  return <Designer {...props} initial={loaded?.sheet ?? createSheet(20, 8)} initialLink={loaded?.link ?? null} />;
 }
 
-function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial }: Props & { initial: Sheet }) {
+function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial, initialLink }: Props & { initial: Sheet; initialLink: string | null }) {
   const { user } = useAuth();
   const save = useSaveSheetForm();
   const [form, setForm] = useState<ApprovalForm>(initialForm);
@@ -66,6 +70,9 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [selection, setSelection] = useState<SheetSelection>({ range: { r1: 0, c1: 0, r2: 0, c2: 0 }, focus: { r: 0, c: 0 } });
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | 'info'; text: string; list?: string[] } | null>(null);
   const [note, setNote] = useState('');
+  // 대체 서식(연동 유형) — 이 서식이 대신하는 기존 서식. 버전과 함께 저장된다
+  const [link, setLink] = useState<string | null>(initialLink);
+  const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   const [side, setSide] = useState<'cell' | 'history'>('cell');
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
   const [trial, setTrial] = useState(false);
@@ -74,7 +81,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const isNew = !form.id;
   const sheetWidth = sheet.cols.reduce((sum, col) => sum + (sheet.colWidths[col] ?? DEFAULT_COL_WIDTH), 0);
   const pageScale = sheetWidth > SHEET_PAGE_WIDTH ? SHEET_PAGE_WIDTH / sheetWidth : 1;
-  const dirty = sheet !== savedSheet || JSON.stringify(form) !== JSON.stringify(savedForm);
+  const dirty = sheet !== savedSheet || link !== savedLink || JSON.stringify(form) !== JSON.stringify(savedForm);
   const set = (patch: Partial<ApprovalForm>) => setForm((f) => ({ ...f, ...patch }));
 
   const close = () => {
@@ -114,14 +121,15 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (isNew && forms.some((f) => f.code.toLowerCase() === code.toLowerCase())) {
       return setMsg({ kind: 'err', text: `서식 코드 '${code}'는 이미 쓰고 있습니다. 다른 코드를 정해 주세요.` });
     }
-    const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet)];
+    const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet), ...linkIssues(sheet, link)];
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
 
     const header: ApprovalForm = { ...form, id: code, code, name, fields: [] };
     try {
       setMsg({ kind: 'info', text: '저장 중…' });
-      const res = await save.mutateAsync({ form: header, sheet, baseVersion, note: note.trim() || undefined, user: { id: user.id, name: user.name } });
+      const res = await save.mutateAsync({ form: header, sheet, baseVersion, link, note: note.trim() || undefined, user: { id: user.id, name: user.name } });
+      setSavedLink(link);
       setForm(header);
       setSavedForm(header);
       setSavedSheet(sheet);
@@ -155,7 +163,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     const col = sheet.cols[c];
     const emptyInput = p.input && col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
     const inputLook = emptyInput && p.input ? <InputLook input={p.input} /> : null;
-    if (p.name) marks.push({ t: cellNameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
+    if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) marks.push({ t: '프로젝트', cls: 'bg-sky-500 text-white', title: `프로젝트 값 채우기: ${bindLabel(p.bind)}` });
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
@@ -268,7 +276,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       )}
 
       {/* 서식 정보 */}
-      <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1.4fr]">
+      <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1.4fr]">
         <Field label="아이콘">
           <input className={inp} value={form.icon} onChange={(e) => set({ icon: e.target.value })} placeholder="📄" />
         </Field>
@@ -287,6 +295,21 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             {folders.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="대체 서식 (연동)">
+          <select
+            className={inp}
+            value={link ?? ''}
+            onChange={(e) => setLink(e.target.value || null)}
+            title="기존 연동 서식(휴가원 등)을 대신하면 휴가 차감·근태·캘린더·결재선 규칙을 이어받습니다. 고르면 칸 이름 목록에 그 연동 칸이 나옵니다."
+          >
+            <option value="">없음 (연동 없는 새 서식)</option>
+            {LINK_TYPES.map((t) => (
+              <option key={t.code} value={t.code}>
+                {t.label} 대신
               </option>
             ))}
           </select>
@@ -343,7 +366,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             ))}
           </div>
           {side === 'cell' ? (
-            <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} />
+            <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
           ) : (
             <VersionHistory
               formId={isNew ? null : form.id}
@@ -360,7 +383,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         </div>
       </div>
 
-      {trial && <DraftTrial sheet={sheet} onClose={() => setTrial(false)} />}
+      {trial && <DraftTrial sheet={sheet} link={link} onClose={() => setTrial(false)} />}
 
       {preview && (
         <div
@@ -463,9 +486,10 @@ function VersionHistory({
  * 기안 미리보기 — 편집 중인 틀을 기안 화면과 같은 부품(SheetDraftForm)으로 연다.
  * 입력 도구·숫자 칸·수식·반복 구간 행 추가를 그대로 써 볼 수 있고, 입력한 값은 어디에도 저장하지 않는다.
  */
-function DraftTrial({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) {
+function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | null; onClose: () => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [issues, setIssues] = useState<string[]>([]);
+  const { data: holidays = [] } = useHolidays();
   // 열 때 한 번만 초점(Esc 로 닫기) — 그릴 때마다 초점을 가져오면 칸 입력이 끊긴다
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => boxRef.current?.focus(), []);
@@ -497,6 +521,8 @@ function DraftTrial({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) {
               formId="미리보기"
               version={1}
               template={sheet}
+              link={link}
+              systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
               values={values}
               onFields={(f) => setValues((v) => ({ ...v, ...f }))}
               onIssues={setIssues}

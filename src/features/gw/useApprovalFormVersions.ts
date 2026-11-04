@@ -44,6 +44,8 @@ export interface SaveSheetFormInput {
   sheet: Sheet;
   /** 지금 편집 중인 틀의 바탕 버전(새 서식이면 null) — 같은 틀이면 버전을 쌓지 않는다 */
   baseVersion: number | null;
+  /** 대체 서식(연동 유형) — 없으면 null */
+  link?: string | null;
   note?: string;
   user: { id: string; name?: string };
 }
@@ -62,7 +64,7 @@ export interface SaveSheetFormResult {
 export function useSaveSheetForm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ form, sheet, baseVersion, note, user }: SaveSheetFormInput): Promise<SaveSheetFormResult> => {
+    mutationFn: async ({ form, sheet, baseVersion, link = null, note, user }: SaveSheetFormInput): Promise<SaveSheetFormResult> => {
       const heads = await approvalFormVersionRepo.listForForm(form.id);
       const latestNo = heads[0]?.version ?? null;
       // 바탕 버전보다 새 버전이 생겼으면(다른 관리자가 저장) 덮어쓰지 않고 알린다
@@ -70,7 +72,7 @@ export function useSaveSheetForm() {
         throw new Error(`다른 사람이 이 서식을 먼저 저장했습니다(v${latestNo}). 화면을 닫았다 다시 열어 최신 서식에서 고쳐 주세요.`);
       }
       const latest = latestNo !== null ? await approvalFormVersionRepo.get(form.id, latestNo) : null;
-      const check = checkNewVersion(sheet, latest?.sheet);
+      const check = checkNewVersion(sheet, latest?.sheet, link, latest?.link ?? null);
       if (!check.ok) throw new Error(check.reason);
 
       let version = latestNo ?? 0;
@@ -80,6 +82,7 @@ export function useSaveSheetForm() {
           formId: form.id,
           sheet,
           note,
+          link,
           createdBy: user.id,
           createdByName: user.name,
         });

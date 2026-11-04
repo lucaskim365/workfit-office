@@ -78,6 +78,7 @@ export function ApprovalLineBuilder({
   onChange,
   drafterId,
   docType,
+  linkType = null,
   amount,
   docData,
   bottomSlot,
@@ -87,6 +88,8 @@ export function ApprovalLineBuilder({
   onChange: (steps: ApprovalStep[]) => void;
   drafterId: string;
   docType: string;
+  /** 연동 유형(시트 서식이 대체한 기존 서식 코드) — 그 서식의 결재선 규칙도 이어받는다 */
+  linkType?: string | null;
   amount: number | null;
   docData?: Record<string, any> | null;
   bottomSlot?: React.ReactNode;
@@ -285,7 +288,7 @@ export function ApprovalLineBuilder({
   };
 
   const fillAuto = () => {
-    const built = route.build({ drafterId, docType, amount, docData });
+    const built = route.build({ drafterId, docType, linkType, amount, docData });
     onChange(built.length ? built : steps);
   };
 

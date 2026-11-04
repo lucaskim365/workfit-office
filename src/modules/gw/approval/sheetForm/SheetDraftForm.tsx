@@ -9,6 +9,8 @@ import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
 import {
   CHECK_MARK,
+  APPROVAL_NS,
+  linkFieldValues,
   SHEET_REFS_KEY,
   SHEET_VALUES_KEY,
   applyValues,
@@ -121,7 +123,16 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
     case 'currency':
       return <NumberInput raw={raw} shown={displayValue(sheet, r, col)} invalid={raw.trim() !== '' && parseNumber(raw) === null} onChange={onSet} />;
     case 'date':
-      return <DateInput value={/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''} onChange={(e) => onSet(e.target.value)} className={FIELD} style={INHERIT} />;
+      return (
+        <DateInput
+          value={/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''}
+          // 휴일근무 '근무 일자' 칸은 주말·공휴일만(기존 휴일근무 서식과 같음)
+          restDaysOnly={sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, col)] === 'workDate'}
+          onChange={(e) => onSet(e.target.value)}
+          className={FIELD}
+          style={INHERIT}
+        />
+      );
     case 'dateRange': {
       const [from = '', to = ''] = raw.split('~').map((x) => x.trim());
       const set = (a: string, b: string) => onSet(a || b ? `${a} ~ ${b}` : '');
@@ -203,6 +214,13 @@ export interface SheetDraftFormProps {
   onIssues?: (invalidCells: string[]) => void;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기의 '기안 미리보기'(편집 중인 틀, 저장 안 함) */
   template?: Sheet;
+  /** 미리보기에서 쓸 대체 서식(연동 유형) — 저장된 버전은 버전에 든 값을 쓴다 */
+  link?: string | null;
+  /**
+   * 시스템이 계산하는 연동 칸 값 — 예: 휴가 일수(공휴일 제외·반차). 연동 칸 값(linkFieldValues)을 받아 { 칸 이름: 값 }.
+   * 그 이름이 붙은 칸에 넣는다
+   */
+  systemValues?: (link: string, linked: Record<string, string>) => Record<string, string>;
   /** 값을 가져올 수 있는 관련 문서 — load 는 그 문서의 이름 값(없으면 null) */
   relatedSources?: RelatedSource[];
 }
@@ -214,7 +232,7 @@ export interface RelatedSource {
   load: () => NamedValues | null;
 }
 
-export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [] }: SheetDraftFormProps) {
+export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [], link: linkProp = null, systemValues }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
   const isLoading = !template && fetched.isLoading;
@@ -227,13 +245,30 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
   const rawRefs = values[SHEET_REFS_KEY];
   const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
-  const emit = (s: Sheet, rowExtras: typeof extras, refMap: Record<string, string>) =>
+  // 대체 서식(연동 유형) — 서식 버전에 묶여 있다(미리보기는 편집 중인 값)
+  const link = (template ? linkProp : (fetched.data?.link ?? null)) || null;
+  const emit = (s0: Sheet, rowExtras: typeof extras, refMap: Record<string, string>) => {
+    let s = s0;
+    // 시스템이 계산하는 연동 칸(휴가 일수 등) — 기안 화면이 준 값으로 채운다
+    if (link && systemValues) {
+      const sys = systemValues(link, linkFieldValues(s, link, refMap));
+      Object.entries(sys).forEach(([name, v]) => {
+        const ck = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === name)?.[0];
+        if (!ck) return;
+        const i = ck.indexOf(':');
+        s = setCellValue(s, Number(ck.slice(0, i)), s.cols.indexOf(ck.slice(i + 1)), v, { allowFormula: false });
+      });
+      s = recalculate(s);
+    }
     onFields({
       ...sheetDocFields(s, key, rowExtras),
+      // 연동 칸 값을 기존 필드 키로(휴가 period·leaveType 등) + 연동 유형 __link — 휴가·근태·캘린더·결재선이 읽는다
+      ...linkFieldValues(s, link, refMap),
       [SHEET_REFS_KEY]: JSON.stringify(refMap),
       // 이름 붙은 칸 값 — 다른 문서가 '관련 문서 값 가져오기'로 읽는다
       [SHEET_NAMED_KEY]: JSON.stringify(collectNamed(s)),
     });
+  };
   // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
   const sheet = useMemo(
     () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, extras), readSheetValues(rawValues), { recalc: true }) : null),

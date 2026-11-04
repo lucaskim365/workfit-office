@@ -24,6 +24,8 @@ export const approvalFormVersionSchema = z.object({
   note: z.string().nullable().optional(),
   createdBy: z.string(),
   createdByName: z.string().nullable().optional(),
+  /** 대체 서식(연동 유형) — 이 버전이 대신하는 기존 서식 코드. 상신 때 문서에 __link 로 남긴다 */
+  link: z.string().nullable().optional(),
   createdAt: z.string(),
 });
 export type ApprovalFormVersion = z.infer<typeof approvalFormVersionSchema>;
@@ -56,11 +58,12 @@ export type VersionCheck =
  * 저장 전 확인 — 틀 크기 한도, 직전 버전과 같은지.
  * 같으면 새 버전을 쌓지 않는다(서식 머리만 고친 저장이 버전을 늘리지 않게).
  */
-export function checkNewVersion(sheet: Sheet, latest: Sheet | undefined): VersionCheck {
+export function checkNewVersion(sheet: Sheet, latest: Sheet | undefined, link: string | null = null, latestLink: string | null = null): VersionCheck {
   const json = serializeSheet(sheet);
   if (json.length > SHEET_VERSION_MAX_CHARS) {
     const kb = Math.round(json.length / 1024);
     return { ok: false, reason: `서식이 너무 큽니다(${kb}KB, 최대 ${Math.round(SHEET_VERSION_MAX_CHARS / 1024)}KB). 빈 행·열이나 쓰지 않는 서식을 줄여 주세요.` };
   }
-  return { ok: true, same: latest !== undefined && serializeSheet(latest) === json, json };
+  // 대체 서식이 바뀌어도 새 버전 — 문서가 어느 연동으로 쓰였는지가 버전에 묶인다
+  return { ok: true, same: latest !== undefined && serializeSheet(latest) === json && (link || null) === (latestLink || null), json };
 }

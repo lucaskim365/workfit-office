@@ -11,6 +11,10 @@ import {
   setCellName,
   type CellInput,
   type CellInputType,
+  LEAVE_TYPE_NAMES,
+  LINK_TYPES,
+  linkTypeDef,
+  nameLabel,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
 
@@ -44,7 +48,20 @@ function Check({ checked, onChange, label, hint }: { checked: boolean; onChange:
   );
 }
 
-export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; selection: SheetSelection; onChange: (next: Sheet) => void }) {
+export function SheetCellPanel({
+  sheet,
+  selection,
+  onChange,
+  link = null,
+}: {
+  sheet: Sheet;
+  selection: SheetSelection;
+  onChange: (next: Sheet) => void;
+  /** 대체 서식(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
+  link?: string | null;
+}) {
+  const linkDef = linkTypeDef(link);
+  const systemKeys = new Set([...COMMON_CELL_NAMES.map((n) => n.key), ...(linkDef?.names.map((n) => n.key) ?? [])]);
   const { range, focus } = selection;
   const props = approvalCellProps(sheet, focus.r, focus.c);
   const multi = range.r1 !== range.r2 || range.c1 !== range.c2;
@@ -76,7 +93,9 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
     const name = nameDraft.trim();
     setCustomNameMode(false);
     setNameDraft('');
-    if (!name || name.startsWith('__') || COMMON_CELL_NAMES.some((n) => n.key === name || n.label === name)) return;
+    // 시스템·연동 이름(키나 한글 이름)과 겹치는 이름은 받지 않는다 — 목록에서 고르게
+    const reserved = [...COMMON_CELL_NAMES, ...LINK_TYPES.flatMap((t) => t.names)];
+    if (!name || name.startsWith('__') || reserved.some((n) => n.key === name || n.label === name)) return;
     onChange(setCellName(sheet, focus.r, focus.c, name));
   };
 
@@ -159,7 +178,12 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
           onChange={(e) => {
             if (e.target.value === CUSTOM) return setCustomNameMode(true);
             setCustomNameMode(false);
-            onChange(setCellName(sheet, focus.r, focus.c, e.target.value || undefined));
+            let next = setCellName(sheet, focus.r, focus.c, e.target.value || undefined);
+            // '휴가 종류'는 휴가 정책이 아는 이름만 — 선택 칸과 항목을 채워 둔다(관리자가 고칠 수 있음)
+            if (e.target.value === 'leaveType' && props.input?.type !== 'select') {
+              next = setApprovalProp(next, { r1: focus.r, c1: focus.c, r2: focus.r, c2: focus.c }, APPROVAL_NS.input, { type: 'select', options: LEAVE_TYPE_NAMES });
+            }
+            onChange(next);
           }}
         >
           <option value="">이름 없음</option>
@@ -168,8 +192,22 @@ export function SheetCellPanel({ sheet, selection, onChange }: { sheet: Sheet; s
               {n.label}
             </option>
           ))}
-          {props.name && props.name !== 'body' && !COMMON_CELL_NAMES.some((n) => n.key === props.name) && <option value={props.name}>{props.name}</option>}
-          {props.name === 'body' && <option value="body">본문 (지금은 쓰지 않는 이름 — 지워 주세요)</option>}
+          {linkDef && (
+            <optgroup label={`${linkDef.label} 연동 (대체 서식)`}>
+              {linkDef.names.map((n) => (
+                <option key={n.key} value={n.key} title={n.hint}>
+                  {n.label}
+                  {n.required ? ' *' : ''}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {props.name && !systemKeys.has(props.name) && (
+            <option value={props.name}>
+              {nameLabel(props.name)}
+              {LINK_TYPES.some((t) => t.names.some((n) => n.key === props.name)) ? ' (지금 대체 서식에선 안 쓰는 연동 이름 — 지워 주세요)' : ''}
+            </option>
+          )}
           <option value={CUSTOM}>직접 쓰기…</option>
         </select>
         {customNameMode && (

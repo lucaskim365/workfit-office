@@ -16,6 +16,8 @@ const RULES_KEY = 'approvalRouteRules';
 export interface RouteInput {
   drafterId: string;
   docType: string;
+  /** 연동 유형(시트 서식이 대체한 기존 서식 코드) — 그 서식의 결재선 규칙도 이어받는다 */
+  linkType?: string | null;
   amount: number | null;
   docData?: Record<string, any> | null;
 }
@@ -30,12 +32,13 @@ export function useRouteEngine() {
 
   /** 상세 결과(steps + 매칭 룰) — 시뮬레이터용. */
   const resolve = useCallback(
-    ({ drafterId, docType, amount, docData }: RouteInput): RouteResult => {
+    ({ drafterId, docType, linkType, amount, docData }: RouteInput): RouteResult => {
       const drafter = org.users.find((u) => u.id === drafterId);
       if (!drafter) return { steps: [], rule: null };
       return resolveRoute({
         drafter,
         docType,
+        linkType,
         amount,
         users: org.users,
         depts: org.depts,

@@ -628,6 +628,7 @@ const COLLECTIONS: CollectionDef[] = [
       INT('version', true, undefined, 1),
       J('sheet', 1_000_000),
       S('note', 255),
+      S('link', 32), // 대체 서식(연동 유형) — 기존 서식 코드(휴가·외근·국내출장·해외출장·휴일근무). 없으면 연동 없음
       S('createdBy', 64, true),
       S('createdByName', 64),
       S('createdAt', 40, true),

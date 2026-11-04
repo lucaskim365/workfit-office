@@ -1,5 +1,6 @@
 import type { ApprovalDoc } from './schema';
 import { calculateLeaveDays } from '@/domain/leave/policy';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 /**
  * 전사 표준 일정/근태 연동 정보 규격 (Single Source of Truth)
@@ -40,7 +41,8 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
   // 취소 기안 문서는 원문서의 일정을 취소하기 위한 결재 문서이므로 자체 일정을 생성하지 않음
   if (doc.cancelTargetDocId) return null;
 
-  const docType = doc.docType;
+  // 연동 유형 — 시트 서식은 대체한 기존 서식 코드(휴가·외근·출장), 기존 문서는 docType 그대로
+  const docType = docLinkType(doc);
   let category: 'LEAVE' | 'OUTSIDE' | 'TRIP' | null = null;
 
   if (docType === '휴가') {

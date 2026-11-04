@@ -31,7 +31,8 @@ import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSh
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
-import { SHEET_VERSION_KEY } from './sheetForm/approvalSheet';
+import { SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
+import { LINK_KEY } from '@/domain/approvalDoc/linkType';
 import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
@@ -988,6 +989,10 @@ function ApprovalDraftInner({
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
   const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : (sheetLatest.get(form.id) ?? null);
   const sheetIssuesRef = useRef<string[]>([]);
+  // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
+  const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;
+  /** 시트 휴가원 — 휴가 일수 칸은 시스템이 계산(기존 휴가원과 같은 calculateLeaveDays) */
+  const sheetSystemValues = (link: string, linked: Record<string, string>) => linkSystemValues(link, linked, holidayList);
   // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
   const findDoc = useCachedApprovalLookup();
   const { data: allForms = [] } = useApprovalForms();
@@ -1026,7 +1031,7 @@ function ApprovalDraftInner({
   const lastAutoSteps = useRef<string>('');
   useEffect(() => {
     if (route.isLoading || !code || editDoc) return;
-    let line = route.build({ drafterId: me.id, docType: code, amount: amountNum, docData: values });
+    let line = route.build({ drafterId: me.id, docType: code, linkType: linkCode !== code ? linkCode : null, amount: amountNum, docData: values });
 
     // 서식 기본 참조자(사용자)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
     if (form?.referenceUserId && form.referenceUserId !== me.id) {
@@ -1119,7 +1124,7 @@ function ApprovalDraftInner({
 
   const buildInput = (): ApprovalDraftInput => {
     let leave: LeaveForm | null = null;
-    if (code === '휴가') {
+    if (linkCode === '휴가') {
       const pStart = String(values['period'] || '');
       const lType = String(values['leaveType'] || '연차') as LeaveType;
       const isPart = isHalfDayLeave(lType) || isQuarterDayLeave(lType);
@@ -1224,14 +1229,14 @@ function ApprovalDraftInner({
       if (!postApprovedById) return '선조치 구두/임시 승인자를 선택해 주세요.';
     }
 
-    if (forSubmit && isOvertimeAutoFill && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
+    if (forSubmit && (isOvertimeAutoFill || (sheetVersion !== null && linkCode === '휴일근무')) && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
       return '근무 일자는 주말이나 공휴일만 선택할 수 있습니다.';
     }
     if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
       return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
     }
 
-    if (code === '휴가' || form?.code === '휴가') {
+    if (linkCode === '휴가' || form?.code === '휴가') {
       const pStart = values['period'];
       const pEnd = values['period__end'];
       const lType = String(values['leaveType'] || '연차').trim();
@@ -1266,14 +1271,14 @@ function ApprovalDraftInner({
       // (초과 사용분은 향후 월별 발생 연차와 자동 상계 처리됨)
     }
 
-    if (code === '외근') {
+    if (linkCode === '외근') {
       const pStart = values['period'];
       const dest = values['destination'];
       if (!pStart) return '외근 일자/기간을 입력하세요.';
       if (!dest || !String(dest).trim()) return '외근지(방문처)를 입력하세요.';
     }
 
-    if (code === '국내출장' || code === '해외출장') {
+    if (linkCode === '국내출장' || linkCode === '해외출장') {
       const pStart = values['period'];
       const dest = values['destination'];
       if (!pStart) return '출장 기간을 입력하세요.';
@@ -1556,7 +1561,7 @@ function ApprovalDraftInner({
           {/* 대체휴무 잔여 0일 시 상단 경고 뱃지 */}
           {(() => {
             const currentLType = String(values['leaveType'] || '').trim();
-            const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
+            const isSub = (linkCode === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
             const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
             if (isSub && subRem <= 0) {
               return (
@@ -1591,7 +1596,7 @@ function ApprovalDraftInner({
           )}
           {(() => {
             const currentLType = String(values['leaveType'] || '').trim();
-            const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
+            const isSub = (linkCode === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
             const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
             const isBlockedBySub = isSub && subRem <= 0;
 
@@ -1705,6 +1710,7 @@ function ApprovalDraftInner({
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   relatedSources={relatedSources}
+                  systemValues={sheetSystemValues}
                 />
               ) : undefined
             }
@@ -1721,6 +1727,7 @@ function ApprovalDraftInner({
             onChange={setSteps}
             drafterId={me.id}
             docType={code}
+            linkType={linkCode !== code ? linkCode : null}
             amount={amountNum}
             docData={values}
             isAgreementEnabled={isAgreementEnabled}

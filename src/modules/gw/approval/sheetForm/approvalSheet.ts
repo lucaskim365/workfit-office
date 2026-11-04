@@ -4,6 +4,7 @@
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
 import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
+import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 
 /** 시트 부가 정보 이름공간 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const APPROVAL_NS = {
@@ -120,7 +121,10 @@ export function extractValues(s: Sheet): SheetValues {
   computed.rows.forEach((row, r) => {
     computed.cols.forEach((col) => {
       const v = row[col];
-      if (v !== undefined && v !== '' && (s.formulas[cellKey(r, col)] !== undefined || hasMeta(s, APPROVAL_NS.input, r, s.cols.indexOf(col)) || hasMeta(s, APPROVAL_NS.bind, r, s.cols.indexOf(col)))) {
+      const c = s.cols.indexOf(col);
+      // 입력·불러오기·수식 칸 + 이름 붙은 칸(시스템이 계산해 넣는 휴가 일수 등 — 입력 칸이 아니어도 값이 있다)
+      const keep = s.formulas[cellKey(r, col)] !== undefined || hasMeta(s, APPROVAL_NS.input, r, c) || hasMeta(s, APPROVAL_NS.bind, r, c) || hasMeta(s, APPROVAL_NS.name, r, c);
+      if (v !== undefined && v !== '' && keep) {
         out[cellKey(r, col)] = v;
       }
     });
@@ -402,4 +406,179 @@ export function isSecretCell(s: Sheet, r: number, c: number): boolean {
 /** 회사 직인 자리인가 */
 export function isSealCell(s: Sheet, r: number, c: number): boolean {
   return approvalCellProps(s, r, c).seal;
+}
+
+// ── 대체 서식(연동 유형)과 연동 칸 이름 (§5.3, 5단계) ──
+
+/**
+ * 연동 칸 이름 — 연동 코드가 문서 fieldValues 에서 읽는 기존 필드 키 그대로(period·leaveType·workDate…).
+ * 관리자 화면엔 label 만 보인다.
+ */
+export interface LinkName {
+  key: string;
+  label: string;
+  /** 서식 저장 때 이 칸이 없으면 막는다 */
+  required?: boolean;
+  /** 기간 칸('시작 ~ 끝')이면 key·key__end 로 나눠 넣는다 */
+  range?: boolean;
+  /** 사람 칸 — 글자 대신 사용자 ID(__refs)를 넣는다 */
+  userId?: boolean;
+  /** 시스템이 계산해 넣는 칸(기안자 입력 아님) */
+  computed?: boolean;
+  hint?: string;
+}
+
+export interface LinkTypeDef {
+  /** 대신하는 기존 서식 코드 — 연동 코드가 보는 값(docLinkType) */
+  code: string;
+  label: string;
+  names: LinkName[];
+}
+
+const PERIOD_END = (label: string): LinkName => ({ key: 'period__end', label, hint: '기간을 날짜 칸 둘로 나눌 때 끝 날짜' });
+const MEMO: LinkName = { key: 'body', label: '사유', hint: '목록·일정 설명에 쓰는 글' };
+
+/** 시트 서식이 대신할 수 있는 기존 서식 — 연동이 있는 서식만 */
+export const LINK_TYPES: LinkTypeDef[] = [
+  {
+    code: '휴가',
+    label: '휴가원',
+    names: [
+      { key: 'leaveType', label: '휴가 종류', required: true, hint: '선택 칸 — 항목을 연차·반차·반반차 등 휴가 종류 이름과 똑같이' },
+      { key: 'period', label: '휴가 기간', required: true, range: true, hint: '기간 칸(시작~종료) 또는 날짜 칸(시작일)' },
+      PERIOD_END('휴가 종료일'),
+      { key: 'period__days', label: '휴가 일수', computed: true, hint: '시스템이 계산해 넣음(공휴일 제외·반차) — 입력 칸으로 두지 않음' },
+      { key: 'startTime', label: '시작 시각' },
+      { key: 'endTime', label: '종료 시각' },
+      { key: 'substituteId', label: '업무 대행자', userId: true, hint: '사람 칸' },
+      { key: 'emergencyContact', label: '긴급 연락처' },
+      MEMO,
+    ],
+  },
+  {
+    code: '외근',
+    label: '외근 신청서',
+    names: [
+      { key: 'period', label: '외근 일자', required: true, range: true, hint: '날짜 칸 또는 기간 칸' },
+      PERIOD_END('외근 종료일'),
+      { key: 'destination', label: '외근지', required: true },
+      { key: 'outsideType', label: '외근 구분' },
+      { key: 'startTime', label: '시작 시각' },
+      { key: 'endTime', label: '종료 시각' },
+      { key: 'purpose', label: '목적' },
+      { key: 'transportation', label: '교통수단' },
+      { key: 'companions', label: '동행자' },
+      MEMO,
+    ],
+  },
+  ...(['국내출장', '해외출장'] as const).map(
+    (code): LinkTypeDef => ({
+      code,
+      label: code === '국내출장' ? '국내출장 신청서' : '해외출장 신청서',
+      names: [
+        { key: 'period', label: '출장 기간', required: true, range: true, hint: '기간 칸 또는 날짜 칸' },
+        PERIOD_END('출장 종료일'),
+        { key: 'destination', label: '출장지', required: true },
+        { key: 'purpose', label: '목적' },
+        { key: 'transportation', label: '교통수단' },
+        { key: 'companions', label: '동행자' },
+        ...(code === '해외출장' ? [{ key: 'overseasType', label: '출장 구분' }] : []),
+        MEMO,
+      ],
+    })
+  ),
+  {
+    code: '휴일근무',
+    label: '휴일근무 신청서',
+    names: [
+      { key: 'workDate', label: '근무 일자', required: true, hint: '날짜 칸 — 주말·공휴일만 고를 수 있음' },
+      { key: 'workStart', label: '출근 시각' },
+      { key: 'workEnd', label: '퇴근 시각' },
+      { key: 'workHours', label: '근무 시간' },
+      MEMO,
+    ],
+  },
+];
+
+export function linkTypeDef(link: string | null | undefined): LinkTypeDef | undefined {
+  return link ? LINK_TYPES.find((t) => t.code === link) : undefined;
+}
+
+/** 칸 이름 표시 — 시스템 이름(금액 키)·연동 이름은 한글로, 직접 쓴 이름은 그대로 */
+export function nameLabel(key: string): string {
+  const common = COMMON_CELL_NAMES.find((n) => n.key === key);
+  if (common) return common.label;
+  for (const t of LINK_TYPES) {
+    const hit = t.names.find((n) => n.key === key);
+    if (hit) return hit.label;
+  }
+  return key;
+}
+
+/** 대체 서식 저장 전 검사 — 꼭 있어야 할 연동 칸 */
+export function linkIssues(s: Sheet, link: string | null | undefined): string[] {
+  const def = linkTypeDef(link);
+  if (!def) return [];
+  const names = new Set(Object.values(s.cellMeta[APPROVAL_NS.name] ?? {}));
+  const errors = def.names
+    .filter((n) => n.required && !names.has(n.key))
+    .map((n) => `${def.label}을(를) 대신하려면 '${n.label}' 칸이 필요합니다. 그 칸을 골라 칸 이름에서 '${n.label}'을(를) 붙여 주세요.`);
+  // 휴가 종류는 휴가 정책이 아는 이름이어야 일수·차감이 맞다(반차 0.5일 등)
+  if (def.code === '휴가') {
+    const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === 'leaveType')?.[0];
+    const input = key ? (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined) : undefined;
+    const known = new Set<string>(LEAVE_TYPE_OPTIONS.map((o) => o.value));
+    if (key && input?.type !== 'select') errors.push(`'휴가 종류' 칸은 선택 칸이어야 합니다(항목: ${[...known].join(', ')}).`);
+    const wrong = (input?.options ?? []).filter((o) => !known.has(o));
+    if (wrong.length) errors.push(`'휴가 종류' 칸의 항목 ${wrong.join(', ')}은(는) 휴가 종류에 없습니다. 쓸 수 있는 이름: ${[...known].join(', ')}`);
+  }
+  return errors;
+}
+
+/** 휴가 종류 칸에 쓸 수 있는 항목 — 칸 속성 패널이 '휴가 종류' 이름을 붙일 때 채워 준다 */
+export const LEAVE_TYPE_NAMES: string[] = LEAVE_TYPE_OPTIONS.map((o) => o.value);
+
+/**
+ * 연동 칸 값 → 문서 맨 위 칸(fieldValues) — 연동 코드가 기존 필드 키로 읽게.
+ * 기간 칸은 key·key__end 로 나누고, 사람 칸은 사용자 ID 를 넣는다. 연동 유형(__link)도 함께
+ */
+export function linkFieldValues(s: Sheet, link: string | null | undefined, refs: Record<string, string> = {}): Record<string, string> {
+  const def = linkTypeDef(link);
+  if (!def) return {};
+  const computed = recalculate(s);
+  const out: Record<string, string> = { __link: def.code };
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const n = def.names.find((x) => x.key === name);
+    if (!n) return;
+    const i = key.indexOf(':');
+    const v = String(computed.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
+    if (n.userId) out[n.key] = refs[key] ?? '';
+    else if (n.range && v.includes('~')) {
+      const [a, b] = v.split('~').map((x) => x.trim());
+      out[n.key] = a;
+      if (b) out[`${n.key}__end`] = b;
+    } else out[n.key] = v;
+  });
+  return out;
+}
+
+/**
+ * 시스템이 계산하는 연동 칸 — 지금은 휴가 일수(기존 휴가원과 같은 calculateLeaveDays: 공휴일 제외·반차·반반차).
+ * 기안 화면·서식 편집기 '기안 미리보기'가 같이 쓴다
+ */
+export function linkSystemValues(
+  link: string,
+  linked: Record<string, string>,
+  holidays: Array<{ date: string; name?: string }>
+): Record<string, string> {
+  if (link !== '휴가' || !linked.period) return {};
+  const leaveType = linked.leaveType || '연차';
+  const isPart = isHalfDayLeave(leaveType) || isQuarterDayLeave(leaveType);
+  const days = calculateLeaveDays({
+    leaveType,
+    startDate: linked.period,
+    endDate: isPart ? linked.period : linked.period__end || linked.period,
+    holidays,
+  });
+  return { period__days: days > 0 ? String(days) : '' };
 }

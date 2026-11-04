@@ -20,6 +20,7 @@ import {
 } from './accrualEngine';
 import { isAnnualLeaveDeduction, type CalculateLeaveDaysOptions } from './policy';
 import { normalizeLegacyLeaveDoc, type NormalizedLeaveRecord } from './legacyAdapter';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 import {
   getSubstituteHolidaysForUser,
   type SubstituteHolidayItemInput,
@@ -159,7 +160,7 @@ export function calculateUserLeaveBalance(
 
   for (const doc of approvalDocs) {
     if (doc.cancelTargetDocId) continue; // 취소 기안 문서는 연차 차감 대상이 아님
-    if (doc.docType !== '휴가') continue;
+    if (docLinkType(doc) !== '휴가') continue;
     if (doc.status !== '완료' && doc.status !== '진행중') continue;
 
     // 사원 매칭 (userId, 사번, 사원명 정규화 다중 대조)
