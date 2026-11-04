@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { useRouteRules } from '@/features/gw/useRouteRules';
-import {
+import { FileSpreadsheet,
   Search,
   Plus,
   Copy,
@@ -24,6 +24,8 @@ interface ApprovalFormCatalogProps {
   onAddNewForm: () => void;
   onToggleActive: (form: ApprovalForm) => void;
   onDuplicate: (form: ApprovalForm) => void;
+  /** 기존 서식 → 시트 서식 초안(새 서식, 기존은 그대로) */
+  onToSheet?: (form: ApprovalForm) => void;
   onDelete: (form: ApprovalForm) => void;
 }
 
@@ -36,6 +38,7 @@ export function ApprovalFormCatalog({
   onAddNewForm,
   onToggleActive,
   onDuplicate,
+  onToSheet,
   onDelete,
 }: ApprovalFormCatalogProps) {
   const { data: rules = [] } = useRouteRules();
@@ -337,6 +340,16 @@ export function ApprovalFormCatalog({
                     정렬순서: {formItem.order ?? 99}
                   </span>
                   <div className="flex items-center gap-1">
+                    {!sheetVersions?.has(formItem.id) && onToSheet && (
+                      <button
+                        type="button"
+                        onClick={() => onToSheet(formItem)}
+                        title="이 서식으로 시트 서식 초안 만들기 — 새 서식으로 만들고 기존 서식은 그대로 둡니다"
+                        className="rounded p-1 text-ink3 hover:bg-panel hover:text-emerald-600 transition-colors cursor-pointer"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {!sheetVersions?.has(formItem.id) && (
                       <button
                         type="button"

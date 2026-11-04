@@ -32,9 +32,9 @@ import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
-import { headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
+import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
 import type { SheetSlots } from '../sheetForm/approvalSheet';
-import { CompanyLetterhead } from './CompanyLetterhead';
+import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -468,7 +468,9 @@ export function ApprovalDraftDocumentSheet({
   );
   const slots: SheetSlots = {
     approvalLine: stampBlock,
-    logo: <img src={processedLogo} alt="회사 로고" className="h-7 w-auto object-contain" />,
+    // 회사 정보 화면에 등록한 로고 — 없으면 작성 화면에만 자리 안내
+    logo: <CompanyLogo fallback={<span className="text-[11px] text-[#aaa] print:hidden">(회사 로고 — 회사 정보 화면에서 등록)</span>} />,
+    letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignBlock,
   };
 

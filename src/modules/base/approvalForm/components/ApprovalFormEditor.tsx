@@ -56,7 +56,7 @@ import {
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
 
 /** 자동번호 칸 설정 — 모양을 바꾸면 새 순번(1번)부터 시작한다 */
-function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onChange: (v: AutoNumberConfig) => void }) {
+export function AutoNumberSettings({ value, onChange }: { value: AutoNumberConfig; onChange: (v: AutoNumberConfig) => void }) {
   const sel = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[11.5px] text-ink outline-none focus:border-teal';
   return (
     <div className="space-y-2 border-t border-border/60 pt-1.5">

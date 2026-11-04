@@ -14,6 +14,7 @@ import { blankForm } from './utils';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
 import { ApprovalFormCatalog } from './components/ApprovalFormCatalog';
 import { SheetFormDesigner } from './sheet/SheetFormDesigner';
+import { legacyFormToSheet, type LegacyConversion } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
 import { Pencil, Trash2, Folder, Layers } from 'lucide-react';
 
 export default function ApprovalFormScreen() {
@@ -31,7 +32,13 @@ export default function ApprovalFormScreen() {
   const [sel, setSel] = useState<ApprovalForm | null>(null);
   const [msg, setMsg] = useState('');
   // 시트 서식 편집 중이면 그 서식과 열 때의 최신 버전(새 시트 서식은 null)
-  const [sheetSel, setSheetSel] = useState<{ form: ApprovalForm; version: number | null } | null>(null);
+  const [sheetSel, setSheetSel] = useState<{
+    form: ApprovalForm;
+    version: number | null;
+    /** 기존 서식에서 변환한 초안 */
+    draft?: LegacyConversion;
+    source?: string;
+  } | null>(null);
   const { latest: sheetVersions } = useSheetFormVersions();
 
   /** 서식 열기 — 시트 서식(버전이 있는 서식)은 시트 편집기로, 나머지는 기존 편집기로 */
@@ -134,6 +141,21 @@ export default function ApprovalFormScreen() {
     setMsg('');
   };
 
+  /** 기존 서식 → 시트 서식 초안 — 새 코드(코드_시트)로, 다 고칠 때까지 사용 안 함. 기존 서식은 그대로 */
+  const toSheet = (form: ApprovalForm) => {
+    const taken = new Set(forms.map((f) => f.code.toLowerCase()));
+    let code = `${form.code}_시트`;
+    for (let i = 2; taken.has(code.toLowerCase()) || sheetVersions.has(code); i++) code = `${form.code}_시트${i}`;
+    setSheetSel({
+      // 이름 끝 (시트) — 목록에서 기존 서식과 구분(큰 제목은 격식 문서명이라 그대로)
+      form: { ...form, id: '', code, name: `${form.name} (시트)`, docTitle: form.docTitle || form.name, fields: [], active: false, system: false },
+      version: null,
+      draft: legacyFormToSheet(form),
+      source: form.name,
+    });
+    setMsg('');
+  };
+
   // 원클릭 사용/중지 상태 토글
   const toggleActive = async (form: ApprovalForm) => {
     await upsert.mutateAsync({ ...form, active: !form.active });
@@ -225,6 +247,16 @@ export default function ApprovalFormScreen() {
           forms={forms}
           folders={folders}
           onClose={() => setSheetSel(null)}
+          initialSheet={sheetSel.draft?.sheet}
+          initialLink={sheetSel.draft?.link}
+          initialNotice={
+            sheetSel.draft
+              ? {
+                  text: `기존 서식 '${sheetSel.source}'로 만든 시트 서식 초안입니다(새 서식 — 기존 서식은 그대로). 모양을 다듬고 [미리보기]로 확인한 뒤 저장하세요.${sheetSel.draft.link ? ` 대체 서식은 '${sheetSel.draft.link}'로 정해 두었습니다(휴가 연동 등 그대로).` : ''}`,
+                  list: sheetSel.draft.warnings,
+                }
+              : undefined
+          }
         />
       ) : sel ? (
         <ApprovalFormEditor
@@ -470,6 +502,7 @@ export default function ApprovalFormScreen() {
               onAddNewForm={handleAddNewForm}
               onToggleActive={toggleActive}
               onDuplicate={duplicate}
+              onToSheet={toSheet}
               onDelete={del}
             />
           </div>

@@ -7,6 +7,7 @@ import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { SelectorDialog } from '../components/DraftRecipientSection';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
+import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import {
   CHECK_MARK,
   APPROVAL_NS,
@@ -437,7 +438,15 @@ export function SheetDraftForm({
           stretchTo={DOC_SHEET_VIEW.stretchTo - 2}
           thinBorderColor={DOC_SHEET_VIEW.thinBorderColor}
           renderCell={(r, c) => {
-            const bind = approvalCellProps(sheet, r, c).bind;
+            const props = approvalCellProps(sheet, r, c);
+            const bind = props.bind;
+            // 자동번호 칸 — 상신하면 서식 규칙으로 번호가 매겨진다(재상신은 받은 번호 그대로)
+            if (props.autoNo) {
+              const v = String(sheet.rows[r]?.[sheet.cols[c]] ?? '');
+              return v || <span className="text-[11px] text-[#999] print:hidden">상신하면 자동으로 매겨집니다 (예: {autoNumberPreview(props.autoNo)})</span>;
+            }
+            // 안내문 칸 — 작성할 때만 흐리게(결재·인쇄 화면엔 안 나옴)
+            if (props.guide) return <span className="text-[11px] text-[#777] print:hidden">{String(sheet.rows[r]?.[sheet.cols[c]] ?? '')}</span>;
             // 문서 머리 부품 칸 — 결재란(누르면 결재선 편집)·로고·기안자 서명
             const slot = slotOf(bind);
             if (slot) return <SlotCell node={slots?.[slot]} />;

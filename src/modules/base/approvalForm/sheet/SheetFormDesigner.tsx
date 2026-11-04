@@ -9,6 +9,7 @@ import { useHolidays } from '@/features/holiday/useHolidays';
 import { HEADER_ITEMS, HEADER_ITEM_LABEL, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { insertDocHeader, insertDocInfoBlock, isExternalHiddenRow, isFullHeaderSheet, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
 import type { ApprovalStep } from '@/domain/approvalDoc/schema';
+import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
@@ -50,6 +51,11 @@ interface Props {
   forms: ApprovalForm[];
   folders: ApprovalFolder[];
   onClose: () => void;
+  /** 새 서식을 이 틀로 시작 — 기존 서식에서 변환한 초안 */
+  initialSheet?: Sheet;
+  initialLink?: string | null;
+  /** 처음 띄울 안내(변환에서 옮기지 못한 것 등) */
+  initialNotice?: { text: string; list?: string[] };
 }
 
 export function SheetFormDesigner(props: Props) {
@@ -67,7 +73,7 @@ export function SheetFormDesigner(props: Props) {
       </div>
     );
   }
-  return <Designer {...props} initial={loaded?.sheet ?? insertDocHeader(fitToPage(createSheet(12, 8)), { formTitle: true })} initialLink={loaded?.link ?? null} />;
+  return <Designer {...props} initial={loaded?.sheet ?? props.initialSheet ?? insertDocHeader(fitToPage(createSheet(12, 8)), { formTitle: true })} initialLink={loaded?.link ?? props.initialLink ?? null} />;
 }
 
 /** 새 서식 틀 — 열 너비를 A4 인쇄 폭에 맞춰 나눈다(기안 화면에서 옆으로 밀리지 않게) */
@@ -76,7 +82,7 @@ const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.
 /** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
 const PAPER_PAD = 66;
 
-function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial, initialLink }: Props & { initial: Sheet; initialLink: string | null }) {
+function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial, initialLink, initialNotice }: Omit<Props, 'initialLink'> & { initial: Sheet; initialLink: string | null }) {
   const { user } = useAuth();
   const save = useSaveSheetForm();
   const [form, setForm] = useState<ApprovalForm>(initialForm);
@@ -85,7 +91,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [savedSheet, setSavedSheet] = useState<Sheet>(initial);
   const [savedForm, setSavedForm] = useState<ApprovalForm>(initialForm);
   const [selection, setSelection] = useState<SheetSelection>({ range: { r1: 0, c1: 0, r2: 0, c2: 0 }, focus: { r: 0, c: 0 } });
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | 'info'; text: string; list?: string[] } | null>(null);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | 'info'; text: string; list?: string[] } | null>(initialNotice ? { kind: 'info', ...initialNotice } : null);
   const [note, setNote] = useState('');
   // 대체 서식(연동 유형) — 이 서식이 대신하는 기존 서식. 버전과 함께 저장된다
   const [link, setLink] = useState<string | null>(initialLink);
@@ -251,9 +257,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         <span
           aria-hidden
           title="문서 이름 — 위 '격식 문서명'(비면 서식명)이 저절로 들어갑니다"
-          className="pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-sky-700/80"
+          className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-1 text-sky-700/80"
         >
-          {form.docTitle || form.name || '문서 이름'}
+          <span>{form.docTitle || form.name || '문서 이름'}</span>
+          <span className="mt-0.5 text-[10px] font-normal tracking-normal text-sky-600/80">격식 문서명(없다면 서식명)이 자동으로 들어갑니다</span>
+        </span>
+      ) : p.autoNo ? (
+        <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">
+          {`{자동번호 · 예 ${autoNumberPreview(p.autoNo)}}`}
         </span>
       ) : p.bind === 'doc.approvalLine' ? (
         <span
@@ -280,6 +291,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
+    if (p.autoNo) marks.push({ t: '자동번호', cls: 'bg-sky-500 text-white', title: '자동번호 — 상신할 때 번호를 매김' });
+    if (p.guide) marks.push({ t: '안내', cls: 'bg-ink3 text-white', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
     if (!marks.length)
       return repeatMark || extMark ? (
         <>

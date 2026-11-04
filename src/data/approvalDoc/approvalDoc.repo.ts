@@ -24,6 +24,9 @@ import { counterRepo } from '@/data/counter/counter.repo';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
 import { DOC_NO_VALUE_KEY, docNoOf } from '@/domain/approvalDoc/docNo';
+import { SHEET_CELL_VALUES_KEY, fillSheetAutoNumbers, sheetAutoNumberCells } from '@/domain/approvalForm/sheetAutoNumber';
+import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
+import { approvalFormVersionRepo } from '@/data/approvalForm/approvalFormVersion.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
 import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
@@ -424,9 +427,20 @@ async function handleCancelTargetOnAbort(doc: ApprovalDoc): Promise<void> {
 async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldValues']> {
   const form = (await approvalFormRepo.list()).find((f) => f.code === doc.docType);
   const fields = (form?.fields ?? []).filter((f) => f.type === '자동번호');
-  if (fields.length === 0) return doc.fieldValues;
+  // 시트 서식 — 문서가 쓴 서식 버전의 자동번호 칸
+  const ver = parseVersionKey(String(doc.fieldValues?.__formVersion ?? ''));
+  const sheetCells = ver ? sheetAutoNumberCells((await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet) : [];
+  if (fields.length === 0 && sheetCells.length === 0) return doc.fieldValues;
   const values = { ...doc.fieldValues };
   const date = new Date();
+  if (sheetCells.length > 0) {
+    const filled = await fillSheetAutoNumbers(values[SHEET_CELL_VALUES_KEY], sheetCells, async (cell) => {
+      const seq = await counterRepo.next(autoNumberChannel(doc.docType, cell.channelKey, cell.config, date));
+      return formatAutoNumber(cell.config, date, seq);
+    });
+    values[SHEET_CELL_VALUES_KEY] = filled.valuesJson;
+    if (filled.docNo) values[DOC_NO_VALUE_KEY] = filled.docNo;
+  }
   for (const field of fields) {
     if (!isFieldVisible(field.visibleIf, values)) continue;
     const config = field.autoNumber ?? DEFAULT_AUTO_NUMBER;

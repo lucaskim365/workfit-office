@@ -23,12 +23,12 @@ import { SheetDocView, isSheetDoc } from './sheetForm/SheetDocView';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
-import { headerShown, stampTableInHeader, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
+import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, type SheetSlots } from './sheetForm/approvalSheet';
 import { sheetHeaderItems } from './sheetForm/sheetHeader';
-import { CompanyLetterhead } from './components/CompanyLetterhead';
+import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './components/CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -552,7 +552,8 @@ export function ApprovalDocumentView({
   // 문서 머리를 시트에 넣은 시트 서식 — 결재란·로고·기안자 서명 칸에 그릴 것
   const sheetSlots: SheetSlots = {
     approvalLine: showStamp ? stampNode : null,
-    logo: <img src={processedLogo} alt="회사 로고" className="h-7 w-auto object-contain" />,
+    logo: <CompanyLogo />,
+    letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignNode,
   };
 

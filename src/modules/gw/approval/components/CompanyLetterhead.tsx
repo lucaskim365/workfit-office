@@ -2,7 +2,7 @@ import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import { useCompanySites } from '@/features/companySite/useCompanySites';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
 import type { FormField } from '@/domain/approvalForm/schema';
-import { DEFAULT_LETTERHEAD, letterheadLines } from '@/domain/approvalForm/headerItems';
+import { DEFAULT_LETTERHEAD, letterheadLines, type LetterheadConfig } from '@/domain/approvalForm/headerItems';
 import { markUrlOf } from '@/domain/companyMark/schema';
 
 /**
@@ -10,10 +10,14 @@ import { markUrlOf } from '@/domain/companyMark/schema';
  * 서식 설정대로 이름·순서를 바꾸고, 한 줄에 N개(열 수)씩 놓되 '한 줄 전체' 줄은 혼자 한 줄.
  */
 export function CompanyLetterhead({ field }: { field: FormField }) {
+  return <CompanyLetterheadBlock config={field.letterhead ?? DEFAULT_LETTERHEAD} />;
+}
+
+/** 회사 정보 머리글 — 설정(config)으로. 시트 서식의 '회사 정보' 칸은 기본 설정 */
+export function CompanyLetterheadBlock({ config }: { config: LetterheadConfig }) {
   const { data: company } = useCompanyInfo();
   const { data: sites } = useCompanySites();
   const { data: marks } = useCompanyMarks();
-  const config = field.letterhead ?? DEFAULT_LETTERHEAD;
   const lines = letterheadLines(config, company, sites);
   const logoUrl = config.showLogo ? markUrlOf(marks, 'logo', config.logoId, company?.logoUrl) : '';
   const columns = config.columns ?? 1;
@@ -50,4 +54,17 @@ export function CompanyLetterhead({ field }: { field: FormField }) {
       )}
     </div>
   );
+}
+
+/**
+ * 회사 로고 — 회사 정보 화면에 등록한 대표 로고(고른 로고가 있으면 그것). 등록이 없으면 fallback.
+ * 시트 서식의 '회사 로고' 칸
+ */
+export function CompanyLogo({ markId, height = 28, fallback = null }: { markId?: string; height?: number; fallback?: React.ReactNode }) {
+  const { data: company } = useCompanyInfo();
+  const { data: marks } = useCompanyMarks();
+  const url = markUrlOf(marks, 'logo', markId, company?.logoUrl);
+  if (!url) return <>{fallback}</>;
+  // maxWidth none — 공통 스타일(img max-width:100%)에 눌려 줄어들지 않게
+  return <img src={url} alt="회사 로고" style={{ height, width: 'auto', maxWidth: 'none' }} className="object-contain" />;
 }

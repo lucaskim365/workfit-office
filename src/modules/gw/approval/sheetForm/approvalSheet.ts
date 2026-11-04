@@ -5,6 +5,8 @@
  */
 import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
 import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
+import { SHEET_AUTO_NO_NS } from '@/domain/approvalForm/sheetAutoNumber';
+import { autoNumberConfigSchema, type AutoNumberConfig } from '@/domain/approvalForm/autoNumber';
 
 /** 시트 부가 정보 이름공간 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const APPROVAL_NS = {
@@ -18,6 +20,12 @@ export const APPROVAL_NS = {
   repeat: 'repeat',
   /** 대외 문서에서 숨길 행 — rowMeta, 값 true. 서식의 '대외 문서'가 켜진 결재 완료 문서(거래처용 모양·발주서 PDF)에서 행째 뺀다 */
   extHide: 'extHide',
+  /** 안내문 칸 — 값 true. 칸 글자를 작성 화면에만 흐리게(결재·인쇄·대외 문서엔 안 나옴). 기존 서식 '안내문' */
+  guide: 'guide',
+  /** 자동번호 칸 — 값 AutoNumberConfig. 상신 때 번호를 매겨 칸 값으로([[sheetAutoNumber]]) */
+  autoNo: SHEET_AUTO_NO_NS,
+  /** 회사 직인 칸이 쓸 직인(회사 로고·직인 목록 id) — 없으면 대표 직인 */
+  sealMark: 'sealMark',
 } as const;
 
 export type CellInputType =
@@ -105,11 +113,14 @@ export interface SheetSlots {
   approvalLine?: import('react').ReactNode;
   logo?: import('react').ReactNode;
   drafterSign?: import('react').ReactNode;
+  /** 회사 정보 머리글(주소·전화·팩스…) — 기존 서식 '회사정보' 항목과 같음 */
+  letterhead?: import('react').ReactNode;
 }
 const SLOT_OF: Record<string, keyof SheetSlots> = {
   'doc.approvalLine': 'approvalLine',
   'doc.logo': 'logo',
   'draft.sign': 'drafterSign',
+  'doc.letterhead': 'letterhead',
 };
 /** 이 칸이 문서 머리 부품이면 그 이름 */
 export const slotOf = (bind: string | undefined): keyof SheetSlots | undefined => (bind ? SLOT_OF[bind] : undefined);
@@ -127,7 +138,7 @@ export const PRESERVATION_OPTIONS = ['1년', '3년', '5년', '10년', '영구'];
 export const VISIBILITY_LABEL: Record<string, string> = { 부서: '부서 공개', 비공개: '비공개' };
 
 /** 이 이름공간의 칸이 든 행·열은 기안자가 지울 수 없음 */
-const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal];
+const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal, APPROVAL_NS.autoNo];
 
 /** 칸 이름·데이터 불러오기·비공개·직인이 든 행/열인지 — 기안자 삭제 금지 판단 */
 export function isStructureLocked(s: Sheet, axis: 'row' | 'col', index: number): boolean {
@@ -291,6 +302,7 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
       { value: 'doc.formTitle', label: '문서 이름(큰 제목)' },
       { value: 'doc.approvalLine', label: '결재란' },
       { value: 'doc.logo', label: '회사 로고' },
+      { value: 'doc.letterhead', label: '회사 정보(주소·전화)' },
       { value: 'draft.sign', label: '기안자 서명' },
     ],
   },
@@ -325,6 +337,12 @@ export interface ApprovalCellProps {
   lock: boolean;
   secret: boolean;
   seal: boolean;
+  /** 안내문 칸 */
+  guide: boolean;
+  /** 자동번호 칸의 번호 모양 */
+  autoNo?: AutoNumberConfig;
+  /** 직인 칸이 쓸 직인 id */
+  sealMark?: string;
 }
 
 const metaAt = (s: Sheet, ns: string, r: number, c: number): unknown => {
@@ -343,7 +361,23 @@ export function approvalCellProps(s: Sheet, r: number, c: number): ApprovalCellP
     lock: metaAt(s, APPROVAL_NS.lock, r, c) === true,
     secret: metaAt(s, APPROVAL_NS.secret, r, c) === true,
     seal: metaAt(s, APPROVAL_NS.seal, r, c) === true,
+    guide: metaAt(s, APPROVAL_NS.guide, r, c) === true,
+    autoNo: (() => {
+      const raw = metaAt(s, APPROVAL_NS.autoNo, r, c);
+      const parsed = raw === undefined ? null : autoNumberConfigSchema.safeParse(raw);
+      return parsed?.success ? parsed.data : undefined;
+    })(),
+    sealMark: (() => {
+      const m = metaAt(s, APPROVAL_NS.sealMark, r, c);
+      return typeof m === 'string' && m ? m : undefined;
+    })(),
   };
+}
+
+/** 시트의 회사 직인 칸이 쓸 직인 — 처음 고른 칸의 것, 없으면 undefined(대표 직인) */
+export function sheetSealMarkId(s: Sheet | null | undefined): string | undefined {
+  const m = Object.values(s?.cellMeta[APPROVAL_NS.sealMark] ?? {}).find((v) => typeof v === 'string' && v);
+  return typeof m === 'string' ? m : undefined;
 }
 
 /** 범위 안의 칸 — 병합에 가려진 칸은 빼고 대표 칸만 */
@@ -371,8 +405,16 @@ function visibleCells(s: Sheet, range: CellRange): { r: number; c: number }[] {
 export function setApprovalProp(
   s: Sheet,
   range: CellRange,
-  ns: typeof APPROVAL_NS.input | typeof APPROVAL_NS.bind | typeof APPROVAL_NS.lock | typeof APPROVAL_NS.secret | typeof APPROVAL_NS.seal,
-  value: CellInput | string | boolean | undefined
+  ns:
+    | typeof APPROVAL_NS.input
+    | typeof APPROVAL_NS.bind
+    | typeof APPROVAL_NS.lock
+    | typeof APPROVAL_NS.secret
+    | typeof APPROVAL_NS.seal
+    | typeof APPROVAL_NS.guide
+    | typeof APPROVAL_NS.autoNo
+    | typeof APPROVAL_NS.sealMark,
+  value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {
   const v = value === false || value === '' ? undefined : value;
   return visibleCells(s, range).reduce((acc, { r, c }) => setCellMeta(acc, ns, r, c, v), s);

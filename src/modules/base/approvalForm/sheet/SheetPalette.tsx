@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, CalendarCheck, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -11,6 +11,7 @@ import {
   type CellInputType,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
+import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 
 /**
  * 부품 목록 — 다우오피스 양식 편집기처럼 칸에 넣을 부품을 왼쪽에 모아 둔다.
@@ -66,6 +67,7 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'doc.approvalLine': Table2,
   'doc.logo': ImageIcon,
   'draft.sign': Signature,
+  'doc.letterhead': Landmark,
   'doc.preservation': Archive,
   'doc.visibility': Eye,
 };
@@ -74,6 +76,7 @@ const DOC_HINTS: Record<string, string> = {
   'doc.formTitle': '큰 제목 — 위 \'격식 문서명\'(비면 서식명)이 저절로 들어갑니다(문서 머리 큰 제목과 같음)',
   'doc.approvalLine': '결재자 이름·도장 칸 — 결재선에 따라 칸 수가 바뀌고, 기안 화면에서 누르면 결재선을 고칩니다. 넓게 합친 칸에 두세요. 시트에 결재란이 있으면 문서 머리 전체가 빠집니다',
   'doc.logo': '회사 로고 그림',
+  'doc.letterhead': '회사 주소·사업장 주소·전화·팩스·홈페이지·이메일 머리글 — 회사 정보 화면의 값이 저절로(기존 서식 \'회사정보\'와 같음)',
   'draft.sign': '맺음말 아래 \'기안자 이름 (인)\' — 기안자 도장이나 서명',
   'draft.completedDate': '결재가 끝난 날짜를 채웁니다(작성·결재 중엔 비어 있음). 문서 머리의 결재 완료일은 빠집니다',
   'doc.title': '기안자가 여기서 문서 제목을 씁니다(필수, 문서 목록·검색에 쓰는 제목). 문서 머리의 제목 줄은 빠집니다',
@@ -132,6 +135,29 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
         remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, false),
       },
       {
+        id: 'autoNo',
+        label: '자동번호',
+        icon: ListOrdered,
+        hint: "상신할 때 서식 규칙(접두어·날짜·자릿수·초기화 주기)으로 번호를 매깁니다 — 번호 모양은 오른쪽 칸 속성에서(기존 서식 '자동번호'와 같음)",
+        apply: (s, g) => {
+          if (hasFormula(s, g)) return { notice: '수식 칸에는 자동번호를 넣을 수 없습니다.' };
+          const at = { r1: Math.min(g.r1, g.r2), r2: Math.min(g.r1, g.r2), c1: Math.min(g.c1, g.c2), c2: Math.min(g.c1, g.c2) };
+          const cleared = setApprovalProp(setApprovalProp(s, at, APPROVAL_NS.input, undefined), at, APPROVAL_NS.bind, undefined);
+          return setApprovalProp(cleared, at, APPROVAL_NS.autoNo, DEFAULT_AUTO_NUMBER);
+        },
+        active: (p) => !!p.autoNo,
+        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.autoNo, undefined),
+      },
+      {
+        id: 'guide',
+        label: '안내문',
+        icon: Info,
+        hint: '칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴) — 작성 요령 안내용(기존 서식 \'안내문\'과 같음)',
+        apply: (s, g) => setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.guide, true),
+        active: (p) => p.guide,
+        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.guide, false),
+      },
+      {
         id: 'repeat',
         label: '반복 구간',
         icon: Repeat,
@@ -147,8 +173,12 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
         id: 'clear',
         label: '부품 빼기',
         icon: Eraser,
-        hint: '고른 칸의 입력 칸·자동 채우기·문서 항목·직인을 뺍니다(글자·서식은 그대로)',
-        apply: (s, g) => setApprovalProp(setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.bind, undefined), g, APPROVAL_NS.seal, false),
+        hint: '고른 칸의 입력 칸·자동 채우기·문서 항목·직인·자동번호·안내문을 뺍니다(글자·서식은 그대로)',
+        apply: (s, g) =>
+          [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.seal, APPROVAL_NS.sealMark, APPROVAL_NS.autoNo, APPROVAL_NS.guide].reduce(
+            (acc, ns) => setApprovalProp(acc, g, ns, undefined),
+            s,
+          ),
       },
     ],
   },

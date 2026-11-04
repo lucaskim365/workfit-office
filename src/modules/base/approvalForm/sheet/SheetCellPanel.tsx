@@ -18,6 +18,10 @@ import {
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
 import { isExternalHiddenRow, setExternalHiddenRows } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import { AutoNumberSettings } from '../components/ApprovalFormEditor';
+import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
+import { marksOf } from '@/domain/companyMark/schema';
+import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 
 /**
  * 시트 서식 편집기 — 고른 칸의 결재 속성(입력 칸·칸 이름·불러오기·잠금·비공개·직인).
@@ -85,6 +89,9 @@ export function SheetCellPanel({
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
+  const { data: marks } = useCompanyMarks();
+  const seals = marksOf(marks, 'seal');
+  const focusRange = { r1: focus.r, r2: focus.r, c1: focus.c, c2: focus.c };
 
   // 대외 문서에서 숨김 — 행 단위(칸만 비우면 빈 줄이 남아 어색함). 고른 행이 모두 켜져 있으면 켜짐으로 보인다
   const rowFrom = Math.min(range.r1, range.r2);
@@ -144,6 +151,12 @@ export function SheetCellPanel({
       {hasOptions && (
         <Row label="고를 항목" hint="한 줄에 하나씩">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
+        </Row>
+      )}
+
+      {props.autoNo && (
+        <Row label="자동번호" hint={`상신할 때 이 모양으로 번호를 매깁니다 — 예: ${autoNumberPreview(props.autoNo)}. 모양을 바꾸면 새 순번(1번)부터 시작합니다.`}>
+          <AutoNumberSettings value={props.autoNo} onChange={(v) => onChange(setApprovalProp(sheet, focusRange, APPROVAL_NS.autoNo, v))} />
         </Row>
       )}
 
@@ -251,6 +264,29 @@ export function SheetCellPanel({
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.seal, v))}
           label="회사 직인 자리"
           hint="결재가 끝나면 이 칸에 회사 직인을 찍습니다."
+        />
+        {props.seal && seals.length > 1 && (
+          <div className="pb-1 pl-6">
+            <select
+              className={inp}
+              value={props.sealMark ?? ''}
+              onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.sealMark, e.target.value || undefined))}
+              title="찍을 직인 — 회사 정보 화면의 로고·직인 목록"
+            >
+              <option value="">대표 직인</option>
+              {seals.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <Check
+          checked={props.guide}
+          onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.guide, v))}
+          label="안내문"
+          hint="칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴)."
         />
         <Check
           checked={rowsExternalHidden}

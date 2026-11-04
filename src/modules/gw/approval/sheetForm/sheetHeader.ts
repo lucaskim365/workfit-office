@@ -95,41 +95,68 @@ const TITLE_ROW_HEIGHT = 96;
  * formTitle: 큰 제목 칸에 '문서 이름' 부품(서식의 격식 문서명·서식명이 저절로) — 아니면 title 글자, 둘 다 없으면(엑셀처럼 제목이 이미 본문에 있을 때) 비워 둔다.
  * 대외 문서에서 숨김: 로고 줄·문서 정보 표·맺음말(큰 제목 줄은 남김 — 결재란 칸은 대외 문서에서 저절로 빈다)
  */
-export function insertDocHeader(s0: Sheet, opts: { title?: string; formTitle?: boolean; closing?: string } = {}): Sheet {
+export function insertDocHeader(
+  s0: Sheet,
+  opts: {
+    title?: string;
+    formTitle?: boolean;
+    closing?: string;
+    /** 회사 로고 줄(기본 넣음) */
+    logo?: boolean;
+    /** 문서 정보 표(기본 넣음) */
+    info?: boolean;
+    /** 맺음말·기안일·기안자 서명(기본 넣음) */
+    closingBlock?: boolean;
+  } = {},
+): Sheet {
   let s = s0;
   while (s.cols.length < 4) s = insertCol(s, s.cols.length);
   const n = s.cols.length;
   const all = (r: number) => ({ r1: r, r2: r, c1: 0, c2: n - 1 });
-  const center = (r: number) => (s = applyStyle(s, all(r), { align: 'center' }));
   // 아래 — 맺음말(빈 줄 · 문구 · 기안일 · 기안자 서명)
+  if (opts.closingBlock !== false) s = appendClosing(s, opts.closing);
+  // 위 — 문서 정보 표, 그 위에 로고 줄·큰 제목/결재란 줄·빈 줄
+  if (opts.info !== false) s = insertDocInfoBlock(s);
+  const logo = opts.logo !== false;
+  const top = logo ? 3 : 2;
+  for (let i = 0; i < top; i++) s = insertRow(s, 0);
+  const mid = Math.floor(n / 2);
+  if (logo) {
+    s = mergeRange(s, all(0));
+    s = setApprovalProp(s, { r1: 0, r2: 0, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.logo');
+    s = setRowMeta(s, APPROVAL_NS.extHide, 0, true);
+  }
+  const t = logo ? 1 : 0;
+  if (mid > 1) s = mergeRange(s, { r1: t, r2: t, c1: 0, c2: mid - 1 });
+  if (n - 1 > mid) s = mergeRange(s, { r1: t, r2: t, c1: mid, c2: n - 1 });
+  const title = opts.title?.trim() ?? '';
+  if (opts.formTitle) s = setApprovalProp(s, { r1: t, r2: t, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.formTitle');
+  else if (title) s = setCellValue(s, t, 0, title, { allowFormula: false });
+  if (opts.formTitle || title) s = applyStyle(s, { r1: t, r2: t, c1: 0, c2: 0 }, { bold: true, fontSize: 20, align: 'center', valign: 'middle' });
+  s = setApprovalProp(s, { r1: t, r2: t, c1: mid, c2: mid }, APPROVAL_NS.bind, 'doc.approvalLine');
+  s = applyStyle(s, { r1: t, r2: t, c1: mid, c2: mid }, { align: 'right', valign: 'top' });
+  s = { ...s, rowHeights: { ...s.rowHeights, [String(t)]: TITLE_ROW_HEIGHT } };
+  // 큰 제목이 비면 대외 문서에선 줄째 뺀다(빈 큰 줄이 남지 않게)
+  if (!title && !opts.formTitle) s = setRowMeta(s, APPROVAL_NS.extHide, t, true);
+  s = setRowMeta(s, APPROVAL_NS.extHide, t + 1, true);
+  return s;
+}
+
+/** 맺음말 — 빈 줄 · 문구 · 기안일 · 기안자 서명(가운데, 대외 문서에서 숨김) */
+function appendClosing(s0: Sheet, closing: string | undefined): Sheet {
+  let s = s0;
+  const n = s.cols.length;
+  const all = (r: number) => ({ r1: r, r2: r, c1: 0, c2: n - 1 });
+  const center = (r: number) => (s = applyStyle(s, all(r), { align: 'center' }));
   const end = s.rows.length;
   for (let i = 0; i < 4; i++) s = insertRow(s, s.rows.length);
   for (let r = end + 1; r <= end + 3; r++) s = mergeRange(s, all(r));
-  s = setCellValue(s, end + 1, 0, opts.closing ?? DEFAULT_CLOSING, { allowFormula: false });
+  s = setCellValue(s, end + 1, 0, closing ?? DEFAULT_CLOSING, { allowFormula: false });
   s = setApprovalProp(s, { r1: end + 2, r2: end + 2, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'draft.date');
   s = setApprovalProp(s, { r1: end + 3, r2: end + 3, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'draft.sign');
   for (let r = end + 1; r <= end + 3; r++) center(r);
   s = applyStyle(s, all(end + 2), { bold: true });
   for (let r = end; r <= end + 3; r++) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
-  // 위 — 문서 정보 표 먼저, 그 위에 로고 줄·큰 제목/결재란 줄·빈 줄
-  s = insertDocInfoBlock(s);
-  for (let i = 0; i < 3; i++) s = insertRow(s, 0);
-  const mid = Math.floor(n / 2);
-  s = mergeRange(s, all(0));
-  s = setApprovalProp(s, { r1: 0, r2: 0, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.logo');
-  if (mid > 1) s = mergeRange(s, { r1: 1, r2: 1, c1: 0, c2: mid - 1 });
-  if (n - 1 > mid) s = mergeRange(s, { r1: 1, r2: 1, c1: mid, c2: n - 1 });
-  const title = opts.title?.trim() ?? '';
-  if (opts.formTitle) s = setApprovalProp(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.formTitle');
-  else if (title) s = setCellValue(s, 1, 0, title, { allowFormula: false });
-  if (opts.formTitle || title) s = applyStyle(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, { bold: true, fontSize: 20, align: 'center', valign: 'middle' });
-  s = setApprovalProp(s, { r1: 1, r2: 1, c1: mid, c2: mid }, APPROVAL_NS.bind, 'doc.approvalLine');
-  s = applyStyle(s, { r1: 1, r2: 1, c1: mid, c2: mid }, { align: 'right', valign: 'top' });
-  s = { ...s, rowHeights: { ...s.rowHeights, '1': TITLE_ROW_HEIGHT } };
-  s = setRowMeta(s, APPROVAL_NS.extHide, 0, true);
-  // 큰 제목이 비면 대외 문서에선 줄째 뺀다(빈 큰 줄이 남지 않게)
-  if (!title && !opts.formTitle) s = setRowMeta(s, APPROVAL_NS.extHide, 1, true);
-  s = setRowMeta(s, APPROVAL_NS.extHide, 2, true);
   return s;
 }
 
