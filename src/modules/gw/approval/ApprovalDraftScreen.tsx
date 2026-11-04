@@ -11,7 +11,8 @@ import {
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
-import { withSealTexts } from '@/domain/approvalForm/headerItems';
+import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
+import { sheetHeaderItems } from './sheetForm/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc, useCachedApprovalLookup } from '@/features/gw/useApprovals';
@@ -33,7 +34,7 @@ import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
 import { SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
-import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionSheet, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
 import { usePermission } from '@/features/auth/usePermission';
@@ -989,6 +990,9 @@ function ApprovalDraftInner({
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
   const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : (sheetLatest.get(form.id) ?? null);
   const sheetIssuesRef = useRef<string[]>([]);
+  // 시트에 든 문서 정보 칸(기안자·제목 등)은 문서 머리에서 뺀다 — 같은 틀을 SheetDraftForm 도 읽는다(같은 조회, 한 번만 받음)
+  const { data: sheetTpl } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
+  const docForm = useMemo(() => withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet)), [form, sheetTpl]);
   // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
   const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;
   /** 시트 휴가원 — 휴가 일수 칸은 시스템이 계산(기존 휴가원과 같은 calculateLeaveDays) */
@@ -1655,7 +1659,7 @@ function ApprovalDraftInner({
             <OvertimeAutoFill workDate={String(values['workDate'])} values={values} setVals={setVals} onFill={setOvertimeFill} />
           )}
           <ApprovalDraftDocumentSheet
-            form={form}
+            form={docForm}
             docCode={code}
             me={me}
             title={title}
@@ -1711,6 +1715,13 @@ function ApprovalDraftInner({
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   relatedSources={relatedSources}
                   systemValues={sheetSystemValues}
+                  // 문서 항목 칸(제목·보존연한·공개범위) — 문서 머리와 같은 값을 시트 칸에서 쓴다
+                  docFields={{ title, preservationPeriod, visibility }}
+                  onDocField={(p) => {
+                    if (p.title !== undefined) setTitle(p.title);
+                    if (p.preservationPeriod !== undefined) setPreservationPeriod(p.preservationPeriod);
+                    if (p.visibility !== undefined) setVisibility(p.visibility === '비공개' ? '비공개' : '부서');
+                  }}
                   draftInfo={{
                     drafter: [me.name, me.position].filter(Boolean).join(' '),
                     dept: me.dept ?? '',

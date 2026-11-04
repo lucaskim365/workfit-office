@@ -5,6 +5,7 @@ import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
 import { approvalCellProps, draftInfoValue, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from './repeatRows';
+import { withoutExternalRows } from './sheetHeader';
 
 /** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
 const PRINT_FIT = { rootSelector: '.approval-print', pageWidthMm: 182 };
@@ -26,7 +27,10 @@ export function SheetDocView({
   fitWidth = DOC_SHEET_WIDTH,
   docInfo,
   template,
+  external = false,
 }: {
+  /** 대외 문서 모양(서식 '대외 문서' + 결재 완료, 발주서 PDF) — '대외 문서에서 숨김' 행을 뺀다 */
+  external?: boolean;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기 미리보기(편집 중인 틀) */
   template?: Sheet;
   /** 자동 채우기 '기안 정보' 칸 값 — 상신된 문서의 기안자·부서·기안일·문서번호 */
@@ -46,10 +50,11 @@ export function SheetDocView({
   const rawValues = fieldValues[SHEET_VALUES_KEY];
   const rawRows = fieldValues[SHEET_ROWS_KEY];
   // 반복 구간은 문서가 붙인 줄 수만큼 펼친 뒤 값을 얹는다
-  const sheet = useMemo(
-    () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false }) : null),
-    [loaded, rawValues, rawRows]
-  );
+  const sheet = useMemo(() => {
+    if (!loaded?.sheet) return null;
+    const filled = applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false });
+    return external ? withoutExternalRows(filled) : filled;
+  }, [loaded, rawValues, rawRows, external]);
 
   if (!ver && !template) return null;
   if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;

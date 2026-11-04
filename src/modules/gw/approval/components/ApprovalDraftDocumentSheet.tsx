@@ -32,7 +32,7 @@ import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
-import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { headerShown, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
@@ -649,7 +649,7 @@ export function ApprovalDraftDocumentSheet({
       {/* 5. 문서 제목 및 금액 표 (ApprovalDocMetaTable과 100% 일치 + 인라인 인풋) */}
       <table className="mt-2 w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
         <tbody>
-          {!titleField && (
+          {titleRowShown(form) && (
           <tr>
             <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-2 text-left align-middle text-[11px] font-bold text-[#444]">
               제 목 <span className="text-rose-500">*</span>

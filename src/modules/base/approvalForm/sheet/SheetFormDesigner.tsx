@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
+import type { DocFields } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
 import type { User } from '@/domain/user/schema';
 import { useHolidays } from '@/features/holiday/useHolidays';
-import { HEADER_ITEMS, HEADER_ITEM_LABEL } from '@/domain/approvalForm/headerItems';
+import { HEADER_ITEMS, HEADER_ITEM_LABEL, withBodyHeader } from '@/domain/approvalForm/headerItems';
+import { insertDocInfoBlock, isExternalHiddenRow, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
@@ -18,6 +20,7 @@ import {
   LINK_TYPES,
   linkIssues,
   linkSystemValues,
+  VISIBILITY_LABEL,
   nameLabel,
   isStructureLocked,
   setApprovalCellValue,
@@ -61,7 +64,7 @@ export function SheetFormDesigner(props: Props) {
       </div>
     );
   }
-  return <Designer {...props} initial={loaded?.sheet ?? createSheet(20, 8)} initialLink={loaded?.link ?? null} />;
+  return <Designer {...props} initial={loaded?.sheet ?? insertDocInfoBlock(createSheet(15, 8))} initialLink={loaded?.link ?? null} />;
 }
 
 /** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
@@ -129,7 +132,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${imported.rows.length}행 × ${imported.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. (문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
+        text: `'${file.name}'을 불러왔습니다 — ${imported.rows.length}행 × ${imported.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. 문서번호·기안자·제목 같은 문서 정보도 시트 안에 두려면 편집 도구의 [문서 정보 표 넣기]를 누르세요. (문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
         list: warnings,
       });
     } catch (err) {
@@ -166,7 +169,11 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     }
   };
 
-  // ── 부품 넣기(왼쪽 부품 목록 — 누르기·끌어 놓기) ──
+  // 시트 안에 있어서 문서 머리에서 빠지는 항목 — 편집 화면의 머리도 실제 문서처럼 뺀 모양으로
+  const covered = useMemo(() => sheetHeaderItems(sheet), [sheet]);
+  const docForm = useMemo(() => withBodyHeader(form, covered), [form, covered]);
+
+  // ── 부품 넣기(부품 목록 — 누르기·끌어 놓기) ──
   const putPart = (id: string, range: CellRange) => {
     const res = applyPart(sheet, range, id);
     if ('notice' in res) return setMsg({ kind: 'err', text: res.notice });
@@ -202,6 +209,17 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         )}
       </>
     );
+    // 대외 문서에서 숨길 행 — 마지막 열 오른쪽 아래에 표시
+    const extMark =
+      // 병합 칸이면 대표 칸(c)이 마지막 열이 아니어도 병합이 마지막 열까지 덮으면 그 칸에
+      c + (sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1) - 1 === sheet.cols.length - 1 && isExternalHiddenRow(sheet, r) ? (
+        <span
+          title="대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다"
+          className="pointer-events-none absolute bottom-0.5 right-0.5 rounded-sm bg-slate-500/80 px-1 text-[8.5px] font-bold leading-[13px] text-white"
+        >
+          대외 숨김
+        </span>
+      ) : null;
     const marks: { t: string; cls: string; title: string }[] = [];
     if (p.input) marks.push({ t: `입력·${INPUT_SHORT_LABELS[p.input.type] ?? ''}`, cls: 'bg-amber-400/90 text-white', title: '입력 칸 — 기안 화면에서 이 종류의 입력 도구가 뜹니다' });
     // 비어 있는 입력 칸에는 기안 화면에서 뜰 입력 도구 모양을 흐리게
@@ -210,22 +228,36 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     // 자동 채우기(기안 정보) 칸 — 어떤 값이 들어갈지 흐리게
     const emptyCell = col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
     const autoLook =
-      p.bind?.startsWith('draft.') && emptyCell ? (
+      (p.bind?.startsWith('draft.') || p.bind?.startsWith('doc.')) && emptyCell ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">
-          {`{${bindLabel(p.bind).replace(/^기안 정보 · /, '')}}`}
+          {`{${bindLabel(p.bind).replace(/^.+? · /, '')}}`}
         </span>
       ) : null;
     const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} /> : null);
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
-    if (p.bind) marks.push({ t: p.bind.startsWith('draft.') ? '자동' : '프로젝트', cls: 'bg-sky-500 text-white', title: `자동 채우기: ${bindLabel(p.bind)}` });
+    if (p.bind) {
+      const isDoc = p.bind.startsWith('doc.');
+      marks.push({
+        t: isDoc ? '문서' : p.bind.startsWith('draft.') ? '자동' : '프로젝트',
+        cls: isDoc ? 'bg-indigo-500 text-white' : 'bg-sky-500 text-white',
+        title: isDoc ? `문서 항목: ${bindLabel(p.bind)} — 기안자가 여기서 쓰고, 문서 자체에 저장` : `자동 채우기: ${bindLabel(p.bind)}`,
+      });
+    }
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
-    if (!marks.length) return repeatMark || null;
+    if (!marks.length)
+      return repeatMark || extMark ? (
+        <>
+          {repeatMark}
+          {extMark}
+        </>
+      ) : null;
     return (
       <>
         {inputLook}
         {repeatMark}
+        {extMark}
         <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
           {marks.map((m) => (
             <span key={m.t} title={m.title} className={`rounded-sm px-1 text-[8.5px] font-bold leading-[13px] ${m.cls}`}>
@@ -371,11 +403,18 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         </span>
         {HEADER_ITEMS.map((item) => {
           const shown = !(form.hiddenHeaderItems ?? []).includes(item);
+          // 시트 안에 같은 칸(기안자·문서번호 등)이 있으면 머리에서 저절로 빠진다
+          const inSheet = covered.includes(item);
           return (
-            <label key={item} className="flex cursor-pointer items-center gap-1 text-ink2">
+            <label
+              key={item}
+              className={`flex items-center gap-1 ${inSheet ? 'cursor-default text-ink3 line-through decoration-ink3/50' : 'cursor-pointer text-ink2'}`}
+              title={inSheet ? '시트 안에 같은 칸이 있어 문서 머리에서는 저절로 빠집니다' : undefined}
+            >
               <input
                 type="checkbox"
-                checked={shown}
+                checked={shown && !inSheet}
+                disabled={inSheet}
                 onChange={(e) => {
                   const hidden = new Set(form.hiddenHeaderItems ?? []);
                   if (e.target.checked) hidden.delete(item);
@@ -388,6 +427,19 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             </label>
           );
         })}
+        {covered.includes('titleRow') && (
+          <span className="text-ink3 line-through decoration-ink3/50" title="시트 안에 제목 칸이 있어 문서 머리의 제목 줄은 저절로 빠집니다">
+            제목 줄
+          </span>
+        )}
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <label
+          className="flex cursor-pointer items-center gap-1 font-semibold text-ink2"
+          title="결재가 끝난 문서는 거래처에 보낼 모양으로 — 상단 바·문서 정보·제목·결재란·첨부·맺음말과, 시트에서 '대외 문서에서 숨김' 행을 뺍니다(발주서 PDF와 같은 모양)"
+        >
+          <input type="checkbox" checked={!!form.hideDocInfoOnComplete} onChange={(e) => set({ hideDocInfoOnComplete: e.target.checked })} className="h-3 w-3 accent-teal" />
+          대외 문서
+        </label>
       </div>
 
       {/* 편집기 + 옆 패널 */}
@@ -406,7 +458,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
               <summary className="cursor-pointer select-none text-[11px] font-semibold text-white/90">
                 문서 머리 — 기안·결재·인쇄 화면에서 시트 위에 붙는 부분(위 '문서 머리에 보일 항목'으로 켜고 끔)
               </summary>
-              <DocFrame form={form} me={user} only="header" />
+              <DocFrame form={docForm} me={user} only="header" />
             </details>
           )}
           <SheetEditor
@@ -423,8 +475,21 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
             height="calc(100vh - 330px)"
-            paper={user && view === 'paper' ? (table) => <DocFrame form={form} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
+            paper={user && view === 'paper' ? (table) => <DocFrame form={docForm} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
             toolbarExtra={
+              <>
+              <button
+                type="button"
+                onClick={() => {
+                  if (covered.length > 0 && !confirm('시트에 이미 문서 정보 칸(기안자·문서번호·제목 등)이 있습니다. 그래도 맨 위에 문서 정보 표를 하나 더 넣을까요?')) return;
+                  setSheet(insertDocInfoBlock(sheet));
+                  setMsg({ kind: 'ok', text: '맨 위에 문서 정보 표를 넣었습니다 — 같은 항목은 문서 머리에서 저절로 빠집니다. 색·위치·칸 합치기는 서식에 맞게 바꿔 쓰세요(Ctrl+Z 로 되돌리기).' });
+                }}
+                title="시트 맨 위에 문서번호·기안부서·기안자·기안일·보존연한·공개범위·제목 표를 넣습니다(대외 문서에서는 숨김)"
+                className="h-7 rounded-md border border-border bg-white px-2 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal"
+              >
+                문서 정보 표 넣기
+              </button>
               <div className="flex rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="문서 보기: 실제 문서 모양 그대로 편집 · 격자 보기: 엑셀처럼 A·B·C 머리와 함께">
                 {(
                   [
@@ -437,6 +502,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                   </button>
                 ))}
               </div>
+              </>
             }
           />
           <div className="space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3">
@@ -477,7 +543,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                 <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </div>
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} />
             </>
           ) : (
             <VersionHistory
@@ -578,8 +644,11 @@ function VersionHistory({
  * 두 탭 모두 문서 머리·첨부·맺음말까지 문서 전체(DocFrame)
  */
 function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalForm; sheet: Sheet; title: string; link: string | null; onClose: () => void }) {
-  const [tab, setTab] = useState<'draft' | 'view'>('draft');
+  const [tab, setTab] = useState<'draft' | 'view' | 'external'>('draft');
   const [values, setValues] = useState<Record<string, string>>({});
+  // 문서 항목 칸(제목·보존연한·공개범위) — 기안 화면에선 문서 머리와 같은 값
+  const [docFields, setDocFields] = useState<DocFields>({ title: '', preservationPeriod: form.preservationPeriod || '5년', visibility: '부서' });
+  const docForm = withBodyHeader(form, sheetHeaderItems(sheet));
   const [issues, setIssues] = useState<string[]>([]);
   const { data: holidays = [] } = useHolidays();
   const { user } = useAuth();
@@ -599,13 +668,28 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       link={link}
       systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
       draftInfo={{ ...info, docNo: '(상신 때 부여)' }}
+      docFields={docFields}
+      onDocField={(p) => setDocFields((d) => ({ ...d, ...p }))}
       values={values}
       onFields={(f) => setValues((v) => ({ ...v, ...f }))}
       onIssues={setIssues}
     />
   );
   const viewBody = (
-    <SheetDocView template={sheet} fieldValues={{ ...values, __formVersion: '미리보기@v1' }} masked={false} stamped docInfo={{ ...info, docNo: 'AP-미리보기' }} />
+    <SheetDocView
+      template={sheet}
+      fieldValues={{ ...values, __formVersion: '미리보기@v1' }}
+      masked={false}
+      stamped
+      external={tab === 'external'}
+      docInfo={{
+        ...info,
+        docNo: 'AP-미리보기',
+        title: docFields.title,
+        preservation: docFields.preservationPeriod,
+        visibility: VISIBILITY_LABEL[docFields.visibility] ?? docFields.visibility,
+      }}
+    />
   );
   const tabCls = (on: boolean) => `rounded-md px-3 py-1 text-[12px] font-bold ${on ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`;
   return (
@@ -629,6 +713,11 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
               <button type="button" className={tabCls(tab === 'view')} onClick={() => setTab('view')}>
                 결재·인쇄 화면
               </button>
+              {form.hideDocInfoOnComplete && (
+                <button type="button" className={tabCls(tab === 'external')} onClick={() => setTab('external')} title="결재가 끝난 뒤 거래처에 보낼 모양(발주서 PDF와 같음)">
+                  대외 문서
+                </button>
+              )}
             </div>
             <button type="button" onClick={() => setValues({})} className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink2 hover:text-ink">
               입력 지우기
@@ -640,7 +729,12 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
         </div>
         <div className="bg-[#878d90] p-4">
           {user ? (
-            <DocFrame form={form} me={user} interactive={tab === 'draft'} body={tab === 'draft' ? draftBody : viewBody} />
+            tab === 'external' ? (
+              // 대외 문서 — 문서 머리·결재란·첨부·맺음말 없이 시트만(숨김 행 뺌)
+              <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{viewBody}</div>
+            ) : (
+              <DocFrame form={docForm} me={user} interactive={tab === 'draft'} body={tab === 'draft' ? draftBody : viewBody} />
+            )
           ) : (
             <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{tab === 'draft' ? draftBody : viewBody}</div>
           )}

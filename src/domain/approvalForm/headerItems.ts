@@ -37,6 +37,27 @@ export function headerShown(form: { hiddenHeaderItems?: string[] | null } | null
   return !(form?.hiddenHeaderItems ?? []).includes(item);
 }
 
+/**
+ * 머리의 제목 줄 — 서식 설정 목록에는 없고, 시트 서식이 시트 안에 제목 칸을 둘 때만 화면에서 뺀다(저장하지 않음, withBodyHeader)
+ */
+export const TITLE_ROW = 'titleRow';
+
+/**
+ * 본문(시트)이 맡은 머리 항목을 뺀 서식 — 문서가 쓴 서식 버전의 시트로 정한 항목을 화면에서만 숨긴다.
+ * 서식에 저장하지 않으므로 서식을 고쳐도 이미 쓴 문서의 머리는 그대로.
+ */
+export function withBodyHeader<F extends { hiddenHeaderItems?: string[] | null }>(form: F, covered: string[]): F;
+export function withBodyHeader<F extends { hiddenHeaderItems?: string[] | null }>(form: F | undefined, covered: string[]): F | undefined;
+export function withBodyHeader<F extends { hiddenHeaderItems?: string[] | null }>(form: F | undefined, covered: string[]): F | undefined {
+  if (!form || covered.length === 0) return form;
+  return { ...form, hiddenHeaderItems: [...new Set([...(form.hiddenHeaderItems ?? []), ...covered])] };
+}
+
+/** 머리에 제목 줄을 둘지 — '문서제목' 칸(기존 서식)이나 시트의 제목 칸이 있으면 본문에서 쓴다 */
+export function titleRowShown(form: { fields?: Array<{ type: string; key: string }> | null; hiddenHeaderItems?: string[] | null } | null | undefined): boolean {
+  return !titleFieldOf(form?.fields) && !(form?.hiddenHeaderItems ?? []).includes(TITLE_ROW);
+}
+
 /** '문서제목' 칸이 있으면 머리의 제목 줄 대신 그 자리에서 제목을 입력·표시한다 */
 export function titleFieldOf<F extends { type: string; key: string }>(fields: F[] | null | undefined): F | undefined {
   return (fields ?? []).find((f) => f.type === '문서제목');

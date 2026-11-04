@@ -3,7 +3,7 @@ import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { won } from '../utils/approvalUtils';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
-import { headerShown, titleFieldOf, type HeaderItem } from '@/domain/approvalForm/headerItems';
+import { headerShown, titleRowShown, type HeaderItem } from '@/domain/approvalForm/headerItems';
 
 function korDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -65,8 +65,8 @@ export function ApprovalDocMetaTable({
   ].filter(Boolean) as Array<[string, React.ReactNode]>);
   const rows: Array<Array<[string, React.ReactNode]>> = [];
   for (let i = 0; i < cells.length; i += 2) rows.push(cells.slice(i, i + 2));
-  // '문서제목' 칸이 있으면 제목은 서식 본문에서 보인다
-  const showTitle = !titleFieldOf(form?.fields);
+  // '문서제목' 칸(기존 서식)이나 시트의 제목 칸이 있으면 제목은 서식 본문에서 보인다
+  const showTitle = titleRowShown(form);
   const showAmount = doc.amount != null && !isAmountInDetails;
   return (
     <>

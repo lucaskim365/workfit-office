@@ -20,6 +20,10 @@ import {
   applyValues,
   draftInputOf,
   invalidNumberCells,
+  isDocFieldBind,
+  PRESERVATION_OPTIONS,
+  VISIBILITY_LABEL,
+  type DocFieldBind,
   readSheetValues,
   sheetDocFields,
   type CellInput,
@@ -114,6 +118,48 @@ function UserField({ value, onSet, org }: { value: string; onSet: (text: string,
         />
       )}
     </span>
+  );
+}
+
+/** 문서 항목 칸에 쓰는 문서 값 — 문서의 제목·보존연한·공개범위(칸이 아니라 문서에 저장) */
+export interface DocFields {
+  title: string;
+  preservationPeriod: string;
+  visibility: string;
+}
+
+/** 문서 항목 칸 — 문서 머리의 제목 줄·보존연한·공개범위와 같은 입력 */
+function DocFieldCell({ bind, doc, onChange }: { bind: DocFieldBind; doc: DocFields; onChange: (patch: Partial<DocFields>) => void }) {
+  if (bind === 'doc.title') {
+    return (
+      <input
+        value={doc.title}
+        onChange={(e) => onChange({ title: e.target.value })}
+        placeholder="문서 제목을 입력하세요 (필수)"
+        className={`${FIELD} placeholder:font-normal placeholder:text-[#aaa]`}
+        style={INHERIT}
+      />
+    );
+  }
+  if (bind === 'doc.preservation') {
+    return (
+      <select value={doc.preservationPeriod} onChange={(e) => onChange({ preservationPeriod: e.target.value })} className={`${FIELD} print:appearance-none`} style={INHERIT}>
+        {PRESERVATION_OPTIONS.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <select value={doc.visibility} onChange={(e) => onChange({ visibility: e.target.value })} className={`${FIELD} print:appearance-none`} style={INHERIT}>
+      {Object.entries(VISIBILITY_LABEL).map(([v, label]) => (
+        <option key={v} value={v}>
+          {label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -229,6 +275,9 @@ export interface SheetDraftFormProps {
   systemValues?: (link: string, linked: Record<string, string>) => Record<string, string>;
   /** 값을 가져올 수 있는 관련 문서 — load 는 그 문서의 이름 값(없으면 null) */
   relatedSources?: RelatedSource[];
+  /** 문서 항목 칸(제목·보존연한·공개범위)에 보일 문서 값과 바꾸기 — 없으면 그 칸은 비어 보인다 */
+  docFields?: DocFields;
+  onDocField?: (patch: Partial<DocFields>) => void;
 }
 
 export interface RelatedSource {
@@ -238,7 +287,20 @@ export interface RelatedSource {
   load: () => NamedValues | null;
 }
 
-export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [], link: linkProp = null, systemValues, draftInfo }: SheetDraftFormProps) {
+export function SheetDraftForm({
+  formId,
+  version,
+  values,
+  onFields,
+  onIssues,
+  template,
+  relatedSources = [],
+  link: linkProp = null,
+  systemValues,
+  draftInfo,
+  docFields,
+  onDocField,
+}: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
   const isLoading = !template && fetched.isLoading;
@@ -362,8 +424,11 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
           stretchTo={DOC_SHEET_VIEW.stretchTo}
           thinBorderColor={DOC_SHEET_VIEW.thinBorderColor}
           renderCell={(r, c) => {
+            const bind = approvalCellProps(sheet, r, c).bind;
+            // 문서 항목 칸 — 문서의 제목·보존연한·공개범위를 여기서 쓴다
+            if (isDocFieldBind(bind)) return docFields && onDocField ? <DocFieldCell bind={bind} doc={docFields} onChange={onDocField} /> : '';
             // 기안 정보 칸 — 시스템 값(입력 칸이어도 고칠 수 없음)
-            const auto = draftInfoValue(approvalCellProps(sheet, r, c).bind, draftInfo);
+            const auto = draftInfoValue(bind, draftInfo);
             if (auto !== undefined) return auto;
             const input = draftInputOf(sheet, r, c);
             if (!input) return undefined;

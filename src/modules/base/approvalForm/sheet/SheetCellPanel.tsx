@@ -17,6 +17,7 @@ import {
   nameLabel,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
+import { isExternalHiddenRow, setExternalHiddenRows } from '@/modules/gw/approval/sheetForm/sheetHeader';
 
 /**
  * 시트 서식 편집기 — 고른 칸의 결재 속성(입력 칸·칸 이름·불러오기·잠금·비공개·직인).
@@ -53,10 +54,13 @@ export function SheetCellPanel({
   selection,
   onChange,
   link = null,
+  external = false,
 }: {
   sheet: Sheet;
   selection: SheetSelection;
   onChange: (next: Sheet) => void;
+  /** 서식의 '대외 문서'가 켜져 있는지 — 행 숨김 안내 문구 */
+  external?: boolean;
   /** 대체 서식(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
   link?: string | null;
 }) {
@@ -81,6 +85,13 @@ export function SheetCellPanel({
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
+
+  // 대외 문서에서 숨김 — 행 단위(칸만 비우면 빈 줄이 남아 어색함). 고른 행이 모두 켜져 있으면 켜짐으로 보인다
+  const rowFrom = Math.min(range.r1, range.r2);
+  const rowTo = Math.max(range.r1, range.r2);
+  const rowLabel = rowFrom === rowTo ? `${rowFrom + 1}행` : `${rowFrom + 1}~${rowTo + 1}행`;
+  let rowsExternalHidden = true;
+  for (let r = rowFrom; r <= rowTo; r++) if (!isExternalHiddenRow(sheet, r)) rowsExternalHidden = false;
 
   // 칸 이름 직접 쓰기 — 시스템 이름(금액 키)과 겹치거나 '__'로 시작하는 이름은 받지 않는다(저장 키와 섞이지 않게)
   const [customNameMode, setCustomNameMode] = useState(false);
@@ -240,6 +251,16 @@ export function SheetCellPanel({
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.seal, v))}
           label="회사 직인 자리"
           hint="결재가 끝나면 이 칸에 회사 직인을 찍습니다."
+        />
+        <Check
+          checked={rowsExternalHidden}
+          onChange={(v) => onChange(setExternalHiddenRows(sheet, range.r1, range.r2, v))}
+          label={`대외 문서에서 숨김 (${rowLabel})`}
+          hint={
+            external
+              ? '결재가 끝난 대외 문서(거래처용·발주서 PDF)에서 이 행을 통째로 뺍니다.'
+              : "위 '대외 문서'를 켜면 적용됩니다 — 결재가 끝난 문서를 거래처용으로 볼 때 이 행을 통째로 뺍니다."
+          }
         />
       </div>
 

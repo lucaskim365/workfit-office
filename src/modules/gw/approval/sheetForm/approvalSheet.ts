@@ -16,6 +16,8 @@ export const APPROVAL_NS = {
   seal: 'seal',
   /** 반복 구간(행) — rowMeta, 값 { id, label } */
   repeat: 'repeat',
+  /** 대외 문서에서 숨길 행 — rowMeta, 값 true. 서식의 '대외 문서'가 켜진 결재 완료 문서(거래처용 모양·발주서 PDF)에서 행째 뺀다 */
+  extHide: 'extHide',
 } as const;
 
 export type CellInputType =
@@ -42,22 +44,50 @@ export interface CellInput {
  * 기안자가 서식에서 프로젝트를 고르면 이 값이 붙은 칸들을 그 프로젝트 값으로 한꺼번에 채운다.
  * 프로젝트 항목은 프로젝트 관리 데이터가 정해진 뒤 BIND_GROUPS 에 더한다(§11.4).
  */
-export type BindSource = `draft.${string}` | `project.${string}`;
+export type BindSource = `draft.${string}` | `doc.${string}` | `project.${string}`;
 
-/** 기안 정보 — 자동 채우기 'draft.*' 칸에 보일 값. 작성 중엔 작성자·오늘, 상신된 문서는 문서에 남은 값(바뀌지 않음) */
+/**
+ * 기안 정보 — 자동 채우기 'draft.*' 칸에 보일 값. 작성 중엔 작성자·오늘, 상신된 문서는 문서에 남은 값(바뀌지 않음).
+ * title·preservation·visibility 는 '문서 항목'(doc.*) 칸 — 문서 보기에서 문서의 제목·보존연한·공개범위
+ */
 export interface DraftInfo {
   drafter: string;
   dept: string;
   date: string;
   docNo: string;
+  title?: string;
+  preservation?: string;
+  visibility?: string;
 }
 
-/** 자동 채우기 칸의 값 — 기안 정보(draft.*)면 그 값, 아니면 undefined */
+const INFO_KEY: Record<string, keyof DraftInfo> = {
+  'draft.drafter': 'drafter',
+  'draft.dept': 'dept',
+  'draft.date': 'date',
+  'draft.docNo': 'docNo',
+  'doc.title': 'title',
+  'doc.preservation': 'preservation',
+  'doc.visibility': 'visibility',
+};
+
+/** 자동 채우기 칸의 값 — 기안 정보(draft.*)·문서 항목(doc.*)이면 그 값, 아니면 undefined */
 export function draftInfoValue(bind: string | undefined, info: DraftInfo | undefined): string | undefined {
-  if (!bind || !info || !bind.startsWith('draft.')) return undefined;
-  const key = bind.slice('draft.'.length) as keyof DraftInfo;
+  const key = bind ? INFO_KEY[bind] : undefined;
+  if (!key || !info) return undefined;
   return info[key];
 }
+
+/**
+ * 문서 항목(doc.*) — 문서의 제목·보존연한·공개범위를 시트 칸에서 쓴다. 값은 칸이 아니라 문서 자체(제목·보존연한·공개범위)에
+ * 저장되므로 문서 목록·검색·모바일은 그대로 읽는다.
+ */
+export const DOC_FIELD_BINDS = ['doc.title', 'doc.preservation', 'doc.visibility'] as const;
+export type DocFieldBind = (typeof DOC_FIELD_BINDS)[number];
+export const isDocFieldBind = (bind: string | undefined): bind is DocFieldBind => (DOC_FIELD_BINDS as readonly string[]).includes(bind ?? '');
+/** 보존연한 고르기 — 문서 머리와 같은 목록 */
+export const PRESERVATION_OPTIONS = ['1년', '3년', '5년', '10년', '영구'];
+/** 공개범위 저장값 → 보이는 글자(문서 머리와 같음) */
+export const VISIBILITY_LABEL: Record<string, string> = { 부서: '부서 공개', 비공개: '비공개' };
 
 /** 이 이름공간의 칸이 든 행·열은 기안자가 지울 수 없음 */
 const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal];
@@ -205,6 +235,15 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
       { value: 'draft.dept', label: '기안 부서' },
       { value: 'draft.date', label: '기안일' },
       { value: 'draft.docNo', label: '문서번호' },
+    ],
+  },
+  {
+    // 문서 머리의 제목·보존연한·공개범위를 시트 안으로 — 기안자가 이 칸에서 쓰고, 값은 문서 자체에 저장
+    label: '문서 항목',
+    items: [
+      { value: 'doc.title', label: '제목' },
+      { value: 'doc.preservation', label: '보존연한' },
+      { value: 'doc.visibility', label: '공개범위' },
     ],
   },
 ];

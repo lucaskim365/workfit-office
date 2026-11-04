@@ -23,7 +23,11 @@ import { SheetDocView, isSheetDoc } from './sheetForm/SheetDocView';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
-import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
+import { headerShown, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
+import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
+import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL } from './sheetForm/approvalSheet';
+import { sheetHeaderItems } from './sheetForm/sheetHeader';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
@@ -330,7 +334,10 @@ export function ApprovalDocumentView({
 
 
 
-  const form = formOverride ?? forms.find((f) => f.code === doc.docType);
+  // 시트 서식 문서 — 문서가 쓴 서식 버전의 시트에 든 문서 정보 칸(기안자·제목 등)은 머리에서 뺀다(겹치지 않게)
+  const sheetVer = parseVersionKey(String(doc.fieldValues?.[SHEET_VERSION_KEY] ?? ''));
+  const { data: sheetTpl } = useFormVersionSheet(sheetVer?.formId ?? null, sheetVer?.version ?? null);
+  const form = withBodyHeader(formOverride ?? forms.find((f) => f.code === doc.docType), sheetHeaderItems(sheetTpl?.sheet));
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
   // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
   const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
@@ -696,12 +703,16 @@ export function ApprovalDocumentView({
               fieldValues={doc.fieldValues}
               masked={isMaskingActive}
               stamped={doc.status === '완료'}
-              // 자동 채우기 '기안 정보' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)
+              external={externalDoc}
+              // 자동 채우기 '기안 정보'·'문서 항목' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)
               docInfo={{
                 drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
                 dept: doc.drafterDept ?? '',
                 date: String(doc.submittedAt ?? doc.createdAt ?? '').slice(0, 10),
                 docNo: doc.docNo ?? '',
+                title: doc.title,
+                preservation: doc.preservationPeriod || form?.preservationPeriod || '',
+                visibility: VISIBILITY_LABEL[doc.visibility ?? ''] ?? doc.visibility ?? '',
               }}
             />
           </div>

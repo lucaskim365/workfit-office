@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Banknote, Building2, Calendar, CalendarRange, Eraser, FileDigit, Hash, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -58,6 +58,15 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'draft.dept': Users,
   'draft.date': CalendarDays,
   'draft.docNo': FileDigit,
+  'doc.title': Heading,
+  'doc.preservation': Archive,
+  'doc.visibility': Eye,
+};
+
+const DOC_HINTS: Record<string, string> = {
+  'doc.title': '기안자가 여기서 문서 제목을 씁니다(필수, 문서 목록·검색에 쓰는 제목). 문서 머리의 제목 줄은 빠집니다',
+  'doc.preservation': '기안자가 여기서 보존연한을 고릅니다. 문서 머리의 보존연한은 빠집니다',
+  'doc.visibility': '기안자가 여기서 공개범위를 고릅니다. 문서 머리의 공개범위는 빠집니다',
 };
 
 const cellsOf = (s: Sheet, g: CellRange) => {
@@ -85,14 +94,16 @@ const bindPart = (value: string, label: string): Part => ({
   id: `bind.${value}`,
   label,
   icon: BIND_ICONS[value] ?? FileDigit,
-  hint: `작성할 때·문서를 볼 때 ${label}을(를) 자동으로 채웁니다(기안자가 고칠 수 없음)`,
+  hint: DOC_HINTS[value] ?? `작성할 때·문서를 볼 때 ${label}을(를) 자동으로 채웁니다(기안자가 고칠 수 없음). 문서 머리의 같은 항목은 빠집니다`,
   apply: (s, g) => setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.bind, value),
   active: (p) => p.bind === value,
 });
 
 export const PART_GROUPS: { label: string; parts: Part[] }[] = [
-  { label: '입력', parts: (Object.keys(CELL_INPUT_LABELS) as CellInputType[]).map(inputPart) },
-  { label: '자동 항목', parts: (BIND_GROUPS.find((g) => g.label === '기안 정보')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
+  // 묶음 이름은 아래 '칸 속성'과 같게 — 입력 칸 / 자동 채우기 / 문서 항목
+  { label: '입력 칸', parts: (Object.keys(CELL_INPUT_LABELS) as CellInputType[]).map(inputPart) },
+  { label: '자동 채우기', parts: (BIND_GROUPS.find((g) => g.label === '기안 정보')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
+  { label: '문서 항목', parts: (BIND_GROUPS.find((g) => g.label === '문서 항목')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
   {
     label: '기타',
     parts: [
@@ -120,7 +131,7 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
         id: 'clear',
         label: '부품 빼기',
         icon: Eraser,
-        hint: '고른 칸의 입력·자동 채우기·직인을 뺍니다(글자·서식은 그대로)',
+        hint: '고른 칸의 입력 칸·자동 채우기·문서 항목·직인을 뺍니다(글자·서식은 그대로)',
         apply: (s, g) => setApprovalProp(setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.bind, undefined), g, APPROVAL_NS.seal, false),
       },
     ],
