@@ -213,7 +213,7 @@ export function SheetPalette({
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
   return (
     <div className="space-y-2">
-      <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(초록)을 다시 누르면 뺍니다.</div>
+      <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>
       {PART_GROUPS.map((g) => (
         <div key={g.label}>
           <div className="mb-1 text-[10.5px] font-bold text-ink3">{g.label}</div>
