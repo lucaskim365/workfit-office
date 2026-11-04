@@ -114,6 +114,12 @@ test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 
   for (let r = end; r <= end + 3; r++) assert.ok(isExternalHiddenRow(s, r), `맺음말 ${r}행`);
   // 제목이 없으면(엑셀 제목이 본문에 있을 때) 큰 제목 줄도 대외 문서에서 숨김
   assert.ok(isExternalHiddenRow(insertDocHeader(base), 1));
+  // 문서 이름 부품 — 큰 제목 칸에 서식 이름이 저절로, 대외 문서에도 남음
+  const auto = insertDocHeader(base, { formTitle: true });
+  assert.equal(approvalCellProps(auto, 1, 0).bind, 'doc.formTitle');
+  assert.equal(text(auto, 1, 0), '');
+  assert.ok(!isExternalHiddenRow(auto, 1));
+  assert.equal(draftInfoValue('doc.formTitle', { drafter: '', dept: '', date: '', docNo: '', formTitle: '발 주 서' }), '발 주 서');
 });
 
 test('결재란이 시트에 있으면 문서 머리 전체를 뺀다', () => {

@@ -770,6 +770,8 @@ export function ApprovalDocumentView({
                 date: korDateText(doc.submittedAt ?? doc.createdAt),
                 docNo: docNoOf(doc),
                 completedDate: doc.completedAt ? korDateText(doc.completedAt) : '',
+                // 문서 머리 큰 제목과 같은 값(격식 문서명 → 서식명)
+                formTitle: docTitle,
                 title: doc.title,
                 preservation: doc.preservationPeriod || form?.preservationPeriod || '',
                 visibility: VISIBILITY_LABEL[doc.visibility ?? ''] ?? doc.visibility ?? '',

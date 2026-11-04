@@ -97,6 +97,11 @@ test('서식·테두리', () => {
   assert.deepEqual(applyBorder(p, all, 'outer').styles['0:A'].border, { t: 'thin', l: 'thin' });
   assert.deepEqual(applyBorder(p, all, 'outer').styles['1:B'].border, { b: 'thin', r: 'thin' });
   assert.deepEqual(applyBorder(p, all, 'thickOuter').styles['0:B'].border, { t: 'thick', r: 'thick' });
+  // 굵기 고르기 — 모든 방향에 굵게
+  assert.deepEqual(applyBorder(p, all, 'outer', 'thick').styles['0:B'].border, { t: 'thick', r: 'thick' });
+  assert.deepEqual(applyBorder(p, all, 'all', 'thick').styles['0:A'].border, { t: 'thick', r: 'thick', b: 'thick', l: 'thick' });
+  assert.deepEqual(applyBorder(p, all, 'left', 'thick').styles['1:A'].border, { l: 'thick' });
+  assert.equal(applyBorder(p, all, 'left', 'thick').styles['1:B'], undefined);
   const every = applyBorder(p, all, 'all');
   assert.deepEqual(every.styles['1:A'].border, { t: 'thin', r: 'thin', b: 'thin', l: 'thin' });
   assert.deepEqual(applyBorder(every, all, 'none').styles['0:A'].border, { t: 'none', r: 'none', b: 'none', l: 'none' });

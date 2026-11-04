@@ -57,6 +57,8 @@ export interface DraftInfo {
   docNo: string;
   /** 결재 완료일 — 결재가 끝난 문서만(작성·결재 중엔 빈 값) */
   completedDate?: string;
+  /** 문서 이름(큰 제목) — 서식의 격식 문서명, 없으면 서식명(문서 머리 큰 제목과 같음) */
+  formTitle?: string;
   title?: string;
   preservation?: string;
   visibility?: string;
@@ -68,6 +70,7 @@ const INFO_KEY: Record<string, keyof DraftInfo> = {
   'draft.date': 'date',
   'draft.docNo': 'docNo',
   'draft.completedDate': 'completedDate',
+  'doc.formTitle': 'formTitle',
   'doc.title': 'title',
   'doc.preservation': 'preservation',
   'doc.visibility': 'visibility',
@@ -285,6 +288,7 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
     // 문서 머리 전체를 시트 안으로 — 결재란이 시트에 있으면 문서 머리를 모두 뺀다(§11.16)
     label: '문서 머리',
     items: [
+      { value: 'doc.formTitle', label: '문서 이름(큰 제목)' },
       { value: 'doc.approvalLine', label: '결재란' },
       { value: 'doc.logo', label: '회사 로고' },
       { value: 'draft.sign', label: '기안자 서명' },

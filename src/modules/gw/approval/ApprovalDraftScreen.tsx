@@ -1732,6 +1732,7 @@ function ApprovalDraftInner({
                     date: korDateText(new Date()),
                     docNo: editDoc?.docNo ?? '(작성 완료 시 자동 발번)',
                     completedDate: '',
+                    formTitle: form.docTitle || form.name,
                   }}
                 />
                 )

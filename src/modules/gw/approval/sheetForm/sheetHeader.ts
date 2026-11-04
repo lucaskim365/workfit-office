@@ -17,6 +17,7 @@ const HEADER_OF_BIND: Record<string, HeaderItem | typeof TITLE_ROW> = {
   'draft.drafter': 'drafter',
   'draft.date': 'draftDate',
   'draft.completedDate': 'completedDate',
+  'doc.formTitle': 'docTitle',
   'doc.preservation': 'preservation',
   'doc.visibility': 'visibility',
   'doc.title': TITLE_ROW,
@@ -91,10 +92,10 @@ const TITLE_ROW_HEIGHT = 96;
 
 /**
  * 문서 머리 전체를 시트에 넣는다 — 위: 회사 로고 / 큰 제목·결재란 / 문서 정보 표, 아래: 맺음말·기안일·기안자 서명.
- * title 이 비면(엑셀처럼 제목이 이미 본문에 있을 때) 큰 제목 칸은 비워 둔다.
+ * formTitle: 큰 제목 칸에 '문서 이름' 부품(서식의 격식 문서명·서식명이 저절로) — 아니면 title 글자, 둘 다 없으면(엑셀처럼 제목이 이미 본문에 있을 때) 비워 둔다.
  * 대외 문서에서 숨김: 로고 줄·문서 정보 표·맺음말(큰 제목 줄은 남김 — 결재란 칸은 대외 문서에서 저절로 빈다)
  */
-export function insertDocHeader(s0: Sheet, opts: { title?: string; closing?: string } = {}): Sheet {
+export function insertDocHeader(s0: Sheet, opts: { title?: string; formTitle?: boolean; closing?: string } = {}): Sheet {
   let s = s0;
   while (s.cols.length < 4) s = insertCol(s, s.cols.length);
   const n = s.cols.length;
@@ -119,16 +120,15 @@ export function insertDocHeader(s0: Sheet, opts: { title?: string; closing?: str
   if (mid > 1) s = mergeRange(s, { r1: 1, r2: 1, c1: 0, c2: mid - 1 });
   if (n - 1 > mid) s = mergeRange(s, { r1: 1, r2: 1, c1: mid, c2: n - 1 });
   const title = opts.title?.trim() ?? '';
-  if (title) {
-    s = setCellValue(s, 1, 0, title, { allowFormula: false });
-    s = applyStyle(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, { bold: true, fontSize: 20, align: 'center', valign: 'middle' });
-  }
+  if (opts.formTitle) s = setApprovalProp(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.formTitle');
+  else if (title) s = setCellValue(s, 1, 0, title, { allowFormula: false });
+  if (opts.formTitle || title) s = applyStyle(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, { bold: true, fontSize: 20, align: 'center', valign: 'middle' });
   s = setApprovalProp(s, { r1: 1, r2: 1, c1: mid, c2: mid }, APPROVAL_NS.bind, 'doc.approvalLine');
   s = applyStyle(s, { r1: 1, r2: 1, c1: mid, c2: mid }, { align: 'right', valign: 'top' });
   s = { ...s, rowHeights: { ...s.rowHeights, '1': TITLE_ROW_HEIGHT } };
   s = setRowMeta(s, APPROVAL_NS.extHide, 0, true);
   // 큰 제목이 비면 대외 문서에선 줄째 뺀다(빈 큰 줄이 남지 않게)
-  if (!title) s = setRowMeta(s, APPROVAL_NS.extHide, 1, true);
+  if (!title && !opts.formTitle) s = setRowMeta(s, APPROVAL_NS.extHide, 1, true);
   s = setRowMeta(s, APPROVAL_NS.extHide, 2, true);
   return s;
 }

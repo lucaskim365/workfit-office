@@ -30,6 +30,8 @@ interface Part {
   hint: string;
   apply: (s: Sheet, range: CellRange) => Result;
   active?: (p: ApprovalCellProps) => boolean;
+  /** 넣은 부품 빼기 — 같은 부품을 다시 누를 때 */
+  remove?: (s: Sheet, range: CellRange) => Sheet;
 }
 
 const INPUT_ICONS: Record<CellInputType, LucideIcon> = {
@@ -60,6 +62,7 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'draft.docNo': FileDigit,
   'draft.completedDate': CalendarCheck,
   'doc.title': Heading,
+  'doc.formTitle': Type,
   'doc.approvalLine': Table2,
   'doc.logo': ImageIcon,
   'draft.sign': Signature,
@@ -68,6 +71,7 @@ const BIND_ICONS: Record<string, LucideIcon> = {
 };
 
 const DOC_HINTS: Record<string, string> = {
+  'doc.formTitle': '큰 제목 — 위 \'격식 문서명\'(비면 서식명)이 저절로 들어갑니다(문서 머리 큰 제목과 같음)',
   'doc.approvalLine': '결재자 이름·도장 칸 — 결재선에 따라 칸 수가 바뀌고, 기안 화면에서 누르면 결재선을 고칩니다. 넓게 합친 칸에 두세요. 시트에 결재란이 있으면 문서 머리 전체가 빠집니다',
   'doc.logo': '회사 로고 그림',
   'draft.sign': '맺음말 아래 \'기안자 이름 (인)\' — 기안자 도장이나 서명',
@@ -96,6 +100,7 @@ const inputPart = (type: CellInputType): Part => ({
     return setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.bind, undefined), g, APPROVAL_NS.input, { type, ...keep });
   },
   active: (p) => p.input?.type === type,
+  remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.input, undefined),
 });
 
 const bindPart = (value: string, label: string): Part => ({
@@ -105,6 +110,7 @@ const bindPart = (value: string, label: string): Part => ({
   hint: DOC_HINTS[value] ?? `작성할 때·문서를 볼 때 ${label}을(를) 자동으로 채웁니다(기안자가 고칠 수 없음). 문서 머리의 같은 항목은 빠집니다`,
   apply: (s, g) => setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.bind, value),
   active: (p) => p.bind === value,
+  remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.bind, undefined),
 });
 
 export const PART_GROUPS: { label: string; parts: Part[] }[] = [
@@ -123,6 +129,7 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
         hint: '결재가 끝나면 이 칸에 회사 직인을 찍습니다',
         apply: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, true),
         active: (p) => p.seal,
+        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, false),
       },
       {
         id: 'repeat',
@@ -149,10 +156,16 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
 
 const PARTS = new Map(PART_GROUPS.flatMap((g) => g.parts).map((p) => [p.id, p]));
 
-/** 부품 넣기 — 바뀐 시트, 또는 막힌 이유 */
-export function applyPart(s: Sheet, range: CellRange, id: string): Result {
+/**
+ * 부품 넣기 — 바뀐 시트, 또는 막힌 이유.
+ * toggle: 고른 칸(범위 첫 칸)에 이미 그 부품이 있으면 뺀다(부품 목록에서 다시 누를 때). 끌어 놓기는 늘 넣기
+ */
+export function applyPart(s: Sheet, range: CellRange, id: string, toggle = false): Result {
   const part = PARTS.get(id);
-  return part ? part.apply(s, range) : s;
+  if (!part) return s;
+  const first = approvalCellProps(s, Math.min(range.r1, range.r2), Math.min(range.c1, range.c2));
+  if (toggle && part.remove && part.active?.(first)) return part.remove(s, range);
+  return part.apply(s, range);
 }
 
 export function SheetPalette({
@@ -162,13 +175,13 @@ export function SheetPalette({
 }: {
   sheet: Sheet;
   selection: SheetSelection;
-  /** 부품 id 와 넣을 범위 — 넣기·알림은 쓰는 쪽에서 */
-  onApply: (id: string, range: CellRange) => void;
+  /** 부품 id 와 넣을 범위 — 넣기·빼기·알림은 쓰는 쪽에서(누르기는 toggle: 이미 있으면 뺀다) */
+  onApply: (id: string, range: CellRange, toggle?: boolean) => void;
 }) {
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
   return (
     <div className="space-y-2">
-      <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요.</div>
+      <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(초록)을 다시 누르면 뺍니다.</div>
       {PART_GROUPS.map((g) => (
         <div key={g.label}>
           <div className="mb-1 text-[10.5px] font-bold text-ink3">{g.label}</div>
@@ -185,8 +198,8 @@ export function SheetPalette({
                     e.dataTransfer.setData(PART_MIME, p.id);
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
-                  onClick={() => onApply(p.id, selection.range)}
-                  title={p.hint}
+                  onClick={() => onApply(p.id, selection.range, true)}
+                  title={on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}
                   className={`flex cursor-grab flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1 text-[10px] font-semibold leading-tight active:cursor-grabbing ${
                     on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'
                   }`}

@@ -5,7 +5,7 @@
  * - 업무 규칙(결재 칸 등)은 모르며, 쓰는 쪽이 판단 함수·칸 표시·도구 모음 끝 버튼을 넘겨준다
  * - 되돌리기(Ctrl+Z)·다시 실행(Ctrl+Y)은 편집기 안에서 관리한다
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { colLetter } from './formula';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, recalculate, type CellStyle, type Sheet } from './model';
 import {
@@ -72,16 +72,14 @@ const HISTORY_LIMIT = 50;
 const HEADER_W = 40;
 const HEADER_H = 24;
 
+/** 테두리 고르기 — 줄마다 방향, 칸마다 굵기(일반·굵게) */
 const BORDER_PRESETS: Array<{ preset: BorderPreset; label: string }> = [
   { preset: 'all', label: '모든 테두리' },
   { preset: 'outer', label: '바깥 테두리' },
-  { preset: 'thickOuter', label: '굵은 바깥 테두리' },
-  { preset: 'top', label: '위쪽 테두리' },
-  { preset: 'bottom', label: '아래쪽 테두리' },
-  { preset: 'left', label: '왼쪽 테두리' },
-  { preset: 'right', label: '오른쪽 테두리' },
-  { preset: 'thickBottom', label: '굵은 아래쪽 테두리' },
-  { preset: 'none', label: '테두리 없음' },
+  { preset: 'top', label: '위쪽' },
+  { preset: 'bottom', label: '아래쪽' },
+  { preset: 'left', label: '왼쪽' },
+  { preset: 'right', label: '오른쪽' },
 ];
 
 const NUM_FORMATS: Array<{ key: NonNullable<CellStyle['numFmt']>; label: string }> = [
@@ -711,20 +709,41 @@ export function SheetEditor({
               테두리 ▾
             </button>
             {popover === 'border' && (
-              <div className="absolute left-0 top-full z-30 mt-1 w-[150px] rounded-lg border border-border bg-white py-1 shadow-lg">
-                {BORDER_PRESETS.map((b) => (
-                  <button
-                    key={b.preset}
-                    type="button"
-                    onClick={() => {
-                      update((s) => applyBorder(s, range, b.preset));
-                      setPopover(null);
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-[11.5px] text-ink hover:bg-teal-soft/40"
-                  >
-                    {b.label}
-                  </button>
-                ))}
+              <div className="absolute left-0 top-full z-30 mt-1 w-[210px] rounded-lg border border-border bg-white p-1.5 shadow-lg">
+                <div className="grid grid-cols-[1fr_52px_52px] items-center gap-x-1 gap-y-0.5 text-[11.5px]">
+                  <span />
+                  <span className="text-center text-[10.5px] font-semibold text-ink3">일반</span>
+                  <span className="text-center text-[10.5px] font-semibold text-ink3">굵게</span>
+                  {BORDER_PRESETS.map((b) => (
+                    <Fragment key={b.preset}>
+                      <span className="px-1 text-ink">{b.label}</span>
+                      {(['thin', 'thick'] as const).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          title={`${b.label} — ${w === 'thin' ? '일반' : '굵게'}`}
+                          onClick={() => {
+                            update((s) => applyBorder(s, range, b.preset, w));
+                            setPopover(null);
+                          }}
+                          className="grid h-6 place-items-center rounded border border-border hover:border-teal hover:bg-teal-soft/40"
+                        >
+                          <span className={`block w-6 bg-ink ${w === 'thin' ? 'h-px' : 'h-[3px]'}`} />
+                        </button>
+                      ))}
+                    </Fragment>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    update((s) => applyBorder(s, range, 'none'));
+                    setPopover(null);
+                  }}
+                  className="mt-1.5 block w-full rounded border-t border-border px-2 pt-1.5 text-left text-[11.5px] text-ink hover:bg-teal-soft/40"
+                >
+                  테두리 없음
+                </button>
               </div>
             )}
           </div>

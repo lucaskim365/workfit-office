@@ -67,7 +67,7 @@ export function SheetFormDesigner(props: Props) {
       </div>
     );
   }
-  return <Designer {...props} initial={loaded?.sheet ?? insertDocHeader(fitToPage(createSheet(12, 8)), { title: '기 안 서' })} initialLink={loaded?.link ?? null} />;
+  return <Designer {...props} initial={loaded?.sheet ?? insertDocHeader(fitToPage(createSheet(12, 8)), { formTitle: true })} initialLink={loaded?.link ?? null} />;
 }
 
 /** 새 서식 틀 — 열 너비를 A4 인쇄 폭에 맞춰 나눈다(기안 화면에서 옆으로 밀리지 않게) */
@@ -193,8 +193,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const docForm = useMemo(() => withBodyHeader(form, covered), [form, covered]);
 
   // ── 부품 넣기(부품 목록 — 누르기·끌어 놓기) ──
-  const putPart = (id: string, range: CellRange) => {
-    const res = applyPart(sheet, range, id);
+  const putPart = (id: string, range: CellRange, toggle = false) => {
+    const res = applyPart(sheet, range, id, toggle);
     if ('notice' in res) return setMsg({ kind: 'err', text: res.notice });
     setSheet(res);
     setSide('cell');
@@ -247,7 +247,15 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     // 자동 채우기(기안 정보) 칸 — 어떤 값이 들어갈지 흐리게
     const emptyCell = col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
     const autoLook =
-      p.bind === 'doc.approvalLine' ? (
+      p.bind === 'doc.formTitle' ? (
+        <span
+          aria-hidden
+          title="문서 이름 — 위 '격식 문서명'(비면 서식명)이 저절로 들어갑니다"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center px-1 text-sky-700/80"
+        >
+          {form.docTitle || form.name || '문서 이름'}
+        </span>
+      ) : p.bind === 'doc.approvalLine' ? (
         <span
           aria-hidden
           className="pointer-events-none absolute inset-1 flex items-center justify-center rounded border-2 border-dashed border-indigo-300 bg-indigo-50/60 text-[11px] font-semibold text-indigo-500"
@@ -502,7 +510,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             onSelect={setSelection}
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
-            height="calc(100vh - 330px)"
+            // 화면 높이에 맞춤 — 글자 크기 배율(body zoom)로 나눠야 실제 화면 높이(안 그러면 페이지 전체를 위아래로 스크롤해야 함)
+            height="calc(100vh / var(--font-scale, 1) - 330px)"
             paper={user && view === 'paper' ? (table) => <DocFrame form={docForm} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
             toolbarExtra={
               <>
@@ -510,10 +519,10 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                 type="button"
                 onClick={() => {
                   if (covered.length > 0 && !confirm('시트에 이미 문서 머리 칸(결재란·기안자·문서번호·제목 등)이 있습니다. 그래도 문서 머리를 하나 더 넣을까요?')) return;
-                  setSheet(insertDocHeader(sheet, { title: '', closing: form.closing || undefined }));
+                  setSheet(insertDocHeader(sheet, { formTitle: true, closing: form.closing || undefined }));
                   setMsg({
                     kind: 'ok',
-                    text: '맨 위에 회사 로고·큰 제목/결재란·문서 정보 표를, 맨 아래에 맺음말·기안일·기안자 서명을 넣었습니다 — 시트 밖 문서 머리는 저절로 빠집니다. 큰 제목 칸에 문서 이름을 쓰고, 색·위치는 서식에 맞게 바꾸세요(Ctrl+Z 로 되돌리기).',
+                    text: '맨 위에 회사 로고·큰 제목/결재란·문서 정보 표를, 맨 아래에 맺음말·기안일·기안자 서명을 넣었습니다 — 시트 밖 문서 머리는 저절로 빠집니다. 큰 제목에는 격식 문서명(없으면 서식명)이 저절로 들어갑니다 — 엑셀 제목과 겹치면 한쪽을 지우세요. 색·위치는 서식에 맞게 바꾸세요(Ctrl+Z 로 되돌리기).',
                   });
                 }}
                 title="문서 머리 전체를 시트 안으로 — 위: 회사 로고·큰 제목·결재란·문서 정보 표, 아래: 맺음말·기안일·기안자 서명(대외 문서에서는 숨김)"
@@ -544,13 +553,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             )}
             <div>
               {view === 'paper'
-                ? "문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다(문서 머리는 위 '문서 머리에 보일 항목'으로 켜고 끔). 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다."
+                ? `문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다${fullHeader ? '' : "(시트 밖 문서 머리는 위 '문서 머리에 보일 항목'으로 켜고 끔)"}. 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다.`
                 : '세로 점선 = A4 세로 인쇄 폭.'}{' '}
               칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다. 보라색 띠 = 반복 구간(기안자가 행 추가·삭제).</div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-panel p-3">
+        {/* 화면에 붙어 있고 안에서만 스크롤 — 시트를 내려 봐도 패널은 그 자리에. 높이는 글자 크기 배율(body zoom)로 나눠야 화면 높이와 맞는다 */}
+        <div className="rounded-xl border border-border bg-panel p-3 xl:sticky xl:top-3 xl:max-h-[calc(100vh/var(--font-scale,1)_-_290px)] xl:overflow-y-auto">
           <div className="mb-3 flex rounded-lg border border-border bg-panel-alt p-0.5 text-[11.5px]">
             {(
               [
@@ -570,10 +580,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
           </div>
           {side === 'cell' ? (
             <>
-              <div className="mb-3 border-b border-border pb-3">
-                <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>
+              <details open className="group mb-3 border-b border-border pb-3">
+                <summary className="mb-1 flex cursor-pointer list-none items-center justify-between text-[12.5px] font-extrabold text-ink">
+                  부품
+                  <span className="text-[10.5px] font-semibold text-ink3 group-open:hidden">펼치기 ▾</span>
+                  <span className="hidden text-[10.5px] font-semibold text-ink3 group-open:inline">접기 ▴</span>
+                </summary>
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
-              </div>
+              </details>
               <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} />
             </>
           ) : (
@@ -690,6 +704,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
     drafter: user ? [user.name, user.position].filter(Boolean).join(' ') : '홍길동 사원',
     dept: user?.dept ?? '기획팀',
     date: korDateText(new Date()),
+    formTitle: form.docTitle || form.name,
   };
   const draftBody = (slots: SheetSlots) => (
     <SheetDraftForm

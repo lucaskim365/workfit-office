@@ -272,7 +272,10 @@ function expandToMerges(s: Sheet, range: CellRange): CellRange {
  * 범위는 걸친 병합 블록까지 넓힌다. '없음'은 범위 바깥 이웃 칸이 맞닿은 쪽에 그린 선도 지운다
  * (화면은 이웃 칸 선도 모아 그리므로 — style.ts cellBorder)
  */
-export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): Sheet {
+/**
+ * 테두리 넣기 — weight 는 선 굵기(일반·굵게). 'thickOuter'·'thickBottom' 은 예전 이름(굵게 + 바깥/아래쪽)으로 그대로 받는다.
+ */
+export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset, weight: 'thin' | 'thick' = 'thin'): Sheet {
   const g = expandToMerges(s, range);
   const styles = { ...s.styles };
   const setSide = (r: number, c: number, side: 't' | 'r' | 'b' | 'l', w: BorderW | undefined) => {
@@ -294,7 +297,7 @@ export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): S
     const right = c === g.c2;
     switch (preset) {
       case 'all':
-        (['t', 'r', 'b', 'l'] as const).forEach((k) => setSide(r, c, k, 'thin'));
+        (['t', 'r', 'b', 'l'] as const).forEach((k) => setSide(r, c, k, weight));
         break;
       case 'none':
         (['t', 'r', 'b', 'l'] as const).forEach((k) => setSide(r, c, k, 'none'));
@@ -305,7 +308,7 @@ export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): S
         break;
       case 'outer':
       case 'thickOuter': {
-        const w = preset === 'thickOuter' ? 'thick' : 'thin';
+        const w = preset === 'thickOuter' ? 'thick' : weight;
         if (top) setSide(r, c, 't', w);
         if (bottom) setSide(r, c, 'b', w);
         if (left) setSide(r, c, 'l', w);
@@ -313,19 +316,19 @@ export function applyBorder(s: Sheet, range: CellRange, preset: BorderPreset): S
         break;
       }
       case 'top':
-        if (top) setSide(r, c, 't', 'thin');
+        if (top) setSide(r, c, 't', weight);
         break;
       case 'bottom':
-        if (bottom) setSide(r, c, 'b', 'thin');
+        if (bottom) setSide(r, c, 'b', weight);
         break;
       case 'thickBottom':
         if (bottom) setSide(r, c, 'b', 'thick');
         break;
       case 'left':
-        if (left) setSide(r, c, 'l', 'thin');
+        if (left) setSide(r, c, 'l', weight);
         break;
       case 'right':
-        if (right) setSide(r, c, 'r', 'thin');
+        if (right) setSide(r, c, 'r', weight);
         break;
     }
   });
