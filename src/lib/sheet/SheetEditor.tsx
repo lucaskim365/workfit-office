@@ -782,7 +782,8 @@ export function SheetEditor({
         )}
       </div>
 
-      {/* 격자 */}
+      {/* 격자 — 열 머리(A·B·C) 아래 선과 행 번호 칸 오른쪽 선은 없앤다: 같은 굵기 테두리가 겹치면 위·왼쪽 칸 선이 이겨
+          맨 위 행·A열의 서식 테두리가 머리 칸의 연회색 선에 가려지기 때문 */}
       <div
         ref={gridRef}
         tabIndex={0}
@@ -815,7 +816,7 @@ export function SheetEditor({
                     e.preventDefault();
                     setHeaderMenu({ kind: 'col', idx: c, x: e.clientX, y: e.clientY });
                   }}
-                  className={`sticky top-0 z-[2] select-none border border-[#d0d0d0] text-center text-[11px] font-semibold ${
+                  className={`sticky top-0 z-[2] select-none border border-b-0 border-[#d0d0d0] [background-clip:padding-box] text-center text-[11px] font-semibold ${
                     c >= range.c1 && c <= range.c2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
                   }`}
                 >
@@ -848,7 +849,7 @@ export function SheetEditor({
                     e.preventDefault();
                     setHeaderMenu({ kind: 'row', idx: r, x: e.clientX, y: e.clientY });
                   }}
-                  className={`sticky left-0 z-[1] select-none border border-[#d0d0d0] p-0 text-center text-[11px] font-semibold ${
+                  className={`sticky left-0 z-[1] select-none border border-r-0 border-[#d0d0d0] [background-clip:padding-box] p-0 text-center text-[11px] font-semibold ${
                     r >= range.r1 && r <= range.r2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
                   }`}
                 >
@@ -885,22 +886,10 @@ export function SheetEditor({
                       }`}
                       style={{
                         textAlign: defaultAlign(computed, r, col),
-                        ...(() => {
-                          // 테두리는 칸 안쪽 그림자로 — 칸에 위치 지정(relative)이 있어 표 겹침 테두리로 그리면 크롬이 배경색을
-                          // 이웃 테두리 위에 칠하고, A열 왼쪽 선은 행 번호 칸의 격자선에 진다. 한 선은 한 칸만 그린다:
-                          // 오른쪽·아래는 늘, 왼쪽·위는 맨 앞 열·맨 위 행일 때만(이웃 선은 cellBorder 가 이미 모아 둠)
-                          const rs = renderStyle(value, r, c, m?.rowSpan, m?.colSpan);
-                          const b = rs?.border;
-                          const w = (x?: string) => (x === 'thick' ? 2 : x === 'thin' ? 1 : 0);
-                          const color = (x?: string) => (x === 'thick' ? '#111' : '#333');
-                          const shadows = [
-                            w(b?.r) && `inset -${w(b?.r)}px 0 0 ${color(b?.r)}`,
-                            w(b?.b) && `inset 0 -${w(b?.b)}px 0 ${color(b?.b)}`,
-                            c === 0 && w(b?.l) && `inset ${w(b?.l)}px 0 0 ${color(b?.l)}`,
-                            r === 0 && w(b?.t) && `inset 0 ${w(b?.t)}px 0 ${color(b?.t)}`,
-                          ].filter(Boolean);
-                          return { ...cellCss(rs ? { ...rs, border: undefined } : undefined), ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}) };
-                        })(),
+                        ...cellCss(renderStyle(value, r, c, m?.rowSpan, m?.colSpan)),
+                        // 배경은 칸 안쪽만 칠한다 — 칸에 위치 지정(relative)이 있으면 크롬이 배경을 이웃 칸과 맞닿은
+                        // 테두리 위에까지 칠해 선이 군데군데 사라진다(배경색 칸 둘레)
+                        backgroundClip: 'padding-box',
                         ...(() => {
                           // 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다
                           const w = cols.slice(c, c + (m?.colSpan ?? 1)).reduce((sum, k) => sum + colW(k), 0);
