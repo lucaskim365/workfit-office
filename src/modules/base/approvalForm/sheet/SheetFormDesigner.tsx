@@ -10,7 +10,7 @@ import { HEADER_ITEMS, HEADER_ITEM_LABEL, withBodyHeader } from '@/domain/approv
 import { insertDocInfoBlock, isExternalHiddenRow, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
-import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type CellRange, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
@@ -86,6 +86,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [link, setLink] = useState<string | null>(initialLink);
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   const [side, setSide] = useState<'cell' | 'history'>('cell');
+  // 서식별 최신 버전 — 지운 서식의 버전 기록도 남아 있다(버전은 지우지 않음)
+  const { latest: versionHeads } = useSheetFormVersions();
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
   // 편집 화면 — 문서(종이 위에서 실제 문서 모양 그대로) / 격자(엑셀처럼 A·B·C 머리)
   const [view, setView] = useState<'paper' | 'grid'>(() => {
@@ -152,6 +154,10 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (!code) return setMsg({ kind: 'err', text: '서식 코드를 입력하세요.' });
     if (isNew && forms.some((f) => f.code.toLowerCase() === code.toLowerCase())) {
       return setMsg({ kind: 'err', text: `서식 코드 '${code}'는 이미 쓰고 있습니다. 다른 코드를 정해 주세요.` });
+    }
+    // 지운 시트 서식의 코드 — 버전 기록(v1…)이 남아 있어 같은 코드로 새로 저장하면 옛 버전과 부딪힌다
+    if (isNew && versionHeads.has(code)) {
+      return setMsg({ kind: 'err', text: `서식 코드 '${code}'는 예전에 지운 시트 서식이 쓰던 코드입니다(버전 기록 v${versionHeads.get(code)}까지 남아 있음 — 그 코드로 쓴 문서를 보여 주려고 지우지 않음). 다른 코드를 정해 주세요.` });
     }
     const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet), ...linkIssues(sheet, link)];
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
