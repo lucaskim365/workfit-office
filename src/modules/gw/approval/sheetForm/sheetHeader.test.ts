@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, setCellValue, type Sheet } from '@/lib/sheet';
-import { TITLE_ROW, titleRowShown, withBodyHeader } from '@/domain/approvalForm/headerItems';
-import { APPROVAL_NS, approvalCellProps, draftInfoValue, korDateText, setApprovalProp } from './approvalSheet';
-import { DOC_INFO_ROWS, insertDocInfoBlock, isExternalHiddenRow, setExternalHiddenRows, sheetHeaderItems, withoutExternalRows } from './sheetHeader';
+import { HEADER_ITEMS, STAMP_TABLE, TITLE_ROW, stampTableInHeader, titleRowShown, withBodyHeader } from '@/domain/approvalForm/headerItems';
+import { APPROVAL_NS, DEFAULT_CLOSING, approvalCellProps, draftInfoValue, korDateText, setApprovalProp, sheetHasSeal, slotOf } from './approvalSheet';
+import { DOC_INFO_ROWS, insertDocHeader, insertDocInfoBlock, isFullHeaderSheet, isExternalHiddenRow, setExternalHiddenRows, sheetHeaderItems, withoutExternalRows } from './sheetHeader';
 
 const text = (s: Sheet, r: number, c: number) => String(s.rows[r]?.[s.cols[c]] ?? '');
 
@@ -88,4 +88,53 @@ test('대외 문서 — 숨김 행을 통째로 빼고, 켜고 끌 수 있다', 
   assert.ok(!isExternalHiddenRow(s, 1));
   assert.equal(s.rowMeta[APPROVAL_NS.extHide]?.[String(4)], true);
   assert.equal(withoutExternalRows(createSheet(2, 2)).rows.length, 2);
+});
+
+test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 정보, 아래: 맺음말·기안일·기안자 서명', () => {
+  const base = setCellValue(createSheet(2, 6), 0, 0, '본문');
+  const s = insertDocHeader(base, { title: '기 안 서' });
+  const top = 3 + DOC_INFO_ROWS + 1;
+  assert.equal(s.rows.length, top + 2 + 4);
+  assert.equal(approvalCellProps(s, 0, 0).bind, 'doc.logo');
+  assert.equal(text(s, 1, 0), '기 안 서');
+  assert.equal(approvalCellProps(s, 1, 3).bind, 'doc.approvalLine', '결재란은 오른쪽 절반');
+  assert.ok(s.merges.some((m) => m.startRow === 1 && m.startCol === 3 && m.colSpan === 3));
+  assert.equal(s.rowHeights['1'], 96);
+  assert.equal(approvalCellProps(s, 3, 1).bind, 'draft.docNo', '그 아래 문서 정보 표');
+  assert.equal(text(s, top, 0), '본문');
+  const end = top + 2;
+  assert.equal(text(s, end + 1, 0), DEFAULT_CLOSING);
+  assert.equal(approvalCellProps(s, end + 2, 0).bind, 'draft.date');
+  assert.equal(approvalCellProps(s, end + 3, 0).bind, 'draft.sign');
+  // 대외 문서: 로고·문서 정보·맺음말은 숨김, 큰 제목 줄은 남김
+  assert.ok(isExternalHiddenRow(s, 0));
+  assert.ok(!isExternalHiddenRow(s, 1));
+  assert.ok(isExternalHiddenRow(s, 3));
+  assert.ok(!isExternalHiddenRow(s, top));
+  for (let r = end; r <= end + 3; r++) assert.ok(isExternalHiddenRow(s, r), `맺음말 ${r}행`);
+  // 제목이 없으면(엑셀 제목이 본문에 있을 때) 큰 제목 줄도 대외 문서에서 숨김
+  assert.ok(isExternalHiddenRow(insertDocHeader(base), 1));
+});
+
+test('결재란이 시트에 있으면 문서 머리 전체를 뺀다', () => {
+  const s = insertDocHeader(createSheet(2, 4), { title: '기안서' });
+  assert.ok(isFullHeaderSheet(s));
+  const items = sheetHeaderItems(s);
+  for (const item of [...HEADER_ITEMS, TITLE_ROW, STAMP_TABLE]) assert.ok(items.includes(item), item);
+  assert.equal(stampTableInHeader(withBodyHeader({ hiddenHeaderItems: [] }, items)), false);
+  assert.equal(stampTableInHeader({ hiddenHeaderItems: [] }), true);
+  // 문서 정보 표만 있으면 결재란·로고 등은 머리에 남는다
+  assert.ok(!isFullHeaderSheet(insertDocInfoBlock(createSheet(2, 4))));
+});
+
+test('문서 머리 부품 칸 이름, 직인 서식 판단', () => {
+  assert.equal(slotOf('doc.approvalLine'), 'approvalLine');
+  assert.equal(slotOf('doc.logo'), 'logo');
+  assert.equal(slotOf('draft.sign'), 'drafterSign');
+  assert.equal(slotOf('draft.drafter'), undefined);
+  assert.equal(slotOf(undefined), undefined);
+  const s = createSheet(2, 2);
+  assert.equal(sheetHasSeal(s), false);
+  assert.equal(sheetHasSeal(setApprovalProp(s, { r1: 0, r2: 0, c1: 1, c2: 1 }, APPROVAL_NS.seal, true)), true);
+  assert.equal(sheetHasSeal(null), false);
 });

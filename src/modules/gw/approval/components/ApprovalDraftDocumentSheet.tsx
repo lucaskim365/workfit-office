@@ -32,7 +32,8 @@ import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
-import { headerShown, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
+import { headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
+import type { SheetSlots } from '../sheetForm/approvalSheet';
 import { CompanyLetterhead } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
@@ -110,8 +111,8 @@ export interface ApprovalDraftDocumentSheetProps {
   onUpdateDocTitle?: (v: string) => void;
   onUpdateClosing?: (v: string) => void;
   onStampTableClick?: () => void;
-  /** 시트 서식 본문 — 있으면 서식 항목 대신 이것을 그린다 */
-  sheetBody?: React.ReactNode;
+  /** 시트 서식 본문 — 있으면 서식 항목 대신 이것을 그린다. 함수면 결재란·로고·기안자 서명(SheetSlots)을 받아 칸에 넣는다 */
+  sheetBody?: React.ReactNode | ((slots: SheetSlots) => React.ReactNode);
   /** 'header' 면 문서 머리(로고·제목·결재란·문서 정보·제목 줄)까지만 그린다 — 시트 서식 편집기의 머리 보기용 */
   only?: 'header';
   /** 종이 최대 폭(px, 기본 800) — 시트 서식 편집기에서 넓은 시트를 종이 위에서 편집할 때 */
@@ -397,6 +398,80 @@ export function ApprovalDraftDocumentSheet({
   const shownDocNo = docNoField ? String(values[docNoField.key] ?? '') : editDocNo ?? '';
   const showDocTitle = headerShown(form, 'docTitle');
 
+  // 결재란·기안자 서명·로고 — 문서 머리와, 문서 머리를 시트에 넣은 시트 서식의 칸(SheetSlots)이 함께 쓴다
+  const stampBlock = (
+    <div
+      role={onStampTableClick ? 'button' : undefined}
+      tabIndex={onStampTableClick ? 0 : undefined}
+      onClick={onStampTableClick}
+      onKeyDown={onStampTableClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStampTableClick(); } } : undefined}
+      className={`relative group ${onStampTableClick
+        ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 focus:outline-none focus-visible:ring-teal transition-all rounded p-1'
+        : ''
+        }`}
+      title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선 규칙 설정' : '클릭하여 결재선 편집') : undefined}
+    >
+      {onStampTableClick && (
+        <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">
+          <span>{isDesignMode ? '⚙️ 클릭하여 결재선 규칙 설정' : '✏️ 클릭하여 결재선 편집'}</span>
+        </div>
+      )}
+      {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
+      {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
+        <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
+          + 결재선 지정
+        </div>
+      )}
+      {/* 직인 서식도 결재가 끝나기 전에는 결재란을 보인다 — 완료되면 문서에서 결재란 대신 회사 직인([[seal]]) */}
+      <ApprovalStampTable
+        steps={stampSteps}
+        nameOf={nameOf}
+        posOf={posOf}
+        sealOf={sealOf}
+        isSignatureOf={isSignatureOf}
+        allowCurrentSignature
+        isPostApproval={isPostApproval}
+      />
+    </div>
+  );
+  const drafterSignBlock = (
+    <div className="mt-1 flex items-center justify-center gap-1">
+      기안자{' '}
+      <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{me.name}</span>
+      {/* 본인 직인/서명 렌더링 */}
+      {me.signType === 'signature' ? (
+        me.signUrl ? (
+          <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
+            <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+            <img
+              src={me.signUrl}
+              alt="서명"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
+            />
+          </span>
+        ) : (
+          <span className="relative inline-flex h-7 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[9.5px] font-bold text-danger/80 select-none">
+            서명미등록
+          </span>
+        )
+      ) : me.sealUrl ? (
+        <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
+          <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+          <img src={me.sealUrl} alt="인감" className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none" />
+        </span>
+      ) : (
+        <span className="grid h-[32px] w-[32px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[9.5px] font-bold text-[#c0392b] select-none">
+          (인)
+        </span>
+      )}
+    </div>
+  );
+  const slots: SheetSlots = {
+    approvalLine: stampBlock,
+    logo: <img src={processedLogo} alt="회사 로고" className="h-7 w-auto object-contain" />,
+    drafterSign: drafterSignBlock,
+  };
+
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5" style={paperWidth ? { maxWidth: paperWidth, width: paperWidth } : undefined}>
@@ -425,7 +500,7 @@ export function ApprovalDraftDocumentSheet({
       </div>
 
       {/* 2. 대형 문서 타이틀 & 우측 상단 실시간 결재 직인란 */}
-      <div className={`relative mb-5 flex items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'}`}>
+      <div className={`relative mb-5 items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'} ${showDocTitle || stampTableInHeader(form) ? 'flex' : 'hidden'}`}>
         <h1
           onClick={() => {
             if (isDesignMode && onUpdateDocTitle) {
@@ -444,44 +519,7 @@ export function ApprovalDraftDocumentSheet({
             </span>
           )}
         </h1>
-        {/*
-          실시간 연동 결재 직인 테이블 — 클릭하면
-          · 디자인 모드(서식 관리): 결재선 규칙 모달
-          · 기안 작성: 결재선·수신처 편집 모달
-        */}
-        <div
-          role={onStampTableClick ? 'button' : undefined}
-          tabIndex={onStampTableClick ? 0 : undefined}
-          onClick={onStampTableClick}
-          onKeyDown={onStampTableClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStampTableClick(); } } : undefined}
-          className={`relative group ${onStampTableClick
-            ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 focus:outline-none focus-visible:ring-teal transition-all rounded p-1'
-            : ''
-            }`}
-          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선 규칙 설정' : '클릭하여 결재선 편집') : undefined}
-        >
-          {onStampTableClick && (
-            <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">
-              <span>{isDesignMode ? '⚙️ 클릭하여 결재선 규칙 설정' : '✏️ 클릭하여 결재선 편집'}</span>
-            </div>
-          )}
-          {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
-          {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
-            <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
-              + 결재선 지정
-            </div>
-          )}
-          {/* 직인 서식도 결재가 끝나기 전에는 결재란을 보인다 — 완료되면 문서에서 결재란 대신 회사 직인([[seal]]) */}
-          <ApprovalStampTable
-            steps={stampSteps}
-            nameOf={nameOf}
-            posOf={posOf}
-            sealOf={sealOf}
-            isSignatureOf={isSignatureOf}
-            allowCurrentSignature
-            isPostApproval={isPostApproval}
-          />
-        </div>
+        {stampTableInHeader(form) && stampBlock}
       </div>
 
       {/* 3. 긴급 후결(선조치 사후승인) 안내 및 입력 인포 박스 */}
@@ -1210,7 +1248,7 @@ export function ApprovalDraftDocumentSheet({
       )}
 
       {/* 8. 시트 서식 본문 */}
-      {sheetBody && <div className="mt-3">{sheetBody}</div>}
+      {sheetBody && <div className="mt-3">{typeof sheetBody === 'function' ? sheetBody(slots) : sheetBody}</div>}
 
       {/* 9. 첨부파일 영역 (ApprovalDocumentView와 100% 일치 표 규격 + 드래그앤드롭 업로더) */}
       <table className="mt-4 w-full border-collapse text-[12px] table-fixed">
@@ -1389,36 +1427,7 @@ export function ApprovalDraftDocumentSheet({
           </div>
         )}
         <div className="mt-4 font-semibold tracking-wide">{korToday()}</div>
-        <div className="mt-1 flex items-center justify-center gap-1">
-          기안자{' '}
-          <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{me.name}</span>
-          {/* 본인 직인/서명 렌더링 */}
-          {me.signType === 'signature' ? (
-            me.signUrl ? (
-              <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
-                <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
-                <img
-                  src={me.signUrl}
-                  alt="서명"
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
-                />
-              </span>
-            ) : (
-              <span className="relative inline-flex h-7 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[9.5px] font-bold text-danger/80 select-none">
-                서명미등록
-              </span>
-            )
-          ) : me.sealUrl ? (
-            <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
-              <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
-              <img src={me.sealUrl} alt="인감" className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none" />
-            </span>
-          ) : (
-            <span className="grid h-[32px] w-[32px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[9.5px] font-bold text-[#c0392b] select-none">
-              (인)
-            </span>
-          )}
-        </div>
+        {drafterSignBlock}
       </div>
       </>)}
 

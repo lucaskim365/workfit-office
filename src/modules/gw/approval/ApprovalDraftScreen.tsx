@@ -1703,6 +1703,7 @@ function ApprovalDraftInner({
             onStampTableClick={() => setLineModalOpen(true)}
             sheetBody={
               form && sheetVersion !== null ? (
+                (slots) => (
                 <SheetDraftForm
                   formId={form.id}
                   version={sheetVersion}
@@ -1722,6 +1723,8 @@ function ApprovalDraftInner({
                     if (p.preservationPeriod !== undefined) setPreservationPeriod(p.preservationPeriod);
                     if (p.visibility !== undefined) setVisibility(p.visibility === '비공개' ? '비공개' : '부서');
                   }}
+                  // 문서 머리를 시트에 넣은 서식 — 결재란(누르면 결재선 편집)·로고·기안자 서명
+                  slots={slots}
                   draftInfo={{
                     drafter: [me.name, me.position].filter(Boolean).join(' '),
                     dept: me.dept ?? '',
@@ -1731,6 +1734,7 @@ function ApprovalDraftInner({
                     completedDate: '',
                   }}
                 />
+                )
               ) : undefined
             }
           />

@@ -41,6 +41,13 @@ export function headerShown(form: { hiddenHeaderItems?: string[] | null } | null
  * 머리의 제목 줄 — 서식 설정 목록에는 없고, 시트 서식이 시트 안에 제목 칸을 둘 때만 화면에서 뺀다(저장하지 않음, withBodyHeader)
  */
 export const TITLE_ROW = 'titleRow';
+/** 머리의 결재란 — 시트 서식이 결재란을 시트 안에 둘 때 화면에서 뺀다(저장하지 않음) */
+export const STAMP_TABLE = 'stampTable';
+
+/** 머리에 결재란을 둘지 */
+export function stampTableInHeader(form: { hiddenHeaderItems?: string[] | null } | null | undefined): boolean {
+  return !(form?.hiddenHeaderItems ?? []).includes(STAMP_TABLE);
+}
 
 /**
  * 본문(시트)이 맡은 머리 항목을 뺀 서식 — 문서가 쓴 서식 버전의 시트로 정한 항목을 화면에서만 숨긴다.

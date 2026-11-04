@@ -23,10 +23,10 @@ import { SheetDocView, isSheetDoc } from './sheetForm/SheetDocView';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
-import { headerShown, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
+import { headerShown, stampTableInHeader, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
-import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from './sheetForm/approvalSheet';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, type SheetSlots } from './sheetForm/approvalSheet';
 import { sheetHeaderItems } from './sheetForm/sheetHeader';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 
@@ -488,6 +488,74 @@ export function ApprovalDocumentView({
 
   const hasSecretFields = form?.fields.some(f => f.isSecret);
 
+  // 직인 서식 — 옛 서식은 직인 항목, 시트 서식은 회사 직인 칸으로 안다(시트는 서식 항목이 비어 있음)
+  const sealForm = isSealForm(form?.fields) || sheetHasSeal(sheetTpl?.sheet);
+  // 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]]
+  const showStamp = !externalDoc && stampTableShown(doc.status, sealForm);
+  const stampNode = (
+    <div className="relative">
+      <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
+      {doc.status === '취소완료' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">
+            취소완료
+          </div>
+        </div>
+      )}
+    </div>
+  );
+  const drafterSignNode = (
+    <div className="mt-1 flex items-center justify-center gap-1">
+      기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
+      {isDrafterSignature() ? (
+        // 서명 모드
+        drafterSeal() ? (
+          // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
+          <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
+            <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+            <img
+              src={drafterSeal()}
+              alt="서명"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
+            />
+          </span>
+        ) : (
+          // (2) 서명 이미지가 없는 경우 (폴백): 붉은 원 없이 '서명미등록' 가이드 표시
+          <span className="relative inline-flex h-9 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[10px] font-bold text-danger/80 select-none">
+            서명미등록
+          </span>
+        )
+      ) : (
+        // 도장 모드
+        drafterSeal() ? (
+          // (3) 도장 이미지가 있는 경우: (인) 표기 위에 등록 도장만 표시
+          <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
+            <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+            <img
+              src={drafterSeal()}
+              alt="인감"
+              className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none"
+            />
+          </span>
+        ) : (
+          // (4) 도장 이미지가 없는 경우 (폴백): 붉은 원형 링 + 희미한 (인) 글씨 위에 이름을 비스듬히 겹쳐 출력
+          <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none bg-white">
+            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+            <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
+              {drafterName}
+            </span>
+          </span>
+        )
+      )}
+    </div>
+  );
+  // 문서 머리를 시트에 넣은 시트 서식 — 결재란·로고·기안자 서명 칸에 그릴 것
+  const sheetSlots: SheetSlots = {
+    approvalLine: showStamp ? stampNode : null,
+    logo: <img src={processedLogo} alt="회사 로고" className="h-7 w-auto object-contain" />,
+    drafterSign: drafterSignNode,
+  };
+
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
       {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
@@ -594,21 +662,10 @@ export function ApprovalDocumentView({
           </div>
         )}
 
-        <div className={`relative mb-5 flex items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'}`}>
+        <div className={`relative mb-5 items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'} ${showDocTitle || (showStamp && stampTableInHeader(form)) ? 'flex' : 'hidden'}`}>
           {showDocTitle && <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>}
           {/* 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]] */}
-          {!externalDoc && stampTableShown(doc.status, isSealForm(form?.fields)) && (
-            <div className="relative">
-              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
-              {doc.status === '취소완료' && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">
-                    취소완료
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {showStamp && stampTableInHeader(form) && stampNode}
         </div>
 
         {/* 긴급 선조치 사후 승인 (후결) 정보 카드 */}
@@ -704,6 +761,7 @@ export function ApprovalDocumentView({
               masked={isMaskingActive}
               stamped={doc.status === '완료'}
               external={externalDoc}
+              slots={sheetSlots}
               // 자동 채우기 '기안 정보'·'문서 항목' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)
               docInfo={{
                 drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
@@ -1020,49 +1078,7 @@ export function ApprovalDocumentView({
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
           {closing.trim() && <div>{closing}</div>}
           <div className="mt-4 font-semibold tracking-wide">{korDate(doc.submittedAt ?? doc.createdAt)}</div>
-          <div className="mt-1 flex items-center justify-center gap-1">
-            기안자 <span className="mx-1 text-[14px] font-bold tracking-[0.2em]">{drafterName}</span>
-            {isDrafterSignature() ? (
-              // 서명 모드
-              drafterSeal() ? (
-                // (1) 서명 이미지가 있는 경우: 붉은 원형 테두리 없이 글씨 "(인)"만 배치하여 그 위에 서명 이미지를 정중앙 오버레이
-                <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
-                  <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
-                  <img
-                    src={drafterSeal()}
-                    alt="서명"
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-full w-[80px] max-w-none object-contain opacity-90 z-20 pointer-events-none mix-blend-multiply scale-125"
-                  />
-                </span>
-              ) : (
-                // (2) 서명 이미지가 없는 경우 (폴백): 붉은 원 없이 '서명미등록' 가이드 표시
-                <span className="relative inline-flex h-9 w-[60px] items-center justify-center rounded border border-dashed border-danger/40 text-[10px] font-bold text-danger/80 select-none">
-                  서명미등록
-                </span>
-              )
-            ) : (
-              // 도장 모드
-              drafterSeal() ? (
-                // (3) 도장 이미지가 있는 경우: (인) 표기 위에 등록 도장만 표시
-                <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
-                  <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
-                  <img
-                    src={drafterSeal()}
-                    alt="인감"
-                    className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none"
-                  />
-                </span>
-              ) : (
-                // (4) 도장 이미지가 없는 경우 (폴백): 붉은 원형 링 + 희미한 (인) 글씨 위에 이름을 비스듬히 겹쳐 출력
-                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none bg-white">
-                  <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
-                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-danger/80 z-20 pointer-events-none rotate-[-15deg] select-none scale-105 bg-transparent">
-                    {drafterName}
-                  </span>
-                </span>
-              )
-            )}
-          </div>
+          {drafterSignNode}
         </div>
         )}
         {activeRelatedDocId && (

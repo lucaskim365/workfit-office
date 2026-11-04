@@ -7,7 +7,8 @@ import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/App
 import type { User } from '@/domain/user/schema';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { HEADER_ITEMS, HEADER_ITEM_LABEL, withBodyHeader } from '@/domain/approvalForm/headerItems';
-import { insertDocInfoBlock, isExternalHiddenRow, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import { insertDocHeader, insertDocInfoBlock, isExternalHiddenRow, isFullHeaderSheet, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import type { ApprovalStep } from '@/domain/approvalDoc/schema';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
@@ -21,6 +22,7 @@ import {
   linkIssues,
   linkSystemValues,
   korDateText,
+  type SheetSlots,
   VISIBILITY_LABEL,
   nameLabel,
   isStructureLocked,
@@ -65,8 +67,11 @@ export function SheetFormDesigner(props: Props) {
       </div>
     );
   }
-  return <Designer {...props} initial={loaded?.sheet ?? insertDocInfoBlock(createSheet(15, 8))} initialLink={loaded?.link ?? null} />;
+  return <Designer {...props} initial={loaded?.sheet ?? insertDocHeader(fitToPage(createSheet(12, 8)), { title: '기 안 서' })} initialLink={loaded?.link ?? null} />;
 }
+
+/** 새 서식 틀 — 열 너비를 A4 인쇄 폭에 맞춰 나눈다(기안 화면에서 옆으로 밀리지 않게) */
+const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.cols.map((c) => [c, Math.floor(SHEET_PAGE_WIDTH / s.cols.length)])) });
 
 /** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
 const PAPER_PAD = 66;
@@ -125,11 +130,13 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (!file) return;
     const hasContent = sheet.rows.some((row) => Object.values(row).some((v) => v !== ''));
     // 문서 정보 표(기안자·제목 등 칸)가 있던 시트면 불러온 엑셀 위에 다시 넣는다 — 새 서식은 이 표로 시작하므로 엑셀만 넣어도 유지
+    const keepFull = isFullHeaderSheet(sheet);
     const keepInfo = sheetHeaderItems(sheet).length > 0;
-    if (hasContent && !confirm(`지금 시트를 '${file.name}' 내용으로 바꿉니다. 칸 속성도 모두 지워집니다${keepInfo ? '(문서 정보 표는 엑셀 위에 기본 모양으로 다시 넣음)' : ''}. Ctrl+Z 로 되돌릴 수 있습니다. 계속할까요?`)) return;
+    if (hasContent && !confirm(`지금 시트를 '${file.name}' 내용으로 바꿉니다. 칸 속성도 모두 지워집니다${keepInfo ? (keepFull ? '(문서 머리·맺음말은 엑셀 위·아래에 기본 모양으로 다시 넣음)' : '(문서 정보 표는 엑셀 위에 기본 모양으로 다시 넣음)') : ''}. Ctrl+Z 로 되돌릴 수 있습니다. 계속할까요?`)) return;
     try {
       const { sheet: fromXlsx, warnings } = await importXlsx(new Uint8Array(await file.arrayBuffer()));
-      const imported = keepInfo ? insertDocInfoBlock(fromXlsx) : fromXlsx;
+      // 엑셀엔 보통 제목이 들어 있어 큰 제목 칸은 비운다
+      const imported = keepFull ? insertDocHeader(fromXlsx, { title: '', closing: form.closing || undefined }) : keepInfo ? insertDocInfoBlock(fromXlsx) : fromXlsx;
       setSheet(imported);
       // 엑셀 양식엔 보통 제목이 들어 있다 — 문서 머리의 큰 제목과 겹치지 않게 끈다(서식 정보에서 다시 켤 수 있음)
       setForm((f) => ({ ...f, hiddenHeaderItems: [...new Set([...(f.hiddenHeaderItems ?? []), 'docTitle'])] }));
@@ -138,7 +145,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서번호·기안자·제목 같은 문서 정보도 시트 안에 두려면 편집 도구의 [문서 정보 표 넣기]를 누르세요. '}(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
+        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepFull ? '문서 머리(로고·결재란·문서 정보)와 맺음말은 엑셀 위·아래에 그대로 두었습니다 — 큰 제목 칸은 비웠으니 엑셀 제목을 쓰거나 칸을 정리하세요. ' : keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서 머리(로고·결재란·문서 정보·맺음말)도 시트 안에 두려면 편집 도구의 [문서 머리 넣기]를 누르세요. '}(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
         list: warnings,
       });
     } catch (err) {
@@ -181,6 +188,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
 
   // 시트 안에 있어서 문서 머리에서 빠지는 항목 — 편집 화면의 머리도 실제 문서처럼 뺀 모양으로
   const covered = useMemo(() => sheetHeaderItems(sheet), [sheet]);
+  // 결재란까지 시트에 있으면 문서 머리 전체가 시트 안 — 머리 설정은 필요 없다
+  const fullHeader = covered.includes('stampTable');
   const docForm = useMemo(() => withBodyHeader(form, covered), [form, covered]);
 
   // ── 부품 넣기(부품 목록 — 누르기·끌어 놓기) ──
@@ -238,7 +247,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     // 자동 채우기(기안 정보) 칸 — 어떤 값이 들어갈지 흐리게
     const emptyCell = col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
     const autoLook =
-      (p.bind?.startsWith('draft.') || p.bind?.startsWith('doc.')) && emptyCell ? (
+      p.bind === 'doc.approvalLine' ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-1 flex items-center justify-center rounded border-2 border-dashed border-indigo-300 bg-indigo-50/60 text-[11px] font-semibold text-indigo-500"
+        >
+          결재란 — 결재선에 따라 칸 수가 바뀝니다
+        </span>
+      ) : (p.bind?.startsWith('draft.') || p.bind?.startsWith('doc.')) && emptyCell ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">
           {`{${bindLabel(p.bind).replace(/^.+? · /, '')}}`}
         </span>
@@ -411,7 +427,9 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         <span className="font-semibold text-ink2" title="기안·결재·인쇄 화면에서 시트 위(로고·제목·문서 정보)와 아래(맺음말·서명)에 붙는 항목">
           문서 머리에 보일 항목
         </span>
-        {HEADER_ITEMS.map((item) => {
+        {fullHeader ? (
+          <span className="text-ink3">문서 머리 전체(로고·큰 제목·결재란·문서 정보·맺음말)가 시트 안에 있습니다 — 위치·모양은 시트에서 바꿉니다.</span>
+        ) : HEADER_ITEMS.map((item) => {
           const shown = !(form.hiddenHeaderItems ?? []).includes(item);
           // 시트 안에 같은 칸(기안자·문서번호 등)이 있으면 머리에서 저절로 빠진다
           const inSheet = covered.includes(item);
@@ -437,7 +455,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             </label>
           );
         })}
-        {covered.includes('titleRow') && (
+        {!fullHeader && covered.includes('titleRow') && (
           <span className="text-ink3 line-through decoration-ink3/50" title="시트 안에 제목 칸이 있어 문서 머리의 제목 줄은 저절로 빠집니다">
             제목 줄
           </span>
@@ -463,7 +481,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
           }}
           onDrop={onPartDrop}
         >
-          {user && view === 'grid' && (
+          {user && view === 'grid' && !fullHeader && (
             <details open className="mb-2 rounded-lg bg-[#878d90] px-3 pb-3 pt-1.5 [&[open]>summary]:mb-2">
               <summary className="cursor-pointer select-none text-[11px] font-semibold text-white/90">
                 문서 머리 — 기안·결재·인쇄 화면에서 시트 위에 붙는 부분(위 '문서 머리에 보일 항목'으로 켜고 끔)
@@ -491,14 +509,17 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
               <button
                 type="button"
                 onClick={() => {
-                  if (covered.length > 0 && !confirm('시트에 이미 문서 정보 칸(기안자·문서번호·제목 등)이 있습니다. 그래도 맨 위에 문서 정보 표를 하나 더 넣을까요?')) return;
-                  setSheet(insertDocInfoBlock(sheet));
-                  setMsg({ kind: 'ok', text: '맨 위에 문서 정보 표를 넣었습니다 — 같은 항목은 문서 머리에서 저절로 빠집니다. 색·위치·칸 합치기는 서식에 맞게 바꿔 쓰세요(Ctrl+Z 로 되돌리기).' });
+                  if (covered.length > 0 && !confirm('시트에 이미 문서 머리 칸(결재란·기안자·문서번호·제목 등)이 있습니다. 그래도 문서 머리를 하나 더 넣을까요?')) return;
+                  setSheet(insertDocHeader(sheet, { title: '', closing: form.closing || undefined }));
+                  setMsg({
+                    kind: 'ok',
+                    text: '맨 위에 회사 로고·큰 제목/결재란·문서 정보 표를, 맨 아래에 맺음말·기안일·기안자 서명을 넣었습니다 — 시트 밖 문서 머리는 저절로 빠집니다. 큰 제목 칸에 문서 이름을 쓰고, 색·위치는 서식에 맞게 바꾸세요(Ctrl+Z 로 되돌리기).',
+                  });
                 }}
-                title="시트 맨 위에 문서번호·기안부서·기안자·기안일·보존연한·공개범위·제목 표를 넣습니다(대외 문서에서는 숨김)"
+                title="문서 머리 전체를 시트 안으로 — 위: 회사 로고·큰 제목·결재란·문서 정보 표, 아래: 맺음말·기안일·기안자 서명(대외 문서에서는 숨김)"
                 className="h-7 rounded-md border border-border bg-white px-2 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal"
               >
-                문서 정보 표 넣기
+                문서 머리 넣기
               </button>
               <div className="flex rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="문서 보기: 실제 문서 모양 그대로 편집 · 격자 보기: 엑셀처럼 A·B·C 머리와 함께">
                 {(
@@ -670,8 +691,9 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
     dept: user?.dept ?? '기획팀',
     date: korDateText(new Date()),
   };
-  const draftBody = (
+  const draftBody = (slots: SheetSlots) => (
     <SheetDraftForm
+      slots={slots}
       formId="미리보기"
       version={1}
       template={sheet}
@@ -685,8 +707,9 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       onIssues={setIssues}
     />
   );
-  const viewBody = (
+  const viewBody = (slots?: SheetSlots) => (
     <SheetDocView
+      slots={slots}
       template={sheet}
       fieldValues={{ ...values, __formVersion: '미리보기@v1' }}
       masked={false}
@@ -743,12 +766,12 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
           {user ? (
             tab === 'external' ? (
               // 대외 문서 — 문서 머리·결재란·첨부·맺음말 없이 시트만(숨김 행 뺌)
-              <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{viewBody}</div>
+              <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{viewBody()}</div>
             ) : (
               <DocFrame form={docForm} me={user} interactive={tab === 'draft'} body={tab === 'draft' ? draftBody : viewBody} />
             )
           ) : (
-            <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{tab === 'draft' ? draftBody : viewBody}</div>
+            <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{tab === 'draft' ? draftBody({}) : viewBody()}</div>
           )}
         </div>
         {tab === 'draft' && issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
@@ -773,12 +796,17 @@ function DocFrame({
   form: ApprovalForm;
   me: User;
   only?: 'header';
-  body?: React.ReactNode;
+  /** 본문(시트) — 함수면 결재란·로고·기안자 서명(SheetSlots)을 받아 칸에 넣는다 */
+  body?: React.ReactNode | ((slots: SheetSlots) => React.ReactNode);
   interactive?: boolean;
   /** 종이 폭 — 편집 중엔 넓은 시트가 종이 밖으로 나가지 않게 넓힌다(문서·인쇄에선 줄여 맞춤) */
   paperWidth?: number;
 }) {
   const noop = () => {};
+  // 결재란이 어떻게 보이는지 — 예시 결재선(나 한 명)
+  const sampleSteps: ApprovalStep[] = [
+    { seq: 1, parallelGroup: null, executionType: 'sequential', kind: '결재', approverId: me.id, delegatedFromId: null, decision: '대기', decidedAt: null, comment: '' },
+  ];
   return (
     // 머리·첨부 등은 보기만(실제 동작 안 함). 작성 화면 미리보기는 시트 부분만 입력할 수 있게 연다
     <div className="pointer-events-none select-none">
@@ -807,7 +835,7 @@ function DocFrame({
         setPostApprovalActionTaken={noop}
         postApprovalNecessity=""
         setPostApprovalNecessity={noop}
-        steps={[]}
+        steps={sampleSteps}
         recipients={[]}
         attachments={[]}
         setAttachments={noop}
@@ -822,7 +850,10 @@ function DocFrame({
         isDesignMode
         only={only}
         paperWidth={paperWidth}
-        sheetBody={interactive ? <div className="pointer-events-auto select-text">{body}</div> : body}
+        sheetBody={(slots: SheetSlots) => {
+          const b = typeof body === 'function' ? body(slots) : body;
+          return interactive ? <div className="pointer-events-auto select-text">{b}</div> : b;
+        }}
       />
     </div>
   );

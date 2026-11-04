@@ -21,6 +21,8 @@ import {
   draftInputOf,
   invalidNumberCells,
   isDocFieldBind,
+  slotOf,
+  type SheetSlots,
   PRESERVATION_OPTIONS,
   VISIBILITY_LABEL,
   type DocFieldBind,
@@ -163,6 +165,13 @@ function DocFieldCell({ bind, doc, onChange }: { bind: DocFieldBind; doc: DocFie
   );
 }
 
+/** 문서 머리 부품을 칸 가운데에(칸 정렬을 따름) — 칸보다 크면 칸이 늘어난다 */
+export function SlotCell({ node }: { node: import('react').ReactNode }) {
+  if (!node) return '';
+  // 줄 안 상자(inline) — 칸의 가로 정렬(text-align)을 그대로 따른다
+  return <span className="inline-flex py-0.5 align-middle">{node}</span>;
+}
+
 function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
@@ -278,6 +287,8 @@ export interface SheetDraftFormProps {
   /** 문서 항목 칸(제목·보존연한·공개범위)에 보일 문서 값과 바꾸기 — 없으면 그 칸은 비어 보인다 */
   docFields?: DocFields;
   onDocField?: (patch: Partial<DocFields>) => void;
+  /** 문서 머리 부품 칸(결재란·회사 로고·기안자 서명)에 그릴 것 — 문서 틀이 만들어 넘긴다 */
+  slots?: SheetSlots;
 }
 
 export interface RelatedSource {
@@ -300,6 +311,7 @@ export function SheetDraftForm({
   draftInfo,
   docFields,
   onDocField,
+  slots,
 }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
@@ -421,10 +433,14 @@ export function SheetDraftForm({
         <SheetView
           sheet={sheet}
           // 문서 머리 표와 폭·선 색 맞춤 — 넓은 서식은 줄이지 않고 옆으로 밀어 쓴다(글씨가 작아지지 않게)
-          stretchTo={DOC_SHEET_VIEW.stretchTo}
+          // 테두리 2px 만큼 덜 늘린다 — 꽉 채우면 넘침 상자(overflow-x-auto)가 맨 오른쪽 테두리를 잘라 먹는다
+          stretchTo={DOC_SHEET_VIEW.stretchTo - 2}
           thinBorderColor={DOC_SHEET_VIEW.thinBorderColor}
           renderCell={(r, c) => {
             const bind = approvalCellProps(sheet, r, c).bind;
+            // 문서 머리 부품 칸 — 결재란(누르면 결재선 편집)·로고·기안자 서명
+            const slot = slotOf(bind);
+            if (slot) return <SlotCell node={slots?.[slot]} />;
             // 문서 항목 칸 — 문서의 제목·보존연한·공개범위를 여기서 쓴다
             if (isDocFieldBind(bind)) return docFields && onDocField ? <DocFieldCell bind={bind} doc={docFields} onChange={onDocField} /> : '';
             // 기안 정보 칸 — 시스템 값(입력 칸이어도 고칠 수 없음)

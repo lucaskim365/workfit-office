@@ -3,9 +3,10 @@ import { SheetView, type Sheet } from '@/lib/sheet';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
-import { approvalCellProps, draftInfoValue, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
+import { approvalCellProps, draftInfoValue, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from './repeatRows';
 import { withoutExternalRows } from './sheetHeader';
+import { SlotCell } from './SheetDraftForm';
 
 /** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
 const PRINT_FIT = { rootSelector: '.approval-print', pageWidthMm: 182 };
@@ -28,7 +29,10 @@ export function SheetDocView({
   docInfo,
   template,
   external = false,
+  slots,
 }: {
+  /** 문서 머리 부품 칸(결재란·회사 로고·기안자 서명)에 그릴 것 */
+  slots?: SheetSlots;
   /** 대외 문서 모양(서식 '대외 문서' + 결재 완료, 발주서 PDF) — '대외 문서에서 숨김' 행을 뺀다 */
   external?: boolean;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기 미리보기(편집 중인 틀) */
@@ -67,7 +71,12 @@ export function SheetDocView({
       fitWidth={fitWidth}
       printFit={PRINT_FIT}
       hidden={masked ? (r, c) => isSecretCell(sheet, r, c) : undefined}
-      renderCell={(r, c) => draftInfoValue(approvalCellProps(sheet, r, c).bind, docInfo)}
+      renderCell={(r, c) => {
+        const bind = approvalCellProps(sheet, r, c).bind;
+        const slot = slotOf(bind);
+        if (slot) return <SlotCell node={slots?.[slot]} />;
+        return draftInfoValue(bind, docInfo);
+      }}
       renderOverlay={(r, c) =>
         isSealCell(sheet, r, c) ? (
           <span className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2">

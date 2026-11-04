@@ -94,6 +94,30 @@ export function draftInfoValue(bind: string | undefined, info: DraftInfo | undef
 export const DOC_FIELD_BINDS = ['doc.title', 'doc.preservation', 'doc.visibility'] as const;
 export type DocFieldBind = (typeof DOC_FIELD_BINDS)[number];
 export const isDocFieldBind = (bind: string | undefined): bind is DocFieldBind => (DOC_FIELD_BINDS as readonly string[]).includes(bind ?? '');
+/**
+ * 문서 머리 부품 — 칸에 그림을 끼운다(값 없음). 그림은 문서를 그리는 쪽(기안·문서 보기)이 만들어 넘긴다(SheetSlots):
+ * 결재란(결재선에 따라 칸 수가 바뀜, 결재하면 도장)·회사 로고·기안자 서명(이름+도장/서명)
+ */
+export interface SheetSlots {
+  approvalLine?: import('react').ReactNode;
+  logo?: import('react').ReactNode;
+  drafterSign?: import('react').ReactNode;
+}
+const SLOT_OF: Record<string, keyof SheetSlots> = {
+  'doc.approvalLine': 'approvalLine',
+  'doc.logo': 'logo',
+  'draft.sign': 'drafterSign',
+};
+/** 이 칸이 문서 머리 부품이면 그 이름 */
+export const slotOf = (bind: string | undefined): keyof SheetSlots | undefined => (bind ? SLOT_OF[bind] : undefined);
+/** 맺음말 기본 문구 — 문서 머리와 같음 */
+export const DEFAULT_CLOSING = '위와 같이 상신하오니 재가하여 주시기 바랍니다.';
+
+/** 회사 직인 칸이 있는 시트 — 직인 서식(결재가 끝나면 결재란 대신 회사 직인, [[seal]]) */
+export function sheetHasSeal(s: Sheet | null | undefined): boolean {
+  return !!s && Object.values(s.cellMeta[APPROVAL_NS.seal] ?? {}).some(Boolean);
+}
+
 /** 보존연한 고르기 — 문서 머리와 같은 목록 */
 export const PRESERVATION_OPTIONS = ['1년', '3년', '5년', '10년', '영구'];
 /** 공개범위 저장값 → 보이는 글자(문서 머리와 같음) */
@@ -255,6 +279,15 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
       { value: 'doc.title', label: '제목' },
       { value: 'doc.preservation', label: '보존연한' },
       { value: 'doc.visibility', label: '공개범위' },
+    ],
+  },
+  {
+    // 문서 머리 전체를 시트 안으로 — 결재란이 시트에 있으면 문서 머리를 모두 뺀다(§11.16)
+    label: '문서 머리',
+    items: [
+      { value: 'doc.approvalLine', label: '결재란' },
+      { value: 'doc.logo', label: '회사 로고' },
+      { value: 'draft.sign', label: '기안자 서명' },
     ],
   },
 ];
