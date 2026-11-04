@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { SheetView } from '@/lib/sheet';
+import { SheetView, type Sheet } from '@/lib/sheet';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
@@ -25,7 +25,10 @@ export function SheetDocView({
   stamped,
   fitWidth = DOC_SHEET_WIDTH,
   docInfo,
+  template,
 }: {
+  /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기 미리보기(편집 중인 틀) */
+  template?: Sheet;
   /** 자동 채우기 '기안 정보' 칸 값 — 상신된 문서의 기안자·부서·기안일·문서번호 */
   docInfo?: DraftInfo;
   fieldValues: Record<string, unknown>;
@@ -36,7 +39,10 @@ export function SheetDocView({
   fitWidth?: number;
 }) {
   const ver = parseVersionKey(String(fieldValues[SHEET_VERSION_KEY] ?? ''));
-  const { data: loaded, isLoading, error } = useFormVersionSheet(ver?.formId ?? null, ver?.version ?? null);
+  const fetched = useFormVersionSheet(template ? null : (ver?.formId ?? null), template ? null : (ver?.version ?? null));
+  const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
+  const isLoading = !template && fetched.isLoading;
+  const error = template ? null : fetched.error;
   const rawValues = fieldValues[SHEET_VALUES_KEY];
   const rawRows = fieldValues[SHEET_ROWS_KEY];
   // 반복 구간은 문서가 붙인 줄 수만큼 펼친 뒤 값을 얹는다
@@ -45,9 +51,9 @@ export function SheetDocView({
     [loaded, rawValues, rawRows]
   );
 
-  if (!ver) return null;
+  if (!ver && !template) return null;
   if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;
-  if (error || !sheet) return <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver.formId} v{ver.version})을 읽지 못했습니다.</div>;
+  if (error || !sheet) return <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver?.formId} v{ver?.version})을 읽지 못했습니다.</div>;
 
   return (
     <SheetView

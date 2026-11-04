@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Eye, FileSpreadsheet, History, PenLine, Save, X } from 'lucide-react';
+import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
+import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
 import type { User } from '@/domain/user/schema';
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -8,14 +9,12 @@ import { HEADER_ITEMS, HEADER_ITEM_LABEL } from '@/domain/approvalForm/headerIte
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
-import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, createSheet, importXlsx, recalculate, type Sheet, type SheetSelection } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
   bindLabel,
   canMergeApprovalRange,
-  DOC_SHEET_VIEW,
-  draftInfoValue,
   LINK_TYPES,
   linkIssues,
   linkSystemValues,
@@ -80,7 +79,6 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   const [side, setSide] = useState<'cell' | 'history'>('cell');
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
-  const [trial, setTrial] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNew = !form.id;
@@ -245,20 +243,12 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
           </button>
           <button
             type="button"
-            onClick={() => setPreview({ sheet: recalculate(sheet), title: '지금 편집 중인 틀' })}
+            onClick={() => setPreview({ sheet, title: '지금 편집 중인 틀' })}
+            title="지금 편집 중인 서식을 기안 화면·결재 화면 그대로 열어 봅니다(입력해 봐도 저장되지 않음)"
             className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink cursor-pointer"
           >
             <Eye className="h-3.5 w-3.5" />
-            <span>문서 모양</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTrial(true)}
-            title="지금 편집 중인 서식을 기안 화면처럼 열어 입력해 봅니다(저장되지 않음)"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink cursor-pointer"
-          >
-            <PenLine className="h-3.5 w-3.5" />
-            <span>기안 미리보기</span>
+            <span>미리보기</span>
           </button>
           <button
             type="button"
@@ -420,7 +410,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             <VersionHistory
               formId={isNew ? null : form.id}
               current={baseVersion}
-              onPreview={(s, v) => setPreview({ sheet: recalculate(s), title: `v${v}` })}
+              onPreview={(s, v) => setPreview({ sheet: s, title: `v${v}` })}
               onLoad={(s, v) => {
                 if (!confirm(`v${v}의 틀을 편집기로 가져옵니다. 저장하면 새 버전이 됩니다(이전 버전은 그대로 남음). 계속할까요?`)) return;
                 setSheet(s);
@@ -432,54 +422,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         </div>
       </div>
 
-      {trial && <DraftTrial sheet={sheet} link={link} onClose={() => setTrial(false)} />}
-
-      {preview && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-6"
-          onClick={() => setPreview(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setPreview(null)}
-          tabIndex={-1}
-          ref={(el) => el?.focus()}
-        >
-          <div className="rounded-xl bg-panel p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between gap-6">
-              <span className="text-[13px] font-bold text-ink">문서 모양 — {preview.title}</span>
-              <button type="button" onClick={() => setPreview(null)} className="rounded p-1 text-ink3 hover:bg-panel-alt" aria-label="닫기">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="bg-[#878d90] p-4">
-              {user ? (
-                <DocFrame
-                  form={form}
-                  me={user}
-                  body={
-                    <SheetView
-                      sheet={preview.sheet}
-                      {...DOC_SHEET_VIEW}
-                      // 자동 채우기 '기안 정보' 칸 — 미리보기는 지금 사용자·오늘로
-                      renderCell={(r, c) =>
-                        draftInfoValue(approvalCellProps(preview.sheet, r, c).bind, {
-                          drafter: [user.name, user.position].filter(Boolean).join(' '),
-                          dept: user.dept ?? '',
-                          date: new Date().toLocaleDateString('sv-SE'),
-                          docNo: 'AP-미리보기',
-                        })
-                      }
-                    />
-                  }
-                />
-              ) : (
-                <div className="border border-black/10 bg-white p-[38px]" style={{ width: SHEET_PAGE_WIDTH + 76 }}>
-                  <SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />
-                </div>
-              )}
-            </div>
-            <div className="mt-2 text-[10.5px] text-ink3">문서 머리·시트·맺음말까지 결재 문서 모양 그대로 · 넓은 시트는 A4 폭에 맞춰 줄여 보입니다.</div>
-          </div>
-        </div>
-      )}
+      {preview && <PreviewModal form={form} sheet={preview.sheet} title={preview.title} link={link} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -534,7 +477,7 @@ function VersionHistory({
               {picked === v.version && pickedSheet ? (
                 <>
                   <button type="button" onClick={() => onPreview(pickedSheet.sheet, v.version)} className="rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink2 hover:text-ink">
-                    문서 모양
+                    미리보기
                   </button>
                   {v.version !== current && (
                     <button type="button" onClick={() => onLoad(pickedSheet.sheet, v.version)} className="rounded border border-teal/40 px-2 py-0.5 text-[10.5px] font-semibold text-teal hover:bg-teal-soft">
@@ -556,10 +499,13 @@ function VersionHistory({
 }
 
 /**
- * 기안 미리보기 — 편집 중인 틀을 기안 화면과 같은 부품(SheetDraftForm)으로 연다.
- * 입력 도구·숫자 칸·수식·반복 구간 행 추가를 그대로 써 볼 수 있고, 입력한 값은 어디에도 저장하지 않는다.
+ * 미리보기 — 편집 중인 틀을 실제 문서 그대로 연다(입력해 봐도 저장 안 함).
+ * - 작성 화면: 기안 화면과 같은 부품(SheetDraftForm) — 입력 도구·숫자 칸·수식·반복 구간 행 추가
+ * - 결재·인쇄 화면: 문서 보기 부품(SheetDocView) — 작성 탭에서 넣은 값이 결재자·인쇄에 어떻게 보이는지(직인·기안 정보 포함)
+ * 두 탭 모두 문서 머리·첨부·맺음말까지 문서 전체(DocFrame)
  */
-function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | null; onClose: () => void }) {
+function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalForm; sheet: Sheet; title: string; link: string | null; onClose: () => void }) {
+  const [tab, setTab] = useState<'draft' | 'view'>('draft');
   const [values, setValues] = useState<Record<string, string>>({});
   const [issues, setIssues] = useState<string[]>([]);
   const { data: holidays = [] } = useHolidays();
@@ -567,6 +513,28 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
   // 열 때 한 번만 초점(Esc 로 닫기) — 그릴 때마다 초점을 가져오면 칸 입력이 끊긴다
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => boxRef.current?.focus(), []);
+  const info = {
+    drafter: user ? [user.name, user.position].filter(Boolean).join(' ') : '홍길동 사원',
+    dept: user?.dept ?? '기획팀',
+    date: new Date().toLocaleDateString('sv-SE'),
+  };
+  const draftBody = (
+    <SheetDraftForm
+      formId="미리보기"
+      version={1}
+      template={sheet}
+      link={link}
+      systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
+      draftInfo={{ ...info, docNo: '(상신 때 부여)' }}
+      values={values}
+      onFields={(f) => setValues((v) => ({ ...v, ...f }))}
+      onIssues={setIssues}
+    />
+  );
+  const viewBody = (
+    <SheetDocView template={sheet} fieldValues={{ ...values, __formVersion: '미리보기@v1' }} masked={false} stamped docInfo={{ ...info, docNo: 'AP-미리보기' }} />
+  );
+  const tabCls = (on: boolean) => `rounded-md px-3 py-1 text-[12px] font-bold ${on ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`;
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-6"
@@ -575,12 +543,20 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
       ref={boxRef}
     >
       <div className="w-full max-w-[880px] rounded-xl bg-panel p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[13px] font-bold text-ink">기안 미리보기</div>
-            <div className="text-[11px] text-ink3">기안자가 보는 화면 그대로입니다. 입력해 봐도 저장되지 않습니다.</div>
+            <div className="text-[13px] font-bold text-ink">미리보기 — {title}</div>
+            <div className="text-[11px] text-ink3">실제 문서 그대로입니다. 작성 화면에서 입력해 보고 결재·인쇄 화면으로 확인하세요(저장되지 않음).</div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-border bg-panel-alt p-0.5">
+              <button type="button" className={tabCls(tab === 'draft')} onClick={() => setTab('draft')}>
+                작성 화면
+              </button>
+              <button type="button" className={tabCls(tab === 'view')} onClick={() => setTab('view')}>
+                결재·인쇄 화면
+              </button>
+            </div>
             <button type="button" onClick={() => setValues({})} className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink2 hover:text-ink">
               입력 지우기
             </button>
@@ -590,26 +566,14 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
           </div>
         </div>
         <div className="bg-[#878d90] p-4">
-          <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">
-            <SheetDraftForm
-              formId="미리보기"
-              version={1}
-              template={sheet}
-              link={link}
-              systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
-              draftInfo={{
-                drafter: user ? [user.name, user.position].filter(Boolean).join(' ') : '홍길동 사원',
-                dept: user?.dept ?? '기획팀',
-                date: new Date().toLocaleDateString('sv-SE'),
-                docNo: '(상신 때 부여)',
-              }}
-              values={values}
-              onFields={(f) => setValues((v) => ({ ...v, ...f }))}
-              onIssues={setIssues}
-            />
-          </div>
+          {user ? (
+            <DocFrame form={form} me={user} interactive={tab === 'draft'} body={tab === 'draft' ? draftBody : viewBody} />
+          ) : (
+            <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{tab === 'draft' ? draftBody : viewBody}</div>
+          )}
         </div>
-        {issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
+        {tab === 'draft' && issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
+        {tab === 'view' && <div className="mt-2 text-[10.5px] text-ink3">결재 완료 모양(직인 칸엔 회사 직인) · 넓은 시트는 종이 폭에 맞춰 줄여 보입니다.</div>}
       </div>
     </div>
   );
@@ -619,9 +583,10 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
  * 문서 틀 — 기안 화면과 같은 문서 부품(ApprovalDraftDocumentSheet)을 보기 전용으로 그린다.
  * only='header' 면 머리(로고·제목·결재란·문서 정보·제목 줄)만, 아니면 body(시트)를 끼운 문서 전체.
  */
-function DocFrame({ form, me, only, body }: { form: ApprovalForm; me: User; only?: 'header'; body?: React.ReactNode }) {
+function DocFrame({ form, me, only, body, interactive = false }: { form: ApprovalForm; me: User; only?: 'header'; body?: React.ReactNode; interactive?: boolean }) {
   const noop = () => {};
   return (
+    // 머리·첨부 등은 보기만(실제 동작 안 함). 작성 화면 미리보기는 시트 부분만 입력할 수 있게 연다
     <div className="pointer-events-none select-none">
       <ApprovalDraftDocumentSheet
         form={form}
@@ -662,7 +627,7 @@ function DocFrame({ form, me, only, body }: { form: ApprovalForm; me: User; only
         editDocNo="AP-미리보기"
         isDesignMode
         only={only}
-        sheetBody={body}
+        sheetBody={interactive ? <div className="pointer-events-auto select-text">{body}</div> : body}
       />
     </div>
   );
