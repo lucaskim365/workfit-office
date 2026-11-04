@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Eye, FileSpreadsheet, History, PenLine, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
+import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
+import type { User } from '@/domain/user/schema';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { HEADER_ITEMS, HEADER_ITEM_LABEL } from '@/domain/approvalForm/headerItems';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -351,6 +353,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
       {/* 편집기 + 옆 패널 */}
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[1fr_290px]">
         <div className="min-w-0 rounded-xl border border-border bg-panel p-2">
+          {user && (
+            <details open className="mb-2 rounded-lg bg-[#878d90] px-3 pb-3 pt-1.5 [&[open]>summary]:mb-2">
+              <summary className="cursor-pointer select-none text-[11px] font-semibold text-white/90">
+                문서 머리 — 기안·결재·인쇄 화면에서 시트 위에 붙는 부분(위 '문서 머리에 보일 항목'으로 켜고 끔)
+              </summary>
+              <DocFrame form={form} me={user} only="header" />
+            </details>
+          )}
           <SheetEditor
             value={sheet}
             onChange={setSheet}
@@ -429,10 +439,16 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="border border-black/10 bg-white p-[38px]" style={{ width: SHEET_PAGE_WIDTH + 76 }}>
-              <SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />
+            <div className="bg-[#878d90] p-4">
+              {user ? (
+                <DocFrame form={form} me={user} body={<SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />} />
+              ) : (
+                <div className="border border-black/10 bg-white p-[38px]" style={{ width: SHEET_PAGE_WIDTH + 76 }}>
+                  <SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />
+                </div>
+              )}
             </div>
-            <div className="mt-2 text-[10.5px] text-ink3">A4 세로(여백 10mm) 폭에 맞춘 모양 · 넓으면 비율로 줄여 보입니다.</div>
+            <div className="mt-2 text-[10.5px] text-ink3">문서 머리·시트·맺음말까지 결재 문서 모양 그대로 · 넓은 시트는 A4 폭에 맞춰 줄여 보입니다.</div>
           </div>
         </div>
       )}
@@ -560,6 +576,59 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
         </div>
         {issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 문서 틀 — 기안 화면과 같은 문서 부품(ApprovalDraftDocumentSheet)을 보기 전용으로 그린다.
+ * only='header' 면 머리(로고·제목·결재란·문서 정보·제목 줄)만, 아니면 body(시트)를 끼운 문서 전체.
+ */
+function DocFrame({ form, me, only, body }: { form: ApprovalForm; me: User; only?: 'header'; body?: React.ReactNode }) {
+  const noop = () => {};
+  return (
+    <div className="pointer-events-none select-none">
+      <ApprovalDraftDocumentSheet
+        form={form}
+        docCode={form.code || '기안'}
+        me={me}
+        title={form.name ? `${form.name} 제목 예시` : '문서 제목'}
+        setTitle={noop}
+        values={{}}
+        setVals={noop}
+        amount=""
+        setAmount={noop}
+        securityLevel={form.securityLevel || '일반'}
+        setSecurityLevel={noop}
+        visibility={form.visibility === '비공개' ? '비공개' : '부서'}
+        setVisibility={noop}
+        preservationPeriod={form.preservationPeriod || '5년'}
+        setPreservationPeriod={noop}
+        isPostApproval={false}
+        setIsPostApproval={noop}
+        isPostApprovalSystemEnabled={false}
+        postApprovedBy=""
+        setPostApprovedBy={noop}
+        postApprovalActionTaken=""
+        setPostApprovalActionTaken={noop}
+        postApprovalNecessity=""
+        setPostApprovalNecessity={noop}
+        steps={[]}
+        recipients={[]}
+        attachments={[]}
+        setAttachments={noop}
+        attachmentRetention="5년"
+        setAttachmentRetention={noop}
+        relatedDocs={[]}
+        setRelatedDocs={noop}
+        setShowRelatedModal={noop}
+        onFileUpload={async () => {}}
+        uploading={false}
+        editDocNo="AP-미리보기"
+        isDesignMode
+        only={only}
+        sheetBody={body}
+      />
     </div>
   );
 }

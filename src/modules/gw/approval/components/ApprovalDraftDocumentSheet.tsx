@@ -112,6 +112,8 @@ export interface ApprovalDraftDocumentSheetProps {
   onStampTableClick?: () => void;
   /** 시트 서식 본문 — 있으면 서식 항목 대신 이것을 그린다 */
   sheetBody?: React.ReactNode;
+  /** 'header' 면 문서 머리(로고·제목·결재란·문서 정보·제목 줄)까지만 그린다 — 시트 서식 편집기의 머리 보기용 */
+  only?: 'header';
 }
 
 export function ApprovalDraftDocumentSheet({
@@ -160,6 +162,7 @@ export function ApprovalDraftDocumentSheet({
   onUpdateClosing,
   onStampTableClick,
   sheetBody,
+  only,
 }: ApprovalDraftDocumentSheetProps) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -684,6 +687,7 @@ export function ApprovalDraftDocumentSheet({
         </tbody>
       </table>
 
+      {only !== 'header' && (<>
       {/* 6. 휴가원 전용: 연차 잔여 현황 배너 & 빠른 휴가 구분 버튼 (연차/반차/반반차 전용) */}
       {docCode === '휴가' && isAnnualLeaveDeduction(selectedLeaveType) && (
         <div className="mt-3 rounded-lg border border-teal/30 bg-[#f4f9f9] p-3 text-[11.5px]">
@@ -1413,6 +1417,7 @@ export function ApprovalDraftDocumentSheet({
           )}
         </div>
       </div>
+      </>)}
 
       {/* 조직도 선택 모달 (인라인 사용자 필드 클릭 시) */}
       {activeUserField && (
