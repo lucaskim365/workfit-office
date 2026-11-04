@@ -359,11 +359,10 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
             const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
             return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t, ref) => set(r, c, t, ref)} org={org} />;
           }}
-          renderOverlay={(r, c) => {
-            // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 인쇄에는 안 나옴
-            if (c !== 0) return null;
-            const sec = sections.find((x) => r >= x.first && r <= x.last);
-            return sec ? <span aria-hidden title={`${sec.label} — 아래 [행 추가]로 줄을 늘립니다`} className="absolute inset-y-0 left-0 w-[3px] bg-violet-500 print:hidden" /> : null;
+          cellClassName={(r, c) => {
+            // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 칸 위치 지정 없이 안쪽 그림자로, 인쇄엔 안 나옴
+            if (c !== 0) return undefined;
+            return sections.some((x) => r >= x.first && r <= x.last) ? 'shadow-[inset_3px_0_0_#8b5cf6] print:shadow-none' : undefined;
           }}
         />
       </div>

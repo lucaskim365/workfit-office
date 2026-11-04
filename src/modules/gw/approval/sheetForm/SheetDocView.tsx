@@ -6,6 +6,9 @@ import { SealImage } from '../components/CompanySeal';
 import { SHEET_PAGE_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from './repeatRows';
 
+/** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
+const PRINT_FIT = { rootSelector: '.approval-print', pageWidthMm: 182 };
+
 /** 시트 서식으로 쓴 문서인가 — 서식 버전이 남아 있으면 */
 export function isSheetDoc(fieldValues: Record<string, unknown> | undefined): boolean {
   return !!parseVersionKey(String(fieldValues?.[SHEET_VERSION_KEY] ?? ''));
@@ -47,6 +50,7 @@ export function SheetDocView({
     <SheetView
       sheet={sheet}
       fitWidth={fitWidth}
+      printFit={PRINT_FIT}
       hidden={masked ? (r, c) => isSecretCell(sheet, r, c) : undefined}
       renderOverlay={(r, c) =>
         isSealCell(sheet, r, c) ? (

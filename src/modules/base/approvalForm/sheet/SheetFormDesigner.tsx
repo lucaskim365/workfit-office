@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, Eye, FileSpreadsheet, History, PenLine, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { useHolidays } from '@/features/holiday/useHolidays';
+import { HEADER_ITEMS, HEADER_ITEM_LABEL } from '@/domain/approvalForm/headerItems';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
@@ -99,12 +100,14 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     try {
       const { sheet: imported, warnings } = await importXlsx(new Uint8Array(await file.arrayBuffer()));
       setSheet(imported);
+      // 엑셀 양식엔 보통 제목이 들어 있다 — 문서 머리의 큰 제목과 겹치지 않게 끈다(서식 정보에서 다시 켤 수 있음)
+      setForm((f) => ({ ...f, hiddenHeaderItems: [...new Set([...(f.hiddenHeaderItems ?? []), 'docTitle'])] }));
       const base = file.name.replace(/\.xlsx$/i, '');
       if (!form.name.trim()) set({ name: base });
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${imported.rows.length}행 × ${imported.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요.`,
+        text: `'${file.name}'을 불러왔습니다 — ${imported.rows.length}행 × ${imported.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. (문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
         list: warnings,
       });
     } catch (err) {
@@ -317,6 +320,32 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
         <Field label="이번 저장 메모 (버전 기록에 남음)">
           <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 품목 표 열 추가" maxLength={255} />
         </Field>
+      </div>
+
+      {/* 문서 머리 항목 — 기존 서식과 같은 설정(hiddenHeaderItems). 시트 위·아래에 붙는 머리·맺음말 중 보일 것 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-panel px-3 py-2 text-[11.5px]">
+        <span className="font-semibold text-ink2" title="기안·결재·인쇄 화면에서 시트 위(로고·제목·문서 정보)와 아래(맺음말·서명)에 붙는 항목">
+          문서 머리에 보일 항목
+        </span>
+        {HEADER_ITEMS.map((item) => {
+          const shown = !(form.hiddenHeaderItems ?? []).includes(item);
+          return (
+            <label key={item} className="flex cursor-pointer items-center gap-1 text-ink2">
+              <input
+                type="checkbox"
+                checked={shown}
+                onChange={(e) => {
+                  const hidden = new Set(form.hiddenHeaderItems ?? []);
+                  if (e.target.checked) hidden.delete(item);
+                  else hidden.add(item);
+                  set({ hiddenHeaderItems: [...hidden] });
+                }}
+                className="h-3 w-3 accent-teal"
+              />
+              {HEADER_ITEM_LABEL[item]}
+            </label>
+          );
+        })}
       </div>
 
       {/* 편집기 + 옆 패널 */}
