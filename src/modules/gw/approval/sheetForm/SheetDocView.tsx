@@ -3,7 +3,7 @@ import { SheetView, type Sheet } from '@/lib/sheet';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
-import { approvalCellProps, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
+import { approvalCellProps, completedDateRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from './repeatRows';
 import { withoutExternalRows } from './sheetHeader';
 import { SlotCell } from './SheetDraftForm';
@@ -65,6 +65,7 @@ export function SheetDocView({
   if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;
   if (error || !sheet) return <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver?.formId} v{ver?.version})을 읽지 못했습니다.</div>;
 
+  const completedRows = new Set(completedDateRows(sheet));
   // 직인 칸이 고른 직인 — 없으면 바깥(문서 틀)이 정한 것·대표 직인
   const sealMark = sheetSealMarkId(sheet);
   const view = (
@@ -74,6 +75,8 @@ export function SheetDocView({
       fitWidth={fitWidth}
       printFit={PRINT_FIT}
       hidden={masked ? (r, c) => isSecretCell(sheet, r, c) : undefined}
+      // 결재 완료일 줄 — 결재가 끝난 문서만(기존 문서 머리와 같음)
+      hiddenRows={docInfo?.completedDate ? undefined : (r) => completedRows.has(r)}
       renderCell={(r, c) => {
         const props = approvalCellProps(sheet, r, c);
         // 안내문 칸 — 작성 화면에만(결재·인쇄·대외 문서엔 안 나옴)

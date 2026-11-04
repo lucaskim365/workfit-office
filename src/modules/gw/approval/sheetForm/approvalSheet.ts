@@ -26,6 +26,8 @@ export const APPROVAL_NS = {
   autoNo: SHEET_AUTO_NO_NS,
   /** 회사 직인 칸이 쓸 직인(회사 로고·직인 목록 id) — 없으면 대표 직인 */
   sealMark: 'sealMark',
+  /** 필수 입력 칸 — 값 true. 비어 있으면 상신을 막는다(기존 서식 '필수') */
+  required: 'required',
 } as const;
 
 export type CellInputType =
@@ -39,6 +41,7 @@ export type CellInputType =
   | 'multiSelect'
   | 'checkbox'
   | 'user'
+  | 'users'
   | 'dept';
 
 /** cellMeta.input 값 — options는 select·multiSelect만 */
@@ -267,6 +270,7 @@ export const CELL_INPUT_LABELS: Record<CellInputType, string> = {
   multiSelect: '선택(여러 개)',
   checkbox: '체크',
   user: '사람',
+  users: '사람(여러 명)',
   dept: '부서',
 };
 
@@ -343,6 +347,8 @@ export interface ApprovalCellProps {
   autoNo?: AutoNumberConfig;
   /** 직인 칸이 쓸 직인 id */
   sealMark?: string;
+  /** 필수 입력 칸 */
+  required: boolean;
 }
 
 const metaAt = (s: Sheet, ns: string, r: number, c: number): unknown => {
@@ -362,6 +368,7 @@ export function approvalCellProps(s: Sheet, r: number, c: number): ApprovalCellP
     secret: metaAt(s, APPROVAL_NS.secret, r, c) === true,
     seal: metaAt(s, APPROVAL_NS.seal, r, c) === true,
     guide: metaAt(s, APPROVAL_NS.guide, r, c) === true,
+    required: metaAt(s, APPROVAL_NS.required, r, c) === true,
     autoNo: (() => {
       const raw = metaAt(s, APPROVAL_NS.autoNo, r, c);
       const parsed = raw === undefined ? null : autoNumberConfigSchema.safeParse(raw);
@@ -372,6 +379,12 @@ export function approvalCellProps(s: Sheet, r: number, c: number): ApprovalCellP
       return typeof m === 'string' && m ? m : undefined;
     })(),
   };
+}
+
+/** 비공개 칸·행·열이 있는 시트 — 문서 보기의 '비공개 가리기' 단추 */
+export function sheetHasSecret(s: Sheet | null | undefined): boolean {
+  if (!s) return false;
+  return [s.cellMeta, s.rowMeta, s.colMeta].some((m) => Object.values(m[APPROVAL_NS.secret] ?? {}).some(Boolean));
 }
 
 /** 시트의 회사 직인 칸이 쓸 직인 — 처음 고른 칸의 것, 없으면 undefined(대표 직인) */
@@ -413,7 +426,8 @@ export function setApprovalProp(
     | typeof APPROVAL_NS.seal
     | typeof APPROVAL_NS.guide
     | typeof APPROVAL_NS.autoNo
-    | typeof APPROVAL_NS.sealMark,
+    | typeof APPROVAL_NS.sealMark
+    | typeof APPROVAL_NS.required,
   value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {
   const v = value === false || value === '' ? undefined : value;
@@ -529,6 +543,41 @@ export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<
 export function draftInputOf(s: Sheet, r: number, c: number): CellInput | undefined {
   if (!isDraftEditable(s, r, c)) return undefined;
   return approvalCellProps(s, r, c).input;
+}
+
+/**
+ * 칸 이름표(라벨) — 같은 줄 왼쪽에서 가장 가까운 글자 칸, 없으면 위쪽, 그래도 없으면 칸 주소.
+ * 상신 전 안내('필수 칸을 채워 주세요: 휴가 종류')에 쓴다
+ */
+export function cellCaption(s: Sheet, r: number, c: number): string {
+  const text = (rr: number, cc: number) => String(s.rows[rr]?.[s.cols[cc]] ?? '').trim();
+  const isInput = (rr: number, cc: number) => !!approvalCellProps(s, rr, cc).input;
+  for (let cc = c - 1; cc >= 0; cc--) if (text(r, cc) && !isInput(r, cc)) return text(r, cc).replace(/\s+/g, ' ');
+  for (let rr = r - 1; rr >= 0; rr--) if (text(rr, c) && !isInput(rr, c)) return text(rr, c).replace(/\s+/g, ' ');
+  return cellAddress(r, c);
+}
+
+/** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
+export function requiredMissing(s: Sheet): string[] {
+  const out: string[] = [];
+  Object.entries(s.cellMeta[APPROVAL_NS.required] ?? {}).forEach(([key, v]) => {
+    if (v !== true) return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    if (c < 0 || r >= s.rows.length || !draftInputOf(s, r, c)) return;
+    if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
+  });
+  return [...new Set(out)];
+}
+
+/** 결재 완료일 칸이 든 줄 — 결재가 끝나기 전엔 줄째 숨긴다(기존 문서 머리와 같음) */
+export function completedDateRows(s: Sheet): number[] {
+  const rows = new Set<number>();
+  Object.entries(s.cellMeta[APPROVAL_NS.bind] ?? {}).forEach(([key, v]) => {
+    if (v === 'draft.completedDate') rows.add(Number(key.slice(0, key.indexOf(':'))));
+  });
+  return [...rows];
 }
 
 /** 숫자·금액 입력 칸인데 숫자로 읽히지 않는 칸 주소 — 상신 전 검사 */

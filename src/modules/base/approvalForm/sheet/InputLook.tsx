@@ -20,6 +20,7 @@ export const INPUT_SHORT_LABELS: Record<CellInputType, string> = {
   multiSelect: '여러 선택',
   checkbox: '체크',
   user: '사람',
+  users: '여러 명',
   dept: '부서',
 };
 
@@ -47,6 +48,13 @@ function look(input: CellInput) {
         <>
           <Building2 className={ic} />
           <span>임직원 검색</span>
+        </>
+      );
+    case 'users':
+      return (
+        <>
+          <Building2 className={ic} />
+          <span>임직원 검색(여러 명)</span>
         </>
       );
     case 'dept':

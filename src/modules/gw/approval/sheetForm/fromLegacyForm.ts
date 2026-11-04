@@ -91,8 +91,10 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (input) {
       const options = input === 'select' || input === 'multiSelect' ? { options: f.options ?? [] } : {};
       s = setApprovalProp(s, at, APPROVAL_NS.input, { type: input, ...options });
+      if (f.required) s = setApprovalProp(s, at, APPROVAL_NS.required, true);
     } else if (f.type === '자동번호') {
-      s = setApprovalProp(s, at, APPROVAL_NS.autoNo, f.autoNumber ?? DEFAULT_AUTO_NUMBER);
+      // 같은 서식 코드에 붙이므로 그 항목의 순번을 이어 쓴다(1번부터 다시 시작하지 않게)
+      s = setApprovalProp(s, at, APPROVAL_NS.autoNo, { ...(f.autoNumber ?? DEFAULT_AUTO_NUMBER), channelKey: f.key });
     }
     // 금액 키 → 결재선 금액, 연동 서식의 연동 칸(휴가 기간 등)은 같은 이름
     if (f.type === '금액' && f.isAmountKey) s = setCellName(s, r, c1, 'amount');
@@ -106,7 +108,6 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   };
 
   if (fields.some((f) => f.visibleIf)) warnings.push('조건부로 보이던 항목(탭·선택에 따라 숨김)은 모두 한꺼번에 보입니다 — 필요 없으면 지우세요.');
-  if (fields.some((f) => f.required)) warnings.push("'필수' 표시는 옮기지 않았습니다 — 시트 서식에는 아직 필수 입력 검사가 없습니다.");
 
   // 섹션 순서대로
   const sections: string[] = [];

@@ -46,6 +46,7 @@ const INPUT_ICONS: Record<CellInputType, LucideIcon> = {
   multiSelect: ListChecks,
   checkbox: SquareCheck,
   user: User,
+  users: Users,
   dept: Building2,
 };
 
@@ -53,6 +54,7 @@ const INPUT_HINTS: Partial<Record<CellInputType, string>> = {
   select: '고를 항목은 오른쪽 칸 속성에서 한 줄에 하나씩 적습니다',
   multiSelect: '고를 항목은 오른쪽 칸 속성에서 한 줄에 하나씩 적습니다',
   user: '임직원 검색 창으로 사람을 고릅니다(이름과 함께 사람 ID 저장)',
+  users: '임직원 검색 창으로 여러 명을 고릅니다(참석자·동행자 등) — 업무 대행자처럼 한 사람만 받는 연동 칸에는 [사람]을',
   dateRange: '달력에서 시작~끝 날짜를 고릅니다',
 };
 

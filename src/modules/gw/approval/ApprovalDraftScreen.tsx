@@ -34,7 +34,8 @@ import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
 import { korDateText, SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
-import { useFormVersionSheet, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
+import { liveSheetVersion } from '@/domain/approvalForm/sheetSwitch';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
 import { usePermission } from '@/features/auth/usePermission';
@@ -987,12 +988,19 @@ function ApprovalDraftInner({
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
   // 시트 서식 — 이 문서가 이미 쓴 버전이 있으면 그 틀, 없으면 서식의 최신 버전(§11.2)
   const { latest: sheetLatest } = useSheetFormVersions();
+  const { switches: sheetSwitches } = useSheetSwitches();
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
-  const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : (sheetLatest.get(form.id) ?? null);
+  const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : liveSheetVersion(form, sheetLatest, sheetSwitches);
   const sheetIssuesRef = useRef<string[]>([]);
+  // 시트 서식의 비어 있는 필수 칸 이름표 — 상신 때만 막는다(임시 저장은 됨)
+  const sheetRequiredRef = useRef<string[]>([]);
   // 시트에 든 문서 정보 칸(기안자·제목 등)은 문서 머리에서 뺀다 — 같은 틀을 SheetDraftForm 도 읽는다(같은 조회, 한 번만 받음)
   const { data: sheetTpl } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
-  const docForm = useMemo(() => withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet)), [form, sheetTpl]);
+  // 시트로 쓰는 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
+  const docForm = useMemo(() => {
+    const f = withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet));
+    return f && sheetVersion !== null ? { ...f, fields: [] } : f;
+  }, [form, sheetTpl, sheetVersion]);
   // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
   const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;
   /** 시트 휴가원 — 휴가 일수 칸은 시스템이 계산(기존 휴가원과 같은 calculateLeaveDays) */
@@ -1017,7 +1025,8 @@ function ApprovalDraftInner({
     [relatedDocs, allForms]
   );
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
-  const isOvertimeAutoFill = !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
+  // 기존 양식 휴일근무의 자동 채우기 — 시트로 쓰는 문서는 해당 없음(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
+  const isOvertimeAutoFill = sheetVersion === null && !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
   const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
   const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
@@ -1096,11 +1105,11 @@ function ApprovalDraftInner({
 
   // 서식 마스터에 최신 업데이트(수식, 셀 병합, 열 구성 등)가 있는지 검사하여 일괄 반영 버튼 노출 여부 결정
   const hasFormMasterUpdates = useMemo(() => {
-    if (!form || !form.fields) return false;
+    if (!form || !form.fields || sheetVersion !== null) return false;
     return form.fields.some(
       (f) => f.type === '표' && !!f.placeholder && hasMasterUpdate(f.placeholder, values[f.key], f.options)
     );
-  }, [form, values]);
+  }, [form, values, sheetVersion]);
 
   // 최신 서식 변경사항을 모든 표에 일괄 스마트 병합 적용
   const handleApplyAllMasterUpdates = () => {
@@ -1193,7 +1202,7 @@ function ApprovalDraftInner({
       body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
       // 직인 문구는 상신 시점 값으로 남긴다 — 나중에 서식 문구가 바뀌어도 낸 문서의 명의는 그대로
-      fieldValues: withSealTexts(form?.fields, isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values),
+      fieldValues: withSealTexts(sheetVersion === null ? form?.fields : [], isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values),
       attachments,
       recipients,
       relatedDocs,
@@ -1215,6 +1224,9 @@ function ApprovalDraftInner({
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+    if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
+      return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
+    }
     if (sheetVersion !== null && sheetIssuesRef.current.length > 0) {
       return `숫자 칸에 숫자가 아닌 값이 있습니다: ${sheetIssuesRef.current.slice(0, 5).join(', ')}`;
     }
@@ -1714,6 +1726,7 @@ function ApprovalDraftInner({
                     if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
+                  onRequired={(labels) => (sheetRequiredRef.current = labels)}
                   relatedSources={relatedSources}
                   systemValues={sheetSystemValues}
                   // 문서 항목 칸(제목·보존연한·공개범위) — 문서 머리와 같은 값을 시트 칸에서 쓴다

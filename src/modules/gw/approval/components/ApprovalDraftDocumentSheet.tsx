@@ -764,8 +764,8 @@ export function ApprovalDraftDocumentSheet({
             ) : null}
           </div>
 
-          {/* 휴가 구분 인라인 칩 버튼 */}
-          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {/* 휴가 구분 인라인 칩 버튼 — 시트 휴가원은 시트의 휴가 종류 칸에서 고른다(여기 단추는 기존 양식 항목용이라 숨김) */}
+          <div className={`mt-2 items-center gap-1.5 flex-wrap ${sheetBody ? 'hidden' : 'flex'}`}>
             <span className="text-[11px] font-bold text-[#555] mr-1">휴가 구분:</span>
             {[
               { type: '연차', label: '종일 연차 (1.0일)' },

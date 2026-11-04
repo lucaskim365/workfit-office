@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { sheetApplied } from '@/domain/approvalForm/sheetSwitch';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { useRouteRules } from '@/features/gw/useRouteRules';
 import { FileSpreadsheet,
@@ -21,10 +22,12 @@ interface ApprovalFormCatalogProps {
   onSelectForm: (form: ApprovalForm) => void;
   /** 시트 서식 id → 최신 버전 번호 (시트 배지·입력 필드 대신 버전 표시) */
   sheetVersions?: Map<string, number>;
+  /** 시트 적용 스위치 — 기존 서식에 붙인 시트를 켰는지 */
+  sheetSwitches?: ReadonlyMap<string, boolean>;
   onAddNewForm: () => void;
   onToggleActive: (form: ApprovalForm) => void;
   onDuplicate: (form: ApprovalForm) => void;
-  /** 기존 서식 → 시트 서식 초안(새 서식, 기존은 그대로) */
+  /** 기존 서식에 시트 붙이기(같은 코드, 서식 기록은 그대로) */
   onToSheet?: (form: ApprovalForm) => void;
   onDelete: (form: ApprovalForm) => void;
 }
@@ -35,6 +38,7 @@ export function ApprovalFormCatalog({
   selFolderId,
   onSelectForm,
   sheetVersions,
+  sheetSwitches,
   onAddNewForm,
   onToggleActive,
   onDuplicate,
@@ -259,8 +263,14 @@ export function ApprovalFormCatalog({
                             {formItem.name}
                           </h3>
                           {sheetVersions?.has(formItem.id) && (
-                            <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.2 text-[9px] font-extrabold text-sky-600">
-                              시트
+                            // 기존 서식에 시트를 붙였는데 아직 '시트로 기안'을 안 켰으면 준비 중(기안은 기존 양식)
+                            <span
+                              className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-extrabold ${
+                                sheetSwitches && !sheetApplied(formItem, sheetSwitches) ? 'bg-amber-500/15 text-amber-700' : 'bg-sky-500/15 text-sky-600'
+                              }`}
+                              title={sheetSwitches && !sheetApplied(formItem, sheetSwitches) ? '시트 틀을 붙이는 중 — 기안은 아직 기존 양식' : '시트로 기안'}
+                            >
+                              {sheetSwitches && !sheetApplied(formItem, sheetSwitches) ? '시트 준비 중' : '시트'}
                             </span>
                           )}
                           {formItem.system && (
@@ -344,7 +354,7 @@ export function ApprovalFormCatalog({
                       <button
                         type="button"
                         onClick={() => onToSheet(formItem)}
-                        title="이 서식으로 시트 서식 초안 만들기 — 새 서식으로 만들고 기존 서식은 그대로 둡니다"
+                        title="이 서식에 시트 붙이기 — 같은 서식(코드)에 시트 틀을 붙입니다. 옛 문서·결재선 규칙·권한은 그대로, '시트로 기안'을 켜기 전까지 기안은 기존 양식"
                         className="rounded p-1 text-ink3 hover:bg-panel hover:text-emerald-600 transition-colors cursor-pointer"
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5" />

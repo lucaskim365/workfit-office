@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -52,7 +53,9 @@ export default function MobileApprovalDetail() {
   const isPostReadRecipient = (postReadQuery.data ?? []).some((s) => s.toUserId === me);
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
-  const form = forms.find((f) => f.code === doc?.docType);
+  const legacyForm = forms.find((f) => f.code === doc?.docType);
+  // 시트 문서는 기존 양식 항목을 그리지 않는다(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
+  const form = legacyForm && isSheetDoc(doc?.fieldValues) ? { ...legacyForm, fields: [] } : legacyForm;
   const decide = useDecideStep();
   const [modalDecision, setModalDecision] = useState<'승인' | '반려' | null>(null);
   const [modalComment, setModalComment] = useState('');

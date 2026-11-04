@@ -21,6 +21,8 @@ import {
   applyValues,
   draftInputOf,
   invalidNumberCells,
+  requiredMissing,
+  completedDateRows,
   isDocFieldBind,
   slotOf,
   type SheetSlots,
@@ -173,6 +175,58 @@ export function SlotCell({ node }: { node: import('react').ReactNode }) {
   return <span className="inline-flex py-0.5 align-middle">{node}</span>;
 }
 
+/**
+ * 사람(여러 명) 칸 — 임직원 검색으로 여러 명을 더하고 하나씩 뺀다. 칸에는 '이름 (부서), 이름 (부서)',
+ * 사용자 ID 는 쉼표로 이어 따로(__refs) — 기안 당시 이름 그대로 남는다
+ */
+function UsersField({ value, onSet, org }: { value: string; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
+  const [open, setOpen] = useState(false);
+  const names = value ? value.split(/,\s*(?![^()]*\))/).map((x) => x.trim()).filter(Boolean) : [];
+  return (
+    <span className={`${FIELD} flex flex-wrap items-center gap-1`}>
+      {names.map((n, i) => (
+        <span key={`${n}-${i}`} className="inline-flex items-center gap-0.5 rounded bg-teal-soft/40 px-1 print:bg-transparent print:px-0">
+          {n}
+          <button
+            type="button"
+            title="빼기"
+            className="text-[#999] hover:text-rose-500 print:hidden"
+            onClick={() => {
+              const rest = names.filter((_, j) => j !== i);
+              onSet(rest.join(', '), REMOVE_AT + String(i));
+            }}
+          >
+            <X size={11} />
+          </button>
+        </span>
+      ))}
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded px-1 text-[11.5px] font-semibold text-teal hover:bg-[#f0f4f4] print:hidden">
+        <Building2 size={12} />
+        {names.length ? '추가' : '임직원 검색'}
+      </button>
+      {open && (
+        <SelectorDialog
+          title="임직원 선택(여러 명)"
+          org={org}
+          deptOnly={false}
+          onConfirm={(items) => {
+            const picked = items.filter((i) => i.type === 'user').map((i) => org.userById(i.id)).filter(Boolean) as Array<{ id: string; name: string; dept?: string }>;
+            if (picked.length) {
+              const add = picked.map((u) => (u.dept ? `${u.name} (${u.dept})` : u.name));
+              onSet([...names, ...add].join(', '), ADD_IDS + picked.map((u) => u.id).join(','));
+            }
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </span>
+  );
+}
+/** 사람(여러 명) 칸이 ID 목록을 고칠 때 보내는 표시 — 'add:id1,id2' / 'del:순번' */
+const ADD_IDS = 'add:';
+const REMOVE_AT = 'del:';
+
 function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
@@ -239,6 +293,8 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
       );
     case 'user':
       return <UserField value={raw} onSet={onSet} org={org} />;
+    case 'users':
+      return <UsersField value={raw} onSet={onSet} org={org} />;
     case 'dept':
       // 기존 서식 '부서'와 같은 부서 목록
       return (
@@ -290,6 +346,8 @@ export interface SheetDraftFormProps {
   onDocField?: (patch: Partial<DocFields>) => void;
   /** 문서 머리 부품 칸(결재란·회사 로고·기안자 서명)에 그릴 것 — 문서 틀이 만들어 넘긴다 */
   slots?: SheetSlots;
+  /** 상신 전 검사용 — 비어 있는 필수 칸 이름표 */
+  onRequired?: (labels: string[]) => void;
 }
 
 export interface RelatedSource {
@@ -313,6 +371,7 @@ export function SheetDraftForm({
   docFields,
   onDocField,
   slots,
+  onRequired,
 }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
@@ -356,6 +415,8 @@ export function SheetDraftForm({
     [loaded, rawValues, extras]
   );
   const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
+  // 결재 완료일 줄 — 작성 중엔 숨김(값이 없을 때)
+  const completedRows = useMemo(() => new Set(sheet && !draftInfo?.completedDate ? completedDateRows(sheet) : []), [sheet, draftInfo?.completedDate]);
 
   // 처음 열 때 서식 버전·수식 결과를 문서 값에 남긴다(아무것도 안 쓰고 저장해도 어느 틀인지 알게)
   const needsInit = !!sheet && values['__formVersion'] !== key;
@@ -363,6 +424,11 @@ export function SheetDraftForm({
     if (sheet && needsInit) emit(sheet, extras, refs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsInit]);
+
+  useEffect(() => {
+    if (sheet) onRequired?.(requiredMissing(sheet));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet]);
 
   useEffect(() => {
     if (sheet) onIssues?.(invalidNumberCells(sheet));
@@ -376,10 +442,17 @@ export function SheetDraftForm({
     // 기안자가 쓴 '='는 수식이 아니라 글자 — 수식은 서식 틀에만 있다
     const next = setCellValue(sheet, r, c, text, { allowFormula: false });
     let refMap = refs;
-    if (draftInputOf(sheet, r, c)?.type === 'user') {
+    const inputType = draftInputOf(sheet, r, c)?.type;
+    if (inputType === 'user' || inputType === 'users') {
       const k = cellKey(r, sheet.cols[c]);
       refMap = { ...refs };
-      if (ref && text) refMap[k] = ref;
+      if (inputType === 'users') {
+        const ids = (refs[k] ?? '').split(',').filter(Boolean);
+        if (ref?.startsWith(ADD_IDS)) ids.push(...ref.slice(ADD_IDS.length).split(',').filter(Boolean));
+        else if (ref?.startsWith(REMOVE_AT)) ids.splice(Number(ref.slice(REMOVE_AT.length)), 1);
+        if (ids.length && text) refMap[k] = ids.join(',');
+        else delete refMap[k];
+      } else if (ref && text) refMap[k] = ref;
       else delete refMap[k];
     }
     emit(recalculate(next), extras, refMap);
@@ -461,24 +534,25 @@ export function SheetDraftForm({
             const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
             return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t, ref) => set(r, c, t, ref)} org={org} />;
           }}
-          cellClassName={(r, c) => {
-            // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 칸 위치 지정 없이 안쪽 그림자로, 인쇄엔 안 나옴
-            if (c !== 0) return undefined;
-            return sections.some((x) => r >= x.first && r <= x.last) ? 'shadow-[inset_3px_0_0_#8b5cf6] print:shadow-none' : undefined;
-          }}
-        />
-      </div>
-      {sections.length > 0 && (
-        // 반복 구간 줄 수 — 기존 서식 '표'의 [행 추가]·[행 삭제]와 같다(마지막 줄을 지운다). 인쇄에는 나오지 않음
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 print:hidden">
-          {sections.map((sec) => {
-            const rows = sec.last - sec.first + 1;
+          // 결재 완료일 줄 — 작성 중엔 아직 결재 전이라 줄째 숨김(기존 문서 머리와 같음)
+          hiddenRows={(r) => completedRows.has(r)}
+          // 반복 구간 줄 수 — 구간 바로 아래 띠(기존 서식 '표'의 [행 추가]·[행 삭제]와 같음, 인쇄 안 됨)
+          afterRow={(r) => {
+            const sec = sections.find((x) => x.last === r);
+            if (!sec) return null;
             const added = extras[sec.id] ?? 0;
             return (
-              <div key={sec.id} className="flex items-center gap-1.5 text-[11px]">
-                <span className="inline-block h-3 w-[3px] rounded-sm bg-violet-500" aria-hidden />
+              <div className="flex items-center gap-1.5 border-x border-b border-dashed border-violet-300 bg-violet-50/60 px-2 py-1 text-[11px]">
                 <span className="font-semibold text-violet-700">{sec.label}</span>
-                <span className="text-[#888]">{rows}줄</span>
+                <span className="text-[#888]">{sec.last - sec.first + 1}줄</span>
+                <button
+                  type="button"
+                  onClick={() => changeRows(sec.id, true)}
+                  className="ml-auto flex items-center gap-0.5 rounded bg-white px-2 py-0.5 font-bold text-teal shadow-xs hover:bg-teal-soft/70"
+                >
+                  <Plus className="h-3 w-3" />
+                  행 추가
+                </button>
                 {added > 0 && (
                   <button
                     type="button"
@@ -490,19 +564,16 @@ export function SheetDraftForm({
                     행 삭제
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => changeRows(sec.id, true)}
-                  className="flex items-center gap-0.5 rounded bg-teal-soft/40 px-2 py-0.5 font-bold text-teal hover:bg-teal-soft/70"
-                >
-                  <Plus className="h-3 w-3" />
-                  행 추가
-                </button>
               </div>
             );
-          })}
-        </div>
-      )}
+          }}
+          cellClassName={(r, c) => {
+            // 반복 구간 — 첫 열 왼쪽에 보라색 띠(아래 [행 추가]와 같은 색). 칸 위치 지정 없이 안쪽 그림자로, 인쇄엔 안 나옴
+            if (c !== 0) return undefined;
+            return sections.some((x) => r >= x.first && r <= x.last) ? 'shadow-[inset_3px_0_0_#8b5cf6] print:shadow-none' : undefined;
+          }}
+        />
+      </div>
     </div>
   );
 }

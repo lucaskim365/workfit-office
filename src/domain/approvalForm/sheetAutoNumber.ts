@@ -39,7 +39,8 @@ export function sheetAutoNumberCells(s: Sheet | null | undefined): SheetAutoNumb
     })
     .filter((x) => x.c >= 0 && x.r >= 0 && x.r < s.rows.length)
     .sort((a, b) => a.r - b.r || a.c - b.c);
-  return cells.map((x, i) => ({ ...x, key: cellKey(x.r, s.cols[x.c]), channelKey: `sheet#${i + 1}` }));
+  // 기존 서식에서 옮긴 칸은 그 항목의 순번을 이어 쓴다
+  return cells.map((x, i) => ({ ...x, key: cellKey(x.r, s.cols[x.c]), channelKey: x.config.channelKey || `sheet#${i + 1}` }));
 }
 
 /** 문서 칸 값 JSON 읽기(문자열 값만) */

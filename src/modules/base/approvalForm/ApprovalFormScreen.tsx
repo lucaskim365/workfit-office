@@ -8,7 +8,7 @@ import {
   useRemoveApprovalFolder,
 } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
@@ -40,6 +40,7 @@ export default function ApprovalFormScreen() {
     source?: string;
   } | null>(null);
   const { latest: sheetVersions } = useSheetFormVersions();
+  const { switches: sheetSwitches } = useSheetSwitches();
 
   /** 서식 열기 — 시트 서식(버전이 있는 서식)은 시트 편집기로, 나머지는 기존 편집기로 */
   const openForm = (form: ApprovalForm) => {
@@ -141,18 +142,12 @@ export default function ApprovalFormScreen() {
     setMsg('');
   };
 
-  /** 기존 서식 → 시트 서식 초안 — 새 코드(코드_시트)로, 다 고칠 때까지 사용 안 함. 기존 서식은 그대로 */
+  /**
+   * 기존 서식에 시트 붙이기 — 같은 서식(같은 코드)에 시트 초안을 연다. 서식 기록·항목 목록은 그대로,
+   * 저장하면 시트 틀만 버전으로 쌓이고 '시트로 기안'을 켜기 전까지 기안은 기존 양식 그대로(결재선 규칙·권한·필터·번호 순번도 그대로)
+   */
   const toSheet = (form: ApprovalForm) => {
-    const taken = new Set(forms.map((f) => f.code.toLowerCase()));
-    let code = `${form.code}_시트`;
-    for (let i = 2; taken.has(code.toLowerCase()) || sheetVersions.has(code); i++) code = `${form.code}_시트${i}`;
-    setSheetSel({
-      // 이름 끝 (시트) — 목록에서 기존 서식과 구분(큰 제목은 격식 문서명이라 그대로)
-      form: { ...form, id: '', code, name: `${form.name} (시트)`, docTitle: form.docTitle || form.name, fields: [], active: false, system: false },
-      version: null,
-      draft: legacyFormToSheet(form),
-      source: form.name,
-    });
+    setSheetSel({ form, version: null, draft: legacyFormToSheet(form), source: form.name });
     setMsg('');
   };
 
@@ -252,8 +247,17 @@ export default function ApprovalFormScreen() {
           initialNotice={
             sheetSel.draft
               ? {
-                  text: `기존 서식 '${sheetSel.source}'로 만든 시트 서식 초안입니다(새 서식 — 기존 서식은 그대로). 모양을 다듬고 [미리보기]로 확인한 뒤 저장하세요.${sheetSel.draft.link ? ` 대체 서식은 '${sheetSel.draft.link}'로 정해 두었습니다(휴가 연동 등 그대로).` : ''}`,
+                  text: `기존 서식 '${sheetSel.source}'에 붙일 시트 초안입니다. 모양을 다듬고 [미리보기]로 확인한 뒤 저장하세요 — 저장해도 '시트로 기안'을 켜기 전까지 기안자는 기존 양식으로 씁니다.`,
                   list: sheetSel.draft.warnings,
+                }
+              : undefined
+          }
+          onOpenLegacy={
+            sheetSel.form.fields?.length
+              ? () => {
+                  const f = sheetSel.form;
+                  setSheetSel(null);
+                  setSel(f);
                 }
               : undefined
           }
@@ -499,6 +503,7 @@ export default function ApprovalFormScreen() {
               selFolderId={selFolderId}
               onSelectForm={openForm}
               sheetVersions={sheetVersions}
+              sheetSwitches={sheetSwitches}
               onAddNewForm={handleAddNewForm}
               onToggleActive={toggleActive}
               onDuplicate={duplicate}

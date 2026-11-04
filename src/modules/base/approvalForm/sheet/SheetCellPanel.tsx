@@ -282,6 +282,14 @@ export function SheetCellPanel({
             </select>
           </div>
         )}
+        {props.input && (
+          <Check
+            checked={props.required}
+            onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.required, v))}
+            label="필수 입력"
+            hint="비어 있으면 상신할 수 없습니다(임시 저장은 됨)."
+          />
+        )}
         <Check
           checked={props.guide}
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.guide, v))}

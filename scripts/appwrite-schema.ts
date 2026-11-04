@@ -636,6 +636,16 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('formId', ['formId'])],
   },
   {
+    id: 'approvalSheetSwitches',
+    name: '결재 시트 적용 스위치',
+    /*
+      기존 서식에 시트 틀을 붙였을 때, 기안을 시트로 받을지(applied) — 서식마다 한 줄, $id = safeDocId(formId).
+      서식 기록(approvalForms)은 읽기 전용이라 따로 둔다. 줄이 없으면 기존 서식은 꺼짐, 처음부터 시트로 만든 서식은 켜짐.
+    */
+    attributes: [S('formId', 64, true), BOOL('applied'), S('updatedBy', 64), S('updatedByName', 64), S('updatedAt', 40)],
+    indexes: [],
+  },
+  {
     id: 'approvalFolders',
     name: '결재 서식 폴더',
     attributes: [S('id', 64, true), S('name', 128, true), INT('order')],

@@ -17,6 +17,9 @@ test('시트 자동번호 칸 — 위→아래·왼→오른 순서, 칸 구분�
     ]
   );
   assert.deepEqual(sheetAutoNumberCells(null), []);
+  // 기존 서식에서 옮긴 칸 — 그 항목 키로 순번을 이어 쓴다
+  const moved = setCellMeta(s, SHEET_AUTO_NO_NS, 1, 2, { ...DEFAULT_AUTO_NUMBER, prefix: 'A', channelKey: 'docNoField' });
+  assert.equal(sheetAutoNumberCells(moved)[0].channelKey, 'docNoField');
 });
 
 test('상신 때 번호 넣기 — 빈 칸만(재상신은 그대로), 문서번호로 쓰는 번호', async () => {

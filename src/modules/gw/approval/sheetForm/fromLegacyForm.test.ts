@@ -66,7 +66,8 @@ test('기존 서식 → 시트 — 라벨·값 칸, 입력 종류, 금액 키, �
   assert.equal(approvalCellProps(s, body.r, 1).secret, true);
   // 문서제목 항목은 문서 정보 표의 제목 칸이 맡는다(따로 안 만듦)
   assert.equal(metaCells(s, APPROVAL_NS.bind).filter((x) => x.v === 'doc.title').length, 1);
-  assert.ok(warnings.some((w) => w.includes('필수')));
+  assert.equal(approvalCellProps(s, kind.r, kind.c + 1).required, true, '필수 그대로');
+  assert.ok(!warnings.some((w) => w.includes('필수')));
 });
 
 test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안내문·섹션', () => {
@@ -100,6 +101,7 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
   assert.equal(approvalCellProps(s, guide.r, guide.c).guide, true, '안내문');
   const no = findText(s, '발주번호')!;
   assert.equal(approvalCellProps(s, no.r, 1).autoNo?.prefix, 'PO', '자동번호 모양 그대로');
+  assert.equal(approvalCellProps(s, no.r, 1).autoNo?.channelKey, 'no', '기존 항목 순번 이어받기');
   assert.ok(findText(s, '발주 내역'), '섹션 제목 줄');
   // 표 — 머리 줄 굵게·회색, 빈 칸은 입력 칸(수식 칸 제외), 마지막 줄은 반복 구간
   const head = findText(s, '품명')!;

@@ -93,7 +93,7 @@ const TITLE_ROW_HEIGHT = 96;
 /**
  * 문서 머리 전체를 시트에 넣는다 — 위: 회사 로고 / 큰 제목·결재란 / 문서 정보 표, 아래: 맺음말·기안일·기안자 서명.
  * formTitle: 큰 제목 칸에 '문서 이름' 부품(서식의 격식 문서명·서식명이 저절로) — 아니면 title 글자, 둘 다 없으면(엑셀처럼 제목이 이미 본문에 있을 때) 비워 둔다.
- * 대외 문서에서 숨김: 로고 줄·문서 정보 표·맺음말(큰 제목 줄은 남김 — 결재란 칸은 대외 문서에서 저절로 빈다)
+ * 대외 문서에서 숨김: 문서 정보 표·맺음말(로고 줄·큰 제목 줄은 남김 — 결재란 칸은 대외 문서에서 저절로 빈다)
  */
 export function insertDocHeader(
   s0: Sheet,
@@ -123,8 +123,8 @@ export function insertDocHeader(
   const mid = Math.floor(n / 2);
   if (logo) {
     s = mergeRange(s, all(0));
+    // 회사 로고 — 대외 문서(거래처용)에도 보인다(그룹웨어 상단 바와 달리 회사 문서의 일부)
     s = setApprovalProp(s, { r1: 0, r2: 0, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.logo');
-    s = setRowMeta(s, APPROVAL_NS.extHide, 0, true);
   }
   const t = logo ? 1 : 0;
   if (mid > 1) s = mergeRange(s, { r1: t, r2: t, c1: 0, c2: mid - 1 });

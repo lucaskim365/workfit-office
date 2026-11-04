@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { approvalFormVersionRepo } from '@/data/approvalForm/approvalFormVersion.repo';
+import { approvalSheetSwitchRepo } from '@/data/approvalForm/approvalSheetSwitch.repo';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { checkNewVersion, latestVersions, type ApprovalFormVersion } from '@/domain/approvalForm/sheetVersion';
 import type { Sheet } from '@/lib/sheet';
@@ -18,6 +19,23 @@ export function useSheetFormVersions() {
   const q = useQuery({ queryKey: [KEY, 'heads'], queryFn: () => approvalFormVersionRepo.listHeads() });
   const latest = useMemo(() => latestVersions(q.data ?? []), [q.data]);
   return { ...q, latest };
+}
+
+/** 시트 적용 스위치 — 서식 id → 켜짐(시트로 기안)/꺼짐(기존 양식으로 기안). 없는 서식은 기본값(sheetApplied) */
+export function useSheetSwitches() {
+  const q = useQuery({ queryKey: [KEY, 'switches'], queryFn: () => approvalSheetSwitchRepo.list() });
+  const switches = useMemo(() => new Map((q.data ?? []).map((s) => [s.formId, s.applied])), [q.data]);
+  return { ...q, switches };
+}
+
+/** 시트 적용 켜고 끄기 */
+export function useSetSheetSwitch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ formId, applied, user }: { formId: string; applied: boolean; user: { id: string; name?: string } }) =>
+      approvalSheetSwitchRepo.set(formId, applied, user),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY, 'switches'] }),
+  });
 }
 
 /** 한 서식의 버전 머리(최신 먼저) */
@@ -48,6 +66,11 @@ export interface SaveSheetFormInput {
   link?: string | null;
   note?: string;
   user: { id: string; name?: string };
+  /**
+   * 서식 머리(approvalForms)도 저장할지 — 기본 저장. 기존 서식에 시트를 붙일 때는 틀만 저장하고,
+   * 서식 설정을 바꿨을 때만 머리를 저장한다(그때도 기존 항목 목록은 그대로 — 옛 문서가 그 항목으로 보임)
+   */
+  saveHeader?: boolean;
 }
 
 export interface SaveSheetFormResult {
@@ -64,7 +87,7 @@ export interface SaveSheetFormResult {
 export function useSaveSheetForm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ form, sheet, baseVersion, link = null, note, user }: SaveSheetFormInput): Promise<SaveSheetFormResult> => {
+    mutationFn: async ({ form, sheet, baseVersion, link = null, note, user, saveHeader = true }: SaveSheetFormInput): Promise<SaveSheetFormResult> => {
       const heads = await approvalFormVersionRepo.listForForm(form.id);
       const latestNo = heads[0]?.version ?? null;
       // 바탕 버전보다 새 버전이 생겼으면(다른 관리자가 저장) 덮어쓰지 않고 알린다
@@ -89,7 +112,7 @@ export function useSaveSheetForm() {
         version = added.version;
         created = true;
       }
-      await approvalFormRepo.save(form);
+      if (saveHeader) await approvalFormRepo.save(form);
       return { version, created };
     },
     onSuccess: () => {

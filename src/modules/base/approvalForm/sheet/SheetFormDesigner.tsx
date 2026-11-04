@@ -12,7 +12,9 @@ import type { ApprovalStep } from '@/domain/approvalDoc/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
-import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSetSheetSwitch, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
+import { hasLegacyFields, sheetApplied } from '@/domain/approvalForm/sheetSwitch';
+import { SheetFormSettings } from './SheetFormSettings';
 import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type CellRange, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
@@ -56,6 +58,8 @@ interface Props {
   initialLink?: string | null;
   /** 처음 띄울 안내(변환에서 옮기지 못한 것 등) */
   initialNotice?: { text: string; list?: string[] };
+  /** 기존 양식(항목 목록) 편집기로 — 기존 서식에 시트를 붙인 경우 */
+  onOpenLegacy?: () => void;
 }
 
 export function SheetFormDesigner(props: Props) {
@@ -82,7 +86,17 @@ const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.
 /** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
 const PAPER_PAD = 66;
 
-function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial, initialLink, initialNotice }: Omit<Props, 'initialLink'> & { initial: Sheet; initialLink: string | null }) {
+function Designer({
+  form: initialForm,
+  version: initialVersion,
+  forms,
+  folders,
+  onClose,
+  initial,
+  initialLink,
+  initialNotice,
+  onOpenLegacy,
+}: Omit<Props, 'initialLink'> & { initial: Sheet; initialLink: string | null }) {
   const { user } = useAuth();
   const save = useSaveSheetForm();
   const [form, setForm] = useState<ApprovalForm>(initialForm);
@@ -96,7 +110,12 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   // 대체 서식(연동 유형) — 이 서식이 대신하는 기존 서식. 버전과 함께 저장된다
   const [link, setLink] = useState<string | null>(initialLink);
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
-  const [side, setSide] = useState<'cell' | 'history'>('cell');
+  const [side, setSide] = useState<'cell' | 'settings' | 'history'>('cell');
+  // 기존 서식(항목 목록이 있는 서식)에 시트를 붙인 경우 — 서식 기록·항목 목록은 그대로, 시트 틀만 버전으로 쌓는다
+  const legacy = !!initialForm.id && hasLegacyFields(initialForm);
+  const { switches } = useSheetSwitches();
+  const setSwitch = useSetSheetSwitch();
+  const applied = sheetApplied(initialForm, switches);
   // 서식별 최신 버전 — 지운 서식의 버전 기록도 남아 있다(버전은 지우지 않음)
   const { latest: versionHeads } = useSheetFormVersions();
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
@@ -176,17 +195,32 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
 
-    const header: ApprovalForm = { ...form, id: code, code, name, fields: [] };
+    // 기존 서식은 항목 목록을 그대로 둔다(옛 문서가 그 항목으로 보임). 서식 설정을 바꿨을 때만 서식 기록에 저장
+    const header: ApprovalForm = { ...form, id: code, code, name, fields: legacy ? initialForm.fields : [] };
+    const headerChanged = JSON.stringify(form) !== JSON.stringify(savedForm);
     try {
       setMsg({ kind: 'info', text: '저장 중…' });
-      const res = await save.mutateAsync({ form: header, sheet, baseVersion, link, note: note.trim() || undefined, user: { id: user.id, name: user.name } });
+      const res = await save.mutateAsync({
+        form: header,
+        sheet,
+        baseVersion,
+        link,
+        note: note.trim() || undefined,
+        user: { id: user.id, name: user.name },
+        saveHeader: !legacy || headerChanged,
+      });
       setSavedLink(link);
       setForm(header);
       setSavedForm(header);
       setSavedSheet(sheet);
       setBaseVersion(res.version);
       setNote('');
-      setMsg({ kind: 'ok', text: res.created ? `저장했습니다 — v${res.version}` : `틀이 바뀌지 않아 서식 정보만 저장했습니다(v${res.version} 그대로).` });
+      setMsg({
+        kind: 'ok',
+        text:
+          (res.created ? `저장했습니다 — v${res.version}` : `틀이 바뀌지 않아 서식 정보만 저장했습니다(v${res.version} 그대로).`) +
+          (legacy && !applied ? " 아직 '시트로 기안'이 꺼져 있어 기안자는 기존 양식으로 씁니다 — 다 다듬으면 위에서 켜세요." : ''),
+      });
     } catch (err) {
       setMsg({ kind: 'err', text: `저장 실패: ${err instanceof Error ? err.message : String(err)}` });
     }
@@ -291,6 +325,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
+    if (p.required && p.input) marks.push({ t: '필수', cls: 'bg-rose-500 text-white', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
     if (p.autoNo) marks.push({ t: '자동번호', cls: 'bg-sky-500 text-white', title: '자동번호 — 상신할 때 번호를 매김' });
     if (p.guide) marks.push({ t: '안내', cls: 'bg-ink3 text-white', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
     if (!marks.length)
@@ -339,14 +374,60 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-[14px] font-bold text-ink">{isNew ? '새 시트 서식' : form.name}</span>
-              <span className="rounded bg-sky-500/15 px-1.5 text-[10px] font-bold text-sky-600">시트</span>
+              <span className="rounded bg-sky-500/15 px-1.5 text-[10px] font-bold text-sky-600">{legacy ? '기존 양식 + 시트' : '시트'}</span>
               {baseVersion !== null && <span className="rounded bg-teal-soft px-1.5 font-mono text-[10px] font-bold text-teal">v{baseVersion}</span>}
               {dirty && <span className="text-[10.5px] font-bold text-amber-600">저장 안 됨</span>}
             </div>
-            <span className="text-[10.5px] text-ink3">엑셀처럼 틀을 만들고, 기안자가 쓸 칸을 '입력 칸'으로 정합니다 · 사용을 켜면 기안 서식 목록에 나옵니다</span>
+            <span className="text-[10.5px] text-ink3">
+              {legacy
+                ? "기존 서식에 시트 틀을 붙입니다 — 서식 코드·항목 목록은 그대로라 옛 문서는 지금 모습, 결재선 규칙·권한도 그대로. '시트로 기안'을 켜면 새 기안부터 시트로"
+                : "엑셀처럼 틀을 만들고, 기안자가 쓸 칸을 '입력 칸'으로 정합니다 · 사용을 켜면 기안 서식 목록에 나옵니다"}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {legacy && (
+            <>
+              {onOpenLegacy && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dirty && !confirm('저장하지 않은 변경이 있습니다. 기존 양식 편집으로 갈까요?')) return;
+                    onOpenLegacy();
+                  }}
+                  title="시트를 켜기 전까지 기안자가 쓰는 기존 양식(항목 목록) 편집"
+                  className="rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink"
+                >
+                  기존 양식 편집
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={setSwitch.isPending || (!applied && baseVersion === null)}
+                onClick={() => {
+                  if (!user) return;
+                  if (!applied) {
+                    if (dirty) return setMsg({ kind: 'err', text: '저장하지 않은 변경이 있습니다 — 먼저 [서식 저장]을 누른 뒤 켜세요.' });
+                    if (!confirm(`지금부터 '${form.name}' 새 기안은 시트(v${baseVersion})로 작성됩니다. 이미 쓴 문서는 그대로입니다. 켤까요?`)) return;
+                  } else if (!confirm(`'${form.name}' 새 기안을 다시 기존 양식으로 받습니다(시트 틀은 그대로 남음). 끌까요?`)) return;
+                  setSwitch.mutate(
+                    { formId: form.id, applied: !applied, user: { id: user.id, name: user.name } },
+                    {
+                      onSuccess: () => setMsg({ kind: 'ok', text: !applied ? '시트로 기안을 켰습니다 — 새 기안부터 시트로 작성됩니다.' : '시트로 기안을 껐습니다 — 새 기안은 기존 양식으로 작성됩니다.' }),
+                      onError: (e) => setMsg({ kind: 'err', text: `바꾸지 못했습니다: ${e instanceof Error ? e.message : String(e)}` }),
+                    }
+                  );
+                }}
+                title={baseVersion === null ? '시트 틀을 한 번 저장한 뒤 켤 수 있습니다' : '켜면 새 기안부터 시트로, 끄면 기존 양식으로'}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-bold disabled:opacity-50 ${
+                  applied ? 'border-teal bg-teal-soft text-teal' : 'border-amber-500/40 bg-amber-500/10 text-amber-700'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${applied ? 'bg-teal' : 'bg-amber-500'}`} />
+                시트로 기안 {applied ? '켜짐' : '꺼짐'}
+              </button>
+            </>
+          )}
           <label className="mr-1 flex cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-ink2" title="켜면 기안 서식 목록에 나옵니다">
             <input type="checkbox" checked={form.active} onChange={(e) => set({ active: e.target.checked })} className="h-3.5 w-3.5 accent-teal" />
             <span>사용</span>
@@ -578,6 +659,7 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             {(
               [
                 ['cell', '칸 속성'],
+                ['settings', '서식 설정'],
                 ['history', '버전 기록'],
               ] as const
             ).map(([k, label]) => (
@@ -603,6 +685,8 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
               </details>
               <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} />
             </>
+          ) : side === 'settings' ? (
+            <SheetFormSettings form={form} onChange={set} />
           ) : (
             <VersionHistory
               formId={isNew ? null : form.id}
@@ -708,6 +792,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
   const [docFields, setDocFields] = useState<DocFields>({ title: '', preservationPeriod: form.preservationPeriod || '5년', visibility: '부서' });
   const docForm = withBodyHeader(form, sheetHeaderItems(sheet));
   const [issues, setIssues] = useState<string[]>([]);
+  const [missing, setMissing] = useState<string[]>([]);
   const { data: holidays = [] } = useHolidays();
   const { user } = useAuth();
   // 열 때 한 번만 초점(Esc 로 닫기) — 그릴 때마다 초점을 가져오면 칸 입력이 끊긴다
@@ -733,6 +818,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       values={values}
       onFields={(f) => setValues((v) => ({ ...v, ...f }))}
       onIssues={setIssues}
+      onRequired={setMissing}
     />
   );
   const viewBody = (slots?: SheetSlots) => (
@@ -802,6 +888,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
             <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{tab === 'draft' ? draftBody({}) : viewBody()}</div>
           )}
         </div>
+        {tab === 'draft' && missing.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 비어 있는 필수 칸 — {missing.join(', ')}</div>}
         {tab === 'draft' && issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
         {tab === 'view' && <div className="mt-2 text-[10.5px] text-ink3">결재 완료 모양(직인 칸엔 회사 직인) · 넓은 시트는 종이 폭에 맞춰 줄여 보입니다.</div>}
       </div>
@@ -839,7 +926,8 @@ function DocFrame({
     // 머리·첨부 등은 보기만(실제 동작 안 함). 작성 화면 미리보기는 시트 부분만 입력할 수 있게 연다
     <div className="pointer-events-none select-none">
       <ApprovalDraftDocumentSheet
-        form={form}
+        // 본문은 시트 — 기존 서식에 붙인 경우에도 기존 항목은 그리지 않는다
+        form={{ ...form, fields: [] }}
         docCode={form.code || '기안'}
         me={me}
         title={form.name ? `${form.name} 제목 예시` : '문서 제목'}

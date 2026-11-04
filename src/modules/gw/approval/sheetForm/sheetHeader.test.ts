@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, setCellValue, type Sheet } from '@/lib/sheet';
 import { HEADER_ITEMS, STAMP_TABLE, TITLE_ROW, stampTableInHeader, titleRowShown, withBodyHeader } from '@/domain/approvalForm/headerItems';
-import { APPROVAL_NS, DEFAULT_CLOSING, approvalCellProps, draftInfoValue, korDateText, setApprovalProp, sheetHasSeal, slotOf } from './approvalSheet';
+import { APPROVAL_NS, DEFAULT_CLOSING, approvalCellProps, cellCaption, completedDateRows, draftInfoValue, korDateText, requiredMissing, setApprovalProp, sheetHasSeal, slotOf } from './approvalSheet';
 import { DOC_INFO_ROWS, insertDocHeader, insertDocInfoBlock, isFullHeaderSheet, isExternalHiddenRow, setExternalHiddenRows, sheetHeaderItems, withoutExternalRows } from './sheetHeader';
 
 const text = (s: Sheet, r: number, c: number) => String(s.rows[r]?.[s.cols[c]] ?? '');
@@ -106,8 +106,8 @@ test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 
   assert.equal(text(s, end + 1, 0), DEFAULT_CLOSING);
   assert.equal(approvalCellProps(s, end + 2, 0).bind, 'draft.date');
   assert.equal(approvalCellProps(s, end + 3, 0).bind, 'draft.sign');
-  // 대외 문서: 로고·문서 정보·맺음말은 숨김, 큰 제목 줄은 남김
-  assert.ok(isExternalHiddenRow(s, 0));
+  // 대외 문서: 문서 정보·맺음말은 숨김, 로고·큰 제목 줄은 남김
+  assert.ok(!isExternalHiddenRow(s, 0));
   assert.ok(!isExternalHiddenRow(s, 1));
   assert.ok(isExternalHiddenRow(s, 3));
   assert.ok(!isExternalHiddenRow(s, top));
@@ -143,4 +143,25 @@ test('문서 머리 부품 칸 이름, 직인 서식 판단', () => {
   assert.equal(sheetHasSeal(s), false);
   assert.equal(sheetHasSeal(setApprovalProp(s, { r1: 0, r2: 0, c1: 1, c2: 1 }, APPROVAL_NS.seal, true)), true);
   assert.equal(sheetHasSeal(null), false);
+});
+
+test('필수 칸 — 비어 있으면 이름표(같은 줄 왼쪽 글자), 기안자가 못 쓰는 칸은 빼고', () => {
+  let s = createSheet(3, 3);
+  s = setCellValue(s, 0, 0, '휴가 종류');
+  s = setApprovalProp(s, { r1: 0, r2: 0, c1: 1, c2: 1 }, APPROVAL_NS.input, { type: 'select', options: ['연차'] });
+  s = setApprovalProp(s, { r1: 0, r2: 0, c1: 1, c2: 1 }, APPROVAL_NS.required, true);
+  s = setCellValue(s, 1, 2, '사유');
+  s = setApprovalProp(s, { r1: 2, r2: 2, c1: 2, c2: 2 }, APPROVAL_NS.input, { type: 'text' });
+  s = setApprovalProp(s, { r1: 2, r2: 2, c1: 2, c2: 2 }, APPROVAL_NS.required, true);
+  // 입력 칸이 아닌 칸의 필수 표시는 무시
+  s = setApprovalProp(s, { r1: 1, r2: 1, c1: 0, c2: 0 }, APPROVAL_NS.required, true);
+  assert.deepEqual(requiredMissing(s), ['휴가 종류', '사유'], '왼쪽 → 위쪽 글자');
+  assert.deepEqual(requiredMissing(setCellValue(s, 0, 1, '연차')), ['사유']);
+  assert.equal(cellCaption(createSheet(2, 2), 1, 1), 'B2', '글자가 없으면 칸 주소');
+});
+
+test('결재 완료일 줄 — 그 칸이 든 줄 번호', () => {
+  const s = insertDocInfoBlock(createSheet(2, 6));
+  assert.deepEqual(completedDateRows(s), [3]);
+  assert.deepEqual(completedDateRows(createSheet(2, 2)), []);
 });

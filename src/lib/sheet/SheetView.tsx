@@ -7,7 +7,7 @@
  * 칸(td)에 position 을 주지 않는다 — 크롬은 위치 지정된 칸의 배경을 표 테두리(border-collapse) 위에 칠해
  * 배경색 있는 칸 둘레의 테두리가 화면·인쇄에서 군데군데 사라진다. 덧그림(직인 등)은 칸 안 상자에 붙인다
  */
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Sheet } from './model';
 import { cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize } from './style';
 
@@ -39,6 +39,10 @@ export interface SheetViewProps {
    * 화면 기준 fitWidth 로는 종이를 넘기 때문
    */
   printFit?: { rootSelector: string; pageWidthMm: number };
+  /** 그리지 않을 줄(예: 결재 끝나기 전의 결재 완료일 줄) — 위아래로 걸친 병합이 없는 줄에만 쓸 것 */
+  hiddenRows?: (r: number) => boolean;
+  /** 줄 아래에 덧붙일 띠(표 폭 한 칸, 인쇄 안 됨) — 예: 반복 구간 [행 추가] */
+  afterRow?: (r: number) => ReactNode;
   className?: string;
 }
 
@@ -54,6 +58,8 @@ export function SheetView({
   stretchMinRatio = 0.5,
   thinBorderColor,
   printFit,
+  hiddenRows,
+  afterRow,
   className = '',
 }: SheetViewProps) {
   const tableRef = useRef<HTMLTableElement>(null);
@@ -117,8 +123,9 @@ export function SheetView({
           ))}
         </colgroup>
         <tbody>
-          {rows.map((_row, r) => (
-            <tr key={r} style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
+          {rows.map((_row, r) => hiddenRows?.(r) ? null : (
+            <Fragment key={r}>
+            <tr style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
               {cols.map((col, c) => {
                 const m = mergeAt(r, c);
                 if (m && (m.startRow !== r || m.startCol !== c)) return null;
@@ -150,6 +157,17 @@ export function SheetView({
                 );
               })}
             </tr>
+            {(() => {
+              const band = afterRow?.(r);
+              return band ? (
+                <tr className="print:hidden">
+                  <td colSpan={cols.length} className="p-0">
+                    {band}
+                  </td>
+                </tr>
+              ) : null;
+            })()}
+            </Fragment>
           ))}
         </tbody>
       </table>

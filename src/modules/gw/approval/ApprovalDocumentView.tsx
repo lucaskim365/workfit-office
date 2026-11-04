@@ -26,7 +26,7 @@ import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
-import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, type SheetSlots } from './sheetForm/approvalSheet';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, sheetHasSecret, type SheetSlots } from './sheetForm/approvalSheet';
 import { sheetHeaderItems } from './sheetForm/sheetHeader';
 import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './components/CompanyLetterhead';
 
@@ -337,7 +337,9 @@ export function ApprovalDocumentView({
   // 시트 서식 문서 — 문서가 쓴 서식 버전의 시트에 든 문서 정보 칸(기안자·제목 등)은 머리에서 뺀다(겹치지 않게)
   const sheetVer = parseVersionKey(String(doc.fieldValues?.[SHEET_VERSION_KEY] ?? ''));
   const { data: sheetTpl } = useFormVersionSheet(sheetVer?.formId ?? null, sheetVer?.version ?? null);
-  const form = withBodyHeader(formOverride ?? forms.find((f) => f.code === doc.docType), sheetHeaderItems(sheetTpl?.sheet));
+  const headForm = withBodyHeader(formOverride ?? forms.find((f) => f.code === doc.docType), sheetHeaderItems(sheetTpl?.sheet));
+  // 시트 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
+  const form = headForm && sheetVer ? { ...headForm, fields: [] } : headForm;
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
   // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
   const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
@@ -486,7 +488,7 @@ export function ApprovalDocumentView({
 
   let lastRenderedSection = '';
 
-  const hasSecretFields = form?.fields.some(f => f.isSecret);
+  const hasSecretFields = form?.fields.some(f => f.isSecret) || sheetHasSecret(sheetTpl?.sheet);
 
   // 직인 서식 — 옛 서식은 직인 항목, 시트 서식은 회사 직인 칸으로 안다(시트는 서식 항목이 비어 있음)
   const sealForm = isSealForm(form?.fields) || sheetHasSeal(sheetTpl?.sheet);

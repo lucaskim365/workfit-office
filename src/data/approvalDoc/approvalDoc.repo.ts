@@ -426,9 +426,10 @@ async function handleCancelTargetOnAbort(doc: ApprovalDoc): Promise<void> {
  */
 async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldValues']> {
   const form = (await approvalFormRepo.list()).find((f) => f.code === doc.docType);
-  const fields = (form?.fields ?? []).filter((f) => f.type === '자동번호');
-  // 시트 서식 — 문서가 쓴 서식 버전의 자동번호 칸
+  // 시트 서식 — 문서가 쓴 서식 버전의 자동번호 칸. 시트 문서는 기존 양식의 자동번호 항목을 쓰지 않는다
+  // (기존 서식에 시트를 붙여도 항목 목록은 남아 있으므로 — 두 번 받으면 순번이 건너뛴다)
   const ver = parseVersionKey(String(doc.fieldValues?.__formVersion ?? ''));
+  const fields = ver ? [] : (form?.fields ?? []).filter((f) => f.type === '자동번호');
   const sheetCells = ver ? sheetAutoNumberCells((await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet) : [];
   if (fields.length === 0 && sheetCells.length === 0) return doc.fieldValues;
   const values = { ...doc.fieldValues };

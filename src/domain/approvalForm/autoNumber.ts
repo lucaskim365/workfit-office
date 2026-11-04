@@ -47,6 +47,11 @@ export const autoNumberConfigSchema = z.object({
   suffix: z.string().trim().max(5).default(''),
   /** 이 번호를 문서번호로 표시(서식당 하나) — 결재 문서 고유번호(AP-…)는 그대로 두고 화면·인쇄에서 이 번호를 보인다 */
   asDocNo: z.boolean().default(false),
+  /**
+   * 시트 서식 자동번호 칸이 이어받는 순번 — 기존 서식에 시트를 붙일 때 그 서식의 자동번호 항목 키.
+   * 같은 서식 코드·같은 키·같은 모양이면 기존 양식과 같은 순번을 이어 쓴다(1번부터 다시 시작해 번호가 겹치지 않게)
+   */
+  channelKey: z.string().max(64).optional(),
 });
 export type AutoNumberConfig = z.infer<typeof autoNumberConfigSchema>;
 
