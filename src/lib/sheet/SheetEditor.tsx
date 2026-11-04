@@ -57,6 +57,11 @@ export interface SheetEditorProps {
   height?: string;
   /** 편집할 때마다 쓰는 쪽 규칙으로 다듬기(예: 반복 구간 이어 붙이기) — 다듬은 결과가 한 번의 편집으로 되돌리기에 들어간다 */
   normalize?: (s: Sheet) => Sheet;
+  /**
+   * 종이 보기 — 행·열 머리(A·B·C, 1·2·3)를 가는 띠로 줄이고, 격자를 이 함수가 감싼 문서(종이) 안에 그린다.
+   * 워드에서 표를 고치듯 실제 문서 모양 그대로 편집한다. 띠를 눌러 행·열 고르기, 띠 끝을 끌어 크기 바꾸기는 그대로.
+   */
+  paper?: (table: ReactNode) => ReactNode;
 }
 
 type Cell = { r: number; c: number };
@@ -120,8 +125,12 @@ export function SheetEditor({
   guideWidth,
   height = '520px',
   normalize,
+  paper,
 }: SheetEditorProps) {
   const design = mode === 'design';
+  // 행·열 머리 크기 — 종이 보기에선 글자 없는 가는 띠
+  const hw = paper ? 10 : HEADER_W;
+  const hh = paper ? 10 : HEADER_H;
   const [anchor, setAnchor] = useState<Cell>({ r: 0, c: 0 });
   const [focus, setFocus] = useState<Cell>({ r: 0, c: 0 });
   const [editing, setEditing] = useState<Cell | null>(null);
@@ -608,7 +617,7 @@ export function SheetEditor({
   );
 
   const barValue = editing ? draft : rawOf(focusCell.r, focusCell.c);
-  const totalWidth = HEADER_W + cols.reduce((sum, col) => sum + colW(col), 0);
+  const totalWidth = hw + cols.reduce((sum, col) => sum + colW(col), 0);
 
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-white" style={{ height }}>
@@ -789,25 +798,32 @@ export function SheetEditor({
         tabIndex={0}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
-        className="relative min-h-0 flex-1 overflow-auto bg-[#f7f7f8] outline-none"
+        className={`relative min-h-0 flex-1 overflow-auto outline-none ${paper ? 'bg-[#878d90] p-4' : 'bg-[#f7f7f8]'}`}
       >
-        <table className={`border-collapse bg-white text-[12px] ${editing ? '' : 'select-none'}`} style={{ tableLayout: 'fixed', width: totalWidth }}>
+        {(() => {
+          const table = (
+        <table
+          className={`border-collapse bg-white text-[12px] ${editing ? '' : 'select-none'}`}
+          // 종이 보기 — 가는 띠는 종이 여백에 걸치고, 시트 첫 열·첫 행이 문서 본문 가장자리에 맞게
+          style={{ tableLayout: 'fixed', width: totalWidth, ...(paper ? { marginLeft: -hw, marginTop: -hh } : {}) }}
+        >
           <colgroup>
-            <col style={{ width: HEADER_W }} />
+            <col style={{ width: hw }} />
             {cols.map((col) => (
               <col key={col} style={{ width: colW(col) }} />
             ))}
           </colgroup>
           <thead>
-            <tr style={{ height: HEADER_H }}>
-              <th className="sticky left-0 top-0 z-[3] border border-[#d0d0d0] bg-[#eef0f2]" />
+            <tr style={{ height: hh }}>
+              <th className={paper ? 'p-0' : 'sticky left-0 top-0 z-[3] border border-[#d0d0d0] bg-[#eef0f2]'} />
               {cols.map((col, c) => (
                 <th
                   key={col}
                   onMouseDown={(e) => {
                     if (e.button !== 0) return;
                     if (editing) commitEdit();
-                    setAnchor({ r: 0, c });
+                    // Shift — 고른 열부터 여기까지 (엑셀과 같음)
+                    setAnchor((a) => (e.shiftKey ? { r: 0, c: a.c } : { r: 0, c }));
                     setFocus({ r: rows.length - 1, c });
                     focusGrid();
                   }}
@@ -816,16 +832,22 @@ export function SheetEditor({
                     e.preventDefault();
                     setHeaderMenu({ kind: 'col', idx: c, x: e.clientX, y: e.clientY });
                   }}
-                  className={`sticky top-0 z-[2] select-none border border-b-0 border-[#d0d0d0] [background-clip:padding-box] text-center text-[11px] font-semibold ${
-                    c >= range.c1 && c <= range.c2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
-                  }`}
+                  title={paper ? `${colLetter(c)}열 — 눌러 열 고르기, 오른쪽 끝을 끌어 너비 바꾸기` : undefined}
+                  className={
+                    paper
+                      ? `relative select-none p-0 ${c >= range.c1 && c <= range.c2 ? 'bg-teal/50' : 'bg-transparent hover:bg-[#d0d0d0]'}`
+                      : `sticky top-0 z-[2] select-none border border-b-0 border-[#d0d0d0] [background-clip:padding-box] text-center text-[11px] font-semibold ${
+                          c >= range.c1 && c <= range.c2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
+                        }`
+                  }
                 >
-                  <div className="relative">
-                    {colLetter(c)}
+                  {/* 종이 보기는 띠(th)에 맞춰 끝에 손잡이 — 글자 없는 div 기준이면 띠 가운데에 와서 고르기를 가로챔 */}
+                  <div className={paper ? undefined : "relative"}>
+                    {!paper && colLetter(c)}
                     {design && (
                       <span
                         onMouseDown={(e) => startResize(e, 'col', col, colW(col))}
-                        className="absolute -right-1 top-[-4px] h-[24px] w-2 cursor-col-resize hover:bg-teal/40"
+                        className={`absolute -right-1 w-2 cursor-col-resize hover:bg-teal/40 ${paper ? 'top-0 h-[10px]' : 'top-[-4px] h-[24px]'}`}
                       />
                     )}
                   </div>
@@ -840,7 +862,8 @@ export function SheetEditor({
                   onMouseDown={(e) => {
                     if (e.button !== 0) return;
                     if (editing) commitEdit();
-                    setAnchor({ r, c: 0 });
+                    // Shift — 고른 행부터 여기까지 (엑셀과 같음)
+                    setAnchor((a) => (e.shiftKey ? { r: a.r, c: 0 } : { r, c: 0 }));
                     setFocus({ r, c: cols.length - 1 });
                     focusGrid();
                   }}
@@ -849,12 +872,18 @@ export function SheetEditor({
                     e.preventDefault();
                     setHeaderMenu({ kind: 'row', idx: r, x: e.clientX, y: e.clientY });
                   }}
-                  className={`sticky left-0 z-[1] select-none border border-r-0 border-[#d0d0d0] [background-clip:padding-box] p-0 text-center text-[11px] font-semibold ${
-                    r >= range.r1 && r <= range.r2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
-                  }`}
+                  title={paper ? `${r + 1}행 — 눌러 행 고르기, 아래 끝을 끌어 높이 바꾸기` : undefined}
+                  className={
+                    paper
+                      ? `relative select-none p-0 ${r >= range.r1 && r <= range.r2 ? 'bg-teal/50' : 'bg-transparent hover:bg-[#d0d0d0]'}`
+                      : `sticky left-0 z-[1] select-none border border-r-0 border-[#d0d0d0] [background-clip:padding-box] p-0 text-center text-[11px] font-semibold ${
+                          r >= range.r1 && r <= range.r2 ? 'bg-teal-soft text-teal' : 'bg-[#eef0f2] text-[#666]'
+                        }`
+                  }
                 >
-                  <div className="relative">
-                    {r + 1}
+                  {/* 종이 보기는 띠(th)에 맞춰 끝에 손잡이 — 글자 없는 div 기준이면 띠 가운데에 와서 고르기를 가로챔 */}
+                  <div className={paper ? undefined : "relative"}>
+                    {!paper && r + 1}
                     {design && (
                       <span
                         onMouseDown={(e) => startResize(e, 'row', String(r), rowH(r))}
@@ -881,7 +910,7 @@ export function SheetEditor({
                       onMouseDown={(e) => onCellMouseDown(e, { r, c })}
                       onMouseEnter={() => onCellMouseEnter({ r, c })}
                       onDoubleClick={() => startEdit({ r, c })}
-                      className={`relative overflow-hidden border border-[#e2e2e2] px-1 align-middle whitespace-pre-wrap break-words text-[#222] ${
+                      className={`relative overflow-hidden border ${paper ? 'border-dashed border-[#dcdcdc]' : 'border-[#e2e2e2]'} px-1 align-middle whitespace-pre-wrap break-words text-[#222] ${
                         !design && !locked ? 'cursor-text' : ''
                       }`}
                       style={{
@@ -933,6 +962,9 @@ export function SheetEditor({
             ))}
           </tbody>
         </table>
+          );
+          return paper ? paper(table) : table;
+        })()}
         {editing && editSource === 'cell' && editBox && (
           // 엑셀처럼 칸을 넘는 글은 오른쪽으로 넓어지고, 시트 끝에 닿으면 줄을 바꿔 아래로 늘어난다(다른 칸 위에 뜸)
           <textarea
@@ -958,12 +990,12 @@ export function SheetEditor({
             }}
           />
         )}
-        {guideWidth !== undefined && (
+        {guideWidth !== undefined && !paper && (
           <div
             aria-hidden
             title="인쇄 폭"
             className="pointer-events-none absolute top-0 z-[4] border-l-2 border-dashed border-rose-400/70"
-            style={{ left: HEADER_W + guideWidth, height: '100%' }}
+            style={{ left: hw + guideWidth, height: '100%' }}
           />
         )}
 

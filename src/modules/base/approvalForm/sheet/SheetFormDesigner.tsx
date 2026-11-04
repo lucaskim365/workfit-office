@@ -9,7 +9,7 @@ import { HEADER_ITEMS, HEADER_ITEM_LABEL } from '@/domain/approvalForm/headerIte
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
 import { useFormVersionList, useFormVersionSheet, useSaveSheetForm } from '@/features/gw/useApprovalFormVersions';
-import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type Sheet, type SheetSelection } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type CellRange, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
@@ -24,6 +24,7 @@ import {
   validateApprovalSheet,
 } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { SheetCellPanel } from './SheetCellPanel';
+import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
 import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/modules/gw/approval/sheetForm/repeatRows';
 
@@ -63,6 +64,9 @@ export function SheetFormDesigner(props: Props) {
   return <Designer {...props} initial={loaded?.sheet ?? createSheet(20, 8)} initialLink={loaded?.link ?? null} />;
 }
 
+/** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
+const PAPER_PAD = 66;
+
 function Designer({ form: initialForm, version: initialVersion, forms, folders, onClose, initial, initialLink }: Props & { initial: Sheet; initialLink: string | null }) {
   const { user } = useAuth();
   const save = useSaveSheetForm();
@@ -79,6 +83,22 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   const [side, setSide] = useState<'cell' | 'history'>('cell');
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
+  // 편집 화면 — 문서(종이 위에서 실제 문서 모양 그대로) / 격자(엑셀처럼 A·B·C 머리)
+  const [view, setView] = useState<'paper' | 'grid'>(() => {
+    try {
+      return localStorage.getItem('sheetDesigner.view') === 'grid' ? 'grid' : 'paper';
+    } catch {
+      return 'paper';
+    }
+  });
+  const changeView = (v: 'paper' | 'grid') => {
+    setView(v);
+    try {
+      localStorage.setItem('sheetDesigner.view', v);
+    } catch {
+      /* 저장 못 해도 이번 화면은 바뀐다 */
+    }
+  };
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNew = !form.id;
@@ -144,6 +164,26 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     } catch (err) {
       setMsg({ kind: 'err', text: `저장 실패: ${err instanceof Error ? err.message : String(err)}` });
     }
+  };
+
+  // ── 부품 넣기(왼쪽 부품 목록 — 누르기·끌어 놓기) ──
+  const putPart = (id: string, range: CellRange) => {
+    const res = applyPart(sheet, range, id);
+    if ('notice' in res) return setMsg({ kind: 'err', text: res.notice });
+    setSheet(res);
+    setSide('cell');
+  };
+  const onPartDrop = (e: React.DragEvent) => {
+    const id = e.dataTransfer.getData(PART_MIME);
+    if (!id) return;
+    e.preventDefault();
+    const at = (e.target as Element).closest?.('[data-cell]')?.getAttribute('data-cell');
+    if (!at) return;
+    const [r, c] = at.split(':').map(Number);
+    const g = selection.range;
+    // 고른 범위 안에 놓으면 범위 전체에, 아니면 놓은 칸에
+    const inSel = r >= Math.min(g.r1, g.r2) && r <= Math.max(g.r1, g.r2) && c >= Math.min(g.c1, g.c2) && c <= Math.max(g.c1, g.c2);
+    putPart(id, inSel ? g : { r1: r, r2: r, c1: c, c2: c });
   };
 
   // ── 칸 표시(편집 격자 안) ──
@@ -352,8 +392,16 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
 
       {/* 편집기 + 옆 패널 */}
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[1fr_290px]">
-        <div className="min-w-0 rounded-xl border border-border bg-panel p-2">
-          {user && (
+        <div
+          className="min-w-0 rounded-xl border border-border bg-panel p-2"
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes(PART_MIME)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={onPartDrop}
+        >
+          {user && view === 'grid' && (
             <details open className="mb-2 rounded-lg bg-[#878d90] px-3 pb-3 pt-1.5 [&[open]>summary]:mb-2">
               <summary className="cursor-pointer select-none text-[11px] font-semibold text-white/90">
                 문서 머리 — 기안·결재·인쇄 화면에서 시트 위에 붙는 부분(위 '문서 머리에 보일 항목'으로 켜고 끔)
@@ -375,6 +423,21 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
             height="calc(100vh - 330px)"
+            paper={user && view === 'paper' ? (table) => <DocFrame form={form} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
+            toolbarExtra={
+              <div className="flex rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="문서 보기: 실제 문서 모양 그대로 편집 · 격자 보기: 엑셀처럼 A·B·C 머리와 함께">
+                {(
+                  [
+                    ['paper', '문서 보기'],
+                    ['grid', '격자 보기'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => changeView(k)} className={`rounded px-2 py-0.5 ${view === k ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
           />
           <div className="space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3">
             {pageScale < 1 && (
@@ -382,7 +445,11 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
                 A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
               </div>
             )}
-            <div>세로 점선 = A4 세로 인쇄 폭. 칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다. 보라색 띠 = 반복 구간(기안자가 행 추가·삭제).</div>
+            <div>
+              {view === 'paper'
+                ? "문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다(문서 머리는 위 '문서 머리에 보일 항목'으로 켜고 끔). 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다."
+                : '세로 점선 = A4 세로 인쇄 폭.'}{' '}
+              칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다. 보라색 띠 = 반복 구간(기안자가 행 추가·삭제).</div>
           </div>
         </div>
 
@@ -405,7 +472,13 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             ))}
           </div>
           {side === 'cell' ? (
-            <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
+            <>
+              <div className="mb-3 border-b border-border pb-3">
+                <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>
+                <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
+              </div>
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
+            </>
           ) : (
             <VersionHistory
               formId={isNew ? null : form.id}
@@ -583,7 +656,22 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
  * 문서 틀 — 기안 화면과 같은 문서 부품(ApprovalDraftDocumentSheet)을 보기 전용으로 그린다.
  * only='header' 면 머리(로고·제목·결재란·문서 정보·제목 줄)만, 아니면 body(시트)를 끼운 문서 전체.
  */
-function DocFrame({ form, me, only, body, interactive = false }: { form: ApprovalForm; me: User; only?: 'header'; body?: React.ReactNode; interactive?: boolean }) {
+function DocFrame({
+  form,
+  me,
+  only,
+  body,
+  interactive = false,
+  paperWidth,
+}: {
+  form: ApprovalForm;
+  me: User;
+  only?: 'header';
+  body?: React.ReactNode;
+  interactive?: boolean;
+  /** 종이 폭 — 편집 중엔 넓은 시트가 종이 밖으로 나가지 않게 넓힌다(문서·인쇄에선 줄여 맞춤) */
+  paperWidth?: number;
+}) {
   const noop = () => {};
   return (
     // 머리·첨부 등은 보기만(실제 동작 안 함). 작성 화면 미리보기는 시트 부분만 입력할 수 있게 연다
@@ -627,6 +715,7 @@ function DocFrame({ form, me, only, body, interactive = false }: { form: Approva
         editDocNo="AP-미리보기"
         isDesignMode
         only={only}
+        paperWidth={paperWidth}
         sheetBody={interactive ? <div className="pointer-events-auto select-text">{body}</div> : body}
       />
     </div>

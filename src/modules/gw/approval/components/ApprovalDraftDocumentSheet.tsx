@@ -114,6 +114,8 @@ export interface ApprovalDraftDocumentSheetProps {
   sheetBody?: React.ReactNode;
   /** 'header' 면 문서 머리(로고·제목·결재란·문서 정보·제목 줄)까지만 그린다 — 시트 서식 편집기의 머리 보기용 */
   only?: 'header';
+  /** 종이 최대 폭(px, 기본 800) — 시트 서식 편집기에서 넓은 시트를 종이 위에서 편집할 때 */
+  paperWidth?: number;
 }
 
 export function ApprovalDraftDocumentSheet({
@@ -163,6 +165,7 @@ export function ApprovalDraftDocumentSheet({
   onStampTableClick,
   sheetBody,
   only,
+  paperWidth,
 }: ApprovalDraftDocumentSheetProps) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -396,7 +399,7 @@ export function ApprovalDraftDocumentSheet({
 
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
-    <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
+    <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5" style={paperWidth ? { maxWidth: paperWidth, width: paperWidth } : undefined}>
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
       <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') ? 'flex' : 'hidden'}`}>
         <div className="flex items-center gap-2 h-full">
