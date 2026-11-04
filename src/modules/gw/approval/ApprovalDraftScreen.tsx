@@ -1711,6 +1711,12 @@ function ApprovalDraftInner({
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   relatedSources={relatedSources}
                   systemValues={sheetSystemValues}
+                  draftInfo={{
+                    drafter: [me.name, me.position].filter(Boolean).join(' '),
+                    dept: me.dept ?? '',
+                    date: new Date().toLocaleDateString('sv-SE'),
+                    docNo: editDoc?.docNo ?? '(상신 때 부여)',
+                  }}
                 />
               ) : undefined
             }

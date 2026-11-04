@@ -692,7 +692,18 @@ export function ApprovalDocumentView({
 
         {sheetDoc && (
           <div className="mt-3">
-            <SheetDocView fieldValues={doc.fieldValues} masked={isMaskingActive} stamped={doc.status === '완료'} />
+            <SheetDocView
+              fieldValues={doc.fieldValues}
+              masked={isMaskingActive}
+              stamped={doc.status === '완료'}
+              // 자동 채우기 '기안 정보' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)
+              docInfo={{
+                drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
+                dept: doc.drafterDept ?? '',
+                date: String(doc.submittedAt ?? doc.createdAt ?? '').slice(0, 10),
+                docNo: doc.docNo ?? '',
+              }}
+            />
           </div>
         )}
 

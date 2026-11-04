@@ -26,6 +26,14 @@ export interface SheetViewProps {
   /** 이 폭(px)보다 넓으면 비율로 줄인다 */
   fitWidth?: number;
   /**
+   * 이 폭(px)보다 좁으면 열 너비를 비율대로 늘려 이 폭에 맞춘다(글씨 크기는 그대로) — 문서 머리 표와 양 끝을 맞추기.
+   * 원래 폭이 이 폭의 minRatio(기본 0.5)보다 좁은 작은 표는 늘리지 않는다(칸이 지나치게 넓어지지 않게)
+   */
+  stretchTo?: number;
+  stretchMinRatio?: number;
+  /** 가는 테두리 색 — 문서 안에서 머리 표 선 색과 맞출 때(굵은 선·배경색은 그대로) */
+  thinBorderColor?: string;
+  /**
    * 인쇄 때 종이 폭에 맞춘다 — 인쇄되는 문서 상자(이 선택자의 조상)를 기준으로, 그 안에서 표가 차지하는 비율만큼의
    * 인쇄 가능 폭(pageWidthMm)에 맞게 인쇄 직전에 다시 줄인다. 화면 배율(body zoom)이 인쇄에도 남아 있어
    * 화면 기준 fitWidth 로는 종이를 넘기 때문
@@ -34,10 +42,27 @@ export interface SheetViewProps {
   className?: string;
 }
 
-export function SheetView({ sheet, hidden, hiddenText = '비공개', renderCell, renderOverlay, cellClassName, fitWidth, printFit, className = '' }: SheetViewProps) {
+export function SheetView({
+  sheet,
+  hidden,
+  hiddenText = '비공개',
+  renderCell,
+  renderOverlay,
+  cellClassName,
+  fitWidth,
+  stretchTo,
+  stretchMinRatio = 0.5,
+  thinBorderColor,
+  printFit,
+  className = '',
+}: SheetViewProps) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { cols, rows, merges } = sheet;
-  const widthOf = (col: string) => sheet.colWidths[col] ?? DEFAULT_COL_WIDTH;
+  const rawWidth = (col: string) => sheet.colWidths[col] ?? DEFAULT_COL_WIDTH;
+  const rawTotal = cols.reduce((sum, col) => sum + rawWidth(col), 0);
+  // 종이 폭에 맞춰 늘리기 — 열 비율 그대로
+  const stretch = stretchTo && rawTotal < stretchTo && rawTotal >= stretchTo * stretchMinRatio ? stretchTo / rawTotal : 1;
+  const widthOf = (col: string) => rawWidth(col) * stretch;
   /** 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다 */
   const fitted = (r: number, c: number, col: string, span: number) => {
     const w = cols.slice(c, c + span).reduce((sum, k) => sum + widthOf(k), 0);
@@ -108,7 +133,7 @@ export function SheetView({ sheet, hidden, hiddenText = '비공개', renderCell,
                     className={`overflow-hidden px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(r, c) ?? ''}`}
                     style={{
                       textAlign: defaultAlign(sheet, r, col),
-                      ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan)),
+                      ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan), { thinColor: thinBorderColor }),
                       ...fitted(r, c, col, m?.colSpan ?? 1),
                     }}
                   >

@@ -14,6 +14,8 @@ import {
   approvalCellProps,
   bindLabel,
   canMergeApprovalRange,
+  DOC_SHEET_VIEW,
+  draftInfoValue,
   LINK_TYPES,
   linkIssues,
   linkSystemValues,
@@ -167,9 +169,17 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
     // 비어 있는 입력 칸에는 기안 화면에서 뜰 입력 도구 모양을 흐리게
     const col = sheet.cols[c];
     const emptyInput = p.input && col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
-    const inputLook = emptyInput && p.input ? <InputLook input={p.input} /> : null;
+    // 자동 채우기(기안 정보) 칸 — 어떤 값이 들어갈지 흐리게
+    const emptyCell = col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
+    const autoLook =
+      p.bind?.startsWith('draft.') && emptyCell ? (
+        <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">
+          {`{${bindLabel(p.bind).replace(/^기안 정보 · /, '')}}`}
+        </span>
+      ) : null;
+    const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} /> : null);
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
-    if (p.bind) marks.push({ t: '프로젝트', cls: 'bg-sky-500 text-white', title: `프로젝트 값 채우기: ${bindLabel(p.bind)}` });
+    if (p.bind) marks.push({ t: p.bind.startsWith('draft.') ? '자동' : '프로젝트', cls: 'bg-sky-500 text-white', title: `자동 채우기: ${bindLabel(p.bind)}` });
     if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
     if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
     if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
@@ -441,7 +451,25 @@ function Designer({ form: initialForm, version: initialVersion, forms, folders, 
             </div>
             <div className="bg-[#878d90] p-4">
               {user ? (
-                <DocFrame form={form} me={user} body={<SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />} />
+                <DocFrame
+                  form={form}
+                  me={user}
+                  body={
+                    <SheetView
+                      sheet={preview.sheet}
+                      {...DOC_SHEET_VIEW}
+                      // 자동 채우기 '기안 정보' 칸 — 미리보기는 지금 사용자·오늘로
+                      renderCell={(r, c) =>
+                        draftInfoValue(approvalCellProps(preview.sheet, r, c).bind, {
+                          drafter: [user.name, user.position].filter(Boolean).join(' '),
+                          dept: user.dept ?? '',
+                          date: new Date().toLocaleDateString('sv-SE'),
+                          docNo: 'AP-미리보기',
+                        })
+                      }
+                    />
+                  }
+                />
               ) : (
                 <div className="border border-black/10 bg-white p-[38px]" style={{ width: SHEET_PAGE_WIDTH + 76 }}>
                   <SheetView sheet={preview.sheet} fitWidth={SHEET_PAGE_WIDTH} />
@@ -535,6 +563,7 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
   const [values, setValues] = useState<Record<string, string>>({});
   const [issues, setIssues] = useState<string[]>([]);
   const { data: holidays = [] } = useHolidays();
+  const { user } = useAuth();
   // 열 때 한 번만 초점(Esc 로 닫기) — 그릴 때마다 초점을 가져오면 칸 입력이 끊긴다
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => boxRef.current?.focus(), []);
@@ -568,6 +597,12 @@ function DraftTrial({ sheet, link, onClose }: { sheet: Sheet; link: string | nul
               template={sheet}
               link={link}
               systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
+              draftInfo={{
+                drafter: user ? [user.name, user.position].filter(Boolean).join(' ') : '홍길동 사원',
+                dept: user?.dept ?? '기획팀',
+                date: new Date().toLocaleDateString('sv-SE'),
+                docNo: '(상신 때 부여)',
+              }}
               values={values}
               onFields={(f) => setValues((v) => ({ ...v, ...f }))}
               onIssues={setIssues}

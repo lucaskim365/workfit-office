@@ -25,14 +25,14 @@ const isHex = (v?: string): v is string => !!v && /^#([0-9a-f]{3}|[0-9a-f]{6})$/
  * 'none'(테두리 없음)은 그린 선만 없는 것 — 엑셀처럼 편집기의 기본 격자선은 보인다(격자선은 화면에만, 문서·인쇄엔 없음).
  * 이웃 칸 선보다 우선하는 것은 cellBorder 가 처리한다.
  */
-function borderCss(w?: BorderW): string | undefined {
-  if (w === 'thin') return '1px solid #333';
+function borderCss(w?: BorderW, thinColor = '#333'): string | undefined {
+  if (w === 'thin') return `1px solid ${thinColor}`;
   if (w === 'thick') return '2px solid #111';
   return undefined;
 }
 
 /** 셀 서식 → 인라인 스타일 (테두리 지정이 없으면 화면의 기본 격자선이 보임) */
-export function cellCss(style?: CellStyle): CSSProperties {
+export function cellCss(style?: CellStyle, opts: { thinColor?: string } = {}): CSSProperties {
   if (!style) return {};
   const css: CSSProperties = {};
   if (style.bold) css.fontWeight = 700;
@@ -48,10 +48,11 @@ export function cellCss(style?: CellStyle): CSSProperties {
   if (style.valign) css.verticalAlign = style.valign;
   const b = style.border;
   if (b) {
-    if (borderCss(b.t)) css.borderTop = borderCss(b.t);
-    if (borderCss(b.r)) css.borderRight = borderCss(b.r);
-    if (borderCss(b.b)) css.borderBottom = borderCss(b.b);
-    if (borderCss(b.l)) css.borderLeft = borderCss(b.l);
+    const tc = opts.thinColor;
+    if (borderCss(b.t, tc)) css.borderTop = borderCss(b.t, tc);
+    if (borderCss(b.r, tc)) css.borderRight = borderCss(b.r, tc);
+    if (borderCss(b.b, tc)) css.borderBottom = borderCss(b.b, tc);
+    if (borderCss(b.l, tc)) css.borderLeft = borderCss(b.l, tc);
   }
   return css;
 }

@@ -10,6 +10,10 @@ import { versionKey } from '@/domain/approvalForm/sheetVersion';
 import {
   CHECK_MARK,
   APPROVAL_NS,
+  DOC_SHEET_VIEW,
+  approvalCellProps,
+  draftInfoValue,
+  type DraftInfo,
   linkFieldValues,
   SHEET_REFS_KEY,
   SHEET_VALUES_KEY,
@@ -214,6 +218,8 @@ export interface SheetDraftFormProps {
   onIssues?: (invalidCells: string[]) => void;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기의 '기안 미리보기'(편집 중인 틀, 저장 안 함) */
   template?: Sheet;
+  /** 자동 채우기 '기안 정보' 칸 값(기안자·부서·기안일·문서번호) */
+  draftInfo?: DraftInfo;
   /** 미리보기에서 쓸 대체 서식(연동 유형) — 저장된 버전은 버전에 든 값을 쓴다 */
   link?: string | null;
   /**
@@ -232,7 +238,7 @@ export interface RelatedSource {
   load: () => NamedValues | null;
 }
 
-export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [], link: linkProp = null, systemValues }: SheetDraftFormProps) {
+export function SheetDraftForm({ formId, version, values, onFields, onIssues, template, relatedSources = [], link: linkProp = null, systemValues, draftInfo }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
   const isLoading = !template && fetched.isLoading;
@@ -352,7 +358,13 @@ export function SheetDraftForm({ formId, version, values, onFields, onIssues, te
       <div className="overflow-x-auto">
         <SheetView
           sheet={sheet}
+          // 문서 머리 표와 폭·선 색 맞춤 — 넓은 서식은 줄이지 않고 옆으로 밀어 쓴다(글씨가 작아지지 않게)
+          stretchTo={DOC_SHEET_VIEW.stretchTo}
+          thinBorderColor={DOC_SHEET_VIEW.thinBorderColor}
           renderCell={(r, c) => {
+            // 기안 정보 칸 — 시스템 값(입력 칸이어도 고칠 수 없음)
+            const auto = draftInfoValue(approvalCellProps(sheet, r, c).bind, draftInfo);
+            if (auto !== undefined) return auto;
             const input = draftInputOf(sheet, r, c);
             if (!input) return undefined;
             const span = sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1;

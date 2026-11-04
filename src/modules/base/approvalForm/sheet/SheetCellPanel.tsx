@@ -137,17 +137,12 @@ export function SheetCellPanel({
       )}
 
       <Row
-        label="프로젝트 값 채우기"
-        hint={
-          BIND_GROUPS.length
-            ? '기안자가 서식에서 프로젝트를 고르면 이 칸을 그 프로젝트의 값으로 채웁니다. 입력 칸이면 고쳐 쓸 수 있습니다.'
-            : '준비 중 — 기안자가 프로젝트를 고르면 계약일자·고객사명 같은 칸을 한꺼번에 채우는 기능입니다. 프로젝트 관리 항목을 정한 뒤 열립니다.'
-        }
+        label="자동 채우기"
+        hint="기안 정보: 작성할 때 기안자·부서·오늘 날짜로 채우고, 상신한 문서는 그 문서의 기안자·부서·기안일·문서번호를 보여 줍니다(기안자가 고칠 수 없음). 엑셀 양식에 이런 칸이 있으면 위 '문서 머리에 보일 항목'에서 같은 항목을 꺼 겹치지 않게 하세요. 프로젝트 값은 준비 중."
       >
         <select
           className={inp}
           value={props.bind ?? ''}
-          disabled={!BIND_GROUPS.length && !props.bind}
           onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}
         >
           <option value="">채우지 않음</option>
@@ -160,6 +155,9 @@ export function SheetCellPanel({
               ))}
             </optgroup>
           ))}
+          <optgroup label="프로젝트 (준비 중 — 프로젝트 관리 항목을 정한 뒤)">
+            <option disabled value="project">프로젝트 값</option>
+          </optgroup>
           {props.bind && !BIND_GROUPS.some((g) => g.items.some((i) => i.value === props.bind)) && <option value={props.bind}>{props.bind} (지금은 없는 항목)</option>}
         </select>
       </Row>

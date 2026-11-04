@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
-import { linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue } from '@/lib/sheet';
 
 function base(): Sheet {
@@ -255,4 +255,13 @@ test('시스템 계산 칸 — 휴가 일수(주말 제외, 반차 0.5)', () => 
   assert.deepEqual(linkSystemValues('휴가', { leaveType: '연차', period: '2026-11-13', period__end: '2026-11-17' }, []), { period__days: '3' });
   assert.deepEqual(linkSystemValues('휴가', { leaveType: '오전반차', period: '2026-11-13', period__end: '2026-11-17' }, []), { period__days: '0.5' });
   assert.deepEqual(linkSystemValues('외근', { period: '2026-11-13' }, []), {});
+});
+
+test('자동 채우기 — 기안 정보 칸 값', () => {
+  const info = { drafter: '신지웅 연구원', dept: '부설기술연구소', date: '2026-11-04', docNo: 'AP-261104-001' };
+  assert.equal(draftInfoValue('draft.drafter', info), '신지웅 연구원');
+  assert.equal(draftInfoValue('draft.docNo', info), 'AP-261104-001');
+  assert.equal(draftInfoValue('project.name', info), undefined);
+  assert.equal(draftInfoValue(undefined, info), undefined);
+  assert.equal(draftInfoValue('draft.date', undefined), undefined);
 });

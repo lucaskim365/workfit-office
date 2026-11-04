@@ -42,7 +42,22 @@ export interface CellInput {
  * 기안자가 서식에서 프로젝트를 고르면 이 값이 붙은 칸들을 그 프로젝트 값으로 한꺼번에 채운다.
  * 프로젝트 항목은 프로젝트 관리 데이터가 정해진 뒤 BIND_GROUPS 에 더한다(§11.4).
  */
-export type BindSource = `project.${string}`;
+export type BindSource = `draft.${string}` | `project.${string}`;
+
+/** 기안 정보 — 자동 채우기 'draft.*' 칸에 보일 값. 작성 중엔 작성자·오늘, 상신된 문서는 문서에 남은 값(바뀌지 않음) */
+export interface DraftInfo {
+  drafter: string;
+  dept: string;
+  date: string;
+  docNo: string;
+}
+
+/** 자동 채우기 칸의 값 — 기안 정보(draft.*)면 그 값, 아니면 undefined */
+export function draftInfoValue(bind: string | undefined, info: DraftInfo | undefined): string | undefined {
+  if (!bind || !info || !bind.startsWith('draft.')) return undefined;
+  const key = bind.slice('draft.'.length) as keyof DraftInfo;
+  return info[key];
+}
 
 /** 이 이름공간의 칸이 든 행·열은 기안자가 지울 수 없음 */
 const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal];
@@ -181,7 +196,18 @@ export const CELL_INPUT_LABELS: Record<CellInputType, string> = {
  * 프로젝트 값 채우기 항목 — 묶음별. 프로젝트 관리 데이터(담당 차장 엑셀)를 받은 뒤 항목을 정한다(§11.4).
  * 비어 있는 동안 서식 편집기는 이 칸을 '준비 중'으로 보여 준다.
  */
-export const BIND_GROUPS: { label: string; items: { value: BindSource; label: string }[] }[] = [];
+export const BIND_GROUPS: { label: string; items: { value: BindSource; label: string }[] }[] = [
+  {
+    // 엑셀 양식 안의 '작성일자'·'담당자' 같은 칸 — 문서 머리의 문서 정보 표를 끄고 시트가 문서 전체가 될 때(§11 B안)
+    label: '기안 정보',
+    items: [
+      { value: 'draft.drafter', label: '기안자' },
+      { value: 'draft.dept', label: '기안 부서' },
+      { value: 'draft.date', label: '기안일' },
+      { value: 'draft.docNo', label: '문서번호' },
+    ],
+  },
+];
 
 export function bindLabel(source: string): string {
   for (const g of BIND_GROUPS) {
@@ -582,3 +608,12 @@ export function linkSystemValues(
   });
   return { period__days: days > 0 ? String(days) : '' };
 }
+
+/**
+ * 결재 문서 안의 시트 — 문서 머리 표와 한 문서처럼 보이게(§11 A안)
+ * - 폭: 문서 종이 글자 폭(800px 종이 − 좌우 여백 32px×2)에 맞춘다. 좁으면 열 비율대로 늘리고 넓으면 줄인다
+ *   (원래 폭이 절반보다 좁은 작은 표는 늘리지 않음)
+ * - 가는 테두리: 문서 머리 표와 같은 색. 굵은 선·배경색은 엑셀 그대로
+ */
+export const DOC_SHEET_WIDTH = 736;
+export const DOC_SHEET_VIEW = { fitWidth: DOC_SHEET_WIDTH, stretchTo: DOC_SHEET_WIDTH, thinBorderColor: '#bbb' } as const;
