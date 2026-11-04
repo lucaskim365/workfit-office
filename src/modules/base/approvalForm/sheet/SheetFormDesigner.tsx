@@ -20,6 +20,7 @@ import {
   LINK_TYPES,
   linkIssues,
   linkSystemValues,
+  korDateText,
   VISIBILITY_LABEL,
   nameLabel,
   isStructureLocked,
@@ -661,7 +662,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
   const info = {
     drafter: user ? [user.name, user.position].filter(Boolean).join(' ') : '홍길동 사원',
     dept: user?.dept ?? '기획팀',
-    date: new Date().toLocaleDateString('sv-SE'),
+    date: korDateText(new Date()),
   };
   const draftBody = (
     <SheetDraftForm
@@ -670,7 +671,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       template={sheet}
       link={link}
       systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
-      draftInfo={{ ...info, docNo: '(상신 때 부여)' }}
+      draftInfo={{ ...info, docNo: '(작성 완료 시 자동 발번)', completedDate: '' }}
       docFields={docFields}
       onDocField={(p) => setDocFields((d) => ({ ...d, ...p }))}
       values={values}
@@ -688,6 +689,8 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       docInfo={{
         ...info,
         docNo: 'AP-미리보기',
+        // 결재·인쇄 화면 미리보기는 결재가 끝난 모양(직인도 찍힘)
+        completedDate: korDateText(new Date()),
         title: docFields.title,
         preservation: docFields.preservationPeriod,
         visibility: VISIBILITY_LABEL[docFields.visibility] ?? docFields.visibility,

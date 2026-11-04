@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, setCellValue, type Sheet } from '@/lib/sheet';
 import { TITLE_ROW, titleRowShown, withBodyHeader } from '@/domain/approvalForm/headerItems';
-import { APPROVAL_NS, approvalCellProps, draftInfoValue, setApprovalProp } from './approvalSheet';
+import { APPROVAL_NS, approvalCellProps, draftInfoValue, korDateText, setApprovalProp } from './approvalSheet';
 import { DOC_INFO_ROWS, insertDocInfoBlock, isExternalHiddenRow, setExternalHiddenRows, sheetHeaderItems, withoutExternalRows } from './sheetHeader';
 
 const text = (s: Sheet, r: number, c: number) => String(s.rows[r]?.[s.cols[c]] ?? '');
@@ -18,8 +18,10 @@ test('문서 정보 표 넣기 — 맨 위에 라벨·문서 정보 칸, 원래 
   assert.equal(approvalCellProps(s, 0, 1).bind, 'draft.docNo');
   assert.equal(approvalCellProps(s, 0, 4).bind, 'draft.dept');
   assert.equal(approvalCellProps(s, 2, 1).bind, 'doc.preservation');
-  assert.equal(approvalCellProps(s, 3, 1).bind, 'doc.title');
-  assert.ok(s.merges.some((m) => m.startRow === 3 && m.startCol === 1 && m.colSpan === 5), '제목 값 칸은 끝까지 합침');
+  assert.equal(text(s, 3, 0), '결재 완료일');
+  assert.equal(approvalCellProps(s, 3, 1).bind, 'draft.completedDate');
+  assert.equal(approvalCellProps(s, 4, 1).bind, 'doc.title');
+  assert.ok(s.merges.some((m) => m.startRow === 4 && m.startCol === 1 && m.colSpan === 5), '제목 값 칸은 끝까지 합침');
   assert.ok(s.merges.some((m) => m.startRow === 0 && m.startCol === 1 && m.colSpan === 2));
   // 넣은 행은 대외 문서에서 숨김
   for (let r = 0; r <= DOC_INFO_ROWS; r++) assert.ok(isExternalHiddenRow(s, r), `${r}행`);
@@ -37,7 +39,7 @@ test('시트가 맡은 머리 항목 — 기안 정보·문서 항목 칸만', (
   assert.deepEqual(sheetHeaderItems(createSheet(2, 2)), []);
   assert.deepEqual(sheetHeaderItems(null), []);
   const s = insertDocInfoBlock(createSheet(2, 6));
-  assert.deepEqual(new Set(sheetHeaderItems(s)), new Set(['docNo', 'drafterDept', 'drafter', 'draftDate', 'preservation', 'visibility', TITLE_ROW]));
+  assert.deepEqual(new Set(sheetHeaderItems(s)), new Set(['docNo', 'drafterDept', 'drafter', 'draftDate', 'completedDate', 'preservation', 'visibility', TITLE_ROW]));
   const one = setApprovalProp(createSheet(2, 2), { r1: 0, r2: 0, c1: 1, c2: 1 }, APPROVAL_NS.bind, 'draft.drafter');
   assert.deepEqual(sheetHeaderItems(one), ['drafter']);
 });
@@ -59,8 +61,17 @@ test('문서 항목 칸 값 — 문서 보기는 문서의 제목·보존연한�
   assert.equal(draftInfoValue('doc.preservation', info), '5년');
   assert.equal(draftInfoValue('doc.visibility', info), '부서 공개');
   assert.equal(draftInfoValue('draft.docNo', info), 'AP-1');
+  assert.equal(draftInfoValue('draft.completedDate', info), undefined, '결재 전 문서는 완료일 없음');
+  assert.equal(draftInfoValue('draft.completedDate', { ...info, completedDate: '2026년 11월 5일' }), '2026년 11월 5일');
   assert.equal(draftInfoValue('project.계약일자', info), undefined);
   assert.equal(draftInfoValue(undefined, info), undefined);
+});
+
+test('날짜 글자 — 문서 머리와 같은 모양', () => {
+  assert.equal(korDateText('2026-11-04T09:00:00'), '2026년 11월 4일');
+  assert.equal(korDateText(new Date(2026, 0, 9)), '2026년 1월 9일');
+  assert.equal(korDateText(null), '');
+  assert.equal(korDateText('아님'), '');
 });
 
 test('대외 문서 — 숨김 행을 통째로 빼고, 켜고 끌 수 있다', () => {

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, CalendarCheck, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -58,12 +58,14 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'draft.dept': Users,
   'draft.date': CalendarDays,
   'draft.docNo': FileDigit,
+  'draft.completedDate': CalendarCheck,
   'doc.title': Heading,
   'doc.preservation': Archive,
   'doc.visibility': Eye,
 };
 
 const DOC_HINTS: Record<string, string> = {
+  'draft.completedDate': '결재가 끝난 날짜를 채웁니다(작성·결재 중엔 비어 있음). 문서 머리의 결재 완료일은 빠집니다',
   'doc.title': '기안자가 여기서 문서 제목을 씁니다(필수, 문서 목록·검색에 쓰는 제목). 문서 머리의 제목 줄은 빠집니다',
   'doc.preservation': '기안자가 여기서 보존연한을 고릅니다. 문서 머리의 보존연한은 빠집니다',
   'doc.visibility': '기안자가 여기서 공개범위를 고릅니다. 문서 머리의 공개범위는 빠집니다',

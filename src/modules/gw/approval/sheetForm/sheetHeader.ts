@@ -16,6 +16,7 @@ const HEADER_OF_BIND: Record<string, HeaderItem | typeof TITLE_ROW> = {
   'draft.dept': 'drafterDept',
   'draft.drafter': 'drafter',
   'draft.date': 'draftDate',
+  'draft.completedDate': 'completedDate',
   'doc.preservation': 'preservation',
   'doc.visibility': 'visibility',
   'doc.title': TITLE_ROW,
@@ -35,10 +36,11 @@ export function sheetHeaderItems(s: Sheet | null | undefined): string[] {
 /** 문서 정보 표 라벨 칸 바탕 — 문서 머리 표와 같은 회색(넣은 뒤 서식에 맞게 바꿔 쓰면 됨) */
 const LABEL_BG = '#f2f2f2';
 /** 문서 정보 표 줄 수(빈 줄 하나 더 붙음) */
-export const DOC_INFO_ROWS = 4;
+export const DOC_INFO_ROWS = 5;
 
 /**
- * 시트 맨 위에 표준 문서 정보 표를 끼운다 — 문서번호·기안부서 / 기안자·기안일 / 보존연한·공개범위 / 제목, 아래 빈 줄 하나.
+ * 시트 맨 위에 표준 문서 정보 표를 끼운다 — 문서번호·기안부서 / 기안자·기안일 / 보존연한·공개범위 / 결재 완료일 / 제목, 아래 빈 줄 하나.
+ * (문서 머리의 문서 정보 표와 같은 항목 — 결재 완료일은 결재가 끝난 뒤에만 값이 보인다)
  * 열이 넷보다 적으면 늘린다. 넣은 행(빈 줄 포함)은 '대외 문서에서 숨김'.
  */
 export function insertDocInfoBlock(s0: Sheet): Sheet {
@@ -66,9 +68,11 @@ export function insertDocInfoBlock(s0: Sheet): Sheet {
     label(r, mid, l2);
     value(r, mid + 1, n - 1, b2);
   });
-  label(3, 0, '제목');
-  value(3, 1, n - 1, 'doc.title');
-  s = applyStyle(s, { r1: 3, r2: 3, c1: 1, c2: 1 }, { bold: true });
+  label(3, 0, '결재 완료일');
+  value(3, 1, n - 1, 'draft.completedDate');
+  label(4, 0, '제목');
+  value(4, 1, n - 1, 'doc.title');
+  s = applyStyle(s, { r1: 4, r2: 4, c1: 1, c2: 1 }, { bold: true });
   s = applyBorder(s, { r1: 0, r2: DOC_INFO_ROWS - 1, c1: 0, c2: n - 1 }, 'all');
   for (let r = 0; r <= DOC_INFO_ROWS; r++) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
   return s;

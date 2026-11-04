@@ -32,7 +32,7 @@ import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSh
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
-import { SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
+import { korDateText, SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
 import { useFormVersionSheet, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
@@ -1725,8 +1725,10 @@ function ApprovalDraftInner({
                   draftInfo={{
                     drafter: [me.name, me.position].filter(Boolean).join(' '),
                     dept: me.dept ?? '',
-                    date: new Date().toLocaleDateString('sv-SE'),
-                    docNo: editDoc?.docNo ?? '(상신 때 부여)',
+                    // 문서 머리와 같은 모양·문구
+                    date: korDateText(new Date()),
+                    docNo: editDoc?.docNo ?? '(작성 완료 시 자동 발번)',
+                    completedDate: '',
                   }}
                 />
               ) : undefined

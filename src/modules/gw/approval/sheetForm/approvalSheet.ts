@@ -55,6 +55,8 @@ export interface DraftInfo {
   dept: string;
   date: string;
   docNo: string;
+  /** 결재 완료일 — 결재가 끝난 문서만(작성·결재 중엔 빈 값) */
+  completedDate?: string;
   title?: string;
   preservation?: string;
   visibility?: string;
@@ -65,10 +67,18 @@ const INFO_KEY: Record<string, keyof DraftInfo> = {
   'draft.dept': 'dept',
   'draft.date': 'date',
   'draft.docNo': 'docNo',
+  'draft.completedDate': 'completedDate',
   'doc.title': 'title',
   'doc.preservation': 'preservation',
   'doc.visibility': 'visibility',
 };
+
+/** 기안 정보 날짜 글자 — 문서 머리와 같은 '2026년 11월 4일'. 못 읽으면 빈 값 */
+export function korDateText(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  const t = typeof d === 'string' ? new Date(d) : d;
+  return Number.isNaN(t.getTime()) ? '' : `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`;
+}
 
 /** 자동 채우기 칸의 값 — 기안 정보(draft.*)·문서 항목(doc.*)이면 그 값, 아니면 undefined */
 export function draftInfoValue(bind: string | undefined, info: DraftInfo | undefined): string | undefined {
@@ -235,6 +245,7 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
       { value: 'draft.dept', label: '기안 부서' },
       { value: 'draft.date', label: '기안일' },
       { value: 'draft.docNo', label: '문서번호' },
+      { value: 'draft.completedDate', label: '결재 완료일' },
     ],
   },
   {

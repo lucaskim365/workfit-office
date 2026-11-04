@@ -26,7 +26,7 @@ import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { headerShown, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
-import { SHEET_VERSION_KEY, VISIBILITY_LABEL } from './sheetForm/approvalSheet';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from './sheetForm/approvalSheet';
 import { sheetHeaderItems } from './sheetForm/sheetHeader';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 
@@ -708,8 +708,10 @@ export function ApprovalDocumentView({
               docInfo={{
                 drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
                 dept: doc.drafterDept ?? '',
-                date: String(doc.submittedAt ?? doc.createdAt ?? '').slice(0, 10),
-                docNo: doc.docNo ?? '',
+                // 문서 머리(ApprovalDocMetaTable)와 같은 값·모양
+                date: korDateText(doc.submittedAt ?? doc.createdAt),
+                docNo: docNoOf(doc),
+                completedDate: doc.completedAt ? korDateText(doc.completedAt) : '',
                 title: doc.title,
                 preservation: doc.preservationPeriod || form?.preservationPeriod || '',
                 visibility: VISIBILITY_LABEL[doc.visibility ?? ''] ?? doc.visibility ?? '',
