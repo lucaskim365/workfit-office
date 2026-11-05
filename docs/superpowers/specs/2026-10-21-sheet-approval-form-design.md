@@ -469,3 +469,9 @@
 - 시트 서식 계산(화면 없음)을 `src/domain/approvalForm/sheet/`로: approvalSheet·repeatRows·sheetHeader·relatedImport·docAutoNumbers. 화면 부품(SheetDraftForm·SheetDocView)과 기존 서식 변환기(fromLegacyForm, 서식 편집기 도구)는 `modules/gw/approval/sheetForm/`에 남는다.
 - `@/lib/sheet/core` — 시트 계산 공개 API(수식·모델·편집 동작·모양·엑셀 읽기, React 화면 부품 없음). 도메인·데이터 코드는 이것만 불러온다. `@/lib/sheet` 는 core + SheetEditor·SheetView.
 - 데이터 층(approvalDoc.repo)이 화면 폴더(modules)를 불러오던 것 해소.
+
+### 11.23 다른 회사가 처음 쓰기 쉽게 (2026-11-05)
+
+- '대체 서식' → **연동 기능**: 고르기 이름에 무엇과 이어지는지(휴가 — 휴가 차감·근태·캘린더 등). 저장 값(기존 서식 코드)은 그대로.
+- **서식 코드 자동**: 새 시트 서식 코드는 서식명에서(공백·기호 빼고, 이미 쓰는 코드·지운 시트 서식 코드와 겹치면 숫자 — `suggestFormCode`). [직접 정하기]를 누를 때만 입력칸. 코드는 목록·모바일에 문서 종류 이름으로 보이므로 무작위 글자는 쓰지 않는다.
+- **기본 서식 묶음**: [+ 시트 서식] → 빈 서식 / 기본 서식(기본 서식 정의 APPROVAL_FORM_SEED 를 시트로 바꾼 것, 시스템 서식·옛 연장근로 제외)에서 시작. 고르면 편집기가 그 모양·연동 기능으로 열릴 뿐, 저장해야 생기고 '사용 안 함'으로 시작한다.

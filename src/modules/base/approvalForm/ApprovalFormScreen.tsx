@@ -11,6 +11,8 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
+import { StarterPicker } from './sheet/StarterPicker';
+import { starterSheetForm } from './sheet/starterForms';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
 import { ApprovalFormCatalog } from './components/ApprovalFormCatalog';
 import { SheetFormDesigner } from './sheet/SheetFormDesigner';
@@ -38,7 +40,11 @@ export default function ApprovalFormScreen() {
     /** 기존 서식에서 변환한 초안 */
     draft?: LegacyConversion;
     source?: string;
+    /** 기본 서식 묶음에서 시작한 새 서식(기존 서식에 붙이는 것 아님) */
+    starter?: boolean;
   } | null>(null);
+  // 새 시트 서식 — 빈 서식 / 기본 서식 묶음 고르기 창
+  const [pickStarter, setPickStarter] = useState(false);
   const { latest: sheetVersions } = useSheetFormVersions();
   const { switches: sheetSwitches } = useSheetSwitches();
 
@@ -161,6 +167,13 @@ export default function ApprovalFormScreen() {
     setSheetSel({ form: { ...blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null), fields: [], active: false }, version: null });
     setMsg('');
   };
+  // 기본 서식 묶음에서 시작 — 그 서식을 시트로 바꾼 새 서식(코드는 편집기가 서식명에서)
+  const startFromStarter = (seed: ApprovalForm) => {
+    const { form, draft } = starterSheetForm(seed, blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null));
+    setPickStarter(false);
+    setSheetSel({ form, version: null, draft, source: seed.name, starter: true });
+    setMsg('');
+  };
 
   // 새 서식 추가
   const handleAddNewForm = () => {
@@ -245,7 +258,12 @@ export default function ApprovalFormScreen() {
           initialSheet={sheetSel.draft?.sheet}
           initialLink={sheetSel.draft?.link}
           initialNotice={
-            sheetSel.draft
+            sheetSel.draft && sheetSel.starter
+              ? {
+                  text: `기본 서식 '${sheetSel.source}'에서 시작한 새 서식입니다. 회사에 맞게 다듬고 [미리보기]로 확인한 뒤 저장하세요 — 저장하면 '사용 안 함'으로 생기고, 서식 목록에서 켜면 기안 목록에 나옵니다.`,
+                  list: sheetSel.draft.warnings,
+                }
+              : sheetSel.draft
               ? {
                   text: `기존 서식 '${sheetSel.source}'에 붙일 시트 초안입니다. 모양을 다듬고 [미리보기]로 확인한 뒤 저장하세요 — 저장해도 '시트로 기안'을 켜기 전까지 기안자는 기존 양식으로 씁니다.`,
                   list: sheetSel.draft.warnings,
@@ -290,8 +308,8 @@ export default function ApprovalFormScreen() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={handleAddSheetForm}
-                title="엑셀 양식을 불러오거나 엑셀처럼 직접 그려 만드는 서식 (기안 연결 준비 중)"
+                onClick={() => setPickStarter(true)}
+                title="빈 서식(엑셀 불러오기·직접 그리기) 또는 기본 서식(휴가원·지출결의서 등)에서 시작하는 시트 서식"
                 className="rounded-lg border border-border bg-panel px-3.5 py-2 text-[12.5px] font-bold text-ink2 shadow-xs hover:text-ink cursor-pointer"
               >
                 + 시트 서식 (엑셀)
@@ -304,6 +322,15 @@ export default function ApprovalFormScreen() {
               </button>
             </div>
           </div>
+          <StarterPicker
+            open={pickStarter}
+            onClose={() => setPickStarter(false)}
+            onBlank={() => {
+              setPickStarter(false);
+              handleAddSheetForm();
+            }}
+            onStarter={startFromStarter}
+          />
 
           <div className="grid grid-cols-[260px_1fr] items-start gap-3.5">
             {/* 좌측: 폴더 탐색 트리 패널 */}
