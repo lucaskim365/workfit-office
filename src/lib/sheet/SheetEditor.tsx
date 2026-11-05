@@ -18,7 +18,7 @@ import {
   mergeRange,
   pasteTsv,
   setCellValue,
-  unmergeAt,
+  unmergeRange,
   type BorderPreset,
   type CellRange,
 } from './ops';
@@ -756,7 +756,7 @@ export function SheetEditor({
           <button type="button" className={btn()} onClick={merge} title="셀 병합">
             병합
           </button>
-          <button type="button" className={btn()} onClick={() => update((s) => unmergeAt(s, focusCell.r, focusCell.c))} title="병합 해제">
+          <button type="button" className={btn()} onClick={() => update((s) => unmergeRange(s, range))} title="병합 해제 — 고른 범위에 걸친 병합을 모두 풂">
             해제
           </button>
           {sep}

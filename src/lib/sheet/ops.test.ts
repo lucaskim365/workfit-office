@@ -8,6 +8,7 @@ import {
   deleteCol,
   mergeRange,
   unmergeAt,
+  unmergeRange,
   setCellValue,
   applyStyle,
   applyBorder,
@@ -204,4 +205,13 @@ test('테두리 없음 — 범위 바깥 이웃 칸이 맞닿은 쪽에 그린 �
   assert.deepEqual(n.styles['0:B'].border, { t: 'thin', r: 'thin', l: 'thin' }); // 위 칸의 아래 선 지움
   assert.deepEqual(n.styles['1:A'].border, { t: 'thin', b: 'thin', l: 'thin' }); // 왼쪽 칸의 오른쪽 선 지움
   assert.deepEqual(n.styles['0:A'].border, { t: 'thin', r: 'thin', b: 'thin', l: 'thin' }); // 맞닿지 않은 칸은 그대로
+});
+
+test('범위 병합 해제 — 고른 범위에 걸친 병합을 모두(범위 밖으로 걸쳐도), 안 걸친 것은 그대로', () => {
+  let s = sheet(6, ['A', 'B', 'C', 'D']);
+  s = mergeRange(s, { r1: 0, r2: 0, c1: 0, c2: 1 });
+  s = mergeRange(s, { r1: 1, r2: 2, c1: 2, c2: 3 });
+  s = mergeRange(s, { r1: 4, r2: 5, c1: 0, c2: 0 });
+  const out = unmergeRange(s, { r1: 2, r2: 0, c1: 3, c2: 1 }); // 거꾸로 끈 범위
+  assert.deepEqual(out.merges, [{ startRow: 4, startCol: 0, rowSpan: 2, colSpan: 1 }]);
 });

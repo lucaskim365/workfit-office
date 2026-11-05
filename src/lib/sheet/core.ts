@@ -39,6 +39,7 @@ export {
   deleteCol,
   mergeRange,
   unmergeAt,
+  unmergeRange,
   setCellValue,
   applyStyle,
   applyBorder,

@@ -208,6 +208,12 @@ export function unmergeAt(s: Sheet, r: number, c: number): Sheet {
   return { ...s, merges: s.merges.filter((m) => !intersects(m, { r1: r, r2: r, c1: c, c2: c })) };
 }
 
+/** 고른 범위에 걸친 병합을 모두 푼다(범위 밖으로 걸쳐 있어도 — 엑셀 [병합 해제]와 같음) */
+export function unmergeRange(s: Sheet, g: CellRange): Sheet {
+  const r = { r1: Math.min(g.r1, g.r2), r2: Math.max(g.r1, g.r2), c1: Math.min(g.c1, g.c2), c2: Math.max(g.c1, g.c2) };
+  return { ...s, merges: s.merges.filter((m) => !intersects(m, r)) };
+}
+
 /** '='로 시작하면 수식(계산은 recalculate가), 아니면 값 + 기존 수식 제거. allowFormula false면 항상 값 */
 export function setCellValue(s: Sheet, r: number, c: number, text: string, opts?: { allowFormula?: boolean }): Sheet {
   const col = s.cols[c];
