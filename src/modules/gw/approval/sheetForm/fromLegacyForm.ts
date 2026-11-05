@@ -9,9 +9,9 @@
  */
 import {
   applyBorder,
+  colLetter,
   applyStyle,
   createSheet,
-  insertRow,
   mergeRange,
   setCellValue,
   setRowMeta,
@@ -53,6 +53,97 @@ export interface LegacyConversion {
   warnings: string[];
 }
 
+/**
+ * 기존 '표' 수식 → 시트 수식. 기존 수식은 표 안 좌표(A1 = 표 0번 줄 첫 열)·열 이름([금액])·SUM(ABOVE)·[줄 이름:열]을 쓴다.
+ * 시트에선 표가 top 행부터 같은 열 순서로 놓이므로 행 번호만 top 만큼 민다(열 글자는 그대로).
+ * 기존 엔진은 계산이 안 되면(0으로 나눔 등) 0 — IFERROR(…,0)으로 감싼다. 백분율(percent1·2)은 식에 ×100 이 들어 있어
+ * 시트 백분율 모양(값×100 에 %)에 맞게 ×100 을 뗀다(없으면 /100).
+ * 다른 표를 가리키는 식([표]!…)이나 모르는 열 이름은 옮기지 못한다 — null
+ */
+export function translateLegacyFormula(
+  expression: string | undefined,
+  at: {
+    /** 수식이 든 표 줄(0부터)·열 이름 — [열]·SUM(ABOVE) 의 기준 */
+    r: number;
+    col: string;
+    /** 표 0번 줄이 놓인 시트 행(0부터) */
+    top: number;
+    cols: string[];
+    rows: Array<Record<string, string>>;
+  },
+  format?: string
+): string | null {
+  let expr = String(expression ?? '').trim().replace(/^=/, '');
+  if (!expr || expr.includes('!')) return null;
+  const sheetRow = (tableRow: number) => at.top + tableRow + 1; // 표 줄(0부터) → 시트 행 번호(1부터)
+  const colOf = (name: string) => at.cols.indexOf(name.trim());
+  let failed = false;
+  expr = expr.replace(
+    /SUM\s*\(\s*ABOVE\s*\)|SUM\s*\(\s*\[([^\]]+)\]\s*\)|\[([^\]]+)\]|\b([A-Z]{1,3})(\d+)\b/gi,
+    (m, sumCol: string | undefined, bracket: string | undefined, L: string | undefined, num: string | undefined) => {
+      const fail = () => {
+        failed = true;
+        return m;
+      };
+      // 위쪽 모두 합 — 같은 열(또는 지정 열)의 표 0번 줄부터 바로 위 줄까지
+      if (/^SUM/i.test(m)) {
+        const j = sumCol !== undefined ? colOf(sumCol) : at.cols.indexOf(at.col);
+        if (j < 0) return fail();
+        return at.r === 0 ? '0' : `SUM(${colLetter(j)}${sheetRow(0)}:${colLetter(j)}${sheetRow(at.r - 1)})`;
+      }
+      if (bracket !== undefined) {
+        // [줄 이름:열] — 첫 열이 그 이름인 줄의 그 열, [열] — 같은 줄의 그 열
+        const k = bracket.indexOf(':');
+        if (k >= 0) {
+          const label = bracket.slice(0, k).trim();
+          const j = colOf(bracket.slice(k + 1));
+          const rr = at.rows.findIndex((row) => String(row[at.cols[0]] ?? '').trim() === label);
+          if (j < 0 || rr < 0) return fail();
+          return `${colLetter(j)}${sheetRow(rr)}`;
+        }
+        const j = colOf(bracket);
+        if (j < 0) return fail();
+        return `${colLetter(j)}${sheetRow(at.r)}`;
+      }
+      // 표 안 좌표 A1 — 열 글자 그대로, 행만 민다
+      const n = Number(num);
+      if (!L || !Number.isFinite(n) || n < 1) return fail();
+      return `${L.toUpperCase()}${at.top + n}`;
+    }
+  );
+  if (failed) return null;
+  if (format === 'percent1' || format === 'percent2') {
+    const dropped = expr.replace(/\s*\*\s*100\s*$/, '');
+    // ×100 이 없는 식: 백분율 칸들의 합(소계 비중 =SUM(ABOVE))은 이미 시트 백분율 값이라 그대로, 그 밖은 /100
+    const sumOnly = /^\s*SUM\([^()]*\)\s*$/i.test(expr);
+    expr = dropped !== expr ? dropped : sumOnly ? expr : `(${expr})/100`;
+  }
+  return `=IFERROR(${expr},0)`;
+}
+
+/**
+ * 기존 '표'에서 기안자가 줄을 더하던 곳 — 품목 줄: 미리 쓴 글자가 없는 줄(줄 번호 1·2·3… 은 빼고).
+ * 같은 모양(수식 열이 같음)의 품목 줄이 3줄 넘게 이어지면 그 마지막 줄(품목 1~8 뒤에 합계 줄이 오는 발주 세부내역 → 8번째 줄),
+ * 데이터 줄이 하나뿐이고 비어 있으면 그 줄(빈 줄 하나로 시작하는 품목 표).
+ * 이름표가 든 줄(작성일·상호 같은 라벨·값 표, '공급가액 합계' 같은 합계 줄, 직인란)은 품목 줄이 아니다 — 반복 구간 없음(관리자가 지정)
+ */
+export function legacyRepeatRow(t: { cols: string[]; rows: Array<Record<string, string>>; cellFormulas: Record<string, unknown> }, headerRows: number): number | null {
+  const data = t.rows.map((_, i) => i).filter((i) => i >= headerRows);
+  const pattern = (i: number) => t.cols.map((c) => (t.cellFormulas[`${i}:${c}`] ? 'f' : 'x')).join('');
+  const itemRow = (i: number) =>
+    t.cols.every((c) => {
+      if (t.cellFormulas[`${i}:${c}`]) return true;
+      const v = String(t.rows[i][c] ?? '').trim();
+      return v === '' || /^\d+$/.test(v);
+    });
+  if (data.length === 1) return itemRow(data[0]) ? data[0] : null;
+  for (let k = data.length - 1; k >= 2; k--) {
+    const [a, b, c] = [data[k - 2], data[k - 1], data[k]];
+    if (pattern(a) === pattern(c) && pattern(b) === pattern(c) && itemRow(a) && itemRow(b) && itemRow(c)) return c;
+  }
+  return null;
+}
+
 export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const warnings: string[] = [];
   const link = LINK_TYPES.some((t) => t.code === form.code) ? form.code : null;
@@ -72,7 +163,9 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   let row = 0;
   /** 다음 줄 — 시트를 한 줄 늘려 그 번호를 준다 */
   const nextRow = () => {
-    if (row >= s.rows.length) s = insertRow(s, s.rows.length);
+    // 맨 끝에 빈 줄을 덧붙인다 — insertRow 는 '범위 바로 다음 삽입 = 범위가 늘어남'(엑셀과 같음)이라
+    // 방금 넣은 합계 수식(=SUM(C17:K17))의 범위가 줄을 붙일 때마다 늘어난다. 끝에 붙이는 건 아무것도 밀지 않으므로 그냥 붙인다
+    if (row >= s.rows.length) s = { ...s, rows: [...s.rows, Object.fromEntries(s.cols.map((c) => [c, '']))] };
     return row++;
   };
   const span = (r: number, c1: number, c2: number): CellRange => ({ r1: r, r2: r, c1, c2 });
@@ -110,6 +203,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (f.hideOnExternal) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
   };
 
+  /** 품목 줄(반복 구간)을 못 찾은 표 — 경고 한 줄로 모은다 */
+  const noRepeat: string[] = [];
   /** 조건부 항목이 만든 행 — 다 놓은 뒤 행 보이기 조건으로 */
   const condRows: { r: number; visibleIf: string }[] = [];
   /** 항목 키 → 값 칸(조건 칸에 이름을 붙이려고) */
@@ -284,9 +379,14 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       merge(r, 0, n - 1);
       s = setCellValue(s, r, 0, f.label, { allowFormula: false });
       s = applyStyle(s, span(r, 0, 0), { bold: true });
+      // 표째 대외 숨김이면 제목 줄도(제목만 덩그러니 남지 않게)
+      extHide(r, f);
     }
     const top = row;
     const tc = t.cols.length;
+    const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
+    const repeatRow = legacyRepeatRow(t, headerRows);
+    const untranslated: string[] = [];
     t.rows.forEach((tr, i) => {
       const r = nextRow();
       t.cols.forEach((tcol, j) => {
@@ -294,7 +394,17 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         const c2 = j === tc - 1 ? n - 1 : j;
         if (c2 > j) merge(r, j, c2);
         const text = String(tr[tcol] ?? '');
-        if (text) s = setCellValue(s, r, j, text, { allowFormula: false });
+        const legacyFormula = t.cellFormulas[`${i}:${tcol}`] ?? (t.sumCell && t.sumCell.rIdx === i && t.sumCell.col === tcol ? { expression: '=SUM(ABOVE)' } : undefined);
+        const formula = legacyFormula ? translateLegacyFormula(legacyFormula.expression, { r: i, col: tcol, top, cols: t.cols, rows: t.rows }, legacyFormula.format) : null;
+        if (formula) {
+          s = setCellValue(s, r, j, formula);
+          const fmt = legacyFormula?.format;
+          const numFmt = fmt === 'currency' ? 'currency' : fmt === 'percent1' || fmt === 'percent2' ? 'percent' : undefined;
+          if (numFmt) s = applyStyle(s, span(r, j, j), { numFmt });
+        } else {
+          if (legacyFormula) untranslated.push(`${colLetter(j)}${r + 1}`);
+          if (text) s = setCellValue(s, r, j, text, { allowFormula: false });
+        }
         const st = t.cellStyles[`${i}:${tcol}`];
         const patch: Partial<CellStyle> = {};
         if (st?.bold) patch.bold = true;
@@ -303,10 +413,9 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         if (st?.numFmt && st.numFmt !== 'general') patch.numFmt = st.numFmt;
         if (Object.keys(patch).length) s = applyStyle(s, span(r, j, j), patch);
         if (st?.seal) s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.seal, true);
-        // 기존 '표'는 수식 칸 말고는 기안자가 모두 고칠 수 있었다 — 제목 줄(0번 줄이 머리 줄이거나 굵게)만 고정 글자,
-        // 나머지는 입력 칸(미리 쓴 글자는 기본값으로 남고 기안자가 고칠 수 있음. 직인 칸도 기존처럼 글자를 쓸 수 있음)
-        const header = i === 0 && (t.legacyHeaderRow || st?.bold);
-        if (!header && !t.cellFormulas[`${i}:${tcol}`]) {
+        // 입력 칸 — 수식·직인 칸이 아닌 빈 칸, 그리고 반복 구간 줄의 칸 전부(줄을 더하면 새 줄에도 쓸 수 있게).
+        // 미리 쓴 글자(작성일·상호 같은 이름표, 회사 정보)는 고정 글자로 — 고칠 칸이면 관리자가 입력 칸으로
+        if (!legacyFormula && !st?.seal && (!text || i === repeatRow)) {
           s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' ? 'currency' : 'text' });
         }
       });
@@ -319,15 +428,17 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const bottom = row - 1;
     if (bottom >= top) {
       s = applyBorder(s, { r1: top, r2: bottom, c1: 0, c2: n - 1 }, 'all');
-      // 기존 '표'는 기안자가 행을 추가하던 표 — 마지막 줄을 반복 구간으로(머리 줄 하나뿐이면 두지 않음)
-      if (bottom > top || !(t.legacyHeaderRow ?? false)) s = setRepeatSection(s, bottom, bottom, f.label || '반복 구간');
+      // 기안자가 줄을 더하던 곳 — 품목처럼 같은 모양 줄이 이어지는 마지막 줄(legacyRepeatRow). 없으면 두지 않음
+      if (repeatRow !== null) s = setRepeatSection(s, top + repeatRow, top + repeatRow, f.label || '반복 구간');
+      else if (t.rows.length > headerRows) noRepeat.push(`'${f.label || '표'}'`);
     }
-    if (Object.keys(t.cellFormulas).length) warnings.push(`'${f.label || '표'}'의 수식은 값만 옮겼습니다 — 합계 등은 시트 수식(=SUM 등)으로 다시 넣어 주세요.`);
+    if (untranslated.length) warnings.push(`'${f.label || '표'}'의 수식 중 ${untranslated.join(', ')}은(는) 옮기지 못해 값만 넣었습니다(다른 표를 가리키는 식 등) — 시트 수식으로 다시 넣어 주세요.`);
     return s;
   }
 
   // 빈 마지막 줄(시작용 한 줄을 안 썼을 때) 정리는 하지 않는다 — 본문 아래 여유 줄
   if (row === 0) warnings.push('옮길 항목이 없습니다 — 빈 본문으로 만들었습니다.');
+  if (noRepeat.length) warnings.push(`표 ${noRepeat.join(', ')}에는 품목처럼 같은 모양으로 이어지는 빈 줄이 없어 [행 추가] 구간을 두지 않았습니다 — 기안자가 줄을 더해야 하는 표면 그 줄을 골라 반복 구간으로 지정하세요.`);
 
   // 행 보이기 조건 — 기존 visibleIf '키:값'. 조건 칸에는 기존 키를 칸 이름으로(선택 칸은 이미 붙어 있음)
   const missing = new Set<string>();

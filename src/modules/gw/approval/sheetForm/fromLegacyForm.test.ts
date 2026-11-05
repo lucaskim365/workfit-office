@@ -4,7 +4,7 @@ import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
 import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 import { setCellValue } from '@/lib/sheet';
-import { legacyFormToSheet } from './fromLegacyForm';
+import { legacyFormToSheet, legacyRepeatRow, translateLegacyFormula } from './fromLegacyForm';
 import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 
@@ -86,7 +86,7 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
     colWidths: {},
     tableWidth: '100%',
     merges: [],
-    cellFormulas: { '1:b': { expr: 'A1' } },
+    cellFormulas: { '1:b': { expression: '=A1' } },
     cellStyles: { '0:a': { bold: true, bg: 'gray' }, '0:b': { bold: true } },
     secretCols: [],
     secretCells: [],
@@ -115,7 +115,9 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
   assert.equal(approvalCellProps(s, head.r + 1, 1).input, undefined, '수식 칸은 입력 칸이 아님');
   assert.equal(repeatSections(s).length, 1);
   assert.equal(repeatSections(s)[0].first, head.r + 1);
-  assert.ok(warnings.some((w) => w.includes('수식')));
+  // 기존 수식(표 안 좌표 A1 = 머리 줄 첫 칸) → 시트 수식(행만 민다)
+  assert.equal(s.formulas[`${head.r + 1}:${s.cols[1]}`], `=IFERROR(A${head.r + 1},0)`);
+  assert.ok(!warnings.some((w) => w.includes('수식')));
   // 직인 — 발신 명의 + 직인 칸(고른 직인)
   const seal = findText(s, '주식회사 워크핏 대표이사')!;
   const sealCell = metaCells(s, APPROVAL_NS.seal).find((x) => x.r === seal.r)!;
@@ -149,10 +151,11 @@ test('기존 서식 → 시트 — 조건부 항목(visibleIf)은 행 보이기 
   assert.ok(warnings.some((w) => w.includes('행 보이기 조건')));
 });
 
-test('기존 서식 → 시트 — 표의 미리 쓴 글자 칸도 입력 칸(기존 표는 수식 칸 말고 모두 고칠 수 있었음)', () => {
+test('기존 서식 → 시트 — 표: 미리 쓴 글자는 고정, 빈 칸은 입력 칸, 빈 품목 줄 하나면 반복 구간', () => {
   const table = JSON.stringify({
+    version: 2,
     cols: ['구분', '항목', '내용'],
-    rows: [{ 구분: '구분', 항목: '항목', 내용: '내용' }, { 구분: '자재', 항목: '', 내용: '' }],
+    rows: [{ 구분: '구분', 항목: '항목', 내용: '내용' }, { 구분: '자재', 항목: '', 내용: '' }, { 구분: '', 항목: '', 내용: '' }],
     legacyHeaderRow: true,
     colWidths: {}, tableWidth: '100%', merges: [], cellFormulas: {}, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [],
   });
@@ -160,7 +163,9 @@ test('기존 서식 → 시트 — 표의 미리 쓴 글자 칸도 입력 칸(�
   const head = findText(s, '항목')!;
   assert.equal(approvalCellProps(s, head.r, 0).input, undefined, '머리 줄은 고정 글자');
   const pre = findText(s, '자재')!;
-  assert.equal(approvalCellProps(s, pre.r, pre.c).input?.type, 'text', '미리 쓴 글자는 기본값이 든 입력 칸');
+  assert.equal(approvalCellProps(s, pre.r, pre.c).input, undefined, '미리 쓴 글자(이름표)는 고정');
+  assert.equal(approvalCellProps(s, pre.r, pre.c + 1).input?.type, 'text', '빈 칸은 입력 칸');
+  assert.equal(approvalCellProps(s, pre.r + 1, 0).input?.type, 'text');
 });
 
 test('기존 서식 → 시트 — 값마다 바뀌던 같은 이름 선택 항목은 종속 선택 칸 하나로, 상위 칸 오른쪽에', () => {
@@ -205,4 +210,37 @@ test('기존 서식 → 시트 — 값마다 바뀌던 같은 이름 선택 항�
   assert.equal(meal.rows[sort.r][s.cols[sc]], '');
   // 고를 분류가 없는 값(직접입력한 글자)이면 분류 칸은 필수 검사에서 빠짐
   assert.deepEqual(requiredMissing(setCellValue(s, kind.r, vc, '문구 구입')), []);
+});
+
+test('기존 표 수식 → 시트 수식 — 좌표·열 이름·SUM(ABOVE)·[줄:열]·백분율, 다른 표 참조는 못 옮김', () => {
+  const cols = ['구분', '비중', '금액'];
+  const rows = [{ 구분: '구분', 비중: '비중', 금액: '금액' }, { 구분: 'A', 비중: '', 금액: '' }, { 구분: '소계', 비중: '', 금액: '' }];
+  const at = (r: number, col: string) => ({ r, col, top: 9, cols, rows });
+  assert.equal(translateLegacyFormula('=D3*F3', at(2, '금액'), 'currency'), '=IFERROR(D12*F12,0)');
+  assert.equal(translateLegacyFormula('=SUM(G2:G9)', at(2, '금액')), '=IFERROR(SUM(G11:G18),0)');
+  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '금액')), '=IFERROR(SUM(C10:C11),0)');
+  assert.equal(translateLegacyFormula('=( [금액] / [소계:금액] ) * 100', at(1, '비중'), 'percent1'), '=IFERROR(( C11 / C12 ),0)');
+  assert.equal(translateLegacyFormula('=C2/C1', at(1, '비중'), 'percent1'), '=IFERROR((C11/C10)/100,0)');
+  // 백분율 칸들의 합(소계 비중)은 나누지 않음
+  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '비중'), 'percent1'), '=IFERROR(SUM(B10:B11),0)');
+  assert.equal(translateLegacyFormula('=[매출구분]![소계:금액] - 1', at(1, '금액')), null);
+  assert.equal(translateLegacyFormula('=[없는열]', at(1, '금액')), null);
+  assert.equal(translateLegacyFormula(undefined, at(1, '금액')), null);
+});
+
+test('기존 표에서 줄을 더하던 곳 — 같은 모양 품목 줄이 이어지는 마지막 줄, 라벨·값 표는 없음', () => {
+  const f = (keys: string[]) => Object.fromEntries(keys.map((k) => [k, { expression: '=1' }]));
+  // 발주 세부내역: 0 머리, 1~8 품목(G 수식), 9~11 합계 줄(A 글자 + G 수식)
+  const cols = ['A', 'B', 'G'];
+  const items = Array.from({ length: 8 }, (_, i) => ({ A: String(i + 1), B: '', G: '' }));
+  const totals = ['공급가액 합계', '부가세', '합계'].map((t) => ({ A: t, B: '', G: '' }));
+  const po = { cols, rows: [{ A: 'NO', B: '항목', G: '공급가액' }, ...items, ...totals], cellFormulas: f([...Array.from({ length: 11 }, (_, i) => `${i + 1}:G`)]) };
+  assert.equal(legacyRepeatRow(po, 1), 8);
+  // 라벨·값 표(작성일 | 값 | 상호 | 값 …) — 미리 쓴 글자가 많아 반복 구간 없음
+  const info = { cols: ['A', 'B', 'C', 'D'], rows: Array.from({ length: 6 }, () => ({ A: '작성일', B: '', C: '상호', D: '워크핏' })), cellFormulas: {} };
+  assert.equal(legacyRepeatRow(info, 1), null);
+  // 데이터 줄 하나뿐이고 비어 있으면 그 줄
+  assert.equal(legacyRepeatRow({ cols: ['A', 'B'], rows: [{ A: '머리', B: '' }, { A: '', B: '' }], cellFormulas: {} }, 1), 1);
+  // 데이터 줄 하나에 이름표가 있으면(직인란 등) 품목 줄 아님
+  assert.equal(legacyRepeatRow({ cols: ['A', 'B'], rows: [{ A: '발주자', B: '' }, { A: '날짜', B: '년 월 일' }], cellFormulas: {} }, 1), null);
 });
