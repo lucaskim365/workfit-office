@@ -64,6 +64,20 @@ async function recallChat(roomId, readUpTo) {
   }
 }
 
+/**
+ * 같은 대상(같은 방 등)의 알림이 상단바에 남아 있으면 먼저 닫는다 — 그 위에 고쳐 쓰면(같은 tag) 안드로이드가
+ * '고친 알림'으로 보고 진동·소리를 생략한다(renotify 를 줘도 휴대폰에 따라 무시됨). 닫고 새로 띄우면 매번 울리고,
+ * 상단바엔 지금처럼 방마다 최신 알림 하나만 남는다
+ */
+async function closeSameTag(tag) {
+  if (!tag) return;
+  try {
+    for (const old of await self.registration.getNotifications({ tag })) old.close();
+  } catch (e) {
+    /* 닫기 실패 — 그래도 새 알림은 띄운다 */
+  }
+}
+
 // 백그라운드/종료 상태 수신 → 알림 표시.
 messaging.onBackgroundMessage(async (payload) => {
   const n = payload.notification || {};
@@ -84,6 +98,7 @@ messaging.onBackgroundMessage(async (payload) => {
   const bodyText = n.body || data.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
   const id = `${Date.now()}-${Math.random()}`;
   const tag = data.roomId || data.docId || data.linkUrl || undefined;
+  await closeSameTag(tag);
   await self.registration.showNotification(n.title || data.title || '새 알림', {
     body: bodyText,
     icon: '/icons/icon-192.png',
