@@ -147,3 +147,17 @@ test('기존 서식 → 시트 — 조건부 항목(visibleIf)은 행 보이기 
   assert.equal(conditionHiddenRows(s).size, 3);
   assert.ok(warnings.some((w) => w.includes('행 보이기 조건')));
 });
+
+test('기존 서식 → 시트 — 표의 미리 쓴 글자 칸도 입력 칸(기존 표는 수식 칸 말고 모두 고칠 수 있었음)', () => {
+  const table = JSON.stringify({
+    cols: ['구분', '항목', '내용'],
+    rows: [{ 구분: '구분', 항목: '항목', 내용: '내용' }, { 구분: '자재', 항목: '', 내용: '' }],
+    legacyHeaderRow: true,
+    colWidths: {}, tableWidth: '100%', merges: [], cellFormulas: {}, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [],
+  });
+  const { sheet: s } = legacyFormToSheet(legacyForm('발주', [{ key: 'body', label: '내역', type: '표', placeholder: table }]));
+  const head = findText(s, '항목')!;
+  assert.equal(approvalCellProps(s, head.r, 0).input, undefined, '머리 줄은 고정 글자');
+  const pre = findText(s, '자재')!;
+  assert.equal(approvalCellProps(s, pre.r, pre.c).input?.type, 'text', '미리 쓴 글자는 기본값이 든 입력 칸');
+});

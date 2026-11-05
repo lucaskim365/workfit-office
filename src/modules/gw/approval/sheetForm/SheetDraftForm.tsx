@@ -229,6 +229,60 @@ function UsersField({ value, onSet, org }: { value: string; onSet: (text: string
 const ADD_IDS = 'add:';
 const REMOVE_AT = 'del:';
 
+/**
+ * 선택 칸 — 항목에 '직접입력'이 있으면 그걸 고를 때 글자 칸으로 바뀐다(기존 서식 선택 항목과 같음).
+ * 칸 값은 기안자가 쓴 글자(목록에 없는 값이면 직접 입력한 값)
+ */
+function SelectCell({ options, raw, onSet }: { options: string[]; raw: string; onSet: (text: string) => void }) {
+  const direct = options.find(isDirectInputOption);
+  const custom = !!direct && raw !== '' && !options.includes(raw);
+  const [typing, setTyping] = useState(custom);
+  useEffect(() => {
+    if (custom) setTyping(true);
+  }, [custom]);
+  if (direct && typing) {
+    return (
+      <span className="flex items-center gap-1">
+        <input value={custom ? raw : ''} onChange={(e) => onSet(e.target.value)} placeholder="직접 입력하세요" className={FIELD} style={INHERIT} autoFocus={!custom} />
+        <button
+          type="button"
+          onClick={() => {
+            setTyping(false);
+            onSet('');
+          }}
+          className="shrink-0 px-1 text-[10.5px] font-semibold text-teal hover:underline print:hidden"
+        >
+          선택으로
+        </button>
+      </span>
+    );
+  }
+  return (
+    <select
+      value={raw}
+      onChange={(e) => {
+        if (direct && e.target.value === direct) {
+          setTyping(true);
+          onSet('');
+        } else onSet(e.target.value);
+      }}
+      className={`${FIELD} print:appearance-none`}
+      style={INHERIT}
+    >
+      <option value="">선택</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+      {raw && !options.includes(raw) && <option value={raw}>{raw}</option>}
+    </select>
+  );
+}
+
+/** '직접입력'·'직접 입력' 항목 — 기존 서식 SelectFieldEditor 와 같은 기준 */
+export const isDirectInputOption = (o: string) => o.replace(/\s/g, '').includes('직접입력');
+
 function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
@@ -259,17 +313,7 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
       );
     }
     case 'select':
-      return (
-        <select value={raw} onChange={(e) => onSet(e.target.value)} className={`${FIELD} print:appearance-none`} style={INHERIT}>
-          <option value="">선택</option>
-          {(input.options ?? []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-          {raw && !(input.options ?? []).includes(raw) && <option value={raw}>{raw}</option>}
-        </select>
-      );
+      return <SelectCell options={input.options ?? []} raw={raw} onSet={onSet} />;
     case 'multiSelect': {
       const picked = raw ? raw.split(',').map((x) => x.trim()) : [];
       const toggle = (o: string) => {

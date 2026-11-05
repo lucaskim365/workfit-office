@@ -244,9 +244,10 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         if (st?.numFmt && st.numFmt !== 'general') patch.numFmt = st.numFmt;
         if (Object.keys(patch).length) s = applyStyle(s, span(r, j, j), patch);
         if (st?.seal) s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.seal, true);
-        // 제목 줄(굵게·0번 줄)이 아니고 비어 있는 칸은 기안자가 쓰는 칸
+        // 기존 '표'는 수식 칸 말고는 기안자가 모두 고칠 수 있었다 — 제목 줄(0번 줄이 머리 줄이거나 굵게)만 고정 글자,
+        // 나머지는 입력 칸(미리 쓴 글자는 기본값으로 남고 기안자가 고칠 수 있음. 직인 칸도 기존처럼 글자를 쓸 수 있음)
         const header = i === 0 && (t.legacyHeaderRow || st?.bold);
-        if (!text && !header && !st?.seal && !t.cellFormulas[`${i}:${tcol}`]) {
+        if (!header && !t.cellFormulas[`${i}:${tcol}`]) {
           s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' ? 'currency' : 'text' });
         }
       });
