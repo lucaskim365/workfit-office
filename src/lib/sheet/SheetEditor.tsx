@@ -340,6 +340,17 @@ export function SheetEditor({
     });
   };
 
+  /**
+   * 수식 입력 중 칸을 누를 때 주소를 넣을 자리인가 — 'insert': 커서 앞이 = + - * / ^ & ( , : < > (공백은 건너뜀),
+   * 'replace': 방금 눌러 넣은 주소 바로 뒤(다른 칸을 누르면 그 주소를 바꿈), null: 주소 자리가 아님(고치기를 끝냄)
+   */
+  const refExpected = (): 'insert' | 'replace' | null => {
+    const pos = activeInput()?.selectionStart ?? caretRef.current;
+    const p = pickRef.current;
+    if (p && p.pos + p.len === pos) return 'replace';
+    return /[=+\-*/^&(,:<>]$/.test(draft.slice(0, pos).replace(/\s+$/, '')) ? 'insert' : null;
+  };
+
   /** 수식 입력 중 칸을 누르면 주소, 끌면 범위를 커서 자리에 넣는다 */
   const pickCell = (cell: Cell, dragging: boolean) => {
     const el = activeInput();
@@ -508,11 +519,17 @@ export function SheetEditor({
     setHeaderMenu(null);
     setPopover(null);
     if (isPicking && editing && !(editing.r === cell.r && editing.c === cell.c)) {
-      e.preventDefault();
-      dragRef.current = 'pick';
-      pickRef.current = null;
-      pickCell(cell, false);
-      return;
+      // 엑셀과 같게 — 커서 바로 앞이 연산 기호·괄호·쉼표면 누른 칸 주소를 넣고, 방금 눌러 넣은 주소 바로 뒤면 그 주소를 바꾼다.
+      // 그 밖(=A1 끝에 커서 등)이면 수식 고치기를 끝내고 누른 칸으로 옮긴다(아래)
+      const mode = refExpected();
+      if (mode) {
+        e.preventDefault();
+        dragRef.current = 'pick';
+        if (mode === 'replace' && pickRef.current) pickRef.current = { ...pickRef.current, start: cell };
+        else pickRef.current = null;
+        pickCell(cell, mode === 'replace');
+        return;
+      }
     }
     if (editing) {
       if (editing.r === cell.r && editing.c === cell.c) return;
