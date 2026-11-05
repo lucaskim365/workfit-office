@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { suggestFormCode } from '@/domain/approvalForm/formCode';
 import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
@@ -145,6 +146,13 @@ function Designer({
   const pageScale = sheetWidth > SHEET_PAGE_WIDTH ? SHEET_PAGE_WIDTH / sheetWidth : 1;
   const dirty = sheet !== savedSheet || link !== savedLink || JSON.stringify(form) !== JSON.stringify(savedForm);
   const set = (patch: Partial<ApprovalForm>) => setForm((f) => ({ ...f, ...patch }));
+  // 새 서식 코드 — 서식명에서 저절로(이미 쓰는 코드·지운 시트 서식 코드와 안 겹치게). [직접 정하기]를 누르면 직접 쓴다
+  const [codeManual, setCodeManual] = useState(false);
+  const autoCode = useMemo(
+    () => suggestFormCode(form.name, [...forms.map((f) => f.code), ...versionHeads.keys()]),
+    [form.name, forms, versionHeads]
+  );
+  const effectiveCode = isNew && !codeManual ? autoCode : form.code;
 
   const close = () => {
     if (dirty && !confirm('저장하지 않은 변경이 있습니다. 닫을까요?')) return;
@@ -184,7 +192,7 @@ function Designer({
 
   // ── 저장 ──
   const onSave = async () => {
-    const code = form.code.trim();
+    const code = effectiveCode.trim();
     const name = form.name.trim();
     if (!name) return setMsg({ kind: 'err', text: '서식명을 입력하세요.' });
     if (!code) return setMsg({ kind: 'err', text: '서식 코드를 입력하세요.' });
@@ -511,8 +519,33 @@ function Designer({
         <Field label="서식명">
           <input className={inp} value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="발주서" />
         </Field>
-        <Field label={isNew ? '서식 코드' : '서식 코드(저장 후 고정)'}>
-          <input className={inp} value={form.code} disabled={!isNew} onChange={(e) => set({ code: e.target.value })} placeholder="발주_시트" />
+        <Field label="서식 코드">
+          {isNew && !codeManual ? (
+            // 코드는 서식명에서 저절로 — 연동·결재선 규칙이 쓰는 내부 이름이라 보통은 몰라도 된다
+            <div className="flex items-center gap-1.5 py-1.5 text-[11.5px] text-ink3">
+              <span className="truncate" title="서식명에서 저절로 정합니다. 저장하면 바꿀 수 없습니다.">
+                자동{form.name.trim() ? ` (${autoCode})` : ''}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  set({ code: autoCode });
+                  setCodeManual(true);
+                }}
+                className="shrink-0 font-semibold text-teal hover:underline"
+              >
+                직접 정하기
+              </button>
+            </div>
+          ) : (
+            <input
+              className={inp}
+              value={form.code}
+              disabled={!isNew}
+              onChange={(e) => set({ code: e.target.value })}
+              title={isNew ? '연동·결재선 규칙이 쓰는 내부 이름 — 저장하면 바꿀 수 없습니다' : '저장 후 고정'}
+            />
+          )}
         </Field>
         <Field label="격식 문서명">
           <input className={inp} value={form.docTitle} onChange={(e) => set({ docTitle: e.target.value })} placeholder="발 주 서" />
