@@ -5,7 +5,7 @@ import {
   type ApprovalFormVersion,
   type ApprovalFormVersionFull,
 } from '@/domain/approvalForm/sheetVersion';
-import type { Sheet } from '@/lib/sheet';
+import type { Sheet } from '@/lib/sheet/core';
 
 /**
  * 시트 서식 버전 Repository — approvalFormVersions 컬렉션(새 컬렉션, 기존 컬렉션과 분리).

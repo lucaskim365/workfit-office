@@ -5,7 +5,7 @@
  * - [문서 정보 표 넣기] — 시트 맨 위에 표준 문서 정보 표를 끼운다
  * - 대외 문서에서 숨길 행 — 거래처용 모양(서식 '대외 문서' + 결재 완료)에서 행째 뺀다
  */
-import { applyBorder, applyStyle, deleteRow, insertCol, insertRow, mergeRange, setCellValue, setRowMeta, type Sheet } from '@/lib/sheet';
+import { applyBorder, applyStyle, deleteRow, insertCol, insertRow, mergeRange, setCellValue, setRowMeta, type Sheet } from '@/lib/sheet/core';
 import type { HeaderItem } from '@/domain/approvalForm/headerItems';
 import { HEADER_ITEMS, STAMP_TABLE, TITLE_ROW } from '@/domain/approvalForm/headerItems';
 import { APPROVAL_NS, DEFAULT_CLOSING, setApprovalProp, type BindSource } from './approvalSheet';

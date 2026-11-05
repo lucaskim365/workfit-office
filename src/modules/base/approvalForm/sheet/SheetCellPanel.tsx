@@ -21,9 +21,9 @@ import {
   LINK_TYPES,
   linkTypeDef,
   nameLabel,
-} from '@/modules/gw/approval/sheetForm/approvalSheet';
-import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
-import { isExternalHiddenRow, setExternalHiddenRows } from '@/modules/gw/approval/sheetForm/sheetHeader';
+} from '@/domain/approvalForm/sheet/approvalSheet';
+import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
+import { isExternalHiddenRow, setExternalHiddenRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { AutoNumberSettings } from '../components/ApprovalFormEditor';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
 import { marksOf } from '@/domain/companyMark/schema';

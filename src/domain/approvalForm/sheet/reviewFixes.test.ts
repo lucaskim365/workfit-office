@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellKey, createSheet, mergeRange, setCellMeta, setCellValue, setRowMeta } from '@/lib/sheet';
+import { cellKey, createSheet, mergeRange, setCellMeta, setCellValue, setRowMeta } from '@/lib/sheet/core';
 import { APPROVAL_NS, SHEET_VALUES_KEY, clearConditionHidden, conditionHiddenRows, invalidNumberCells, setCellName, setRowCondition } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, repeatSections, setRepeatSection } from './repeatRows';
 import { withoutExternalRows } from './sheetHeader';

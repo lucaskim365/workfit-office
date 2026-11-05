@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellKey, createSheet, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet';
+import { cellKey, createSheet, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, applyValues, setCellName } from './approvalSheet';
 import { expandRepeats, repeatSections, setRepeatSection } from './repeatRows';
 import { collectNamed, importNamed, namedFromLegacy, readNamed } from './relatedImport';

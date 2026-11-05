@@ -7,7 +7,7 @@ import { useRouteRules } from '@/features/gw/useRouteRules';
 import { FormPermissionSettings } from '../components/FormPermissionSettings';
 import { FormTargetSelector } from '../components/FormTargetSelector';
 import { ApprovalRouteRuleModal } from '../routeRules/ApprovalRouteRuleModal';
-import { PRESERVATION_OPTIONS } from '@/modules/gw/approval/sheetForm/approvalSheet';
+import { PRESERVATION_OPTIONS } from '@/domain/approvalForm/sheet/approvalSheet';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
 

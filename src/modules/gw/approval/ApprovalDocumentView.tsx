@@ -26,8 +26,8 @@ import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
-import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, sheetHasSecret, type SheetSlots } from './sheetForm/approvalSheet';
-import { sheetHeaderItems } from './sheetForm/sheetHeader';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, sheetHasSecret, type SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
+import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './components/CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;

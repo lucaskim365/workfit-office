@@ -37,9 +37,9 @@ import {
   readSheetValues,
   sheetDocFields,
   type CellInput,
-} from './approvalSheet';
-import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from './relatedImport';
-import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, readRowExtras, removeRepeatRow, repeatSections } from './repeatRows';
+} from '@/domain/approvalForm/sheet/approvalSheet';
+import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, readRowExtras, removeRepeatRow, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).

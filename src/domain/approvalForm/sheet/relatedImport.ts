@@ -8,7 +8,7 @@
  * - 옛 서식 문서는 필드 이름(라벨)을 칸 이름처럼 쓴다(글·숫자·날짜 같은 한 칸짜리 필드만)
  * 가져온 값은 이 문서에 복사되어 저장된다 — 원본 문서가 나중에 바뀌어도 이 문서는 그대로
  */
-import { cellKey, type Sheet } from '@/lib/sheet';
+import { cellKey, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, applyValues, type SheetValues } from './approvalSheet';
 import { addRepeatRow, expandRepeats, repeatSections, type RowExtras } from './repeatRows';
 

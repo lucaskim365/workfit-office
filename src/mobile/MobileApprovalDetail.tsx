@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SheetDocView, isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
-import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from '@/modules/gw/approval/sheetForm/approvalSheet';
-import { isFullHeaderSheet } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from '@/domain/approvalForm/sheet/approvalSheet';
+import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 import { CompanyLetterheadBlock, CompanyLogo } from '@/modules/gw/approval/components/CompanyLetterhead';
 import { DEFAULT_LETTERHEAD } from '@/domain/approvalForm/headerItems';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';

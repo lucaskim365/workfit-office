@@ -4,7 +4,7 @@
  * - 행 보이기 조건으로 숨은 행의 칸은 번호를 받지 않는다(기존 양식 '숨은 항목엔 안 매김'과 같음 — 순번이 헛돌지 않게)
  * 순번 채널(channelKey)은 서식 틀 기준 그대로라 문서마다 바뀌지 않는다.
  */
-import { cellKey, type Sheet } from '@/lib/sheet';
+import { cellKey, type Sheet } from '@/lib/sheet/core';
 import { sheetAutoNumberCells, type SheetAutoNumberCell } from '@/domain/approvalForm/sheetAutoNumber';
 import { SHEET_VALUES_KEY, applyValues, conditionHiddenRows, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, extraRowCount, readRowExtras, repeatSections } from './repeatRows';

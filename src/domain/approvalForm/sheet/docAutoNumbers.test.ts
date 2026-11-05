@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellKey, createSheet, setCellMeta, type Sheet } from '@/lib/sheet';
+import { cellKey, createSheet, setCellMeta, type Sheet } from '@/lib/sheet/core';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { APPROVAL_NS, SHEET_VALUES_KEY, setCellName, setRowCondition } from './approvalSheet';
 import { SHEET_ROWS_KEY, repeatSections, setRepeatSection } from './repeatRows';

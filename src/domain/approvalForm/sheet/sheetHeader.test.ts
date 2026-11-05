@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSheet, setCellValue, type Sheet } from '@/lib/sheet';
+import { createSheet, setCellValue, type Sheet } from '@/lib/sheet/core';
 import { HEADER_ITEMS, STAMP_TABLE, TITLE_ROW, stampTableInHeader, titleRowShown, withBodyHeader } from '@/domain/approvalForm/headerItems';
 import { APPROVAL_NS, DEFAULT_CLOSING, approvalCellProps, cellCaption, completedDateRows, draftInfoValue, korDateText, requiredMissing, setApprovalProp, sheetHasSeal, slotOf } from './approvalSheet';
 import { DOC_INFO_ROWS, insertDocHeader, insertDocInfoBlock, isFullHeaderSheet, isExternalHiddenRow, setExternalHiddenRows, sheetHeaderItems, withoutExternalRows } from './sheetHeader';

@@ -33,7 +33,7 @@ import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
 import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
-import type { SheetSlots } from '../sheetForm/approvalSheet';
+import type { SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
 import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;

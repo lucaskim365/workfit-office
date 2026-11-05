@@ -1,4 +1,4 @@
-import { cellKey, type Sheet } from '@/lib/sheet';
+import { cellKey, type Sheet } from '@/lib/sheet/core';
 import { autoNumberConfigSchema, DEFAULT_AUTO_NUMBER, type AutoNumberConfig } from './autoNumber';
 
 /*

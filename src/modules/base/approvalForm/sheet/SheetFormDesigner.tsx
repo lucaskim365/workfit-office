@@ -7,7 +7,7 @@ import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/App
 import type { User } from '@/domain/user/schema';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { HEADER_ITEMS, HEADER_ITEM_LABEL, withBodyHeader } from '@/domain/approvalForm/headerItems';
-import { insertDocHeader, insertDocInfoBlock, isExternalHiddenRow, isFullHeaderSheet, sheetHeaderItems } from '@/modules/gw/approval/sheetForm/sheetHeader';
+import { insertDocHeader, insertDocInfoBlock, isExternalHiddenRow, isFullHeaderSheet, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import type { ApprovalStep } from '@/domain/approvalDoc/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -34,11 +34,11 @@ import {
   isStructureLocked,
   setApprovalCellValue,
   validateApprovalSheet,
-} from '@/modules/gw/approval/sheetForm/approvalSheet';
+} from '@/domain/approvalForm/sheet/approvalSheet';
 import { SheetCellPanel } from './SheetCellPanel';
 import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
 import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
-import { healRepeatSections, repeatIssues, repeatSections } from '@/modules/gw/approval/sheetForm/repeatRows';
+import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
 /**
  * 시트 서식 편집기(관리자) — 엑셀 불러오기, 틀 편집, 칸 속성, 버전 저장.

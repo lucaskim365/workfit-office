@@ -9,7 +9,7 @@
  * - 문서에는 구간별로 더 붙인 줄 수만 저장한다(fieldValues.__rows). 틀은 서식 버전에 그대로 두고,
  *   보기·작성 때 같은 규칙으로 펼친다(expandRepeats) — 같은 틀·같은 줄 수면 항상 같은 모양
  */
-import { cellKey, insertRow, translateFormula, type Merge, type Sheet } from '@/lib/sheet';
+import { cellKey, insertRow, translateFormula, type Merge, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, type SheetValues } from './approvalSheet';
 
 export interface RepeatMark {

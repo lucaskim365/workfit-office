@@ -9,8 +9,8 @@ import {
   setApprovalProp,
   type ApprovalCellProps,
   type CellInputType,
-} from '@/modules/gw/approval/sheetForm/approvalSheet';
-import { repeatSectionAt, setRepeatSection } from '@/modules/gw/approval/sheetForm/repeatRows';
+} from '@/domain/approvalForm/sheet/approvalSheet';
+import { repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 
 /**

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
-import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from './approvalSheet';
+import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 import { setCellValue } from '@/lib/sheet';
 import { legacyFormToSheet } from './fromLegacyForm';
-import { repeatSections } from './repeatRows';
-import { isFullHeaderSheet } from './sheetHeader';
+import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 
 const field = (f: Record<string, unknown>) => formFieldSchema.parse(f);
 

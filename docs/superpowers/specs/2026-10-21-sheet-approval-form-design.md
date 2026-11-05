@@ -463,3 +463,9 @@
 - 변환: 같은 상위 선택 칸의 값마다 하나씩 보이던 같은 이름·같은 섹션의 선택 항목(2개 이상)을 종속 선택 칸 하나로 합치고, 상위 칸이 반쪽 줄에 홀로 있으면 그 오른쪽에 둔다(지출결의 '분류' 4종 → 지출 항목 오른쪽 칸 하나).
 - 선택 칸 '직접입력' 항목: 고르면 글자 칸으로(기존 SelectFieldEditor 와 같음), [선택으로] 되돌리기.
 - 변환: 기존 '표'는 수식 칸 말고 모두 기안자가 고칠 수 있었으므로 머리 줄만 고정 글자, 미리 쓴 글자 칸은 기본값이 든 입력 칸.
+
+### 11.22 코드 위치 정리 (2026-11-05)
+
+- 시트 서식 계산(화면 없음)을 `src/domain/approvalForm/sheet/`로: approvalSheet·repeatRows·sheetHeader·relatedImport·docAutoNumbers. 화면 부품(SheetDraftForm·SheetDocView)과 기존 서식 변환기(fromLegacyForm, 서식 편집기 도구)는 `modules/gw/approval/sheetForm/`에 남는다.
+- `@/lib/sheet/core` — 시트 계산 공개 API(수식·모델·편집 동작·모양·엑셀 읽기, React 화면 부품 없음). 도메인·데이터 코드는 이것만 불러온다. `@/lib/sheet` 는 core + SheetEditor·SheetView.
+- 데이터 층(approvalDoc.repo)이 화면 폴더(modules)를 불러오던 것 해소.

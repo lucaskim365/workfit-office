@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseSheet, serializeSheet, type Sheet } from '@/lib/sheet';
+import { parseSheet, serializeSheet, type Sheet } from '@/lib/sheet/core';
 
 /**
  * 시트 서식 버전 — 시트 서식의 틀(배치·병합·너비·서식·수식·칸 속성) 한 벌.

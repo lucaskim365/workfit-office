@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, type Sheet } from '@/lib/sheet';
-import { approvalCellProps } from '@/modules/gw/approval/sheetForm/approvalSheet';
+import { approvalCellProps } from '@/domain/approvalForm/sheet/approvalSheet';
 import { applyPart } from './SheetPalette';
 
 const one = { r1: 0, r2: 0, c1: 1, c2: 1 };

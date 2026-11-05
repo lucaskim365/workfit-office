@@ -12,7 +12,7 @@ import {
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
-import { sheetHeaderItems } from './sheetForm/sheetHeader';
+import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc, useCachedApprovalLookup } from '@/features/gw/useApprovals';
@@ -31,8 +31,8 @@ import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog'
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { isSheetDoc } from './sheetForm/SheetDocView';
-import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from './sheetForm/relatedImport';
-import { korDateText, SHEET_VERSION_KEY, linkSystemValues } from './sheetForm/approvalSheet';
+import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from '@/domain/approvalForm/sheet/relatedImport';
+import { korDateText, SHEET_VERSION_KEY, linkSystemValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
 import { useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import { liveSheetVersion } from '@/domain/approvalForm/sheetSwitch';

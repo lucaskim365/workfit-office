@@ -22,9 +22,9 @@ import {
 import type { ApprovalForm, FormField } from '@/domain/approvalForm/schema';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { normalizeTablePayload } from '../formFields/sheetModel';
-import { APPROVAL_NS, LINK_TYPES, approvalCellProps, linkTypeDef, rowConditionOf, setApprovalProp, setCellName, setRowCondition, type CellInputType } from './approvalSheet';
-import { setRepeatSection } from './repeatRows';
-import { insertDocHeader } from './sheetHeader';
+import { APPROVAL_NS, LINK_TYPES, approvalCellProps, linkTypeDef, rowConditionOf, setApprovalProp, setCellName, setRowCondition, type CellInputType } from '@/domain/approvalForm/sheet/approvalSheet';
+import { setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
+import { insertDocHeader } from '@/domain/approvalForm/sheet/sheetHeader';
 
 /** A4 인쇄 폭(SHEET_PAGE_WIDTH)과 같게 */
 const PAGE = 718;

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
+import { createSheet, cellKey, type Sheet } from '@/lib/sheet/core';
 import { CHECK_MARK, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
-import { setCellMeta, setCellValue } from '@/lib/sheet';
+import { setCellMeta, setCellValue } from '@/lib/sheet/core';
 
 function base(): Sheet {
   return createSheet(4, 3);

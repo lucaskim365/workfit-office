@@ -1,5 +1,5 @@
 import { Building2, Calendar, CheckSquare, ChevronDown, Square } from 'lucide-react';
-import type { CellInput, CellInputType } from '@/modules/gw/approval/sheetForm/approvalSheet';
+import type { CellInput, CellInputType } from '@/domain/approvalForm/sheet/approvalSheet';
 
 /**
  * 아이콘은 왼쪽에 — 칸 오른쪽 위에는 '입력·날짜' 같은 칸 표시가 붙는다

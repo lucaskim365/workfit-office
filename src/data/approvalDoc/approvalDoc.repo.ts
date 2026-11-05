@@ -25,8 +25,7 @@ import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
 import { DOC_NO_VALUE_KEY, docNoOf } from '@/domain/approvalDoc/docNo';
 import { SHEET_CELL_VALUES_KEY, fillSheetAutoNumbers } from '@/domain/approvalForm/sheetAutoNumber';
-// 시트 서식 칸 계산(순수 함수 — 화면 코드 없음)
-import { docAutoNumberCells } from '@/modules/gw/approval/sheetForm/docAutoNumbers';
+import { docAutoNumberCells } from '@/domain/approvalForm/sheet/docAutoNumbers';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { approvalFormVersionRepo } from '@/data/approvalForm/approvalFormVersion.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
