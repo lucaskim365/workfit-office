@@ -123,6 +123,8 @@ export default function MobileApp() {
             silent: false,
             vibrate: [200, 100, 200],
           } as NotificationOptions & { renotify: boolean };
+          // 같은 방 알림이 상단바에 남아 있으면 먼저 닫는다 — 고쳐 쓰면 안드로이드가 진동을 생략한다(서비스워커 closeSameTag 와 같음)
+          if (tag) for (const old of await reg.getNotifications({ tag })) old.close();
           await reg.showNotification(p.title, options);
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
