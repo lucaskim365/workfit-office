@@ -24,7 +24,7 @@ import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
-import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
+import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -1060,7 +1060,7 @@ function MessageBubble({
   } else if (m.type === 'file' && att) {
     body = (
       <button
-        onClick={() => downloadAttachment(att)}
+        onClick={() => openAttachment(att)}
         onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -1917,7 +1917,7 @@ function MobileFileBoxModal({
                 )}
                 <div className="min-w-0 flex-1">
                   <button 
-                    onClick={() => downloadAttachment(f.attachment)}
+                    onClick={() => openAttachment(f.attachment)}
                     className="block text-left text-[12.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
                   >
                     {f.attachment.name}

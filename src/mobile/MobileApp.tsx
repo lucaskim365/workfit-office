@@ -22,6 +22,7 @@ import MobileCalendarScreen from './MobileCalendarScreen';
 import MobileTaskScreen from './MobileTaskScreen';
 import MobileWorkPlanAdminScreen from './MobileWorkPlanAdminScreen';
 import MobileContactScreen from './MobileContactScreen';
+import { MobilePdfViewerHost } from './MobilePdfViewer';
 import MobileBoardScreen from './MobileBoardScreen';
 import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
@@ -93,22 +94,35 @@ export default function MobileApp() {
     if (!user) return;
     void onForegroundMessage(async (p) => {
       try {
-        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-        if (shouldSuppressChatPopup(p.roomId)) return;
+        // 앱을 보고 있어도 알림이 오면 무조건 진동 — 알림을 띄우지 않는 경우(지금 열어 둔 대화방의 메시지, 알림 권한 없음)엔
+        // 휴대폰 진동만 직접 울린다(띄우는 알림은 알림이 울리므로 두 번 울리지 않게). 안드로이드만 — 아이폰은 진동 기능이 없다
+        const buzz = () => {
+          try {
+            navigator.vibrate?.([200, 100, 200]);
+          } catch {
+            /* 진동 없는 기기 */
+          }
+        };
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return buzz();
+        if (shouldSuppressChatPopup(p.roomId)) return buzz();
         const isChat = Boolean(p.roomId || p.type === '메신저');
         const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
         // at·shownAt: 읽은 방 알림 정리 기준(서비스워커 recallChat, closeReadChatNotifications)
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl, at: p.at, shownAt: Date.now() };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
+          const tag = p.roomId || p.docId || undefined;
+          // 같은 방 다음 메시지도 다시 울리게(renotify) + 진동
           const options: NotificationOptions & { renotify: boolean } = {
             body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
-            tag: p.roomId || p.docId || undefined,
-            renotify: Boolean(p.roomId || p.docId),
-          };
+            tag,
+            renotify: Boolean(tag),
+            silent: false,
+            vibrate: [200, 100, 200],
+          } as NotificationOptions & { renotify: boolean };
           await reg.showNotification(p.title, options);
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
@@ -125,6 +139,8 @@ export default function MobileApp() {
     <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
+      {/* 앱 안 PDF 보기(채팅 첨부 등) — 휴대폰 뒤로가기로 닫힌다 */}
+      <MobilePdfViewerHost />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
         style={{ background: 'var(--color-header-bg)', paddingTop: 'env(safe-area-inset-top)' }}

@@ -33,6 +33,7 @@
     "jspdf": "^4.2.1",
     "korean-lunar-calendar": "0.3.6",
     "lucide-react": "^0.546.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-hook-form": "^7.80.0",
