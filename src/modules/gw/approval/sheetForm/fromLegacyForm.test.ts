@@ -151,7 +151,7 @@ test('기존 서식 → 시트 — 조건부 항목(visibleIf)은 행 보이기 
   assert.ok(warnings.some((w) => w.includes('행 보이기 조건')));
 });
 
-test('기존 서식 → 시트 — 표: 미리 쓴 글자는 고정, 빈 칸은 입력 칸, 빈 품목 줄 하나면 반복 구간', () => {
+test('기존 서식 → 시트 — 표: 수식 칸 말고 모두 입력 칸(미리 쓴 글자는 기본값), 섹션 항목 이름표는 고정', () => {
   const table = JSON.stringify({
     version: 2,
     cols: ['구분', '항목', '내용'],
@@ -161,11 +161,14 @@ test('기존 서식 → 시트 — 표: 미리 쓴 글자는 고정, 빈 칸은 
   });
   const { sheet: s } = legacyFormToSheet(legacyForm('발주', [{ key: 'body', label: '내역', type: '표', placeholder: table }]));
   const head = findText(s, '항목')!;
-  assert.equal(approvalCellProps(s, head.r, 0).input, undefined, '머리 줄은 고정 글자');
+  // 기존 표는 칸을 모두 고칠 수 있었다(운영 문서에서 기안자가 수주자·날짜·분류 이름 등을 실제로 고쳐 씀)
+  assert.equal(approvalCellProps(s, head.r, 0).input?.type, 'text', '머리 줄도 고칠 수 있음');
   const pre = findText(s, '자재')!;
-  assert.equal(approvalCellProps(s, pre.r, pre.c).input, undefined, '미리 쓴 글자(이름표)는 고정');
-  assert.equal(approvalCellProps(s, pre.r, pre.c + 1).input?.type, 'text', '빈 칸은 입력 칸');
-  assert.equal(approvalCellProps(s, pre.r + 1, 0).input?.type, 'text');
+  assert.equal(approvalCellProps(s, pre.r, pre.c).input?.type, 'text', '미리 쓴 글자는 기본값이 든 입력 칸');
+  assert.equal(approvalCellProps(s, pre.r, pre.c + 1).input?.type, 'text');
+  // 표 밖 항목 이름표(라벨)는 기존 양식에서도 못 고쳤다 — 고정
+  const label = findText(s, '내역');
+  assert.ok(!label || approvalCellProps(s, label.r, label.c).input === undefined);
 });
 
 test('기존 서식 → 시트 — 값마다 바뀌던 같은 이름 선택 항목은 종속 선택 칸 하나로, 상위 칸 오른쪽에', () => {

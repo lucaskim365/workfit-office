@@ -413,9 +413,10 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         if (st?.numFmt && st.numFmt !== 'general') patch.numFmt = st.numFmt;
         if (Object.keys(patch).length) s = applyStyle(s, span(r, j, j), patch);
         if (st?.seal) s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.seal, true);
-        // 입력 칸 — 수식·직인 칸이 아닌 빈 칸, 그리고 반복 구간 줄의 칸 전부(줄을 더하면 새 줄에도 쓸 수 있게).
-        // 미리 쓴 글자(작성일·상호 같은 이름표, 회사 정보)는 고정 글자로 — 고칠 칸이면 관리자가 입력 칸으로
-        if (!legacyFormula && !st?.seal && (!text || i === repeatRow)) {
+        // 입력 칸 — 수식·직인 칸이 아닌 표 칸 전부(머리 줄·미리 쓴 글자 칸 포함, 미리 쓴 글자는 기본값으로 남음).
+        // 기존 '표'는 칸을 모두 고칠 수 있었고, 운영 문서를 보면 기안자가 실제로 많이 고쳐 썼다
+        // (발주서 수주자·날짜·담당자 자리, 계약보고서 매출·매입 분류 이름 등) — 고정하면 지금처럼 못 쓴다
+        if (!legacyFormula && !st?.seal) {
           s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' ? 'currency' : 'text' });
         }
       });
