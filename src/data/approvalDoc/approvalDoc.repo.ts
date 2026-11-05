@@ -24,7 +24,9 @@ import { counterRepo } from '@/data/counter/counter.repo';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
 import { DOC_NO_VALUE_KEY, docNoOf } from '@/domain/approvalDoc/docNo';
-import { SHEET_CELL_VALUES_KEY, fillSheetAutoNumbers, sheetAutoNumberCells } from '@/domain/approvalForm/sheetAutoNumber';
+import { SHEET_CELL_VALUES_KEY, fillSheetAutoNumbers } from '@/domain/approvalForm/sheetAutoNumber';
+// 시트 서식 칸 계산(순수 함수 — 화면 코드 없음)
+import { docAutoNumberCells } from '@/modules/gw/approval/sheetForm/docAutoNumbers';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { approvalFormVersionRepo } from '@/data/approvalForm/approvalFormVersion.repo';
 import { APPROVAL_DOC_SEED } from '@/data/seeds/approvalDoc.seed';
@@ -430,7 +432,8 @@ async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldVal
   // (기존 서식에 시트를 붙여도 항목 목록은 남아 있으므로 — 두 번 받으면 순번이 건너뛴다)
   const ver = parseVersionKey(String(doc.fieldValues?.__formVersion ?? ''));
   const fields = ver ? [] : (form?.fields ?? []).filter((f) => f.type === '자동번호');
-  const sheetCells = ver ? sheetAutoNumberCells((await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet) : [];
+  // 문서가 펼친 모양 기준 — 반복 구간에 더한 줄만큼 밀린 자리, 행 보이기 조건으로 숨은 칸은 빼고
+  const sheetCells = ver ? docAutoNumberCells((await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet, doc.fieldValues ?? {}) : [];
   if (fields.length === 0 && sheetCells.length === 0) return doc.fieldValues;
   const values = { ...doc.fieldValues };
   const date = new Date();
