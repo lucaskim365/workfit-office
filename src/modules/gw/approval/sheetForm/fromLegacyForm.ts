@@ -57,7 +57,7 @@ export interface LegacyConversion {
 /**
  * 기존 '표' 수식 → 시트 수식. 기존 수식은 표 안 좌표(A1 = 표 0번 줄 첫 열)·열 이름([금액])·SUM(ABOVE)·[줄 이름:열]을 쓴다.
  * 시트에선 표가 top 행부터 같은 열 순서로 놓이므로 행 번호만 top 만큼 민다(열 글자는 그대로).
- * 기존 엔진은 계산이 안 되면(0으로 나눔 등) 0 — IFERROR(…,0)으로 감싼다. 백분율(percent1·2)은 식에 ×100 이 들어 있어
+ * 기존 엔진은 계산이 안 되면(0으로 나눔 등) 0 — 나눗셈이 든 식만 IFERROR(…,0)으로 감싼다. 백분율(percent1·2)은 식에 ×100 이 들어 있어
  * 시트 백분율 모양(값×100 에 %)에 맞게 ×100 을 뗀다(없으면 /100).
  * 다른 표를 가리키는 식([표]!…)이나 모르는 열 이름은 옮기지 못한다 — null
  */
@@ -119,7 +119,9 @@ export function translateLegacyFormula(
     const sumOnly = /^\s*SUM\([^()]*\)\s*$/i.test(expr);
     expr = dropped !== expr ? dropped : sumOnly ? expr : `(${expr})/100`;
   }
-  return `=IFERROR(${expr},0)`;
+  // 나눗셈만 IFERROR — 기존 엔진은 계산이 안 되면 0, 시트는 #DIV/0! 를 띄우므로(비율 칸에 아직 분모를 안 쓴 때).
+  // 더하기·곱하기는 빈 칸을 0으로 계산하므로 감싸지 않는다(감싸면 칸 주소를 잘못 쓴 #REF! 같은 진짜 오류까지 0으로 숨겨짐)
+  return expr.includes('/') ? `=IFERROR(${expr},0)` : `=${expr}`;
 }
 
 /**

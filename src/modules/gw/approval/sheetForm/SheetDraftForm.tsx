@@ -91,8 +91,10 @@ function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: st
         const text = e.target.value.trim();
         if (NUMBER_TYPING.test(text)) onChange(text.replace(/,/g, ''));
       }}
+      // 비어 있으면 흐린 0 — 숫자 칸임을 알 수 있게(인쇄엔 안 나옴)
+      placeholder="0"
       title={invalid ? '숫자만 입력할 수 있습니다' : undefined}
-      className={`${FIELD} ${invalid ? 'bg-rose-100 ring-1 ring-rose-400' : ''}`}
+      className={`${FIELD} placeholder:text-[#c8c8c8] print:placeholder:text-transparent ${invalid ? 'bg-rose-100 ring-1 ring-rose-400' : ''}`}
       style={{ ...INHERIT, textAlign: 'right' }}
     />
   );

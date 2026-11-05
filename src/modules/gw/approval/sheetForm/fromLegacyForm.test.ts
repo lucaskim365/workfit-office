@@ -116,7 +116,7 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
   assert.equal(repeatSections(s).length, 1);
   assert.equal(repeatSections(s)[0].first, head.r + 1);
   // 기존 수식(표 안 좌표 A1 = 머리 줄 첫 칸) → 시트 수식(행만 민다)
-  assert.equal(s.formulas[`${head.r + 1}:${s.cols[1]}`], `=IFERROR(A${head.r + 1},0)`);
+  assert.equal(s.formulas[`${head.r + 1}:${s.cols[1]}`], `=A${head.r + 1}`);
   assert.ok(!warnings.some((w) => w.includes('수식')));
   // 직인 — 발신 명의 + 직인 칸(고른 직인)
   const seal = findText(s, '주식회사 워크핏 대표이사')!;
@@ -219,13 +219,13 @@ test('기존 표 수식 → 시트 수식 — 좌표·열 이름·SUM(ABOVE)·[�
   const cols = ['구분', '비중', '금액'];
   const rows = [{ 구분: '구분', 비중: '비중', 금액: '금액' }, { 구분: 'A', 비중: '', 금액: '' }, { 구분: '소계', 비중: '', 금액: '' }];
   const at = (r: number, col: string) => ({ r, col, top: 9, cols, rows });
-  assert.equal(translateLegacyFormula('=D3*F3', at(2, '금액'), 'currency'), '=IFERROR(D12*F12,0)');
-  assert.equal(translateLegacyFormula('=SUM(G2:G9)', at(2, '금액')), '=IFERROR(SUM(G11:G18),0)');
-  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '금액')), '=IFERROR(SUM(C10:C11),0)');
+  assert.equal(translateLegacyFormula('=D3*F3', at(2, '금액'), 'currency'), '=D12*F12');
+  assert.equal(translateLegacyFormula('=SUM(G2:G9)', at(2, '금액')), '=SUM(G11:G18)');
+  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '금액')), '=SUM(C10:C11)');
   assert.equal(translateLegacyFormula('=( [금액] / [소계:금액] ) * 100', at(1, '비중'), 'percent1'), '=IFERROR(( C11 / C12 ),0)');
   assert.equal(translateLegacyFormula('=C2/C1', at(1, '비중'), 'percent1'), '=IFERROR((C11/C10)/100,0)');
   // 백분율 칸들의 합(소계 비중)은 나누지 않음
-  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '비중'), 'percent1'), '=IFERROR(SUM(B10:B11),0)');
+  assert.equal(translateLegacyFormula('=SUM(ABOVE)', at(2, '비중'), 'percent1'), '=SUM(B10:B11)');
   assert.equal(translateLegacyFormula('=[매출구분]![소계:금액] - 1', at(1, '금액')), null);
   assert.equal(translateLegacyFormula('=[없는열]', at(1, '금액')), null);
   assert.equal(translateLegacyFormula(undefined, at(1, '금액')), null);
