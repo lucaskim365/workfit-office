@@ -31,7 +31,8 @@ import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
-import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, isHolidayWorkLocked, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { nowLocalIso } from '@/shared/lib/datetime';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
 
@@ -1448,6 +1449,15 @@ function InlineFieldEditor({
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
 
+  // 휴일근로 신청서 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음, 사후 신청)
+  if (isHolidayWorkLocked(field.key)) {
+    return (
+      <span className="block px-1 py-0.5 text-[12px] text-[#222]" title="근태 기록에서 불러옵니다(고칠 수 없음)">
+        {sv || <span className="text-[11px] text-[#999]">근태 기록에서 불러옵니다</span>}
+      </span>
+    );
+  }
+
   switch (field.type) {
     case '안내문':
       return <span className="text-[11px] text-[#777]">{field.placeholder || field.label}</span>;
@@ -1495,6 +1505,8 @@ function InlineFieldEditor({
         <DateInput
           value={sv}
           restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY}
+          // 휴일근로는 사후 신청 — 오늘까지만
+          max={field.key === HOLIDAY_WORK_DATE_KEY ? nowLocalIso().slice(0, 10) : undefined}
           onChange={(e) => setVals({ [field.key]: e.target.value })}
           className="bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer"
         />

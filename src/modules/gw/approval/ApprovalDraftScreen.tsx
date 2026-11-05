@@ -45,6 +45,7 @@ import { isEditableStatus } from '@/domain/approvalDoc/engine';
 import { OvertimeAutoFill } from './components/OvertimeAutoFill';
 import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
 import { isRestDay } from '@/shared/ui/form/datePickerGrid';
+import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -1194,8 +1195,16 @@ function ApprovalDraftInner({
     if (forSubmit && isOvertimeAutoFill && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
       return '근무 일자는 주말이나 공휴일만 선택할 수 있습니다.';
     }
-    if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
-      return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
+    // 휴일근로는 사후 신청·승인만 — 지난 날(오늘 포함)·근태 기록의 출근·퇴근 시각이 있어야 상신(시각은 기안자가 고칠 수 없음)
+    if (forSubmit && isOvertimeAutoFill && String(values['workDate'] ?? '') > nowLocalIso().slice(0, 10)) {
+      return '휴일근로는 근무를 마친 뒤(사후)에만 신청할 수 있습니다. 근무 일자를 오늘이나 지난 날로 골라 주세요.';
+    }
+    if (
+      forSubmit &&
+      isOvertimeAutoFill &&
+      (!overtimeFill || overtimeFill.marks.workStart || overtimeFill.marks.workEnd || !clockOf(values['workStart']) || !clockOf(values['workEnd']))
+    ) {
+      return '이 날 근태 기록에 출근·퇴근 시각이 없어 신청할 수 없습니다. 기록이 빠졌으면 근태 정정을 먼저 해 주세요.';
     }
 
     if (code === '휴가' || form?.code === '휴가') {

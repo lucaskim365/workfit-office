@@ -6,8 +6,15 @@ import type { CommuteRecord } from './schema';
  * 칸은 서식의 키로 찾는다(workDate·workStart·workEnd·workHours). workStart 칸이 없는 서식은 자동 입력을 하지 않는다.
  */
 export const OVERTIME_AUTOFILL_FIELD = 'workStart';
-/** 주말·공휴일만 고를 수 있는 근무 일자 칸 */
+/** 주말·공휴일만 고를 수 있는 근무 일자 칸 — 사후 신청만 받으므로 오늘까지 */
 export const HOLIDAY_WORK_DATE_KEY = 'workDate';
+
+/**
+ * 휴일근로 신청서는 사후 신청·승인만 한다(2026-11) — 출근·퇴근 시각과 근무 시간은 근태 기록에서만 채우고
+ * 기안자가 고칠 수 없다(작성 화면에 글자로만 보인다). 근태 기록이 없는 날은 상신할 수 없다(근태 정정 먼저)
+ */
+export const HOLIDAY_WORK_LOCKED_KEYS: readonly string[] = ['workStart', 'workEnd', 'workHours'];
+export const isHolidayWorkLocked = (key: string) => HOLIDAY_WORK_LOCKED_KEYS.includes(key);
 
 export type OvertimeMark = '예정' | '수동 입력';
 
