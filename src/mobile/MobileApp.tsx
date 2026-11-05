@@ -94,17 +94,17 @@ export default function MobileApp() {
     if (!user) return;
     void onForegroundMessage(async (p) => {
       try {
-        // 앱을 보고 있어도 알림이 오면 무조건 진동 — 알림을 띄우지 않는 경우(지금 열어 둔 대화방의 메시지, 알림 권한 없음)엔
-        // 휴대폰 진동만 직접 울린다(띄우는 알림은 알림이 울리므로 두 번 울리지 않게). 안드로이드만 — 아이폰은 진동 기능이 없다
-        const buzz = () => {
+        // 알림 권한이 없어 알림을 못 띄우면 휴대폰 진동만 직접 울린다(안드로이드 — 아이폰은 진동 기능이 없다)
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
           try {
             navigator.vibrate?.([200, 100, 200]);
           } catch {
             /* 진동 없는 기기 */
           }
-        };
-        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return buzz();
-        if (shouldSuppressChatPopup(p.roomId)) return buzz();
+          return;
+        }
+        // 지금 보고 있는 대화방의 메시지는 팝업·진동 모두 없음(카카오톡과 같음) — 다른 방·다른 알림은 아래 알림이 진동과 함께 뜬다
+        if (shouldSuppressChatPopup(p.roomId)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
         const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
         // at·shownAt: 읽은 방 알림 정리 기준(서비스워커 recallChat, closeReadChatNotifications)
