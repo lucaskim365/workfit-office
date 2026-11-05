@@ -192,6 +192,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       s = setApprovalProp(s, span(r, 1, 1), APPROVAL_NS.bind, 'doc.title');
       s = applyStyle(s, span(r, 1, 1), { bold: true });
       box(r, r);
+      // 기존 항목의 '대외 문서에서 숨김'을 따른다(공문처럼 본문 제목을 거래처 문서에도 보이는 서식은 그대로 보임)
+      extHide(r, f);
       return;
     }
     if (f.type === '안내문') {
