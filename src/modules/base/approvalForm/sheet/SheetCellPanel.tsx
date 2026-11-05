@@ -9,6 +9,8 @@ import {
   cellAddress,
   CHECK_MARK,
   conditionSources,
+  DIRECT_INPUT_OPTION,
+  isDirectInputOption,
   rowConditionOf,
   setRowCondition,
   setApprovalProp,
@@ -156,6 +158,17 @@ export function SheetCellPanel({
         <Row label="고를 항목" hint="한 줄에 하나씩">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
         </Row>
+      )}
+      {props.input?.type === 'select' && !props.input.depends && (
+        <Check
+          checked={(props.input.options ?? []).some(isDirectInputOption)}
+          onChange={(v) => {
+            const rest = (props.input?.options ?? []).filter((o) => !isDirectInputOption(o));
+            setInput({ ...props.input!, options: v ? [...rest, DIRECT_INPUT_OPTION] : rest });
+          }}
+          label="직접 입력 허용"
+          hint="목록 끝에 '직접입력'이 붙습니다. 기안자가 그걸 고르면 글자 칸으로 바뀌어 목록에 없는 값을 직접 씁니다."
+        />
       )}
       {props.input?.type === 'select' && !multi && (
         <DependsEditor sheet={sheet} r={focus.r} c={focus.c} input={props.input} onInput={setInput} />
@@ -354,7 +367,7 @@ function DependsEditor({ sheet, r, c, input, onInput }: { sheet: Sheet; r: numbe
   return (
     <Row
       label="항목을 다른 칸 값에 따라"
-      hint="기준 칸 값마다 고를 항목을 쉼표로 적습니다. 비워 둔 값을 고르면 이 칸은 쓸 수 없는 칸(—)이 됩니다."
+      hint="기준 칸 값마다 고를 항목을 쉼표로 적습니다. 비워 둔 값을 고르면 이 칸은 쓸 수 없는 칸(—)이 됩니다. 항목에 '직접입력'을 넣으면 그 값일 때 직접 쓸 수 있습니다."
     >
       <select className={inp} value={dep?.name ?? ''} onChange={(e) => choose(e.target.value)}>
         <option value="">항상 같은 항목 (위 '고를 항목')</option>

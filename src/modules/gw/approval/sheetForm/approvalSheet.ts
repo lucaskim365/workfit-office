@@ -73,6 +73,8 @@ export interface SelectBranch {
   key?: string;
 }
 
+/** 칸 속성 [직접 입력 허용]이 목록 끝에 붙이는 항목 */
+export const DIRECT_INPUT_OPTION = '직접입력';
 /** '직접입력'·'직접 입력' 항목 — 고르면 글자 칸으로(기존 서식 SelectFieldEditor 와 같은 기준) */
 export const isDirectInputOption = (o: string) => o.replace(/\s/g, '').includes('직접입력');
 

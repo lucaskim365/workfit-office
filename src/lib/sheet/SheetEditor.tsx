@@ -532,10 +532,15 @@ export function SheetEditor({
     e.preventDefault();
     e.stopPropagation();
     const start = kind === 'col' ? e.clientX : e.clientY;
+    // 화면 크기 배율(CSS zoom — 글자 크기 설정)만큼 마우스 거리가 커져 있다 — 배치 단위로 되돌린다.
+    // 안 그러면 끄는 거리보다 칸이 배율만큼 더 늘어 경계선이 마우스(조절 손잡이)를 앞질러 간다
+    const grid = gridRef.current;
+    const scale = grid && grid.offsetWidth > 0 ? grid.getBoundingClientRect().width / grid.offsetWidth : 1;
     const base = value;
     let latest = value;
     const move = (ev: globalThis.MouseEvent) => {
-      const size = Math.max(kind === 'col' ? 24 : 16, Math.round(startSize + (kind === 'col' ? ev.clientX : ev.clientY) - start));
+      const moved = ((kind === 'col' ? ev.clientX : ev.clientY) - start) / (scale || 1);
+      const size = Math.max(kind === 'col' ? 24 : 16, Math.round(startSize + moved));
       latest = kind === 'col' ? { ...base, colWidths: { ...base.colWidths, [key]: size } } : { ...base, rowHeights: { ...base.rowHeights, [key]: size } };
       emit(latest);
     };
