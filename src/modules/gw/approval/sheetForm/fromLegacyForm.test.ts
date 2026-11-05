@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
-import { APPROVAL_NS, approvalCellProps, conditionHiddenRows, rowConditionOf } from './approvalSheet';
+import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from './approvalSheet';
+import { setCellValue } from '@/lib/sheet';
 import { legacyFormToSheet } from './fromLegacyForm';
 import { repeatSections } from './repeatRows';
 import { isFullHeaderSheet } from './sheetHeader';
@@ -128,7 +129,7 @@ test('기존 서식 → 시트 — 조건부 항목(visibleIf)은 행 보이기 
     { key: 'sort_meal', label: '분류', type: '선택', options: ['간식대', '야근식대'], visibleIf: 'expenseItem:식대', width: 'half' },
     { key: 'note_meal', label: '인원', type: '숫자', visibleIf: 'expenseItem:식대', width: 'half' },
     { key: 'guide', label: '회의비 안내', type: '안내문', placeholder: '회의비는 10만원 이내', visibleIf: 'expenseItem:회의비' },
-    { key: 'sort_carr', label: '분류', type: '선택', options: ['우편/택배', '퀵서비스'], visibleIf: 'expenseItem:운반비', width: 'half' },
+    { key: 'sort_carr', label: '운반 분류', type: '선택', options: ['우편/택배', '퀵서비스'], visibleIf: 'expenseItem:운반비', width: 'half' },
     { key: 'amount', label: '청구 금액', type: '금액', isAmountKey: true },
   ]);
   const { sheet: s, warnings } = legacyFormToSheet(form);
@@ -160,4 +161,48 @@ test('기존 서식 → 시트 — 표의 미리 쓴 글자 칸도 입력 칸(�
   assert.equal(approvalCellProps(s, head.r, 0).input, undefined, '머리 줄은 고정 글자');
   const pre = findText(s, '자재')!;
   assert.equal(approvalCellProps(s, pre.r, pre.c).input?.type, 'text', '미리 쓴 글자는 기본값이 든 입력 칸');
+});
+
+test('기존 서식 → 시트 — 값마다 바뀌던 같은 이름 선택 항목은 종속 선택 칸 하나로, 상위 칸 오른쪽에', () => {
+  const form = legacyForm('지출결의', [
+    { key: 'expenseItem', label: '지출 항목', type: '선택', options: ['식대', '회의비', '운반비', '직접입력'], width: 'half', required: true },
+    { key: 'sort_meal', label: '분류', type: '선택', options: ['간식대', '야근식대'], visibleIf: 'expenseItem:식대', width: 'half' },
+    { key: 'guide', label: '회의비 안내', type: '안내문', placeholder: '회의비는 10만원 이내', visibleIf: 'expenseItem:회의비' },
+    { key: 'sort_carr', label: '분류', type: '선택', options: ['우편/택배', '퀵서비스'], visibleIf: 'expenseItem:운반비', width: 'half', required: true },
+    { key: 'amount', label: '청구 금액', type: '금액', isAmountKey: true },
+  ]);
+  const { sheet: s, warnings } = legacyFormToSheet(form);
+  const kind = findText(s, '지출 항목')!;
+  const sort = findText(s, '분류')!;
+  assert.equal(sort.r, kind.r, '분류는 지출 항목과 같은 줄 오른쪽');
+  assert.equal(metaCells(s, APPROVAL_NS.input).filter((x) => (x.v as CellInput).depends).length, 1, '칸 하나');
+  const input = approvalCellProps(s, sort.r, sort.c + 1).input!;
+  assert.deepEqual(input.depends, {
+    name: 'expenseItem',
+    branches: [
+      { when: '식대', options: ['간식대', '야근식대'], key: 'sort_meal' },
+      { when: '운반비', options: ['우편/택배', '퀵서비스'], key: 'sort_carr' },
+    ],
+  });
+  assert.equal(approvalCellProps(s, sort.r, sort.c + 1).required, true);
+  assert.equal(rowConditionOf(s, kind.r), undefined, '지출 항목 줄은 늘 보임');
+  assert.deepEqual(rowConditionOf(s, findText(s, '회의비는 10만원 이내')!.r), { name: 'expenseItem', values: ['회의비'] });
+  assert.ok(warnings.some((w) => w.includes("'분류'")));
+
+  // 기안 — 운반비 → 퀵서비스: 결재선 규칙 키 sort_carr 에 값, 다른 갈래 키는 빈 값
+  const vc = kind.c + 1;
+  const sc = sort.c + 1;
+  assert.deepEqual(draftOptions(s, input), [], '지출 항목 고르기 전엔 쓸 수 없음');
+  let d = setCellValue(s, kind.r, vc, '운반비');
+  assert.deepEqual(draftOptions(d, input), ['우편/택배', '퀵서비스']);
+  assert.deepEqual(requiredMissing(d), ['분류'], '갈래가 있으면 필수 검사');
+  d = setCellValue(d, sort.r, sc, '퀵서비스');
+  const fv = sheetDocFields(d, 'x@1');
+  assert.equal(fv.sort_carr, '퀵서비스');
+  assert.equal(fv.sort_meal, '');
+  // 지출 항목을 식대로 바꾸면 운반비 분류 값은 비운다
+  const meal = clearStaleDependent(setCellValue(d, kind.r, vc, '식대'));
+  assert.equal(meal.rows[sort.r][s.cols[sc]], '');
+  // 고를 분류가 없는 값(직접입력한 글자)이면 분류 칸은 필수 검사에서 빠짐
+  assert.deepEqual(requiredMissing(setCellValue(s, kind.r, vc, '문구 구입')), []);
 });

@@ -52,8 +52,29 @@ export type CellInputType =
 /** cellMeta.input 값 — options는 select·multiSelect만 */
 export interface CellInput {
   type: CellInputType;
+  /** 고를 항목. 종속 선택 칸이면 모든 갈래 항목을 합친 것(검사·조건 칸 목록용) */
   options?: string[];
+  /** 종속 선택(select 만) — 다른 칸 값에 따라 고를 항목이 바뀐다(엑셀 종속 드롭다운, 기존 서식 '지출 항목별 분류') */
+  depends?: SelectDepends;
 }
+
+/**
+ * 종속 선택 — 기준 칸(칸 이름 name) 값이 when 이면 그 갈래 항목에서 고른다. 맞는 갈래가 없으면 칸을 쓸 수 없다(빈 값).
+ * 갈래의 key: 그 갈래일 때 칸 값을 이 이름으로도 문서에 남긴다 — 기존 서식에서 분류마다 키가 달랐던 것
+ * (지출결의 운반비 분류 sort_carr 등)을 결재선 규칙 조건이 그대로 읽게
+ */
+export interface SelectDepends {
+  name: string;
+  branches: SelectBranch[];
+}
+export interface SelectBranch {
+  when: string;
+  options: string[];
+  key?: string;
+}
+
+/** '직접입력'·'직접 입력' 항목 — 고르면 글자 칸으로(기존 서식 SelectFieldEditor 와 같은 기준) */
+export const isDirectInputOption = (o: string) => o.replace(/\s/g, '').includes('직접입력');
 
 /**
  * cellMeta.bind 값 — '출처.항목'. 지금 쓰는 출처는 프로젝트뿐(project.계약일자 등):
@@ -548,6 +569,11 @@ export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<
       .filter(([k]) => !inRepeat.has(k))
       .map(([k, v]) => [k, hidden.has(k) ? '' : v])
   );
+  // 종속 선택 갈래 이름(기존 서식 분류 키) — 지금 갈래만 값, 나머지는 빈 값(숨은 행이면 모두 빈 값)
+  const condRows = conditionHiddenRows(s);
+  Object.entries(dependentKeyValues(s)).forEach(([k, x]) => {
+    if (!(k in named) && !repeatRows[String(x.r)]) named[k] = condRows.has(x.r) ? '' : x.v;
+  });
   return {
     ...named,
     [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),
@@ -584,10 +610,78 @@ export function requiredMissing(s: Sheet): string[] {
     const i = key.indexOf(':');
     const r = Number(key.slice(0, i));
     const c = s.cols.indexOf(key.slice(i + 1));
-    if (c < 0 || r >= s.rows.length || hiddenRows.has(r) || !draftInputOf(s, r, c)) return;
+    if (c < 0 || r >= s.rows.length || hiddenRows.has(r)) return;
+    const input = draftInputOf(s, r, c);
+    if (!input || (input.depends && draftOptions(s, input).length === 0)) return;
     if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
   });
   return [...new Set(out)];
+}
+
+// ── 종속 선택 ──
+
+/** 칸 이름 → 첫 칸의 값(없으면 undefined) */
+function valueOfName(s: Sheet, name: string): string | undefined {
+  const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === name)?.[0];
+  if (!key) return undefined;
+  const i = key.indexOf(':');
+  return String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
+}
+
+/** 종속 선택 칸의 지금 갈래 — 기준 칸 값에 맞는 것(없으면 undefined). 기준 칸이 시트에 없으면 'missing' */
+export function activeBranch(s: Sheet, input: CellInput | undefined): SelectBranch | undefined | 'missing' {
+  const dep = input?.depends;
+  if (!dep) return undefined;
+  const v = valueOfName(s, dep.name);
+  if (v === undefined) return 'missing';
+  return dep.branches.find((b) => b.when === v);
+}
+
+/**
+ * 기안자가 지금 고를 수 있는 항목 — 일반 선택 칸은 그대로, 종속 선택 칸은 기준 칸 값에 맞는 갈래(없으면 빈 목록 = 쓸 수 없음).
+ * 기준 칸이 없어졌으면(이름을 지움) 모든 항목
+ */
+export function draftOptions(s: Sheet, input: CellInput): string[] {
+  const b = activeBranch(s, input);
+  if (!input.depends || b === 'missing') return input.options ?? [];
+  return b?.options ?? [];
+}
+
+/** 종속 선택 칸들 — [칸 키, 행, 열, 입력] */
+function dependentCells(s: Sheet): { key: string; r: number; col: string; input: CellInput }[] {
+  return Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {})
+    .filter(([, v]) => !!(v as CellInput)?.depends)
+    .map(([key, v]) => {
+      const i = key.indexOf(':');
+      return { key, r: Number(key.slice(0, i)), col: key.slice(i + 1), input: v as CellInput };
+    });
+}
+
+/** 갈래 이름(key)별 값 — 지금 갈래면 칸 값, 아니면 빈 값. 문서 맨 위 칸으로 넣어 결재선 규칙 조건이 읽는다 */
+export function dependentKeyValues(s: Sheet): Record<string, { r: number; v: string }> {
+  const out: Record<string, { r: number; v: string }> = {};
+  dependentCells(s).forEach(({ r, col, input }) => {
+    const b = activeBranch(s, input);
+    const v = String(s.rows[r]?.[col] ?? '');
+    input.depends!.branches.forEach((x) => {
+      if (x.key && !(x.key in out)) out[x.key] = { r, v: b === x ? v : '' };
+    });
+  });
+  return out;
+}
+
+/** 기준 칸이 바뀌어 지금 갈래에 없는 값이 된 종속 선택 칸을 비운다(직접입력 갈래는 쓴 글자 그대로) */
+export function clearStaleDependent(s: Sheet): Sheet {
+  let out = s;
+  dependentCells(s).forEach(({ r, col, input }) => {
+    const v = String(out.rows[r]?.[col] ?? '');
+    if (!v) return;
+    const b = activeBranch(out, input);
+    if (b === 'missing') return;
+    const ok = !!b && (b.options.includes(v) || b.options.some(isDirectInputOption));
+    if (!ok) out = setCellValue(out, r, s.cols.indexOf(col), '', { allowFormula: false });
+  });
+  return out === s ? s : recalculate(out);
 }
 
 // ── 행 보이기 조건 (기존 서식 visibleIf) ──
@@ -661,6 +755,7 @@ export function conditionHiddenRows(s: Sheet): Set<number> {
     const r = Number(key.slice(0, i));
     at.set(name, { r, v: String(s.rows[r]?.[key.slice(i + 1)] ?? '') });
   });
+  Object.entries(dependentKeyValues(s)).forEach(([name, x]) => !at.has(name) && at.set(name, x));
   const rows = Object.keys(rec).map(Number).filter((r) => r < s.rows.length).sort((a, b) => a - b);
   // 위에서 아래로 — 조건 칸이 위에 있는 보통의 경우 한 번에 정해진다. 아래를 보는 조건까지 몇 번 되풀이
   for (let pass = 0; pass < 3; pass++) {

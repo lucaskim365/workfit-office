@@ -124,8 +124,64 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     pendingHalf = null;
   };
 
+  /**
+   * 종속 선택으로 합칠 항목 묶음 — 같은 선택 칸(상위)의 값마다 하나씩 보이던 같은 이름의 선택 항목들
+   * (지출결의 '분류': 식대면 sort_meal, 운반비면 sort_carr …). 칸 하나에 갈래별 항목으로 넣고, 상위 칸 오른쪽에 둔다
+   */
+  const parentOf = (f: FormField) => {
+    const at = f.visibleIf?.indexOf(':') ?? -1;
+    return at > 0 ? { key: f.visibleIf!.slice(0, at), when: f.visibleIf!.slice(at + 1) } : null;
+  };
+  const groups = new Map<string, FormField[]>();
+  fields.forEach((f) => {
+    const p = parentOf(f);
+    const parent = p && fields.find((x) => x.key === p.key);
+    if (f.type !== '선택' || !p || !parent || parent.type !== '선택') return;
+    const id = `${p.key}|${f.section ?? ''}|${f.label}`;
+    groups.set(id, [...(groups.get(id) ?? []), f]);
+  });
+  [...groups].forEach(([id, list]) => list.length < 2 && groups.delete(id));
+  /** 묶인 항목 키 → 묶음 */
+  const groupOf = new Map<string, FormField[]>();
+  groups.forEach((list) => list.forEach((f) => groupOf.set(f.key, list)));
+
+  /** 종속 선택 칸 하나 — 상위 칸이 반쪽 줄에 홀로 있으면 그 오른쪽, 아니면 새 줄 */
+  function placeDependent(list: FormField[]) {
+    const first = list[0];
+    const parentKey = parentOf(first)!.key;
+    const depends = {
+      name: parentKey,
+      branches: list.map((f) => ({ when: parentOf(f)!.when, options: f.options ?? [], key: f.key })),
+    };
+    const input = { type: 'select' as const, options: [...new Set(list.flatMap((f) => f.options ?? []))], depends };
+    const put = (r: number, c1: number, c2: number) => {
+      merge(r, c1, c2);
+      const at = span(r, c1, c1);
+      s = setApprovalProp(s, at, APPROVAL_NS.input, input);
+      if (list.some((f) => f.required)) s = setApprovalProp(s, at, APPROVAL_NS.required, true);
+      if (list.some((f) => f.isSecret)) s = setApprovalProp(s, at, APPROVAL_NS.secret, true);
+    };
+    if (pendingHalf && pendingHalf.key === parentKey) {
+      label(halfRow, mid, first.label);
+      put(halfRow, mid + 1, n - 1);
+      pendingHalf = null;
+      return;
+    }
+    flushHalf();
+    const r = nextRow();
+    label(r, 0, first.label);
+    put(r, 1, n - 1);
+    box(r, r);
+    if (list.every((f) => f.hideOnExternal)) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
+  }
+
   /** 항목 하나를 시트 줄로 */
   function placeField(f: FormField) {
+    const group = groupOf.get(f.key);
+    if (group) {
+      if (group[0] === f) placeDependent(group);
+      return;
+    }
     // 문서 제목은 문서 정보 표의 제목 칸이 맡는다(문서 정보 표를 안 넣는 서식은 이 자리에 제목 칸)
     if (f.type === '문서제목') {
       if (withInfo) return;
@@ -213,7 +269,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       const before = row;
       placeField(f);
       // 조건부 항목(visibleIf '키:값') — 이 항목이 만든 행에 행 보이기 조건
-      if (f.visibleIf) for (let r = before; r < row; r++) condRows.push({ r, visibleIf: f.visibleIf });
+      // 종속 선택으로 합친 항목은 조건 대신 갈래로(그 칸은 늘 보이고 항목만 바뀜)
+      if (f.visibleIf && !groupOf.has(f.key)) for (let r = before; r < row; r++) condRows.push({ r, visibleIf: f.visibleIf });
     }
   }
 
@@ -285,6 +342,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const values = prev?.name === key ? [...new Set([...prev.values, want])] : [want];
     s = setRowCondition(s, r, r, { name: key, values });
   });
+  if (groups.size) warnings.push(`값에 따라 바뀌던 같은 이름의 선택 항목(${[...groups.values()].map((l) => `'${l[0].label}'`).join(', ')})은 칸 하나로 합쳐 기준 칸 값마다 항목이 바뀌게 했습니다.`);
   if (condRows.length) warnings.push('조건부로 보이던 항목은 행 보이기 조건으로 옮겼습니다 — 미리보기에서 값을 바꿔 보며 확인해 주세요.');
   if (missing.size) warnings.push(`조건 칸(${[...missing].join(', ')})을 찾지 못해 그 조건이 걸린 행은 항상 보입니다.`);
 

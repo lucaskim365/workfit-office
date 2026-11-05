@@ -152,10 +152,13 @@ export function SheetCellPanel({
         </select>
       </Row>
 
-      {hasOptions && (
+      {hasOptions && !props.input?.depends && (
         <Row label="고를 항목" hint="한 줄에 하나씩">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
         </Row>
+      )}
+      {props.input?.type === 'select' && !multi && (
+        <DependsEditor sheet={sheet} r={focus.r} c={focus.c} input={props.input} onInput={setInput} />
       )}
 
       {props.autoNo && (
@@ -315,6 +318,76 @@ export function SheetCellPanel({
       <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} />
       <RepeatPanel sheet={sheet} selection={selection} onChange={onChange} />
     </div>
+  );
+}
+
+/**
+ * 종속 선택 — 이 선택 칸의 항목을 다른 선택 칸 값에 따라 바꾼다(엑셀 종속 드롭다운).
+ * 예: 지출 항목이 식대면 [간식대·외근식대·야근식대], 운반비면 [우편/택배·퀵서비스], 그 밖엔 칸을 쓸 수 없음
+ */
+function DependsEditor({ sheet, r, c, input, onInput }: { sheet: Sheet; r: number; c: number; input: CellInput; onInput: (next: CellInput) => void }) {
+  const selfName = approvalCellProps(sheet, r, c).name;
+  const sources = conditionSources(sheet).filter((x) => x.name !== selfName && x.options[0] !== CHECK_MARK);
+  const dep = input.depends;
+  const src = dep ? sources.find((x) => x.name === dep.name) : undefined;
+  // 갈래 항목 글자 — 칸을 벗어날 때 넣는다(입력 중 쉼표 그대로)
+  const textOf = (when: string) => (dep?.branches.find((b) => b.when === when)?.options ?? []).join(', ');
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useEffect(() => setDrafts({}), [r, c, dep?.name]);
+  const commit = (when: string, text: string) => {
+    if (!dep) return;
+    const list = text.split(/[,\n]/).map((o) => o.trim()).filter(Boolean);
+    const known = dep.branches.find((b) => b.when === when);
+    const branches = known ? dep.branches.map((b) => (b.when === when ? { ...b, options: list } : b)) : [...dep.branches, { when, options: list }];
+    const kept = branches.filter((b) => b.options.length || b.key);
+    onInput({ ...input, depends: { ...dep, branches: kept }, options: [...new Set(kept.flatMap((b) => b.options))] });
+  };
+  const choose = (name: string) => {
+    if (!name) {
+      // 종속 해제 — 모든 갈래 항목을 일반 목록으로
+      const { depends: _drop, ...rest } = input;
+      return onInput({ ...rest, options: input.options ?? [] });
+    }
+    onInput({ ...input, depends: { name, branches: [] }, options: input.options ?? [] });
+  };
+  if (!dep && sources.length === 0) return null;
+  return (
+    <Row
+      label="항목을 다른 칸 값에 따라"
+      hint="기준 칸 값마다 고를 항목을 쉼표로 적습니다. 비워 둔 값을 고르면 이 칸은 쓸 수 없는 칸(—)이 됩니다."
+    >
+      <select className={inp} value={dep?.name ?? ''} onChange={(e) => choose(e.target.value)}>
+        <option value="">항상 같은 항목 (위 '고를 항목')</option>
+        {sources.map((x) => (
+          <option key={x.name} value={x.name}>
+            {x.label} 값에 따라
+          </option>
+        ))}
+        {dep && !src && <option value={dep.name}>{nameLabel(dep.name)} (칸 없음)</option>}
+      </select>
+      {dep && src && (
+        <div className="mt-1 space-y-1 rounded-lg bg-panel-alt px-2 py-1.5">
+          {src.options.map((when) => {
+            const key = dep.branches.find((b) => b.when === when)?.key;
+            return (
+              <label key={when} className="flex items-center gap-1.5 text-[11px]">
+                <span className="w-[72px] shrink-0 truncate font-semibold text-ink2" title={when}>
+                  {when}
+                </span>
+                <input
+                  className={inp}
+                  value={drafts[when] ?? textOf(when)}
+                  placeholder="(이 값이면 칸 안 씀)"
+                  onChange={(e) => setDrafts((d) => ({ ...d, [when]: e.target.value }))}
+                  onBlur={(e) => commit(when, e.target.value)}
+                  title={key ? `이 값일 때 칸 값을 '${key}' 이름으로도 남깁니다(기존 서식 결재선 규칙 조건)` : undefined}
+                />
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </Row>
   );
 }
 

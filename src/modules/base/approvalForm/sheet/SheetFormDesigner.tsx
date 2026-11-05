@@ -350,6 +350,7 @@ function Designer({
     if (p.required && p.input) marks.push({ t: '필수', cls: 'bg-rose-500 text-white', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
     if (p.autoNo) marks.push({ t: '자동번호', cls: 'bg-sky-500 text-white', title: '자동번호 — 상신할 때 번호를 매김' });
     if (p.guide) marks.push({ t: '안내', cls: 'bg-ink3 text-white', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
+    if (p.input?.depends) marks.push({ t: '종속', cls: 'bg-indigo-500 text-white', title: `종속 선택 — '${condLabels.get(p.input.depends.name) ?? nameLabel(p.input.depends.name)}' 값에 따라 고를 항목이 바뀝니다` });
     if (!marks.length)
       return repeatMark || extMark ? (
         <>

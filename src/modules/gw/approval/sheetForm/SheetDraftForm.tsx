@@ -25,6 +25,9 @@ import {
   completedDateRows,
   conditionHiddenRows,
   clearConditionHidden,
+  clearStaleDependent,
+  draftOptions,
+  isDirectInputOption,
   isDocFieldBind,
   slotOf,
   type SheetSlots,
@@ -280,8 +283,6 @@ function SelectCell({ options, raw, onSet }: { options: string[]; raw: string; o
   );
 }
 
-/** '직접입력'·'직접 입력' 항목 — 기존 서식 SelectFieldEditor 와 같은 기준 */
-export const isDirectInputOption = (o: string) => o.replace(/\s/g, '').includes('직접입력');
 
 function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
@@ -312,8 +313,12 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
         </span>
       );
     }
-    case 'select':
-      return <SelectCell options={input.options ?? []} raw={raw} onSet={onSet} />;
+    case 'select': {
+      const options = draftOptions(sheet, input);
+      // 종속 선택 — 기준 칸에서 아직 안 골랐거나 이 칸이 필요 없는 값이면 쓸 수 없는 칸
+      if (input.depends && options.length === 0) return <span className="block px-1 text-[11px] text-[#bbb] print:hidden">—</span>;
+      return <SelectCell options={options} raw={raw} onSet={onSet} />;
+    }
     case 'multiSelect': {
       const picked = raw ? raw.split(',').map((x) => x.trim()) : [];
       const toggle = (o: string) => {
@@ -435,7 +440,8 @@ export function SheetDraftForm({
   const link = (template ? linkProp : (fetched.data?.link ?? null)) || null;
   const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>) => {
     // 행 보이기 조건으로 숨은 행의 입력 값은 비운다 — 합계·금액·연동 값에 숨은 값이 남지 않게
-    const cleared = clearConditionHidden(s0, refMap0);
+    // 종속 선택 칸은 기준 칸이 바뀌어 목록에 없게 된 값을 비운다
+    const cleared = clearConditionHidden(clearStaleDependent(s0), refMap0);
     let s = cleared.sheet;
     const refMap = cleared.refs;
     // 시스템이 계산하는 연동 칸(휴가 일수 등) — 기안 화면이 준 값으로 채운다
