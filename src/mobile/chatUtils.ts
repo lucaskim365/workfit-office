@@ -55,10 +55,20 @@ export function msgPreview(m: ChatMessage): string {
 }
 
 import { downloadFile } from '@/shared/lib/download';
+import { isPdfFile, openPdfViewer } from './MobilePdfViewer';
 
 /**
  * 첨부 다운로드 — 원본 파일명 보존.
  */
 export function downloadAttachment(att: Attachment) {
   void downloadFile(att.url, att.name);
+}
+
+/**
+ * 첨부 열기 — PDF 는 앱 안 보기 화면(뒤로가기로 대화방에 돌아옴), 나머지는 다운로드.
+ * 다운로드한 PDF 를 다른 뷰어 앱으로 열면 뒤로가기에 앱이 아니라 홈 화면으로 나가 버렸다
+ */
+export function openAttachment(att: Attachment) {
+  if (isPdfFile(att.name, att.mime)) openPdfViewer(att.url, att.name);
+  else downloadAttachment(att);
 }

@@ -98,7 +98,14 @@ messaging.onBackgroundMessage(async (payload) => {
      */
     tag,
     requireInteraction: false,
-    renotify: Boolean(data.roomId || data.docId),
+    /**
+     * 알림마다 진동 — 같은 방(같은 tag)의 다음 메시지도 조용히 바꿔치기하지 않고 다시 울린다(renotify 는 tag 가 있어야 됨).
+     * 일정 리마인더(linkUrl tag)도 마찬가지. vibrate 는 안드로이드 크롬 PWA 에서 쓰이고(아이폰은 휴대폰 설정대로),
+     * 실제로 울릴지는 휴대폰의 앱 알림 설정(소리·진동, 무음·방해금지)에도 달렸다
+     */
+    renotify: Boolean(tag),
+    silent: false,
+    vibrate: [200, 100, 200],
   });
   // FCM은 반환한 Promise를 push 이벤트의 waitUntil에 연결한다.
   if ((await getClientMode()) === 'desktop') await expireNotification(id, tag);
