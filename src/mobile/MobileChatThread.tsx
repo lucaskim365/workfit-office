@@ -25,6 +25,7 @@ import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
+import { useChatFileStatus } from './chatFileStore';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -907,6 +908,20 @@ function CompositeMessageBubble({
   );
 }
 
+/** 파일 말풍선 아랫줄 — 받기 전·받는 중(진행률)·받음(앱 보관함에 있어 바로 열림)·받기 실패 */
+function FileBubbleStatus({ url, size, mine }: { url: string; size: number; mine: boolean }) {
+  const st = useChatFileStatus(url);
+  const label =
+    st.state === 'loading'
+      ? `받는 중 ${st.progress}%`
+      : st.state === 'ready'
+        ? `${fmtSize(size)} · 받음 — 누르면 열기`
+        : st.state === 'error'
+          ? '받기 실패 — 다시 누르기'
+          : `${fmtSize(size)} · 누르면 받아서 열기`;
+  return <span className={`block chat-text-[10px] ${st.state === 'error' ? 'text-rose-600' : mine ? 'opacity-85' : 'text-ink3'}`}>{label}</span>;
+}
+
 function MessageBubble({
   m,
   me,
@@ -1074,7 +1089,7 @@ function MessageBubble({
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0 pointer-events-none">
           <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
-          <span className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          <FileBubbleStatus url={att.url} size={att.size} mine={mine} />
         </span>
       </button>
     );
