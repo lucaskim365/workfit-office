@@ -905,8 +905,9 @@ export function SheetEditor({
                         }`
                   }
                 >
-                  {/* 종이 보기는 띠(th)에 맞춰 끝에 손잡이 — 글자 없는 div 기준이면 띠 가운데에 와서 고르기를 가로챔 */}
-                  <div className={paper ? undefined : "relative"}>
+                  {/* 손잡이는 행 머리 칸(th — 종이 보기 relative, 격자 보기 sticky 라 둘 다 위치 기준) 아래 끝에.
+                      행 번호 글자 상자(div) 기준이면 행을 늘렸을 때 손잡이가 칸 가운데(글자 아래)에 남는다 */}
+                  <div>
                     {!paper && r + 1}
                     {design && (
                       <span
