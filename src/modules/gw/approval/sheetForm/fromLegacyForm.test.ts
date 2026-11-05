@@ -55,6 +55,10 @@ test('기존 서식 → 시트 — 라벨·값 칸, 입력 종류, 금액 키, �
   assert.equal(approvalCellProps(s, kind.r, kind.c + 1).input?.type, 'select');
   assert.deepEqual(approvalCellProps(s, kind.r, kind.c + 1).input?.options, ['연차', '오전반차']);
   assert.equal(approvalCellProps(s, kind.r, kind.c + 1).name, 'leaveType');
+  // 연동 서식이 아니어도 선택 항목은 기존 키를 칸 이름으로(결재선 규칙 조건용)
+  const exp = legacyFormToSheet(legacyForm('지출결의', [{ key: 'expenseItem', label: '경비 항목', type: '선택', options: ['식대', '교통비'] }])).sheet;
+  const ex = findText(exp, '경비 항목')!;
+  assert.equal(approvalCellProps(exp, ex.r, ex.c + 1).name, 'expenseItem');
   assert.equal(approvalCellProps(s, period.r, period.c + 1).input?.type, 'dateRange');
   assert.equal(approvalCellProps(s, period.r, period.c + 1).name, 'period');
   // 금액 키 → amount, 장문 비공개

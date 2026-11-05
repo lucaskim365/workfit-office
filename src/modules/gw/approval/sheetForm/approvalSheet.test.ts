@@ -176,6 +176,9 @@ test('문서 저장 — 칸 값·서식 버전·이름 붙은 칸 값을 fieldVa
   const fields = sheetDocFields(s, '발주@v3');
   assert.equal(fields[SHEET_VERSION_KEY], '발주@v3');
   assert.equal(fields.amount, '1500'); // 칸 이름 amount
+  // 직접 쓴 칸 이름도 맨 위 칸으로 — 결재선 규칙 조건(기존 서식 키)이 읽는다
+  const withName = setCellName(setCellValue(s, 1, 0, '식대'), 1, 0, 'expenseItem');
+  assert.equal(sheetDocFields(withName, '발주@v3').expenseItem, '식대');
   const vals = readSheetValues(fields[SHEET_VALUES_KEY]);
   const [, b] = s.cols;
   assert.equal(vals[cellKey(0, b)], '1500');

@@ -527,9 +527,16 @@ export function readSheetValues(raw: unknown): SheetValues {
  * 이름 붙은 칸 값은 연동 기능이 이름으로 읽는다(지금은 amount → 문서 금액 → 결재선 금액 조건).
  */
 export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<string, number> = {}): Record<string, string> {
-  // 시스템 이름(금액 키 등)만 문서 맨 위 칸으로 — 연동이 그 키로 읽는다. 직접 쓴 이름은 __named 에만(relatedImport.ts)
-  const system = new Set(COMMON_CELL_NAMES.map((n) => n.key));
-  const named = Object.fromEntries(Object.entries(namedValues(s)).filter(([k]) => system.has(k)));
+  // 이름 붙은 칸 값을 문서 맨 위 칸(칸 이름 = 키)으로 — 금액 키·연동 칸처럼 시스템이 그 키로 읽고,
+  // 기존 서식의 결재선 규칙 조건(예: 지출결의 expenseItem = 식대)도 같은 키를 본다(기존 서식에 시트를 붙여도 규칙이 그대로 걸리게).
+  // 반복 구간 안 이름(여러 줄 — 값이 목록)은 맨 위 칸 하나로 담을 수 없어 __named 에만(relatedImport.ts)
+  const repeatRows = s.rowMeta[APPROVAL_NS.repeat] ?? {};
+  const inRepeat = new Set(
+    Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {})
+      .filter(([key]) => repeatRows[key.slice(0, key.indexOf(':'))] !== undefined)
+      .map(([, name]) => String(name))
+  );
+  const named = Object.fromEntries(Object.entries(namedValues(s)).filter(([k]) => !inRepeat.has(k)));
   return {
     ...named,
     [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),

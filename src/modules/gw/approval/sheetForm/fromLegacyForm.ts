@@ -99,6 +99,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     // 금액 키 → 결재선 금액, 연동 서식의 연동 칸(휴가 기간 등)은 같은 이름
     if (f.type === '금액' && f.isAmountKey) s = setCellName(s, r, c1, 'amount');
     else if (linkNames.has(f.key)) s = setCellName(s, r, c1, f.key);
+    // 선택 항목은 기존 키 그대로 — 결재선 규칙 조건(예: 지출결의 expenseItem = 식대)이 이 키로 값을 읽는다
+    else if (f.type === '선택' || f.type === '다중선택') s = setCellName(s, r, c1, f.key);
     if (f.isSecret) s = setApprovalProp(s, at, APPROVAL_NS.secret, true);
     if (f.type === '장문') s = { ...s, rowHeights: { ...s.rowHeights, [String(r)]: 80 } };
   };
