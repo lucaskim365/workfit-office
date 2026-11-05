@@ -111,21 +111,27 @@ export default function MobileApp() {
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl, at: p.at, shownAt: Date.now() };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
-          const tag = p.roomId || p.docId || undefined;
-          // 같은 방 다음 메시지도 다시 울리게(renotify) + 진동
-          const options: NotificationOptions & { renotify: boolean } = {
+          // 메시지마다 다른 tag — 늘 새 알림이라 매번 울린다. 띄운 뒤 같은 방 예전 알림은 닫는다(서비스워커 closeOlderOfTarget 과 같음)
+          const target = p.roomId || p.docId || '';
+          const notificationId = `${Date.now()}-${Math.random()}`;
+          const tag = target ? `${target}#${notificationId}` : undefined;
+          // 진동 — vibrate 는 DOM 타입 정의에 없어 넓혀 둔다(안드로이드 크롬이 쓴다)
+          const options: NotificationOptions & { vibrate: number[] } = {
             body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
-            data,
+            data: { ...data, workfitNotificationId: notificationId, workfitTarget: target },
             tag,
-            renotify: Boolean(tag),
             silent: false,
             vibrate: [200, 100, 200],
-          } as NotificationOptions & { renotify: boolean };
-          // 같은 방 알림이 상단바에 남아 있으면 먼저 닫는다 — 고쳐 쓰면 안드로이드가 진동을 생략한다(서비스워커 closeSameTag 와 같음)
-          if (tag) for (const old of await reg.getNotifications({ tag })) old.close();
+          };
           await reg.showNotification(p.title, options);
+          if (target) {
+            for (const old of await reg.getNotifications()) {
+              const d = old.data as { workfitTarget?: string; workfitNotificationId?: string } | null;
+              if ((d?.workfitTarget === target || old.tag === target) && d?.workfitNotificationId !== notificationId) old.close();
+            }
+          }
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
           new Notification(p.title, { body, icon: '/icons/icon-192.png' });

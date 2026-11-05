@@ -245,7 +245,11 @@ function backgroundFixture(mode) {
       addEventListener: (name, listener) => { listeners[name] = listener; },
       registration: {
         showNotification: async (title, options) => shown.push({ title, options, data: options.data, tag: options.tag, closed: false, close() { this.closed = true; } }),
-        getNotifications: async ({ tag } = {}) => shown.filter((item) => (tag === undefined || item.tag === tag) && !item.closed).slice(-1),
+        // 휴대폰처럼 — 같은 tag 는 마지막 알림이 앞 것을 대신한다(tag 마다 최신 하나), 닫은 건 빠진다
+        getNotifications: async ({ tag } = {}) => {
+          const open = shown.filter((item) => (tag === undefined || item.tag === tag) && !item.closed);
+          return open.filter((item, i) => item.tag === undefined || !open.slice(i + 1).some((later) => later.tag === item.tag));
+        },
       },
     },
   });
@@ -262,7 +266,10 @@ test('백그라운드 서비스워커(PC): 미리보기와 클릭 데이터를 �
   await flush();
   assert.equal(shown[0].title, '홍길동 · 팀 채팅');
   assert.equal(shown[0].options.body, '회의 시작합니다');
-  assert.equal(shown[0].options.renotify, true);
+  // 메시지마다 다른 tag(대상#알림id) — 늘 새 알림이라 같은 방 알림이 떠 있어도 진동한다
+  assert.match(shown[0].options.tag, /^ROOM#/);
+  assert.equal(shown[0].options.data.workfitTarget, 'ROOM');
+  assert.equal(shown[0].options.vibrate.length > 0, true);
   assert.equal(shown[0].options.data.roomId, 'ROOM');
   assert.equal(shown[0].options.requireInteraction, false);
   assert.equal(timers[0].ms, 5_000);
@@ -345,11 +352,22 @@ test('백그라운드(PC): 이전 타이머는 새 알림을 유지하고 SW 메
   await first;
   assert.equal(shown[1].closed, false);
   let expiry;
-  listeners.message({ data: { type: 'workfit-expire-notification', id: shown[1].data.workfitNotificationId, tag: 'ROOM' }, waitUntil: (promise) => { expiry = promise; } });
+  listeners.message({ data: { type: 'workfit-expire-notification', id: shown[1].data.workfitNotificationId, tag: shown[1].tag }, waitUntil: (promise) => { expiry = promise; } });
   assert.equal(timers[2].ms, 5_000);
   timers[2].fn();
   await expiry;
   assert.equal(shown[1].closed, true);
   timers[1].fn();
   await second;
+});
+
+test('백그라운드(휴대폰): 같은 방 알림이 떠 있어도 새 알림(다른 tag)으로 띄우고, 예전 같은 방 알림은 닫음', async () => {
+  const { callback, shown } = backgroundFixture('pwa');
+  await callback({ data: { roomId: 'ROOM', body: '첫 메시지', at: '2026-10-29T10:00:00' } });
+  await callback({ data: { roomId: 'OTHER', body: '다른 방', at: '2026-10-29T10:00:01' } });
+  await callback({ data: { roomId: 'ROOM', body: '둘째 메시지', at: '2026-10-29T10:00:02' } });
+  assert.notEqual(shown[0].tag, shown[2].tag, '같은 방이어도 tag 가 달라 고쳐 쓰기(진동 생략)가 아님');
+  assert.equal(shown[0].closed, true, '예전 같은 방 알림은 닫힘');
+  assert.equal(shown[1].closed, false, '다른 방 알림은 그대로');
+  assert.equal(shown[2].closed, false);
 });
