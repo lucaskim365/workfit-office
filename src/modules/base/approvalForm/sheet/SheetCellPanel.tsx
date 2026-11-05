@@ -71,7 +71,7 @@ export function SheetCellPanel({
   onChange: (next: Sheet) => void;
   /** 서식의 '대외 문서'가 켜져 있는지 — 행 숨김 안내 문구 */
   external?: boolean;
-  /** 대체 서식(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
+  /** 연동 기능(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
   link?: string | null;
 }) {
   const linkDef = linkTypeDef(link);
@@ -235,7 +235,7 @@ export function SheetCellPanel({
             </option>
           ))}
           {linkDef && (
-            <optgroup label={`${linkDef.label} 연동 (대체 서식)`}>
+            <optgroup label={`연동 기능 — ${linkDef.code}`}>
               {linkDef.names.map((n) => (
                 <option key={n.key} value={n.key} title={n.hint}>
                   {n.label}
@@ -247,7 +247,7 @@ export function SheetCellPanel({
           {props.name && !systemKeys.has(props.name) && (
             <option value={props.name}>
               {nameLabel(props.name)}
-              {LINK_TYPES.some((t) => t.names.some((n) => n.key === props.name)) ? ' (지금 대체 서식에선 안 쓰는 연동 이름 — 지워 주세요)' : ''}
+              {LINK_TYPES.some((t) => t.names.some((n) => n.key === props.name)) ? ' (지금 연동 기능에선 안 쓰는 이름 — 지워 주세요)' : ''}
             </option>
           )}
           <option value={CUSTOM}>직접 쓰기…</option>

@@ -110,7 +110,7 @@ function Designer({
   const [selection, setSelection] = useState<SheetSelection>({ range: { r1: 0, c1: 0, r2: 0, c2: 0 }, focus: { r: 0, c: 0 } });
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | 'info'; text: string; list?: string[] } | null>(initialNotice ? { kind: 'info', ...initialNotice } : null);
   const [note, setNote] = useState('');
-  // 대체 서식(연동 유형) — 이 서식이 대신하는 기존 서식. 버전과 함께 저장된다
+  // 연동 기능(연동 유형) — 휴가·외근·출장·휴일근무 기능과 잇기. 버전과 함께 저장된다
   const [link, setLink] = useState<string | null>(initialLink);
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   const [side, setSide] = useState<'cell' | 'settings' | 'history'>('cell');
@@ -527,17 +527,17 @@ function Designer({
             ))}
           </select>
         </Field>
-        <Field label="대체 서식 (연동)">
+        <Field label="연동 기능">
           <select
             className={inp}
             value={link ?? ''}
             onChange={(e) => setLink(e.target.value || null)}
-            title="기존 연동 서식(휴가원 등)을 대신하면 휴가 차감·근태·캘린더·결재선 규칙을 이어받습니다. 고르면 칸 이름 목록에 그 연동 칸이 나옵니다."
+            title="이 서식으로 쓴 문서가 고른 기능(휴가 차감·근태·캘린더)과 이어지고, 그 기능의 결재선 규칙도 걸립니다. 고르면 칸 이름 목록에 연동 칸(휴가 기간 등)이 나옵니다."
           >
-            <option value="">없음 (연동 없는 새 서식)</option>
+            <option value="">없음 (일반 결재 서식)</option>
             {LINK_TYPES.map((t) => (
               <option key={t.code} value={t.code}>
-                {t.label} 대신
+                {t.feature}
               </option>
             ))}
           </select>

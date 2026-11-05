@@ -855,7 +855,9 @@ export function isSealCell(s: Sheet, r: number, c: number): boolean {
   return approvalCellProps(s, r, c).seal;
 }
 
-// ── 대체 서식(연동 유형)과 연동 칸 이름 (§5.3, 5단계) ──
+// ── 연동 기능(연동 유형)과 연동 칸 이름 (§5.3, 5단계) ──
+// 화면 이름은 '연동 기능' — 시트 서식이 휴가·외근·출장·휴일근무 기능과 이어진다(처음부터 만든 서식도 고를 수 있음).
+// 저장 값은 기존 서식 코드(휴가 등)라 바꾸지 않는다(연동 코드가 그 코드로 문서를 알아봄)
 
 /**
  * 연동 칸 이름 — 연동 코드가 문서 fieldValues 에서 읽는 기존 필드 키 그대로(period·leaveType·workDate…).
@@ -876,9 +878,11 @@ export interface LinkName {
 }
 
 export interface LinkTypeDef {
-  /** 대신하는 기존 서식 코드 — 연동 코드가 보는 값(docLinkType) */
+  /** 연동 코드가 보는 값(docLinkType) — 기존 서식 코드와 같다 */
   code: string;
   label: string;
+  /** 연동 기능 고르기에 보일 이름 — 무엇과 이어지는지 */
+  feature: string;
   names: LinkName[];
 }
 
@@ -890,6 +894,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
   {
     code: '휴가',
     label: '휴가원',
+    feature: '휴가 — 휴가 차감·근태·캘린더',
     names: [
       { key: 'leaveType', label: '휴가 종류', required: true, hint: '선택 칸 — 항목을 연차·반차·반반차 등 휴가 종류 이름과 똑같이' },
       { key: 'period', label: '휴가 기간', required: true, range: true, hint: '기간 칸(시작~종료) 또는 날짜 칸(시작일)' },
@@ -905,6 +910,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
   {
     code: '외근',
     label: '외근 신청서',
+    feature: '외근 — 근태·캘린더',
     names: [
       { key: 'period', label: '외근 일자', required: true, range: true, hint: '날짜 칸 또는 기간 칸' },
       PERIOD_END('외근 종료일'),
@@ -922,6 +928,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
     (code): LinkTypeDef => ({
       code,
       label: code === '국내출장' ? '국내출장 신청서' : '해외출장 신청서',
+      feature: `${code} — 근태·캘린더`,
       names: [
         { key: 'period', label: '출장 기간', required: true, range: true, hint: '기간 칸 또는 날짜 칸' },
         PERIOD_END('출장 종료일'),
@@ -937,6 +944,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
   {
     code: '휴일근무',
     label: '휴일근무 신청서',
+    feature: '휴일근무 — 근태(휴일 근무 인정)',
     names: [
       { key: 'workDate', label: '근무 일자', required: true, hint: '날짜 칸 — 주말·공휴일만 고를 수 있음' },
       { key: 'workStart', label: '출근 시각' },
@@ -962,14 +970,14 @@ export function nameLabel(key: string): string {
   return key;
 }
 
-/** 대체 서식 저장 전 검사 — 꼭 있어야 할 연동 칸 */
+/** 연동 기능 저장 전 검사 — 꼭 있어야 할 연동 칸 */
 export function linkIssues(s: Sheet, link: string | null | undefined): string[] {
   const def = linkTypeDef(link);
   if (!def) return [];
   const names = new Set(Object.values(s.cellMeta[APPROVAL_NS.name] ?? {}));
   const errors = def.names
     .filter((n) => n.required && !names.has(n.key))
-    .map((n) => `${def.label}을(를) 대신하려면 '${n.label}' 칸이 필요합니다. 그 칸을 골라 칸 이름에서 '${n.label}'을(를) 붙여 주세요.`);
+    .map((n) => `'${def.code}' 연동 기능을 쓰려면 '${n.label}' 칸이 필요합니다. 그 칸을 골라 칸 이름에서 '${n.label}'을(를) 붙여 주세요.`);
   // 휴가 종류는 휴가 정책이 아는 이름이어야 일수·차감이 맞다(반차 0.5일 등)
   if (def.code === '휴가') {
     const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === 'leaveType')?.[0];
