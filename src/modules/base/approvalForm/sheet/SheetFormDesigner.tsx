@@ -3,6 +3,7 @@ import { suggestFormCode } from '@/domain/approvalForm/formCode';
 import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
+import { legacyFormToSheet } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
 import type { DocFields } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
 import type { User } from '@/domain/user/schema';
@@ -430,6 +431,29 @@ function Designer({
                   className="rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink"
                 >
                   기존 양식 편집
+                </button>
+              )}
+              {baseVersion !== null && (
+                // 붙여 둔 시트를 버리고 기존 양식에서 다시 변환 — 저장해야 새 버전으로 쌓인다(옛 버전·그 버전으로 쓴 문서는 그대로)
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        "지금 시트를 버리고 기존 양식에서 다시 만듭니다(최신 변환 규칙). 손본 모양·수식은 사라집니다.\n저장해야 새 버전이 되고, 저장하지 않고 닫으면 지금 시트 그대로 남습니다. 계속할까요?"
+                      )
+                    )
+                      return;
+                    const res = legacyFormToSheet(initialForm);
+                    setSheet(res.sheet);
+                    setLink(res.link);
+                    setNote('기존 양식에서 다시 만듦');
+                    setMsg({ kind: 'info', text: '기존 양식에서 다시 만들었습니다 — 모양을 다듬고 [미리보기]로 확인한 뒤 저장하세요.', list: res.warnings });
+                  }}
+                  title="붙여 둔 시트를 버리고 기존 양식에서 다시 변환(저장 전까지는 바뀌지 않음)"
+                  className="rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink"
+                >
+                  기존 양식에서 다시 만들기
                 </button>
               )}
               <button
