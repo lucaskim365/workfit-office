@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, Download, Plus, Trash2, X } from 'lucide-react';
+import { Building2, Download, Minus, Plus, Trash2, X } from 'lucide-react';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
@@ -39,7 +39,7 @@ import {
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
-import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, readRowExtras, removeRepeatRow, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -528,15 +528,32 @@ export function SheetDraftForm({
   };
   const canImport = !!loaded?.sheet && hasImportableNames(loaded.sheet) && relatedSources.length > 0;
 
-  /** 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다 */
-  const changeRows = (id: string, add: boolean) => {
+  /**
+   * 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다. at 이 있으면 그 줄 아래에 넣기(+)·그 줄 지우기(−),
+   * 없으면 구간 끝(아래 띠의 [행 추가]·[행 삭제]). 번호 열(1, 2, 3…)은 차례였으면 다시 매긴다
+   */
+  const changeRows = (id: string, add: boolean, at?: number) => {
     if (!loaded?.sheet) return;
-    const fn = add ? addRepeatRow : removeRepeatRow;
-    const next = fn(loaded.sheet, extras, readSheetValues(rawValues), id);
-    // 사람 칸 ID 도 값과 같은 규칙으로 행을 옮긴다
-    const nextRefs = fn(loaded.sheet, extras, refs, id).values;
-    const expanded = applyValues(expandRepeats(loaded.sheet, next.extras), next.values, { recalc: true });
+    const tpl = loaded.sheet;
+    const run = (vals: Record<string, string>, renumber: boolean) =>
+      at === undefined
+        ? (add ? addRepeatRow : removeRepeatRow)(tpl, extras, vals, id)
+        : (add ? insertRepeatRowAfter : removeRepeatRowAt)(tpl, extras, vals, id, at, { renumber });
+    const next = run(readSheetValues(rawValues), true);
+    // 사람 칸 ID 도 값과 같은 규칙으로 행을 옮긴다(번호는 안 매김)
+    const nextRefs = run(refs, false).values;
+    const expanded = applyValues(expandRepeats(tpl, next.extras), next.values, { recalc: true });
     emit(expanded, next.extras, nextRefs);
+  };
+  /** 줄마다 [+][−] 를 놓을 칸 — 그 줄의 맨 왼쪽 칸(위에서 내려오는 세로 병합에 덮인 칸은 건너뜀) */
+  const rowButtonCol = (r: number): number => {
+    if (!sheet) return 0;
+    for (let c = 0; c < sheet.cols.length; ) {
+      const m = sheet.merges.find((x) => r >= x.startRow && r < x.startRow + x.rowSpan && c >= x.startCol && c < x.startCol + x.colSpan);
+      if (!m || (m.startRow === r && m.rowSpan === 1)) return c;
+      c = m.startCol + m.colSpan;
+    }
+    return 0;
   };
 
   return (
@@ -622,6 +639,25 @@ export function SheetDraftForm({
                   </button>
                 )}
               </div>
+            );
+          }}
+          // 반복 구간 줄 — 마우스를 올리면 줄 왼쪽에 [+]·[−](그 줄 아래에 넣기·그 줄 지우기, 인쇄 안 됨)
+          rowClassName={(r) => (sections.some((x) => r >= x.first && r <= x.last) ? 'group/rep' : undefined)}
+          renderOverlay={(r, c) => {
+            const sec = sections.find((x) => r >= x.first && r <= x.last);
+            if (!sec || c !== rowButtonCol(r)) return null;
+            const btn = 'flex h-[15px] w-[15px] items-center justify-center rounded-sm bg-white/95 font-bold leading-none shadow-sm ring-1 ring-black/10';
+            return (
+              <span className="absolute left-0 top-1/2 z-20 hidden -translate-y-1/2 gap-px group-hover/rep:flex print:hidden">
+                <button type="button" title="이 줄 아래에 줄 넣기" onClick={() => changeRows(sec.id, true, r)} className={`${btn} text-teal hover:bg-teal-soft`}>
+                  <Plus className="h-2.5 w-2.5" />
+                </button>
+                {sec.last > sec.first && (
+                  <button type="button" title="이 줄 지우기" onClick={() => changeRows(sec.id, false, r)} className={`${btn} text-rose-500 hover:bg-rose-50`}>
+                    <Minus className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </span>
             );
           }}
           cellClassName={(r, c) => {

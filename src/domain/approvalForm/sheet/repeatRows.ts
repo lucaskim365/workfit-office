@@ -12,7 +12,7 @@
  *   보기·작성 때 같은 규칙으로 펼친다(expandRepeats) — 같은 틀·같은 줄 수면 항상 같은 모양
  */
 import { cellKey, deleteRow, insertRow, translateFormula, type Merge, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, type SheetValues } from './approvalSheet';
+import { APPROVAL_NS, applyValues, type SheetValues } from './approvalSheet';
 
 export interface RepeatMark {
   id: string;
@@ -217,24 +217,92 @@ function currentLast(template: Sheet, extras: RowExtras, id: string): number | u
 /** [행 추가] — 구간 끝에 빈 행. 아래 행 값은 한 줄씩 내린다 */
 export function addRepeatRow(template: Sheet, extras: RowExtras, values: SheetValues, id: string): { extras: RowExtras; values: SheetValues } {
   const last = currentLast(template, extras, id);
-  if (last === undefined || (extras[id] ?? 0) >= MAX_EXTRA_ROWS) return { extras, values };
-  return {
-    extras: { ...extras, [id]: (extras[id] ?? 0) + 1 },
-    values: remapValues(values, (r) => (r > last ? r + 1 : r)),
-  };
+  return last === undefined ? { extras, values } : insertRepeatRowAfter(template, extras, values, id, last);
 }
 
 /** [행 삭제] — 구간 마지막 행을 지운다. 관리자가 그린 줄도 지울 수 있고(기존 서식 표와 같음), 1줄은 남긴다 */
 export function removeRepeatRow(template: Sheet, extras: RowExtras, values: SheetValues, id: string): { extras: RowExtras; values: SheetValues } {
   const last = currentLast(template, extras, id);
-  const sec = repeatSections(template).find((x) => x.id === id);
-  if (last === undefined || !sec || (extras[id] ?? 0) <= -(sec.last - sec.first)) return { extras, values };
-  const next = { ...extras, [id]: (extras[id] ?? 0) - 1 };
-  if (next[id] === 0) delete next[id];
-  return {
-    extras: next,
-    values: remapValues(values, (r) => (r === last ? null : r > last ? r - 1 : r)),
+  return last === undefined ? { extras, values } : removeRepeatRowAt(template, extras, values, id, last);
+}
+
+/**
+ * 줄마다 [+] — at 행(펼친 시트 기준) 바로 아래에 빈 줄. 구간 줄은 모두 같은 모양이라 '구간 끝에 한 줄 붙이고
+ * at 아래 값을 한 줄씩 내리기'와 같다 — 문서엔 줄 수만 남고 범위 수식(=SUM)도 그대로 따라간다
+ */
+export function insertRepeatRowAfter(
+  template: Sheet,
+  extras: RowExtras,
+  values: SheetValues,
+  id: string,
+  at: number,
+  opts: { renumber?: boolean } = {}
+): { extras: RowExtras; values: SheetValues } {
+  const cur = sectionNow(template, extras, id);
+  if (!cur || at < cur.first || at > cur.last || (extras[id] ?? 0) >= MAX_EXTRA_ROWS) return { extras, values };
+  const nextExtras = { ...extras, [id]: (extras[id] ?? 0) + 1 };
+  const shifted = remapValues(values, (r) => (r > at ? r + 1 : r));
+  // 넣은 줄은 빈 줄 — 값이 없으면 그 자리 서식 틀의 미리 쓴 글자(예: 그 자리의 번호)가 비쳐 보이므로 입력 칸을 빈 값으로
+  const after = expandRepeats(template, nextExtras);
+  after.cols.forEach((col) => {
+    if (after.cellMeta[APPROVAL_NS.input]?.[cellKey(at + 1, col)] !== undefined) shifted[cellKey(at + 1, col)] = '';
+  });
+  const next = { extras: nextExtras, values: shifted };
+  return opts.renumber === false ? next : renumber(template, extras, values, id, next);
+}
+
+/** 줄마다 [−] — at 행을 지우고 아래 값을 한 줄씩 올린다(구간 끝 줄이 하나 줄어듦). 1줄은 남긴다 */
+export function removeRepeatRowAt(
+  template: Sheet,
+  extras: RowExtras,
+  values: SheetValues,
+  id: string,
+  at: number,
+  opts: { renumber?: boolean } = {}
+): { extras: RowExtras; values: SheetValues } {
+  const cur = sectionNow(template, extras, id);
+  if (!cur || at < cur.first || at > cur.last || cur.last === cur.first) return { extras, values };
+  const n = { ...extras, [id]: (extras[id] ?? 0) - 1 };
+  if (n[id] === 0) delete n[id];
+  const next = { extras: n, values: remapValues(values, (r) => (r === at ? null : r > at ? r - 1 : r)) };
+  return opts.renumber === false ? next : renumber(template, extras, values, id, next);
+}
+
+/** 펼친 시트에서 이 구간의 지금 범위 */
+function sectionNow(template: Sheet, extras: RowExtras, id: string): RepeatSection | undefined {
+  return repeatSections(expandRepeats(template, extras)).find((x) => x.id === id);
+}
+
+/**
+ * 줄 번호 다시 매기기 — 줄을 넣고 지우기 전에 구간의 어떤 입력 칸 열이 1, 2, 3…으로 빠짐없이 차례였으면
+ * 바뀐 줄 수에 맞게 다시 1, 2, 3…. 기안자가 번호를 바꿔 차례가 깨져 있으면(1, 2, 2-1…) 손대지 않는다
+ */
+function renumber(
+  template: Sheet,
+  extras: RowExtras,
+  values: SheetValues,
+  id: string,
+  next: { extras: RowExtras; values: SheetValues }
+): { extras: RowExtras; values: SheetValues } {
+  const before = applyValues(expandRepeats(template, extras), values, { recalc: false });
+  const sec = repeatSections(before).find((x) => x.id === id);
+  if (!sec) return next;
+  const isInput = (s: Sheet, r: number, col: string) => s.cellMeta[APPROVAL_NS.input]?.[cellKey(r, col)] !== undefined;
+  // 번호 열 = 서식에 관리자가 1, 2, 3…을 미리 적어 둔 열(수량에 우연히 1·2·3을 쓴 열은 아님) — 그리고 지금도 차례인 열
+  const tplSec = repeatSections(template).find((x) => x.id === id);
+  if (!tplSec) return next;
+  const sequential = (s: Sheet, first: number, last: number, col: string) => {
+    for (let r = first; r <= last; r++) if (!isInput(s, r, col) || String(s.rows[r]?.[col] ?? '').trim() !== String(r - first + 1)) return false;
+    return true;
   };
+  const cols = before.cols.filter((col) => sequential(template, tplSec.first, tplSec.last, col) && sequential(before, sec.first, sec.last, col));
+  if (!cols.length) return next;
+  const after = expandRepeats(template, next.extras);
+  const sec2 = repeatSections(after).find((x) => x.id === id);
+  if (!sec2) return next;
+  const out = { ...next.values };
+  for (let r = sec2.first; r <= sec2.last; r++) for (const col of cols) if (isInput(after, r, col)) out[cellKey(r, col)] = String(r - sec2.first + 1);
+  return { extras: next.extras, values: out };
 }
 
 /**

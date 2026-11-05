@@ -6,6 +6,8 @@ import {
   addRepeatRow,
   clearRepeatSection,
   healRepeatSections,
+  insertRepeatRowAfter,
+  removeRepeatRowAt,
   expandRepeats,
   readRowExtras,
   removeRepeatRow,
@@ -125,4 +127,53 @@ test('구간 한가운데에 넣은 행은 그 구간으로 채운다', () => {
   assert.equal(secs.length, 1);
   assert.deepEqual([secs[0].first, secs[0].last], [1, 4]);
   assert.equal(healRepeatSections(healed), healed); // 바뀔 것 없으면 그대로
+});
+
+/** 번호 표 — 0행 머리, 1~3행 품목(반복): A 번호(입력, 1·2·3), B 수량(입력), C =B*10, 4행 합계 C5 =SUM(C2:C4) */
+function numberedForm(): Sheet {
+  let s = createSheet(5, 3);
+  for (const r of [1, 2, 3]) {
+    s = setCellMeta(s, APPROVAL_NS.input, r, 0, { type: 'text' });
+    s = setCellValue(s, r, 0, String(r), { allowFormula: false });
+    s = setCellMeta(s, APPROVAL_NS.input, r, 1, { type: 'number' });
+    s = setCellValue(s, r, 2, `=B${r + 1}*10`);
+  }
+  s = setCellValue(s, 4, 2, '=SUM(C2:C4)');
+  return setRepeatSection(s, 1, 3, '품목');
+}
+
+test('줄마다 [+]·[−] — 중간에 넣고 지우면 아래 값이 밀리고, 합계 범위가 따라가고, 차례 번호는 다시 매김', () => {
+  const tpl = numberedForm();
+  const id = repeatSections(tpl)[0].id;
+  const [a, b] = tpl.cols;
+  const values = { [cellKey(1, a)]: '1', [cellKey(2, a)]: '2', [cellKey(3, a)]: '3', [cellKey(1, b)]: '1', [cellKey(2, b)]: '2', [cellKey(3, b)]: '3' };
+  // 1번 줄 아래에 넣기 → 수량 1, (빈), 2, 3 / 번호 1·2·3·4
+  const ins = insertRepeatRowAfter(tpl, {}, values, id, 1);
+  assert.deepEqual(ins.extras, { [id]: 1 });
+  const s1 = applyValues(expandRepeats(tpl, ins.extras), ins.values, { recalc: true });
+  assert.deepEqual([1, 2, 3, 4].map((r) => val(s1, r, 1)), ['1', '', '2', '3']);
+  assert.deepEqual([1, 2, 3, 4].map((r) => val(s1, r, 0)), ['1', '2', '3', '4']);
+  assert.equal(val(s1, 5, 2), '60'); // 합계 =SUM(C2:C5) — 10+0+20+30
+  // 2번째 줄(수량 2였던 원래 줄이 아니라 넣은 빈 줄 다음) 지우기 → 1, (빈), 3 / 번호 1·2·3
+  const del = removeRepeatRowAt(tpl, ins.extras, ins.values, id, 3);
+  const s2 = applyValues(expandRepeats(tpl, del.extras), del.values, { recalc: true });
+  assert.deepEqual([1, 2, 3].map((r) => val(s2, r, 1)), ['1', '', '3']);
+  assert.deepEqual([1, 2, 3].map((r) => val(s2, r, 0)), ['1', '2', '3']);
+  assert.equal(val(s2, 4, 2), '40');
+  // 그린 줄 첫 줄도 지울 수 있다 → 수량 (빈), 3 — 1줄은 남김
+  const first = removeRepeatRowAt(tpl, del.extras, del.values, id, 1);
+  const one = removeRepeatRowAt(tpl, first.extras, first.values, id, 1);
+  assert.deepEqual(removeRepeatRowAt(tpl, one.extras, one.values, id, 1).extras, one.extras, '마지막 1줄은 못 지움');
+  // 구간 밖 행은 무시
+  assert.deepEqual(insertRepeatRowAfter(tpl, {}, values, id, 4).extras, {});
+});
+
+test('번호 다시 매기기 — 기안자가 번호를 바꿔 차례가 깨졌으면 손대지 않음', () => {
+  const tpl = numberedForm();
+  const id = repeatSections(tpl)[0].id;
+  const a = tpl.cols[0];
+  const custom = { [cellKey(1, a)]: '1', [cellKey(2, a)]: '1-1', [cellKey(3, a)]: '2' };
+  const ins = insertRepeatRowAfter(tpl, {}, custom, id, 1);
+  const s = applyValues(expandRepeats(tpl, ins.extras), ins.values, { recalc: false });
+  assert.deepEqual([1, 2, 3, 4].map((r) => val(s, r, 0)), ['1', '', '1-1', '2']);
 });
