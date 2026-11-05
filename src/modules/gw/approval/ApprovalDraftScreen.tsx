@@ -990,7 +990,14 @@ function ApprovalDraftInner({
   const { latest: sheetLatest } = useSheetFormVersions();
   const { switches: sheetSwitches } = useSheetSwitches();
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
-  const sheetVersion = !form ? null : savedSheetVersion?.formId === form.id ? savedSheetVersion.version : liveSheetVersion(form, sheetLatest, sheetSwitches);
+  const sheetVersion = !form
+    ? null
+    : savedSheetVersion?.formId === form.id
+      ? savedSheetVersion.version
+      : // 기존 양식으로 쓰던 문서(임시 저장·반려 재상신) — 그 사이 '시트로 기안'을 켜도 기존 양식 그대로 이어 쓴다
+        editDoc
+        ? null
+        : liveSheetVersion(form, sheetLatest, sheetSwitches);
   const sheetIssuesRef = useRef<string[]>([]);
   // 시트 서식의 비어 있는 필수 칸 이름표 — 상신 때만 막는다(임시 저장은 됨)
   const sheetRequiredRef = useRef<string[]>([]);

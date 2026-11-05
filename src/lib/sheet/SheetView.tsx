@@ -8,7 +8,7 @@
  * 배경색 있는 칸 둘레의 테두리가 화면·인쇄에서 군데군데 사라진다. 덧그림(직인 등)은 칸 안 상자에 붙인다
  */
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
-import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Sheet } from './model';
+import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Merge, type Sheet } from './model';
 import { cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize } from './style';
 
 export interface SheetViewProps {
@@ -107,6 +107,21 @@ export function SheetView({
 
   const mergeAt = (r: number, c: number) =>
     merges.find((m) => r >= m.startRow && r < m.startRow + m.rowSpan && c >= m.startCol && c < m.startCol + m.colSpan);
+  /**
+   * 숨긴 행이 걸친 병합 — 보이는 행만 센 높이(rowSpan)로, 맨 위 행이 숨었으면 첫 보이는 행에서 그린다(내용·모양은 원래 칸).
+   * 그대로 두면 숨은 행을 덮은 칸 때문에 아래 줄 칸이 한 칸씩 밀린다
+   */
+  const isHiddenRow = (r: number) => hiddenRows?.(r) ?? false;
+  const visibleMerge = (m: Merge) => {
+    let first = -1;
+    let span = 0;
+    for (let r = m.startRow; r < m.startRow + m.rowSpan; r++) {
+      if (isHiddenRow(r)) continue;
+      if (first < 0) first = r;
+      span++;
+    }
+    return { first, span };
+  };
 
   return (
     <div className={`mx-auto w-fit ${className}`}>
@@ -128,20 +143,25 @@ export function SheetView({
             <tr style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
               {cols.map((col, c) => {
                 const m = mergeAt(r, c);
-                if (m && (m.startRow !== r || m.startCol !== c)) return null;
-                const secret = hidden?.(r, c) ?? false;
-                const content = secret ? <span className="italic text-[#999]">{hiddenText}</span> : (renderCell?.(r, c) ?? displayValue(sheet, r, col));
-                const overlay = renderOverlay?.(r, c);
+                if (m && m.startCol !== c) return null;
+                const vm = m ? visibleMerge(m) : null;
+                if (vm && vm.first !== r) return null;
+                // 병합 칸은 원래 칸(맨 위 행) 기준으로 그린다 — 맨 위 행이 숨어 아래 행에서 그려도 같은 내용·모양
+                const rr = m ? m.startRow : r;
+                const rowSpan = vm ? vm.span : 1;
+                const secret = hidden?.(rr, c) ?? false;
+                const content = secret ? <span className="italic text-[#999]">{hiddenText}</span> : (renderCell?.(rr, c) ?? displayValue(sheet, rr, col));
+                const overlay = renderOverlay?.(rr, c);
                 return (
                   <td
                     key={col}
-                    rowSpan={m && m.rowSpan > 1 ? m.rowSpan : undefined}
+                    rowSpan={rowSpan > 1 ? rowSpan : undefined}
                     colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
-                    className={`overflow-hidden px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(r, c) ?? ''}`}
+                    className={`overflow-hidden px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(rr, c) ?? ''}`}
                     style={{
-                      textAlign: defaultAlign(sheet, r, col),
-                      ...cellCss(renderStyle(sheet, r, c, m?.rowSpan, m?.colSpan), { thinColor: thinBorderColor }),
-                      ...fitted(r, c, col, m?.colSpan ?? 1),
+                      textAlign: defaultAlign(sheet, rr, col),
+                      ...cellCss(renderStyle(sheet, rr, c, m?.rowSpan, m?.colSpan), { thinColor: thinBorderColor }),
+                      ...fitted(rr, c, col, m?.colSpan ?? 1),
                     }}
                   >
                     {overlay ? (

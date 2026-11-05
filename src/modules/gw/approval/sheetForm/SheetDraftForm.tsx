@@ -24,6 +24,7 @@ import {
   requiredMissing,
   completedDateRows,
   conditionHiddenRows,
+  clearConditionHidden,
   isDocFieldBind,
   slotOf,
   type SheetSlots,
@@ -388,8 +389,11 @@ export function SheetDraftForm({
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
   // 대체 서식(연동 유형) — 서식 버전에 묶여 있다(미리보기는 편집 중인 값)
   const link = (template ? linkProp : (fetched.data?.link ?? null)) || null;
-  const emit = (s0: Sheet, rowExtras: typeof extras, refMap: Record<string, string>) => {
-    let s = s0;
+  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>) => {
+    // 행 보이기 조건으로 숨은 행의 입력 값은 비운다 — 합계·금액·연동 값에 숨은 값이 남지 않게
+    const cleared = clearConditionHidden(s0, refMap0);
+    let s = cleared.sheet;
+    const refMap = cleared.refs;
     // 시스템이 계산하는 연동 칸(휴가 일수 등) — 기안 화면이 준 값으로 채운다
     if (link && systemValues) {
       const sys = systemValues(link, linkFieldValues(s, link, refMap));

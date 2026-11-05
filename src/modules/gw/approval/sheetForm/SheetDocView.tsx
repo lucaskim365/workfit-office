@@ -55,10 +55,12 @@ export function SheetDocView({
   const rawValues = fieldValues[SHEET_VALUES_KEY];
   const rawRows = fieldValues[SHEET_ROWS_KEY];
   // 반복 구간은 문서가 붙인 줄 수만큼 펼친 뒤 값을 얹는다
-  const sheet = useMemo(() => {
-    if (!loaded?.sheet) return null;
+  // 행 보이기 조건으로 숨은 행 — 대외 숨김 행을 빼기 전에 정한다(조건 칸이 대외 숨김 행에 있어도 맞게). 대외 문서는 행째 뺀다
+  const { sheet, condHidden } = useMemo(() => {
+    if (!loaded?.sheet) return { sheet: null, condHidden: new Set<number>() };
     const filled = applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false });
-    return external ? withoutExternalRows(filled) : filled;
+    const hiddenRows = conditionHiddenRows(filled);
+    return external ? { sheet: withoutExternalRows(filled, hiddenRows), condHidden: new Set<number>() } : { sheet: filled, condHidden: hiddenRows };
   }, [loaded, rawValues, rawRows, external]);
 
   if (!ver && !template) return null;
@@ -66,8 +68,6 @@ export function SheetDocView({
   if (error || !sheet) return <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver?.formId} v{ver?.version})을 읽지 못했습니다.</div>;
 
   const completedRows = new Set(completedDateRows(sheet));
-  // 행 보이기 조건에 맞지 않아 작성 때 숨었던 행
-  const condHidden = conditionHiddenRows(sheet);
   // 직인 칸이 고른 직인 — 없으면 바깥(문서 틀)이 정한 것·대표 직인
   const sealMark = sheetSealMarkId(sheet);
   const view = (

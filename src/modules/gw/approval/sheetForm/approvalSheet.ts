@@ -680,6 +680,31 @@ export function conditionHiddenRows(s: Sheet): Set<number> {
   return out;
 }
 
+/**
+ * 조건으로 숨은 행의 기안자 입력 칸 값을 비운다 — 숨은 값이 합계 수식·금액(결재선 금액 조건)·연동 값(휴가 등)·
+ * 관련 문서 가져오기·숫자 검사에 남지 않게(기안자가 볼 수도 고칠 수도 없는 값). 사람 칸 ID(refs)도 함께 비운다.
+ * 조건을 되돌리면 그 행은 빈 칸으로 다시 나타난다. 비운 뒤 다시 계산한 시트를 돌려준다
+ */
+export function clearConditionHidden(s: Sheet, refs: Record<string, string> = {}): { sheet: Sheet; refs: Record<string, string> } {
+  const rows = conditionHiddenRows(s);
+  if (!rows.size) return { sheet: s, refs };
+  let out = s;
+  let nextRefs = refs;
+  Object.keys(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach((key) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const col = key.slice(i + 1);
+    if (!rows.has(r)) return;
+    const c = s.cols.indexOf(col);
+    if (c >= 0 && String(out.rows[r]?.[col] ?? '') !== '' && isDraftEditable(s, r, c)) out = setCellValue(out, r, c, '', { allowFormula: false });
+    if (nextRefs[key] !== undefined) {
+      nextRefs = { ...nextRefs };
+      delete nextRefs[key];
+    }
+  });
+  return { sheet: out === s ? s : recalculate(out), refs: nextRefs };
+}
+
 /** 조건으로 숨은 행에 있는 칸 이름 */
 function conditionHiddenNames(s: Sheet): Set<string> {
   const rows = conditionHiddenRows(s);
@@ -703,6 +728,7 @@ export function completedDateRows(s: Sheet): number[] {
 /** 숫자·금액 입력 칸인데 숫자로 읽히지 않는 칸 주소 — 상신 전 검사 */
 export function invalidNumberCells(s: Sheet): string[] {
   const out: string[] = [];
+  const hiddenRows = conditionHiddenRows(s);
   Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach(([key, v]) => {
     const type = (v as CellInput).type;
     if (type !== 'number' && type !== 'currency') return;
@@ -711,7 +737,7 @@ export function invalidNumberCells(s: Sheet): string[] {
     const col = key.slice(i + 1);
     const c = s.cols.indexOf(col);
     const raw = String(s.rows[r]?.[col] ?? '').trim();
-    if (c >= 0 && raw !== '' && parseNumber(raw) === null) out.push(cellAddress(r, c));
+    if (c >= 0 && !hiddenRows.has(r) && raw !== '' && parseNumber(raw) === null) out.push(cellAddress(r, c));
   });
   return out;
 }

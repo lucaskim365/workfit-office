@@ -172,11 +172,19 @@ export function setExternalHiddenRows(s0: Sheet, r1: number, r2: number, on: boo
   return s;
 }
 
-/** 대외 문서 모양 — 숨길 행을 뺀 시트(아래 행부터 지워 번호가 밀리지 않게) */
-export function withoutExternalRows(s0: Sheet): Sheet {
-  const rows = Object.keys(s0.rowMeta[APPROVAL_NS.extHide] ?? {})
-    .map(Number)
-    .filter((r) => isExternalHiddenRow(s0, r) && r < s0.rows.length)
-    .sort((a, b) => b - a);
-  return rows.reduce((s, r) => deleteRow(s, r), s0);
+/**
+ * 대외 문서 모양 — 숨길 행을 뺀 시트(아래 행부터 지워 번호가 밀리지 않게).
+ * alsoRows: 함께 뺄 행(행 보이기 조건으로 숨은 행) — 대외 숨김 행을 빼기 전에 정해 넘긴다(조건 칸이 대외 숨김 행에 있어도 맞게)
+ */
+export function withoutExternalRows(s0: Sheet, alsoRows: Iterable<number> = []): Sheet {
+  const rows = new Set(
+    Object.keys(s0.rowMeta[APPROVAL_NS.extHide] ?? {})
+      .map(Number)
+      .filter((r) => isExternalHiddenRow(s0, r))
+  );
+  for (const r of alsoRows) rows.add(r);
+  return [...rows]
+    .filter((r) => r >= 0 && r < s0.rows.length)
+    .sort((a, b) => b - a)
+    .reduce((s, r) => deleteRow(s, r), s0);
 }

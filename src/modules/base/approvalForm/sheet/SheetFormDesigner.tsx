@@ -166,14 +166,15 @@ function Designer({
       // 엑셀엔 보통 제목이 들어 있어 큰 제목 칸은 비운다
       const imported = keepFull ? insertDocHeader(fromXlsx, { title: '', closing: form.closing || undefined }) : keepInfo ? insertDocInfoBlock(fromXlsx) : fromXlsx;
       setSheet(imported);
-      // 엑셀 양식엔 보통 제목이 들어 있다 — 문서 머리의 큰 제목과 겹치지 않게 끈다(서식 정보에서 다시 켤 수 있음)
-      setForm((f) => ({ ...f, hiddenHeaderItems: [...new Set([...(f.hiddenHeaderItems ?? []), 'docTitle'])] }));
+      // 엑셀 양식엔 보통 제목이 들어 있다 — 문서 머리의 큰 제목과 겹치지 않게 끈다(서식 정보에서 다시 켤 수 있음).
+      // 기존 서식에 붙인 시트는 끄지 않는다 — 그 설정은 기존 서식 기록이라 옛 문서 제목까지 사라진다
+      if (!legacy) setForm((f) => ({ ...f, hiddenHeaderItems: [...new Set([...(f.hiddenHeaderItems ?? []), 'docTitle'])] }));
       const base = file.name.replace(/\.xlsx$/i, '');
       if (!form.name.trim()) set({ name: base });
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepFull ? '문서 머리(로고·결재란·문서 정보)와 맺음말은 엑셀 위·아래에 그대로 두었습니다 — 큰 제목 칸은 비웠으니 엑셀 제목을 쓰거나 칸을 정리하세요. ' : keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서 머리(로고·결재란·문서 정보·맺음말)도 시트 안에 두려면 편집 도구의 [문서 머리 넣기]를 누르세요. '}(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)`,
+        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepFull ? '문서 머리(로고·결재란·문서 정보)와 맺음말은 엑셀 위·아래에 그대로 두었습니다 — 큰 제목 칸은 비웠으니 엑셀 제목을 쓰거나 칸을 정리하세요. ' : keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서 머리(로고·결재란·문서 정보·맺음말)도 시트 안에 두려면 편집 도구의 [문서 머리 넣기]를 누르세요. '}${legacy ? '' : "(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)"}`,
         list: warnings,
       });
     } catch (err) {

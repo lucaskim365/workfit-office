@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { SheetDocView, isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from '@/modules/gw/approval/sheetForm/approvalSheet';
 import { isFullHeaderSheet } from '@/modules/gw/approval/sheetForm/sheetHeader';
-import { CompanyLogo } from '@/modules/gw/approval/components/CompanyLetterhead';
+import { CompanyLetterheadBlock, CompanyLogo } from '@/modules/gw/approval/components/CompanyLetterhead';
+import { DEFAULT_LETTERHEAD } from '@/domain/approvalForm/headerItems';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
@@ -389,7 +390,7 @@ export default function MobileApprovalDetail() {
                 <Card>
                   {isSheetDoc(doc.fieldValues) ? (
                     // 시트 서식 문서 — PC 문서 보기와 같은 부품을 휴대폰 폭에 맞춰 줄여 그린다
-                    <MobileSheetBody doc={doc} masked={isMaskingActive} drafterName={doc.drafterName || nameOf(doc.drafterId)} />
+                    <MobileSheetBody doc={doc} form={legacyForm} masked={isMaskingActive} drafterName={doc.drafterName || nameOf(doc.drafterId)} drafterPos={doc.drafterPos || users.find((u) => u.id === doc.drafterId)?.position || ''} />
                   ) : (
                     <ApprovalBody doc={doc} form={form} users={users} isMaskingActive={isMaskingActive} maskValue={maskValue} />
                   )}
@@ -711,7 +712,19 @@ function fmtAmount(n: number): string {
  * 시트 서식 문서 본문(휴대폰) — PC 와 같은 SheetDocView 를 칸 폭에 맞춰 줄인다(작은 글씨는 손가락으로 확대).
  * 결재란 칸은 휴대폰에선 위 '결재선' 카드가 대신하므로 비워 둔다.
  */
-function MobileSheetBody({ doc, masked, drafterName }: { doc: ApprovalDoc; masked: boolean; drafterName: string }) {
+function MobileSheetBody({
+  doc,
+  form,
+  masked,
+  drafterName,
+  drafterPos,
+}: {
+  doc: ApprovalDoc;
+  form?: ApprovalForm;
+  masked: boolean;
+  drafterName: string;
+  drafterPos: string;
+}) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   useEffect(() => {
@@ -732,17 +745,20 @@ function MobileSheetBody({ doc, masked, drafterName }: { doc: ApprovalDoc; maske
         // 테두리 2px 만큼 덜 — 꽉 채우면 감싼 상자(overflow-hidden)가 맨 오른쪽 선을 잘라 먹는다
         fitWidth={width - 2}
         docInfo={{
-          drafter: drafterName,
+          drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
           dept: doc.drafterDept ?? '',
           date: korDateText(doc.submittedAt ?? doc.createdAt),
           docNo: docNoOf(doc),
           completedDate: doc.completedAt ? korDateText(doc.completedAt) : '',
+          // 문서 이름(큰 제목) — 격식 문서명 → 서식명(PC 문서 보기와 같음)
+          formTitle: form?.docTitle || form?.name || doc.docType,
           title: doc.title,
-          preservation: doc.preservationPeriod ?? '',
+          preservation: doc.preservationPeriod || form?.preservationPeriod || '',
           visibility: VISIBILITY_LABEL[doc.visibility ?? ''] ?? doc.visibility ?? '',
         }}
         slots={{
           logo: <CompanyLogo height={22} />,
+          letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
           drafterSign: <span className="font-bold">기안자 {drafterName}</span>,
         }}
       />

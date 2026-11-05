@@ -142,11 +142,12 @@ function appendRow(s: Sheet, sec: RepeatSection): Sheet {
     const v = n.rowMeta[ns]?.[String(last)];
     if (v !== undefined) rowMeta[ns] = { ...rowMeta[ns], [String(at)]: v };
   });
-  // 병합: 구간 전체를 세로로 덮는 것(이름 칸)은 늘리고, 마지막 행 안의 가로 병합은 새 행에도
+  // 병합: 구간을 세로로 덮는 것(여러 줄 — 이름 칸)은 늘리고, 마지막 행 안의 가로 병합(한 줄)은 새 행에도.
+  // 한 줄짜리 구간의 가로 병합은 '구간을 덮는' 조건에도 맞지만 세로 병합이 아니므로 늘리지 않는다(새 줄 칸이 덮여 못 쓰게 됨)
   const merges: Merge[] = [];
   n.merges.forEach((m) => {
     const end = m.startRow + m.rowSpan - 1;
-    if (m.startRow <= sec.first && end === last) merges.push({ ...m, rowSpan: m.rowSpan + 1 });
+    if (m.rowSpan > 1 && m.startRow <= sec.first && end === last) merges.push({ ...m, rowSpan: m.rowSpan + 1 });
     else merges.push(m);
     if (m.startRow === last && m.rowSpan === 1) merges.push({ ...m, startRow: at });
   });
@@ -158,7 +159,7 @@ export function expandRepeats(template: Sheet, extras: RowExtras): Sheet {
   let s = template;
   const sections = repeatSections(template).sort((a, b) => b.first - a.first);
   for (const sec of sections) {
-    const count = Math.max(0, Math.min(MAX_EXTRA_ROWS, Math.floor(extras[sec.id] ?? 0)));
+    const count = extraRowCount(extras, sec.id);
     let cur = sec;
     for (let k = 0; k < count; k++) {
       s = appendRow(s, cur);
@@ -166,6 +167,11 @@ export function expandRepeats(template: Sheet, extras: RowExtras): Sheet {
     }
   }
   return s;
+}
+
+/** 구간에 실제로 붙는 줄 수 — 0~MAX_EXTRA_ROWS 정수(문서 값이 이상해도 펼친 모양과 같게) */
+export function extraRowCount(extras: RowExtras, id: string): number {
+  return Math.max(0, Math.min(MAX_EXTRA_ROWS, Math.floor(extras[id] ?? 0)));
 }
 
 /** fieldValues.__rows(JSON 글자) → 붙인 줄 수. 없거나 깨졌으면 빈 값 */

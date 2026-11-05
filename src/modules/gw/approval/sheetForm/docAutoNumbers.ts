@@ -7,7 +7,7 @@
 import { cellKey, type Sheet } from '@/lib/sheet';
 import { sheetAutoNumberCells, type SheetAutoNumberCell } from '@/domain/approvalForm/sheetAutoNumber';
 import { SHEET_VALUES_KEY, applyValues, conditionHiddenRows, readSheetValues } from './approvalSheet';
-import { SHEET_ROWS_KEY, expandRepeats, readRowExtras, repeatSections } from './repeatRows';
+import { SHEET_ROWS_KEY, expandRepeats, extraRowCount, readRowExtras, repeatSections } from './repeatRows';
 
 export function docAutoNumberCells(template: Sheet | null | undefined, fieldValues: Record<string, unknown>): SheetAutoNumberCell[] {
   if (!template) return [];
@@ -16,7 +16,7 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
   const extras = readRowExtras(fieldValues[SHEET_ROWS_KEY]);
   const sections = repeatSections(template);
   /** 서식 틀 행 → 문서 행: 위쪽 반복 구간에 더한 줄 수만큼 */
-  const docRow = (r: number) => r + sections.filter((x) => x.last < r).reduce((n, x) => n + (extras[x.id] ?? 0), 0);
+  const docRow = (r: number) => r + sections.filter((x) => x.last < r).reduce((n, x) => n + extraRowCount(extras, x.id), 0);
   const doc = applyValues(expandRepeats(template, extras), readSheetValues(fieldValues[SHEET_VALUES_KEY]), { recalc: false });
   const hidden = conditionHiddenRows(doc);
   return cells
