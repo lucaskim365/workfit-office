@@ -6,10 +6,12 @@
  * - 기안자: 구간 끝에 행을 붙인다. 붙인 행은 구간 마지막 행을 본뜬다(서식·테두리·입력 칸·수식, 수식은 한 행 아래로 옮겨서)
  *   - 구간 끝에 붙이므로 구간을 덮는 범위 수식(=SUM(E8:E12))은 늘어난 행까지 따라간다(shiftFormula: 끝 바로 다음 삽입은 늘어남)
  *   - 구간 전체를 세로로 덮는 병합(왼쪽 '매출구분' 같은 이름 칸)도 늘린다. 마지막 행 안의 가로 병합은 새 행에도 만든다
- * - 문서에는 구간별로 더 붙인 줄 수만 저장한다(fieldValues.__rows). 틀은 서식 버전에 그대로 두고,
+ * - [행 삭제]는 구간 마지막 행을 지운다 — 기안자가 붙인 줄은 물론 관리자가 그린 줄도(기존 서식 표의 [행 삭제]와 같음, 1줄은 남김).
+ *   그린 줄을 지우면 붙인 줄 수가 음수가 된다(-2 = 그린 줄 중 아래 2줄 지움). 범위 수식·병합은 지운 만큼 줄어든다
+ * - 문서에는 구간별로 더 붙인(또는 지운) 줄 수만 저장한다(fieldValues.__rows). 틀은 서식 버전에 그대로 두고,
  *   보기·작성 때 같은 규칙으로 펼친다(expandRepeats) — 같은 틀·같은 줄 수면 항상 같은 모양
  */
-import { cellKey, insertRow, translateFormula, type Merge, type Sheet } from '@/lib/sheet/core';
+import { cellKey, deleteRow, insertRow, translateFormula, type Merge, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, type SheetValues } from './approvalSheet';
 
 export interface RepeatMark {
@@ -23,7 +25,7 @@ export interface RepeatSection extends RepeatMark {
   last: number;
 }
 
-/** 구간별로 더 붙인 줄 수 */
+/** 구간별로 더 붙인 줄 수 — 음수면 관리자가 그린 줄 중 아래에서 지운 줄 수 */
 export type RowExtras = Record<string, number>;
 
 /** 문서 fieldValues 에 붙인 줄 수를 담는 키 — 저장 데이터의 키이므로 바꾸지 말 것 */
@@ -159,19 +161,28 @@ export function expandRepeats(template: Sheet, extras: RowExtras): Sheet {
   let s = template;
   const sections = repeatSections(template).sort((a, b) => b.first - a.first);
   for (const sec of sections) {
-    const count = extraRowCount(extras, sec.id);
+    const count = extraRowCount(extras, sec);
     let cur = sec;
     for (let k = 0; k < count; k++) {
       s = appendRow(s, cur);
       cur = { ...cur, last: cur.last + 1 };
     }
+    // 그린 줄 지우기 — 아래부터(범위 수식·세로 병합은 deleteRow 가 줄인다)
+    for (let k = 0; k > count; k--) {
+      s = deleteRow(s, cur.last);
+      cur = { ...cur, last: cur.last - 1 };
+    }
   }
   return s;
 }
 
-/** 구간에 실제로 붙는 줄 수 — 0~MAX_EXTRA_ROWS 정수(문서 값이 이상해도 펼친 모양과 같게) */
-export function extraRowCount(extras: RowExtras, id: string): number {
-  return Math.max(0, Math.min(MAX_EXTRA_ROWS, Math.floor(extras[id] ?? 0)));
+/**
+ * 구간에 실제로 붙는(음수면 지우는) 줄 수 — 정수, 최대 MAX_EXTRA_ROWS, 최소 '그린 줄 − 1'(1줄은 남김).
+ * 문서 값이 이상해도 펼친 모양과 같게 — 펼치기·자동번호 자리 계산이 같이 쓴다
+ */
+export function extraRowCount(extras: RowExtras, sec: { id: string; first: number; last: number }): number {
+  const n = Math.trunc(extras[sec.id] ?? 0);
+  return Math.max(-(sec.last - sec.first), Math.min(MAX_EXTRA_ROWS, Number.isFinite(n) ? n : 0));
 }
 
 /** fieldValues.__rows(JSON 글자) → 붙인 줄 수. 없거나 깨졌으면 빈 값 */
@@ -180,7 +191,8 @@ export function readRowExtras(raw: unknown): RowExtras {
   try {
     const p = JSON.parse(raw);
     if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
-    return Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v === 'number' && v > 0)) as RowExtras;
+    // 음수 = 그린 줄을 지운 수
+    return Object.fromEntries(Object.entries(p).filter(([, v]) => typeof v === 'number' && Number.isFinite(v) && v !== 0)) as RowExtras;
   } catch {
     return {};
   }
@@ -212,11 +224,12 @@ export function addRepeatRow(template: Sheet, extras: RowExtras, values: SheetVa
   };
 }
 
-/** [행 삭제] — 구간 마지막 행을 지운다. 관리자가 그린 줄 수보다는 줄지 않는다 */
+/** [행 삭제] — 구간 마지막 행을 지운다. 관리자가 그린 줄도 지울 수 있고(기존 서식 표와 같음), 1줄은 남긴다 */
 export function removeRepeatRow(template: Sheet, extras: RowExtras, values: SheetValues, id: string): { extras: RowExtras; values: SheetValues } {
   const last = currentLast(template, extras, id);
-  if (last === undefined || (extras[id] ?? 0) <= 0) return { extras, values };
-  const next = { ...extras, [id]: extras[id] - 1 };
+  const sec = repeatSections(template).find((x) => x.id === id);
+  if (last === undefined || !sec || (extras[id] ?? 0) <= -(sec.last - sec.first)) return { extras, values };
+  const next = { ...extras, [id]: (extras[id] ?? 0) - 1 };
   if (next[id] === 0) delete next[id];
   return {
     extras: next,

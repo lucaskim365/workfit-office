@@ -15,8 +15,14 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
   if (!cells.length) return [];
   const extras = readRowExtras(fieldValues[SHEET_ROWS_KEY]);
   const sections = repeatSections(template);
-  /** 서식 틀 행 → 문서 행: 위쪽 반복 구간에 더한 줄 수만큼 */
-  const docRow = (r: number) => r + sections.filter((x) => x.last < r).reduce((n, x) => n + extraRowCount(extras, x.id), 0);
+  /** 서식 틀 행 → 문서 행: 위쪽 반복 구간에 더한(지운) 줄 수만큼 */
+  const docRow = (r: number) => r + sections.filter((x) => x.last < r).reduce((n, x) => n + extraRowCount(extras, x), 0);
+  /** 서식 틀 행이 [행 삭제]로 지워졌나 — 구간의 그린 줄 중 아래에서 지운 줄 */
+  const inRemovedRow = (r: number) =>
+    sections.some((x) => {
+      const n = extraRowCount(extras, x);
+      return n < 0 && r > x.last + n && r <= x.last;
+    });
   const doc = applyValues(expandRepeats(template, extras), readSheetValues(fieldValues[SHEET_VALUES_KEY]), { recalc: false });
   const hidden = conditionHiddenRows(doc);
   return cells
@@ -24,5 +30,6 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
       const r = docRow(x.r);
       return { ...x, r, key: cellKey(r, template.cols[x.c]) };
     })
-    .filter((x) => !hidden.has(x.r));
+    // 지운 줄에 있던 칸(반복 구간 안 자동번호 — 드묾)은 빼고
+    .filter((x, i) => !hidden.has(x.r) && !inRemovedRow(cells[i].r))
 }

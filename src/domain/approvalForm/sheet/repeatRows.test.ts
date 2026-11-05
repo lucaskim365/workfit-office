@@ -79,8 +79,11 @@ test('행 추가·삭제 — 값은 아래로 밀리고, 지운 행 값은 버�
   assert.deepEqual(extras, {});
   assert.equal(values[cellKey(3, b)], undefined); // 지운 행 값은 버림
   assert.equal(values[cellKey(1, b)], '2');
+  // 관리자가 그린 줄도 지울 수 있다(기존 표 [행 삭제]와 같음) — 2줄 구간이면 1줄까지
   const again = removeRepeatRow(tpl, extras, values, id);
-  assert.deepEqual(again.extras, {}); // 더 못 줄임
+  assert.deepEqual(again.extras, { [id]: -1 });
+  assert.equal(repeatSections(expandRepeats(tpl, again.extras))[0].last, 1, "그린 줄 하나 지움");
+  assert.deepEqual(removeRepeatRow(tpl, again.extras, again.values, id).extras, { [id]: -1 }, "1줄은 남김");
 });
 
 test('구간 둘 — 아래 구간부터 펼쳐 위 구간 행 번호가 흔들리지 않음', () => {

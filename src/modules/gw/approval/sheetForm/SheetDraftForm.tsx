@@ -597,7 +597,6 @@ export function SheetDraftForm({
           afterRow={(r) => {
             const sec = sections.find((x) => x.last === r);
             if (!sec) return null;
-            const added = extras[sec.id] ?? 0;
             return (
               <div className="flex items-center gap-1.5 border-x border-b border-dashed border-violet-300 bg-violet-50/60 px-2 py-1 text-[11px]">
                 <span className="font-semibold text-violet-700">{sec.label}</span>
@@ -610,7 +609,8 @@ export function SheetDraftForm({
                   <Plus className="h-3 w-3" />
                   행 추가
                 </button>
-                {added > 0 && (
+                {/* 그린 줄도 지울 수 있다(기존 서식 표와 같음) — 1줄은 남김 */}
+                {sec.last > sec.first && (
                   <button
                     type="button"
                     onClick={() => changeRows(sec.id, false)}

@@ -122,12 +122,15 @@ export function translateLegacyFormula(
 }
 
 /**
- * 기존 '표'에서 기안자가 줄을 더하던 곳 — 품목 줄: 미리 쓴 글자가 없는 줄(줄 번호 1·2·3… 은 빼고).
- * 같은 모양(수식 열이 같음)의 품목 줄이 3줄 넘게 이어지면 그 마지막 줄(품목 1~8 뒤에 합계 줄이 오는 발주 세부내역 → 8번째 줄),
- * 데이터 줄이 하나뿐이고 비어 있으면 그 줄(빈 줄 하나로 시작하는 품목 표).
+ * 기존 '표'에서 기안자가 줄을 더하고 지우던 곳 — 품목 줄: 미리 쓴 글자가 없는 줄(줄 번호 1·2·3… 은 빼고).
+ * 같은 모양(수식 열이 같음)의 품목 줄이 3줄 넘게 이어지면 그 줄들 전체(품목 1~8 뒤에 합계 줄이 오는 발주 세부내역 → 1~8번 줄 —
+ * 기안자가 [행 삭제]로 안 쓰는 품목 줄을 아래부터 지운다), 데이터 줄이 하나뿐이고 비어 있으면 그 줄(빈 줄 하나로 시작하는 품목 표).
  * 이름표가 든 줄(작성일·상호 같은 라벨·값 표, '공급가액 합계' 같은 합계 줄, 직인란)은 품목 줄이 아니다 — 반복 구간 없음(관리자가 지정)
  */
-export function legacyRepeatRow(t: { cols: string[]; rows: Array<Record<string, string>>; cellFormulas: Record<string, unknown> }, headerRows: number): number | null {
+export function legacyRepeatRows(
+  t: { cols: string[]; rows: Array<Record<string, string>>; cellFormulas: Record<string, unknown> },
+  headerRows: number
+): { first: number; last: number } | null {
   const data = t.rows.map((_, i) => i).filter((i) => i >= headerRows);
   const pattern = (i: number) => t.cols.map((c) => (t.cellFormulas[`${i}:${c}`] ? 'f' : 'x')).join('');
   const itemRow = (i: number) =>
@@ -136,10 +139,15 @@ export function legacyRepeatRow(t: { cols: string[]; rows: Array<Record<string, 
       const v = String(t.rows[i][c] ?? '').trim();
       return v === '' || /^\d+$/.test(v);
     });
-  if (data.length === 1) return itemRow(data[0]) ? data[0] : null;
+  if (data.length === 1) return itemRow(data[0]) ? { first: data[0], last: data[0] } : null;
   for (let k = data.length - 1; k >= 2; k--) {
     const [a, b, c] = [data[k - 2], data[k - 1], data[k]];
-    if (pattern(a) === pattern(c) && pattern(b) === pattern(c) && itemRow(a) && itemRow(b) && itemRow(c)) return c;
+    if (pattern(a) === pattern(c) && pattern(b) === pattern(c) && itemRow(a) && itemRow(b) && itemRow(c)) {
+      // 같은 모양 품목 줄이 위로 이어지는 데까지
+      let first = k - 2;
+      while (first - 1 >= 0 && pattern(data[first - 1]) === pattern(c) && itemRow(data[first - 1])) first--;
+      return { first: data[first], last: c };
+    }
   }
   return null;
 }
@@ -385,7 +393,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const top = row;
     const tc = t.cols.length;
     const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
-    const repeatRow = legacyRepeatRow(t, headerRows);
+    const repeat = legacyRepeatRows(t, headerRows);
     const untranslated: string[] = [];
     t.rows.forEach((tr, i) => {
       const r = nextRow();
@@ -430,7 +438,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (bottom >= top) {
       s = applyBorder(s, { r1: top, r2: bottom, c1: 0, c2: n - 1 }, 'all');
       // 기안자가 줄을 더하던 곳 — 품목처럼 같은 모양 줄이 이어지는 마지막 줄(legacyRepeatRow). 없으면 두지 않음
-      if (repeatRow !== null) s = setRepeatSection(s, top + repeatRow, top + repeatRow, f.label || '반복 구간');
+      if (repeat) s = setRepeatSection(s, top + repeat.first, top + repeat.last, f.label || '반복 구간');
       else if (t.rows.length > headerRows) noRepeat.push(`'${f.label || '표'}'`);
     }
     if (untranslated.length) warnings.push(`'${f.label || '표'}'의 수식 중 ${untranslated.join(', ')}은(는) 옮기지 못해 값만 넣었습니다(다른 표를 가리키는 식 등) — 시트 수식으로 다시 넣어 주세요.`);

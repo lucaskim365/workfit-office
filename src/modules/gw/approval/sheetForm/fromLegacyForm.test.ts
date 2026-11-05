@@ -4,7 +4,7 @@ import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
 import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 import { setCellValue } from '@/lib/sheet';
-import { legacyFormToSheet, legacyRepeatRow, translateLegacyFormula } from './fromLegacyForm';
+import { legacyFormToSheet, legacyRepeatRows, translateLegacyFormula } from './fromLegacyForm';
 import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 
@@ -238,12 +238,12 @@ test('기존 표에서 줄을 더하던 곳 — 같은 모양 품목 줄이 이�
   const items = Array.from({ length: 8 }, (_, i) => ({ A: String(i + 1), B: '', G: '' }));
   const totals = ['공급가액 합계', '부가세', '합계'].map((t) => ({ A: t, B: '', G: '' }));
   const po = { cols, rows: [{ A: 'NO', B: '항목', G: '공급가액' }, ...items, ...totals], cellFormulas: f([...Array.from({ length: 11 }, (_, i) => `${i + 1}:G`)]) };
-  assert.equal(legacyRepeatRow(po, 1), 8);
+  assert.deepEqual(legacyRepeatRows(po, 1), { first: 1, last: 8 }, '품목 1~8 줄 전체(합계 줄 빼고)');
   // 라벨·값 표(작성일 | 값 | 상호 | 값 …) — 미리 쓴 글자가 많아 반복 구간 없음
   const info = { cols: ['A', 'B', 'C', 'D'], rows: Array.from({ length: 6 }, () => ({ A: '작성일', B: '', C: '상호', D: '워크핏' })), cellFormulas: {} };
-  assert.equal(legacyRepeatRow(info, 1), null);
+  assert.equal(legacyRepeatRows(info, 1), null);
   // 데이터 줄 하나뿐이고 비어 있으면 그 줄
-  assert.equal(legacyRepeatRow({ cols: ['A', 'B'], rows: [{ A: '머리', B: '' }, { A: '', B: '' }], cellFormulas: {} }, 1), 1);
+  assert.deepEqual(legacyRepeatRows({ cols: ['A', 'B'], rows: [{ A: '머리', B: '' }, { A: '', B: '' }], cellFormulas: {} }, 1), { first: 1, last: 1 });
   // 데이터 줄 하나에 이름표가 있으면(직인란 등) 품목 줄 아님
-  assert.equal(legacyRepeatRow({ cols: ['A', 'B'], rows: [{ A: '발주자', B: '' }, { A: '날짜', B: '년 월 일' }], cellFormulas: {} }, 1), null);
+  assert.equal(legacyRepeatRows({ cols: ['A', 'B'], rows: [{ A: '발주자', B: '' }, { A: '날짜', B: '년 월 일' }], cellFormulas: {} }, 1), null);
 });
