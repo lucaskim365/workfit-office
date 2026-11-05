@@ -28,6 +28,9 @@ import {
   type SheetSlots,
   VISIBILITY_LABEL,
   nameLabel,
+  CHECK_MARK,
+  conditionSources,
+  rowConditionOf,
   isStructureLocked,
   setApprovalCellValue,
   validateApprovalSheet,
@@ -254,6 +257,8 @@ function Designer({
 
   // ── 칸 표시(편집 격자 안) ──
   const sections = useMemo(() => repeatSections(sheet), [sheet]);
+  // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
+  const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
   const badge = (r: number, c: number) => {
     const p = approvalCellProps(sheet, r, c);
     // 반복 구간 — 첫 열 왼쪽에 보라색 띠, 첫 행에 이름
@@ -268,15 +273,31 @@ function Designer({
         )}
       </>
     );
-    // 대외 문서에서 숨길 행 — 마지막 열 오른쪽 아래에 표시
+    // 행 표시(대외 숨김·보이기 조건) — 마지막 열 오른쪽 아래에
+    // 병합 칸이면 대표 칸(c)이 마지막 열이 아니어도 병합이 마지막 열까지 덮으면 그 칸에
+    const lastCol = c + (sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1) - 1 === sheet.cols.length - 1;
+    const ext = lastCol && isExternalHiddenRow(sheet, r);
+    const cond = lastCol ? rowConditionOf(sheet, r) : undefined;
+    const condText = cond && `${condLabels.get(cond.name) ?? nameLabel(cond.name)} = ${cond.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join('·')}`;
     const extMark =
-      // 병합 칸이면 대표 칸(c)이 마지막 열이 아니어도 병합이 마지막 열까지 덮으면 그 칸에
-      c + (sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1) - 1 === sheet.cols.length - 1 && isExternalHiddenRow(sheet, r) ? (
-        <span
-          title="대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다"
-          className="pointer-events-none absolute bottom-0.5 right-0.5 rounded-sm bg-slate-500/80 px-1 text-[8.5px] font-bold leading-[13px] text-white"
-        >
-          대외 숨김
+      ext || cond ? (
+        <span className="pointer-events-none absolute bottom-0.5 right-0.5 flex gap-0.5">
+          {cond && (
+            <span
+              title={`행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)`}
+              className="max-w-[220px] truncate rounded-sm bg-indigo-500/85 px-1 text-[8.5px] font-bold leading-[13px] text-white"
+            >
+              조건 · {condText}
+            </span>
+          )}
+          {ext && (
+            <span
+              title="대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다"
+              className="rounded-sm bg-slate-500/80 px-1 text-[8.5px] font-bold leading-[13px] text-white"
+            >
+              대외 숨김
+            </span>
+          )}
         </span>
       ) : null;
     const marks: { t: string; cls: string; title: string }[] = [];

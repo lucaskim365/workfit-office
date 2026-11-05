@@ -23,6 +23,7 @@ import {
   invalidNumberCells,
   requiredMissing,
   completedDateRows,
+  conditionHiddenRows,
   isDocFieldBind,
   slotOf,
   type SheetSlots,
@@ -417,6 +418,8 @@ export function SheetDraftForm({
   const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
   // 결재 완료일 줄 — 작성 중엔 숨김(값이 없을 때)
   const completedRows = useMemo(() => new Set(sheet && !draftInfo?.completedDate ? completedDateRows(sheet) : []), [sheet, draftInfo?.completedDate]);
+  // 행 보이기 조건 — 조건 칸(예: 지출 항목) 값에 맞지 않는 행은 숨긴다(기존 서식 '식대일 때만 보이기')
+  const condHidden = useMemo(() => (sheet ? conditionHiddenRows(sheet) : new Set<number>()), [sheet]);
 
   // 처음 열 때 서식 버전·수식 결과를 문서 값에 남긴다(아무것도 안 쓰고 저장해도 어느 틀인지 알게)
   const needsInit = !!sheet && values['__formVersion'] !== key;
@@ -535,7 +538,7 @@ export function SheetDraftForm({
             return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t, ref) => set(r, c, t, ref)} org={org} />;
           }}
           // 결재 완료일 줄 — 작성 중엔 아직 결재 전이라 줄째 숨김(기존 문서 머리와 같음)
-          hiddenRows={(r) => completedRows.has(r)}
+          hiddenRows={(r) => completedRows.has(r) || condHidden.has(r)}
           // 반복 구간 줄 수 — 구간 바로 아래 띠(기존 서식 '표'의 [행 추가]·[행 삭제]와 같음, 인쇄 안 됨)
           afterRow={(r) => {
             const sec = sections.find((x) => x.last === r);

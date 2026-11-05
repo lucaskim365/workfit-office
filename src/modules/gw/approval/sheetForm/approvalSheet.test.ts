@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet';
-import { draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { CHECK_MARK, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue } from '@/lib/sheet';
 
 function base(): Sheet {
@@ -50,7 +50,7 @@ test('이름 칸에는 수식이 들어가지 않는다', () => {
 });
 
 test('이름공간 값은 바뀌지 않는다', () => {
-  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal', repeat: 'repeat', extHide: 'extHide', guide: 'guide', autoNo: 'autoNo', sealMark: 'sealMark', required: 'required' });
+  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal', repeat: 'repeat', extHide: 'extHide', guide: 'guide', autoNo: 'autoNo', sealMark: 'sealMark', required: 'required', showIf: 'showIf' });
 });
 
 /** 2×3: A1 라벨(잠금 없음, 입력 아님) · B1 입력+이름 amount · C1 입력+잠금 · A2 입력 · B2 수식 =B1*2 */
@@ -267,4 +267,56 @@ test('자동 채우기 — 기안 정보 칸 값', () => {
   assert.equal(draftInfoValue('project.name', info), undefined);
   assert.equal(draftInfoValue(undefined, info), undefined);
   assert.equal(draftInfoValue('draft.date', undefined), undefined);
+});
+
+test('행 보이기 조건 — 조건 칸 값에 맞지 않는 행 숨김, 필수 검사·연동 값에서 빠짐', () => {
+  // 0행: 지출 항목(선택, 이름 expenseItem) / 1행: 식대 분류(필수, 이름 sort_meal) / 2행: 교통비 분류
+  let s = createSheet(4, 2);
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['식대', '교통비'] });
+  s = setCellName(s, 0, 1, 'expenseItem');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'select', options: ['간식대', '야근식대'] });
+  s = setCellMeta(s, APPROVAL_NS.required, 1, 1, true);
+  s = setCellName(s, 1, 1, 'sort_meal');
+  s = setCellValue(s, 1, 0, '분류');
+  s = setRowCondition(s, 1, 1, { name: 'expenseItem', values: ['식대'] });
+  s = setRowCondition(s, 2, 2, { name: 'expenseItem', values: ['교통비', '기타'] });
+  assert.deepEqual(rowConditionOf(s, 2), { name: 'expenseItem', values: ['교통비', '기타'] });
+  assert.deepEqual(conditionSources(s).map((x) => x.name), ['expenseItem', 'sort_meal']);
+
+  // 아무것도 안 골랐으면 둘 다 숨김 — 숨은 필수 칸은 검사하지 않음
+  assert.deepEqual([...conditionHiddenRows(s)].sort(), [1, 2]);
+  assert.deepEqual(requiredMissing(s), []);
+
+  // 식대 → 1행 보임(필수 검사 대상), 2행 숨김
+  let meal = setCellValue(s, 0, 1, '식대');
+  assert.deepEqual([...conditionHiddenRows(meal)], [2]);
+  assert.deepEqual(requiredMissing(meal), ['분류']);
+  meal = setCellValue(meal, 1, 1, '야근식대');
+  assert.equal(sheetDocFields(meal, 'f@v1').sort_meal, '야근식대');
+
+  // 식대 분류를 고른 뒤 교통비로 바꾸면 숨은 식대 분류 값은 연동 값에서 빈 값(결재선 조건에 안 걸리게)
+  const bus = setCellValue(meal, 0, 1, '교통비');
+  assert.deepEqual([...conditionHiddenRows(bus)], [1]);
+  assert.equal(sheetDocFields(bus, 'f@v1').sort_meal, '');
+
+  // 조건 칸 이름을 지우면 숨기지 않는다 / 조건 빼기
+  assert.equal(conditionHiddenRows(setCellName(s, 0, 1, undefined)).size, 0);
+  assert.equal(rowConditionOf(setRowCondition(s, 1, 2, undefined), 1), undefined);
+});
+
+test('행 보이기 조건 — 여러 선택·체크 칸, 숨은 조건 칸을 보는 행도 숨김', () => {
+  assert.equal(conditionMatches('식대, 교통비', ['교통비']), true);
+  assert.equal(conditionMatches('식대', ['교통비']), false);
+  assert.equal(conditionMatches(CHECK_MARK, [CHECK_MARK]), true);
+  let s = createSheet(3, 2);
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'checkbox' });
+  s = setCellName(s, 0, 1, 'car');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'select', options: ['자차', '렌트'] });
+  s = setCellName(s, 1, 1, 'carType');
+  s = setCellValue(s, 1, 1, '렌트');
+  s = setRowCondition(s, 1, 1, { name: 'car', values: [CHECK_MARK] });
+  s = setRowCondition(s, 2, 2, { name: 'carType', values: ['렌트'] });
+  // 체크 안 함 → 1행 숨김 → 1행 값(렌트)은 없는 셈 → 2행도 숨김
+  assert.deepEqual([...conditionHiddenRows(s)].sort(), [1, 2]);
+  assert.equal(conditionHiddenRows(setCellValue(s, 0, 1, CHECK_MARK)).size, 0);
 });

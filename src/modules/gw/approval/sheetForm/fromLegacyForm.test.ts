@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
-import { APPROVAL_NS, approvalCellProps } from './approvalSheet';
+import { APPROVAL_NS, approvalCellProps, conditionHiddenRows, rowConditionOf } from './approvalSheet';
 import { legacyFormToSheet } from './fromLegacyForm';
 import { repeatSections } from './repeatRows';
 import { isFullHeaderSheet } from './sheetHeader';
@@ -120,4 +120,30 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
   const sealCell = metaCells(s, APPROVAL_NS.seal).find((x) => x.r === seal.r)!;
   assert.ok(sealCell);
   assert.equal(approvalCellProps(s, sealCell.r, sealCell.c).sealMark, 'MK-abcd');
+});
+
+test('기존 서식 → 시트 — 조건부 항목(visibleIf)은 행 보이기 조건으로', () => {
+  const form = legacyForm('지출결의', [
+    { key: 'expenseItem', label: '지출 항목', type: '선택', options: ['식대', '회의비', '운반비'], isTabSelector: true },
+    { key: 'sort_meal', label: '분류', type: '선택', options: ['간식대', '야근식대'], visibleIf: 'expenseItem:식대', width: 'half' },
+    { key: 'note_meal', label: '인원', type: '숫자', visibleIf: 'expenseItem:식대', width: 'half' },
+    { key: 'guide', label: '회의비 안내', type: '안내문', placeholder: '회의비는 10만원 이내', visibleIf: 'expenseItem:회의비' },
+    { key: 'sort_carr', label: '분류', type: '선택', options: ['우편/택배', '퀵서비스'], visibleIf: 'expenseItem:운반비', width: 'half' },
+    { key: 'amount', label: '청구 금액', type: '금액', isAmountKey: true },
+  ]);
+  const { sheet: s, warnings } = legacyFormToSheet(form);
+  const kind = findText(s, '지출 항목')!;
+  assert.equal(approvalCellProps(s, kind.r, kind.c + 1).name, 'expenseItem');
+  const condOf = (t: string) => rowConditionOf(s, findText(s, t)!.r);
+  // 같은 조건의 반쪽 둘은 한 줄에
+  assert.equal(findText(s, '인원')!.r, metaCells(s, APPROVAL_NS.name).find((x) => x.v === 'sort_meal')!.r);
+  assert.deepEqual(condOf('인원'), { name: 'expenseItem', values: ['식대'] });
+  assert.deepEqual(condOf('회의비는 10만원 이내'), { name: 'expenseItem', values: ['회의비'] });
+  // 조건이 다른 반쪽은 다른 줄
+  const carr = metaCells(s, APPROVAL_NS.name).find((x) => x.v === 'sort_carr')!;
+  assert.deepEqual(rowConditionOf(s, carr.r), { name: 'expenseItem', values: ['운반비'] });
+  assert.equal(rowConditionOf(s, findText(s, '청구 금액')!.r), undefined);
+  // 아무것도 안 골랐으면 조건 행은 모두 숨김
+  assert.equal(conditionHiddenRows(s).size, 3);
+  assert.ok(warnings.some((w) => w.includes('행 보이기 조건')));
 });

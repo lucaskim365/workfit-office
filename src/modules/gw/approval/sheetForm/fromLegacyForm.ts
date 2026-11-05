@@ -22,7 +22,7 @@ import {
 import type { ApprovalForm, FormField } from '@/domain/approvalForm/schema';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { normalizeTablePayload } from '../formFields/sheetModel';
-import { APPROVAL_NS, LINK_TYPES, linkTypeDef, setApprovalProp, setCellName, type CellInputType } from './approvalSheet';
+import { APPROVAL_NS, LINK_TYPES, approvalCellProps, linkTypeDef, rowConditionOf, setApprovalProp, setCellName, setRowCondition, type CellInputType } from './approvalSheet';
 import { setRepeatSection } from './repeatRows';
 import { insertDocHeader } from './sheetHeader';
 
@@ -86,6 +86,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   /** 값 칸 — 항목 종류에 맞는 부품·이름·비공개 */
   const value = (r: number, c1: number, c2: number, f: FormField) => {
     merge(r, c1, c2);
+    if (!valueAt.has(f.key)) valueAt.set(f.key, { r, c: c1 });
     const at = span(r, c1, c1);
     const input = INPUT_OF[f.type];
     if (input) {
@@ -109,7 +110,10 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (f.hideOnExternal) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
   };
 
-  if (fields.some((f) => f.visibleIf)) warnings.push('조건부로 보이던 항목(탭·선택에 따라 숨김)은 모두 한꺼번에 보입니다 — 필요 없으면 지우세요.');
+  /** 조건부 항목이 만든 행 — 다 놓은 뒤 행 보이기 조건으로 */
+  const condRows: { r: number; visibleIf: string }[] = [];
+  /** 항목 키 → 값 칸(조건 칸에 이름을 붙이려고) */
+  const valueAt = new Map<string, { r: number; c: number }>();
 
   // 섹션 순서대로
   const sections: string[] = [];
@@ -120,6 +124,79 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     pendingHalf = null;
   };
 
+  /** 항목 하나를 시트 줄로 */
+  function placeField(f: FormField) {
+    // 문서 제목은 문서 정보 표의 제목 칸이 맡는다(문서 정보 표를 안 넣는 서식은 이 자리에 제목 칸)
+    if (f.type === '문서제목') {
+      if (withInfo) return;
+      flushHalf();
+      const r = nextRow();
+      label(r, 0, f.label || '제목');
+      merge(r, 1, n - 1);
+      s = setApprovalProp(s, span(r, 1, 1), APPROVAL_NS.bind, 'doc.title');
+      s = applyStyle(s, span(r, 1, 1), { bold: true });
+      box(r, r);
+      return;
+    }
+    if (f.type === '안내문') {
+      flushHalf();
+      const r = nextRow();
+      merge(r, 0, n - 1);
+      s = setCellValue(s, r, 0, f.placeholder || f.label, { allowFormula: false });
+      s = setApprovalProp(s, span(r, 0, 0), APPROVAL_NS.guide, true);
+      return;
+    }
+    if (f.type === '회사정보') {
+      flushHalf();
+      const r = nextRow();
+      merge(r, 0, n - 1);
+      s = setApprovalProp(s, span(r, 0, 0), APPROVAL_NS.bind, 'doc.letterhead');
+      extHide(r, f);
+      return;
+    }
+    if (f.type === '직인') {
+      flushHalf();
+      const r = nextRow();
+      merge(r, 0, n - 2);
+      s = setCellValue(s, r, 0, f.label, { allowFormula: false });
+      s = applyStyle(s, span(r, 0, 0), { bold: true, align: 'right', fontSize: 15 });
+      s = setApprovalProp(s, span(r, n - 1, n - 1), APPROVAL_NS.seal, true);
+      if (f.markId) s = setApprovalProp(s, span(r, n - 1, n - 1), APPROVAL_NS.sealMark, f.markId);
+      s = { ...s, rowHeights: { ...s.rowHeights, [String(r)]: 76 } };
+      return;
+    }
+    if (f.type === '표') {
+      flushHalf();
+      s = placeTable(f);
+      return;
+    }
+    // 라벨·값 항목 — 반쪽은 한 줄에 둘
+    if (f.width === 'half' && f.type !== '장문') {
+      if (pendingHalf && (pendingHalf.visibleIf ?? null) === (f.visibleIf ?? null)) {
+        label(halfRow, mid, f.label);
+        value(halfRow, mid + 1, n - 1, f);
+        extHide(halfRow, f);
+        pendingHalf = null;
+        return;
+      }
+      const r = nextRow();
+      label(r, 0, f.label);
+      value(r, 1, mid - 1, f);
+      // 짝이 없으면 오른쪽 절반은 빈 라벨·값으로 남는다(테두리는 줄 전체)
+      box(r, r);
+      extHide(r, f);
+      pendingHalf = f;
+      halfRow = r;
+      return;
+    }
+    flushHalf();
+    const r = nextRow();
+    label(r, 0, f.label);
+    value(r, 1, n - 1, f);
+    box(r, r);
+    extHide(r, f);
+  }
+
   for (const section of sections) {
     flushHalf();
     if (section) {
@@ -128,77 +205,15 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       s = setCellValue(s, r, 0, section, { allowFormula: false });
       s = applyStyle(s, span(r, 0, 0), { bold: true, bg: SECTION_BG });
       box(r, r);
+      const conds = new Set(fields.filter((x) => (x.section ?? '') === section).map((x) => x.visibleIf ?? ''));
+      const only = conds.size === 1 ? [...conds][0] : '';
+      if (only) condRows.push({ r, visibleIf: only });
     }
     for (const f of fields.filter((x) => (x.section ?? '') === section)) {
-      // 문서 제목은 문서 정보 표의 제목 칸이 맡는다(문서 정보 표를 안 넣는 서식은 이 자리에 제목 칸)
-      if (f.type === '문서제목') {
-        if (withInfo) continue;
-        flushHalf();
-        const r = nextRow();
-        label(r, 0, f.label || '제목');
-        merge(r, 1, n - 1);
-        s = setApprovalProp(s, span(r, 1, 1), APPROVAL_NS.bind, 'doc.title');
-        s = applyStyle(s, span(r, 1, 1), { bold: true });
-        box(r, r);
-        continue;
-      }
-      if (f.type === '안내문') {
-        flushHalf();
-        const r = nextRow();
-        merge(r, 0, n - 1);
-        s = setCellValue(s, r, 0, f.placeholder || f.label, { allowFormula: false });
-        s = setApprovalProp(s, span(r, 0, 0), APPROVAL_NS.guide, true);
-        continue;
-      }
-      if (f.type === '회사정보') {
-        flushHalf();
-        const r = nextRow();
-        merge(r, 0, n - 1);
-        s = setApprovalProp(s, span(r, 0, 0), APPROVAL_NS.bind, 'doc.letterhead');
-        extHide(r, f);
-        continue;
-      }
-      if (f.type === '직인') {
-        flushHalf();
-        const r = nextRow();
-        merge(r, 0, n - 2);
-        s = setCellValue(s, r, 0, f.label, { allowFormula: false });
-        s = applyStyle(s, span(r, 0, 0), { bold: true, align: 'right', fontSize: 15 });
-        s = setApprovalProp(s, span(r, n - 1, n - 1), APPROVAL_NS.seal, true);
-        if (f.markId) s = setApprovalProp(s, span(r, n - 1, n - 1), APPROVAL_NS.sealMark, f.markId);
-        s = { ...s, rowHeights: { ...s.rowHeights, [String(r)]: 76 } };
-        continue;
-      }
-      if (f.type === '표') {
-        flushHalf();
-        s = placeTable(f);
-        continue;
-      }
-      // 라벨·값 항목 — 반쪽은 한 줄에 둘
-      if (f.width === 'half' && f.type !== '장문') {
-        if (pendingHalf) {
-          label(halfRow, mid, f.label);
-          value(halfRow, mid + 1, n - 1, f);
-          extHide(halfRow, f);
-          pendingHalf = null;
-          continue;
-        }
-        const r = nextRow();
-        label(r, 0, f.label);
-        value(r, 1, mid - 1, f);
-        // 짝이 없으면 오른쪽 절반은 빈 라벨·값으로 남는다(테두리는 줄 전체)
-        box(r, r);
-        extHide(r, f);
-        pendingHalf = f;
-        halfRow = r;
-        continue;
-      }
-      flushHalf();
-      const r = nextRow();
-      label(r, 0, f.label);
-      value(r, 1, n - 1, f);
-      box(r, r);
-      extHide(r, f);
+      const before = row;
+      placeField(f);
+      // 조건부 항목(visibleIf '키:값') — 이 항목이 만든 행에 행 보이기 조건
+      if (f.visibleIf) for (let r = before; r < row; r++) condRows.push({ r, visibleIf: f.visibleIf });
     }
   }
 
@@ -253,6 +268,24 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
 
   // 빈 마지막 줄(시작용 한 줄을 안 썼을 때) 정리는 하지 않는다 — 본문 아래 여유 줄
   if (row === 0) warnings.push('옮길 항목이 없습니다 — 빈 본문으로 만들었습니다.');
+
+  // 행 보이기 조건 — 기존 visibleIf '키:값'. 조건 칸에는 기존 키를 칸 이름으로(선택 칸은 이미 붙어 있음)
+  const missing = new Set<string>();
+  condRows.forEach(({ r, visibleIf }) => {
+    const at = visibleIf.indexOf(':');
+    if (at < 0) return;
+    const key = visibleIf.slice(0, at);
+    const want = visibleIf.slice(at + 1);
+    const src = valueAt.get(key);
+    if (!src) return void missing.add(key);
+    if (approvalCellProps(s, src.r, src.c).name !== key) s = setCellName(s, src.r, src.c, key);
+    const prev = rowConditionOf(s, r);
+    // 한 행에 두 항목(반쪽 짝)이 같은 조건 — 값은 하나로
+    const values = prev?.name === key ? [...new Set([...prev.values, want])] : [want];
+    s = setRowCondition(s, r, r, { name: key, values });
+  });
+  if (condRows.length) warnings.push('조건부로 보이던 항목은 행 보이기 조건으로 옮겼습니다 — 미리보기에서 값을 바꿔 보며 확인해 주세요.');
+  if (missing.size) warnings.push(`조건 칸(${[...missing].join(', ')})을 찾지 못해 그 조건이 걸린 행은 항상 보입니다.`);
 
   if (withInfo && INFO_ITEMS.some((i) => hiddenHead.has(i))) {
     warnings.push('기존 서식에서 일부만 숨겼던 문서 정보 항목도 문서 정보 표에 들어 있습니다 — 필요 없으면 그 칸을 지우세요.');

@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, type CellRange, type Sheet } from '@/lib/sheet';
+import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet';
 import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 import { SHEET_AUTO_NO_NS } from '@/domain/approvalForm/sheetAutoNumber';
 import { autoNumberConfigSchema, type AutoNumberConfig } from '@/domain/approvalForm/autoNumber';
@@ -28,6 +28,11 @@ export const APPROVAL_NS = {
   sealMark: 'sealMark',
   /** 필수 입력 칸 — 값 true. 비어 있으면 상신을 막는다(기존 서식 '필수') */
   required: 'required',
+  /**
+   * 행 보이기 조건 — rowMeta, 값 RowCondition { name, values }. 칸 이름 name 인 칸 값이 values 중 하나일 때만 행을 보인다
+   * (기존 서식 visibleIf '지출 항목이 식대일 때만'과 같음). 숨은 행은 작성·결재·인쇄 모두 빠지고 필수 검사·연동 값에서도 빠진다
+   */
+  showIf: 'showIf',
 } as const;
 
 export type CellInputType =
@@ -536,7 +541,13 @@ export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<
       .filter(([key]) => repeatRows[key.slice(0, key.indexOf(':'))] !== undefined)
       .map(([, name]) => String(name))
   );
-  const named = Object.fromEntries(Object.entries(namedValues(s)).filter(([k]) => !inRepeat.has(k)));
+  // 조건으로 숨은 행의 값은 빈 값으로 — 기안자가 지출 항목을 바꾸면 전에 고른 다른 '분류'가 결재선 조건에 걸리지 않게
+  const hidden = conditionHiddenNames(s);
+  const named = Object.fromEntries(
+    Object.entries(namedValues(s))
+      .filter(([k]) => !inRepeat.has(k))
+      .map(([k, v]) => [k, hidden.has(k) ? '' : v])
+  );
   return {
     ...named,
     [SHEET_VALUES_KEY]: JSON.stringify(extractValues(s)),
@@ -567,15 +578,117 @@ export function cellCaption(s: Sheet, r: number, c: number): string {
 /** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
 export function requiredMissing(s: Sheet): string[] {
   const out: string[] = [];
+  const hiddenRows = conditionHiddenRows(s);
   Object.entries(s.cellMeta[APPROVAL_NS.required] ?? {}).forEach(([key, v]) => {
     if (v !== true) return;
     const i = key.indexOf(':');
     const r = Number(key.slice(0, i));
     const c = s.cols.indexOf(key.slice(i + 1));
-    if (c < 0 || r >= s.rows.length || !draftInputOf(s, r, c)) return;
+    if (c < 0 || r >= s.rows.length || hiddenRows.has(r) || !draftInputOf(s, r, c)) return;
     if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
   });
   return [...new Set(out)];
+}
+
+// ── 행 보이기 조건 (기존 서식 visibleIf) ──
+
+export interface RowCondition {
+  /** 조건을 보는 칸의 이름(칸 이름) — 선택·여러 선택·체크 칸 */
+  name: string;
+  /** 이 값 중 하나일 때 행을 보인다 */
+  values: string[];
+}
+
+/** 행 보이기 조건 읽기 — 형식이 틀리면 없음 */
+export function rowConditionOf(s: Sheet, r: number): RowCondition | undefined {
+  const raw = s.rowMeta[APPROVAL_NS.showIf]?.[String(r)] as Partial<RowCondition> | undefined;
+  if (!raw || typeof raw.name !== 'string' || !raw.name || !Array.isArray(raw.values)) return undefined;
+  return { name: raw.name, values: raw.values.filter((v): v is string => typeof v === 'string') };
+}
+
+/** 행들의 보이기 조건 넣기·빼기(undefined·값 없음이면 뺀다) */
+export function setRowCondition(s0: Sheet, r1: number, r2: number, cond: RowCondition | undefined): Sheet {
+  let s = s0;
+  const value = cond && cond.name && cond.values.length ? { name: cond.name, values: cond.values } : undefined;
+  for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) s = setRowMeta(s, APPROVAL_NS.showIf, r, value);
+  return s;
+}
+
+/** 칸 값이 조건에 맞나 — 여러 선택 칸('식대, 교통비')은 고른 것 중 하나라도 맞으면 */
+export function conditionMatches(value: string, values: string[]): boolean {
+  const picked = value.split(',').map((x) => x.trim()).filter(Boolean);
+  return values.some((v) => v === value.trim() || picked.includes(v));
+}
+
+export interface ConditionSource {
+  name: string;
+  /** 화면에 보일 이름 — 칸 왼쪽 글자(예: '지출 항목') */
+  label: string;
+  /** 칸이 있는 행 — 그 행 자신에는 조건을 걸 수 없다 */
+  r: number;
+  options: string[];
+}
+
+/** 조건을 걸 수 있는 칸 — 이름 붙은 선택·여러 선택·체크 칸과 그 항목(체크 칸은 CHECK_MARK 하나) */
+export function conditionSources(s: Sheet): ConditionSource[] {
+  const out = new Map<string, ConditionSource>();
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
+    if (typeof name !== 'string' || !input || out.has(name)) return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    if (c < 0) return;
+    const options = input.type === 'select' || input.type === 'multiSelect' ? (input.options ?? []) : input.type === 'checkbox' ? [CHECK_MARK] : null;
+    if (options) out.set(name, { name, label: cellCaption(s, r, c), r, options });
+  });
+  return [...out.values()];
+}
+
+/**
+ * 조건으로 숨은 행 — 조건 칸 값이 맞지 않는 행. 조건 칸이 시트에 없으면(이름을 지웠으면) 숨기지 않는다.
+ * 조건 칸 자체가 숨은 행에 있으면 그 값은 없는 셈(빈 값)이라 줄줄이 숨는다
+ */
+export function conditionHiddenRows(s: Sheet): Set<number> {
+  const rec = s.rowMeta[APPROVAL_NS.showIf] ?? {};
+  const out = new Set<number>();
+  if (!Object.keys(rec).length) return out;
+  // 이름 → 칸 행·값(첫 칸)
+  const at = new Map<string, { r: number; v: string }>();
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    if (typeof name !== 'string' || at.has(name)) return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    at.set(name, { r, v: String(s.rows[r]?.[key.slice(i + 1)] ?? '') });
+  });
+  const rows = Object.keys(rec).map(Number).filter((r) => r < s.rows.length).sort((a, b) => a - b);
+  // 위에서 아래로 — 조건 칸이 위에 있는 보통의 경우 한 번에 정해진다. 아래를 보는 조건까지 몇 번 되풀이
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    rows.forEach((r) => {
+      const cond = rowConditionOf(s, r);
+      const src = cond && at.get(cond.name);
+      if (!cond || !src) return;
+      const show = !out.has(src.r) && conditionMatches(src.v, cond.values);
+      if (!show && !out.has(r)) {
+        out.add(r);
+        changed = true;
+      }
+    });
+    if (!changed) break;
+  }
+  return out;
+}
+
+/** 조건으로 숨은 행에 있는 칸 이름 */
+function conditionHiddenNames(s: Sheet): Set<string> {
+  const rows = conditionHiddenRows(s);
+  const out = new Set<string>();
+  if (!rows.size) return out;
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    if (rows.has(Number(key.slice(0, key.indexOf(':'))))) out.add(String(name));
+  });
+  return out;
 }
 
 /** 결재 완료일 칸이 든 줄 — 결재가 끝나기 전엔 줄째 숨긴다(기존 문서 머리와 같음) */

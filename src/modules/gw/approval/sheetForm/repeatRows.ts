@@ -137,7 +137,8 @@ function appendRow(s: Sheet, sec: RepeatSection): Sheet {
   const rowHeights = { ...n.rowHeights };
   if (n.rowHeights[String(last)] !== undefined) rowHeights[String(at)] = n.rowHeights[String(last)];
   const rowMeta = { ...n.rowMeta };
-  [APPROVAL_NS.repeat, APPROVAL_NS.secret].forEach((ns) => {
+  // 반복 구간·비공개·행 보이기 조건·대외 숨김은 새 줄도 같게
+  [APPROVAL_NS.repeat, APPROVAL_NS.secret, APPROVAL_NS.showIf, APPROVAL_NS.extHide].forEach((ns) => {
     const v = n.rowMeta[ns]?.[String(last)];
     if (v !== undefined) rowMeta[ns] = { ...rowMeta[ns], [String(at)]: v };
   });

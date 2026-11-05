@@ -7,6 +7,10 @@ import {
   COMMON_CELL_NAMES,
   approvalCellProps,
   cellAddress,
+  CHECK_MARK,
+  conditionSources,
+  rowConditionOf,
+  setRowCondition,
   setApprovalProp,
   setCellName,
   type CellInput,
@@ -308,7 +312,82 @@ export function SheetCellPanel({
         />
       </div>
 
+      <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} />
       <RepeatPanel sheet={sheet} selection={selection} onChange={onChange} />
+    </div>
+  );
+}
+
+/**
+ * 행 보이기 조건 — 고른 행을 '지출 항목이 식대일 때만'처럼 다른 칸 값에 따라 보이게(기존 서식 visibleIf).
+ * 조건 칸은 칸 이름이 붙은 선택·여러 선택·체크 칸
+ */
+function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selection: SheetSelection; onChange: (next: Sheet) => void }) {
+  const { range, focus } = selection;
+  const r1 = Math.min(range.r1, range.r2);
+  const r2 = Math.max(range.r1, range.r2);
+  const rowLabel = r1 === r2 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`;
+  const current = rowConditionOf(sheet, focus.r);
+  // 고른 행 안의 칸은 조건 칸이 될 수 없다(자기를 숨기면 다시 못 보임)
+  const sources = conditionSources(sheet).filter((x) => x.r < r1 || x.r > r2);
+  const [name, setName] = useState('');
+  // 다른 행으로 옮기면 그 행 조건으로, 조건이 바뀌면(되돌리기 등) 그 칸으로 — 칸만 고르고 값을 아직 안 고른 상태는 지우지 않는다
+  useEffect(() => setName(current?.name ?? ''), [focus.r]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (current?.name) setName(current.name);
+  }, [current?.name]);
+  const src = sources.find((x) => x.name === name);
+  const values = current?.name === name ? current.values : [];
+  const toggle = (opt: string, on: boolean) => {
+    const next = on ? [...values, opt] : values.filter((v) => v !== opt);
+    onChange(setRowCondition(sheet, r1, r2, next.length ? { name, values: next } : undefined));
+  };
+
+  return (
+    <div className="space-y-1.5 border-t border-border pt-2.5">
+      <div className="text-[11px] font-bold text-ink2">행 보이기 조건 ({rowLabel})</div>
+      {sources.length === 0 && !current ? (
+        <div className="text-[10.5px] leading-snug text-ink3">
+          다른 칸 값에 따라 이 행을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 행). 조건으로 쓸 선택·체크 칸에 먼저 칸 이름을 붙이세요.
+        </div>
+      ) : (
+        <>
+          <select
+            className={inp}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              // 조건 칸을 바꾸면 고른 값은 새로 — 비우면 조건 없음(항상 보임)
+              onChange(setRowCondition(sheet, r1, r2, undefined));
+            }}
+          >
+            <option value="">항상 보이기 (조건 없음)</option>
+            {sources.map((x) => (
+              <option key={x.name} value={x.name}>
+                {x.label} 칸 값에 따라
+              </option>
+            ))}
+            {current && !sources.some((x) => x.name === current.name) && <option value={current.name}>{nameLabel(current.name)} (칸 없음)</option>}
+          </select>
+          {name && src && (
+            <div className="space-y-0.5 rounded-lg bg-panel-alt px-2 py-1.5">
+              <div className="text-[10.5px] text-ink3">
+                <b className="text-ink2">{src.label}</b>이(가) 다음 중 하나일 때만 보입니다
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                {src.options.map((opt) => (
+                  <label key={opt} className="flex cursor-pointer items-center gap-1 text-[11.5px] text-ink">
+                    <input type="checkbox" checked={values.includes(opt)} onChange={(e) => toggle(opt, e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
+                    {opt === CHECK_MARK ? '체크했을 때' : opt}
+                  </label>
+                ))}
+              </div>
+              {values.length === 0 && <div className="text-[10.5px] text-amber-600">값을 하나 이상 고르면 조건이 걸립니다.</div>}
+            </div>
+          )}
+          {name && !src && <div className="text-[10.5px] text-rose-600">조건 칸 '{nameLabel(name)}'이(가) 시트에 없어 이 행은 항상 보입니다.</div>}
+        </>
+      )}
     </div>
   );
 }
