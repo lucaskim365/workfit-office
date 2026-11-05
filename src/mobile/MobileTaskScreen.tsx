@@ -252,13 +252,16 @@ function MobileTaskBody({ actor }: { actor: User }) {
         <label className="relative flex items-center gap-1.5 text-[13px] font-bold text-ink">
           <Calendar size={14} className="text-teal" />
           <span>{dateTitleOf(selectedDate)}</span>
-          {/* 날짜를 눌러 바로 고른다 */}
-          <DateInput
-            aria-label="날짜 선택"
-            value={selectedDate}
-            onChange={(e) => isValidCalendarDate(e.target.value) && setSelectedDate(e.target.value)}
-            className="absolute inset-0 opacity-0"
-          />
+          {/* 날짜를 눌러 바로 고른다 — 입력칸을 날짜 글자 위에 투명하게 덮는다.
+              DateInput 은 자기 달력 단추를 따로 그리므로 감싼 상자째 투명하게(입력칸만 투명하면 그 단추가 요일 위에 겹쳐 보였다) */}
+          <span className="absolute inset-0 flex opacity-0">
+            <DateInput
+              aria-label="날짜 선택"
+              value={selectedDate}
+              onChange={(e) => isValidCalendarDate(e.target.value) && setSelectedDate(e.target.value)}
+              className="h-full w-full"
+            />
+          </span>
         </label>
         <button
           type="button"
