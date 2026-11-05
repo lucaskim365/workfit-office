@@ -13,7 +13,8 @@ import { AutoResizeTextarea } from './formFields/AutoResizeTextarea';
 import { TableFieldEditor } from './formFields/TableFieldEditor';
 import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 import { calculateLeaveDays } from '@/domain/leave/policy';
-import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, isHolidayWorkLocked, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { nowLocalIso } from '@/shared/lib/datetime';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -126,6 +127,11 @@ export function DynamicField({
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
 
+  // 휴일근로 신청서 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음, 사후 신청)
+  if (isHolidayWorkLocked(field.key)) {
+    return <div className={`${inp} bg-panel-alt text-ink2`}>{sv || '근태 기록에서 불러옵니다'}</div>;
+  }
+
   switch (field.type) {
     case '안내문':
       return <div className="rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] text-ink3">{field.placeholder || field.label}</div>;
@@ -163,7 +169,16 @@ export function DynamicField({
       );
 
     case '날짜':
-      return <DateInput value={sv} restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY} onChange={(e) => set({ [field.key]: e.target.value })} className={inp} />;
+      return (
+        <DateInput
+          value={sv}
+          restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY}
+          // 휴일근로는 사후 신청 — 오늘까지만
+          max={field.key === HOLIDAY_WORK_DATE_KEY ? nowLocalIso().slice(0, 10) : undefined}
+          onChange={(e) => set({ [field.key]: e.target.value })}
+          className={inp}
+        />
+      );
 
     case '기간': {
       const start = sv;
