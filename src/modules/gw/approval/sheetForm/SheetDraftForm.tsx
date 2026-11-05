@@ -545,16 +545,6 @@ export function SheetDraftForm({
     const expanded = applyValues(expandRepeats(tpl, next.extras), next.values, { recalc: true });
     emit(expanded, next.extras, nextRefs);
   };
-  /** 줄마다 [+][−] 를 놓을 칸 — 그 줄의 맨 왼쪽 칸(위에서 내려오는 세로 병합에 덮인 칸은 건너뜀) */
-  const rowButtonCol = (r: number): number => {
-    if (!sheet) return 0;
-    for (let c = 0; c < sheet.cols.length; ) {
-      const m = sheet.merges.find((x) => r >= x.startRow && r < x.startRow + x.rowSpan && c >= x.startCol && c < x.startCol + x.colSpan);
-      if (!m || (m.startRow === r && m.rowSpan === 1)) return c;
-      c = m.startCol + m.colSpan;
-    }
-    return 0;
-  };
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
@@ -577,7 +567,8 @@ export function SheetDraftForm({
           ))}
         </div>
       )}
-      <div className="overflow-x-auto">
+      {/* 오른쪽에 [+][−] 자리(종이 여백 안) — 넘침 상자를 그만큼 넓힌다 */}
+      <div className={`overflow-x-auto ${sections.length ? '-mr-7 pr-7' : ''}`}>
         <SheetView
           sheet={sheet}
           // 문서 머리 표와 폭·선 색 맞춤 — 넓은 서식은 줄이지 않고 옆으로 밀어 쓴다(글씨가 작아지지 않게)
@@ -641,20 +632,20 @@ export function SheetDraftForm({
               </div>
             );
           }}
-          // 반복 구간 줄 — 마우스를 올리면 줄 왼쪽에 [+]·[−](그 줄 아래에 넣기·그 줄 지우기, 인쇄 안 됨)
+          // 반복 구간 줄 — 마우스를 올리면 표 오른쪽 바깥에 [+]·[−](그 줄 아래에 넣기·그 줄 지우기, 인쇄 안 됨)
           rowClassName={(r) => (sections.some((x) => r >= x.first && r <= x.last) ? 'group/rep' : undefined)}
-          renderOverlay={(r, c) => {
+          rowEnd={(r) => {
             const sec = sections.find((x) => r >= x.first && r <= x.last);
-            if (!sec || c !== rowButtonCol(r)) return null;
-            const btn = 'flex h-[15px] w-[15px] items-center justify-center rounded-sm bg-white/95 font-bold leading-none shadow-sm ring-1 ring-black/10';
+            if (!sec) return null;
+            const btn = 'flex h-[13px] w-[13px] items-center justify-center rounded-sm bg-white font-bold leading-none shadow-sm ring-1 ring-black/15';
             return (
-              <span className="absolute left-0 top-1/2 z-20 hidden -translate-y-1/2 gap-px group-hover/rep:flex print:hidden">
+              <span className="hidden gap-px group-hover/rep:flex">
                 <button type="button" title="이 줄 아래에 줄 넣기" onClick={() => changeRows(sec.id, true, r)} className={`${btn} text-teal hover:bg-teal-soft`}>
-                  <Plus className="h-2.5 w-2.5" />
+                  <Plus className="h-2 w-2" />
                 </button>
                 {sec.last > sec.first && (
                   <button type="button" title="이 줄 지우기" onClick={() => changeRows(sec.id, false, r)} className={`${btn} text-rose-500 hover:bg-rose-50`}>
-                    <Minus className="h-2.5 w-2.5" />
+                    <Minus className="h-2 w-2" />
                   </button>
                 )}
               </span>

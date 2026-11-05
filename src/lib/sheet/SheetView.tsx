@@ -45,6 +45,11 @@ export interface SheetViewProps {
   afterRow?: (r: number) => ReactNode;
   /** 줄(tr)에 붙일 클래스 — 예: 마우스를 올린 줄에만 칸 위 단추 보이기(group) */
   rowClassName?: (r: number) => string | undefined;
+  /**
+   * 표 오른쪽 바깥에 줄마다 덧그릴 것(예: 반복 구간 줄 [+][−]) — 폭 0 칸에서 오른쪽으로 삐져나오게 그려 표 폭은 그대로.
+   * 바깥 상자가 오른쪽에 자리를 내줘야 보인다(인쇄 안 됨)
+   */
+  rowEnd?: (r: number) => ReactNode;
   className?: string;
 }
 
@@ -63,6 +68,7 @@ export function SheetView({
   hiddenRows,
   afterRow,
   rowClassName,
+  rowEnd,
   className = '',
 }: SheetViewProps) {
   const tableRef = useRef<HTMLTableElement>(null);
@@ -139,6 +145,7 @@ export function SheetView({
           {cols.map((col) => (
             <col key={col} style={{ width: widthOf(col) }} />
           ))}
+          {rowEnd && <col style={{ width: 0 }} />}
         </colgroup>
         <tbody>
           {rows.map((_row, r) => hiddenRows?.(r) ? null : (
@@ -179,6 +186,14 @@ export function SheetView({
                   </td>
                 );
               })}
+              {rowEnd && (
+                <td className="relative w-0 p-0 print:hidden" style={{ border: 'none' }}>
+                  {(() => {
+                    const node = rowEnd(r);
+                    return node ? <div className="absolute left-1 top-1/2 -translate-y-1/2">{node}</div> : null;
+                  })()}
+                </td>
+              )}
             </tr>
             {(() => {
               const band = afterRow?.(r);

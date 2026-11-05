@@ -10,6 +10,7 @@
 import {
   applyBorder,
   colLetter,
+  parseNumber,
   applyStyle,
   createSheet,
   mergeRange,
@@ -425,7 +426,10 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         // 기존 '표'는 칸을 모두 고칠 수 있었고, 운영 문서를 보면 기안자가 실제로 많이 고쳐 썼다
         // (발주서 수주자·날짜·담당자 자리, 계약보고서 매출·매입 분류 이름 등) — 고정하면 지금처럼 못 쓴다
         if (!legacyFormula && !st?.seal) {
-          s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' ? 'currency' : 'text' });
+          // 금액 서식은 숫자 칸에만 — 기존 표는 줄·열째 금액 서식을 걸어 '매출(원)'·'단가' 같은 이름표 칸에도 붙어 있다
+          // (금액 입력 칸이 되면 글자라서 '숫자가 아님'으로 빨갛게 뜬다)
+          const numeric = !text || parseNumber(text) !== null;
+          s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' && numeric ? 'currency' : 'text' });
         }
       });
       if (f.hideOnExternal) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);
