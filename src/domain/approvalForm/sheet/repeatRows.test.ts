@@ -177,3 +177,21 @@ test('번호 다시 매기기 — 기안자가 번호를 바꿔 차례가 깨졌
   const s = applyValues(expandRepeats(tpl, ins.extras), ins.values, { recalc: false });
   assert.deepEqual([1, 2, 3, 4].map((r) => val(s, r, 0)), ['1', '', '1-1', '2']);
 });
+
+test('줄 본뜨기 — 구간 밖(소계)을 가리키는 주소는 그대로, 소계 줄을 구간에 넣으면 저장 전 검사', () => {
+  // 0 머리, 1~2 분류(B = C/C4 비중), 3 소계 C4 =SUM(C2:C3)
+  let s = createSheet(4, 3);
+  for (const r of [1, 2]) {
+    s = setCellMeta(s, APPROVAL_NS.input, r, 2, { type: 'number' });
+    s = setCellValue(s, r, 1, `=C${r + 1}/C4`);
+  }
+  s = setCellValue(s, 3, 2, '=SUM(C2:C3)');
+  const tpl = setRepeatSection(s, 1, 2, '분류');
+  const id = repeatSections(tpl)[0].id;
+  const out = expandRepeats(tpl, { [id]: 1 });
+  assert.equal(out.formulas[cellKey(3, out.cols[1])], '=C4/C5', '새 줄 비중은 밀려 내려간 소계(C5)를 가리킴');
+  assert.equal(out.formulas[cellKey(4, out.cols[2])], '=SUM(C2:C4)');
+  assert.deepEqual(repeatIssues(tpl), []);
+  // 소계 줄까지 구간으로 잡으면 막는다
+  assert.ok(repeatIssues(setRepeatSection(s, 1, 3, '분류')).some((m) => m.includes('합계 줄')));
+});

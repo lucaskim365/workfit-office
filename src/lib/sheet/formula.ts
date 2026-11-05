@@ -614,7 +614,11 @@ export function shiftFormula(expression: string, action: ShiftAction): string {
  * 수식을 다른 칸으로 복사할 때처럼 상대 참조만 (dr, dc)만큼 옮긴다 — $ 붙은 쪽은 그대로.
  * 엑셀의 공유 수식(한 수식을 여러 칸에 나눠 쓴 것)을 칸마다 풀 때 쓴다. 시트 밖으로 나가면 #REF!
  */
-export function translateFormula(expression: string, dr: number, dc: number): string {
+/**
+ * 수식을 dr·dc 만큼 옮긴 자리에 맞게 — 상대 주소만 옮긴다($ 고정 주소는 그대로).
+ * move 를 주면 그 칸(옮기기 전 0부터 행·열)을 가리키는 주소만 옮긴다 — 반복 구간 줄을 본뜰 때 구간 밖(소계 등)을 가리키는 주소는 그대로 두려고
+ */
+export function translateFormula(expression: string, dr: number, dc: number, move?: (row: number, col: number) => boolean): string {
   let tokens: Tok[];
   try {
     tokens = tokenize(expression);
@@ -624,6 +628,7 @@ export function translateFormula(expression: string, dr: number, dc: number): st
   const edits: Array<{ start: number; end: number; text: string }> = [];
   for (const t of tokens) {
     if (t.kind !== 'ref') continue;
+    if (move && !move(t.row, t.col)) continue;
     const row = t.rowAbs ? t.row : t.row + dr;
     const col = t.colAbs ? t.col : t.col + dc;
     edits.push({ start: t.start, end: t.end, text: row < 0 || col < 0 ? '#REF!' : refText(t, row, col) });

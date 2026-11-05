@@ -111,6 +111,19 @@ export function repeatIssues(s: Sheet): string[] {
     if (colNames.has(colKey)) errors.push(`반복 구간 '${x.label}'의 한 열에 칸 이름이 둘입니다('${colNames.get(colKey)}', '${String(name)}'). 열마다 하나만 붙여 주세요.`);
     else colNames.set(colKey, String(name));
   });
+  // 구간 맨 아래 줄에 구간 줄들을 더하는 합계(소계 줄을 구간에 넣음) — [행 추가]가 그 합계 줄을 본떠 붙이게 된다
+  sections.forEach((x) => {
+    if (x.last === x.first) return;
+    const sums = s.cols.some((col) => {
+      const f = s.formulas[cellKey(x.last, col)];
+      if (!f) return false;
+      return [...f.matchAll(/\$?[A-Z]{1,3}\$?(\d+)\s*:\s*\$?[A-Z]{1,3}\$?(\d+)/gi)].some((m) => {
+        const end = Math.max(Number(m[1]), Number(m[2])) - 1;
+        return end >= x.first && end < x.last;
+      });
+    });
+    if (sums) errors.push(`반복 구간 '${x.label}'의 맨 아래 줄(${x.last + 1}행)이 위 줄들을 더하는 합계 줄입니다. 줄을 더하면 합계 줄이 복사되므로, 합계(소계) 줄은 빼고 그 위 줄까지만 구간으로 지정해 주세요.`);
+  });
   return errors;
 }
 
@@ -130,7 +143,8 @@ function appendRow(s: Sheet, sec: RepeatSection): Sheet {
     const to = cellKey(at, col);
     if (n.styles[from]) styles[to] = { ...n.styles[from] };
     const f = n.formulas[from];
-    if (f !== undefined) formulas[to] = translateFormula(f, 1, 0);
+    // 구간 안 줄을 가리키는 주소만 한 줄 내린다 — 구간 밖(소계·합계 칸 등)은 그 칸 그대로(엑셀의 $ 고정 주소처럼)
+    if (f !== undefined) formulas[to] = translateFormula(f, 1, 0, (row) => row >= sec.first && row <= last);
     COPY_CELL_NS.forEach((ns) => {
       const v = n.cellMeta[ns]?.[from];
       if (v !== undefined) cellMeta[ns] = { ...cellMeta[ns], [to]: v };
