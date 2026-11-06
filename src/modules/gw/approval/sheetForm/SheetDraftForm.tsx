@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { DEFAULT_COL_WIDTH, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
 import { Building2, Download, Minus, Plus, Trash2, X } from 'lucide-react';
 import { DateInput } from '@/shared/ui/form/DateInput';
+import { nowLocalIso } from '@/shared/lib/datetime';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { SelectorDialog } from '../components/DraftRecipientSection';
@@ -301,6 +302,8 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
           value={/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''}
           // 휴일근무 '근무 일자' 칸은 주말·공휴일만(기존 휴일근무 서식과 같음)
           restDaysOnly={sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, col)] === 'workDate'}
+          // 휴일근로는 사후 신청 — 오늘까지만
+          max={sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, col)] === 'workDate' ? nowLocalIso().slice(0, 10) : undefined}
           onChange={(e) => onSet(e.target.value)}
           className={FIELD}
           style={INHERIT}
@@ -401,6 +404,10 @@ export interface SheetDraftFormProps {
   slots?: SheetSlots;
   /** 상신 전 검사용 — 비어 있는 필수 칸 이름표 */
   onRequired?: (labels: string[]) => void;
+  /** 기안자가 고칠 수 없는 이름 붙은 칸(시스템이 채움) — 휴일근로의 출근·퇴근 시각·근무 시간 */
+  lockedNames?: readonly string[];
+  /** systemValues 결과가 바뀌었음을 알리는 값 — 바뀌면 시트에 다시 넣는다(근태 기록을 늦게 받아 온 경우) */
+  systemKey?: string;
 }
 
 export interface RelatedSource {
@@ -425,6 +432,8 @@ export function SheetDraftForm({
   onDocField,
   slots,
   onRequired,
+  lockedNames,
+  systemKey,
 }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
@@ -483,6 +492,12 @@ export function SheetDraftForm({
     if (sheet && needsInit) emit(sheet, extras, refs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsInit]);
+
+  // 시스템 값(근태 기록 등)이 새로 정해지면 칸에 다시 넣는다 — 기안자가 칸을 건드리지 않아도
+  useEffect(() => {
+    if (sheet && !needsInit && systemKey !== undefined) emit(sheet, extras, refs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemKey]);
 
   useEffect(() => {
     if (sheet) onRequired?.(requiredMissing(sheet));
@@ -597,6 +612,12 @@ export function SheetDraftForm({
             if (auto !== undefined) return auto;
             const input = draftInputOf(sheet, r, c);
             if (!input) return undefined;
+            // 시스템이 채우는 칸 — 글자로만(휴일근로 출근·퇴근 시각·근무 시간은 근태 기록에서)
+            const cellName = sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, sheet.cols[c])];
+            if (typeof cellName === 'string' && lockedNames?.includes(cellName)) {
+              const shown = displayValue(sheet, r, sheet.cols[c]);
+              return <span title="근태 기록에서 자동으로 채웁니다">{shown || <span className="text-[11px] text-[#999] print:hidden">근태 기록에서 채움</span>}</span>;
+            }
             const span = sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1;
             const width = sheet.cols.slice(c, c + span).reduce((sum, k) => sum + (sheet.colWidths[k] ?? DEFAULT_COL_WIDTH), 0);
             return <CellField input={input} sheet={sheet} r={r} c={c} width={width} onSet={(t, ref) => set(r, c, t, ref)} org={org} />;

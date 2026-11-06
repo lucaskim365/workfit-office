@@ -32,3 +32,9 @@ test('다른 날·다른 사람·자기 자신·다른 서식은 중복 아님',
   assert.equal(findHolidayWorkDuplicate(doc({}), [doc({ id: 'D-old', status: '완료', docType: '휴가' })]), null);
   assert.equal(findHolidayWorkDuplicate(doc({ docType: '휴가' }), [doc({ id: 'D-old', status: '완료' })]), null);
 });
+
+test('시트 서식 — 서식 코드가 달라도 연동 기능이 휴일근무면 같은 신청서', () => {
+  const sheetDoc = (over: Record<string, unknown>) => doc({ docType: '휴일근무_시트', fieldValues: { workDate: '2026-11-01', __link: '휴일근무' }, ...over });
+  assert.ok(findHolidayWorkDuplicate(sheetDoc({}), [doc({ id: 'D-old', status: '완료' })]));
+  assert.ok(findHolidayWorkDuplicate(doc({}), [sheetDoc({ id: 'D-old', status: '진행중' })]));
+});

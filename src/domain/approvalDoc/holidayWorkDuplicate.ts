@@ -3,6 +3,8 @@
   반려·회수·취소·임시저장·삭제된 문서는 세지 않는다(다시 낼 수 있어야 하므로).
 */
 
+import { LINK_KEY } from './linkType';
+
 /** 휴일근로 신청서 서식 코드 — 예전 문서는 '연장근로' */
 export const HOLIDAY_WORK_DOC_TYPES: readonly string[] = ['휴일근무', '연장근로'];
 
@@ -19,7 +21,9 @@ interface DocLike {
 }
 
 export function holidayWorkDateOf(doc: Pick<DocLike, 'docType' | 'fieldValues'>): string | null {
-  if (!HOLIDAY_WORK_DOC_TYPES.includes(doc.docType)) return null;
+  // 시트 서식은 서식 코드가 달라도 '연동 기능'이 휴일근무면 같은 신청서
+  const linked = doc.fieldValues?.[LINK_KEY] === '휴일근무';
+  if (!linked && !HOLIDAY_WORK_DOC_TYPES.includes(doc.docType)) return null;
   const date = String(doc.fieldValues?.workDate ?? '').trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }

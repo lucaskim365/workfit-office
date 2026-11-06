@@ -17,11 +17,17 @@ export function OvertimeAutoFill({
   values,
   setVals,
   onFill,
+  onHours,
+  apply = true,
 }: {
   workDate: string;
   values: Record<string, FieldValue>;
   setVals: (patch: Record<string, FieldValue>) => void;
   onFill: (fill: OvertimeFill) => void;
+  /** 계산한 근무 시간 — 시트 문서(apply=false)는 이것으로 근무 시간 칸을 채운다 */
+  onHours?: (hours: number | null) => void;
+  /** false = 문서 값에 직접 넣지 않는다(시트 문서 — 시트가 이름 붙은 칸에 넣음) */
+  apply?: boolean;
 }) {
   const month = workDate.slice(0, 7);
   const { isSettled } = useCommuteBootstrap(month, false);
@@ -42,18 +48,20 @@ export function OvertimeAutoFill({
     const next = overtimeFillOf(workDate, nowLocalIso().slice(0, 10), record, holidayName);
     setFill(next);
     onFill(next);
+    if (!apply) return;
     if (clockOf(values.workStart) === next.workStart && clockOf(values.workEnd) === next.workEnd) return;
     setVals({ workKind: next.workKind, workStart: next.workStart, workEnd: next.workEnd, workHours: '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 날짜·기록이 정해질 때만 채운다
   }, [ready, workDate, record, holidayName]);
 
-  // 시각·종류로 근무 시간을 계산한다
-  const kind = String(values.workKind || '휴일');
-  const start = String(values.workStart ?? '');
-  const end = String(values.workEnd ?? '');
+  // 시각·종류로 근무 시간을 계산한다(시트 문서는 근태 기록 시각으로)
+  const kind = apply ? String(values.workKind || '휴일') : (fill?.workKind ?? '휴일');
+  const start = apply ? String(values.workStart ?? '') : (fill?.workStart ?? '');
+  const end = apply ? String(values.workEnd ?? '') : (fill?.workEnd ?? '');
   useEffect(() => {
     const hours = overtimeHours(kind, start, end, policy);
-    if (hours !== null) setVals({ workHours: String(hours) });
+    onHours?.(hours);
+    if (apply && hours !== null) setVals({ workHours: String(hours) });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 시각·종류 변경에만 반응한다
   }, [kind, start, end, policy]);
 
