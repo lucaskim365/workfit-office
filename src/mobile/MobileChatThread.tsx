@@ -10,7 +10,7 @@ import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessa
 import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, useRoomFiles } from '@/features/chat/useChatThread';
 import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
-import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
@@ -239,10 +239,13 @@ export default function MobileChatThread() {
 
   // 읽음 처리 — 들어올 때뿐 아니라 방을 열어 둔 동안 새로 온 메시지도(안 그러면 보낸 사람 쪽 숫자가 안 줄어든다)
   const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
+  // 서버가 세는 이 방 안 읽음 — 불러온 최근 메시지 밖(오래된 메시지)에 안 읽은 게 남아 있어도 읽음 처리를 돌린다
+  const { data: unreadMap = {} } = useUnreadCounts(me);
+  const serverUnread = unreadMap[roomId] ?? 0;
   useEffect(() => {
-    if (myUnreadCount > 0) markRead.mutate({ roomId, userId: me });
+    if (myUnreadCount > 0 || serverUnread > 0) markRead.mutate({ roomId, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUnreadCount, roomId, me]);
+  }, [myUnreadCount, serverUnread, roomId, me]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== roomId) {
