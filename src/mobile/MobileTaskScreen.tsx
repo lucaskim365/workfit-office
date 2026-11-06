@@ -27,7 +27,9 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
+import { WORK_PLAN_MEMO_MAX, toggleMemoTask } from '@/domain/workPlan/memo';
+import { WorkPlanMemoEditor } from '@/modules/gw/task/components/memo/WorkPlanMemoEditor';
+import { WorkPlanMemoView } from '@/modules/gw/task/components/memo/WorkPlanMemoView';
 import { useSaveWorkPlanMemo } from '@/features/workPlan/useWorkPlans';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { collectDayRows, countRows } from '@/modules/gw/task/components/dayAgenda';
@@ -581,10 +583,28 @@ function DayMemo({ text, divided, onSave }: { text: string | null; divided: bool
       setDraft(null);
       return;
     }
+    if (draft.length > WORK_PLAN_MEMO_MAX) {
+      setError(`메모는 ${WORK_PLAN_MEMO_MAX.toLocaleString()}자까지 쓸 수 있습니다(서식 포함).`);
+      return;
+    }
     setSaving(true);
     try {
       await onSave(draft);
       setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 체크박스 누르기 — 고치기 창을 열지 않고 바로 저장
+  const toggleTask = async (taskIndex: number) => {
+    if (!onSave || !text || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(toggleMemoTask(text, taskIndex));
     } catch (e) {
       setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
     } finally {
@@ -600,15 +620,18 @@ function DayMemo({ text, divided, onSave }: { text: string | null; divided: bool
       </div>
       {draft !== null ? (
         <>
-          <textarea
-            aria-label="메모"
-            autoFocus
+          <WorkPlanMemoEditor
+            label="메모"
             value={draft}
-            maxLength={WORK_PLAN_MEMO_MAX}
             disabled={saving}
-            rows={5}
-            onChange={(e) => setDraft(e.target.value)}
-            className="w-full resize-none rounded-lg border border-teal/50 bg-white px-2.5 py-2 text-[12px] leading-relaxed text-ink outline-none select-text disabled:opacity-60"
+            toolbar="inline"
+            onChange={setDraft}
+            onSave={() => void save()}
+            onCancel={() => {
+              setError('');
+              setDraft(null);
+            }}
+            className="min-h-[6.5rem] rounded-lg border border-teal/50 bg-white px-2.5 py-2 text-[12px] leading-relaxed text-ink select-text"
           />
           {error && <div role="alert" className="mt-0.5 text-[11px] font-semibold text-danger">{error}</div>}
           <div className="mt-1.5 flex justify-end gap-1.5">
@@ -639,9 +662,9 @@ function DayMemo({ text, divided, onSave }: { text: string | null; divided: bool
             ref={ref}
             role={onSave ? 'button' : undefined}
             onClick={onSave ? () => setDraft(text) : undefined}
-            className={`whitespace-pre-line break-words text-[11.5px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-4'}`}
+            className={`text-[11.5px] leading-relaxed text-ink3 ${expanded ? '' : 'line-clamp-4'}`}
           >
-            {text}
+            <WorkPlanMemoView memo={text} onToggle={onSave ? (i) => void toggleTask(i) : undefined} boxSize={14} />
           </div>
           {(overflowing || expanded) && (
             <button
