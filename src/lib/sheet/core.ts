@@ -52,4 +52,4 @@ export {
   type PasteOptions,
 } from './ops';
 export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, shrinkFontSize, SHEET_COLORS } from './style';
-export { importXlsx, XlsxError, type XlsxImport, type XlsxOptions } from './xlsx';
+export { importXlsx, xlsxSheetImages, XlsxError, type XlsxImage, type XlsxImport, type XlsxOptions } from './xlsx';

@@ -472,3 +472,83 @@ export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Pro
   }
   return { sheet: recalculate(s), sheetNames: picked.names, warnings };
 }
+
+/** 시트 위에 띄운 그림 하나 — 칸 위치(왼쪽 위)와 크기(px) */
+export interface XlsxImage {
+  data: Uint8Array;
+  /** image/png 등 */
+  type: string;
+  row: number;
+  col: number;
+  width: number;
+  height: number;
+}
+
+/** 'xl/worksheets/sheet2.xml' 기준 '../drawings/drawing1.xml' → 'xl/drawings/drawing1.xml' */
+function resolvePart(base: string, target: string): string {
+  if (target.startsWith('/')) return target.slice(1);
+  const parts = base.split('/').slice(0, -1);
+  for (const seg of target.split('/')) {
+    if (seg === '..') parts.pop();
+    else if (seg !== '.') parts.push(seg);
+  }
+  return parts.join('/');
+}
+
+const relsOf = (files: Map<string, Uint8Array>, decode: (b: Uint8Array) => string, part: string) => {
+  const slash = part.lastIndexOf('/');
+  const b = files.get(`${part.slice(0, slash)}/_rels/${part.slice(slash + 1)}.rels`);
+  return b ? children(find(parseXml(decode(b)), 'Relationships'), 'Relationship') : [];
+};
+
+const EMU_PER_PX = 9525;
+const IMAGE_TYPE: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
+
+/**
+ * 시트 위에 띄운 그림(삽입한 사진·캡처 등) — 칸 내용이 아니라 importXlsx 는 읽지 않는다. 파일 보기 화면이 칸과 함께 보인다.
+ * 도형·차트·글상자는 읽지 않는다(그림만). 위에서 아래, 왼쪽에서 오른쪽 순서
+ */
+export async function xlsxSheetImages(bytes: Uint8Array, sheet = 0): Promise<XlsxImage[]> {
+  let files: Map<string, Uint8Array>;
+  try {
+    files = await unzip(bytes);
+  } catch {
+    return [];
+  }
+  const decoder = new TextDecoder();
+  const decode = (b: Uint8Array) => decoder.decode(b);
+  let sheetPath: string;
+  try {
+    sheetPath = sheetPathOf(files, decode, () => {}, sheet).path;
+  } catch {
+    return [];
+  }
+  const out: XlsxImage[] = [];
+  for (const rel of relsOf(files, decode, sheetPath)) {
+    if (!/\/drawing$/.test(rel.attrs.Type ?? '')) continue;
+    const drawingPath = resolvePart(sheetPath, rel.attrs.Target ?? '');
+    const drawing = files.get(drawingPath);
+    if (!drawing) continue;
+    const media = new Map(relsOf(files, decode, drawingPath).map((r) => [r.attrs.Id, resolvePart(drawingPath, r.attrs.Target ?? '')]));
+    const root = find(parseXml(decode(drawing)), 'wsDr');
+    const anchors = ['twoCellAnchor', 'oneCellAnchor', 'absoluteAnchor'].flatMap((n) => children(root, n));
+    for (const a of anchors) {
+      const pic = child(a, 'pic');
+      const embed = find(pic, 'blip')?.attrs.embed;
+      const path = embed ? media.get(embed) : undefined;
+      const data = path ? files.get(path) : undefined;
+      if (!pic || !data || !path) continue;
+      const from = child(a, 'from');
+      const ext = child(a, 'ext') ?? find(child(pic, 'spPr'), 'ext');
+      out.push({
+        data,
+        type: IMAGE_TYPE[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'image/png',
+        row: Number(textOf(child(from, 'row'))) || 0,
+        col: Number(textOf(child(from, 'col'))) || 0,
+        width: Math.round(Number(ext?.attrs.cx ?? 0) / EMU_PER_PX),
+        height: Math.round(Number(ext?.attrs.cy ?? 0) / EMU_PER_PX),
+      });
+    }
+  }
+  return out.sort((x, y) => x.row - y.row || x.col - y.col);
+}
