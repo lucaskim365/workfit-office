@@ -192,9 +192,18 @@ function FloatingToolbar({ anchor, editor }: { anchor: React.RefObject<HTMLDivEl
       setPos({ top: topPx / scale, left: leftPx / scale });
     };
     place();
+    // 이 효과는 감싼 칸(anchor)의 ref 가 붙기 전에 돈다(자식 효과가 먼저) — 그래서 처음엔 잴 수 없어
+    // 스크롤해야 나타났다. 그린 다음 프레임에 한 번 더 재고, 칸 크기가 바뀔 때(줄이 늘 때)도 다시 잰다.
+    const frame = requestAnimationFrame(() => {
+      place();
+      if (anchor.current) resize.observe(anchor.current);
+    });
+    const resize = new ResizeObserver(place);
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
     return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
     };
