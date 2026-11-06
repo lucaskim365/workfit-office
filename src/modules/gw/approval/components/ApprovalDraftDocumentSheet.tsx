@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep, ApprovalRecipient, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField, type FieldValue } from '@/domain/approvalForm/schema';
@@ -67,6 +68,8 @@ interface LayoutBlock {
 
 export interface ApprovalDraftDocumentSheetProps {
   form?: ApprovalForm;
+  /** 결재란 칭호 방식 — 새 문서는 'jobTitle'(직책 우선), 예전에 만든 임시저장 문서는 없음(직급) */
+  titleMode?: string | null;
   /** 루미팹 문서면 상단 바에 워크핏 로고 대신 '루미팹' */
   company?: ApprovalCompany | null;
   docCode: string;
@@ -119,6 +122,7 @@ export interface ApprovalDraftDocumentSheetProps {
 
 export function ApprovalDraftDocumentSheet({
   form,
+  titleMode,
   company,
   docCode,
   me,
@@ -477,6 +481,7 @@ export function ApprovalDraftDocumentSheet({
             steps={stampSteps}
             nameOf={nameOf}
             posOf={posOf}
+            titleOf={(s) => stepTitleOf({ titleMode }, s, org.userById(s.approverId) || users.find((x) => x.id === s.approverId))}
             sealOf={sealOf}
             isSignatureOf={isSignatureOf}
             allowCurrentSignature

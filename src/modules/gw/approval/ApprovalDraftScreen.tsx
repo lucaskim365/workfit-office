@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -1639,6 +1640,7 @@ function ApprovalDraftInner({
           )}
           <ApprovalDraftDocumentSheet
             form={form}
+            titleMode={editDoc ? editDoc.titleMode : TITLE_MODE_JOB_TITLE}
             company={company}
             docCode={code}
             me={me}
