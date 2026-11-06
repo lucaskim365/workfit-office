@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { cellKey, colLetter, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
+import { cellKey, colLetter, mergeRange, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
 import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 import { SHEET_AUTO_NO_NS } from '@/domain/approvalForm/sheetAutoNumber';
 import { autoNumberConfigSchema, type AutoNumberConfig } from '@/domain/approvalForm/autoNumber';
@@ -230,6 +230,45 @@ export function canMergeApprovalRange(s: Sheet, range: CellRange): boolean {
     }
   }
   return true;
+}
+
+/** 가려지는 칸(왼쪽 위 말고)들의 칸 키 */
+function coveredKeys(s: Sheet, range: CellRange): string[] {
+  const r1 = Math.min(range.r1, range.r2);
+  const r2 = Math.max(range.r1, range.r2);
+  const c1 = Math.min(range.c1, range.c2);
+  const c2 = Math.max(range.c1, range.c2);
+  const out: string[] = [];
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if ((r !== r1 || c !== c1) && s.cols[c] !== undefined) out.push(cellKey(r, s.cols[c]));
+  return out;
+}
+
+/** 가려지는 칸에 연결된 부품(칸 이름·불러오기·직인·자동번호)이 있는가 — 병합하면 그 연결이 빠진다 */
+export function mergeCoversLinks(s: Sheet, range: CellRange): boolean {
+  const keys = coveredKeys(s, range);
+  return [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.seal, APPROVAL_NS.autoNo].some((ns) => keys.some((k) => s.cellMeta[ns]?.[k] !== undefined));
+}
+
+/** 가려지는 칸에 글자·수식이 있는가 — 병합하면 지워진다 */
+export function mergeDropsContent(s: Sheet, range: CellRange): boolean {
+  return coveredKeys(s, range).some((k) => {
+    const i = k.indexOf(':');
+    return s.formulas[k] !== undefined || String(s.rows[Number(k.slice(0, i))]?.[k.slice(i + 1)] ?? '') !== '';
+  });
+}
+
+/**
+ * 결재 시트 병합 — 왼쪽 위 칸이 기준. 가려지는 칸의 부품(입력 칸·필수·칸 이름 등 칸 설정)은 모두 뺀다(엑셀과 같음).
+ * 병합을 풀었다 다시 합칠 때 풀린 칸마다 남은 입력 칸 설정 때문에 막히던 것을 없앤다.
+ */
+export function mergeApprovalRange(s: Sheet, range: CellRange): Sheet {
+  const keys = new Set(coveredKeys(s, range));
+  const merged = mergeRange(s, range);
+  if (keys.size === 0) return merged;
+  const cellMeta = Object.fromEntries(
+    Object.entries(merged.cellMeta).map(([ns, rec]) => [ns, Object.fromEntries(Object.entries(rec ?? {}).filter(([k]) => !keys.has(k)))])
+  );
+  return { ...merged, cellMeta };
 }
 
 /** 문서에 저장할 값 — 칸 키 → 보이는 글자(수식 칸은 계산 결과). 빈 칸은 뺀다 */

@@ -22,7 +22,9 @@ import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
   bindLabel,
-  canMergeApprovalRange,
+  mergeApprovalRange,
+  mergeCoversLinks,
+  mergeDropsContent,
   LINK_TYPES,
   linkIssues,
   linkSystemValues,
@@ -676,7 +678,12 @@ function Designer({
             onChange={setSheet}
             normalize={healRepeatSections}
             mode="design"
-            canMerge={canMergeApprovalRange}
+            // 왼쪽 위 칸이 기준 — 가려지는 칸의 부품(입력 칸 등)은 뺀다. 칸 이름·불러오기·직인·자동번호가 빠지면 먼저 묻는다
+            mergeCells={(s, range) => {
+              if (mergeCoversLinks(s, range) && !confirm('가려지는 칸에 연결된 부품(칸 이름·불러오기·직인·자동번호)이 있습니다. 병합하면 그 연결이 빠집니다. 병합할까요?')) return s;
+              if (mergeDropsContent(s, range) && !confirm('병합하면 왼쪽 위 칸만 남고 다른 칸의 글자는 지워집니다. 병합할까요?')) return s;
+              return mergeApprovalRange(s, range);
+            }}
             canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}
             canDeleteCol={(s, c) => !isStructureLocked(s, 'col', c)}
             setValue={setApprovalCellValue}

@@ -37,6 +37,8 @@ export interface SheetEditorProps {
   canEditCell?: (s: Sheet, r: number, c: number) => boolean;
   /** 병합해도 되는가 — false 면 막고 onNotice */
   canMerge?: (s: Sheet, range: CellRange) => boolean;
+  /** 병합 — 기본 mergeRange(왼쪽 위 칸만 남김). 쓰는 쪽 규칙으로 바꿀 때(예: 빈 왼쪽 위 칸으로 내용 옮기기). 원래 시트를 돌려주면 취소 */
+  mergeCells?: (s: Sheet, range: CellRange) => Sheet;
   /** 행·열을 지워도 되는가 */
   canDeleteRow?: (s: Sheet, r: number) => boolean;
   canDeleteCol?: (s: Sheet, c: number) => boolean;
@@ -112,6 +114,7 @@ export function SheetEditor({
   mode,
   canEditCell,
   canMerge,
+  mergeCells,
   canDeleteRow,
   canDeleteCol,
   setValue = (s, r, c, text) => setCellValue(s, r, c, text),
@@ -410,7 +413,7 @@ export function SheetEditor({
       onNotice?.('연결된 칸을 덮는 병합은 할 수 없습니다. 연결된 칸이 왼쪽 위에 오도록 고르세요.');
       return;
     }
-    update((s) => mergeRange(s, range));
+    update((s) => (mergeCells ?? mergeRange)(s, range));
   };
 
   // ── 서식 ───────────────────────────────────────────────

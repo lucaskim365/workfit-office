@@ -10,7 +10,7 @@
  *   이름 붙은 칸(금액·휴가 기간 등 연동 값), 문서 머리 부품·기안 정보 칸(bind), 직인, 자동번호, 비공개, 관리자가 잠근 칸.
  *   그 칸이 든 행·열은 지울 수 없고(isStructureLocked), 입력 칸이 아닌 보호 칸은 내용(수식 포함)도 바꿀 수 없다.
  */
-import { cellKey, parseSheet, pasteTsv, type Sheet } from '@/lib/sheet/core';
+import { cellKey, parseSheet, pasteTsv, type CellRange, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, isStructureLocked, setApprovalCellValue } from './approvalSheet';
 
 /** 문서가 가진 시트(JSON). 빈 값이면 서식 버전의 틀을 쓴다 */
@@ -62,6 +62,14 @@ export function draftEditPaste(s: Sheet, r: number, c: number, text: string): Sh
     canWrite: (rr, cc) => canDraftWrite(s, rr, cc),
     allowFormula: (rr, cc) => metaOf(s, APPROVAL_NS.name, rr, cc) === undefined,
   });
+}
+
+/** 기안자 병합 — 가려지는 칸(왼쪽 위 말고)에 보호 칸(금액·연동 칸, 문서 정보 등)이 있으면 안 됨. 입력 칸 설정만 있는 칸은 빼고 병합 */
+export function draftCanMerge(s: Sheet, range: CellRange): boolean {
+  const r1 = Math.min(range.r1, range.r2), r2 = Math.max(range.r1, range.r2);
+  const c1 = Math.min(range.c1, range.c2), c2 = Math.max(range.c1, range.c2);
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if ((r !== r1 || c !== c1) && isProtectedCell(s, r, c)) return false;
+  return true;
 }
 
 /** 행·열을 지워도 되는가 — 보호 칸이 든 행·열은 안 됨 */

@@ -320,3 +320,20 @@ test('행 보이기 조건 — 여러 선택·체크 칸, 숨은 조건 칸을 �
   assert.deepEqual([...conditionHiddenRows(s)].sort(), [1, 2]);
   assert.equal(conditionHiddenRows(setCellValue(s, 0, 1, CHECK_MARK)).size, 0);
 });
+
+test('병합 — 왼쪽 위 칸 기준, 가려지는 칸의 부품(입력 칸 등)은 빠진다(풀었다 다시 합쳐도 막히지 않게)', async () => {
+  const { mergeApprovalRange, mergeCoversLinks, mergeDropsContent } = await import('./approvalSheet');
+  let s = createSheet(1, 3);
+  s = setApprovalProp(s, { r1: 0, c1: 0, r2: 0, c2: 2 }, APPROVAL_NS.input, { type: 'text' });
+  s = setCellValue(s, 0, 0, '기타');
+  const range = { r1: 0, c1: 0, r2: 0, c2: 2 };
+  assert.equal(mergeCoversLinks(s, range), false);
+  assert.equal(mergeDropsContent(s, range), false);
+  const m = mergeApprovalRange(s, range);
+  assert.equal(m.merges.length, 1);
+  assert.equal(String(m.rows[0][m.cols[0]]), '기타');
+  assert.deepEqual(Object.keys(m.cellMeta[APPROVAL_NS.input] ?? {}), [`0:${m.cols[0]}`]);
+  // 가려지는 칸에 칸 이름이 있으면 알린다
+  const named = setCellName(s, 0, 2, 'amount');
+  assert.equal(mergeCoversLinks(named, range), true);
+});
