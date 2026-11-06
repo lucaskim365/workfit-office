@@ -145,6 +145,20 @@ export function saveBlob(blob: Blob, name: string) {
 }
 
 /**
+ * 휴대폰 공유 창으로 넘길 수 있는 파일인가 — 크롬은 웹 앱이 공유할 수 있는 종류를 정해 두었다(PDF·사진·소리·영상·글자 파일).
+ * 한글(hwp)·엑셀·워드 같은 문서는 막혀서, 그런 파일은 다운로드로 연다(휴대폰 다운로드 알림의 [열기])
+ */
+const SHAREABLE_EXT = new Set([
+  'pdf', 'txt', 'text', 'csv', 'htm', 'html', 'css',
+  'png', 'jpg', 'jpeg', 'jfif', 'pjp', 'pjpeg', 'gif', 'webp', 'bmp', 'ico', 'svg', 'svgz', 'tif', 'tiff', 'xbm',
+  'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'weba',
+  'mp4', 'm4v', 'mpeg', 'mpg', 'ogv', 'ogm', 'webm',
+]);
+export function canShareFileType(name: string): boolean {
+  return SHAREABLE_EXT.has(name.split('.').pop()?.toLowerCase() ?? '');
+}
+
+/**
  * 다른 앱으로 열기 — 휴대폰 공유 창(앱 화면 위에 뜸 → 고른 앱에서 뒤로가기하면 채팅방으로 돌아옴).
  * 'unsupported': 공유 창이 없는 기기, 'expired': 누른 지 오래돼 휴대폰이 막음(다시 누르면 됨), 'cancelled': 사용자가 닫음
  */

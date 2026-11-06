@@ -109,7 +109,7 @@ export function CompositeMessageCard({
                       {att.name}
                     </div>
                     {onOpenFile ? (
-                      <ChatFileStatusText url={att.url} size={att.size} className="block chat-text-[10px] text-ink3 font-medium mt-0.5" />
+                      <ChatFileStatusText url={att.url} name={att.name} size={att.size} className="block chat-text-[10px] text-ink3 font-medium mt-0.5" />
                     ) : (
                       <div className="chat-text-[10px] text-ink3 font-medium mt-0.5">
                         {fmtSize(att.size)}
