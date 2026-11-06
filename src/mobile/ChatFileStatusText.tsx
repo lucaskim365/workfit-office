@@ -1,13 +1,17 @@
-import { useChatFileStatus } from './chatFileStore';
+import { canShareFileType, useChatFileStatus } from './chatFileStore';
 import { fmtSize } from './chatUtils';
 
 /**
  * 채팅 파일 아랫줄(휴대폰) — 받기 전·받는 중(진행률)·받음(앱 보관함에 있어 바로 열림)·받기 실패.
  * 파일 말풍선·서식 메시지 속 파일·여러 파일 묶음이 같이 쓴다
  */
-export function ChatFileStatusText({ url, size, className = '' }: { url: string; size: number; className?: string }) {
+export function ChatFileStatusText({ url, name, size, className = '' }: { url: string; name: string; size: number; className?: string }) {
   const st = useChatFileStatus(url);
-  const label =
+  // 한글·엑셀·워드 등 — 앱 안에서도 공유 창으로도 못 열어 다운로드로 연다
+  const downloadOnly = !/\.pdf$/i.test(name.trim()) && !canShareFileType(name);
+  const label = downloadOnly
+    ? `${fmtSize(size)} · 누르면 다운로드`
+    :
     st.state === 'loading'
       ? `받는 중 ${st.progress}%`
       : st.state === 'ready'

@@ -172,7 +172,7 @@ export function RichMessageBody({
                   <div className="min-w-0 flex-1">
                     <div className="truncate chat-text-[12px] font-semibold leading-tight text-ink" title={att.name}>{att.name}</div>
                     {onOpenFile ? (
-                      <ChatFileStatusText url={att.url} size={att.size} className="mt-0.5 block chat-text-[10px] font-medium text-ink3" />
+                      <ChatFileStatusText url={att.url} name={att.name} size={att.size} className="mt-0.5 block chat-text-[10px] font-medium text-ink3" />
                     ) : (
                       <div className="mt-0.5 chat-text-[10px] font-medium text-ink3">{fmtSize(att.size)}</div>
                     )}

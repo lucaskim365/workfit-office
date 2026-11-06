@@ -1076,7 +1076,7 @@ function MessageBubble({
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0 pointer-events-none">
           <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
-          <ChatFileStatusText url={att.url} size={att.size} className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`} />
+          <ChatFileStatusText url={att.url} name={att.name} size={att.size} className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`} />
         </span>
       </button>
     );
