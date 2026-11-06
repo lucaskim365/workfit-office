@@ -265,3 +265,22 @@ test('엑셀 불러오기 — 셀에 맞춤(shrinkToFit)', async () => {
   assert.equal(styleAt(sheet, 'A3')?.shrink, true);
   assert.equal(styleAt(sheet, 'A1')?.shrink, undefined);
 });
+
+test('여러 시트 — 시트 이름 목록, 고른 시트 읽기(안내 없음), 없으면 첫 시트', async () => {
+  const sheetXml = (v: string) =>
+    `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${v}</t></is></c></row></sheetData></worksheet>`;
+  const bytes = await zip({
+    'xl/workbook.xml': '<workbook><sheets><sheet name="견적" r:id="rId1"/><sheet name="세부" r:id="rId2"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':
+      '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml': sheetXml('첫 시트'),
+    'xl/worksheets/sheet2.xml': sheetXml('둘째 시트'),
+  });
+  const first = await importXlsx(bytes);
+  assert.deepEqual(first.sheetNames, ['견적', '세부']);
+  assert.equal(first.sheet.rows[0][first.sheet.cols[0]], '첫 시트');
+  assert.ok(first.warnings.some((w) => w.includes('첫 번째 시트')));
+  const second = await importXlsx(bytes, { sheet: 1 });
+  assert.equal(second.sheet.rows[0][second.sheet.cols[0]], '둘째 시트');
+  assert.ok(!second.warnings.some((w) => w.includes('첫 번째 시트')));
+});

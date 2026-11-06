@@ -14,6 +14,8 @@ export class XlsxError extends Error {}
 
 export interface XlsxImport {
   sheet: Sheet;
+  /** 통합 문서의 시트 이름들(순서대로) — 보기 화면의 시트 탭 */
+  sheetNames: string[];
   /** 사람이 읽을 안내 — 못 가져온 것, 잘라 낸 것 등 */
   warnings: string[];
 }
@@ -22,6 +24,8 @@ export interface XlsxOptions {
   /** 이보다 크면 잘라 낸다 (기본 300행 × 60열) */
   maxRows?: number;
   maxCols?: number;
+  /** 몇 번째 시트(0부터) — 없으면 첫 시트(시트가 여럿이면 안내를 남김) */
+  sheet?: number;
 }
 
 /** 엑셀 기본 열 너비(8.43글자)를 픽셀로 */
@@ -240,26 +244,33 @@ function parseRef(ref: string): [number, number] | null {
 }
 
 /** workbook.xml 의 첫 시트가 가리키는 파일 경로 */
-function firstSheetPath(files: Map<string, Uint8Array>, decode: (b: Uint8Array) => string, warn: (msg: string) => void): string {
+function sheetPathOf(
+  files: Map<string, Uint8Array>,
+  decode: (b: Uint8Array) => string,
+  warn: (msg: string) => void,
+  index: number | undefined
+): { path: string; names: string[]; index: number } {
   const workbook = files.get('xl/workbook.xml');
   if (!workbook) throw new XlsxError('엑셀 통합 문서(.xlsx)가 아닙니다.');
   const sheets = children(find(parseXml(decode(workbook)), 'sheets'), 'sheet');
   if (sheets.length === 0) throw new XlsxError('시트가 없는 파일입니다.');
-  if (sheets.length > 1) warn(`시트가 ${sheets.length}개입니다. 첫 번째 시트('${sheets[0].attrs.name}')만 가져왔습니다.`);
-  const relId = sheets[0].attrs.id;
+  const names = sheets.map((s) => s.attrs.name ?? '');
+  if (index === undefined && sheets.length > 1) warn(`시트가 ${sheets.length}개입니다. 첫 번째 시트('${sheets[0].attrs.name}')만 가져왔습니다.`);
+  const at = index !== undefined && index >= 0 && index < sheets.length ? index : 0;
+  const relId = sheets[at].attrs.id;
   const rels = files.get('xl/_rels/workbook.xml.rels');
   const target = rels ? children(find(parseXml(decode(rels)), 'Relationships'), 'Relationship').find((r) => r.attrs.Id === relId)?.attrs.Target : undefined;
-  if (!target) return 'xl/worksheets/sheet1.xml';
-  return target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
+  const path = !target ? `xl/worksheets/sheet${at + 1}.xml` : target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
+  return { path, names, index: at };
 }
 
 /**
- * 첫 시트의 인쇄 영역 끝(행·열 수). 'Sheet1'!$A$1:$K$42 형식, 여러 구역이면 첫 구역.
+ * 그 시트(기본 첫 시트)의 인쇄 영역 끝(행·열 수). 'Sheet1'!$A$1:$K$42 형식, 여러 구역이면 첫 구역.
  * 왼쪽 위가 A1 이 아니어도 끝만 쓴다(앞쪽을 잘라 내면 칸 위치가 엑셀과 달라짐)
  */
-function printAreaOf(workbook: XmlNode | undefined): { rows: number; cols: number; ref: string } | null {
+function printAreaOf(workbook: XmlNode | undefined, sheetIndex = 0): { rows: number; cols: number; ref: string } | null {
   const names = children(find(workbook, 'definedNames'), 'definedName');
-  const area = names.find((n) => n.attrs.name === '_xlnm.Print_Area' && (n.attrs.localSheetId ?? '0') === '0');
+  const area = names.find((n) => n.attrs.name === '_xlnm.Print_Area' && (n.attrs.localSheetId ?? '0') === String(sheetIndex));
   if (!area) return null;
   const first = textOf(area).split(',')[0];
   const ref = first.slice(first.lastIndexOf('!') + 1);
@@ -292,12 +303,12 @@ export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Pro
     return b ? parseXml(decode(b)) : undefined;
   };
 
-  const sheetPath = firstSheetPath(files, decode, warn);
-  const sheetXml = xmlOf(sheetPath);
+  const picked = sheetPathOf(files, decode, warn, opts.sheet);
+  const sheetXml = xmlOf(picked.path);
   if (!sheetXml) throw new XlsxError('시트 내용을 찾을 수 없습니다.');
   const shared = readSharedStrings(xmlOf('xl/sharedStrings.xml'));
   const xfs = readStyles(xmlOf('xl/styles.xml'), readThemeColors(xmlOf('xl/theme/theme1.xml')), warn);
-  const printArea = printAreaOf(xmlOf('xl/workbook.xml'));
+  const printArea = printAreaOf(xmlOf('xl/workbook.xml'), picked.index);
   const ws = find(sheetXml, 'worksheet') ?? sheetXml;
 
   // ── 칸 읽기 ──
@@ -457,5 +468,5 @@ export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Pro
     const list = unsupported.slice(0, 10).join(', ') + (unsupported.length > 10 ? ` 외 ${unsupported.length - 10}칸` : '');
     warn(`계산할 수 없는 수식이 있어 저장된 값만 가져왔습니다: ${list}`);
   }
-  return { sheet: recalculate(s), warnings };
+  return { sheet: recalculate(s), sheetNames: picked.names, warnings };
 }
