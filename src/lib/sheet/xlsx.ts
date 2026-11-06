@@ -26,6 +26,8 @@ export interface XlsxOptions {
   maxCols?: number;
   /** 몇 번째 시트(0부터) — 없으면 첫 시트(시트가 여럿이면 안내를 남김) */
   sheet?: number;
+  /** 인쇄 영역 밖 칸도 가져온다(파일 보기 화면) — 기본은 인쇄 영역까지(서식 만들기) */
+  ignorePrintArea?: boolean;
 }
 
 /** 엑셀 기본 열 너비(8.43글자)를 픽셀로 */
@@ -399,7 +401,7 @@ export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Pro
   let colCount = contentCol + 1;
   if (rowCount <= 0 || colCount <= 0) throw new XlsxError('시트에 내용이 없습니다.');
   // 인쇄 영역이 정해져 있으면 그 밖(메모·계산용 칸 등)은 서식에 넣지 않는다
-  if (printArea && (rowCount > printArea.rows || colCount > printArea.cols)) {
+  if (printArea && !opts.ignorePrintArea && (rowCount > printArea.rows || colCount > printArea.cols)) {
     rowCount = Math.min(rowCount, printArea.rows);
     colCount = Math.min(colCount, printArea.cols);
     warn(`엑셀의 인쇄 영역(${printArea.ref}) 밖에 있는 칸은 가져오지 않았습니다.`);

@@ -284,3 +284,15 @@ test('여러 시트 — 시트 이름 목록, 고른 시트 읽기(안내 없음
   assert.equal(second.sheet.rows[0][second.sheet.cols[0]], '둘째 시트');
   assert.ok(!second.warnings.some((w) => w.includes('첫 번째 시트')));
 });
+
+test('인쇄 영역 — 기본은 그 안까지, ignorePrintArea 면 전부(파일 보기)', async () => {
+  const cell = (ref: string, v: string) => `<c r="${ref}" t="inlineStr"><is><t>${v}</t></is></c>`;
+  const bytes = await zip({
+    'xl/workbook.xml':
+      '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">S!$A$1:$A$1</definedName></definedNames></workbook>',
+    'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml': `<worksheet><sheetData><row r="1">${cell('A1', '안')}${cell('C1', '밖')}</row></sheetData></worksheet>`,
+  });
+  assert.equal((await importXlsx(bytes)).sheet.cols.length, 1);
+  assert.equal((await importXlsx(bytes, { ignorePrintArea: true })).sheet.cols.length, 3);
+});
