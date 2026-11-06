@@ -110,7 +110,7 @@ export default function PdfScreen({ file, onClose }: { file: ViewerFile; onClose
         onScroll={onScroll}
         {...pinch}
         onTouchCancel={pinch.onTouchEnd}
-        className="relative min-h-0 flex-1 overflow-auto p-2"
+        className="relative min-h-0 flex-1 overflow-auto overscroll-contain p-2"
         style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', touchAction: 'pan-x pan-y' }}
       >
         {status === 'loading' && <div className="py-16 text-center text-[13px] text-white/80">PDF를 여는 중…</div>}

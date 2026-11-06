@@ -70,7 +70,8 @@ export function ViewerShell({
   };
   const btn = 'grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15 active:bg-white/25 disabled:opacity-40';
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#3a3a3a]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    // overscroll-none: 끌기가 페이지로 넘어가 '당겨서 새로고침'이 되지 않게(MobileFileViewer 가 페이지에도 끈다)
+    <div className="fixed inset-0 z-[200] flex flex-col overscroll-none bg-[#3a3a3a]" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="flex shrink-0 items-center gap-1 bg-[#222] px-2 py-2 text-white">
         <span className="min-w-0 flex-1 truncate px-1 text-[12.5px] font-semibold">{file.name}</span>
         <button type="button" onClick={() => setZoom(Math.max(min, +(zoom - step).toFixed(2)))} disabled={zoom <= min} title="축소" className={btn}>
