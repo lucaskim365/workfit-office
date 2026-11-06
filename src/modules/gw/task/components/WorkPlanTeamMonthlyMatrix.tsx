@@ -9,7 +9,9 @@ import {
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
 import { canMoveEntry, hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
-import { WORK_PLAN_MEMO_MAX } from '@/domain/workPlan/memo';
+import { WORK_PLAN_MEMO_MAX, toggleMemoTask } from '@/domain/workPlan/memo';
+import { WorkPlanMemoEditor } from './memo/WorkPlanMemoEditor';
+import { WorkPlanMemoView } from './memo/WorkPlanMemoView';
 import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
@@ -835,10 +837,28 @@ function CellMemo({
       setDraft(null);
       return;
     }
+    if (draft.length > WORK_PLAN_MEMO_MAX) {
+      setError(`메모는 ${WORK_PLAN_MEMO_MAX.toLocaleString()}자까지 쓸 수 있습니다(서식 포함).`);
+      return;
+    }
     setSaving(true);
     try {
       await onSave(draft);
       setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 칸에서 체크박스 누르기 — 고치기 창을 열지 않고 바로 저장
+  const toggleTask = async (taskIndex: number) => {
+    if (!onSave || !text || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(toggleMemoTask(text, taskIndex));
     } catch (e) {
       setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
     } finally {
@@ -876,31 +896,28 @@ function CellMemo({
     >
       {draft !== null ? (
         <>
-          <textarea
-            aria-label={label}
-            autoFocus
+          {/* 서식 메모 편집기 — 위에 서식 버튼이 뜬다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소 */}
+          <WorkPlanMemoEditor
+            label={label}
             value={draft}
-            maxLength={WORK_PLAN_MEMO_MAX}
             disabled={saving}
-            rows={Math.min(8, Math.max(3, draft.split('\n').length + 1))}
-            placeholder="메모"
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             onBlur={() => void finish()}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.stopPropagation();
-                setDraft(null);
-              } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                void finish();
-              }
+            onSave={() => void finish()}
+            onCancel={() => {
+              setError('');
+              setDraft(null);
             }}
-            className={`w-full resize-none rounded border border-sky-300 bg-panel px-1.5 py-1 ${look.memo} leading-relaxed text-ink outline-none focus:border-sky-400 disabled:opacity-60 dark:border-sky-700`}
+            className={`min-h-[3.5rem] rounded border border-sky-300 bg-panel px-1.5 py-1 ${look.memo} leading-relaxed text-ink focus-within:border-sky-400 dark:border-sky-700`}
           />
           {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
         </>
       ) : text ? (
-        <div className={`whitespace-pre-line break-words ${look.memo} leading-relaxed text-ink2`}>{text}</div>
+        <WorkPlanMemoView
+          memo={text}
+          onToggle={onSave ? (i) => void toggleTask(i) : undefined}
+          className={`${look.memo} leading-relaxed text-ink2 ${saving ? 'opacity-60' : ''}`}
+        />
       ) : (
         onSave && (
           // 비어 있는 내 메모 칸 — 흐린 '메모' 글자를 늘 보인다

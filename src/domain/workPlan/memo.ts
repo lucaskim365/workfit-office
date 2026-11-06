@@ -1,39 +1,61 @@
 import { parseWorkPlanItems } from './engine';
-import { serializeInlineSegments, stripInlineMarks } from './richText';
+import { contentToEditorDoc, editorDocToContent, toEditableText, type EditorNode } from './richText';
 
-/** 메모 글자 수 한도 — 저장 본문(`workPlans.content`) 한도와 같다 */
+/** 메모 글자 수 한도 — 저장 본문(`workPlans.content`) 한도와 같다(서식 표기 포함) */
 export const WORK_PLAN_MEMO_MAX = 1_000;
 
-/** 할 일로 읽히는 줄 머리(`-`, `*`, `[ ]`, `[x]`) — 메모 줄이 할 일로 바뀌지 않게 막는다 */
-const LOOKS_LIKE_TASK = /^\s*(?:[-*]|\[[ xX]\])/;
+/*
+  칸 메모는 업무계획 본문(`workPlans.content`)을 그대로 쓴다 — 줄 단위 텍스트 + 서식 표기(`**굵게**` 등) + 체크박스(`- [ ]`).
+  편집기(WorkPlanMemoEditor)가 이 표기를 서식으로 보여 주고 저장할 때 되돌린다(domain/workPlan/richText).
+  예전 글자만 메모(서식 기호를 역슬래시로 막아 둔 것)도 같은 형식이라 그대로 읽힌다.
+*/
 
-/**
- * 업무계획 본문 → 칸에 보일 메모 글. 서식 기호는 빼고, 태그가 있던 줄은 `[태그] ` 접두.
- * 빈 줄은 뺀다. 남는 글이 없으면 null.
- */
+/** 업무계획 본문 → 칸 메모(편집기에 넣는 본문). 체크 메타(`__c__`)는 `- [x]`로 풀고, 글이 없으면 null */
 export function contentToMemo(content: string): string | null {
-  const lines = parseWorkPlanItems(content)
-    .map((line) => {
-      const text = stripInlineMarks(line.text).trim();
-      if (!text) return '';
-      return line.tag ? `[${line.tag}] ${text}` : text;
-    })
-    .filter(Boolean);
-  return lines.length > 0 ? lines.join('\n') : null;
+  const memo = memoToContent(toEditableText(content));
+  return memo ? memo : null;
 }
 
-/**
- * 메모 글 → 저장 본문. 다시 읽을 때(`contentToMemo`) 같은 글이 나오도록
- * 서식 기호처럼 보이는 글자는 이스케이프하고, 할 일처럼 보이는 줄은 역슬래시를 붙인다. 빈 줄은 뺀다.
- */
+/** 칸 메모 → 저장 본문. 앞뒤 공백·빈 줄은 뺀다 */
 export function memoToContent(memo: string): string {
   return memo
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => {
-      const escaped = serializeInlineSegments([{ text: line, marks: {} }]);
-      return LOOKS_LIKE_TASK.test(escaped) ? `\\${escaped}` : escaped;
-    })
     .join('\n');
+}
+
+/** 칸에 그릴 메모 한 줄 — 체크박스 줄이면 checked, 몇 번째 체크박스인지(taskIndex) */
+export interface MemoLine {
+  key: string;
+  /** 서식 표기가 남은 글 — WorkPlanInlineText 로 그린다 */
+  text: string;
+  tag?: string;
+  task: { index: number; checked: boolean } | null;
+}
+
+export function memoLines(memo: string): MemoLine[] {
+  let taskIndex = 0;
+  return parseWorkPlanItems(memo)
+    .filter((item) => item.text || item.isChecklist)
+    .map((item) => ({
+      key: item.id,
+      text: item.text,
+      tag: item.tag,
+      task: item.isChecklist ? { index: taskIndex++, checked: item.completed } : null,
+    }));
+}
+
+/** 칸에서 체크박스를 눌렀을 때 — 몇 번째(0부터) 체크박스를 뒤집은 본문 */
+export function toggleMemoTask(memo: string, taskIndex: number): string {
+  const doc = contentToEditorDoc(memo);
+  let seen = 0;
+  const flip = (node: EditorNode): EditorNode => {
+    if (node.type === 'taskItem') {
+      const hit = seen++ === taskIndex;
+      return hit ? { ...node, attrs: { ...node.attrs, checked: !node.attrs?.checked } } : node;
+    }
+    return node.content ? { ...node, content: node.content.map(flip) } : node;
+  };
+  return memoToContent(editorDocToContent(flip(doc)));
 }

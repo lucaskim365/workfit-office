@@ -1,13 +1,13 @@
 import { getEditableContent, parseWorkPlanItems } from './engine';
 
 /**
- * 업무계획 서식(굵게·밑줄·취소선·형광펜·글자색) 표기 ↔ 편집기 문서 변환.
+ * 업무계획 서식(굵게·기울임·밑줄·취소선·형광펜·글자색) 표기 ↔ 편집기 문서 변환.
  *
  * 저장 형식은 **줄 단위 텍스트를 그대로 둔다.** 편집기(Tiptap)는 화면에서만 서식을 보여 주고,
  * 저장할 때 아래 표기로 되돌린다. 그래야 체크리스트 파서·진행률·체크 메타(`__c__`)·모바일이
  * 지금 모양 그대로 동작한다.
  *
- *   굵게 `**글**` · 밑줄 `++글++` · 취소선 `~~글~~` · 형광펜 `==글==` · 글자색 `{red}글{/}`
+ *   굵게 `**글**` · 기울임 `%%글%%` · 밑줄 `++글++` · 취소선 `~~글~~` · 형광펜 `==글==` · 글자색 `{red}글{/}`
  *
  * 닫히지 않은 표기나 모르는 색 이름은 글자 그대로 둔다 — "2**3" 같은 평범한 글이 깨지지 않게.
  * 편집기에서 글자로 친 표기("C++ and C++")는 저장할 때 역슬래시로 이스케이프한다(`C\+\+`).
@@ -32,6 +32,7 @@ export const WORK_PLAN_COLOR_LABELS: Record<WorkPlanColor, string> = {
 
 export interface InlineMarks {
   bold?: true;
+  italic?: true;
   underline?: true;
   strike?: true;
   highlight?: true;
@@ -43,10 +44,11 @@ export interface InlineSegment {
   marks: InlineMarks;
 }
 
-type ToggleMark = 'bold' | 'underline' | 'strike' | 'highlight';
+type ToggleMark = 'bold' | 'italic' | 'underline' | 'strike' | 'highlight';
 
 const TOGGLE_TOKENS: Array<[string, ToggleMark]> = [
   ['**', 'bold'],
+  ['%%', 'italic'],
   ['++', 'underline'],
   ['~~', 'strike'],
   ['==', 'highlight'],
@@ -55,10 +57,10 @@ const COLOR_TOKEN_START = new RegExp(`\\{(?=(?:${Object.keys(WORK_PLAN_COLORS).j
 const COLOR_OPEN = new RegExp(`^\\{(${Object.keys(WORK_PLAN_COLORS).join('|')})\\}`);
 const COLOR_CLOSE = '{/}';
 /** 역슬래시로 이스케이프할 수 있는 글자. 그 밖의 역슬래시(C:	emp)는 글자 그대로다. */
-const ESCAPABLE = '\\*+~={';
+const ESCAPABLE = '\\*%+~={';
 
 function sameMarks(a: InlineMarks, b: InlineMarks): boolean {
-  return a.bold === b.bold && a.underline === b.underline && a.strike === b.strike
+  return a.bold === b.bold && a.italic === b.italic && a.underline === b.underline && a.strike === b.strike
     && a.highlight === b.highlight && a.color === b.color;
 }
 
@@ -125,18 +127,19 @@ export function parseInlineMarks(text: string): InlineSegment[] {
 /** 글자로 쓴 표기 기호가 다시 읽을 때 서식으로 둔갑하지 않게 이스케이프한다. */
 function escapeLiteral(text: string): string {
   return text
-    .replace(/\\(?=[\\*+~={]|$)/g, '\\\\')
-    .replace(/\*\*|\+\+|~~|==/g, (m) => `\\${m[0]}\\${m[1]}`)
+    .replace(/\\(?=[\\*%+~={]|$)/g, '\\\\')
+    .replace(/\*\*|%%|\+\+|~~|==/g, (m) => `\\${m[0]}\\${m[1]}`)
     .replace(COLOR_TOKEN_START, '\\{');
 }
 
-/** 서식 구간을 표기로 되돌린다. 바깥부터 글자색 → 형광펜 → 굵게 → 밑줄 → 취소선. */
+/** 서식 구간을 표기로 되돌린다. 바깥부터 글자색 → 형광펜 → 굵게 → 기울임 → 밑줄 → 취소선. */
 export function serializeInlineSegments(segments: InlineSegment[]): string {
   return segments
     .map(({ text, marks }) => {
       let s = escapeLiteral(text);
       if (marks.strike) s = `~~${s}~~`;
       if (marks.underline) s = `++${s}++`;
+      if (marks.italic) s = `%%${s}%%`;
       if (marks.bold) s = `**${s}**`;
       if (marks.highlight) s = `==${s}==`;
       if (marks.color) s = `{${marks.color}}${s}${COLOR_CLOSE}`;
@@ -165,6 +168,7 @@ function segmentsToNodes(segments: InlineSegment[]): EditorNode[] {
   return segments.map(({ text, marks }) => {
     const nodeMarks: NonNullable<EditorNode['marks']> = [];
     if (marks.bold) nodeMarks.push({ type: 'bold' });
+    if (marks.italic) nodeMarks.push({ type: 'italic' });
     if (marks.underline) nodeMarks.push({ type: 'underline' });
     if (marks.strike) nodeMarks.push({ type: 'strike' });
     if (marks.highlight) nodeMarks.push({ type: 'highlight' });
@@ -228,6 +232,7 @@ function inlineText(node: EditorNode | undefined): string {
     const marks: InlineMarks = {};
     for (const mark of child.marks ?? []) {
       if (mark.type === 'bold') marks.bold = true;
+      else if (mark.type === 'italic') marks.italic = true;
       else if (mark.type === 'underline') marks.underline = true;
       else if (mark.type === 'strike') marks.strike = true;
       else if (mark.type === 'highlight') marks.highlight = true;

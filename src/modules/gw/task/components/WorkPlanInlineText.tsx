@@ -11,7 +11,7 @@ export function WorkPlanInlineText({ text }: { text: string }) {
   return (
     <>
       {segments.map(({ text: part, marks }, idx) => {
-        if (!marks.bold && !marks.underline && !marks.strike && !marks.highlight && !marks.color) {
+        if (!marks.bold && !marks.italic && !marks.underline && !marks.strike && !marks.highlight && !marks.color) {
           return <span key={idx}>{part}</span>;
         }
         // 밑줄과 취소선은 같은 CSS 속성(text-decoration-line)이라 클래스로 나누면 하나가 지워진다.
@@ -24,7 +24,7 @@ export function WorkPlanInlineText({ text }: { text: string }) {
           <span
             key={idx}
             style={style}
-            className={`${marks.bold ? 'font-bold' : ''} ${marks.highlight ? 'rounded-sm bg-yellow-200/80 dark:bg-yellow-500/30' : ''}`}
+            className={`${marks.bold ? 'font-bold' : ''} ${marks.italic ? 'italic' : ''} ${marks.highlight ? 'rounded-sm bg-yellow-200/80 dark:bg-yellow-500/30' : ''}`}
           >
             {part}
           </span>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { WorkPlanMemoView } from './memo/WorkPlanMemoView';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
@@ -187,7 +188,7 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
             {memos.map(({ member, memo }) => (
               <div key={member.id} className="px-2 py-1.5">
                 <div className="text-[11px] font-semibold text-ink2">{member.name}</div>
-                <div className="whitespace-pre-line break-words text-[11.5px] leading-relaxed text-ink3">{memo}</div>
+                <WorkPlanMemoView memo={memo} className="text-[11.5px] leading-relaxed text-ink3" />
               </div>
             ))}
           </section>

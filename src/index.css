@@ -313,6 +313,9 @@ body {
 .workplan-rich-editor strong {
   font-weight: 700;
 }
+.workplan-rich-editor em {
+  font-style: italic;
+}
 
 /* 메신저 — 답장 인용 클릭 시 원본 메시지 잠깐 강조 */
 @keyframes chat-jump-flash {
