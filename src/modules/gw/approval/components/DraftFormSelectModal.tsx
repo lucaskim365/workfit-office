@@ -15,6 +15,18 @@ interface DraftFormSelectModalProps {
   currentCompany?: ApprovalCompany | null;
 }
 
+/**
+ * 서식 선택 창의 한 칸 — 서식 + 회사. 루미팹 칸은 같은 서식을 루미팹 문서로 쓴다.
+ * key 는 이 창의 즐겨찾기·최근 사용에만 쓰는 이름표(워크핏 = 서식 코드, 루미팹 = '코드@lumefab').
+ * 문서에는 서식 코드가 그대로 저장되고 회사는 company 칸에 따로 남는다.
+ */
+interface FormEntry {
+  key: string;
+  form: ApprovalForm;
+  company: ApprovalCompany | null;
+}
+const LUMEFAB_KEY_SUFFIX = '@lumefab';
+
 /** 사용자별 로컬스토리지 키 분리 */
 const getFavoriteStorageKey = (userId?: string) => `workfit:favorite_forms:${userId || 'guest'}`;
 const getRecentStorageKey = (userId?: string) => `workfit:recent_forms:${userId || 'guest'}`;
@@ -99,7 +111,7 @@ export function DraftFormSelectModal({
     });
   };
 
-  const handleSelectForm = (form: ApprovalForm) => {
+  const handleSelectEntry = ({ key, form, company }: FormEntry) => {
     if (!isFormAllowed(form)) {
       alert('해당 서식은 기안 권한이 제한되어 있습니다.');
       return;
@@ -107,7 +119,7 @@ export function DraftFormSelectModal({
 
     // 사용자별 최근 사용 서식 저장 (최대 8개)
     try {
-      const nextRecents = [form.code, ...recents.filter((c) => c !== form.code)].slice(0, 8);
+      const nextRecents = [key, ...recents.filter((c) => c !== key)].slice(0, 8);
       setRecents(nextRecents);
       if (user?.id) {
         localStorage.setItem(getRecentStorageKey(user.id), JSON.stringify(nextRecents));
@@ -116,28 +128,21 @@ export function DraftFormSelectModal({
       /* ignore */
     }
 
-    onSelect(form);
+    onSelect(form, company);
     onClose();
   };
 
-  const handleSelectLumefab = (form: ApprovalForm) => {
-    if (!isFormAllowed(form)) {
-      alert('해당 서식은 기안 권한이 제한되어 있습니다.');
-      return;
-    }
-    onSelect(form, 'lumefab');
-    onClose();
-  };
-
-  // 루미팹용 서식(지출결의서·품의서) — 같은 서식을 루미팹 문서로 쓴다
-  const lumefabForms = useMemo(() => forms.filter(isLumefabForm), [forms]);
-  const shownLumefabForms = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (q) {
-      return lumefabForms.filter((f) => '루미팹 lumefab'.includes(q) || `루미팹 ${f.name}`.toLowerCase().includes(q));
-    }
-    return selectedFolderId === 'lumefab' ? lumefabForms : [];
-  }, [lumefabForms, search, selectedFolderId]);
+  // 모든 칸 — 워크핏 서식마다 한 칸, 루미팹용 서식(지출결의서·품의서)은 바로 뒤에 [루미팹] 칸을 하나 더
+  const entries = useMemo<FormEntry[]>(
+    () =>
+      forms.flatMap((form) => {
+        const own: FormEntry = { key: form.code, form, company: null };
+        if (!isLumefabForm(form)) return [own];
+        return [own, { key: form.code + LUMEFAB_KEY_SUFFIX, form, company: 'lumefab' }];
+      }),
+    [forms]
+  );
+  const lumefabCount = useMemo(() => entries.filter((e) => e.company === 'lumefab').length, [entries]);
 
   // 모달 열릴 때 검색어 초기화
   useEffect(() => {
@@ -147,45 +152,42 @@ export function DraftFormSelectModal({
   }, [open]);
 
   // 폴더별 필터링 및 검색
-  const filteredForms = useMemo(() => {
-    let list = forms;
+  const filteredEntries = useMemo(() => {
+    const list = entries;
 
-    // 검색어 필터
+    // 검색어 필터 — 루미팹 칸은 '루미팹'으로도 찾힌다
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      return list.filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          f.code.toLowerCase().includes(q) ||
-          (f.docTitle && f.docTitle.toLowerCase().includes(q))
+      return list.filter(({ form: f, company }) =>
+        [company ? '루미팹 lumefab' : '', f.name, f.code, f.docTitle ?? ''].some((t) => t.toLowerCase().includes(q))
       );
     }
 
     // 카테고리 탭 필터
     if (selectedFolderId === 'favorites') {
-      return list.filter((f) => favorites.includes(f.code));
+      return list.filter((e) => favorites.includes(e.key));
     }
     if (selectedFolderId === 'recents') {
-      return list.filter((f) => recents.includes(f.code));
+      return list.filter((e) => recents.includes(e.key));
     }
     if (selectedFolderId === 'all') {
       return list;
     }
-    if (selectedFolderId === 'lumefab') return [];
+    if (selectedFolderId === 'lumefab') return list.filter((e) => e.company === 'lumefab');
     if (selectedFolderId === 'root') {
-      return list.filter((f) => !f.folderId);
+      return list.filter((e) => !e.form.folderId);
     }
-    return list.filter((f) => f.folderId === selectedFolderId);
-  }, [forms, search, selectedFolderId, favorites, recents]);
+    return list.filter((e) => e.form.folderId === selectedFolderId);
+  }, [entries, search, selectedFolderId, favorites, recents]);
 
   // 상단 1행 최근 사용 서식 목록 (최대 4개)
   const recentFormsList = useMemo(() => {
     if (selectedFolderId !== 'all' || search.trim()) return [];
     return recents
-      .map((code) => forms.find((f) => f.code === code))
-      .filter((f): f is ApprovalForm => !!f)
+      .map((key) => entries.find((e) => e.key === key))
+      .filter((e): e is FormEntry => !!e)
       .slice(0, 4);
-  }, [recents, forms, selectedFolderId, search]);
+  }, [recents, entries, selectedFolderId, search]);
 
   const currentFolderTitle = useMemo(() => {
     if (search.trim()) return `"${search}" 검색 결과`;
@@ -287,7 +289,7 @@ export function DraftFormSelectModal({
                 <FileText className="h-4 w-4" />
                 <span>전체 서식</span>
               </span>
-              <span className="text-[11px] opacity-70">{forms.length}</span>
+              <span className="text-[11px] opacity-70">{entries.length}</span>
             </button>
 
             <button
@@ -304,7 +306,7 @@ export function DraftFormSelectModal({
                 <span>즐겨찾는 서식</span>
               </span>
               <span className="text-[11px] opacity-70">
-                {forms.filter((f) => favorites.includes(f.code)).length}
+                {entries.filter((e) => favorites.includes(e.key)).length}
               </span>
             </button>
 
@@ -322,11 +324,11 @@ export function DraftFormSelectModal({
                 <span>최근 사용 서식</span>
               </span>
               <span className="text-[11px] opacity-70">
-                {forms.filter((f) => recents.includes(f.code)).length}
+                {entries.filter((e) => recents.includes(e.key)).length}
               </span>
             </button>
 
-            {lumefabForms.length > 0 && (
+            {lumefabCount > 0 && (
               <>
                 <div className="pt-3 pb-1">
                   <div className="border-t border-border/80 my-1" />
@@ -347,7 +349,7 @@ export function DraftFormSelectModal({
                     <Building2 className="h-4 w-4 shrink-0" />
                     <span className="truncate">루미팹</span>
                   </span>
-                  <span className="text-[11px] opacity-70">{lumefabForms.length}</span>
+                  <span className="text-[11px] opacity-70">{lumefabCount}</span>
                 </button>
               </>
             )}
@@ -374,13 +376,13 @@ export function DraftFormSelectModal({
                 <span className="truncate">기본 / 공통</span>
               </span>
               <span className="text-[11px] opacity-70">
-                {forms.filter((f) => !f.folderId).length}
+                {entries.filter((e) => !e.form.folderId).length}
               </span>
             </button>
 
             {/* 개별 생성된 폴더들 */}
             {folders.map((f) => {
-              const count = forms.filter((form) => form.folderId === f.id).length;
+              const count = entries.filter((e) => e.form.folderId === f.id).length;
               return (
                 <button
                   key={f.id}
@@ -418,15 +420,16 @@ export function DraftFormSelectModal({
                 </div>
 
                 <div className="grid grid-cols-[repeat(auto-fill,210px)] gap-3">
-                  {recentFormsList.map((form) => (
+                  {recentFormsList.map((entry) => (
                     <FormCard
-                      key={`recent-${form.id}`}
-                      form={form}
-                      isAllowed={isFormAllowed(form)}
-                      isCurrent={currentCode === form.code && !currentCompany}
-                      isFav={favorites.includes(form.code)}
-                      onSelect={() => handleSelectForm(form)}
-                      onToggleFav={(e) => toggleFavorite(e, form.code)}
+                      key={`recent-${entry.key}`}
+                      form={entry.form}
+                      company={entry.company ?? undefined}
+                      isAllowed={isFormAllowed(entry.form)}
+                      isCurrent={currentCode === entry.form.code && (currentCompany ?? null) === entry.company}
+                      isFav={favorites.includes(entry.key)}
+                      onSelect={() => handleSelectEntry(entry)}
+                      onToggleFav={(e) => toggleFavorite(e, entry.key)}
                     />
                   ))}
                 </div>
@@ -443,27 +446,11 @@ export function DraftFormSelectModal({
                 <span>{currentFolderTitle}</span>
               </span>
               <span className="text-[11px] text-ink3 font-semibold">
-                총 {filteredForms.length + shownLumefabForms.length}개 서식
+                총 {filteredEntries.length}개 서식
               </span>
             </div>
 
-            {shownLumefabForms.length > 0 && (
-              <div className={`grid grid-cols-[repeat(auto-fill,210px)] gap-3 ${filteredForms.length > 0 ? 'mb-3' : ''}`}>
-                {shownLumefabForms.map((form) => (
-                  <FormCard
-                    key={`lumefab-${form.id}`}
-                    form={form}
-                    company="lumefab"
-                    isAllowed={isFormAllowed(form)}
-                    isCurrent={currentCode === form.code && currentCompany === 'lumefab'}
-                    isFav={false}
-                    onSelect={() => handleSelectLumefab(form)}
-                  />
-                ))}
-              </div>
-            )}
-
-            {filteredForms.length === 0 && shownLumefabForms.length > 0 ? null : filteredForms.length === 0 ? (
+            {filteredEntries.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-ink3">
                 <FileText className="h-10 w-10 stroke-1 opacity-40 mb-2" />
                 <p className="text-sm font-semibold">해당하는 서식이 없습니다.</p>
@@ -471,15 +458,16 @@ export function DraftFormSelectModal({
               </div>
             ) : (
               <div className="grid grid-cols-[repeat(auto-fill,210px)] gap-3">
-                {filteredForms.map((form) => (
+                {filteredEntries.map((entry) => (
                   <FormCard
-                    key={form.id}
-                    form={form}
-                    isAllowed={isFormAllowed(form)}
-                    isCurrent={currentCode === form.code && !currentCompany}
-                    isFav={favorites.includes(form.code)}
-                    onSelect={() => handleSelectForm(form)}
-                    onToggleFav={(e) => toggleFavorite(e, form.code)}
+                    key={entry.key}
+                    form={entry.form}
+                    company={entry.company ?? undefined}
+                    isAllowed={isFormAllowed(entry.form)}
+                    isCurrent={currentCode === entry.form.code && (currentCompany ?? null) === entry.company}
+                    isFav={favorites.includes(entry.key)}
+                    onSelect={() => handleSelectEntry(entry)}
+                    onToggleFav={(e) => toggleFavorite(e, entry.key)}
                   />
                 ))}
               </div>
@@ -505,7 +493,7 @@ export function DraftFormSelectModal({
 /** 단순화된 사용자 중심 서식 카드 컴포넌트 */
 interface FormCardProps {
   form: ApprovalForm;
-  /** 루미팹용 카드 — 이름 앞에 [루미팹], 즐겨찾기 별 없음 */
+  /** 루미팹용 카드 — 이름 앞에 [루미팹] */
   company?: ApprovalCompany;
   isAllowed: boolean;
   isCurrent: boolean;
