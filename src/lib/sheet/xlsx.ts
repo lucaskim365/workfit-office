@@ -480,6 +480,9 @@ export interface XlsxImage {
   type: string;
   row: number;
   col: number;
+  /** 시트 왼쪽 위에서 잰 자리(px) — 엑셀이 적어 둔 값(있으면 칸 번호보다 정확: 열 너비를 몰라도 됨) */
+  x?: number;
+  y?: number;
   width: number;
   height: number;
 }
@@ -540,11 +543,13 @@ export async function xlsxSheetImages(bytes: Uint8Array, sheet = 0): Promise<Xls
       if (!pic || !data || !path) continue;
       const from = child(a, 'from');
       const ext = child(a, 'ext') ?? find(child(pic, 'spPr'), 'ext');
+      const off = find(child(pic, 'spPr'), 'off') ?? child(a, 'pos');
       out.push({
         data,
         type: IMAGE_TYPE[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'image/png',
         row: Number(textOf(child(from, 'row'))) || 0,
         col: Number(textOf(child(from, 'col'))) || 0,
+        ...(off ? { x: Math.round(Number(off.attrs.x ?? 0) / EMU_PER_PX), y: Math.round(Number(off.attrs.y ?? 0) / EMU_PER_PX) } : {}),
         width: Math.round(Number(ext?.attrs.cx ?? 0) / EMU_PER_PX),
         height: Math.round(Number(ext?.attrs.cy ?? 0) / EMU_PER_PX),
       });
