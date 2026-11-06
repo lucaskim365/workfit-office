@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { drafterTitleOf, stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
@@ -1564,7 +1565,7 @@ function DocDetail({
                         {doc.drafterName || nameOf(doc.drafterId)}
                       </span>
                       <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                        {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
+                        {drafterTitleOf(doc, org.userById(doc.drafterId)) || doc.drafterDept}
                       </span>
                     </div>
                     <div className={'rounded bg-teal/15 py-0.2 ' + subFontClass + ' font-bold text-teal'}>상신</div>
@@ -1603,7 +1604,7 @@ function DocDetail({
                                       {s.approverName || nameOf(s.approverId)}
                                     </span>
                                     <span className={parallelSubFontClass + ' text-ink3 truncate w-full'}>
-                                      {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                                      {stepTitleOf(doc, s, org.userById(s.approverId)) || '—'}
                                       {s.delegatedFromId && <span className="ml-1 text-[7.5px] text-amber font-bold">(대결)</span>}
                                     </span>
                                   </div>
@@ -1652,7 +1653,7 @@ function DocDetail({
                                     {s.approverName || nameOf(s.approverId)}
                                   </span>
                                   <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                                    {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                                    {stepTitleOf(doc, s, org.userById(s.approverId)) || '—'}
                                   </span>
                                   {s.delegatedFromId && <span className="text-[7.5px] text-amber truncate w-full">대결</span>}
                                 </div>

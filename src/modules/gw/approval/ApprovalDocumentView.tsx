@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { usePermission } from '@/features/auth/usePermission';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -498,7 +499,7 @@ export function ApprovalDocumentView({
   const showStamp = !externalDoc && stampTableShown(doc.status, sealForm);
   const stampNode = (
     <div className="relative">
-      <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
+      <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} titleOf={(s) => stepTitleOf(doc, s, org.userById(s.approverId) || users.find((x) => x.id === s.approverId))} isPostApproval={doc.isPostApproval} />
       {doc.status === '취소완료' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">
