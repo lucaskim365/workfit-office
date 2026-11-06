@@ -307,7 +307,7 @@ test('시트 그림 — 칸 내용 없는 시트의 그림을 위치·크기와 
     'xl/worksheets/sheet2.xml': '<worksheet><sheetData/><drawing r:id="rId1"/></worksheet>',
     'xl/worksheets/_rels/sheet2.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas/drawing" Target="../drawings/drawing1.xml"/></Relationships>',
     'xl/drawings/drawing1.xml':
-      '<xdr:wsDr><xdr:twoCellAnchor><xdr:from><xdr:col>5</xdr:col><xdr:row>2</xdr:row></xdr:from><xdr:pic><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill><xdr:spPr><a:xfrm><a:ext cx="952500" cy="476250"/></a:xfrm></xdr:spPr></xdr:pic></xdr:twoCellAnchor>' +
+      '<xdr:wsDr><xdr:twoCellAnchor><xdr:from><xdr:col>5</xdr:col><xdr:row>2</xdr:row></xdr:from><xdr:pic><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="6248400" y="95250"/><a:ext cx="952500" cy="476250"/></a:xfrm></xdr:spPr></xdr:pic></xdr:twoCellAnchor>' +
       '<xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:row>0</xdr:row></xdr:from><xdr:sp/></xdr:twoCellAnchor></xdr:wsDr>',
     'xl/drawings/_rels/drawing1.xml.rels': '<Relationships><Relationship Id="rId1" Target="../media/image1.png"/></Relationships>',
     'xl/media/image1.png': png,
@@ -316,4 +316,6 @@ test('시트 그림 — 칸 내용 없는 시트의 그림을 위치·크기와 
   const imgs = await xlsxSheetImages(bytes, 1);
   assert.equal(imgs.length, 1, '도형은 빼고 그림만');
   assert.deepEqual({ type: imgs[0].type, row: imgs[0].row, col: imgs[0].col, w: imgs[0].width, h: imgs[0].height }, { type: 'image/png', row: 2, col: 5, w: 100, h: 50 });
+  // 엑셀이 적어 둔 자리(EMU → px) — 열 너비를 몰라도 겹치지 않게
+  assert.deepEqual({ x: imgs[0].x, y: imgs[0].y }, { x: 656, y: 10 });
 });

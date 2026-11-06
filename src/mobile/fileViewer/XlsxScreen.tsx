@@ -77,7 +77,8 @@ export default function XlsxScreen({ file, onClose }: { file: ViewerFile; onClos
     const rowH = (r: number) => (s ? (r < s.rows.length ? (s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT) : DEFAULT_ROW_HEIGHT) : EXCEL_ROW_PX);
     const x = (c: number) => Array.from({ length: c }, (_, i) => colW(i)).reduce((n, w) => n + w, 0);
     const y = (r: number) => Array.from({ length: r }, (_, i) => rowH(i)).reduce((n, h) => n + h, 0);
-    const pics = (loaded?.images ?? []).map((img) => ({ left: x(img.col), top: y(img.row), width: img.width, height: img.height }));
+    // 엑셀이 적어 둔 자리(x·y)가 있으면 그것 — 칸 번호로 세면 열 너비를 몰라(빈 시트) 그림이 겹쳤다
+    const pics = (loaded?.images ?? []).map((img) => ({ left: img.x ?? x(img.col), top: img.y ?? y(img.row), width: img.width, height: img.height }));
     const tableW = s ? s.cols.reduce((n, c) => n + (s.colWidths[c] ?? DEFAULT_COL_WIDTH), 0) : 0;
     const width = Math.max(tableW, ...pics.map((p) => p.left + p.width), 0);
     const height = Math.max(s ? y(s.rows.length) : 0, ...pics.map((p) => p.top + p.height), 0);
