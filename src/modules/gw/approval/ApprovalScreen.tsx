@@ -83,8 +83,7 @@ const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(-
 
 /** 화면의 함 — 저장된 결재함 + 부서 문서함 */
 type ScreenBox = ApprovalBox | '문서함';
-/** 결재함 회사 보기 — 사람마다 마지막 고른 것을 기억 */
-const COMPANY_VIEW_KEY = (userId: string) => `workfit:approval_company_view:${userId}`;
+/** 결재함 회사 보기 — 들어올 때마다 '전체'(고른 보기는 그 화면에 있는 동안만) */
 const COMPANY_VIEW_OPTIONS: { key: CompanyView; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'workfit', label: '워크핏' },
@@ -152,19 +151,12 @@ export default function ApprovalScreen() {
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
 
-  // 회사 보기 — 전체(합쳐서)·워크핏만·루미팹만. 모든 함에 똑같이 적용(주소 ?company= 가 있으면 그것)
-  const [companyView, setCompanyViewState] = useState<CompanyView>(() => {
-    const fromUrl = parseCompanyView(params.get('company'));
-    if (fromUrl) return fromUrl;
-    try {
-      return parseCompanyView(localStorage.getItem(COMPANY_VIEW_KEY(me))) ?? 'all';
-    } catch {
-      return 'all';
-    }
-  });
+  // 회사 보기 — 전체(합쳐서)·워크핏만·루미팹만. 모든 함에 똑같이 적용.
+  // 기본은 늘 '전체' — 마지막 보기를 기억하면 '루미팹'으로 둔 채 다시 들어와 워크핏 결재 문서를 못 보는 일이 생긴다.
+  // (주소에 ?company= 가 있으면 그것 — 새로고침·뒤로가기 때 고른 보기 유지)
+  const [companyView, setCompanyViewState] = useState<CompanyView>(() => parseCompanyView(params.get('company')) ?? 'all');
   const setCompanyView = (v: CompanyView) => {
     setCompanyViewState(v);
-    try { localStorage.setItem(COMPANY_VIEW_KEY(me), v); } catch { /* 저장 못 해도 화면은 바뀐다 */ }
     const nextUrl = new URL(window.location.href);
     if (v === 'all') nextUrl.searchParams.delete('company');
     else nextUrl.searchParams.set('company', v);
