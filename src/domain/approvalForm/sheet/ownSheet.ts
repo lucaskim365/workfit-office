@@ -10,8 +10,8 @@
  *   이름 붙은 칸(금액·휴가 기간 등 연동 값), 문서 머리 부품·기안 정보 칸(bind), 직인, 자동번호, 비공개, 관리자가 잠근 칸.
  *   그 칸이 든 행·열은 지울 수 없고(isStructureLocked), 입력 칸이 아닌 보호 칸은 내용(수식 포함)도 바꿀 수 없다.
  */
-import { cellKey, parseSheet, pasteTsv, type CellRange, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, isStructureLocked, setApprovalCellValue } from './approvalSheet';
+import { cellKey, insertCol, parseSheet, pasteTsv, type CellRange, type Sheet } from '@/lib/sheet/core';
+import { APPROVAL_NS, coveredKeys, isStructureLocked, setApprovalCellValue } from './approvalSheet';
 
 /** 문서가 가진 시트(JSON). 빈 값이면 서식 버전의 틀을 쓴다 */
 export const SHEET_OWN_KEY = '__sheet';
@@ -66,10 +66,46 @@ export function draftEditPaste(s: Sheet, r: number, c: number, text: string): Sh
 
 /** 기안자 병합 — 가려지는 칸(왼쪽 위 말고)에 보호 칸(금액·연동 칸, 문서 정보 등)이 있으면 안 됨. 입력 칸 설정만 있는 칸은 빼고 병합 */
 export function draftCanMerge(s: Sheet, range: CellRange): boolean {
-  const r1 = Math.min(range.r1, range.r2), r2 = Math.max(range.r1, range.r2);
-  const c1 = Math.min(range.c1, range.c2), c2 = Math.max(range.c1, range.c2);
-  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if ((r !== r1 || c !== c1) && isProtectedCell(s, r, c)) return false;
-  return true;
+  return coveredKeys(s, range).every((key) => {
+    const i = key.indexOf(':');
+    const c = s.cols.indexOf(key.slice(i + 1));
+    return c < 0 || !isProtectedCell(s, Number(key.slice(0, i)), c);
+  });
+}
+
+/** 문서 머리 행 — 결재란·기안 정보·문서 항목·로고·직인 칸이 든 행 */
+function docHeadRows(s: Sheet): Set<number> {
+  const rows = new Set<number>();
+  for (const ns of [APPROVAL_NS.bind, APPROVAL_NS.seal]) for (const key of Object.keys(s.cellMeta[ns] ?? {})) rows.add(Number(key.slice(0, key.indexOf(':'))));
+  return rows;
+}
+
+/**
+ * 기안자 열 넣기 — 열은 시트 전체에 생기지만, 문서 머리 행(기안부서·기안일·결재란 등)에 생긴 새 칸은 왼쪽 칸에 합쳐
+ * 문서 머리 모양·테두리가 그대로 남게 한다(그 칸들은 보호 칸이라 기안자가 직접 병합할 수 없다)
+ */
+export function draftInsertCol(s: Sheet, at: number): Sheet {
+  let next = insertCol(s, at);
+  if (at <= 0) return next;
+  const heads = docHeadRows(next);
+  const covers = (m: Sheet['merges'][number], r: number, c: number) => r >= m.startRow && r < m.startRow + m.rowSpan && c >= m.startCol && c < m.startCol + m.colSpan;
+  const merges = next.merges.map((m) => ({ ...m }));
+  const extended = new Set<number>();
+  for (const r of heads) {
+    if (merges.some((m) => covers(m, r, at))) continue; // 이미 넓어진 병합 안(열을 병합 가운데에 넣음)
+    const left = merges.findIndex((m) => covers(m, r, at - 1));
+    if (left >= 0) {
+      const m = merges[left];
+      if (m.startCol + m.colSpan - 1 === at - 1 && !extended.has(left)) {
+        m.colSpan += 1;
+        extended.add(left);
+      }
+      continue;
+    }
+    merges.push({ startRow: r, startCol: at - 1, rowSpan: 1, colSpan: 2 });
+  }
+  next = { ...next, merges };
+  return next;
 }
 
 /** 행·열을 지워도 되는가 — 보호 칸이 든 행·열은 안 됨 */

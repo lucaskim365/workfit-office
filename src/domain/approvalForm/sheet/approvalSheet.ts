@@ -232,14 +232,36 @@ export function canMergeApprovalRange(s: Sheet, range: CellRange): boolean {
   return true;
 }
 
-/** 가려지는 칸(왼쪽 위 말고)들의 칸 키 */
-function coveredKeys(s: Sheet, range: CellRange): string[] {
+const cellHasAnything = (s: Sheet, key: string): boolean => {
+  const i = key.indexOf(':');
+  if (s.formulas[key] !== undefined || String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '') !== '') return true;
+  return Object.values(s.cellMeta).some((rec) => rec?.[key] !== undefined);
+};
+
+/**
+ * 병합하면 남는 칸 — 왼쪽 위 칸. 단 왼쪽 위 칸이 아무것도 없는 빈 칸이면(새로 넣은 열 등) 범위에서 처음 나오는 내용·부품 있는 칸.
+ * 그 칸의 글자·수식·부품을 왼쪽 위로 옮겨 병합한다(빈 칸 때문에 옆 칸이 지워지거나 막히지 않게)
+ */
+export function mergeKeeperOf(s: Sheet, range: CellRange): string {
   const r1 = Math.min(range.r1, range.r2);
   const r2 = Math.max(range.r1, range.r2);
   const c1 = Math.min(range.c1, range.c2);
   const c2 = Math.max(range.c1, range.c2);
+  const tl = cellKey(r1, s.cols[c1]);
+  if (cellHasAnything(s, tl)) return tl;
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (s.cols[c] !== undefined && cellHasAnything(s, cellKey(r, s.cols[c]))) return cellKey(r, s.cols[c]);
+  return tl;
+}
+
+/** 가려지는 칸(병합하면 남는 칸 말고)들의 칸 키 */
+export function coveredKeys(s: Sheet, range: CellRange): string[] {
+  const r1 = Math.min(range.r1, range.r2);
+  const r2 = Math.max(range.r1, range.r2);
+  const c1 = Math.min(range.c1, range.c2);
+  const c2 = Math.max(range.c1, range.c2);
+  const keep = mergeKeeperOf(s, range);
   const out: string[] = [];
-  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if ((r !== r1 || c !== c1) && s.cols[c] !== undefined) out.push(cellKey(r, s.cols[c]));
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (s.cols[c] !== undefined && cellKey(r, s.cols[c]) !== keep) out.push(cellKey(r, s.cols[c]));
   return out;
 }
 
@@ -263,7 +285,30 @@ export function mergeDropsContent(s: Sheet, range: CellRange): boolean {
  */
 export function mergeApprovalRange(s: Sheet, range: CellRange): Sheet {
   const keys = new Set(coveredKeys(s, range));
-  const merged = mergeRange(s, range);
+  // 왼쪽 위가 빈 칸이면 남길 칸의 글자·수식·부품·서식을 왼쪽 위로 옮긴다
+  const tl = cellKey(Math.min(range.r1, range.r2), s.cols[Math.min(range.c1, range.c2)]);
+  const keep = mergeKeeperOf(s, range);
+  let base = s;
+  if (keep !== tl) {
+    const move = <T,>(rec: Record<string, T> | undefined): Record<string, T> => {
+      const { [keep]: v, [tl]: _old, ...rest } = rec ?? {};
+      return v !== undefined ? { ...rest, [tl]: v } : rest;
+    };
+    const i = keep.indexOf(':');
+    const ti = tl.indexOf(':');
+    const rows = s.rows.map((row) => ({ ...row }));
+    rows[Number(tl.slice(0, ti))][tl.slice(ti + 1)] = String(s.rows[Number(keep.slice(0, i))]?.[keep.slice(i + 1)] ?? '');
+    base = {
+      ...s,
+      rows,
+      formulas: move(s.formulas),
+      styles: { ...s.styles, ...(s.styles[keep] ? { [tl]: s.styles[keep] } : {}) },
+      cellMeta: Object.fromEntries(Object.entries(s.cellMeta).map(([ns, rec]) => [ns, move(rec)])),
+    };
+    keys.add(keep);
+    keys.delete(tl);
+  }
+  const merged = mergeRange(base, range);
   if (keys.size === 0) return merged;
   const cellMeta = Object.fromEntries(
     Object.entries(merged.cellMeta).map(([ns, rec]) => [ns, Object.fromEntries(Object.entries(rec ?? {}).filter(([k]) => !keys.has(k)))])

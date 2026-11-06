@@ -39,6 +39,8 @@ export interface SheetEditorProps {
   canMerge?: (s: Sheet, range: CellRange) => boolean;
   /** 병합 — 기본 mergeRange(왼쪽 위 칸만 남김). 쓰는 쪽 규칙으로 바꿀 때(예: 빈 왼쪽 위 칸으로 내용 옮기기). 원래 시트를 돌려주면 취소 */
   mergeCells?: (s: Sheet, range: CellRange) => Sheet;
+  /** 열 넣기 — 기본 insertCol. 쓰는 쪽 규칙으로 바꿀 때(예: 문서 머리 행의 새 칸은 옆 칸에 합치기) */
+  insertColumn?: (s: Sheet, at: number) => Sheet;
   /** 행·열을 지워도 되는가 */
   canDeleteRow?: (s: Sheet, r: number) => boolean;
   canDeleteCol?: (s: Sheet, c: number) => boolean;
@@ -115,6 +117,7 @@ export function SheetEditor({
   canEditCell,
   canMerge,
   mergeCells,
+  insertColumn,
   canDeleteRow,
   canDeleteCol,
   setValue = (s, r, c, text) => setCellValue(s, r, c, text),
@@ -783,7 +786,7 @@ export function SheetEditor({
           <button type="button" className={btn()} onClick={() => update((s) => insertRow(s, range.r2 + 1))}>
             + 행
           </button>
-          <button type="button" className={btn()} onClick={() => update((s) => insertCol(s, range.c2 + 1))}>
+          <button type="button" className={btn()} onClick={() => update((s) => (insertColumn ?? insertCol)(s, range.c2 + 1))}>
             + 열
           </button>
           <button type="button" className={btn()} onClick={() => removeRows(range.r1, range.r2)} disabled={rows.length <= 1}>
@@ -1057,8 +1060,8 @@ export function SheetEditor({
                   { label: '행 삭제', run: () => removeRows(headerMenu.idx, headerMenu.idx) },
                 ]
               : [
-                  { label: '왼쪽에 열 삽입', run: () => update((s) => insertCol(s, headerMenu.idx)) },
-                  { label: '오른쪽에 열 삽입', run: () => update((s) => insertCol(s, headerMenu.idx + 1)) },
+                  { label: '왼쪽에 열 삽입', run: () => update((s) => (insertColumn ?? insertCol)(s, headerMenu.idx)) },
+                  { label: '오른쪽에 열 삽입', run: () => update((s) => (insertColumn ?? insertCol)(s, headerMenu.idx + 1)) },
                   { label: '열 삭제', run: () => removeCols(headerMenu.idx, headerMenu.idx) },
                 ]
             ).map((item) => (

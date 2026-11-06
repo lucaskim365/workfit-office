@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
 import { Building2, Download, Minus, Plus, Table2, Trash2, X } from 'lucide-react';
-import { SHEET_OWN_KEY, canDraftDelete, draftCanMerge, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
+import { SHEET_OWN_KEY, canDraftDelete, draftCanMerge, draftInsertCol, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -654,6 +654,7 @@ export function SheetDraftForm({
             mode="design"
             normalize={healRepeatSections}
             canMerge={draftCanMerge}
+            insertColumn={draftInsertCol}
             mergeCells={(s, range) => {
               // 왼쪽 위 칸이 기준 — 나머지 칸의 글자와 부품(입력 칸 등)은 빠진다
               if (mergeDropsContent(s, range) && !confirm('병합하면 왼쪽 위 칸만 남고 다른 칸의 글자는 지워집니다. 병합할까요?')) return s;

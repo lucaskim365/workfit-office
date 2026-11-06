@@ -57,3 +57,31 @@ test('사람 칸 ID — 같은 자리에 같은 이름이 남은 칸만 그대�
   assert.deepEqual(keepRefsAfterEdit(refs, s, s), refs);
   assert.deepEqual(keepRefsAfterEdit(refs, s, insertRow(s, 0)), {});
 });
+
+test('기안자 열 넣기 — 문서 머리 행(기안 정보 칸)에 생긴 새 칸은 왼쪽 칸에 합쳐 모양이 그대로', async () => {
+  const { draftInsertCol } = await import('./ownSheet');
+  let s = createSheet(2, 3);
+  s = setCellValue(s, 0, 0, '기안부서');
+  s = setCellMeta(s, APPROVAL_NS.bind, 0, 1, 'draft.dept');
+  const next = draftInsertCol(s, 2);
+  assert.equal(next.cols.length, 4);
+  // 머리 행: 기안부서 값 칸(B)이 새 칸(C)까지 합쳐짐, 표 행(2행)은 그대로 갈라짐
+  assert.deepEqual(next.merges, [{ startRow: 0, startCol: 1, rowSpan: 1, colSpan: 2 }]);
+});
+
+test('병합 — 왼쪽 위가 빈 칸이면 옆 칸의 글자·부품을 왼쪽 위로 옮겨 합친다(보호 칸도 잃지 않으니 기안자도 가능)', async () => {
+  const { mergeApprovalRange } = await import('./approvalSheet');
+  const { draftCanMerge } = await import('./ownSheet');
+  let s = createSheet(1, 2);
+  s = setCellValue(s, 0, 1, '홍길동');
+  s = setCellMeta(s, APPROVAL_NS.bind, 0, 1, 'draft.name');
+  const range = { r1: 0, c1: 0, r2: 0, c2: 1 };
+  assert.equal(draftCanMerge(s, range), true);
+  const m = mergeApprovalRange(s, range);
+  assert.equal(String(m.rows[0][m.cols[0]]), '홍길동');
+  assert.deepEqual(m.cellMeta[APPROVAL_NS.bind], { [`0:${m.cols[0]}`]: 'draft.name' });
+  assert.deepEqual(draftEditIssues(s, m), []);
+  // 왼쪽 위에 글자가 있으면 그 칸 기준 — 보호 칸을 덮는 병합은 기안자에게 막힘
+  const s2 = setCellValue(s, 0, 0, '기안자');
+  assert.equal(draftCanMerge(s2, range), false);
+});
