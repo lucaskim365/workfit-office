@@ -31,3 +31,15 @@ export function docNoPrefixOf(company: ApprovalCompany | null | undefined): stri
 export function isLumefabDoc(doc: { company?: string | null }): boolean {
   return doc.company === 'lumefab';
 }
+
+/** 결재함 회사 보기 — 합쳐서·워크핏만·루미팹만 */
+export type CompanyView = 'all' | 'workfit' | 'lumefab';
+
+export function parseCompanyView(v: unknown): CompanyView | null {
+  return v === 'all' || v === 'workfit' || v === 'lumefab' ? v : null;
+}
+
+export function inCompanyView(doc: { company?: string | null }, view: CompanyView): boolean {
+  if (view === 'all') return true;
+  return view === 'lumefab' ? isLumefabDoc(doc) : !isLumefabDoc(doc);
+}

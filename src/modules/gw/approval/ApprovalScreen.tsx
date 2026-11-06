@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { isLumefabDoc } from '@/domain/approvalDoc/company';
+import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -82,12 +82,14 @@ const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(-
 
 /** 화면의 함 — 저장된 결재함 + 부서 문서함 */
 type ScreenBox = ApprovalBox | '문서함';
-/** [루미팹] 결재함 그룹에 두는 함 — 같은 함을 루미팹 문서만 걸러 보인다(주소 ?company=lumefab) */
-const LUMEFAB_BOXES = [
-  { key: '대기', label: '받은 결재함' },
-  { key: '반려', label: '반려함' },
-  { key: '후열', label: '후열함' },
-] as const;
+/** 결재함 회사 보기 — 사람마다 마지막 고른 것을 기억 */
+const COMPANY_VIEW_KEY = (userId: string) => `workfit:approval_company_view:${userId}`;
+const COMPANY_VIEW_OPTIONS: { key: CompanyView; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'workfit', label: '워크핏' },
+  { key: 'lumefab', label: '루미팹' },
+];
+const COMPANY_VIEW_TITLE: Record<CompanyView, string> = { all: '', workfit: '[워크핏] ', lumefab: '[루미팹] ' };
 
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '받은 결재함',
@@ -149,19 +151,37 @@ export default function ApprovalScreen() {
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
 
-  // [루미팹] 결재함 그룹의 함을 골랐는지 — 같은 함에서 루미팹 문서만 거른다
-  const [lumefabOnly, setLumefabOnly] = useState(() => params.get('company') === 'lumefab');
+  // 회사 보기 — 전체(합쳐서)·워크핏만·루미팹만. 모든 함에 똑같이 적용(주소 ?company= 가 있으면 그것)
+  const [companyView, setCompanyViewState] = useState<CompanyView>(() => {
+    const fromUrl = parseCompanyView(params.get('company'));
+    if (fromUrl) return fromUrl;
+    try {
+      return parseCompanyView(localStorage.getItem(COMPANY_VIEW_KEY(me))) ?? 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const setCompanyView = (v: CompanyView) => {
+    setCompanyViewState(v);
+    try { localStorage.setItem(COMPANY_VIEW_KEY(me), v); } catch { /* 저장 못 해도 화면은 바뀐다 */ }
+    const nextUrl = new URL(window.location.href);
+    if (v === 'all') nextUrl.searchParams.delete('company');
+    else nextUrl.searchParams.set('company', v);
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
+  const inView = (d: ApprovalDoc) => inCompanyView(d, companyView);
+  /** 검색·알림으로 연 문서가 지금 보기에서 걸러지면 '전체'로 넓힌다 */
+  const widenViewFor = (d: ApprovalDoc) => {
+    if (!inCompanyView(d, companyView)) setCompanyView('all');
+  };
 
-  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null, lumefab = false) => {
+  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null) => {
     setBox(newBox);
-    setLumefabOnly(lumefab);
     setCompletedForm(formCode);
     setSelId(null);
     if (newBox === '대기') setTodoFilter('all');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
-    if (lumefab) nextUrl.searchParams.set('company', 'lumefab');
-    else nextUrl.searchParams.delete('company');
     nextUrl.searchParams.delete('doc');
     window.history.replaceState(null, '', nextUrl.toString());
   };
@@ -197,7 +217,6 @@ export default function ApprovalScreen() {
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
     if ('todoFilter' in t) setTodoFilter(t.todoFilter);
     setCompletedForm(null);
-    setLumefabOnly(false);
     setBox(t.box);
   };
 
@@ -243,6 +262,7 @@ export default function ApprovalScreen() {
   const handleSelectSearchedDoc = (d: ApprovalDoc) => {
     const target = searchBoxFilter === 'all' ? resolveDocBox(d, me, myDeptKey) : { box: searchBoxFilter };
     applyBoxTarget(target);
+    widenViewFor(d);
     setSelId(d.id);
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', target.box);
@@ -287,13 +307,13 @@ export default function ApprovalScreen() {
     const uniqueMap = new Map<string, ApprovalDoc>();
     combined.forEach((d) => uniqueMap.set(d.id, d));
     const docs = Array.from(uniqueMap.values()).sort(byRecent);
-    // [루미팹] 결재함 — 루미팹 문서만(일반 결재함에는 루미팹 문서도 그대로 보인다)
-    return lumefabOnly ? docs.filter(isLumefabDoc) : docs;
-  }, [box, allDocs, me, org, userObj, recvPostReads, lumefabOnly]);
+    // 회사 보기 — 워크핏만·루미팹만이면 거른다
+    return docs.filter((d) => inCompanyView(d, companyView));
+  }, [box, allDocs, me, org, userObj, recvPostReads, companyView]);
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
-    if (box === '문서함') return deptArchiveDocs;
+    if (box === '문서함') return deptArchiveDocs.filter((d) => inCompanyView(d, companyView));
 
     if (box === '완료') {
       const byForm = completedForm ? list.filter((d: ApprovalDoc) => d.docType === completedForm) : list;
@@ -351,7 +371,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm]);
+  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm, companyView]);
 
   // 완료함 서식 바로가기 — 서식 이름은 서식 마스터(code)에서, 없으면 docType 그대로
   const completedDocs = useMemo(() => {
@@ -413,7 +433,6 @@ export default function ApprovalScreen() {
     const urlBox = deepBox;
 
     setCompletedForm(null);
-    setLumefabOnly(params.get('company') === 'lumefab');
     // 1. URL에 box만 있는 경우
     if (!deepTargetDoc) {
       if (urlBox) setBox(urlBox);
@@ -421,6 +440,7 @@ export default function ApprovalScreen() {
     }
 
     const targetDoc = deepTargetDoc;
+    widenViewFor(targetDoc);
     setSelId(targetDoc.id);
 
     // 2. 함이 지정되지 않았으면 문서가 실제로 보이는 함을 자동 판정
@@ -550,6 +570,26 @@ export default function ApprovalScreen() {
             + 새 상신
           </button>
 
+          {/* 회사 보기 — 모든 함에 적용 */}
+          <div className="mb-1 grid grid-cols-3 gap-0.5 rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="회사 보기">
+            {COMPANY_VIEW_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                role="radio"
+                aria-checked={companyView === o.key}
+                onClick={() => setCompanyView(o.key)}
+                className={`rounded-md py-1 text-[11px] font-bold transition-colors ${
+                  companyView === o.key
+                    ? o.key === 'lumefab' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-panel text-teal shadow-xs'
+                    : 'text-ink3 hover:text-ink'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
           {/* 임시 저장함 단독 버튼 (새 상신 바로 밑 배치) */}
           <button
             onClick={() => handleSelectBox('임시')}
@@ -559,10 +599,10 @@ export default function ApprovalScreen() {
             <span className="flex items-center gap-1.5">
               <span>임시 저장함</span>
             </span>
-            {(byBox['임시'] ?? []).length > 0 && (
+            {(byBox['임시'] ?? []).filter(inView).length > 0 && (
               <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${box === '임시' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
                 }`}>
-                {(byBox['임시'] ?? []).length}
+                {(byBox['임시'] ?? []).filter(inView).length}
               </span>
             )}
           </button>
@@ -585,12 +625,7 @@ export default function ApprovalScreen() {
               ] as const,
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
-            {
-              title: '[루미팹] 결재함',
-              lumefab: true,
-              boxes: LUMEFAB_BOXES,
-              titleBg: 'bg-indigo-50/50 text-indigo-900 border-l-2 border-indigo-500 pl-2 font-extrabold dark:bg-indigo-950/20 dark:text-indigo-300',
-            },
+
             {
               title: '공유 문서함',
               boxes: [
@@ -616,11 +651,11 @@ export default function ApprovalScreen() {
                 {g.boxes.map((bInfo) => {
                   const b = bInfo.key;
                   const label = bInfo.label;
-                  // [루미팹] 결재함 그룹 — 같은 함에서 루미팹 문서만 센다
-                  const lf = 'lumefab' in g && g.lumefab === true;
-                  const inGroup = (d: ApprovalDoc) => !lf || isLumefabDoc(d);
-                  const pendingCount = lf
-                    ? (byBox['대기'] ?? []).filter((d) => isLumefabDoc(d) && currentApproverIds(d).includes(me)).length
+                  // 회사 보기 — 워크핏만·루미팹만이면 그 회사 문서만 센다
+                  const filtered = companyView !== 'all';
+                  const inGroup = inView;
+                  const pendingCount = filtered
+                    ? (byBox['대기'] ?? []).filter((d) => inView(d) && currentApproverIds(d).includes(me)).length
                     : activePendingCount;
                   let newCount = b === '반려' || b === '문서함' ? 0 : unreadState.unreadCount(b as ApprovalBox);
 
@@ -644,6 +679,7 @@ export default function ApprovalScreen() {
                       const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
                       const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
 
+                      if (!inView(d)) return false;
                       return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
                     badgeCount = deptDocsCount;
@@ -651,7 +687,7 @@ export default function ApprovalScreen() {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
                     const combined = allDocs.filter((d) => inGroup(d) && matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
-                    if (lf && b !== '반려') newCount = combined.filter((d) => unreadState.isUnreadInBox(b, d.id)).length;
+                    if (filtered && b !== '반려') newCount = combined.filter((d) => unreadState.isUnreadInBox(b, d.id)).length;
 
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
@@ -691,13 +727,13 @@ export default function ApprovalScreen() {
                           ? (unconfirmedPostReadCount > 0
                             ? 'bg-amber-500 text-white animate-pulse'
                             : 'bg-ink3/15 text-ink2')
-                          : (box === b && lumefabOnly === lf ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+                          : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   const row = (
                     <button
-                      key={lf ? `lumefab-${b}` : b}
-                      onClick={() => handleSelectBox(b, null, lf)}
-                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && lumefabOnly === lf && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      key={b}
+                      onClick={() => handleSelectBox(b)}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
@@ -818,7 +854,7 @@ export default function ApprovalScreen() {
                 </div>
               ) : (
                 <span>
-                  {lumefabOnly && <span className="text-indigo-600">[루미팹] </span>}
+                  {companyView !== 'all' && <span className={companyView === 'lumefab' ? 'text-indigo-600' : 'text-teal'}>{COMPANY_VIEW_TITLE[companyView]}</span>}
                   {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
                   {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>

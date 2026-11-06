@@ -25,3 +25,14 @@ test('루미팹 문서 판별 — 기존 문서(company 없음)는 워크핏', (
   assert.ok(!isLumefabDoc({}));
   assert.ok(!isLumefabDoc({ company: null }));
 });
+
+test('회사 보기 — 합쳐서·워크핏만·루미팹만', async () => {
+  const { inCompanyView, parseCompanyView } = await import('./company');
+  const wf = {};
+  const lf = { company: 'lumefab' };
+  assert.ok(inCompanyView(wf, 'all') && inCompanyView(lf, 'all'));
+  assert.ok(inCompanyView(wf, 'workfit') && !inCompanyView(lf, 'workfit'));
+  assert.ok(!inCompanyView(wf, 'lumefab') && inCompanyView(lf, 'lumefab'));
+  assert.equal(parseCompanyView('lumefab'), 'lumefab');
+  assert.equal(parseCompanyView('x'), null);
+});
