@@ -3,13 +3,16 @@ import { useDraftCatalogForms, useApprovalFolders } from '@/features/gw/useAppro
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { Search, Folder, FileText, Star, Clock, X, ChevronRight, Check } from 'lucide-react';
+import { Search, Folder, FileText, Star, Clock, X, ChevronRight, Check, Building2 } from 'lucide-react';
+import { COMPANY_LABEL, isLumefabForm, type ApprovalCompany } from '@/domain/approvalDoc/company';
 
 interface DraftFormSelectModalProps {
   open: boolean;
   onClose: () => void;
-  onSelect: (form: ApprovalForm) => void;
+  /** company — '[루미팹] …'을 고르면 'lumefab' */
+  onSelect: (form: ApprovalForm, company?: ApprovalCompany | null) => void;
   currentCode?: string;
+  currentCompany?: ApprovalCompany | null;
 }
 
 /** 사용자별 로컬스토리지 키 분리 */
@@ -42,6 +45,7 @@ export function DraftFormSelectModal({
   onClose,
   onSelect,
   currentCode,
+  currentCompany = null,
 }: DraftFormSelectModalProps) {
   const { user } = useAuth();
   const org = useOrgTree();
@@ -116,6 +120,25 @@ export function DraftFormSelectModal({
     onClose();
   };
 
+  const handleSelectLumefab = (form: ApprovalForm) => {
+    if (!isFormAllowed(form)) {
+      alert('해당 서식은 기안 권한이 제한되어 있습니다.');
+      return;
+    }
+    onSelect(form, 'lumefab');
+    onClose();
+  };
+
+  // 루미팹용 서식(지출결의서·품의서) — 같은 서식을 루미팹 문서로 쓴다
+  const lumefabForms = useMemo(() => forms.filter(isLumefabForm), [forms]);
+  const shownLumefabForms = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q) {
+      return lumefabForms.filter((f) => '루미팹 lumefab'.includes(q) || `루미팹 ${f.name}`.toLowerCase().includes(q));
+    }
+    return selectedFolderId === 'lumefab' ? lumefabForms : [];
+  }, [lumefabForms, search, selectedFolderId]);
+
   // 모달 열릴 때 검색어 초기화
   useEffect(() => {
     if (open) {
@@ -148,6 +171,7 @@ export function DraftFormSelectModal({
     if (selectedFolderId === 'all') {
       return list;
     }
+    if (selectedFolderId === 'lumefab') return [];
     if (selectedFolderId === 'root') {
       return list.filter((f) => !f.folderId);
     }
@@ -169,6 +193,7 @@ export function DraftFormSelectModal({
     if (selectedFolderId === 'favorites') return '즐겨찾는 서식';
     if (selectedFolderId === 'recents') return '최근 사용 서식';
     if (selectedFolderId === 'root') return '기본 / 공통 서식';
+    if (selectedFolderId === 'lumefab') return '루미팹 서식';
     const f = folders.find((fol) => fol.id === selectedFolderId);
     return f ? `${f.name} 서식` : '서식 목록';
   }, [selectedFolderId, search, folders]);
@@ -301,6 +326,32 @@ export function DraftFormSelectModal({
               </span>
             </button>
 
+            {lumefabForms.length > 0 && (
+              <>
+                <div className="pt-3 pb-1">
+                  <div className="border-t border-border/80 my-1" />
+                  <div className="text-[11px] font-bold text-ink3 px-2 py-1 uppercase tracking-wider">
+                    회사
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedFolderId('lumefab'); setSearch(''); }}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                    selectedFolderId === 'lumefab' && !search
+                      ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                      : 'text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <Building2 className="h-4 w-4 shrink-0" />
+                    <span className="truncate">루미팹</span>
+                  </span>
+                  <span className="text-[11px] opacity-70">{lumefabForms.length}</span>
+                </button>
+              </>
+            )}
+
             <div className="pt-3 pb-1">
               <div className="border-t border-border/80 my-1" />
               <div className="text-[11px] font-bold text-ink3 px-2 py-1 uppercase tracking-wider">
@@ -372,7 +423,7 @@ export function DraftFormSelectModal({
                       key={`recent-${form.id}`}
                       form={form}
                       isAllowed={isFormAllowed(form)}
-                      isCurrent={currentCode === form.code}
+                      isCurrent={currentCode === form.code && !currentCompany}
                       isFav={favorites.includes(form.code)}
                       onSelect={() => handleSelectForm(form)}
                       onToggleFav={(e) => toggleFavorite(e, form.code)}
@@ -392,11 +443,27 @@ export function DraftFormSelectModal({
                 <span>{currentFolderTitle}</span>
               </span>
               <span className="text-[11px] text-ink3 font-semibold">
-                총 {filteredForms.length}개 서식
+                총 {filteredForms.length + shownLumefabForms.length}개 서식
               </span>
             </div>
 
-            {filteredForms.length === 0 ? (
+            {shownLumefabForms.length > 0 && (
+              <div className={`grid grid-cols-[repeat(auto-fill,210px)] gap-3 ${filteredForms.length > 0 ? 'mb-3' : ''}`}>
+                {shownLumefabForms.map((form) => (
+                  <FormCard
+                    key={`lumefab-${form.id}`}
+                    form={form}
+                    company="lumefab"
+                    isAllowed={isFormAllowed(form)}
+                    isCurrent={currentCode === form.code && currentCompany === 'lumefab'}
+                    isFav={false}
+                    onSelect={() => handleSelectLumefab(form)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {filteredForms.length === 0 && shownLumefabForms.length > 0 ? null : filteredForms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-ink3">
                 <FileText className="h-10 w-10 stroke-1 opacity-40 mb-2" />
                 <p className="text-sm font-semibold">해당하는 서식이 없습니다.</p>
@@ -409,7 +476,7 @@ export function DraftFormSelectModal({
                     key={form.id}
                     form={form}
                     isAllowed={isFormAllowed(form)}
-                    isCurrent={currentCode === form.code}
+                    isCurrent={currentCode === form.code && !currentCompany}
                     isFav={favorites.includes(form.code)}
                     onSelect={() => handleSelectForm(form)}
                     onToggleFav={(e) => toggleFavorite(e, form.code)}
@@ -438,15 +505,18 @@ export function DraftFormSelectModal({
 /** 단순화된 사용자 중심 서식 카드 컴포넌트 */
 interface FormCardProps {
   form: ApprovalForm;
+  /** 루미팹용 카드 — 이름 앞에 [루미팹], 즐겨찾기 별 없음 */
+  company?: ApprovalCompany;
   isAllowed: boolean;
   isCurrent: boolean;
   isFav: boolean;
   onSelect: () => void;
-  onToggleFav: (e: React.MouseEvent) => void;
+  onToggleFav?: (e: React.MouseEvent) => void;
 }
 
 function FormCard({
   form,
+  company,
   isAllowed,
   isCurrent,
   isFav,
@@ -476,6 +546,7 @@ function FormCard({
             <div className="min-w-0">
               <div className="flex items-center gap-1">
                 <h3 className="font-extrabold text-[13px] leading-snug text-ink line-clamp-2 break-keep group-hover:text-teal transition-colors" title={form.name}>
+                  {company && <span className="text-indigo-600">[{COMPANY_LABEL[company]}] </span>}
                   {form.name}
                 </h3>
                 {form.system && (
@@ -487,6 +558,7 @@ function FormCard({
             </div>
           </div>
 
+          {onToggleFav && (
           <button
             type="button"
             onClick={onToggleFav}
@@ -499,6 +571,7 @@ function FormCard({
               }`}
             />
           </button>
+          )}
         </div>
 
         {/* 한 줄 직관 설명 (관리자용 코드 및 공식양식명 제거) */}

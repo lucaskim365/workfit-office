@@ -20,6 +20,7 @@ import {
   isEditableStatus,
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
+import { docNoPrefixOf, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { counterRepo } from '@/data/counter/counter.repo';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
@@ -369,6 +370,8 @@ export interface ApprovalDraftInput {
   postApprovedByName?: string | null;
   /** 취소 기안 시 대상 원문서 ID */
   cancelTargetDocId?: string | null;
+  /** 회사 — 'lumefab'(루미팹)이면 문서번호 LF-, 없으면 워크핏(AP-) */
+  company?: ApprovalCompany | null;
 }
 
 /** 취소 기안 문서 최종 승인(완료) 시 대상 원문서를 '취소완료' 상태로 전이 */
@@ -509,8 +512,10 @@ export const approvalDocRepo = {
   /** 임시저장 신규 작성 — 채번 + status='임시저장'. */
   async createDraft(input: ApprovalDraftInput): Promise<ApprovalDoc> {
     const dateKey = yymmdd(new Date());
-    const seq = await counterRepo.next(`AP-${dateKey}`);
-    const docNo = formatDocNo('AP', dateKey, seq);
+    // 루미팹 문서는 LF- 로 따로 센다(워크핏 AP- 번호와 섞이지 않게)
+    const prefix = docNoPrefixOf(input.company);
+    const seq = await counterRepo.next(`${prefix}-${dateKey}`);
+    const docNo = formatDocNo(prefix, dateKey, seq);
     const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === input.drafterId);
     
@@ -554,6 +559,7 @@ export const approvalDocRepo = {
       postApprovedById: input.postApprovedById ?? null,
       postApprovedByName: input.postApprovedByName ?? null,
       cancelTargetDocId: input.cancelTargetDocId ?? null,
+      company: input.company ?? null,
     });
 
     await persist(created);

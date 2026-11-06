@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { User } from '@/domain/user/schema';
@@ -137,6 +138,7 @@ export default function ApprovalDraftScreen() {
       editDoc={fetchedDoc ?? null}
       cancelTargetDoc={cancelTargetDoc ?? null}
       fixedType={params.get('type') ?? undefined}
+      fixedCompany={parseCompany(params.get('company'))}
       initialDate={params.get('date')}
       initialLeaveType={params.get('leaveType')}
       navigate={navigate}
@@ -149,6 +151,7 @@ function ApprovalDraftInner({
   editDoc,
   cancelTargetDoc,
   fixedType,
+  fixedCompany,
   initialDate,
   initialLeaveType,
   navigate,
@@ -157,6 +160,8 @@ function ApprovalDraftInner({
   editDoc?: ApprovalDoc | null;
   cancelTargetDoc?: ApprovalDoc | null;
   fixedType?: string;
+  /** 서식 선택에서 '[루미팹] …'을 골랐을 때 */
+  fixedCompany?: ApprovalCompany | null;
   initialDate?: string | null;
   initialLeaveType?: string | null;
   navigate: (url: string) => void;
@@ -172,6 +177,10 @@ function ApprovalDraftInner({
   }, [org.depts, me.dept]);
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? (cancelTargetDoc ? '취소신청' : (fixedType ?? '기안')));
+  // 회사 — 고친 문서는 그 문서의 회사, 취소 기안은 원문서의 회사, 새 문서는 서식 선택에서 고른 회사
+  const [company, setCompany] = useState<ApprovalCompany | null>(
+    parseCompany(editDoc ? editDoc.company : cancelTargetDoc ? cancelTargetDoc.company : fixedCompany)
+  );
   const [title, setTitle] = useState(editDoc?.title ?? (cancelTargetDoc ? `[취소 신청] ${cancelTargetDoc.title}` : ''));
   const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? cancelTargetDoc?.securityLevel ?? '일반');
   const [visibility, setVisibility] = useState<'부서' | '비공개'>(editDoc?.visibility === '비공개' || cancelTargetDoc?.visibility === '비공개' ? '비공개' : '부서');
@@ -572,12 +581,13 @@ function ApprovalDraftInner({
   };
 
   // 모달에서 새 서식을 최종 선택했을 때
-  const handleSelectNewForm = (newForm: ApprovalForm) => {
+  const handleSelectNewForm = (newForm: ApprovalForm, nextCompany?: ApprovalCompany | null) => {
     setCode(newForm.code);
+    setCompany(nextCompany ?? null);
     setValues({});
     setTitle('');
     setAmount('');
-    navigate(`/gw/approval/new?type=${encodeURIComponent(newForm.code)}`);
+    navigate(`/gw/approval/new?type=${encodeURIComponent(newForm.code)}${nextCompany ? `&company=${nextCompany}` : ''}`);
   };
 
   /** 마지막으로 브라우저에 보관한 시각. 화면에 "마지막 보관 HH:MM:SS"로 보여 준다. */
@@ -688,6 +698,7 @@ function ApprovalDraftInner({
       postApprovedAt,
       postApprovedById,
       cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
+      company,
       timestamp: Date.now(),
     };
     latestPayloadRef.current = payload;
@@ -1172,6 +1183,7 @@ function ApprovalDraftInner({
       postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
       postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
       cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
+      company,
     };
   };
 
@@ -1627,6 +1639,7 @@ function ApprovalDraftInner({
           )}
           <ApprovalDraftDocumentSheet
             form={form}
+            company={company}
             docCode={code}
             me={me}
             title={title}
@@ -1774,7 +1787,7 @@ function ApprovalDraftInner({
           onConfirm={() => {
             if (pendingAutosaveData) {
               const data = pendingAutosaveData;
-              if (!editDoc && data.code) setCode(data.code);
+              if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
               setTitle(data.title || '');
               setValues(data.values || {});
               setAmount(data.amount || '');
@@ -2037,7 +2050,7 @@ function ApprovalDraftInner({
                             if (window.confirm('이 보관본의 내용을 현재 화면으로 불러오시겠습니까?\n(현재 화면의 입력값이 덮어써집니다)')) {
                               const data = selectedBackup.data;
                               if (data) {
-                                if (!editDoc && data.code) setCode(data.code);
+                                if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
                                 setTitle(data.title || '');
                                 setValues(data.values || {});
                                 setAmount(data.amount || '');
@@ -2131,6 +2144,7 @@ function ApprovalDraftInner({
         onClose={() => setShowSelectModal(false)}
         onSelect={handleSelectNewForm}
         currentCode={code}
+        currentCompany={company}
       />
 
       {/* 양식 변경 확인 다이얼로그 (작성 내용 보존 여부 선택) */}

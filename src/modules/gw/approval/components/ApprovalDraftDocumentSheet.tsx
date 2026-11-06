@@ -18,6 +18,8 @@ import {
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
+import type { ApprovalCompany } from '@/domain/approvalDoc/company';
+import { CompanyTopMark } from './CompanyTopMark';
 import {
   FileText,
   Paperclip,
@@ -65,6 +67,8 @@ interface LayoutBlock {
 
 export interface ApprovalDraftDocumentSheetProps {
   form?: ApprovalForm;
+  /** 루미팹 문서면 상단 바에 워크핏 로고 대신 '루미팹' */
+  company?: ApprovalCompany | null;
   docCode: string;
   me: User;
   title: string;
@@ -115,6 +119,7 @@ export interface ApprovalDraftDocumentSheetProps {
 
 export function ApprovalDraftDocumentSheet({
   form,
+  company,
   docCode,
   me,
   title,
@@ -393,13 +398,17 @@ export function ApprovalDraftDocumentSheet({
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
-      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') ? 'flex' : 'hidden'}`}>
+      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') || company ? 'flex' : 'hidden'}`}>
+        {company ? (
+          <CompanyTopMark company={company} />
+        ) : (
         <div className="flex items-center gap-2 h-full">
           <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
           <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">
             workfit 그룹웨어 · 전자결재
           </span>
         </div>
+        )}
         <div className="text-[11px] font-medium text-[#888] flex items-center gap-2 self-center">
           {shownDocNo ? (
             <span className="font-mono text-teal">{shownDocNo}</span>

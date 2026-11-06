@@ -22,6 +22,8 @@ import { SealFieldRow, SealMarkProvider } from './components/CompanySeal';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
+import { isLumefabDoc } from '@/domain/approvalDoc/company';
+import { CompanyTopMark } from './components/CompanyTopMark';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 
@@ -516,12 +518,16 @@ export function ApprovalDocumentView({
       {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
       <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
-        {!externalDoc && headerShown(form, 'topBar') && (
+        {!externalDoc && (headerShown(form, 'topBar') || isLumefabDoc(doc)) && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
+          {isLumefabDoc(doc) ? (
+            <CompanyTopMark company="lumefab" />
+          ) : (
           <div className="flex items-center gap-2 h-full">
             <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
             <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
           </div>
+          )}
           <div className="text-[11px] text-[#888] self-center">{doc.docNo ? docNoOf(doc) : ''}</div>
         </div>
         )}
