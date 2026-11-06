@@ -96,17 +96,35 @@ abstract class FilteringBackend {
   }
 }
 
-/** 저장소 무관 안전 파싱 — 불량 문서 하나가 전체 조회를 깨지 않도록 실패분만 건너뛴다. */
-function safeParse(raw: Record<string, unknown>): ChatMessage | null {
+/** 건너뛴 문서를 한 번씩만 알린다(같은 문서를 조회마다 되풀이해 찍지 않게) */
+const warnedBadRows = new Set<string>();
+
+/**
+ * 저장소 무관 안전 파싱 — 불량 문서 하나가 전체 조회를 깨지 않도록 실패분만 건너뛴다.
+ * 빈 칸(null)은 기본값으로 채운다 — 칸을 나중에 만든 DB에는 예전 메시지의 그 칸이 null 로 남아 있다
+ * (isEdited 가 null 인 예전 메시지가 통째로 버려져 화면에 안 보이고, 읽음 처리도 안 돼 '안 읽음 30'이 남던 일).
+ */
+export function parseStoredChatMessage(raw: Record<string, unknown>): ChatMessage | null {
   const parsed = chatMessageSchema.safeParse({
     ...raw,
+    senderId: raw.senderId ?? '',
+    senderName: raw.senderName ?? '',
     text: raw.text ?? '',
     type: raw.type ?? 'text',
     readBy: Array.isArray(raw.readBy) ? raw.readBy : [],
+    isEdited: raw.isEdited ?? false,
     reactions: raw.reactions ?? {},
   });
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+  const id = String(raw.id ?? '');
+  if (!warnedBadRows.has(id)) {
+    warnedBadRows.add(id);
+    // 본문은 찍지 않는다 — 어느 칸이 왜 틀렸는지만
+    console.warn('[chat] 형식이 맞지 않아 건너뛴 메시지', id, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.code}`));
+  }
+  return null;
 }
+const safeParse = parseStoredChatMessage;
 
 // ─────────────────────────────────────────────────────────────
 // 1) In-memory 백엔드 (Firebase/Appwrite 미설정 폴백 — 기존 동작 보존)
