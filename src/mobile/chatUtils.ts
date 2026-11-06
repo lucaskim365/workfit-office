@@ -55,7 +55,7 @@ export function msgPreview(m: ChatMessage): string {
 }
 
 import { downloadFile } from '@/shared/lib/download';
-import { isPdfFile, openPdfViewer } from './MobilePdfViewer';
+import { openFileViewer, viewerKindOf } from './MobileFileViewer';
 import { canShareFileType, getChatFile, loadChatFile, saveBlob, shareFile } from './chatFileStore';
 
 /**
@@ -79,7 +79,7 @@ const opening = new Set<string>();
 export async function openAttachment(att: Attachment) {
   if (opening.has(att.url)) return;
   // 한글·엑셀·워드 등 공유 창으로 못 넘기는 문서 — 바로 다운로드(휴대폰 다운로드 알림의 [열기]로 연다)
-  if (!isPdfFile(att.name, att.mime) && !canShareFileType(att.name)) return downloadAttachment(att);
+  if (!viewerKindOf(att.name, att.mime) && !canShareFileType(att.name)) return downloadAttachment(att);
   opening.add(att.url);
   try {
     let blob = await getChatFile(att.url);
@@ -91,7 +91,8 @@ export async function openAttachment(att: Attachment) {
         return; // 말풍선이 '받기 실패'를 보인다
       }
     }
-    if (isPdfFile(att.name, att.mime)) return openPdfViewer({ blob, name: att.name, mime: att.mime || 'application/pdf' });
+    // PDF·엑셀·워드 — 앱 안 보기 화면
+    if (viewerKindOf(att.name, att.mime)) return openFileViewer({ blob, name: att.name, mime: att.mime });
     const r = await shareFile(blob, att.name, att.mime);
     // 공유 창이 없거나 휴대폰이 이 파일을 거절 — 보관함에서 바로 꺼냈는데 거절했으면 '누른 지 오래됨'이 아니라 종류 거절이다
     if (r === 'unsupported' || (r === 'expired' && fromCache)) saveBlob(blob, att.name);

@@ -1,4 +1,5 @@
 import { canShareFileType, useChatFileStatus } from './chatFileStore';
+import { viewerKindOf } from './MobileFileViewer';
 import { fmtSize } from './chatUtils';
 
 /**
@@ -7,8 +8,8 @@ import { fmtSize } from './chatUtils';
  */
 export function ChatFileStatusText({ url, name, size, className = '' }: { url: string; name: string; size: number; className?: string }) {
   const st = useChatFileStatus(url);
-  // 한글·엑셀·워드 등 — 앱 안에서도 공유 창으로도 못 열어 다운로드로 연다
-  const downloadOnly = !/\.pdf$/i.test(name.trim()) && !canShareFileType(name);
+  // 한글·압축 등 — 앱 안에서도 공유 창으로도 못 열어 다운로드로 연다(PDF·엑셀·워드는 앱 안 보기 화면)
+  const downloadOnly = !viewerKindOf(name) && !canShareFileType(name);
   const label = downloadOnly
     ? `${fmtSize(size)} · 누르면 다운로드`
     :
