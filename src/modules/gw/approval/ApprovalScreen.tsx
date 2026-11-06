@@ -381,7 +381,11 @@ export default function ApprovalScreen() {
     return allDocs.filter((d) => matchesBox(d, me, '완료', myDeptNameOrId, undefined, postReadIdsOf(me)));
   }, [allDocs, me, org, userObj, recvPostReads]);
   const formNameOf = (code: string) => approvalForms.find((f) => f.code === code)?.name ?? code;
-  const completedFormCounts = useMemo(() => formCounts(completedDocs), [completedDocs]);
+  // 숫자는 회사 보기(전체·워크핏·루미팹)를 따른다 — 바로가기 목록(pinned)은 보기를 바꿔도 그대로 둔다
+  const completedFormCounts = useMemo(
+    () => formCounts(completedDocs.filter((d) => inCompanyView(d, companyView))),
+    [completedDocs, companyView]
+  );
   const pinned = useMemo(() => pinnedForms(savedPinned, completedDocs), [savedPinned, completedDocs]);
   const completedFormOptions = useMemo(() => {
     const countOf = new Map(completedFormCounts.map((f) => [f.code, f.count]));
