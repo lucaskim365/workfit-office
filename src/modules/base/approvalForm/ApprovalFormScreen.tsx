@@ -10,6 +10,7 @@ import {
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
+import { isLumefabForm } from '@/domain/approvalDoc/company';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
 import { ApprovalFormCatalog } from './components/ApprovalFormCatalog';
 import { Pencil, Trash2, Folder, Layers } from 'lucide-react';
@@ -313,6 +314,14 @@ export default function ApprovalFormScreen() {
                                   기본
                                 </span>
                               )}
+                              {isLumefabForm(f) && (
+                                <span
+                                  className="ml-1 rounded bg-indigo-500/10 px-1 py-0.2 text-[8px] font-bold text-indigo-600"
+                                  title={`서식 선택에서 [루미팹] ${f.name}으로도 쓰입니다 — 이 서식을 고치면 루미팹 문서에도 똑같이 적용됩니다`}
+                                >
+                                  루미팹 겸용
+                                </span>
+                              )}
                               {!f.active && (
                                 <span className="ml-1 text-[8.5px] text-red-500 font-bold">
                                   중지
@@ -395,6 +404,14 @@ export default function ApprovalFormScreen() {
                                 {formItem.system && (
                                   <span className="ml-1 rounded bg-ink3/10 px-1 py-0.2 text-[8px] font-bold text-ink3">
                                     기본
+                                  </span>
+                                )}
+                                {isLumefabForm(formItem) && (
+                                  <span
+                                    className="ml-1 rounded bg-indigo-500/10 px-1 py-0.2 text-[8px] font-bold text-indigo-600"
+                                    title={`서식 선택에서 [루미팹] ${formItem.name}으로도 쓰입니다 — 이 서식을 고치면 루미팹 문서에도 똑같이 적용됩니다`}
+                                  >
+                                    루미팹 겸용
                                   </span>
                                 )}
                                 {!formItem.active && (
