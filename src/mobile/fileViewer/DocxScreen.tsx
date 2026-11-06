@@ -55,7 +55,7 @@ export default function DocxScreen({ file, onClose }: { file: ViewerFile; onClos
         ref={boxRef}
         {...pinch}
         onTouchCancel={pinch.onTouchEnd}
-        className="relative min-h-0 flex-1 overflow-auto bg-[#e8e8e8] p-1"
+        className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-[#e8e8e8] p-1"
         style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', touchAction: 'pan-x pan-y' }}
       >
         {status === 'loading' && <div className="py-16 text-center text-[13px] text-[#666]">워드 문서를 여는 중…</div>}

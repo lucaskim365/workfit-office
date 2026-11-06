@@ -60,6 +60,20 @@ export function MobileFileViewerHost() {
     };
   }, []);
 
+  // 보는 동안은 '당겨서 새로고침'을 끈다 — 위로 끌다가 잘못 당기면 휴대폰 크롬이 앱을 새로고침해 대화방으로 튕겼다
+  useEffect(() => {
+    if (!file) return;
+    const html = document.documentElement.style;
+    const body = document.body.style;
+    const prev = [html.overscrollBehaviorY, body.overscrollBehaviorY];
+    html.overscrollBehaviorY = 'none';
+    body.overscrollBehaviorY = 'none';
+    return () => {
+      html.overscrollBehaviorY = prev[0];
+      body.overscrollBehaviorY = prev[1];
+    };
+  }, [file]);
+
   // [닫기] — 쌓아 둔 기록을 되돌린다(popstate 가 닫는다)
   const close = () => {
     if (pushed.current) window.history.back();

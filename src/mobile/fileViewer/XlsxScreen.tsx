@@ -123,7 +123,7 @@ export default function XlsxScreen({ file, onClose }: { file: ViewerFile; onClos
         ref={boxRef}
         {...pinch}
         onTouchCancel={pinch.onTouchEnd}
-        className="relative min-h-0 flex-1 overflow-auto bg-[#f0f0f0] p-2"
+        className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-[#f0f0f0] p-2"
         style={{ touchAction: 'pan-x pan-y' }}
       >
         {error ? (
