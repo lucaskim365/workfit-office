@@ -168,6 +168,12 @@ export function WorkPlanMemoEditor({
   );
 }
 
+/** 화면 배율(body zoom, 설정의 글자 크기) — 실제 걸린 값을 읽는다(변수가 비어도 CSS 기본 1.48) */
+function bodyScale(): number {
+  const v = parseFloat(getComputedStyle(document.body).zoom);
+  return Number.isFinite(v) && v > 0 ? v : 1;
+}
+
 /** 좁은 칸 위에 띄우는 서식 버튼 — 표 칸이 넘치는 부분을 잘라도 보이게 화면 위(portal)에 그린다 */
 function FloatingToolbar({ anchor, editor }: { anchor: React.RefObject<HTMLDivElement | null>; editor: Editor | null }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -176,11 +182,14 @@ function FloatingToolbar({ anchor, editor }: { anchor: React.RefObject<HTMLDivEl
     const place = () => {
       const el = anchor.current;
       if (!el) return;
+      // 화면 배율(body zoom) — 잰 자리는 배율이 곱해진 화면 px, fixed 좌표는 배율 전 px 라 나눠서 넣는다
+      // (안 나누면 배율만큼 아래·오른쪽으로 밀려 화면 밖에 그려졌다)
+      const scale = bodyScale();
       const r = el.getBoundingClientRect();
-      const height = 34;
-      const top = r.top - height - 4 < 8 ? r.bottom + 4 : r.top - height - 4;
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - 260));
-      setPos({ top, left });
+      const height = 34 * scale;
+      const topPx = r.top - height - 4 < 8 ? r.bottom + 4 : r.top - height - 4;
+      const leftPx = Math.max(8, Math.min(r.left, window.innerWidth - 260 * scale));
+      setPos({ top: topPx / scale, left: leftPx / scale });
     };
     place();
     window.addEventListener('scroll', place, true);
