@@ -80,10 +80,14 @@ const SEARCH_RESULT_LIMIT = 50;
 const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
 const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
-/** 화면의 함 — 저장된 결재함 + 부서 문서함 + 루미팹(루미팹 문서 중 내가 관련된 것) */
-type ScreenBox = ApprovalBox | '문서함' | '루미팹';
-/** 루미팹 함에 모으는 함 — 임시·휴지통은 빼고 내가 관련된 모든 함 */
-const LUMEFAB_SOURCE_BOXES: ApprovalBox[] = ['대기', '상신', '반려', '수신', '참조', '후열', '완료'];
+/** 화면의 함 — 저장된 결재함 + 부서 문서함 */
+type ScreenBox = ApprovalBox | '문서함';
+/** [루미팹] 결재함 그룹에 두는 함 — 같은 함을 루미팹 문서만 걸러 보인다(주소 ?company=lumefab) */
+const LUMEFAB_BOXES = [
+  { key: '대기', label: '받은 결재함' },
+  { key: '반려', label: '반려함' },
+  { key: '후열', label: '후열함' },
+] as const;
 
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '받은 결재함',
@@ -145,13 +149,19 @@ export default function ApprovalScreen() {
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
 
-  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null) => {
+  // [루미팹] 결재함 그룹의 함을 골랐는지 — 같은 함에서 루미팹 문서만 거른다
+  const [lumefabOnly, setLumefabOnly] = useState(() => params.get('company') === 'lumefab');
+
+  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null, lumefab = false) => {
     setBox(newBox);
+    setLumefabOnly(lumefab);
     setCompletedForm(formCode);
     setSelId(null);
     if (newBox === '대기') setTodoFilter('all');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
+    if (lumefab) nextUrl.searchParams.set('company', 'lumefab');
+    else nextUrl.searchParams.delete('company');
     nextUrl.searchParams.delete('doc');
     window.history.replaceState(null, '', nextUrl.toString());
   };
@@ -187,6 +197,7 @@ export default function ApprovalScreen() {
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
     if ('todoFilter' in t) setTodoFilter(t.todoFilter);
     setCompletedForm(null);
+    setLumefabOnly(false);
     setBox(t.box);
   };
 
@@ -268,12 +279,6 @@ export default function ApprovalScreen() {
     // 1. 본인의 기본 문서 목록
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-    // 루미팹 — 루미팹 문서 중 내가 기안·결재·수신·참조한 것(일반 결재함에도 그대로 있다)
-    if (box === '루미팹') {
-      return allDocs
-        .filter((d) => isLumefabDoc(d) && LUMEFAB_SOURCE_BOXES.some((b) => matchesBox(d, me, b, myDeptNameOrId, undefined, postReadIdsOf(me))))
-        .sort(byRecent);
-    }
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
     // 받은 결재함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
     if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
@@ -281,8 +286,10 @@ export default function ApprovalScreen() {
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
     const uniqueMap = new Map<string, ApprovalDoc>();
     combined.forEach((d) => uniqueMap.set(d.id, d));
-    return Array.from(uniqueMap.values()).sort(byRecent);
-  }, [box, allDocs, me, org, userObj, recvPostReads]);
+    const docs = Array.from(uniqueMap.values()).sort(byRecent);
+    // [루미팹] 결재함 — 루미팹 문서만(일반 결재함에는 루미팹 문서도 그대로 보인다)
+    return lumefabOnly ? docs.filter(isLumefabDoc) : docs;
+  }, [box, allDocs, me, org, userObj, recvPostReads, lumefabOnly]);
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
@@ -406,6 +413,7 @@ export default function ApprovalScreen() {
     const urlBox = deepBox;
 
     setCompletedForm(null);
+    setLumefabOnly(params.get('company') === 'lumefab');
     // 1. URL에 box만 있는 경우
     if (!deepTargetDoc) {
       if (urlBox) setBox(urlBox);
@@ -578,19 +586,18 @@ export default function ApprovalScreen() {
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
+              title: '[루미팹] 결재함',
+              lumefab: true,
+              boxes: LUMEFAB_BOXES,
+              titleBg: 'bg-indigo-50/50 text-indigo-900 border-l-2 border-indigo-500 pl-2 font-extrabold dark:bg-indigo-950/20 dark:text-indigo-300',
+            },
+            {
               title: '공유 문서함',
               boxes: [
                 { key: '수신', label: '수신함' },
                 { key: '문서함', label: '부서 문서함' },
               ] as const,
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
-            },
-            {
-              title: '회사',
-              boxes: [
-                { key: '루미팹', label: '[루미팹] 결재함' },
-              ] as const,
-              titleBg: 'bg-indigo-50/50 text-indigo-900 border-l-2 border-indigo-500 pl-2 font-extrabold dark:bg-indigo-950/20 dark:text-indigo-300',
             },
             {
               title: '관리',
@@ -609,9 +616,16 @@ export default function ApprovalScreen() {
                 {g.boxes.map((bInfo) => {
                   const b = bInfo.key;
                   const label = bInfo.label;
+                  // [루미팹] 결재함 그룹 — 같은 함에서 루미팹 문서만 센다
+                  const lf = 'lumefab' in g && g.lumefab === true;
+                  const inGroup = (d: ApprovalDoc) => !lf || isLumefabDoc(d);
+                  const pendingCount = lf
+                    ? (byBox['대기'] ?? []).filter((d) => isLumefabDoc(d) && currentApproverIds(d).includes(me)).length
+                    : activePendingCount;
+                  let newCount = b === '반려' || b === '문서함' ? 0 : unreadState.unreadCount(b as ApprovalBox);
 
                   const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
-                    (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || myUnreadPostReadIds.has(d.id)
+                    (d) => inGroup(d) && (d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || myUnreadPostReadIds.has(d.id))
                   ).length;
 
                   // 배지 개수 산출
@@ -633,13 +647,11 @@ export default function ApprovalScreen() {
                       return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
                     badgeCount = deptDocsCount;
-                  } else if (b === '루미팹') {
-                    // 루미팹 문서 중 지금 내 결재 차례인 것
-                    badgeCount = (byBox['대기'] ?? []).filter((d) => isLumefabDoc(d) && currentApproverIds(d).includes(me)).length;
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-                    const combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+                    const combined = allDocs.filter((d) => inGroup(d) && matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+                    if (lf && b !== '반려') newCount = combined.filter((d) => unreadState.isUnreadInBox(b, d.id)).length;
 
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
@@ -654,7 +666,7 @@ export default function ApprovalScreen() {
                         .filter((d) => unreadState.isUnreadDoc(d))
                         .length;
                     } else if (b === '대기') {
-                      badgeCount = activePendingCount;
+                      badgeCount = pendingCount;
                     } else {
                       badgeCount = uniqueIds.size;
                     }
@@ -664,7 +676,7 @@ export default function ApprovalScreen() {
                   const hasBadge = badgeCount > 0;
 
                   const badgeClass = b === '대기'
-                    ? (activePendingCount > 0
+                    ? (pendingCount > 0
                       ? 'bg-red-500 text-white animate-pulse'
                       : 'bg-ink3/15 text-ink2')
                     : b === '상신'
@@ -679,21 +691,21 @@ export default function ApprovalScreen() {
                           ? (unconfirmedPostReadCount > 0
                             ? 'bg-amber-500 text-white animate-pulse'
                             : 'bg-ink3/15 text-ink2')
-                          : (box === b ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
+                          : (box === b && lumefabOnly === lf ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2');
 
                   const row = (
                     <button
-                      key={b}
-                      onClick={() => handleSelectBox(b)}
-                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      key={lf ? `lumefab-${b}` : b}
+                      onClick={() => handleSelectBox(b, null, lf)}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && lumefabOnly === lf && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
                       <span className="flex min-w-0 items-center gap-1">
                         <span className="truncate whitespace-nowrap">{label}</span>
-                        {b !== '반려' && b !== '문서함' && b !== '루미팹' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
+                        {newCount > 0 && (
                           <span className="shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-1 text-[9px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
-                            새 {unreadState.unreadCount(b as ApprovalBox)}
+                            새 {newCount}
                           </span>
                         )}
                       </span>
@@ -806,7 +818,8 @@ export default function ApprovalScreen() {
                 </div>
               ) : (
                 <span>
-                  {box === '문서함' ? '문서함' : box === '루미팹' ? '[루미팹] 결재함' : BOX_LABEL[box as ApprovalBox]}
+                  {lumefabOnly && <span className="text-indigo-600">[루미팹] </span>}
+                  {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
                   {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>
                 </span>
