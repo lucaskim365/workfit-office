@@ -63,6 +63,7 @@ export function ApprovalStampTable({
   steps,
   nameOf,
   posOf,
+  titleOf,
   sealOf,
   isSignatureOf,
   isPostApproval,
@@ -71,6 +72,8 @@ export function ApprovalStampTable({
   steps: ApprovalStep[];
   nameOf: (id: string) => string;
   posOf: (id: string) => string;
+  /** 칸 위 칭호 — 주면 이것(직책 우선), 없으면 승인 때 직급 → 지금 직급 */
+  titleOf?: (step: ApprovalStep) => string;
   sealOf?: (id: string) => string;
   isSignatureOf?: (id: string) => boolean;
   isPostApproval?: boolean;
@@ -104,7 +107,7 @@ export function ApprovalStampTable({
           <div className="flex">
             {agreementSteps.map((s) => {
               const finalName = s.approverName || nameOf(s.approverId);
-              const finalPos = s.approverPos || posOf(s.approverId);
+              const finalPos = titleOf ? titleOf(s) : s.approverPos || posOf(s.approverId);
               const { url: finalSealUrl, isSignature: finalIsSignature } = signatureOfStep(s);
 
               return (
@@ -130,7 +133,7 @@ export function ApprovalStampTable({
           <div className="flex">
             {approvalSteps.map((s) => {
               const finalName = s.approverName || nameOf(s.approverId);
-              const finalPos = s.approverPos || posOf(s.approverId);
+              const finalPos = titleOf ? titleOf(s) : s.approverPos || posOf(s.approverId);
               const { url: finalSealUrl, isSignature: finalIsSignature } = signatureOfStep(s);
 
               return (

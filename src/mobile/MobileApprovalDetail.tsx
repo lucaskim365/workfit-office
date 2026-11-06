@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { Smartphone, ZoomIn, Paperclip, AlertTriangle, CheckCircle2, X, Info } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -619,7 +620,7 @@ function StepRow({ doc, step, name, hideSeq, users }: { doc: ApprovalDoc; step: 
   const isHold = step.decision === '보류';
   const isActive = activeSteps(doc).some((s) => s.seq === step.seq);
 
-  const position = step.approverPos || users?.find((u) => u.id === step.approverId)?.position || '';
+  const position = stepTitleOf(doc, step, users?.find((u) => u.id === step.approverId));
 
   const color = (() => {
     if (isRejected) return '#e0483b'; // 반려 (레드)

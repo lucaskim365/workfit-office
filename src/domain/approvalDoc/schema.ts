@@ -74,6 +74,8 @@ export const approvalStepSchema = z.object({
   approverName: z.string().nullable().optional(),
   /** 승인 당시 직급 (스냅샷) */
   approverPos: z.string().nullable().optional(),
+  /** 승인 당시 직책 (스냅샷) — 결재란 칭호(직책 우선)에 쓴다. 빈 값 = 직책 없었음 */
+  approverTitle: z.string().nullable().optional(),
   /** 승인 당시 부서명 (스냅샷) */
   approverDept: z.string().nullable().optional(),
 });
@@ -184,6 +186,10 @@ export const approvalDocSchema = z.object({
   drafterName: z.string().nullable().optional(),
   /** 기안 당시 기안자 직급 (스냅샷) */
   drafterPos: z.string().nullable().optional(),
+  /** 상신 당시 기안자 직책 (스냅샷) */
+  drafterTitle: z.string().nullable().optional(),
+  /** 결재란 칭호 방식 — 'jobTitle' 이면 직책 우선(이 기능 이후 만든 문서). 없으면 예전처럼 직급 */
+  titleMode: z.string().nullable().optional(),
   /** 유형 확장 필드(휴가=기간·종류 등). 유형별 optional. 휴가 system 서식 전용. */
   form: leaveFormSchema.nullable().default(null),
   /** 결재서식 동적 필드값 `{ key: value }`. 커스텀 서식·확장 필드 저장(휴가 form 은 별도). */

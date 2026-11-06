@@ -1,4 +1,5 @@
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
+import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { db } from '@/shared/lib/firebase';
 import { client as appwriteClient, databases, APPWRITE_DATABASE_ID, Query, assertAppwriteId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
@@ -543,6 +544,8 @@ export const approvalDocRepo = {
       drafterSignType: drafterUser?.signType ?? null,
       drafterName: drafterUser?.name ?? null,
       drafterPos: drafterUser?.position ?? null,
+      drafterTitle: drafterUser?.jobTitle ?? '',
+      titleMode: TITLE_MODE_JOB_TITLE,
       preservationPeriod: input.preservationPeriod ?? null,
       execution: input.execution ?? null,
       executionDepts: input.executionDepts ?? [],
@@ -591,6 +594,7 @@ export const approvalDocRepo = {
     next.drafterSignType = drafterUser?.signType ?? null;
     next.drafterName = drafterUser?.name ?? null;
     next.drafterPos = drafterUser?.position ?? null;
+    next.drafterTitle = drafterUser?.jobTitle ?? '';
     
     // 결재선의 기안 노드(seq === 1)에도 당시의 서명/인장 스냅샷 정보를 박제
     next.steps = next.steps.map((s) => {
@@ -602,6 +606,7 @@ export const approvalDocRepo = {
           signType: drafterUser?.signType ?? null,
           approverName: drafterUser?.name ?? null,
           approverPos: drafterUser?.position ?? null,
+          approverTitle: drafterUser?.jobTitle ?? '',
           approverDept: drafterUser?.dept ?? null,
         };
       }
@@ -676,6 +681,7 @@ export const approvalDocRepo = {
           signType: actingUser?.signType ?? null,
           approverName: actingUser?.name ?? null,
           approverPos: actingUser?.position ?? null,
+          approverTitle: actingUser?.jobTitle ?? '',
           approverDept: actingUser?.dept ?? null,
         };
       }
@@ -904,6 +910,7 @@ export const approvalDocRepo = {
           signType: delegateUser?.signType ?? null,
           approverName: delegateUser?.name ?? null,
           approverPos: delegateUser?.position ?? null,
+          approverTitle: delegateUser?.jobTitle ?? '',
           approverDept: delegateUser?.dept ?? null,
         };
       }
