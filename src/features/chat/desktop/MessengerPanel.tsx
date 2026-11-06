@@ -610,10 +610,14 @@ function MessengerThread({
   // 다른 창·탭을 보는 동안은 읽음으로 치지 않는다 — 돌아오면 그때 읽음 처리(windowActive 가 바뀌며 다시 돈다)
   const windowActive = useWindowActive();
   const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
+  // 서버가 세는 이 방 안 읽음 — 불러온 최근 메시지 밖(오래된 메시지)에 안 읽은 게 남아 있어도 읽음 처리를 돌린다.
+  // (화면에 불러온 메시지만 보면, 오래된 안 읽음은 들어가도 영영 안 사라졌다)
+  const { data: unreadMap = {} } = useUnreadCounts(me);
+  const serverUnread = unreadMap[room.id] ?? 0;
   useEffect(() => {
-    if (windowActive && myUnreadCount > 0) markRead.mutate({ roomId: room.id, userId: me });
+    if (windowActive && (myUnreadCount > 0 || serverUnread > 0)) markRead.mutate({ roomId: room.id, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUnreadCount, room.id, me, windowActive]);
+  }, [myUnreadCount, serverUnread, room.id, me, windowActive]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== room.id) {
