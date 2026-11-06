@@ -1,4 +1,5 @@
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
+import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { db } from '@/shared/lib/firebase';
 import { client as appwriteClient, databases, APPWRITE_DATABASE_ID, Query, assertAppwriteId } from '@/shared/lib/appwrite';
@@ -584,6 +585,12 @@ export const approvalDocRepo = {
   async submit(id: string, userId: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
     if (cur.drafterId !== userId) throw new Error('기안자만 상신할 수 있습니다');
+    // 휴일근로 신청서는 같은 근무 일자로 한 번만 — 결재 중이거나 끝난 같은 날 문서가 있으면 막는다(재상신도 같음)
+    const workDate = holidayWorkDateOf(cur);
+    if (workDate) {
+      const dup = findHolidayWorkDuplicate(cur, await loadAll());
+      if (dup) throw new Error(holidayWorkDuplicateMessage(workDate, dup));
+    }
     const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === userId);
     

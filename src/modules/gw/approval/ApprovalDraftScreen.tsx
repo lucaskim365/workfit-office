@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
@@ -16,6 +17,7 @@ import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, 
 import { withSealTexts } from '@/domain/approvalForm/headerItems';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
+import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
@@ -1440,11 +1442,25 @@ function ApprovalDraftInner({
   };
 
   /** [상신 발송] — 검증을 통과하면 바로 보내지 않고 확인창을 띄운다 */
-  const onSubmit = () => {
+  const onSubmit = async () => {
     const err = validate(true);
     if (err) {
       alert(err);
       return setError(err);
+    }
+    // 휴일근로 — 같은 날 이미 낸 신청서가 있으면 확인창 전에 알린다(상신 때 저장소도 한 번 더 막는다)
+    const workDate = holidayWorkDateOf({ docType: code, fieldValues: values });
+    if (workDate) {
+      try {
+        const dup = findHolidayWorkDuplicate({ id: editDoc?.id ?? '', docType: code, drafterId: me.id, status: '임시저장', fieldValues: values }, await approvalDocRepo.list());
+        if (dup) {
+          const msg = holidayWorkDuplicateMessage(workDate, dup);
+          alert(msg);
+          return setError(msg);
+        }
+      } catch {
+        /* 목록을 못 읽었으면 상신 단계에서 다시 검사한다 */
+      }
     }
     setError('');
     setShowSubmitConfirm(true);
@@ -1459,7 +1475,9 @@ function ApprovalDraftInner({
       navigate('/gw/approval?box=상신');
     } catch (e) {
       setShowSubmitConfirm(false);
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('휴일근로 신청서를 이미 냈습니다')) alert(msg);
+      setError(msg);
     }
   };
 
