@@ -646,9 +646,11 @@ export function SheetEditor({
   const totalWidth = hw + cols.reduce((sum, col) => sum + colW(col), 0);
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-white" style={{ height }}>
+    // overflow-hidden 을 두지 않는다 — 좁은 화면(기안 문서 폭)에서 오른쪽 끝 버튼의 메뉴(테두리 일반·굵게 등)가 잘려 글자만 보이고 눌리지 않았다.
+    // 격자는 아래 자기 상자(overflow-auto) 안에서 스크롤하므로 바깥 상자를 넘지 않는다
+    <div className="flex min-w-0 flex-col rounded-lg border border-border bg-white" style={{ height }}>
       {design && (
-        <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-panel-alt/40 px-2 py-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-t-lg border-b border-border bg-panel-alt/40 px-2 py-1.5">
           <button type="button" className={btn()} onClick={undo} disabled={undoStack.current.length === 0} title="되돌리기 (Ctrl+Z)">
             ↶
           </button>
@@ -845,7 +847,7 @@ export function SheetEditor({
         tabIndex={0}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
-        className={`relative min-h-0 flex-1 overflow-auto outline-none ${paper ? 'bg-[#878d90] p-4' : 'bg-[#f7f7f8]'}`}
+        className={`relative min-h-0 flex-1 overflow-auto rounded-b-lg outline-none ${paper ? 'bg-[#878d90] p-4' : 'bg-[#f7f7f8]'}`}
       >
         {(() => {
           const table = (

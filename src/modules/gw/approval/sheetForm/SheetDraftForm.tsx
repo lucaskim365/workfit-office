@@ -698,7 +698,8 @@ export function SheetDraftForm({
       ) : (
       <>
       {/* 오른쪽에 [+][−] 자리(종이 여백 안) — 넘침 상자를 그만큼 넓힌다 */}
-      <div className={`overflow-x-auto ${sections.length ? '-mr-7 pr-7' : ''}`}>
+      {/* 단추 폭(약 30px)이 이 여백(32px) 안에 들어가야 가로 스크롤이 생기지 않는다 — 종이 좌우 여백(px-8)과 같은 폭 */}
+      <div className={`overflow-x-auto ${sections.length ? '-mr-8 pr-8' : ''}`}>
         <SheetView
           sheet={sheet}
           // 문서 머리 표와 폭·선 색 맞춤 — 넓은 서식은 줄이지 않고 옆으로 밀어 쓴다(글씨가 작아지지 않게)
@@ -773,9 +774,10 @@ export function SheetDraftForm({
           rowEnd={(r) => {
             const sec = sections.find((x) => r >= x.first && r <= x.last);
             if (!sec) return null;
-            const btn = 'flex h-[13px] w-[13px] items-center justify-center rounded-sm bg-white font-bold leading-none shadow-sm ring-1 ring-black/15';
+            const btn = 'flex h-3 w-3 items-center justify-center rounded-sm bg-white font-bold leading-none shadow-sm ring-1 ring-black/15';
             return (
-              <span className="hidden gap-px group-hover/rep:flex">
+              // 투명하게 늘 있다 — 줄이나 단추 자리에 마우스를 올리면 보인다(전엔 줄에서 마우스가 나가면 바로 사라져 누르기 어려웠다)
+              <span className="flex gap-px opacity-0 transition-opacity group-hover/rep:opacity-100 hover:opacity-100 focus-within:opacity-100">
                 <button type="button" title="이 줄 아래에 줄 넣기" onClick={() => changeRows(sec.id, true, r)} className={`${btn} text-teal hover:bg-teal-soft`}>
                   <Plus className="h-2 w-2" />
                 </button>

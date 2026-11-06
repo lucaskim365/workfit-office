@@ -190,7 +190,8 @@ export function SheetView({
                 <td className="relative w-0 p-0 print:hidden" style={{ border: 'none' }}>
                   {(() => {
                     const node = rowEnd(r);
-                    return node ? <div className="absolute left-1 top-1/2 -translate-y-1/2">{node}</div> : null;
+                    // 왼쪽 여백은 안쪽(pl)으로 — 표 끝에서 단추까지 마우스가 끊기지 않게
+                    return node ? <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-1">{node}</div> : null;
                   })()}
                 </td>
               )}
