@@ -22,7 +22,7 @@ import MobileCalendarScreen from './MobileCalendarScreen';
 import MobileTaskScreen from './MobileTaskScreen';
 import MobileWorkPlanAdminScreen from './MobileWorkPlanAdminScreen';
 import MobileContactScreen from './MobileContactScreen';
-import { MobilePdfViewerHost } from './MobilePdfViewer';
+import { MobileFileViewerHost } from './MobileFileViewer';
 import MobileBoardScreen from './MobileBoardScreen';
 import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
@@ -147,8 +147,8 @@ export default function MobileApp() {
     <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
-      {/* 앱 안 PDF 보기(채팅 첨부 등) — 휴대폰 뒤로가기로 닫힌다 */}
-      <MobilePdfViewerHost />
+      {/* 앱 안 파일 보기(채팅 첨부 PDF·엑셀·워드) — 휴대폰 뒤로가기로 닫힌다 */}
+      <MobileFileViewerHost />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
         style={{ background: 'var(--color-header-bg)', paddingTop: 'env(safe-area-inset-top)' }}
