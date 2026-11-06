@@ -6,6 +6,7 @@ import { SealImage } from '../components/CompanySeal';
 import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
+import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
 
@@ -49,9 +50,12 @@ export function SheetDocView({
 }) {
   const ver = parseVersionKey(String(fieldValues[SHEET_VERSION_KEY] ?? ''));
   const fetched = useFormVersionSheet(template ? null : (ver?.formId ?? null), template ? null : (ver?.version ?? null));
-  const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
-  const isLoading = !template && fetched.isLoading;
-  const error = template ? null : fetched.error;
+  // 기안자가 표 모양을 고친 문서는 문서가 가진 시트를 틀로(ownSheet.ts) — 서식 버전은 읽지 않아도 된다
+  const rawOwn = fieldValues[SHEET_OWN_KEY];
+  const own = useMemo(() => (template ? null : readOwnSheet(rawOwn)), [template, rawOwn]);
+  const loaded = useMemo(() => (template ? { sheet: template } : own ? { sheet: own } : fetched.data), [template, own, fetched.data]);
+  const isLoading = !template && !own && fetched.isLoading;
+  const error = template || own ? null : fetched.error;
   const rawValues = fieldValues[SHEET_VALUES_KEY];
   const rawRows = fieldValues[SHEET_ROWS_KEY];
   // 반복 구간은 문서가 붙인 줄 수만큼 펼친 뒤 값을 얹는다
@@ -97,5 +101,13 @@ export function SheetDocView({
       }
     />
   );
-  return sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
+  const body = sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
+  // 결재자가 알아보게 — 기안자가 서식의 표 모양(열·행·수식)을 고친 문서. 인쇄·대외 문서에는 안 나옴
+  if (!own || external) return body;
+  return (
+    <>
+      <div className="mb-1 text-right text-[10.5px] font-semibold text-amber-700 print:hidden">기안자가 표 모양을 고친 문서입니다</div>
+      {body}
+    </>
+  );
 }

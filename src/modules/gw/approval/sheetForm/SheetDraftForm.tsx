@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { DEFAULT_COL_WIDTH, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, Download, Minus, Plus, Trash2, X } from 'lucide-react';
+import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
+import { Building2, Download, Minus, Plus, Table2, Trash2, X } from 'lucide-react';
+import { SHEET_OWN_KEY, canDraftDelete, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -14,6 +15,7 @@ import {
   APPROVAL_NS,
   DOC_SHEET_VIEW,
   approvalCellProps,
+  canMergeApprovalRange,
   draftInfoValue,
   type DraftInfo,
   linkFieldValues,
@@ -40,7 +42,7 @@ import {
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
-import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -444,12 +446,20 @@ export function SheetDraftForm({
   const rawValues = values[SHEET_VALUES_KEY];
   const rawRows = values[SHEET_ROWS_KEY];
   const extras = useMemo(() => readRowExtras(rawRows), [rawRows]);
+  // 기안자가 표 모양을 고친 문서 — 문서가 가진 시트를 틀로 쓴다(ownSheet.ts). 없으면 서식 버전의 틀
+  const rawOwn = values[SHEET_OWN_KEY];
+  const own = useMemo(() => readOwnSheet(rawOwn), [rawOwn]);
+  const tplSheet: Sheet | null = own ?? loaded?.sheet ?? null;
+  // [표 모양 고치기] — 고치는 중인 시트와 시작할 때 모양(끝낼 때 보호 칸 검사·사람 칸 ID 맞추기)
+  const [editing, setEditing] = useState<{ start: Sheet; sheet: Sheet } | null>(null);
+  const [editNotice, setEditNotice] = useState('');
   const rawRefs = values[SHEET_REFS_KEY];
   const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
   // 대체 서식(연동 유형) — 서식 버전에 묶여 있다(미리보기는 편집 중인 값)
   const link = (template ? linkProp : (fetched.data?.link ?? null)) || null;
-  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>) => {
+  /** ownNext — 문서 시트 바꾸기(Sheet = 고친 모양 저장, null = 지우고 서식 틀로). 없으면 그대로 */
+  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>, ownNext?: Sheet | null) => {
     // 행 보이기 조건으로 숨은 행의 입력 값은 비운다 — 합계·금액·연동 값에 숨은 값이 남지 않게
     // 종속 선택 칸은 기준 칸이 바뀌어 목록에 없게 된 값을 비운다
     const cleared = clearConditionHidden(clearStaleDependent(s0), refMap0);
@@ -473,12 +483,13 @@ export function SheetDraftForm({
       [SHEET_REFS_KEY]: JSON.stringify(refMap),
       // 이름 붙은 칸 값 — 다른 문서가 '관련 문서 값 가져오기'로 읽는다
       [SHEET_NAMED_KEY]: JSON.stringify(collectNamed(s)),
+      ...(ownNext !== undefined ? { [SHEET_OWN_KEY]: ownNext ? JSON.stringify(ownNext) : '' } : {}),
     });
   };
   // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
   const sheet = useMemo(
-    () => (loaded?.sheet ? applyValues(expandRepeats(loaded.sheet, extras), readSheetValues(rawValues), { recalc: true }) : null),
-    [loaded, rawValues, extras]
+    () => (tplSheet ? applyValues(expandRepeats(tplSheet, extras), readSheetValues(rawValues), { recalc: true }) : null),
+    [tplSheet, rawValues, extras]
   );
   const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
   // 결재 완료일 줄 — 작성 중엔 숨김(값이 없을 때)
@@ -534,24 +545,24 @@ export function SheetDraftForm({
 
   /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
   const importFrom = (src: RelatedSource) => {
-    if (!loaded?.sheet) return;
+    if (!tplSheet) return;
     const named = src.load();
     if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
-    const res = importNamed(loaded.sheet, extras, readSheetValues(rawValues), refs, named);
+    const res = importNamed(tplSheet, extras, readSheetValues(rawValues), refs, named);
     if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
     if (!confirm(`'${src.label}'에서 ${res.filled.join(', ')} 값을 가져옵니다.
 이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
-    emit(sheetWith(loaded.sheet, res), res.extras, res.refs);
+    emit(sheetWith(tplSheet, res), res.extras, res.refs);
   };
-  const canImport = !!loaded?.sheet && hasImportableNames(loaded.sheet) && relatedSources.length > 0;
+  const canImport = !!tplSheet && hasImportableNames(tplSheet) && relatedSources.length > 0;
 
   /**
    * 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다. at 이 있으면 그 줄 아래에 넣기(+)·그 줄 지우기(−),
    * 없으면 구간 끝(아래 띠의 [행 추가]·[행 삭제]). 번호 열(1, 2, 3…)은 차례였으면 다시 매긴다
    */
   const changeRows = (id: string, add: boolean, at?: number) => {
-    if (!loaded?.sheet) return;
-    const tpl = loaded.sheet;
+    if (!tplSheet) return;
+    const tpl = tplSheet;
     const run = (vals: Record<string, string>, renumber: boolean) =>
       at === undefined
         ? (add ? addRepeatRow : removeRepeatRow)(tpl, extras, vals, id)
@@ -562,6 +573,27 @@ export function SheetDraftForm({
     const expanded = applyValues(expandRepeats(tpl, next.extras), next.values, { recalc: true });
     emit(expanded, next.extras, nextRefs);
   };
+
+  /** [표 모양 고치기] 끝 — 보호 칸이 그대로인지 보고, 고친 모양을 문서 시트로 저장(반복 구간 줄 수는 시트에 들었으니 0) */
+  const finishEdit = () => {
+    if (!editing) return;
+    const issues = draftEditIssues(editing.start, editing.sheet);
+    if (issues.length) {
+      alert(`${issues.join('\n')}\n\n되돌리기(Ctrl+Z)로 되살리거나 [취소]로 처음 모양으로 돌아가 주세요.`);
+      return;
+    }
+    const next = recalculate(editing.sheet);
+    emit(next, {}, keepRefsAfterEdit(refs, editing.start, editing.sheet), next);
+    setEditing(null);
+    setEditNotice('');
+  };
+  /** [원래 양식으로] — 고친 모양과 입력 값을 지우고 서식 처음 모양으로 */
+  const resetToTemplate = () => {
+    if (!loaded?.sheet) return;
+    if (!confirm('고친 표 모양과 입력한 값을 모두 지우고 서식 처음 모양으로 되돌립니다. 계속할까요?')) return;
+    emit(recalculate(loaded.sheet), {}, {}, null);
+  };
+  const canEditShape = !template && !!loaded?.sheet;
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
@@ -584,6 +616,80 @@ export function SheetDraftForm({
           ))}
         </div>
       )}
+      {/* 표 모양 고치기 — 열·행 넣기·지우기, 병합, 수식(금액·연동 칸 등 보호 칸은 그대로). 인쇄에는 안 나옴 */}
+      {canEditShape && !editing && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] print:hidden">
+          {own && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">기안자가 표 모양을 고친 문서입니다</span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditNotice('');
+              setEditing({ start: sheet, sheet });
+            }}
+            className="ml-auto flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal"
+            title="열·행 넣기·지우기, 병합, 수식 고치기 — 금액·연동 칸, 문서 정보, 결재란 등은 고칠 수 없습니다"
+          >
+            <Table2 className="h-3 w-3" />표 모양 고치기
+          </button>
+          {own && (
+            <button type="button" onClick={resetToTemplate} className="rounded px-1.5 py-0.5 font-semibold text-rose-500 hover:bg-rose-50">
+              원래 양식으로
+            </button>
+          )}
+        </div>
+      )}
+      {editing ? (
+        <div className="print:hidden">
+          <div className="mb-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-relaxed text-amber-800">
+            엑셀처럼 열·행을 넣거나 지우고, 병합하고, 수식을 고칠 수 있습니다. 🔒 표시 칸(금액·연동 칸, 문서 정보, 결재란, 직인, 자동번호)과 그 칸이 든 행·열은 고칠 수 없습니다.
+            새로 만든 칸에 쓸 글자도 여기서 쓰세요. 다 고쳤으면 [고치기 끝].
+            {editNotice && <div className="mt-0.5 font-semibold text-rose-600">{editNotice}</div>}
+          </div>
+          <SheetEditor
+            value={editing.sheet}
+            onChange={(next) => setEditing((e) => (e ? { ...e, sheet: next } : e))}
+            mode="design"
+            normalize={healRepeatSections}
+            canMerge={canMergeApprovalRange}
+            canDeleteRow={(s, r) => canDraftDelete(s, 'row', r)}
+            canDeleteCol={(s, c) => canDraftDelete(s, 'col', c)}
+            setValue={(s, r, c, text) => {
+              const next = draftEditSetValue(s, r, c, text);
+              if (next) return next;
+              setEditNotice('이 칸은 고칠 수 없습니다(금액·연동 칸, 문서 정보 등).');
+              return s;
+            }}
+            paste={draftEditPaste}
+            renderBadge={(r, c) => (isProtectedCell(editing.sheet, r, c) ? <span className="text-[9px]" title="고칠 수 없는 칸">🔒</span> : null)}
+            onNotice={setEditNotice}
+            height="60vh"
+            toolbarExtra={
+              <>
+                <button
+                  type="button"
+                  onClick={finishEdit}
+                  className="h-7 rounded-md bg-teal px-2.5 text-[11.5px] font-bold text-white hover:opacity-90"
+                >
+                  고치기 끝
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(null);
+                    setEditNotice('');
+                  }}
+                  className="h-7 rounded-md border border-border bg-white px-2 text-[11.5px] font-semibold text-ink2 hover:bg-panel-alt"
+                >
+                  취소
+                </button>
+              </>
+            }
+          />
+        </div>
+      ) : (
+      <>
       {/* 오른쪽에 [+][−] 자리(종이 여백 안) — 넘침 상자를 그만큼 넓힌다 */}
       <div className={`overflow-x-auto ${sections.length ? '-mr-7 pr-7' : ''}`}>
         <SheetView
@@ -681,6 +787,8 @@ export function SheetDraftForm({
           }}
         />
       </div>
+      </>
+      )}
     </div>
   );
 }

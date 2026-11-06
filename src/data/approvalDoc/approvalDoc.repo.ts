@@ -1,4 +1,5 @@
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
+import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { db } from '@/shared/lib/firebase';
@@ -437,7 +438,11 @@ async function issueAutoNumbers(doc: ApprovalDoc): Promise<ApprovalDoc['fieldVal
   const ver = parseVersionKey(String(doc.fieldValues?.__formVersion ?? ''));
   const fields = ver ? [] : (form?.fields ?? []).filter((f) => f.type === '자동번호');
   // 문서가 펼친 모양 기준 — 반복 구간에 더한 줄만큼 밀린 자리, 행 보이기 조건으로 숨은 칸은 빼고
-  const sheetCells = ver ? docAutoNumberCells((await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet, doc.fieldValues ?? {}) : [];
+  // 기안자가 표 모양을 고친 문서는 문서가 가진 시트 기준(자동번호 칸은 보호 칸이라 차례는 그대로)
+  const ownTpl = readOwnSheet(doc.fieldValues?.[SHEET_OWN_KEY]);
+  const sheetCells = ver
+    ? docAutoNumberCells(ownTpl ?? (await approvalFormVersionRepo.get(ver.formId, ver.version))?.sheet, doc.fieldValues ?? {})
+    : [];
   if (fields.length === 0 && sheetCells.length === 0) return doc.fieldValues;
   const values = { ...doc.fieldValues };
   const date = new Date();
