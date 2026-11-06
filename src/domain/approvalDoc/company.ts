@@ -1,0 +1,33 @@
+/*
+  결재 문서의 회사 — 루미팹(LumeFab, 광주 법인)이 조직을 따로 두기 전까지 쓰는 임시 구분.
+  같은 서식(지출결의·품의)을 루미팹용으로 골라 쓰면 문서에 company='lumefab' 를 남긴다.
+  company 가 없으면 워크핏 문서다(기존 문서는 모두 그대로).
+*/
+
+export type ApprovalCompany = 'lumefab';
+
+export const COMPANY_LABEL: Record<ApprovalCompany, string> = { lumefab: '루미팹' };
+export const COMPANY_NAME_EN: Record<ApprovalCompany, string> = { lumefab: 'LumeFab' };
+
+/** 루미팹용으로 고를 수 있는 서식 — 서식 코드나 이름 중 하나가 맞으면 */
+const LUMEFAB_FORMS = [
+  { code: '지출결의', name: '지출결의서' },
+  { code: '품의', name: '품의서' },
+];
+
+export function isLumefabForm(form: { code: string; name: string }): boolean {
+  return LUMEFAB_FORMS.some((f) => f.code === form.code || f.name === form.name.trim());
+}
+
+export function parseCompany(v: unknown): ApprovalCompany | null {
+  return v === 'lumefab' ? 'lumefab' : null;
+}
+
+/** 문서번호 앞자리 — 워크핏 AP, 루미팹 LF (번호도 따로 센다) */
+export function docNoPrefixOf(company: ApprovalCompany | null | undefined): string {
+  return company === 'lumefab' ? 'LF' : 'AP';
+}
+
+export function isLumefabDoc(doc: { company?: string | null }): boolean {
+  return doc.company === 'lumefab';
+}

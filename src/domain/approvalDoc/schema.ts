@@ -248,6 +248,8 @@ export const approvalDocSchema = z.object({
   recallReason: z.string().nullable().optional().default(null),
   recalledAt: z.string().nullable().optional().default(null),
   recalledBy: z.string().nullable().optional().default(null),
+  /** 회사 — 'lumefab'(루미팹)이면 루미팹 문서(문서번호 LF-). 없으면 워크핏 */
+  company: z.enum(['lumefab']).nullable().optional(),
 });
 
 export type ApprovalDoc = z.infer<typeof approvalDocSchema>;

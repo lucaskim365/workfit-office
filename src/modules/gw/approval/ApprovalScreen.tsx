@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { isLumefabDoc } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -79,6 +80,11 @@ const SEARCH_RESULT_LIMIT = 50;
 const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
 const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
+/** 화면의 함 — 저장된 결재함 + 부서 문서함 + 루미팹(루미팹 문서 중 내가 관련된 것) */
+type ScreenBox = ApprovalBox | '문서함' | '루미팹';
+/** 루미팹 함에 모으는 함 — 임시·휴지통은 빼고 내가 관련된 모든 함 */
+const LUMEFAB_SOURCE_BOXES: ApprovalBox[] = ['대기', '상신', '반려', '수신', '참조', '후열', '완료'];
+
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '받은 결재함',
   상신: '상신함',
@@ -108,9 +114,9 @@ export default function ApprovalScreen() {
   const { data: allDocs = [] } = useAllApprovals();
   const [params] = useSearchParams();
   const location = useLocation();
-  const boxParam = params.get('box') as ApprovalBox | '문서함' | null;
+  const boxParam = params.get('box') as ScreenBox | null;
 
-  const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
+  const [box, setBox] = useState<ScreenBox>(() => boxParam || '대기');
 
   // 후열(공람) 전달 — 본인 앞 전달을 읽는다.
   const { isOperator: isOp, isAdmin: isAdm } = usePermission();
@@ -139,7 +145,7 @@ export default function ApprovalScreen() {
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
 
-  const handleSelectBox = (newBox: ApprovalBox | '문서함', formCode: string | null = null) => {
+  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null) => {
     setBox(newBox);
     setCompletedForm(formCode);
     setSelId(null);
@@ -175,7 +181,7 @@ export default function ApprovalScreen() {
   }, [org, userObj]);
 
   /** 문서가 보이는 결재함으로 옮기고 그 함의 상태 필터도 맞춘다(딥링크·검색 공용) */
-  const applyBoxTarget = (t: DocBoxTarget | { box: ApprovalBox | '문서함' }) => {
+  const applyBoxTarget = (t: DocBoxTarget | { box: ScreenBox }) => {
     if ('doneFilter' in t) setDoneFilter(t.doneFilter);
     if ('draftFilter' in t) setDraftFilter(t.draftFilter);
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
@@ -262,6 +268,12 @@ export default function ApprovalScreen() {
     // 1. 본인의 기본 문서 목록
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
+    // 루미팹 — 루미팹 문서 중 내가 기안·결재·수신·참조한 것(일반 결재함에도 그대로 있다)
+    if (box === '루미팹') {
+      return allDocs
+        .filter((d) => isLumefabDoc(d) && LUMEFAB_SOURCE_BOXES.some((b) => matchesBox(d, me, b, myDeptNameOrId, undefined, postReadIdsOf(me))))
+        .sort(byRecent);
+    }
     const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
     // 받은 결재함은 내가 승인하고 끝난 문서도 함께 둔다('완료' 필터) — 완료함까지 가지 않고 이어 보게
     if (box === '대기') combined.push(...allDocs.filter((d) => isMyApprovedDone(d, me)));
@@ -386,7 +398,7 @@ export default function ApprovalScreen() {
   // 다시 적용하면, 다른 탭·다른 직원의 결재로 목록이 바뀔 때마다 사용자가 옮겨 간 함·문서를
   // 알림으로 들어온 문서로 되돌려 버린다.
   const deepDocId = params.get('doc');
-  const deepBox = params.get('box') as ApprovalBox | '문서함' | null;
+  const deepBox = params.get('box') as ScreenBox | null;
   // location.key 는 이동할 때마다 새로 생긴다 — 같은 알림을 다시 눌러도 다시 적용되고, 목록 갱신으로는 바뀌지 않는다.
   const deepLinkKey = deepDocId || deepBox ? `${location.key}|${deepBox ?? ''}|${deepDocId ?? ''}` : null;
   const deepTargetDoc = deepDocId ? allDocs.find((d) => d.id === deepDocId || d.docNo === deepDocId) ?? null : null;
@@ -574,6 +586,13 @@ export default function ApprovalScreen() {
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
             {
+              title: '회사',
+              boxes: [
+                { key: '루미팹', label: '[루미팹] 결재함' },
+              ] as const,
+              titleBg: 'bg-indigo-50/50 text-indigo-900 border-l-2 border-indigo-500 pl-2 font-extrabold dark:bg-indigo-950/20 dark:text-indigo-300',
+            },
+            {
               title: '관리',
               boxes: [
                 { key: '완료', label: '완료함' },
@@ -614,6 +633,9 @@ export default function ApprovalScreen() {
                       return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
                     badgeCount = deptDocsCount;
+                  } else if (b === '루미팹') {
+                    // 루미팹 문서 중 지금 내 결재 차례인 것
+                    badgeCount = (byBox['대기'] ?? []).filter((d) => isLumefabDoc(d) && currentApproverIds(d).includes(me)).length;
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
@@ -669,7 +691,7 @@ export default function ApprovalScreen() {
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
                       <span className="flex min-w-0 items-center gap-1">
                         <span className="truncate whitespace-nowrap">{label}</span>
-                        {b !== '반려' && b !== '문서함' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
+                        {b !== '반려' && b !== '문서함' && b !== '루미팹' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
                           <span className="shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-1 text-[9px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
                             새 {unreadState.unreadCount(b as ApprovalBox)}
                           </span>
@@ -784,7 +806,7 @@ export default function ApprovalScreen() {
                 </div>
               ) : (
                 <span>
-                  {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
+                  {box === '문서함' ? '문서함' : box === '루미팹' ? '[루미팹] 결재함' : BOX_LABEL[box as ApprovalBox]}
                   {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>
                 </span>
@@ -1034,6 +1056,9 @@ export default function ApprovalScreen() {
                         <div className="flex flex-col gap-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <DocTypeIcon type={d.docType} size={14} className="text-ink3 shrink-0" />
+                            {isLumefabDoc(d) && (
+                              <span className="shrink-0 rounded bg-indigo-500/10 px-1 text-[10px] font-extrabold text-indigo-600">루미팹</span>
+                            )}
                             <span className={`min-w-0 flex-1 truncate text-[12.5px] text-ink ${unreadState.isUnreadInBox(box, d.id) ? 'font-extrabold' : 'font-semibold'}`}>{d.title}</span>
                             {isRecentCompleted && (
                               <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
@@ -1150,8 +1175,8 @@ export default function ApprovalScreen() {
         <DraftFormSelectModal
           open={showFormSelectModal}
           onClose={() => setShowFormSelectModal(false)}
-          onSelect={(form) => {
-            navigate(`/gw/approval/new?type=${encodeURIComponent(form.code)}`);
+          onSelect={(form, company) => {
+            navigate(`/gw/approval/new?type=${encodeURIComponent(form.code)}${company ? `&company=${company}` : ''}`);
           }}
         />
       )}
