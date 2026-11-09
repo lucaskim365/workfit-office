@@ -36,6 +36,7 @@ import {
   conditionSources,
   rowConditionOf,
   isStructureLocked,
+  isDocFieldBind,
   setApprovalCellValue,
   validateApprovalSheet,
 } from '@/domain/approvalForm/sheet/approvalSheet';
@@ -137,7 +138,7 @@ function Designer({
       return 'paper';
     }
   });
-  // 칸 표시 — 간단(입력 칸은 연한 바탕, 특별한 칸만 작은 아이콘) / 자세히(글자 꼬리표 전부) / 끔(엑셀처럼 깨끗하게)
+  // 칸 표시 — 간단(못 고치는 칸만 옅은 빗금, 특별한 칸은 작은 아이콘) / 자세히(글자 꼬리표 전부) / 끔(엑셀처럼 깨끗하게)
   const [markMode, setMarkMode] = useState<MarksMode>(() => {
     try {
       const v = localStorage.getItem('sheetDesigner.marks');
@@ -367,7 +368,13 @@ function Designer({
         </span>
       ) : null;
     const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} quiet={markMode === 'simple'} /> : null);
-    if (markMode === 'simple') return simpleBadge(r, p, sec, ext, cond ? condText : undefined, inputLook);
+    if (markMode === 'simple') {
+      // 기안자가 쓰거나 고칠 수 있는 칸 — 잠그지 않은 입력 칸, 문서 항목(제목·보존연한·공개범위)
+      const writable = (!!p.input && !p.lock && !p.bind) || isDocFieldBind(p.bind);
+      // 못 고치는 칸 중 내용이 있는 칸만 표시(빈 여백 칸까지 칠하면 오히려 어지럽다)
+      const fixed = !writable && (!emptyCell || !!p.bind || !!p.seal || !!p.autoNo);
+      return simpleBadge(r, p, sec, ext, cond ? condText : undefined, inputLook, fixed);
+    }
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) {
       const isDoc = p.bind.startsWith('doc.');
@@ -409,7 +416,7 @@ function Designer({
 
   /**
    * 간단 표시 — 칸 내용을 가리지 않게.
-   * 입력 칸: 연한 노란 바탕(기안 화면의 입력 칸 색). 빈 칸엔 글 아닌 종류만 흐리게(금액·날짜 등).
+   * 기안자가 못 고치는 칸(글자·수식·자동 채우기·잠근 칸): 옅은 빗금. 쓸 수 있는 칸은 서식 색 그대로. 빈 입력 칸엔 글 아닌 종류만 흐리게(금액·날짜 등).
    * 특별한 칸(필수·잠금·비공개·직인·칸 이름·종속·안내): 오른쪽 위 작은 아이콘 — 마우스를 올리면 설명.
    * 자동 채우기·문서 항목은 '{기안자}' 같은 흐린 글자로 이미 보이므로 따로 표시하지 않는다.
    * 행 표시(반복 구간·대외 숨김·보이기 조건): 아이콘으로(반복 구간 보라 띠는 그대로)
@@ -421,6 +428,7 @@ function Designer({
     ext: boolean,
     condText: string | undefined,
     inputLook: React.ReactNode,
+    fixed: boolean,
   ) => {
     type Mark = { key: string; icon: React.ReactNode; cls: string; title: string };
     const ic = 'h-2.5 w-2.5';
@@ -451,7 +459,15 @@ function Designer({
       ) : null;
     return (
       <>
-        {p.input && !p.bind && <span aria-hidden className="pointer-events-none absolute inset-0 bg-amber-300/15" />}
+        {fixed && (
+          // 기안자가 못 고치는 칸 — 옅은 빗금(회색 바탕은 표 제목 칸 색으로도 쓰여 구분이 안 되므로)
+          <span
+            aria-hidden
+            title="기안자가 쓰거나 고칠 수 없는 칸"
+            className="pointer-events-none absolute inset-0"
+            style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(100,116,139,0.13) 0 1.5px, transparent 1.5px 6px)' }}
+          />
+        )}
         {inputLook}
         {sec && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-violet-500" />}
         {sec && r === sec.first && (
@@ -806,7 +822,7 @@ function Designer({
                   </button>
                 ))}
               </div>
-              <div className="flex items-center rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="칸 표시 — 간단: 입력 칸은 연한 바탕, 특별한 칸만 작은 아이콘 · 자세히: 모든 표시를 글자로 · 끔: 표시 없이 엑셀처럼">
+              <div className="flex items-center rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="칸 표시 — 간단: 기안자가 못 고치는 칸만 옅은 빗금, 특별한 칸은 작은 아이콘 · 자세히: 모든 표시를 글자로 · 끔: 표시 없이 엑셀처럼">
                 <span className="px-1 text-ink3">표시</span>
                 {(
                   [

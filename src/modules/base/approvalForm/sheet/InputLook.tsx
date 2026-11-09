@@ -97,7 +97,7 @@ function look(input: CellInput) {
   }
 }
 
-/** quiet — 간단 표시: 글 입력 칸은 아무것도 안 그린다(연한 바탕만으로 입력 칸임을 안다) */
+/** quiet — 간단 표시: 글 입력 칸은 아무것도 안 그린다(빗금이 없으면 쓸 수 있는 칸) */
 export function InputLook({ input, quiet }: { input: CellInput; quiet?: boolean }) {
   if (quiet && input.type === 'text') return null;
   return (
