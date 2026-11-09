@@ -85,3 +85,15 @@ test('병합 — 왼쪽 위가 빈 칸이면 옆 칸의 글자·부품을 왼쪽
   const s2 = setCellValue(s, 0, 0, '기안자');
   assert.equal(draftCanMerge(s2, range), false);
 });
+
+test('기안자 열 넣기 — 모든 열을 같은 비율로 줄여 시트 전체 폭이 그대로', async () => {
+  const { draftInsertCol } = await import('./ownSheet');
+  const s = { ...createSheet(1, 3), colWidths: {} as Record<string, number> };
+  s.colWidths[s.cols[1]] = 120;
+  const total = (x: Sheet) => x.cols.reduce((n, c) => n + (x.colWidths[c] ?? 96), 0);
+  const next = draftInsertCol(s, 2);
+  assert.ok(Math.abs(total(next) - total(s)) <= next.cols.length); // 반올림 오차만
+  // 새 열은 왼쪽 칸과 같은 폭, 다른 칸도 같은 비율로 줄어 한 칸만 좁아지지 않는다
+  assert.equal(next.colWidths[next.cols[2]], next.colWidths[next.cols[1]]);
+  assert.ok(next.colWidths[next.cols[0]] < 96 && next.colWidths[next.cols[0]] > 60);
+});

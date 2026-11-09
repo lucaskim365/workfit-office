@@ -10,7 +10,7 @@
  *   이름 붙은 칸(금액·휴가 기간 등 연동 값), 문서 머리 부품·기안 정보 칸(bind), 직인, 자동번호, 비공개, 관리자가 잠근 칸.
  *   그 칸이 든 행·열은 지울 수 없고(isStructureLocked), 입력 칸이 아닌 보호 칸은 내용(수식 포함)도 바꿀 수 없다.
  */
-import { cellKey, insertCol, parseSheet, pasteTsv, type CellRange, type Sheet } from '@/lib/sheet/core';
+import { DEFAULT_COL_WIDTH, cellKey, insertCol, parseSheet, pasteTsv, type CellRange, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, coveredKeys, isStructureLocked, setApprovalCellValue } from './approvalSheet';
 
 /** 문서가 가진 시트(JSON). 빈 값이면 서식 버전의 틀을 쓴다 */
@@ -86,6 +86,19 @@ function docHeadRows(s: Sheet): Set<number> {
  */
 export function draftInsertCol(s: Sheet, at: number): Sheet {
   let next = insertCol(s, at);
+  // 새 열은 옆 칸(왼쪽, 맨 앞이면 오른쪽)과 같은 폭으로 넣고, 모든 열을 같은 비율로 줄여 시트 전체 폭을 그대로 둔다
+  // — 종이 밖으로 밀리지 않고, 한 칸만 좁아져 글자가 세로로 쪼개지지도 않게
+  const neighbor = next.cols[at > 0 ? at - 1 : at + 1];
+  const added = next.cols[at];
+  if (neighbor !== undefined && added !== undefined) {
+    const widthOf = (c: string) => next.colWidths[c] ?? DEFAULT_COL_WIDTH;
+    const before = s.cols.reduce((n, c) => n + (s.colWidths[c] ?? DEFAULT_COL_WIDTH), 0);
+    const widths: Record<string, number> = { ...next.colWidths, [added]: widthOf(neighbor) };
+    const after = next.cols.reduce((n, c) => n + (widths[c] ?? DEFAULT_COL_WIDTH), 0);
+    const k = before / after;
+    const scaled = Object.fromEntries(next.cols.map((c) => [c, Math.max(16, Math.round((widths[c] ?? DEFAULT_COL_WIDTH) * k))]));
+    next = { ...next, colWidths: { ...next.colWidths, ...scaled } };
+  }
   if (at <= 0) return next;
   const heads = docHeadRows(next);
   const covers = (m: Sheet['merges'][number], r: number, c: number) => r >= m.startRow && r < m.startRow + m.rowSpan && c >= m.startCol && c < m.startCol + m.colSpan;
