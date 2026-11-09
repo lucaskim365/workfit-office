@@ -57,8 +57,13 @@ export interface SheetEditorProps {
   onNotice?: (message: string) => void;
   /** 이 폭(px)에 세로 안내선 — 예: A4 인쇄 폭 */
   guideWidth?: number;
-  /** 편집기 높이(CSS 값). 기본 520px */
+  /**
+   * 편집기 높이(CSS 값). 기본 520px.
+   * 'auto' — 시트를 아래로 다 펼치고(격자 안 세로 스크롤 없음) 페이지가 스크롤된다. 도구 막대·수식 입력줄은 화면 위에 붙어 따라온다
+   */
   height?: string;
+  /** 펼침(auto)일 때 화면 위에서 붙을 자리(px) — 앱 상단바·탭 막대처럼 화면 위에 붙어 있는 것의 높이 */
+  stickyTop?: number;
   /** 편집할 때마다 쓰는 쪽 규칙으로 다듬기(예: 반복 구간 이어 붙이기) — 다듬은 결과가 한 번의 편집으로 되돌리기에 들어간다 */
   normalize?: (s: Sheet) => Sheet;
   /**
@@ -128,6 +133,7 @@ export function SheetEditor({
   onNotice,
   guideWidth,
   height = '520px',
+  stickyTop = 0,
   normalize,
   paper,
 }: SheetEditorProps) {
@@ -148,6 +154,18 @@ export function SheetEditor({
   const undoStack = useRef<Sheet[]>([]);
   const redoStack = useRef<Sheet[]>([]);
   const gridRef = useRef<HTMLDivElement>(null);
+  const autoHeight = height === 'auto';
+  // 펼침 — 붙는 도구 막대 높이(줄바꿈으로 바뀜)를 재서, 격자 열 머리(A·B·C)를 그 바로 아래에 붙인다
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barH, setBarH] = useState(0);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!autoHeight || !el) return;
+    const ro = new ResizeObserver(() => setBarH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [autoHeight]);
+  const headTop = autoHeight ? stickyTop + barH : 0;
   const cellInputRef = useRef<HTMLTextAreaElement>(null);
   const barInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<'select' | 'pick' | null>(null);
@@ -652,7 +670,9 @@ export function SheetEditor({
   return (
     // overflow-hidden 을 두지 않는다 — 좁은 화면(기안 문서 폭)에서 오른쪽 끝 버튼의 메뉴(테두리 일반·굵게 등)가 잘려 글자만 보이고 눌리지 않았다.
     // 격자는 아래 자기 상자(overflow-auto) 안에서 스크롤하므로 바깥 상자를 넘지 않는다
-    <div className="flex min-w-0 flex-col rounded-lg border border-border bg-white" style={{ height }}>
+    <div className="flex min-w-0 flex-col rounded-lg border border-border bg-white" style={autoHeight ? undefined : { height }}>
+      {/* 펼침(auto) — 도구 막대·수식 입력줄을 한 덩어리로 화면 위에 붙인다(페이지를 내려도 따라옴) */}
+      <div ref={barRef} className={autoHeight ? 'sticky z-20 rounded-t-lg bg-white shadow-[0_1px_0_0_var(--color-border,#e5e7eb)]' : 'contents'} style={autoHeight ? { top: stickyTop } : undefined}>
       {design && (
         <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-t-lg border-b border-border bg-panel-alt/40 px-2 py-1.5">
           <button type="button" className={btn()} onClick={undo} disabled={undoStack.current.length === 0} title="되돌리기 (Ctrl+Z)">
@@ -843,6 +863,7 @@ export function SheetEditor({
           </div>
         )}
       </div>
+      </div>
 
       {/* 격자 — 열 머리(A·B·C) 아래 선과 행 번호 칸 오른쪽 선은 없앤다: 같은 굵기 테두리가 겹치면 위·왼쪽 칸 선이 이겨
           맨 위 행·A열의 서식 테두리가 머리 칸의 연회색 선에 가려지기 때문 */}
@@ -851,7 +872,8 @@ export function SheetEditor({
         tabIndex={0}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
-        className={`relative min-h-0 flex-1 overflow-auto rounded-b-lg outline-none ${paper ? 'bg-[#878d90] p-4' : 'bg-[#f7f7f8]'}`}
+        // 펼침(auto) — 넘침 상자를 두지 않는다(페이지가 스크롤). 넘침 상자가 있으면 열 머리가 그 상자 기준으로만 붙어 페이지를 내리면 따라오지 않는다
+        className={`relative rounded-b-lg outline-none ${autoHeight ? '' : 'min-h-0 flex-1 overflow-auto'} ${paper ? 'bg-[#878d90] p-4' : 'bg-[#f7f7f8]'}`}
       >
         {(() => {
           const table = (
@@ -868,7 +890,7 @@ export function SheetEditor({
           </colgroup>
           <thead>
             <tr style={{ height: hh }}>
-              <th className={paper ? 'p-0' : 'sticky left-0 top-0 z-[3] border border-[#d0d0d0] bg-[#eef0f2]'} />
+              <th className={paper ? 'p-0' : 'sticky left-0 top-0 z-[3] border border-[#d0d0d0] bg-[#eef0f2]'} style={paper ? undefined : { top: headTop }} />
               {cols.map((col, c) => (
                 <th
                   key={col}
@@ -886,6 +908,7 @@ export function SheetEditor({
                     setHeaderMenu({ kind: 'col', idx: c, x: e.clientX, y: e.clientY });
                   }}
                   title={paper ? `${colLetter(c)}열 — 눌러 열 고르기, 오른쪽 끝을 끌어 너비 바꾸기` : undefined}
+                  style={paper ? undefined : { top: headTop }}
                   className={
                     paper
                       ? `relative select-none p-0 ${c >= range.c1 && c <= range.c2 ? 'bg-teal/50' : 'bg-transparent hover:bg-[#d0d0d0]'}`

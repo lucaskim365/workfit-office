@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { suggestFormCode } from '@/domain/approvalForm/formCode';
-import { ArrowLeft, Asterisk, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Repeat, Save, Stamp, Tag, X } from 'lucide-react';
+import { ArrowLeft, Asterisk, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { legacyFormToSheet } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
@@ -96,6 +96,8 @@ const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.
 
 /** 문서 종이의 좌우 여백 + 테두리(ApprovalDraftDocumentSheet px-8) */
 const PAPER_PAD = 66;
+/** 앱에서 화면 위에 붙어 있는 높이 — 상단바(58px) + 탭 막대(36px). 편집기 도구 막대·옆 패널이 그 아래에 붙는다 */
+const APP_STICKY_TOP = 94;
 
 function Designer({
   form: initialForm,
@@ -167,6 +169,8 @@ function Designer({
 
   const isNew = !form.id;
   const sheetWidth = sheet.cols.reduce((sum, col) => sum + (sheet.colWidths[col] ?? DEFAULT_COL_WIDTH), 0);
+  // 편집기 폭 — 문서 종이(A4 세로 800px, 넓은 시트면 그 폭) + 회색 바탕 여백·행 번호 칸
+  const editorWidth = Math.max(800, sheetWidth + PAPER_PAD) + 76;
   const pageScale = sheetWidth > SHEET_PAGE_WIDTH ? SHEET_PAGE_WIDTH / sheetWidth : 1;
   const dirty = sheet !== savedSheet || link !== savedLink || JSON.stringify(form) !== JSON.stringify(savedForm);
   const set = (patch: Partial<ApprovalForm>) => setForm((f) => ({ ...f, ...patch }));
@@ -373,7 +377,7 @@ function Designer({
       const writable = (!!p.input && !p.lock && !p.bind) || isDocFieldBind(p.bind);
       // 못 고치는 칸 중 내용이 있는 칸만 표시(빈 여백 칸까지 칠하면 오히려 어지럽다)
       const fixed = !writable && (!emptyCell || !!p.bind || !!p.seal || !!p.autoNo);
-      return simpleBadge(r, p, sec, ext, cond ? condText : undefined, inputLook, fixed);
+      return simpleBadge(p, sec, ext, cond ? condText : undefined, inputLook, fixed);
     }
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) {
@@ -422,7 +426,6 @@ function Designer({
    * 행 표시(반복 구간·대외 숨김·보이기 조건): 아이콘으로(반복 구간 보라 띠는 그대로)
    */
   const simpleBadge = (
-    r: number,
     p: ReturnType<typeof approvalCellProps>,
     sec: ReturnType<typeof repeatSections>[number] | undefined,
     ext: boolean,
@@ -469,20 +472,40 @@ function Designer({
           />
         )}
         {inputLook}
-        {sec && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-violet-500" />}
-        {sec && r === sec.first && (
+        {/* 반복 구간 — 보라 띠만(첫 글자를 가리지 않게 아이콘은 두지 않음). 띠에 마우스를 올리면 구간 이름 */}
+        {sec && (
           <span
             title={`반복 구간: ${sec.label} (${sec.first + 1}~${sec.last + 1}행) — 기안자가 행을 추가·삭제`}
-            className="absolute left-1 top-0.5 z-[1] flex h-3 w-3 items-center justify-center rounded-sm bg-violet-500 text-white"
-          >
-            <Repeat className="h-2 w-2" />
-          </span>
+            className="absolute inset-y-0 left-0 z-[1] w-[4px] bg-violet-500"
+          />
         )}
         {iconRow(icons, 'right-0.5 top-0.5')}
         {iconRow(rowIcons, 'bottom-0.5 right-0.5')}
       </>
     );
   };
+
+  // 열 때 — 맨 위부터 보이게(서식 목록에서 내려 둔 스크롤 자리가 남으면 긴 시트의 아래쪽부터 보인다).
+  // 그리고 이 화면 동안 본문 상자(main)의 넘침 설정을 푼다 — 본문 상자는 실제로는 스크롤하지 않고(창이 스크롤) 넘침 설정만 있어,
+  // 화면 위에 붙는 도구 막대·열 머리·옆 패널(sticky)이 그 상자 기준이 되어 페이지를 내려도 따라오지 않았다
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 화면 위에 붙을 자리 — 창이 스크롤하면 앱 상단바·탭 막대 아래, 본문 상자가 스크롤하면 그 상자 맨 위
+  const [stickTop, setStickTop] = useState(APP_STICKY_TOP);
+  useEffect(() => {
+    const main = rootRef.current?.closest('main');
+    window.scrollTo({ top: 0 });
+    if (!main) return;
+    main.scrollTop = 0;
+    if (main.scrollHeight > main.clientHeight + 1) {
+      setStickTop(0); // 본문 상자가 정말 스크롤하는 화면이면 그대로(그 상자 맨 위에 붙는다)
+      return;
+    }
+    const prev = main.style.overflow;
+    main.style.overflow = 'visible';
+    return () => {
+      main.style.overflow = prev;
+    };
+  }, []);
 
   const msgCls =
     msg?.kind === 'err'
@@ -492,7 +515,7 @@ function Designer({
         : 'border-teal/30 bg-teal-soft/70 text-teal';
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className="space-y-3">
       {/* 머리 */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel px-4 py-2.5 shadow-xs">
         <div className="flex items-center gap-3">
@@ -754,9 +777,11 @@ function Designer({
       </div>
 
       {/* 편집기 + 옆 패널 */}
-      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[1fr_290px]">
+      {/* 편집기는 문서(A4 세로) 폭에 맞춘 폭만 — 넓은 화면에서 빈 공간이 생기지 않게 옆 패널을 바로 붙인다 */}
+      <div className="flex flex-col items-start gap-3 xl:flex-row">
         <div
-          className="min-w-0 rounded-xl border border-border bg-panel p-2"
+          className="w-full min-w-0 rounded-xl border border-border bg-panel p-2 xl:w-auto xl:flex-none"
+          style={{ width: editorWidth, maxWidth: '100%' }}
           onDragOver={(e) => {
             if (!e.dataTransfer.types.includes(PART_MIME)) return;
             e.preventDefault();
@@ -791,7 +816,8 @@ function Designer({
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
             // 화면 높이에 맞춤 — 글자 크기 배율(body zoom)로 나눠야 실제 화면 높이(안 그러면 페이지 전체를 위아래로 스크롤해야 함)
-            height="calc(100vh / var(--font-scale, 1) - 330px)"
+            height="auto"
+            stickyTop={stickTop}
             paper={user && view === 'paper' ? (table) => <DocFrame form={docForm} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
             toolbarExtra={
               <>
@@ -854,7 +880,11 @@ function Designer({
         </div>
 
         {/* 화면에 붙어 있고 안에서만 스크롤 — 시트를 내려 봐도 패널은 그 자리에. 높이는 글자 크기 배율(body zoom)로 나눠야 화면 높이와 맞는다 */}
-        <div className="rounded-xl border border-border bg-panel p-3 xl:sticky xl:top-3 xl:max-h-[calc(100vh/var(--font-scale,1)_-_290px)] xl:overflow-y-auto">
+        <div
+          className="w-full rounded-xl border border-border bg-panel p-3 xl:sticky xl:w-[320px] xl:min-w-[280px] xl:shrink xl:overflow-y-auto"
+          // 앱 상단바·탭 막대 바로 아래에 붙고, 화면 높이를 넘지 않게(넘치면 안에서만 스크롤). 화면 높이는 글자 크기 배율(body zoom)로 나눈다
+          style={{ top: stickTop + 8, maxHeight: `calc(100vh / var(--font-scale, 1) - ${stickTop + 16}px)` }}
+        >
           <div className="mb-3 flex rounded-lg border border-border bg-panel-alt p-0.5 text-[11.5px]">
             {(
               [
