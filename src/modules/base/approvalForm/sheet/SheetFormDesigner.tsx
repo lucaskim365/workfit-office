@@ -41,6 +41,7 @@ import {
   validateApprovalSheet,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SheetCellPanel } from './SheetCellPanel';
+import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
 import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
@@ -98,6 +99,11 @@ const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.
 const PAPER_PAD = 66;
 /** 앱에서 화면 위에 붙어 있는 높이 — 상단바(58px) + 탭 막대(36px). 편집기 도구 막대·옆 패널이 그 아래에 붙는다 */
 const APP_STICKY_TOP = 94;
+/** 편집기 옆 막대 폭 — 부품(2열)·부품(아이콘만)·설정 패널 */
+const PALETTE_W = 196;
+const PALETTE_ICONS_W = 56;
+const SIDE_W = 320;
+const SIDE_MIN_W = 280;
 
 function Designer({
   form: initialForm,
@@ -491,6 +497,34 @@ function Designer({
   const rootRef = useRef<HTMLDivElement>(null);
   // 화면 위에 붙을 자리 — 창이 스크롤하면 앱 상단바·탭 막대 아래, 본문 상자가 스크롤하면 그 상자 맨 위
   const [stickTop, setStickTop] = useState(APP_STICKY_TOP);
+  // 편집하는 동안 앱 왼쪽 메뉴를 접는다(닫으면 원래대로)
+  useEffect(() => {
+    requestSidebarCollapse(true);
+    return () => requestSidebarCollapse(false);
+  }, []);
+  // 화면 폭에 따라 배치 — three: 부품(왼쪽)·문서·설정(오른쪽) / compact: 부품을 아이콘 막대로 / two: 부품도 오른쪽 패널 안에 / stack: 위아래로
+  // 쓸 수 있는 폭은 창 기준으로 잰다 — 앱 바탕이 내용 폭에 맞춰 늘어나므로(min-w-fit) 이 상자 폭을 재면 늘 '다 들어감'이 된다
+  const [rootW, setRootW] = useState(0);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const scale = el.offsetWidth > 0 ? rect.width / el.offsetWidth : 1; // 화면 배율(body zoom)
+      setRootW(Math.floor((window.innerWidth - rect.left) / (scale || 1)) - 24); // 오른쪽 여백·스크롤 막대
+    };
+    measure();
+    // 왼쪽 메뉴가 접히는 움직임(0.2초)이 끝난 뒤 한 번 더
+    const t = window.setTimeout(measure, 350);
+    window.addEventListener('resize', measure);
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', measure);
+      ro.disconnect();
+    };
+  }, []);
   useEffect(() => {
     const main = rootRef.current?.closest('main');
     window.scrollTo({ top: 0 });
@@ -506,6 +540,18 @@ function Designer({
       main.style.overflow = prev;
     };
   }, []);
+
+  const GAP = 12;
+  const layout: 'three' | 'compact' | 'two' | 'stack' =
+    rootW === 0 || rootW >= editorWidth + PALETTE_W + SIDE_W + GAP * 2
+      ? 'three'
+      : rootW >= editorWidth + PALETTE_ICONS_W + SIDE_W + GAP * 2
+        ? 'compact'
+        : rootW >= editorWidth + SIDE_MIN_W + GAP
+          ? 'two'
+          : 'stack';
+  // 화면에 붙는 옆 막대(부품·설정) — 앱 상단바·탭 막대 바로 아래, 화면 높이를 넘지 않게(넘치면 안에서만 스크롤). 화면 높이는 글자 크기 배율(body zoom)로 나눈다
+  const stickyStyle = layout === 'stack' ? undefined : { top: stickTop + 8, maxHeight: `calc(100vh / var(--font-scale, 1) - ${stickTop + 16}px)` };
 
   const msgCls =
     msg?.kind === 'err'
@@ -778,10 +824,20 @@ function Designer({
 
       {/* 편집기 + 옆 패널 */}
       {/* 편집기는 문서(A4 세로) 폭에 맞춘 폭만 — 넓은 화면에서 빈 공간이 생기지 않게 옆 패널을 바로 붙인다 */}
-      <div className="flex flex-col items-start gap-3 xl:flex-row">
+      <div className={`flex gap-3 ${layout === 'stack' ? 'flex-col' : 'items-start'}`}>
+        {(layout === 'three' || layout === 'compact') && (
+          // 부품 — 편집기 왼쪽(끌어다 놓기 거리가 짧고, 오른쪽 설정 패널이 짧아진다)
+          <div
+            className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2"
+            style={{ ...stickyStyle, width: layout === 'three' ? PALETTE_W : PALETTE_ICONS_W }}
+          >
+            {layout === 'three' && <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>}
+            <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant={layout === 'three' ? 'side' : 'icons'} />
+          </div>
+        )}
         <div
-          className="w-full min-w-0 rounded-xl border border-border bg-panel p-2 xl:w-auto xl:flex-none"
-          style={{ width: editorWidth, maxWidth: '100%' }}
+          className={`min-w-0 rounded-xl border border-border bg-panel p-2 ${layout === 'stack' ? 'w-full' : 'flex-none'}`}
+          style={layout === 'stack' ? undefined : { width: editorWidth, maxWidth: '100%' }}
           onDragOver={(e) => {
             if (!e.dataTransfer.types.includes(PART_MIME)) return;
             e.preventDefault();
@@ -881,9 +937,8 @@ function Designer({
 
         {/* 화면에 붙어 있고 안에서만 스크롤 — 시트를 내려 봐도 패널은 그 자리에. 높이는 글자 크기 배율(body zoom)로 나눠야 화면 높이와 맞는다 */}
         <div
-          className="w-full rounded-xl border border-border bg-panel p-3 xl:sticky xl:w-[320px] xl:min-w-[280px] xl:shrink xl:overflow-y-auto"
-          // 앱 상단바·탭 막대 바로 아래에 붙고, 화면 높이를 넘지 않게(넘치면 안에서만 스크롤). 화면 높이는 글자 크기 배율(body zoom)로 나눈다
-          style={{ top: stickTop + 8, maxHeight: `calc(100vh / var(--font-scale, 1) - ${stickTop + 16}px)` }}
+          className={`rounded-xl border border-border bg-panel p-3 ${layout === 'stack' ? 'w-full' : 'sticky min-w-0 shrink overflow-y-auto'}`}
+          style={layout === 'stack' ? undefined : { ...stickyStyle, width: SIDE_W, minWidth: SIDE_MIN_W }}
         >
           <div className="mb-3 flex rounded-lg border border-border bg-panel-alt p-0.5 text-[11.5px]">
             {(
@@ -905,6 +960,7 @@ function Designer({
           </div>
           {side === 'cell' ? (
             <>
+              {(layout === 'two' || layout === 'stack') && (
               <details open className="group mb-3 border-b border-border pb-3">
                 <summary className="mb-1 flex cursor-pointer list-none items-center justify-between text-[12.5px] font-extrabold text-ink">
                   부품
@@ -913,6 +969,7 @@ function Designer({
                 </summary>
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
+              )}
               <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} />
             </>
           ) : side === 'settings' ? (

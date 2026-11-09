@@ -204,20 +204,23 @@ export function SheetPalette({
   sheet,
   selection,
   onApply,
+  variant = 'full',
 }: {
   sheet: Sheet;
   selection: SheetSelection;
+  /** full: 4열(옆 패널 안) · side: 2열(편집기 왼쪽 막대) · icons: 아이콘만 1열(좁은 화면의 왼쪽 막대 — 이름은 마우스를 올리면) */
+  variant?: 'full' | 'side' | 'icons';
   /** 부품 id 와 넣을 범위 — 넣기·빼기·알림은 쓰는 쪽에서(누르기는 toggle: 이미 있으면 뺀다) */
   onApply: (id: string, range: CellRange, toggle?: boolean) => void;
 }) {
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
   return (
     <div className="space-y-2">
-      <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>
+      {variant !== 'icons' && <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>}
       {PART_GROUPS.map((g) => (
-        <div key={g.label}>
-          <div className="mb-1 text-[10.5px] font-bold text-ink3">{g.label}</div>
-          <div className="grid grid-cols-4 gap-1">
+        <div key={g.label} className={variant === 'icons' ? 'border-t border-border pt-2 first:border-t-0 first:pt-0' : undefined}>
+          {variant === 'icons' ? null : <div className="mb-1 text-[10.5px] font-bold text-ink3">{g.label}</div>}
+          <div className={`grid gap-1 ${variant === 'icons' ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-4'}`}>
             {g.parts.map((p) => {
               const on = p.active?.(props) ?? false;
               const Icon = p.icon;
@@ -231,13 +234,13 @@ export function SheetPalette({
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   onClick={() => onApply(p.id, selection.range, true)}
-                  title={on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}
+                  title={`${variant === 'icons' ? `[${g.label}] ${p.label} — ` : ''}${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
                   className={`flex cursor-grab flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1 text-[10px] font-semibold leading-tight active:cursor-grabbing ${
                     on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span className="text-center">{p.label}</span>
+                  <Icon className={variant === 'icons' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+                  {variant !== 'icons' && <span className="text-center">{p.label}</span>}
                 </button>
               );
             })}

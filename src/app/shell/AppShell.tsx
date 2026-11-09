@@ -1,3 +1,4 @@
+import { COLLAPSE_SIDEBAR_EVENT } from './collapseSidebar';
 import { Activity, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
@@ -173,6 +174,26 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
   useEffect(() => { try { localStorage.setItem('mes_favs', JSON.stringify(favs)); } catch { /* noop */ } }, [favs]);
   useEffect(() => { try { localStorage.setItem('mes_rail_open', JSON.stringify(railOpen)); } catch { /* noop */ } }, [railOpen]);
 
+
+  // 화면이 넓은 자리가 필요할 때 좌측 메뉴를 잠시 접는다(예: 결재서식 편집기) — 'workfit:collapse-sidebar' 이벤트, detail true 접기 / false 원래대로.
+  // 원래 접혀 있었으면 끝나도 접힌 그대로
+  useEffect(() => {
+    let saved: boolean | null = null;
+    const onRequest = (e: Event) => {
+      if ((e as CustomEvent<boolean>).detail) {
+        setCollapsed((c) => {
+          if (saved === null) saved = c;
+          return true;
+        });
+      } else if (saved !== null) {
+        const back = saved;
+        saved = null;
+        setCollapsed(back);
+      }
+    };
+    window.addEventListener(COLLAPSE_SIDEBAR_EVENT, onRequest);
+    return () => window.removeEventListener(COLLAPSE_SIDEBAR_EVENT, onRequest);
+  }, []);
 
   // 전자결재 화면(/gw/approval) 진입 시 좌측 사이드바 메뉴 기본 닫힘 처리
   useEffect(() => {
