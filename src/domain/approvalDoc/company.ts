@@ -13,6 +13,8 @@ export const COMPANY_NAME_EN: Record<ApprovalCompany, string> = { lumefab: 'Lume
 const LUMEFAB_FORMS = [
   { code: '지출결의', name: '지출결의서' },
   { code: '품의', name: '품의서' },
+  // 법인카드를 쓴 뒤 내역을 증빙으로 내는 서식(품의서를 복사해 만듦) — 코드는 관리자가 정하므로 이름으로도 찾는다
+  { code: '법인카드', name: '법인카드 사용 내역서' },
 ];
 
 export function isLumefabForm(form: { code: string; name: string }): boolean {
