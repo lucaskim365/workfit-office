@@ -423,6 +423,10 @@ export function SheetEditor({
   const styleAt = (r: number, c: number): CellStyle | undefined => value.styles[`${r}:${cols[c]}`];
   const focusCell = anchorOf(focus);
   const focusStyle = styleAt(focusCell.r, focusCell.c);
+  // 지금 칸에 실제로 걸린 정렬 — 따로 정하지 않았으면 기본값(가로: 숫자는 오른쪽·글자는 왼쪽, 세로: 가운데)을 눌린 상태로 보인다
+  const focusCol = cols[focusCell.c];
+  const effectiveAlign = focusStyle?.align ?? (focusCol !== undefined ? defaultAlign(computed, focusCell.r, focusCol) : 'left');
+  const effectiveValign = focusStyle?.valign ?? 'middle';
   const style = (patch: Partial<CellStyle>) => update((s) => applyStyle(s, range, patch));
   const toggle = (key: 'bold' | 'italic' | 'underline' | 'shrink') => {
     let all = true;
@@ -702,12 +706,12 @@ export function SheetEditor({
           </div>
           {sep}
           {(['left', 'center', 'right'] as const).map((a) => (
-            <button key={a} type="button" className={btn(focusStyle?.align === a)} onClick={() => style({ align: a })} title={{ left: '왼쪽', center: '가운데', right: '오른쪽' }[a] + ' 정렬'}>
+            <button key={a} type="button" className={btn(effectiveAlign === a)} onClick={() => style({ align: a })} title={{ left: '왼쪽', center: '가운데', right: '오른쪽' }[a] + ' 정렬'}>
               {{ left: '⫷', center: '≡', right: '⫸' }[a]}
             </button>
           ))}
           {(['top', 'middle', 'bottom'] as const).map((v) => (
-            <button key={v} type="button" className={btn(focusStyle?.valign === v)} onClick={() => style({ valign: v })} title={{ top: '위', middle: '가운데', bottom: '아래' }[v] + ' 맞춤'}>
+            <button key={v} type="button" className={btn(effectiveValign === v)} onClick={() => style({ valign: v })} title={{ top: '위', middle: '가운데', bottom: '아래' }[v] + ' 맞춤'}>
               {{ top: '⤒', middle: '⇕', bottom: '⤓' }[v]}
             </button>
           ))}
