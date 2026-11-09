@@ -21,6 +21,10 @@ test('루미팹 서식 — 코드나 이름으로', () => {
   // 법인카드 사용 내역서 — 코드가 달라도 이름으로
   assert.ok(isLumefabForm({ code: '품의_사본', name: '법인카드 사용 내역서' }));
   assert.ok(isLumefabForm({ code: '법인카드', name: '아무 이름' }));
+  // 채용 품의서 — 코드로, 이름(띄어쓰기 달라도)으로
+  assert.ok(isLumefabForm({ code: '채용', name: '아무 이름' }));
+  assert.ok(isLumefabForm({ code: 'X2', name: '채용품의서' }));
+  assert.ok(!isLumefabForm({ code: 'X3', name: '채용 계획서' }));
 });
 
 test('루미팹 문서 판별 — 기존 문서(company 없음)는 워크핏', () => {
