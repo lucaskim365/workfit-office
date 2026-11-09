@@ -92,7 +92,8 @@ export async function exportElementToPdf(el: HTMLElement, fileName: string): Pro
   await document.fonts?.ready;
   await waitForImages(el);
   const inlined = await inlineImageSources(el);
-  const blocks = unbreakableBlocks(el);
+  // 자르면 안 되는 블록은 캡처용 복제본에서 잰다 — 인쇄 제외(print:hidden) 요소가 빠진 배치 기준이어야 나눔 위치가 맞는다
+  let blocks: Array<[number, number]> = [];
 
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas-pro'), import('jspdf')]);
   const canvas = await html2canvas(el, {
@@ -116,6 +117,7 @@ export async function exportElementToPdf(el: HTMLElement, fileName: string): Pro
         if (data) img.src = data;
       });
       await waitForImages(clonedEl);
+      blocks = unbreakableBlocks(clonedEl);
     },
   });
 
