@@ -1,4 +1,5 @@
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import type { NotificationPrefs } from '@/domain/notificationPrefs/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows, registerTestAccountSource, rememberTestAccounts } from '@/data/_backend/testAccountVisibility';
@@ -25,7 +26,7 @@ const backend = createCrudBackend<User>({
   seed: USER_SEED.map((u) => userSchema.parse(u)),
   // 기기 토큰 목록은 토큰 전용 함수(patchPushTokens)로만 쓴다. 프로필 저장 등이 옛 목록으로 덮어쓰지 않게 하고,
   // DB에 칸이 아직 없을 때도 일반 저장이 깨지지 않게 한다.
-  stripFields: ['fcmTokens', 'fcmTokensRecall'],
+  stripFields: ['fcmTokens', 'fcmTokensRecall', 'notificationPrefs'],
 });
 
 /** Appwrite가 "없는 칸"이라 거절한 오류인가 (fcmTokens 칸 추가 전) */
@@ -253,6 +254,11 @@ export const userRepo = {
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`[push] ${stale[i].id} 계정의 이전 토큰 회수 실패`, r.reason);
     });
+  },
+
+  /** 내 알림 설정만 부분 저장한다 — 서버 푸시 함수가 이 값을 읽는다. */
+  async saveNotificationPrefs(userId: string, prefs: NotificationPrefs): Promise<void> {
+    await backend.patch(userId, { notificationPrefs: JSON.stringify(prefs) });
   },
 
   /** 로그아웃한 기기의 토큰을 내 목록에서 뺀다 — 로그아웃한 기기로 알림이 가지 않게. */

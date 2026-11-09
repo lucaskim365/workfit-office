@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { drafterTitleOf, stepTitleOf } from '@/domain/approvalDoc/stampTitle';
+import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -79,6 +81,16 @@ const SEARCH_RESULT_LIMIT = 50;
 const PANE_STICKY = 'sticky top-[calc(var(--shell-top)+var(--appr-bar)+12px)]';
 const PANE_MAX_H = 'max-h-[calc(100vh/var(--font-scale,1)-var(--shell-top)-var(--appr-bar)-28px)]';
 
+/** 화면의 함 — 저장된 결재함 + 부서 문서함 */
+type ScreenBox = ApprovalBox | '문서함';
+/** 결재함 회사 보기 — 들어올 때마다 '전체'(고른 보기는 그 화면에 있는 동안만) */
+const COMPANY_VIEW_OPTIONS: { key: CompanyView; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'workfit', label: '워크핏' },
+  { key: 'lumefab', label: '루미팹' },
+];
+const COMPANY_VIEW_TITLE: Record<CompanyView, string> = { all: '', workfit: '[워크핏] ', lumefab: '[루미팹] ' };
+
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '받은 결재함',
   상신: '상신함',
@@ -108,9 +120,9 @@ export default function ApprovalScreen() {
   const { data: allDocs = [] } = useAllApprovals();
   const [params] = useSearchParams();
   const location = useLocation();
-  const boxParam = params.get('box') as ApprovalBox | '문서함' | null;
+  const boxParam = params.get('box') as ScreenBox | null;
 
-  const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
+  const [box, setBox] = useState<ScreenBox>(() => boxParam || '대기');
 
   // 후열(공람) 전달 — 본인 앞 전달을 읽는다.
   const { isOperator: isOp, isAdmin: isAdm } = usePermission();
@@ -139,7 +151,24 @@ export default function ApprovalScreen() {
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
 
-  const handleSelectBox = (newBox: ApprovalBox | '문서함', formCode: string | null = null) => {
+  // 회사 보기 — 전체(합쳐서)·워크핏만·루미팹만. 모든 함에 똑같이 적용.
+  // 기본은 늘 '전체' — 마지막 보기를 기억하면 '루미팹'으로 둔 채 다시 들어와 워크핏 결재 문서를 못 보는 일이 생긴다.
+  // (주소에 ?company= 가 있으면 그것 — 새로고침·뒤로가기 때 고른 보기 유지)
+  const [companyView, setCompanyViewState] = useState<CompanyView>(() => parseCompanyView(params.get('company')) ?? 'all');
+  const setCompanyView = (v: CompanyView) => {
+    setCompanyViewState(v);
+    const nextUrl = new URL(window.location.href);
+    if (v === 'all') nextUrl.searchParams.delete('company');
+    else nextUrl.searchParams.set('company', v);
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
+  const inView = (d: ApprovalDoc) => inCompanyView(d, companyView);
+  /** 검색·알림으로 연 문서가 지금 보기에서 걸러지면 '전체'로 넓힌다 */
+  const widenViewFor = (d: ApprovalDoc) => {
+    if (!inCompanyView(d, companyView)) setCompanyView('all');
+  };
+
+  const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null) => {
     setBox(newBox);
     setCompletedForm(formCode);
     setSelId(null);
@@ -175,7 +204,7 @@ export default function ApprovalScreen() {
   }, [org, userObj]);
 
   /** 문서가 보이는 결재함으로 옮기고 그 함의 상태 필터도 맞춘다(딥링크·검색 공용) */
-  const applyBoxTarget = (t: DocBoxTarget | { box: ApprovalBox | '문서함' }) => {
+  const applyBoxTarget = (t: DocBoxTarget | { box: ScreenBox }) => {
     if ('doneFilter' in t) setDoneFilter(t.doneFilter);
     if ('draftFilter' in t) setDraftFilter(t.draftFilter);
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
@@ -226,6 +255,7 @@ export default function ApprovalScreen() {
   const handleSelectSearchedDoc = (d: ApprovalDoc) => {
     const target = searchBoxFilter === 'all' ? resolveDocBox(d, me, myDeptKey) : { box: searchBoxFilter };
     applyBoxTarget(target);
+    widenViewFor(d);
     setSelId(d.id);
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', target.box);
@@ -269,12 +299,14 @@ export default function ApprovalScreen() {
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
     const uniqueMap = new Map<string, ApprovalDoc>();
     combined.forEach((d) => uniqueMap.set(d.id, d));
-    return Array.from(uniqueMap.values()).sort(byRecent);
-  }, [box, allDocs, me, org, userObj, recvPostReads]);
+    const docs = Array.from(uniqueMap.values()).sort(byRecent);
+    // 회사 보기 — 워크핏만·루미팹만이면 거른다
+    return docs.filter((d) => inCompanyView(d, companyView));
+  }, [box, allDocs, me, org, userObj, recvPostReads, companyView]);
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
-    if (box === '문서함') return deptArchiveDocs;
+    if (box === '문서함') return deptArchiveDocs.filter((d) => inCompanyView(d, companyView));
 
     if (box === '완료') {
       const byForm = completedForm ? list.filter((d: ApprovalDoc) => d.docType === completedForm) : list;
@@ -332,7 +364,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm]);
+  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm, companyView]);
 
   // 완료함 서식 바로가기 — 서식 이름은 서식 마스터(code)에서, 없으면 docType 그대로
   const completedDocs = useMemo(() => {
@@ -341,7 +373,11 @@ export default function ApprovalScreen() {
     return allDocs.filter((d) => matchesBox(d, me, '완료', myDeptNameOrId, undefined, postReadIdsOf(me)));
   }, [allDocs, me, org, userObj, recvPostReads]);
   const formNameOf = (code: string) => approvalForms.find((f) => f.code === code)?.name ?? code;
-  const completedFormCounts = useMemo(() => formCounts(completedDocs), [completedDocs]);
+  // 숫자는 회사 보기(전체·워크핏·루미팹)를 따른다 — 바로가기 목록(pinned)은 보기를 바꿔도 그대로 둔다
+  const completedFormCounts = useMemo(
+    () => formCounts(completedDocs.filter((d) => inCompanyView(d, companyView))),
+    [completedDocs, companyView]
+  );
   const pinned = useMemo(() => pinnedForms(savedPinned, completedDocs), [savedPinned, completedDocs]);
   const completedFormOptions = useMemo(() => {
     const countOf = new Map(completedFormCounts.map((f) => [f.code, f.count]));
@@ -386,7 +422,7 @@ export default function ApprovalScreen() {
   // 다시 적용하면, 다른 탭·다른 직원의 결재로 목록이 바뀔 때마다 사용자가 옮겨 간 함·문서를
   // 알림으로 들어온 문서로 되돌려 버린다.
   const deepDocId = params.get('doc');
-  const deepBox = params.get('box') as ApprovalBox | '문서함' | null;
+  const deepBox = params.get('box') as ScreenBox | null;
   // location.key 는 이동할 때마다 새로 생긴다 — 같은 알림을 다시 눌러도 다시 적용되고, 목록 갱신으로는 바뀌지 않는다.
   const deepLinkKey = deepDocId || deepBox ? `${location.key}|${deepBox ?? ''}|${deepDocId ?? ''}` : null;
   const deepTargetDoc = deepDocId ? allDocs.find((d) => d.id === deepDocId || d.docNo === deepDocId) ?? null : null;
@@ -401,6 +437,7 @@ export default function ApprovalScreen() {
     }
 
     const targetDoc = deepTargetDoc;
+    widenViewFor(targetDoc);
     setSelId(targetDoc.id);
 
     // 2. 함이 지정되지 않았으면 문서가 실제로 보이는 함을 자동 판정
@@ -530,6 +567,26 @@ export default function ApprovalScreen() {
             + 새 상신
           </button>
 
+          {/* 회사 보기 — 모든 함에 적용 */}
+          <div className="mb-1 grid grid-cols-3 gap-0.5 rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="회사 보기">
+            {COMPANY_VIEW_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                role="radio"
+                aria-checked={companyView === o.key}
+                onClick={() => setCompanyView(o.key)}
+                className={`rounded-md py-1 text-[11px] font-bold transition-colors ${
+                  companyView === o.key
+                    ? o.key === 'lumefab' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-panel text-teal shadow-xs'
+                    : 'text-ink3 hover:text-ink'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
           {/* 임시 저장함 단독 버튼 (새 상신 바로 밑 배치) */}
           <button
             onClick={() => handleSelectBox('임시')}
@@ -539,10 +596,10 @@ export default function ApprovalScreen() {
             <span className="flex items-center gap-1.5">
               <span>임시 저장함</span>
             </span>
-            {(byBox['임시'] ?? []).length > 0 && (
+            {(byBox['임시'] ?? []).filter(inView).length > 0 && (
               <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${box === '임시' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
                 }`}>
-                {(byBox['임시'] ?? []).length}
+                {(byBox['임시'] ?? []).filter(inView).length}
               </span>
             )}
           </button>
@@ -565,6 +622,7 @@ export default function ApprovalScreen() {
               ] as const,
               titleBg: 'bg-blue-50/50 text-[#1e3a8a] border-l-2 border-[#1890ff] pl-2 font-extrabold dark:bg-blue-950/20 dark:text-blue-300',
             },
+
             {
               title: '공유 문서함',
               boxes: [
@@ -590,9 +648,16 @@ export default function ApprovalScreen() {
                 {g.boxes.map((bInfo) => {
                   const b = bInfo.key;
                   const label = bInfo.label;
+                  // 회사 보기 — 워크핏만·루미팹만이면 그 회사 문서만 센다
+                  const filtered = companyView !== 'all';
+                  const inGroup = inView;
+                  const pendingCount = filtered
+                    ? (byBox['대기'] ?? []).filter((d) => inView(d) && currentApproverIds(d).includes(me)).length
+                    : activePendingCount;
+                  let newCount = b === '반려' || b === '문서함' ? 0 : unreadState.unreadCount(b as ApprovalBox);
 
                   const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
-                    (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || myUnreadPostReadIds.has(d.id)
+                    (d) => inGroup(d) && (d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || myUnreadPostReadIds.has(d.id))
                   ).length;
 
                   // 배지 개수 산출
@@ -611,13 +676,15 @@ export default function ApprovalScreen() {
                       const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
                       const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
 
+                      if (!inView(d)) return false;
                       return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
                     }).length;
                     badgeCount = deptDocsCount;
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-                    const combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+                    const combined = allDocs.filter((d) => inGroup(d) && matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+                    if (filtered && b !== '반려') newCount = combined.filter((d) => unreadState.isUnreadInBox(b, d.id)).length;
 
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
@@ -632,7 +699,7 @@ export default function ApprovalScreen() {
                         .filter((d) => unreadState.isUnreadDoc(d))
                         .length;
                     } else if (b === '대기') {
-                      badgeCount = activePendingCount;
+                      badgeCount = pendingCount;
                     } else {
                       badgeCount = uniqueIds.size;
                     }
@@ -642,7 +709,7 @@ export default function ApprovalScreen() {
                   const hasBadge = badgeCount > 0;
 
                   const badgeClass = b === '대기'
-                    ? (activePendingCount > 0
+                    ? (pendingCount > 0
                       ? 'bg-red-500 text-white animate-pulse'
                       : 'bg-ink3/15 text-ink2')
                     : b === '상신'
@@ -669,9 +736,9 @@ export default function ApprovalScreen() {
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
                       <span className="flex min-w-0 items-center gap-1">
                         <span className="truncate whitespace-nowrap">{label}</span>
-                        {b !== '반려' && b !== '문서함' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
+                        {newCount > 0 && (
                           <span className="shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-1 text-[9px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
-                            새 {unreadState.unreadCount(b as ApprovalBox)}
+                            새 {newCount}
                           </span>
                         )}
                       </span>
@@ -784,6 +851,7 @@ export default function ApprovalScreen() {
                 </div>
               ) : (
                 <span>
+                  {companyView !== 'all' && <span className={companyView === 'lumefab' ? 'text-indigo-600' : 'text-teal'}>{COMPANY_VIEW_TITLE[companyView]}</span>}
                   {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
                   {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>
@@ -1034,6 +1102,9 @@ export default function ApprovalScreen() {
                         <div className="flex flex-col gap-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <DocTypeIcon type={d.docType} size={14} className="text-ink3 shrink-0" />
+                            {isLumefabDoc(d) && (
+                              <span className="shrink-0 rounded bg-indigo-500/10 px-1 text-[10px] font-extrabold text-indigo-600">루미팹</span>
+                            )}
                             <span className={`min-w-0 flex-1 truncate text-[12.5px] text-ink ${unreadState.isUnreadInBox(box, d.id) ? 'font-extrabold' : 'font-semibold'}`}>{d.title}</span>
                             {isRecentCompleted && (
                               <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
@@ -1150,8 +1221,8 @@ export default function ApprovalScreen() {
         <DraftFormSelectModal
           open={showFormSelectModal}
           onClose={() => setShowFormSelectModal(false)}
-          onSelect={(form) => {
-            navigate(`/gw/approval/new?type=${encodeURIComponent(form.code)}`);
+          onSelect={(form, company) => {
+            navigate(`/gw/approval/new?type=${encodeURIComponent(form.code)}${company ? `&company=${company}` : ''}`);
           }}
         />
       )}
@@ -1490,7 +1561,7 @@ function DocDetail({
                         {doc.drafterName || nameOf(doc.drafterId)}
                       </span>
                       <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                        {doc.drafterPos || org.userById(doc.drafterId)?.position || doc.drafterDept}
+                        {drafterTitleOf(doc, org.userById(doc.drafterId)) || doc.drafterDept}
                       </span>
                     </div>
                     <div className={'rounded bg-teal/15 py-0.2 ' + subFontClass + ' font-bold text-teal'}>상신</div>
@@ -1529,7 +1600,7 @@ function DocDetail({
                                       {s.approverName || nameOf(s.approverId)}
                                     </span>
                                     <span className={parallelSubFontClass + ' text-ink3 truncate w-full'}>
-                                      {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                                      {stepTitleOf(doc, s, org.userById(s.approverId)) || '—'}
                                       {s.delegatedFromId && <span className="ml-1 text-[7.5px] text-amber font-bold">(대결)</span>}
                                     </span>
                                   </div>
@@ -1578,7 +1649,7 @@ function DocDetail({
                                     {s.approverName || nameOf(s.approverId)}
                                   </span>
                                   <span className={subFontClass + ' text-ink3 truncate w-full mt-0.5'}>
-                                    {s.approverPos || org.userById(s.approverId)?.position || '—'}
+                                    {stepTitleOf(doc, s, org.userById(s.approverId)) || '—'}
                                   </span>
                                   {s.delegatedFromId && <span className="text-[7.5px] text-amber truncate w-full">대결</span>}
                                 </div>

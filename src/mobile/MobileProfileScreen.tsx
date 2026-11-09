@@ -4,6 +4,7 @@ import { Camera } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useUploadAvatar } from '@/features/user/useUploadAvatar';
 import MobileCommonHeader from './MobileCommonHeader';
+import NotificationPrefsCard from './profile/NotificationPrefsCard';
 import PersonalInfoCard from './profile/PersonalInfoCard';
 import SignCard from './profile/SignCard';
 import { Card, Feedback, dangerOutlineButton, inputClass, labelClass, outlineButton, saveButton } from './profile/shared';
@@ -24,6 +25,7 @@ export default function MobileProfileScreen() {
       <div className="flex-1 space-y-3 overflow-y-auto px-3.5 py-3 pb-[calc(env(safe-area-inset-bottom)+16px)]">
         <BasicInfoCard />
         <PersonalInfoCard user={user} />
+        <NotificationPrefsCard userId={user.id} />
         <PasswordCard />
         <SignCard user={user} />
       </div>

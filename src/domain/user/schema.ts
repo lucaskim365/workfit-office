@@ -63,6 +63,8 @@ export const userSchema = z.object({
   fcmTokens: z.array(z.string()).default([]),
   /** 회수 신호를 받아도 되는 기기 토큰(안드로이드 휴대폰만 — 아이폰·PC 제외) — domain/user/pushTokens withRecallToken */
   fcmTokensRecall: z.array(z.string()).default([]),
+  /** 알림 설정 JSON — domain/notificationPrefs. 칸을 나중에 추가해 예전 사용자는 DB 값이 null 이다. 일반 저장(save)에서는 뺀다 */
+  notificationPrefs: z.string().nullish(),
   /**
    * 다중 소속(겸직) 확장 스키마 (User.dept 단일 구조의 점진적 확장 대비).
    */

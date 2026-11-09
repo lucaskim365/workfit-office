@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep, ApprovalRecipient, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { amountFieldOf, type ApprovalForm, type FormField, type FieldValue } from '@/domain/approvalForm/schema';
@@ -18,6 +19,8 @@ import {
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
+import type { ApprovalCompany } from '@/domain/approvalDoc/company';
+import { CompanyTopMark } from './CompanyTopMark';
 import {
   FileText,
   Paperclip,
@@ -31,7 +34,8 @@ import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { SealFieldRow, SealMarkProvider } from './CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
-import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, isHolidayWorkLocked, numberFieldInput } from '@/domain/commute/overtimeDraft';
+import { nowLocalIso } from '@/shared/lib/datetime';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
 
@@ -64,6 +68,10 @@ interface LayoutBlock {
 
 export interface ApprovalDraftDocumentSheetProps {
   form?: ApprovalForm;
+  /** 결재란 칭호 방식 — 새 문서는 'jobTitle'(직책 우선), 예전에 만든 임시저장 문서는 없음(직급) */
+  titleMode?: string | null;
+  /** 루미팹 문서면 상단 바에 워크핏 로고 대신 '루미팹' */
+  company?: ApprovalCompany | null;
   docCode: string;
   me: User;
   title: string;
@@ -114,6 +122,8 @@ export interface ApprovalDraftDocumentSheetProps {
 
 export function ApprovalDraftDocumentSheet({
   form,
+  titleMode,
+  company,
   docCode,
   me,
   title,
@@ -392,13 +402,17 @@ export function ApprovalDraftDocumentSheet({
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
-      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') ? 'flex' : 'hidden'}`}>
+      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') || company ? 'flex' : 'hidden'}`}>
+        {company ? (
+          <CompanyTopMark company={company} />
+        ) : (
         <div className="flex items-center gap-2 h-full">
           <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
           <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">
             workfit 그룹웨어 · 전자결재
           </span>
         </div>
+        )}
         <div className="text-[11px] font-medium text-[#888] flex items-center gap-2 self-center">
           {shownDocNo ? (
             <span className="font-mono text-teal">{shownDocNo}</span>
@@ -467,6 +481,7 @@ export function ApprovalDraftDocumentSheet({
             steps={stampSteps}
             nameOf={nameOf}
             posOf={posOf}
+            titleOf={(s) => stepTitleOf({ titleMode }, s, org.userById(s.approverId) || users.find((x) => x.id === s.approverId))}
             sealOf={sealOf}
             isSignatureOf={isSignatureOf}
             allowCurrentSignature
@@ -1448,6 +1463,15 @@ function InlineFieldEditor({
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
 
+  // 휴일근로 신청서 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음, 사후 신청)
+  if (isHolidayWorkLocked(field.key)) {
+    return (
+      <span className="block px-1 py-0.5 text-[12px] text-[#222]" title="근태 기록에서 불러옵니다(고칠 수 없음)">
+        {sv || <span className="text-[11px] text-[#999]">근태 기록에서 불러옵니다</span>}
+      </span>
+    );
+  }
+
   switch (field.type) {
     case '안내문':
       return <span className="text-[11px] text-[#777]">{field.placeholder || field.label}</span>;
@@ -1495,6 +1519,8 @@ function InlineFieldEditor({
         <DateInput
           value={sv}
           restDaysOnly={field.key === HOLIDAY_WORK_DATE_KEY}
+          // 휴일근로는 사후 신청 — 오늘까지만
+          max={field.key === HOLIDAY_WORK_DATE_KEY ? nowLocalIso().slice(0, 10) : undefined}
           onChange={(e) => setVals({ [field.key]: e.target.value })}
           className="bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded cursor-pointer"
         />

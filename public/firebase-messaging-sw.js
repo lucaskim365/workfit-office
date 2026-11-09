@@ -58,9 +58,30 @@ async function recallChat(roomId, readUpTo) {
   } catch (e) {
     /* 기록 실패 — 지금 떠 있는 알림은 그래도 닫는다 */
   }
-  for (const old of await self.registration.getNotifications({ tag: roomId })) {
+  // 대화 알림의 tag 는 메시지마다 다르다(아래 showChatNotification) — 방 번호로 찾는다(예전 알림은 tag = 방 번호)
+  for (const old of await self.registration.getNotifications()) {
+    if (old.data?.roomId !== roomId && old.tag !== roomId) continue;
     const at = old.data?.at || '';
     if (!at || at <= readUpTo) old.close();
+  }
+}
+
+/**
+ * 같은 대상(같은 방·같은 문서)의 예전 알림 닫기 — 새 알림을 띄운 '뒤에' 부른다.
+ *
+ * 알림 tag 는 메시지마다 다르게 준다(대상#알림id). 같은 tag 로 띄우면 휴대폰이 상단바의 같은 대상 알림을 '고친 알림'으로
+ * 보고 진동·소리를 생략했다(renotify 를 줘도, 먼저 닫고 띄워도 휴대폰에 따라 그대로 — 알림 번호가 같아서).
+ * 늘 새 알림으로 띄워 매번 울리고, 예전 것은 닫아 상단바엔 지금처럼 대상마다 최신 알림 하나만 남긴다
+ */
+async function closeOlderOfTarget(target, keepId) {
+  if (!target) return;
+  try {
+    for (const old of await self.registration.getNotifications()) {
+      const sameTarget = old.data?.workfitTarget === target || old.tag === target; // 예전 알림은 tag = 대상
+      if (sameTarget && old.data?.workfitNotificationId !== keepId) old.close();
+    }
+  } catch (e) {
+    /* 닫기 실패 — 새 알림은 이미 떴다 */
   }
 }
 
@@ -83,13 +104,15 @@ messaging.onBackgroundMessage(async (payload) => {
   const isChat = Boolean(data.roomId);
   const bodyText = n.body || data.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
   const id = `${Date.now()}-${Math.random()}`;
-  const tag = data.roomId || data.docId || data.linkUrl || undefined;
+  const target = data.roomId || data.docId || data.linkUrl || '';
+  // 메시지마다 다른 tag — 늘 새 알림이라 매번 울린다(closeOlderOfTarget 참고)
+  const tag = target ? `${target}#${id}` : undefined;
   await self.registration.showNotification(n.title || data.title || '새 알림', {
     body: bodyText,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     // shownAt: 휴대폰 앱이 안 읽은 수로 알림을 정리할 때, 그 수를 받은 뒤에 뜬 알림은 건드리지 않게
-    data: { ...data, workfitNotificationId: id, shownAt: Date.now() },
+    data: { ...data, workfitNotificationId: id, workfitTarget: target, shownAt: Date.now() },
     /**
      * 같은 대상의 알림은 겹쳐 쌓지 않고 하나로 합친다.
      *
@@ -98,8 +121,15 @@ messaging.onBackgroundMessage(async (payload) => {
      */
     tag,
     requireInteraction: false,
-    renotify: Boolean(data.roomId || data.docId),
+    /**
+     * 알림마다 진동 — tag 가 메시지마다 달라 늘 새 알림이다(closeOlderOfTarget).
+     * 일정 리마인더(linkUrl tag)도 마찬가지. vibrate 는 안드로이드 크롬 PWA 에서 쓰이고(아이폰은 휴대폰 설정대로),
+     * 실제로 울릴지는 휴대폰의 앱 알림 설정(소리·진동, 무음·방해금지)에도 달렸다
+     */
+    silent: false,
+    vibrate: [200, 100, 200],
   });
+  await closeOlderOfTarget(target, id);
   // FCM은 반환한 Promise를 push 이벤트의 waitUntil에 연결한다.
   if ((await getClientMode()) === 'desktop') await expireNotification(id, tag);
 });

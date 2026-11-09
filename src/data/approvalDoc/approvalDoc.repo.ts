@@ -1,4 +1,6 @@
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
+import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
+import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { db } from '@/shared/lib/firebase';
 import { client as appwriteClient, databases, APPWRITE_DATABASE_ID, Query, assertAppwriteId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
@@ -20,6 +22,7 @@ import {
   isEditableStatus,
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
+import { docNoPrefixOf, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { counterRepo } from '@/data/counter/counter.repo';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
 import { autoNumberChannel, DEFAULT_AUTO_NUMBER, formatAutoNumber, isFieldVisible } from '@/domain/approvalForm/autoNumber';
@@ -369,6 +372,8 @@ export interface ApprovalDraftInput {
   postApprovedByName?: string | null;
   /** 취소 기안 시 대상 원문서 ID */
   cancelTargetDocId?: string | null;
+  /** 회사 — 'lumefab'(루미팹)이면 문서번호 LF-, 없으면 워크핏(AP-) */
+  company?: ApprovalCompany | null;
 }
 
 /** 취소 기안 문서 최종 승인(완료) 시 대상 원문서를 '취소완료' 상태로 전이 */
@@ -509,8 +514,10 @@ export const approvalDocRepo = {
   /** 임시저장 신규 작성 — 채번 + status='임시저장'. */
   async createDraft(input: ApprovalDraftInput): Promise<ApprovalDoc> {
     const dateKey = yymmdd(new Date());
-    const seq = await counterRepo.next(`AP-${dateKey}`);
-    const docNo = formatDocNo('AP', dateKey, seq);
+    // 루미팹 문서는 LF- 로 따로 센다(워크핏 AP- 번호와 섞이지 않게)
+    const prefix = docNoPrefixOf(input.company);
+    const seq = await counterRepo.next(`${prefix}-${dateKey}`);
+    const docNo = formatDocNo(prefix, dateKey, seq);
     const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === input.drafterId);
     
@@ -538,6 +545,8 @@ export const approvalDocRepo = {
       drafterSignType: drafterUser?.signType ?? null,
       drafterName: drafterUser?.name ?? null,
       drafterPos: drafterUser?.position ?? null,
+      drafterTitle: drafterUser?.jobTitle ?? '',
+      titleMode: TITLE_MODE_JOB_TITLE,
       preservationPeriod: input.preservationPeriod ?? null,
       execution: input.execution ?? null,
       executionDepts: input.executionDepts ?? [],
@@ -554,6 +563,7 @@ export const approvalDocRepo = {
       postApprovedById: input.postApprovedById ?? null,
       postApprovedByName: input.postApprovedByName ?? null,
       cancelTargetDocId: input.cancelTargetDocId ?? null,
+      company: input.company ?? null,
     });
 
     await persist(created);
@@ -575,6 +585,12 @@ export const approvalDocRepo = {
   async submit(id: string, userId: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
     if (cur.drafterId !== userId) throw new Error('기안자만 상신할 수 있습니다');
+    // 휴일근로 신청서는 같은 근무 일자로 한 번만 — 결재 중이거나 끝난 같은 날 문서가 있으면 막는다(재상신도 같음)
+    const workDate = holidayWorkDateOf(cur);
+    if (workDate) {
+      const dup = findHolidayWorkDuplicate(cur, await loadAll());
+      if (dup) throw new Error(holidayWorkDuplicateMessage(workDate, dup));
+    }
     const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === userId);
     
@@ -585,6 +601,7 @@ export const approvalDocRepo = {
     next.drafterSignType = drafterUser?.signType ?? null;
     next.drafterName = drafterUser?.name ?? null;
     next.drafterPos = drafterUser?.position ?? null;
+    next.drafterTitle = drafterUser?.jobTitle ?? '';
     
     // 결재선의 기안 노드(seq === 1)에도 당시의 서명/인장 스냅샷 정보를 박제
     next.steps = next.steps.map((s) => {
@@ -596,6 +613,7 @@ export const approvalDocRepo = {
           signType: drafterUser?.signType ?? null,
           approverName: drafterUser?.name ?? null,
           approverPos: drafterUser?.position ?? null,
+          approverTitle: drafterUser?.jobTitle ?? '',
           approverDept: drafterUser?.dept ?? null,
         };
       }
@@ -670,6 +688,7 @@ export const approvalDocRepo = {
           signType: actingUser?.signType ?? null,
           approverName: actingUser?.name ?? null,
           approverPos: actingUser?.position ?? null,
+          approverTitle: actingUser?.jobTitle ?? '',
           approverDept: actingUser?.dept ?? null,
         };
       }
@@ -898,6 +917,7 @@ export const approvalDocRepo = {
           signType: delegateUser?.signType ?? null,
           approverName: delegateUser?.name ?? null,
           approverPos: delegateUser?.position ?? null,
+          approverTitle: delegateUser?.jobTitle ?? '',
           approverDept: delegateUser?.dept ?? null,
         };
       }

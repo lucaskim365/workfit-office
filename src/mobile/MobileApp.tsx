@@ -22,6 +22,7 @@ import MobileCalendarScreen from './MobileCalendarScreen';
 import MobileTaskScreen from './MobileTaskScreen';
 import MobileWorkPlanAdminScreen from './MobileWorkPlanAdminScreen';
 import MobileContactScreen from './MobileContactScreen';
+import { MobileFileViewerHost } from './MobileFileViewer';
 import MobileBoardScreen from './MobileBoardScreen';
 import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
@@ -93,7 +94,16 @@ export default function MobileApp() {
     if (!user) return;
     void onForegroundMessage(async (p) => {
       try {
-        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        // 알림 권한이 없어 알림을 못 띄우면 휴대폰 진동만 직접 울린다(안드로이드 — 아이폰은 진동 기능이 없다)
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+          try {
+            navigator.vibrate?.([200, 100, 200]);
+          } catch {
+            /* 진동 없는 기기 */
+          }
+          return;
+        }
+        // 지금 보고 있는 대화방의 메시지는 팝업·진동 모두 없음(카카오톡과 같음) — 다른 방·다른 알림은 아래 알림이 진동과 함께 뜬다
         if (shouldSuppressChatPopup(p.roomId)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
         const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
@@ -101,15 +111,27 @@ export default function MobileApp() {
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl, at: p.at, shownAt: Date.now() };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
-          const options: NotificationOptions & { renotify: boolean } = {
+          // 메시지마다 다른 tag — 늘 새 알림이라 매번 울린다. 띄운 뒤 같은 방 예전 알림은 닫는다(서비스워커 closeOlderOfTarget 과 같음)
+          const target = p.roomId || p.docId || '';
+          const notificationId = `${Date.now()}-${Math.random()}`;
+          const tag = target ? `${target}#${notificationId}` : undefined;
+          // 진동 — vibrate 는 DOM 타입 정의에 없어 넓혀 둔다(안드로이드 크롬이 쓴다)
+          const options: NotificationOptions & { vibrate: number[] } = {
             body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
-            data,
-            tag: p.roomId || p.docId || undefined,
-            renotify: Boolean(p.roomId || p.docId),
+            data: { ...data, workfitNotificationId: notificationId, workfitTarget: target },
+            tag,
+            silent: false,
+            vibrate: [200, 100, 200],
           };
           await reg.showNotification(p.title, options);
+          if (target) {
+            for (const old of await reg.getNotifications()) {
+              const d = old.data as { workfitTarget?: string; workfitNotificationId?: string } | null;
+              if ((d?.workfitTarget === target || old.tag === target) && d?.workfitNotificationId !== notificationId) old.close();
+            }
+          }
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
           new Notification(p.title, { body, icon: '/icons/icon-192.png' });
@@ -125,6 +147,8 @@ export default function MobileApp() {
     <ModalLayerProvider value="z-[130]">
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
       <ReloginDialog variant="mobile" />
+      {/* 앱 안 파일 보기(채팅 첨부 PDF·엑셀·워드) — 휴대폰 뒤로가기로 닫힌다 */}
+      <MobileFileViewerHost />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
         style={{ background: 'var(--color-header-bg)', paddingTop: 'env(safe-area-inset-top)' }}

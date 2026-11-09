@@ -67,7 +67,8 @@ export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; o
    * 서버가 안 붙었으면 아예 묻지 않는다 — 목업 숫자가 진짜 배지로 보이면 안 된다.
    * 이 패널은 도크를 열었을 때만 그려져서 IMAP 왕복이 상시로 일어나지 않는다.
    */
-  const mailUnseenQuery = useUnseenCount(isMailBackendReady || isMailSampleData ? user : null);
+  // 메일이 열린 앱일 때만 센다 — 미공개인데 세면 토큰이 만료된 사람에게 어느 화면에서든 재로그인 창이 뜬다
+  const mailUnseenQuery = useUnseenCount(isGwAppReady('mail') && (isMailBackendReady || isMailSampleData) ? user : null);
   const mailUnseen = useMemo(
     () => Object.values(mailUnseenQuery.data ?? {}).reduce((sum, count) => sum + count, 0),
     [mailUnseenQuery.data],

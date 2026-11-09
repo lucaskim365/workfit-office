@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { routineSchema } from './routine';
+import { toHHmm, type MinuteRange } from './timeGrid';
 
 // calendarEvent의 timeSchema와 같은 식 — 24:00은 받지 않는다.
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
@@ -40,3 +41,13 @@ export const workPlanItemSchema = z.object({
 
 export type WorkPlanItem = z.infer<typeof workPlanItemSchema>;
 export type WorkPlanItemDraft = Pick<WorkPlanItem, 'date' | 'allDay' | 'startTime' | 'endTime' | 'tagId' | 'title' | 'memo'>;
+
+/**
+ * 항목을 옮긴 내용 — 날짜와, 시간표에서 옮겼다면 시각만 바뀐다. 태그·제목·메모는 그대로다.
+ * 종료 미정 항목은 옮겨도 종료 미정으로 남는다.
+ */
+export function movedDraft(item: WorkPlanItem, date: string, range?: MinuteRange): WorkPlanItemDraft {
+  const { allDay, startTime, endTime, tagId, title, memo } = item;
+  if (!range) return { date, allDay, startTime, endTime, tagId, title, memo };
+  return { date, allDay, startTime: toHHmm(range.start), endTime: endTime === null ? null : toHHmm(range.end), tagId, title, memo };
+}

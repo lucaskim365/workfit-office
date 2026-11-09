@@ -45,3 +45,13 @@ test('읽음 처리 중에 새 메시지가 와서 다시 불리면, 끝난 뒤 
   const rows = await chatMessageRepo.listByRoom('room-read');
   assert.deepEqual(rows.map((m) => m.readBy.includes(me.id)), [true, true]);
 });
+
+test('칸을 나중에 만든 DB의 예전 메시지(isEdited 등이 null)도 버리지 않고 읽는다 — 안 그러면 화면에 안 보이고 안 읽음이 영영 남는다', async () => {
+  const { parseStoredChatMessage } = await import('./chatMessage.repo');
+  const m = parseStoredChatMessage({ id: 'old-1', roomId: 'r', senderId: 'U1', senderName: null, text: '예전', type: 'text', at: '2026-08-13T09:21:29', readBy: ['U2'], isEdited: null, reactions: null });
+  assert.ok(m);
+  assert.equal(m!.isEdited, false);
+  assert.equal(m!.senderName, '');
+  // 정말 틀린 문서(시각 없음)는 여전히 건너뛴다
+  assert.equal(parseStoredChatMessage({ id: 'bad-1', roomId: 'r', text: 'x' }), null);
+});

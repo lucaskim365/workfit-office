@@ -10,7 +10,7 @@ import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessa
 import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, useRoomFiles } from '@/features/chat/useChatThread';
 import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
-import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
@@ -24,7 +24,8 @@ import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
-import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
+import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
+import { ChatFileStatusText } from './ChatFileStatusText';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -238,10 +239,13 @@ export default function MobileChatThread() {
 
   // 읽음 처리 — 들어올 때뿐 아니라 방을 열어 둔 동안 새로 온 메시지도(안 그러면 보낸 사람 쪽 숫자가 안 줄어든다)
   const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
+  // 서버가 세는 이 방 안 읽음 — 불러온 최근 메시지 밖(오래된 메시지)에 안 읽은 게 남아 있어도 읽음 처리를 돌린다
+  const { data: unreadMap = {} } = useUnreadCounts(me);
+  const serverUnread = unreadMap[roomId] ?? 0;
   useEffect(() => {
-    if (myUnreadCount > 0) markRead.mutate({ roomId, userId: me });
+    if (myUnreadCount > 0 || serverUnread > 0) markRead.mutate({ roomId, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUnreadCount, roomId, me]);
+  }, [myUnreadCount, serverUnread, roomId, me]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== roomId) {
@@ -518,18 +522,21 @@ export default function MobileChatThread() {
           );
         })}
       </div>
-      {showScrollBtn && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-black/5 active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
-          style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
-        >
-          ⬇ 최근 메시지
-          {hasNewMsg && (
-            <span className="w-2 h-2 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
-          )}
-        </button>
-      )}
+      {/* 높이 0 기준점 — 입력창이 길어져도 버튼이 항상 입력창 바로 위에 뜬다 */}
+      <div className="relative h-0 shrink-0">
+        {showScrollBtn && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-black/5 active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
+            style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
+          >
+            ⬇ 최근 메시지
+            {hasNewMsg && (
+              <span className="w-2 h-2 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
+            )}
+          </button>
+        )}
+      </div>
 
       {readonly ? (
         <div className="shrink-0 border-t border-black/10 bg-black/[0.03] px-4 py-3 text-center text-[11.5px] text-ink3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
@@ -867,6 +874,7 @@ function CompositeMessageBubble({
             className={`relative flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
           >
             <CompositeMessageCard
+              onOpenFile={(a) => void openAttachment(a)}
               text={item.text}
               images={item.images}
               files={item.files}
@@ -1057,7 +1065,7 @@ function MessageBubble({
   } else if (m.type === 'file' && att) {
     body = (
       <button
-        onClick={() => downloadAttachment(att)}
+        onClick={() => openAttachment(att)}
         onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -1071,7 +1079,7 @@ function MessageBubble({
         <FileText size={18} className="shrink-0" />
         <span className="min-w-0 pointer-events-none">
           <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
-          <span className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
+          <ChatFileStatusText url={att.url} name={att.name} size={att.size} className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`} />
         </span>
       </button>
     );
@@ -1093,7 +1101,7 @@ function MessageBubble({
         className="max-w-full min-w-0 rounded-2xl px-3 py-2 chat-text-[13px] select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
-        <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} />
+        <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} onOpenFile={(a) => void openAttachment(a)} />
       </div>
     );
   } else {
@@ -1914,7 +1922,7 @@ function MobileFileBoxModal({
                 )}
                 <div className="min-w-0 flex-1">
                   <button 
-                    onClick={() => downloadAttachment(f.attachment)}
+                    onClick={() => openAttachment(f.attachment)}
                     className="block text-left text-[12.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
                   >
                     {f.attachment.name}

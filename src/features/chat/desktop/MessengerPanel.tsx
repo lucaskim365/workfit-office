@@ -610,10 +610,14 @@ function MessengerThread({
   // 다른 창·탭을 보는 동안은 읽음으로 치지 않는다 — 돌아오면 그때 읽음 처리(windowActive 가 바뀌며 다시 돈다)
   const windowActive = useWindowActive();
   const myUnreadCount = useMemo(() => messages.filter((m) => m.senderId !== me && !m.readBy.includes(me)).length, [messages, me]);
+  // 서버가 세는 이 방 안 읽음 — 불러온 최근 메시지 밖(오래된 메시지)에 안 읽은 게 남아 있어도 읽음 처리를 돌린다.
+  // (화면에 불러온 메시지만 보면, 오래된 안 읽음은 들어가도 영영 안 사라졌다)
+  const { data: unreadMap = {} } = useUnreadCounts(me);
+  const serverUnread = unreadMap[room.id] ?? 0;
   useEffect(() => {
-    if (windowActive && myUnreadCount > 0) markRead.mutate({ roomId: room.id, userId: me });
+    if (windowActive && (myUnreadCount > 0 || serverUnread > 0)) markRead.mutate({ roomId: room.id, userId: me });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myUnreadCount, room.id, me, windowActive]);
+  }, [myUnreadCount, serverUnread, room.id, me, windowActive]);
 
   useEffect(() => {
     if (prevRoomIdRef.current !== room.id) {
@@ -1047,18 +1051,21 @@ function MessengerThread({
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
         )}
       </div>
-      {showScrollBtn && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-[#e2e8f0] active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
-          style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
-        >
-          ⬇ 최근 메시지
-          {hasNewMsg && (
-            <span className="w-2.5 h-2.5 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
-          )}
-        </button>
-      )}
+      {/* 높이 0 기준점 — 입력창이 길어져도 버튼이 항상 입력창 바로 위에 뜬다 */}
+      <div className="relative h-0 shrink-0">
+        {showScrollBtn && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2.5 text-[11px] font-extrabold text-[#101830] shadow-lg border border-[#e2e8f0] active:scale-95 transition-all select-none animate-bounce whitespace-nowrap"
+            style={{ boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)' }}
+          >
+            ⬇ 최근 메시지
+            {hasNewMsg && (
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ff4d4f] shadow-[0_0_6px_#ff4d4f]" />
+            )}
+          </button>
+        )}
+      </div>
 
       {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
 

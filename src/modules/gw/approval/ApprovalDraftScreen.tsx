@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
+import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
+import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { User } from '@/domain/user/schema';
@@ -14,6 +17,7 @@ import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, 
 import { withSealTexts } from '@/domain/approvalForm/headerItems';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
+import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
 import { useActiveApprovalForms } from '@/features/gw/useApprovalForms';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
@@ -45,6 +49,7 @@ import { isEditableStatus } from '@/domain/approvalDoc/engine';
 import { OvertimeAutoFill } from './components/OvertimeAutoFill';
 import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
 import { isRestDay } from '@/shared/ui/form/datePickerGrid';
+import { nowLocalIso } from '@/shared/lib/datetime';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -136,6 +141,7 @@ export default function ApprovalDraftScreen() {
       editDoc={fetchedDoc ?? null}
       cancelTargetDoc={cancelTargetDoc ?? null}
       fixedType={params.get('type') ?? undefined}
+      fixedCompany={parseCompany(params.get('company'))}
       initialDate={params.get('date')}
       initialLeaveType={params.get('leaveType')}
       navigate={navigate}
@@ -148,6 +154,7 @@ function ApprovalDraftInner({
   editDoc,
   cancelTargetDoc,
   fixedType,
+  fixedCompany,
   initialDate,
   initialLeaveType,
   navigate,
@@ -156,6 +163,8 @@ function ApprovalDraftInner({
   editDoc?: ApprovalDoc | null;
   cancelTargetDoc?: ApprovalDoc | null;
   fixedType?: string;
+  /** 서식 선택에서 '[루미팹] …'을 골랐을 때 */
+  fixedCompany?: ApprovalCompany | null;
   initialDate?: string | null;
   initialLeaveType?: string | null;
   navigate: (url: string) => void;
@@ -171,6 +180,10 @@ function ApprovalDraftInner({
   }, [org.depts, me.dept]);
 
   const [code, setCode] = useState<string>(editDoc?.docType ?? (cancelTargetDoc ? '취소신청' : (fixedType ?? '기안')));
+  // 회사 — 고친 문서는 그 문서의 회사, 취소 기안은 원문서의 회사, 새 문서는 서식 선택에서 고른 회사
+  const [company, setCompany] = useState<ApprovalCompany | null>(
+    parseCompany(editDoc ? editDoc.company : cancelTargetDoc ? cancelTargetDoc.company : fixedCompany)
+  );
   const [title, setTitle] = useState(editDoc?.title ?? (cancelTargetDoc ? `[취소 신청] ${cancelTargetDoc.title}` : ''));
   const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? cancelTargetDoc?.securityLevel ?? '일반');
   const [visibility, setVisibility] = useState<'부서' | '비공개'>(editDoc?.visibility === '비공개' || cancelTargetDoc?.visibility === '비공개' ? '비공개' : '부서');
@@ -571,12 +584,13 @@ function ApprovalDraftInner({
   };
 
   // 모달에서 새 서식을 최종 선택했을 때
-  const handleSelectNewForm = (newForm: ApprovalForm) => {
+  const handleSelectNewForm = (newForm: ApprovalForm, nextCompany?: ApprovalCompany | null) => {
     setCode(newForm.code);
+    setCompany(nextCompany ?? null);
     setValues({});
     setTitle('');
     setAmount('');
-    navigate(`/gw/approval/new?type=${encodeURIComponent(newForm.code)}`);
+    navigate(`/gw/approval/new?type=${encodeURIComponent(newForm.code)}${nextCompany ? `&company=${nextCompany}` : ''}`);
   };
 
   /** 마지막으로 브라우저에 보관한 시각. 화면에 "마지막 보관 HH:MM:SS"로 보여 준다. */
@@ -687,6 +701,7 @@ function ApprovalDraftInner({
       postApprovedAt,
       postApprovedById,
       cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
+      company,
       timestamp: Date.now(),
     };
     latestPayloadRef.current = payload;
@@ -1171,6 +1186,7 @@ function ApprovalDraftInner({
       postApprovedById: isPostApprovalSystemEnabled && isPostApproval ? postApprovedById : null,
       postApprovedByName: isPostApprovalSystemEnabled && isPostApproval && postApprovedUser ? postApprovedUser.name : null,
       cancelTargetDocId: editDoc?.cancelTargetDocId ?? cancelTargetDoc?.id ?? null,
+      company,
     };
   };
 
@@ -1194,8 +1210,16 @@ function ApprovalDraftInner({
     if (forSubmit && isOvertimeAutoFill && !isRestDay(String(values['workDate'] ?? ''), new Set(holidayList.map((h) => h.date)))) {
       return '근무 일자는 주말이나 공휴일만 선택할 수 있습니다.';
     }
-    if (forSubmit && isOvertimeAutoFill && !clockOf(values['workEnd'])) {
-      return '퇴근 시각을 입력하세요. 아직 퇴근 전이면 예정 시각을 입력합니다.';
+    // 휴일근로는 사후 신청·승인만 — 지난 날(오늘 포함)·근태 기록의 출근·퇴근 시각이 있어야 상신(시각은 기안자가 고칠 수 없음)
+    if (forSubmit && isOvertimeAutoFill && String(values['workDate'] ?? '') > nowLocalIso().slice(0, 10)) {
+      return '휴일근로는 근무를 마친 뒤(사후)에만 신청할 수 있습니다. 근무 일자를 오늘이나 지난 날로 골라 주세요.';
+    }
+    if (
+      forSubmit &&
+      isOvertimeAutoFill &&
+      (!overtimeFill || overtimeFill.marks.workStart || overtimeFill.marks.workEnd || !clockOf(values['workStart']) || !clockOf(values['workEnd']))
+    ) {
+      return '이 날 근태 기록에 출근·퇴근 시각이 없어 신청할 수 없습니다. 기록이 빠졌으면 근태 정정을 먼저 해 주세요.';
     }
 
     if (code === '휴가' || form?.code === '휴가') {
@@ -1418,11 +1442,25 @@ function ApprovalDraftInner({
   };
 
   /** [상신 발송] — 검증을 통과하면 바로 보내지 않고 확인창을 띄운다 */
-  const onSubmit = () => {
+  const onSubmit = async () => {
     const err = validate(true);
     if (err) {
       alert(err);
       return setError(err);
+    }
+    // 휴일근로 — 같은 날 이미 낸 신청서가 있으면 확인창 전에 알린다(상신 때 저장소도 한 번 더 막는다)
+    const workDate = holidayWorkDateOf({ docType: code, fieldValues: values });
+    if (workDate) {
+      try {
+        const dup = findHolidayWorkDuplicate({ id: editDoc?.id ?? '', docType: code, drafterId: me.id, status: '임시저장', fieldValues: values }, await approvalDocRepo.list());
+        if (dup) {
+          const msg = holidayWorkDuplicateMessage(workDate, dup);
+          alert(msg);
+          return setError(msg);
+        }
+      } catch {
+        /* 목록을 못 읽었으면 상신 단계에서 다시 검사한다 */
+      }
     }
     setError('');
     setShowSubmitConfirm(true);
@@ -1437,7 +1475,9 @@ function ApprovalDraftInner({
       navigate('/gw/approval?box=상신');
     } catch (e) {
       setShowSubmitConfirm(false);
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('휴일근로 신청서를 이미 냈습니다')) alert(msg);
+      setError(msg);
     }
   };
 
@@ -1618,6 +1658,8 @@ function ApprovalDraftInner({
           )}
           <ApprovalDraftDocumentSheet
             form={form}
+            titleMode={editDoc ? editDoc.titleMode : TITLE_MODE_JOB_TITLE}
+            company={company}
             docCode={code}
             me={me}
             title={title}
@@ -1765,7 +1807,7 @@ function ApprovalDraftInner({
           onConfirm={() => {
             if (pendingAutosaveData) {
               const data = pendingAutosaveData;
-              if (!editDoc && data.code) setCode(data.code);
+              if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
               setTitle(data.title || '');
               setValues(data.values || {});
               setAmount(data.amount || '');
@@ -2028,7 +2070,7 @@ function ApprovalDraftInner({
                             if (window.confirm('이 보관본의 내용을 현재 화면으로 불러오시겠습니까?\n(현재 화면의 입력값이 덮어써집니다)')) {
                               const data = selectedBackup.data;
                               if (data) {
-                                if (!editDoc && data.code) setCode(data.code);
+                                if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
                                 setTitle(data.title || '');
                                 setValues(data.values || {});
                                 setAmount(data.amount || '');
@@ -2122,6 +2164,7 @@ function ApprovalDraftInner({
         onClose={() => setShowSelectModal(false)}
         onSelect={handleSelectNewForm}
         currentCode={code}
+        currentCompany={company}
       />
 
       {/* 양식 변경 확인 다이얼로그 (작성 내용 보존 여부 선택) */}

@@ -3,6 +3,7 @@ import { Download, FileArchive, FileCode, FileSpreadsheet, FileText } from 'luci
 import type { Attachment } from '@/domain/chatMessage/schema';
 import { imageIdsOfRich, isSafeHref, parseRichBody, type RichNode } from '@/domain/chatMessage/richBody';
 import { downloadAttachment, fmtSize } from '@/mobile/chatUtils';
+import { ChatFileStatusText } from '@/mobile/ChatFileStatusText';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 
 function fileIcon(name: string) {
@@ -22,11 +23,14 @@ export function RichMessageBody({
   attachments = [],
   mine,
   onOpenImage,
+  onOpenFile,
 }: {
   body: string | null | undefined;
   attachments?: Attachment[];
   mine: boolean;
   onOpenImage?: (att: Attachment, list: Attachment[]) => void;
+  /** 파일 줄을 누르면 — 휴대폰은 앱 안에서 열기(PDF 보기·다른 앱으로 열기), 없으면(PC) 다운로드 단추만 */
+  onOpenFile?: (att: Attachment) => void;
 }) {
   const doc = useMemo(() => parseRichBody(body), [body]);
   const byId = useMemo(() => new Map(attachments.filter((a) => a.id).map((a) => [a.id!, a])), [attachments]);
@@ -153,11 +157,25 @@ export function RichMessageBody({
                   mine ? 'border border-[#91caff]/60 bg-white/80' : 'border border-black/5 bg-black/[0.03]'
                 }`}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-2 ${onOpenFile ? 'cursor-pointer' : ''}`}
+                  onClick={
+                    onOpenFile
+                      ? (e) => {
+                          e.stopPropagation();
+                          onOpenFile(att);
+                        }
+                      : undefined
+                  }
+                >
                   {fileIcon(att.name)}
                   <div className="min-w-0 flex-1">
                     <div className="truncate chat-text-[12px] font-semibold leading-tight text-ink" title={att.name}>{att.name}</div>
-                    <div className="mt-0.5 chat-text-[10px] font-medium text-ink3">{fmtSize(att.size)}</div>
+                    {onOpenFile ? (
+                      <ChatFileStatusText url={att.url} name={att.name} size={att.size} className="mt-0.5 block chat-text-[10px] font-medium text-ink3" />
+                    ) : (
+                      <div className="mt-0.5 chat-text-[10px] font-medium text-ink3">{fmtSize(att.size)}</div>
+                    )}
                   </div>
                 </div>
                 <button

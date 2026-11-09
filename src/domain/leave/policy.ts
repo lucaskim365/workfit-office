@@ -186,6 +186,11 @@ export function isAnnualLeaveDeduction(leaveType?: string | null): boolean {
   return ['연차', '오전반차', '오후반차', '반차', '반반차', 'ANNUAL', 'AM_HALF', 'PM_HALF', 'QUARTER'].includes(leaveType);
 }
 
+/** 연차 변동 내역에 들어갈 문서 — 결재가 끝난 연차 차감 휴가와 대체휴무 */
+export function annualLeaveHistoryDocs<T extends { status: string; form?: { leaveType?: string | null } | null }>(docs: T[]): T[] {
+  return docs.filter((d) => d.status === '완료' && (isAnnualLeaveDeduction(d.form?.leaveType) || d.form?.leaveType === '대체휴무'));
+}
+
 /** 반반차 여부 판별 (단일 기준) */
 export function isQuarterDayLeave(leaveType?: string | null, title?: string | null): boolean {
   const t = (leaveType || '').trim();

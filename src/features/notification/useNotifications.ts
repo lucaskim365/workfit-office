@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationRepo } from '@/data/notification/notification.repo';
 import type { LiveNotification } from '@/domain/liveNotification/schema';
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
+import { allowsToast } from '@/domain/notificationPrefs/schema';
+import { useNotificationPrefs } from './useNotificationPrefs';
 
 const NOTI_KEY = 'liveNotifications';
 
@@ -84,6 +86,10 @@ export function useNotifications(userId: string | undefined) {
 
 export function useToastNotificationsTrigger(userId: string | undefined) {
   const lastCount = useRef(-1);
+  // 구독을 다시 맺지 않고 최신 설정을 본다
+  const { prefs } = useNotificationPrefs(userId);
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   useEffect(() => {
     if (!userId) return;
@@ -91,7 +97,7 @@ export function useToastNotificationsTrigger(userId: string | undefined) {
       const unread = list.filter((n) => !n.read);
       if (lastCount.current !== -1 && unread.length > lastCount.current) {
         const newest = unread[0];
-        if (newest) {
+        if (newest && allowsToast(prefsRef.current, newest.type)) {
           const meta = NOTIFICATION_TYPE_META[newest.type] || { icon: '📢', color: '#16b8cf' };
           const displayText = newest.type === '메신저' ? '새로운 메시지가 도착했습니다.' : newest.text;
           triggerToast(newest.type, newest.senderName, displayText, meta.icon, meta.color);

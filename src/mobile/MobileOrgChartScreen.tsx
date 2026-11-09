@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import {
+  Armchair,
   BarChart3,
   PhoneCall,
   Search,
@@ -16,7 +17,9 @@ import {
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
+import { displayEmpNo, publicEmailOf } from '@/domain/user/publicContact';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileSeatLayoutView from './MobileSeatLayoutView';
 
 // 테스트 계정 숨김은 사람 목록 repo 가 접속자 기준으로 처리한다([[testAccountVisibility]]).
 
@@ -27,7 +30,7 @@ export default function MobileOrgChartScreen() {
     return new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
   }, [employeeProfiles]);
 
-  const [viewMode, setViewMode] = useState<'visual' | 'emergency'>('visual');
+  const [viewMode, setViewMode] = useState<'visual' | 'emergency' | 'seat'>('visual');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // 유효 부서 및 유효 사용자 목록
@@ -47,9 +50,9 @@ export default function MobileOrgChartScreen() {
         subtitle={`${validDepts.length}개 부서 · 총 ${validUsers.length}명`}
       />
 
-      {/* 1. 상단 2단 뷰 모드 탭 바 (비주얼 차트 / 비상연락망) */}
+      {/* 1. 상단 뷰 모드 탭 바 (비주얼 차트 / 비상연락망 / 좌석배치도) */}
       <div className="flex items-center justify-between gap-1 border-b border-border/70 bg-white px-3 py-2 shrink-0 shadow-2xs">
-        <div className="grid grid-cols-2 w-full gap-1 rounded-xl bg-slate-100 p-1">
+        <div className="grid grid-cols-3 w-full gap-1 rounded-xl bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => setViewMode('visual')}
@@ -60,7 +63,7 @@ export default function MobileOrgChartScreen() {
             }`}
           >
             <BarChart3 size={14} />
-            <span>비주얼 조직도</span>
+            <span>조직도</span>
           </button>
 
           <button
@@ -75,11 +78,24 @@ export default function MobileOrgChartScreen() {
             <PhoneCall size={14} />
             <span>비상연락망</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('seat')}
+            className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-bold transition-all ${
+              viewMode === 'seat'
+                ? 'bg-white text-teal shadow-xs'
+                : 'text-ink3 hover:text-ink'
+            }`}
+          >
+            <Armchair size={14} />
+            <span>좌석배치도</span>
+          </button>
         </div>
       </div>
 
       {/* 2. 메인 콘텐츠 영역 */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {/* 모드 1: 모바일 최적화 세로형 비주얼 다이어그램 */}
         {viewMode === 'visual' && (
           <VerticalVisualOrgChart
@@ -98,6 +114,9 @@ export default function MobileOrgChartScreen() {
             onSelectUserId={setSelectedUserId}
           />
         )}
+
+        {/* 모드 3: 좌석배치도(보기 전용) */}
+        {viewMode === 'seat' && <MobileSeatLayoutView users={validUsers} onSelectUserId={setSelectedUserId} />}
       </div>
 
       {/* 3. 임직원 상세 정보 바텀시트 / 모달 */}
@@ -513,7 +532,7 @@ function EmergencyContactMobileView({
           u.dept.includes('위원회') ||
           u.name === '대표이사';
         const phone = isPrivate ? '' : (profile?.phone || (u as any).phone || '');
-        const email = isPrivate ? '' : (u.email || '');
+        const email = publicEmailOf(u) ?? (isPrivate ? '' : (u.email || ''));
 
         return {
           id: u.id,
@@ -521,7 +540,7 @@ function EmergencyContactMobileView({
           dept: u.dept,
           position: u.position,
           jobTitle: u.jobTitle || '',
-          empNo: u.empNo || '—',
+          empNo: displayEmpNo(u) || '—',
           phone,
           email,
           isPrivate,
@@ -613,11 +632,12 @@ function EmployeeDetailModal({
     user.name === '대표이사';
 
   const phone = isPrivate ? '' : (profile?.phone || (user as any).phone || '');
-  const email = isPrivate ? '' : (user.email || '');
+  const email = publicEmailOf(user) ?? (isPrivate ? '' : (user.email || ''));
+  const empNo = displayEmpNo(user);
 
   const handleCopyEmpNo = () => {
-    if (!user.empNo) return;
-    void navigator.clipboard.writeText(user.empNo);
+    if (!empNo) return;
+    void navigator.clipboard.writeText(empNo);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -661,13 +681,13 @@ function EmployeeDetailModal({
             <div className="mt-0.5 text-[12px] font-bold text-teal">
               {user.dept} · {user.position} {user.jobTitle && `(${user.jobTitle})`}
             </div>
-            {user.empNo && (
+            {empNo && (
               <button
                 type="button"
                 onClick={handleCopyEmpNo}
                 className="mt-1 flex items-center gap-1 text-[10px] text-ink3 font-mono hover:text-ink transition-colors"
               >
-                <span>사번: #{user.empNo}</span>
+                <span>사번: #{empNo}</span>
                 {copied ? <Check size={11} className="text-teal" /> : <Copy size={11} />}
               </button>
             )}

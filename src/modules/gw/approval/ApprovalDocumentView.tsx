@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { usePermission } from '@/features/auth/usePermission';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -22,6 +23,8 @@ import { SealFieldRow, SealMarkProvider } from './components/CompanySeal';
 import { sealTextOf } from '@/domain/approvalForm/headerItems';
 import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm/seal';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
+import { isLumefabDoc } from '@/domain/approvalDoc/company';
+import { CompanyTopMark } from './components/CompanyTopMark';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 
@@ -518,12 +521,16 @@ export function ApprovalDocumentView({
       {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
       <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
-        {!externalDoc && headerShown(form, 'topBar') && (
+        {!externalDoc && (headerShown(form, 'topBar') || isLumefabDoc(doc)) && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
+          {isLumefabDoc(doc) ? (
+            <CompanyTopMark company="lumefab" />
+          ) : (
           <div className="flex items-center gap-2 h-full">
             <img src={processedLogo} alt="WorkFit Logo" className="h-6 w-auto object-contain" />
             <span className="text-[11px] font-semibold tracking-wide text-[#888] self-center">workfit 그룹웨어 · 전자결재</span>
           </div>
+          )}
           <div className="text-[11px] text-[#888] self-center">{doc.docNo ? docNoOf(doc) : ''}</div>
         </div>
         )}
@@ -591,7 +598,7 @@ export function ApprovalDocumentView({
           {/* 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]] */}
           {!externalDoc && stampTableShown(doc.status, sealForm) && (
             <div className="relative">
-              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
+              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} titleOf={(s) => stepTitleOf(doc, s, org.userById(s.approverId) || users.find((x) => x.id === s.approverId))} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">

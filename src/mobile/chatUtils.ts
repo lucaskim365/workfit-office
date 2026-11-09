@@ -55,10 +55,48 @@ export function msgPreview(m: ChatMessage): string {
 }
 
 import { downloadFile } from '@/shared/lib/download';
+import { openFileViewer, viewerKindOf } from './MobileFileViewer';
+import { canShareFileType, getChatFile, loadChatFile, saveBlob, shareFile } from './chatFileStore';
 
 /**
  * 첨부 다운로드 — 원본 파일명 보존.
  */
 export function downloadAttachment(att: Attachment) {
   void downloadFile(att.url, att.name);
+}
+
+/** 받는 중인 첨부 — 받는 동안 또 눌러도 겹쳐 받지 않게 */
+const opening = new Set<string>();
+
+/**
+ * 첨부 열기(카카오톡처럼) — 처음 누르면 받아서 앱 보관함에 두고 열고, 다음부터는 보관함에서 바로 연다(chatFileStore).
+ * - PDF: 앱 안 보기 화면(휴대폰 뒤로가기로 대화방에 돌아옴)
+ * - 그 밖(한글·엑셀 등): 휴대폰 공유 창(다른 앱으로 열기 — 앱 화면 위에 떠서 뒤로가기로 돌아옴). 공유 창은 누른 직후에만
+ *   띄울 수 있어(휴대폰 보안 규칙) 받는 데 오래 걸렸으면 말풍선이 '받음'으로 바뀌고, 다시 누르면 바로 뜬다.
+ *   공유 창이 없는 기기는 휴대폰에 저장(다운로드)
+ * 다운로드한 파일을 다른 뷰어 앱으로 열면 휴대폰에 따라 뒤로가기에 앱이 아니라 홈 화면으로 나가 버렸다
+ */
+export async function openAttachment(att: Attachment) {
+  if (opening.has(att.url)) return;
+  // 한글·엑셀·워드 등 공유 창으로 못 넘기는 문서 — 바로 다운로드(휴대폰 다운로드 알림의 [열기]로 연다)
+  if (!viewerKindOf(att.name, att.mime) && !canShareFileType(att.name)) return downloadAttachment(att);
+  opening.add(att.url);
+  try {
+    let blob = await getChatFile(att.url);
+    const fromCache = !!blob;
+    if (!blob) {
+      try {
+        blob = await loadChatFile(att.url, att.mime);
+      } catch {
+        return; // 말풍선이 '받기 실패'를 보인다
+      }
+    }
+    // PDF·엑셀·워드 — 앱 안 보기 화면
+    if (viewerKindOf(att.name, att.mime)) return openFileViewer({ blob, name: att.name, mime: att.mime });
+    const r = await shareFile(blob, att.name, att.mime);
+    // 공유 창이 없거나 휴대폰이 이 파일을 거절 — 보관함에서 바로 꺼냈는데 거절했으면 '누른 지 오래됨'이 아니라 종류 거절이다
+    if (r === 'unsupported' || (r === 'expired' && fromCache)) saveBlob(blob, att.name);
+  } finally {
+    opening.delete(att.url);
+  }
 }

@@ -2,6 +2,7 @@ import type { Attachment } from '@/domain/chatMessage/schema';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { ImageBundleGrid } from './ImageBundleGrid';
 import { fmtSize, downloadAttachment } from '@/mobile/chatUtils';
+import { ChatFileStatusText } from '@/mobile/ChatFileStatusText';
 import { FileText, Download, FileArchive, FileSpreadsheet, FileCode } from 'lucide-react';
 
 interface CompositeMessageCardProps {
@@ -10,6 +11,8 @@ interface CompositeMessageCardProps {
   files?: Attachment[];
   mine: boolean;
   onOpenImage?: (att: Attachment, list: Attachment[]) => void;
+  /** 파일 줄을 누르면 — 휴대폰은 앱 안에서 열기(PDF 보기·다른 앱으로 열기), 없으면(PC) 다운로드 단추만 */
+  onOpenFile?: (att: Attachment) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   searchQuery?: string;
   isSearchActive?: boolean;
@@ -33,6 +36,7 @@ export function CompositeMessageCard({
   files = [],
   mine,
   onOpenImage,
+  onOpenFile,
   onContextMenu,
 }: CompositeMessageCardProps) {
   const hasText = Boolean(text && text.trim());
@@ -95,15 +99,22 @@ export function CompositeMessageCard({
                     : 'bg-black/[0.03] hover:bg-black/[0.06] border border-black/5'
                 }`}
               >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div
+                  className={`flex items-center gap-2 min-w-0 flex-1 ${onOpenFile ? 'cursor-pointer' : ''}`}
+                  onClick={onOpenFile ? () => onOpenFile(att) : undefined}
+                >
                   {getFileIcon(att.name)}
                   <div className="min-w-0 flex-1">
                     <div className="truncate chat-text-[12px] font-semibold text-ink leading-tight" title={att.name}>
                       {att.name}
                     </div>
-                    <div className="chat-text-[10px] text-ink3 font-medium mt-0.5">
-                      {fmtSize(att.size)}
-                    </div>
+                    {onOpenFile ? (
+                      <ChatFileStatusText url={att.url} name={att.name} size={att.size} className="block chat-text-[10px] text-ink3 font-medium mt-0.5" />
+                    ) : (
+                      <div className="chat-text-[10px] text-ink3 font-medium mt-0.5">
+                        {fmtSize(att.size)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
