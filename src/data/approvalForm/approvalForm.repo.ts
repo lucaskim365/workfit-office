@@ -29,7 +29,8 @@ const backend = createCrudBackend<ApprovalForm>({
   idOf: (x) => x.id,
   seed: APPROVAL_FORM_SEED.map((x) => approvalFormSchema.parse(x)),
   jsonFields: ['fields'],
-  stripFields: ['allowedJobTitles', 'allowedUserIds', 'referenceDeptId', 'referenceUserId'],
+  // 기본 참조 대상(referenceDeptId·referenceUserId)은 저장한다 — DB 에 칸이 생겼으므로(scripts/appwrite-schema.ts). 아래 둘은 아직 칸이 없어 뺀다
+  stripFields: ['allowedJobTitles', 'allowedUserIds'],
 });
 
 const folderBackend = createCrudBackend<ApprovalFolder>({
