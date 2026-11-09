@@ -704,7 +704,7 @@ export function SheetDraftForm({
           sheet={sheet}
           // 문서 머리 표와 폭·선 색 맞춤 — 넓은 서식은 줄이지 않고 옆으로 밀어 쓴다(글씨가 작아지지 않게)
           // 테두리 2px 만큼 덜 늘린다 — 꽉 채우면 넘침 상자(overflow-x-auto)가 맨 오른쪽 테두리를 잘라 먹는다
-          stretchTo={DOC_SHEET_VIEW.stretchTo - 2}
+          stretchTo={DOC_SHEET_VIEW.stretchTo - 4}
           thinBorderColor={DOC_SHEET_VIEW.thinBorderColor}
           renderCell={(r, c) => {
             const props = approvalCellProps(sheet, r, c);
