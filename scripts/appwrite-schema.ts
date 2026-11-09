@@ -537,6 +537,9 @@ const COLLECTIONS: CollectionDef[] = [
       S('folderId', 64),
       S('recipientDeptId', 64),
       S('recipientUserId', 64),
+      // 기본 참조 대상(서식 설정) — 없을 땐 저장소가 이 값을 빼고 저장해 설정이 사라졌다
+      S('referenceDeptId', 64),
+      S('referenceUserId', 64),
       BOOL('recipientDrafter'),
       INT('allowedPositionFromRank'),
       INT('allowedPositionToRank'),
