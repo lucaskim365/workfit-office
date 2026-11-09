@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { suggestFormCode } from '@/domain/approvalForm/formCode';
-import { ArrowLeft, Eye, FileSpreadsheet, History, Save, X } from 'lucide-react';
+import { ArrowLeft, Asterisk, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Repeat, Save, Stamp, Tag, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { legacyFormToSheet } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
@@ -43,6 +43,9 @@ import { SheetCellPanel } from './SheetCellPanel';
 import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
 import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+
+/** 편집기 칸 표시 방식 */
+type MarksMode = 'simple' | 'detail' | 'off';
 
 /**
  * 시트 서식 편집기(관리자) — 엑셀 불러오기, 틀 편집, 칸 속성, 버전 저장.
@@ -134,6 +137,23 @@ function Designer({
       return 'paper';
     }
   });
+  // 칸 표시 — 간단(입력 칸은 연한 바탕, 특별한 칸만 작은 아이콘) / 자세히(글자 꼬리표 전부) / 끔(엑셀처럼 깨끗하게)
+  const [markMode, setMarkMode] = useState<MarksMode>(() => {
+    try {
+      const v = localStorage.getItem('sheetDesigner.marks');
+      return v === 'detail' || v === 'off' ? v : 'simple';
+    } catch {
+      return 'simple';
+    }
+  });
+  const changeMarks = (v: MarksMode) => {
+    setMarkMode(v);
+    try {
+      localStorage.setItem('sheetDesigner.marks', v);
+    } catch {
+      /* 저장 못 해도 이번 화면은 바뀐다 */
+    }
+  };
   const changeView = (v: 'paper' | 'grid') => {
     setView(v);
     try {
@@ -272,6 +292,7 @@ function Designer({
   // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
   const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
   const badge = (r: number, c: number) => {
+    if (markMode === 'off') return null;
     const p = approvalCellProps(sheet, r, c);
     // 반복 구간 — 첫 열 왼쪽에 보라색 띠, 첫 행에 이름
     const sec = c === 0 ? sections.find((x) => r >= x.first && r <= x.last) : undefined;
@@ -345,7 +366,8 @@ function Designer({
           {`{${bindLabel(p.bind).replace(/^.+? · /, '')}}`}
         </span>
       ) : null;
-    const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} /> : null);
+    const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} quiet={markMode === 'simple'} /> : null);
+    if (markMode === 'simple') return simpleBadge(r, p, sec, ext, cond ? condText : undefined, inputLook);
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) {
       const isDoc = p.bind.startsWith('doc.');
@@ -381,6 +403,67 @@ function Designer({
             </span>
           ))}
         </span>
+      </>
+    );
+  };
+
+  /**
+   * 간단 표시 — 칸 내용을 가리지 않게.
+   * 입력 칸: 연한 노란 바탕(기안 화면의 입력 칸 색). 빈 칸엔 글 아닌 종류만 흐리게(금액·날짜 등).
+   * 특별한 칸(필수·잠금·비공개·직인·칸 이름·종속·안내): 오른쪽 위 작은 아이콘 — 마우스를 올리면 설명.
+   * 자동 채우기·문서 항목은 '{기안자}' 같은 흐린 글자로 이미 보이므로 따로 표시하지 않는다.
+   * 행 표시(반복 구간·대외 숨김·보이기 조건): 아이콘으로(반복 구간 보라 띠는 그대로)
+   */
+  const simpleBadge = (
+    r: number,
+    p: ReturnType<typeof approvalCellProps>,
+    sec: ReturnType<typeof repeatSections>[number] | undefined,
+    ext: boolean,
+    condText: string | undefined,
+    inputLook: React.ReactNode,
+  ) => {
+    type Mark = { key: string; icon: React.ReactNode; cls: string; title: string };
+    const ic = 'h-2.5 w-2.5';
+    const icons: Mark[] = [];
+    if (p.required && p.input) icons.push({ key: 'req', icon: <Asterisk className={ic} />, cls: 'text-rose-500', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
+    if (p.name) icons.push({ key: 'name', icon: <Tag className={ic} />, cls: 'text-teal', title: `칸 이름: ${nameLabel(p.name)}` });
+    if (p.lock) icons.push({ key: 'lock', icon: <Lock className={ic} />, cls: 'text-ink3', title: '기안자 수정 잠금' });
+    if (p.secret) icons.push({ key: 'secret', icon: <EyeOff className={ic} />, cls: 'text-rose-500', title: '비공개' });
+    if (p.seal) icons.push({ key: 'seal', icon: <Stamp className={ic} />, cls: 'text-red-600', title: '회사 직인 자리' });
+    if (p.input?.depends) {
+      const dep = p.input.depends.name;
+      icons.push({ key: 'dep', icon: <GitBranch className={ic} />, cls: 'text-indigo-500', title: `종속 선택 — '${condLabels.get(dep) ?? nameLabel(dep)}' 값에 따라 고를 항목이 바뀝니다` });
+    }
+    if (p.guide) icons.push({ key: 'guide', icon: <Info className={ic} />, cls: 'text-ink3', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
+    const rowIcons: Mark[] = [];
+    if (condText) rowIcons.push({ key: 'cond', icon: <Filter className={ic} />, cls: 'text-indigo-500', title: `행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)` });
+    if (ext) rowIcons.push({ key: 'ext', icon: <EyeOff className={ic} />, cls: 'text-slate-500', title: "대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다" });
+    const iconRow = (list: Mark[], pos: string) =>
+      list.length ? (
+        <span className={`pointer-events-none absolute ${pos} z-[1] flex gap-px rounded-sm bg-white/85 px-px`}>
+          {list.map((m) => (
+            // 아이콘에만 마우스 — 설명(title)이 뜨게. 누르면 칸 선택으로 이어진다
+            <span key={m.key} title={m.title} className={`pointer-events-auto flex h-3 w-3 items-center justify-center ${m.cls}`}>
+              {m.icon}
+            </span>
+          ))}
+        </span>
+      ) : null;
+    return (
+      <>
+        {p.input && !p.bind && <span aria-hidden className="pointer-events-none absolute inset-0 bg-amber-300/15" />}
+        {inputLook}
+        {sec && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-violet-500" />}
+        {sec && r === sec.first && (
+          <span
+            title={`반복 구간: ${sec.label} (${sec.first + 1}~${sec.last + 1}행) — 기안자가 행을 추가·삭제`}
+            className="absolute left-1 top-0.5 z-[1] flex h-3 w-3 items-center justify-center rounded-sm bg-violet-500 text-white"
+          >
+            <Repeat className="h-2 w-2" />
+          </span>
+        )}
+        {iconRow(icons, 'right-0.5 top-0.5')}
+        {iconRow(rowIcons, 'bottom-0.5 right-0.5')}
       </>
     );
   };
@@ -719,6 +802,20 @@ function Designer({
                   ] as const
                 ).map(([k, label]) => (
                   <button key={k} type="button" onClick={() => changeView(k)} className={`rounded px-2 py-0.5 ${view === k ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="칸 표시 — 간단: 입력 칸은 연한 바탕, 특별한 칸만 작은 아이콘 · 자세히: 모든 표시를 글자로 · 끔: 표시 없이 엑셀처럼">
+                <span className="px-1 text-ink3">표시</span>
+                {(
+                  [
+                    ['simple', '간단'],
+                    ['detail', '자세히'],
+                    ['off', '끔'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => changeMarks(k)} className={`rounded px-2 py-0.5 ${markMode === k ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'}`}>
                     {label}
                   </button>
                 ))}
