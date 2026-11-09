@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePrintFit } from '@/shared/lib/printFit';
+import { useEffect, useMemo, useState } from 'react';
 import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { usePermission } from '@/features/auth/usePermission';
@@ -79,9 +78,6 @@ export function ApprovalDocumentView({
   const { data: forms = [] } = useApprovalForms();
   const [accessibleRelatedDocs, setAccessibleRelatedDocs] = useState<RelatedDoc[]>([]);
   const [activeRelatedDocId, setActiveRelatedDocId] = useState<string | null>(null);
-  // 인쇄할 때 A4 폭에 맞추고, 둘째 장이 조금만 넘치면 한 장으로 줄인다
-  const printRef = useRef<HTMLDivElement>(null);
-  usePrintFit(printRef);
 
   useEffect(() => {
     if (!doc.relatedDocs || doc.relatedDocs.length === 0) {
@@ -523,7 +519,7 @@ export function ApprovalDocumentView({
       )}
 
       {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
-      <div ref={printRef} className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
+      <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
         {!externalDoc && (headerShown(form, 'topBar') || isLumefabDoc(doc)) && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">

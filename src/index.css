@@ -259,18 +259,6 @@ body {
     max-height: none !important;
   }
 
-  /* 인쇄 맞춤(src/shared/lib/printFit.ts) — 화면 배율을 풀고, 문서를 화면 모양(폭 800px) 그대로 배율만 줄여 찍는다.
-     배율은 인쇄 직전에 재서 넣는다: A4 폭 맞춤, 둘째 장이 20% 미만이면 한 장에 맞춤 */
-  html.print-fit body {
-    zoom: 1 !important;
-  }
-  html.print-fit .approval-print[data-print-fit] {
-    box-sizing: border-box !important;
-    width: 800px !important;
-    padding: 28px 32px !important;
-    zoom: var(--print-fit-zoom, 1) !important;
-  }
-
   .print-avoid-break {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
