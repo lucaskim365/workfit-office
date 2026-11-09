@@ -20,7 +20,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
 import type { ApprovalCompany } from '@/domain/approvalDoc/company';
-import { CompanyTopMark } from './CompanyTopMark';
+import { CompanyTopMark, SheetTopMark } from './CompanyTopMark';
 import {
   FileText,
   Paperclip,
@@ -38,7 +38,7 @@ import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, isHolidayWorkLocked, numberField
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
 import type { SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
-import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './CompanyLetterhead';
+import { CompanyLetterhead, CompanyLetterheadBlock } from './CompanyLetterhead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -407,6 +407,8 @@ export function ApprovalDraftDocumentSheet({
   const docNoField = form?.fields.find((f) => f.type === '자동번호' && f.autoNumber?.asDocNo);
   const shownDocNo = docNoField ? String(values[docNoField.key] ?? '') : editDocNo ?? '';
   const showDocTitle = headerShown(form, 'docTitle');
+  /** 문서 머리가 모두 시트 안 — 위 상단 바·큰 제목·결재란·문서 정보가 하나도 안 그려짐 */
+  const sheetOnlyHead = !!sheetBody && !company && !headerShown(form, 'topBar') && !showDocTitle && !stampTableInHeader(form) && !headerShown(form, 'drafter');
 
   // 결재란·기안자 서명·로고 — 문서 머리와, 문서 머리를 시트에 넣은 시트 서식의 칸(SheetSlots)이 함께 쓴다
   const stampBlock = (
@@ -479,8 +481,8 @@ export function ApprovalDraftDocumentSheet({
   );
   const slots: SheetSlots = {
     approvalLine: stampBlock,
-    // 회사 정보 화면에 등록한 로고 — 없으면 작성 화면에만 자리 안내
-    logo: <CompanyLogo fallback={<span className="text-[11px] text-[#aaa] print:hidden">(회사 로고 — 회사 정보 화면에서 등록)</span>} />,
+    // 기존 문서 상단 바와 같은 모양 — 회사 정보 화면에 등록한 로고(없으면 기존 상단 바 로고) + 그룹웨어 글자
+    logo: <SheetTopMark fallbackSrc={processedLogo} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignBlock,
   };
@@ -702,7 +704,7 @@ export function ApprovalDraftDocumentSheet({
       })()}
 
       {/* 5. 문서 제목 및 금액 표 (ApprovalDocMetaTable과 100% 일치 + 인라인 인풋) */}
-      <table className="mt-2 w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed">
+      <table className={`${sheetOnlyHead ? '' : 'mt-2'} w-full border-collapse text-[11.5px] sm:text-[12px] table-fixed`}>
         <tbody>
           {titleRowShown(form) && (
           <tr>
@@ -1265,7 +1267,8 @@ export function ApprovalDraftDocumentSheet({
       )}
 
       {/* 8. 시트 서식 본문 */}
-      {sheetBody && <div className="mt-3">{typeof sheetBody === 'function' ? sheetBody(slots) : sheetBody}</div>}
+      {/* 문서 머리 전체가 시트 안이면(위에 아무것도 없음) 띄우지 않는다 — 시트 맨 위 로고 줄이 기존 상단 바 자리에 붙게 */}
+      {sheetBody && <div className={sheetOnlyHead ? '' : 'mt-3'}>{typeof sheetBody === 'function' ? sheetBody(slots) : sheetBody}</div>}
 
       {/* 9. 첨부파일 영역 (ApprovalDocumentView와 100% 일치 표 규격 + 드래그앤드롭 업로더) */}
       <table className="mt-4 w-full border-collapse text-[12px] table-fixed">

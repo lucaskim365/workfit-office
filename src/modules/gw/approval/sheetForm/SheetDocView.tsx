@@ -7,7 +7,7 @@ import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoVal
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
-import { SlotCell } from './SheetDraftForm';
+import { SheetFormTitle, SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
 
 /** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
@@ -89,7 +89,8 @@ export function SheetDocView({
         if (props.guide) return '';
         const bind = props.bind;
         const slot = slotOf(bind);
-        if (slot) return <SlotCell node={slots?.[slot]} />;
+        if (slot) return <SlotCell node={slots?.[slot]} slot={slot} />;
+        if (bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(bind, docInfo) ?? ''} />;
         return draftInfoValue(bind, docInfo);
       }}
       renderOverlay={(r, c) =>

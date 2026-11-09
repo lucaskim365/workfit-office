@@ -29,9 +29,9 @@ import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, sheetHasSecret, type SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
 import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
-import { CompanyLetterhead, CompanyLetterheadBlock, CompanyLogo } from './components/CompanyLetterhead';
+import { CompanyLetterhead, CompanyLetterheadBlock } from './components/CompanyLetterhead';
 import { isLumefabDoc } from '@/domain/approvalDoc/company';
-import { CompanyTopMark } from './components/CompanyTopMark';
+import { CompanyTopMark, SheetTopMark } from './components/CompanyTopMark';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -350,6 +350,10 @@ export function ApprovalDocumentView({
   const titleField = titleFieldOf(form?.fields);
   const viewValues = titleField ? { ...doc.fieldValues, [titleField.key]: doc.title } : doc.fieldValues;
   const showDocTitle = headerShown(form, 'docTitle');
+  /** 문서 머리가 모두 시트 안이고 위에 안내 띠도 없음 — 시트를 띄우지 않아 맨 위 로고 줄이 기존 상단 바 자리에 붙게 */
+  const sheetOnlyHead =
+    !isLumefabDoc(doc) && !headerShown(form, 'topBar') && !showDocTitle && !stampTableInHeader(form) && !headerShown(form, 'drafter') &&
+    !doc.cancelTargetDocId && doc.status !== '취소완료' && doc.status !== '회수' && !doc.isPostApproval;
 
   const closing = (form?.closing !== undefined && form?.closing !== null)
     ? form.closing
@@ -557,7 +561,7 @@ export function ApprovalDocumentView({
   // 문서 머리를 시트에 넣은 시트 서식 — 결재란·로고·기안자 서명 칸에 그릴 것
   const sheetSlots: SheetSlots = {
     approvalLine: showStamp ? stampNode : null,
-    logo: <CompanyLogo />,
+    logo: <SheetTopMark fallbackSrc={processedLogo} external={externalDoc} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignNode,
   };
@@ -765,7 +769,7 @@ export function ApprovalDocumentView({
         />
 
         {sheetDoc && (
-          <div className="mt-3">
+          <div className={sheetOnlyHead ? '' : 'mt-3'}>
             <SheetDocView
               fieldValues={doc.fieldValues}
               masked={isMaskingActive}

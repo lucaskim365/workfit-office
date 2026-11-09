@@ -180,10 +180,45 @@ function DocFieldCell({ bind, doc, onChange }: { bind: DocFieldBind; doc: DocFie
 }
 
 /** 문서 머리 부품을 칸 가운데에(칸 정렬을 따름) — 칸보다 크면 칸이 늘어난다 */
-export function SlotCell({ node }: { node: import('react').ReactNode }) {
+export function SlotCell({ node, slot }: { node: import('react').ReactNode; slot?: string }) {
   if (!node) return '';
   // 줄 안 상자(inline) — 칸의 가로 정렬(text-align)을 그대로 따른다
-  return <span className="inline-flex py-0.5 align-middle">{node}</span>;
+  return <span data-slot={slot} className="inline-flex py-0.5 align-middle">{node}</span>;
+}
+
+/**
+ * 큰 제목(문서 이름) 칸 — 기존 문서 머리와 같은 모양(굵기·자간)으로, 같은 줄의 결재란을 뺀 나머지 폭 가운데에 놓는다.
+ * 시트는 제목 줄을 반으로 갈라 왼쪽 반에 제목을 두므로, 결재란이 좁으면 제목이 왼쪽으로 치우쳐 보인다 — 그만큼 오른쪽으로 옮긴다
+ */
+export function SheetFormTitle({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    const td = ref.current?.closest('td');
+    const tr = td?.closest('tr');
+    if (!td || !tr) return;
+    // 옮긴 글자가 칸 밖(결재란 쪽 빈자리)으로 나가도 잘리지 않게
+    td.style.overflow = 'visible';
+    const measure = () => {
+      const stamp = tr.querySelector<HTMLElement>('[data-slot="approvalLine"]');
+      const t = td.getBoundingClientRect();
+      const s = stamp?.getBoundingClientRect();
+      if (!s || !t.width || s.left <= t.right) return setShift(0);
+      // 화면 배율(zoom) — 화면 px 를 CSS px 로
+      setShift(((s.left - t.right) / 2) * (td.offsetWidth / t.width));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(tr);
+    const stamp = tr.querySelector('[data-slot="approvalLine"]');
+    if (stamp) ro.observe(stamp);
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <span ref={ref} className="inline-block font-extrabold tracking-[0.15em]" style={shift ? { transform: `translateX(${shift}px)` } : undefined}>
+      {text}
+    </span>
+  );
 }
 
 /**
@@ -598,7 +633,7 @@ export function SheetDraftForm({
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
-    <div>
+    <div className="relative">
       {canImport && (
         // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 같은 이름 칸 값을 복사(§11.4). 인쇄에는 안 나옴
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded border border-dashed border-teal/40 bg-teal-soft/20 px-2 py-1.5 text-[11px] print:hidden">
@@ -619,7 +654,8 @@ export function SheetDraftForm({
       )}
       {/* 표 모양 고치기 — 열·행 넣기·지우기, 병합, 수식(금액·연동 칸 등 보호 칸은 그대로). 인쇄에는 안 나옴 */}
       {canEditShape && !editing && (
-        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] print:hidden">
+        // 시트 위(종이 윗여백)에 띄운다 — 줄을 차지하면 시트 맨 위 로고가 종이 위에서 떨어져 보인다
+        <div className="absolute bottom-full right-0 mb-1 flex flex-wrap items-center justify-end gap-1.5 text-[11px] print:hidden">
           {own && (
             <span className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">기안자가 표 모양을 고친 문서입니다</span>
           )}
@@ -718,7 +754,8 @@ export function SheetDraftForm({
             if (props.guide) return <span className="text-[11px] text-[#777] print:hidden">{String(sheet.rows[r]?.[sheet.cols[c]] ?? '')}</span>;
             // 문서 머리 부품 칸 — 결재란(누르면 결재선 편집)·로고·기안자 서명
             const slot = slotOf(bind);
-            if (slot) return <SlotCell node={slots?.[slot]} />;
+            if (slot) return <SlotCell node={slots?.[slot]} slot={slot} />;
+            if (bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(bind, draftInfo) ?? ''} />;
             // 문서 항목 칸 — 문서의 제목·보존연한·공개범위를 여기서 쓴다
             if (isDocFieldBind(bind)) return docFields && onDocField ? <DocFieldCell bind={bind} doc={docFields} onChange={onDocField} /> : '';
             // 기안 정보 칸 — 시스템 값(입력 칸이어도 고칠 수 없음)
