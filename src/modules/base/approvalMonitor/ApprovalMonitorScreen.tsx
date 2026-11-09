@@ -405,7 +405,12 @@ export default function ApprovalMonitorScreen() {
           onClick={() => setViewDoc(null)}
         >
           <div
-            className="flex max-h-[92vh] w-[880px] max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-xl"
+            className="flex flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-xl"
+            // 화면 배율(--font-scale)만큼 커지므로 실제 화면 크기에 맞춰 제한한다(배율 1.48 에서 아래·오른쪽이 잘리던 것)
+            style={{
+              width: 'min(880px, calc(100vw / var(--font-scale, 1) - 32px))',
+              maxHeight: 'calc(100vh / var(--font-scale, 1) - 32px)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5 print:hidden">
@@ -429,7 +434,8 @@ export default function ApprovalMonitorScreen() {
               </div>
             </div>
             <div className="menu-scroll flex-1 overflow-auto bg-panel-alt/30 p-4">
-              <div className="flex justify-center">
+              {/* 창이 문서보다 좁으면 가운데 정렬 때문에 왼쪽이 잘리므로 w-fit + mx-auto 로 가운데 두고 가로 스크롤 */}
+              <div className="mx-auto w-fit">
                 <ApprovalDocumentView doc={viewDoc} isPreview={true} />
               </div>
             </div>
