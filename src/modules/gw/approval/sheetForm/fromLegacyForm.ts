@@ -419,7 +419,12 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         const st = t.cellStyles[`${i}:${tcol}`];
         const patch: Partial<CellStyle> = {};
         if (st?.bold) patch.bold = true;
-        if (st?.align) patch.align = st.align;
+        // 금액·숫자 칸(금액 입력·금액/백분율 수식)은 오른쪽 정렬 — 기존 표는 칸을 모두 가운데로 두어 자릿수가 세로로 안 맞았다
+        const numericCell = formula
+          ? legacyFormula?.format === 'currency' || legacyFormula?.format === 'percent1' || legacyFormula?.format === 'percent2'
+          : !legacyFormula && !st?.seal && st?.numFmt === 'currency' && (!text || parseNumber(text) !== null);
+        if (numericCell) patch.align = 'right';
+        else if (st?.align) patch.align = st.align;
         if (st?.bg === 'gray') patch.bg = LABEL_BG;
         if (st?.numFmt && st.numFmt !== 'general') patch.numFmt = st.numFmt;
         if (Object.keys(patch).length) s = applyStyle(s, span(r, j, j), patch);

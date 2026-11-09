@@ -247,3 +247,32 @@ test('기존 표에서 줄을 더하던 곳 — 같은 모양 품목 줄이 이�
   // 데이터 줄 하나에 이름표가 있으면(직인란 등) 품목 줄 아님
   assert.equal(legacyRepeatRows({ cols: ['A', 'B'], rows: [{ A: '발주자', B: '' }, { A: '날짜', B: '년 월 일' }], cellFormulas: {} }, 1), null);
 });
+
+test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(기존 표의 가운데 정렬 대신), 글자 칸은 그대로', () => {
+  const table = JSON.stringify({
+    version: 2,
+    cols: ['a', 'b', 'c'],
+    rows: [
+      { a: '품명', b: '단가', c: '공급가액' },
+      { a: '', b: '', c: '' },
+    ],
+    colWidths: {},
+    tableWidth: '100%',
+    merges: [],
+    cellFormulas: { '1:c': { expression: '=B2*2', format: 'currency' } },
+    cellStyles: {
+      '1:a': { align: 'center' },
+      '1:b': { align: 'center', numFmt: 'currency' },
+      '1:c': { align: 'center', numFmt: 'currency' },
+    },
+    secretCols: [],
+    secretCells: [],
+    secretRows: [],
+  });
+  const { sheet: s } = legacyFormToSheet(legacyForm('발주', [{ key: 'items', label: '품목', type: '표', placeholder: table }]));
+  const head = findText(s, '품명')!;
+  const r = head.r + 1;
+  assert.equal(s.styles[`${r}:${s.cols[0]}`]?.align, 'center', '글자 칸은 기존 정렬');
+  assert.equal(s.styles[`${r}:${s.cols[1]}`]?.align, 'right', '금액 입력 칸');
+  assert.equal(s.styles[`${r}:${s.cols[2]}`]?.align, 'right', '금액 수식 칸');
+});

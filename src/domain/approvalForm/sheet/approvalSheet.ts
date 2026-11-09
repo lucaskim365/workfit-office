@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { cellKey, colLetter, mergeRange, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
+import { applyStyle, cellKey, colLetter, mergeRange, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
 import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 import { SHEET_AUTO_NO_NS } from '@/domain/approvalForm/sheetAutoNumber';
 import { autoNumberConfigSchema, type AutoNumberConfig } from '@/domain/approvalForm/autoNumber';
@@ -543,7 +543,21 @@ export function setApprovalProp(
   value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {
   const v = value === false || value === '' ? undefined : value;
-  return visibleCells(s, range).reduce((acc, { r, c }) => setCellMeta(acc, ns, r, c, v), s);
+  let out = visibleCells(s, range).reduce((acc, { r, c }) => setCellMeta(acc, ns, r, c, v), s);
+  // 숫자·금액 입력 칸 — 정렬을 따로 정하지 않았으면 오른쪽 정렬(자릿수가 세로로 맞게). 비어 있어도 오른쪽에 붙어 보인다
+  if (ns === APPROVAL_NS.input && isNumericInput(v)) {
+    for (const { r, c } of visibleCells(s, range)) {
+      const col = out.cols[c];
+      if (col !== undefined && !out.styles[cellKey(r, col)]?.align) out = applyStyle(out, { r1: r, r2: r, c1: c, c2: c }, { align: 'right' });
+    }
+  }
+  return out;
+}
+
+/** 숫자·금액 입력인가 */
+export function isNumericInput(v: unknown): boolean {
+  const t = v && typeof v === 'object' ? (v as { type?: unknown }).type : undefined;
+  return t === 'number' || t === 'currency';
 }
 
 /** 칸 이름 붙이기 — 같은 이름이 다른 칸에 있으면 그 칸에서 뗀다(이름은 서식에 하나) */

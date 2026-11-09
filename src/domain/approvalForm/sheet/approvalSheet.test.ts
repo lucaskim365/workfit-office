@@ -337,3 +337,13 @@ test('병합 — 왼쪽 위 칸 기준, 가려지는 칸의 부품(입력 칸 �
   const named = setCellName(s, 0, 2, 'amount');
   assert.equal(mergeCoversLinks(named, range), true);
 });
+
+test('금액·숫자 입력 칸 — 정렬을 안 정했으면 오른쪽 정렬, 이미 정한 정렬은 그대로', () => {
+  let s = createSheet(1, 3);
+  s = setApprovalProp(s, { r1: 0, c1: 0, r2: 0, c2: 1 }, APPROVAL_NS.input, { type: 'currency' });
+  assert.equal(s.styles[cellKey(0, s.cols[0])]?.align, 'right');
+  assert.equal(s.styles[cellKey(0, s.cols[1])]?.align, 'right');
+  // 글 입력은 그대로(정렬 없음)
+  s = setApprovalProp(s, { r1: 0, c1: 2, r2: 0, c2: 2 }, APPROVAL_NS.input, { type: 'text' });
+  assert.equal(s.styles[cellKey(0, s.cols[2])]?.align, undefined);
+});
