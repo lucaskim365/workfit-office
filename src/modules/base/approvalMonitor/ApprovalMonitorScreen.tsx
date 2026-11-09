@@ -4,7 +4,8 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { usePermission } from '@/features/auth/usePermission';
-import { Search, X } from 'lucide-react';
+import { FileText, Printer, Search, X } from 'lucide-react';
+import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
 type MonitorTab = 'ALL' | '진행중' | '완료' | '반려' | '임시저장' | '회수';
 
@@ -57,6 +58,7 @@ export default function ApprovalMonitorScreen() {
   const [tab, setTab] = useState<MonitorTab>('ALL');
   const [q, setQ] = useState('');
   const [selId, setSelId] = useState<string | null>(null);
+  const [viewDoc, setViewDoc] = useState<ApprovalDoc | null>(null);
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
   const deptNameOf = (id: string) => org.depts.find((d) => d.id === id || d.name === id)?.name ?? id;
@@ -252,6 +254,13 @@ export default function ApprovalMonitorScreen() {
         <div className="flex flex-col gap-4 sticky top-[calc(var(--shell-top)+16px)]">
           {selDoc ? (
             <>
+              <button
+                type="button"
+                onClick={() => setViewDoc(selDoc)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-2 text-[12px] font-bold text-ink2 shadow-sm hover:border-teal hover:text-teal cursor-pointer"
+              >
+                <FileText size={14} /> 문서 보기·인쇄
+              </button>
               {/* 결재 진행 상황 타임라인 패널 */}
               <div className="rounded-xl border border-border bg-panel p-4 flex flex-col gap-2.5 shadow-sm">
                 {(() => {
@@ -388,6 +397,45 @@ export default function ApprovalMonitorScreen() {
           )}
         </div>
       </div>
+
+      {/* 문서 보기·인쇄 — 모니터링 권한이 있으면 결재선에 없어도 본문을 보고 인쇄한다 */}
+      {viewDoc && (
+        <div
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/55 p-4"
+          onClick={() => setViewDoc(null)}
+        >
+          <div
+            className="flex max-h-[92vh] w-[880px] max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5 print:hidden">
+              <span className="text-[12.5px] font-bold text-ink">{viewDoc.title}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal cursor-pointer"
+                >
+                  <Printer size={13} /> 인쇄
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewDoc(null)}
+                  className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel-alt hover:text-ink cursor-pointer"
+                  aria-label="닫기"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="menu-scroll flex-1 overflow-auto bg-panel-alt/30 p-4">
+              <div className="flex justify-center">
+                <ApprovalDocumentView doc={viewDoc} isPreview={true} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
