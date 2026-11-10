@@ -548,13 +548,18 @@ export function ApprovalWidget() {
     () => (me ? (byBox['대기'] ?? []).filter((d) => currentApproverIds(d).includes(me.id)) : []),
     [byBox, me],
   );
-  const mineInProgress = (byBox['상신'] ?? []).filter((d) => d.status === '진행중').length;
+  const inProgressDocs = useMemo(() => (byBox['상신'] ?? []).filter((d) => d.status === '진행중'), [byBox]);
+  const mineInProgress = inProgressDocs.length;
+  // 카드를 누르면 화면을 옮기지 않고 아래 목록이 그 문서함으로 바뀐다
   const tiles = [
-    { label: '결재 대기', value: pending.length, box: '대기', strong: true },
-    { label: '진행 중', value: mineInProgress, box: '상신' },
-    { label: '반려', value: counts['반려'] ?? 0, box: '반려' },
-    { label: '수신', value: counts['수신'] ?? 0, box: '수신' },
+    { key: '대기', label: '결재 대기', value: pending.length, docs: pending, empty: '결재할 문서가 없습니다.' },
+    { key: '상신', label: '진행 중', value: mineInProgress, docs: inProgressDocs, empty: '진행 중인 문서가 없습니다.' },
+    { key: '반려', label: '반려', value: counts['반려'] ?? 0, docs: byBox['반려'] ?? [], empty: '반려된 문서가 없습니다.' },
+    { key: '수신', label: '수신', value: counts['수신'] ?? 0, docs: byBox['수신'] ?? [], empty: '수신한 문서가 없습니다.' },
   ];
+  const [boxKey, setBoxKey] = useState('대기');
+  const active = tiles.find((t) => t.key === boxKey) ?? tiles[0];
+  const dateOf = (d: (typeof pending)[number]) => (d.submittedAt ?? d.createdAt ?? '').slice(5, 10).replace('-', '.');
   if (useMini()) {
     return (
       <MiniPanel title="결재 대기" onClick={() => navigate('/gw/approval?box=대기')}>
@@ -567,29 +572,36 @@ export function ApprovalWidget() {
   }
   return (
     <Panel>
-      <Head title="전자결재" to={() => navigate('/gw/approval')} />
-      <div className="mb-4 grid grid-cols-4 gap-1.5">
-        {tiles.map((t) => (
-          <button
-            key={t.label}
-            type="button"
-            onClick={() => navigate(`/gw/approval?box=${encodeURIComponent(t.box)}`)}
-            className={`cursor-pointer rounded-xl px-2 py-2.5 text-center ${t.strong ? 'bg-[#0876c8] text-white hover:bg-[#066aaf]' : 'bg-panel-alt text-ink hover:bg-[#e6eef8] dark:hover:bg-white/10'}`}
-          >
-            <div className="text-[22px] leading-none font-black tabular-nums">{t.value}</div>
-            <div className={`mt-1.5 text-[10.5px] font-bold whitespace-nowrap ${t.strong ? 'text-white/85' : 'text-ink3'}`}>{t.label}</div>
-          </button>
-        ))}
+      <Head title="전자결재" to={() => navigate(`/gw/approval?box=${encodeURIComponent(active.key)}`)} />
+      <div className="mb-4 grid grid-cols-4 gap-1.5" role="tablist" aria-label="문서함">
+        {tiles.map((t) => {
+          const on = t.key === active.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => setBoxKey(t.key)}
+              className={`cursor-pointer rounded-xl px-2 py-2.5 text-center transition-colors ${on ? 'bg-[#0876c8] text-white' : 'bg-panel-alt text-ink hover:bg-[#e6eef8] dark:hover:bg-white/10'}`}
+            >
+              <div className="text-[22px] leading-none font-black tabular-nums">{t.value}</div>
+              <div className={`mt-1.5 text-[10.5px] font-bold whitespace-nowrap ${on ? 'text-white/85' : 'text-ink3'}`}>{t.label}</div>
+            </button>
+          );
+        })}
       </div>
-      {pending.length === 0 ? (
-        <Empty>결재할 문서가 없습니다.</Empty>
+      {active.docs.length === 0 ? (
+        <Empty>{active.empty}</Empty>
       ) : (
-        <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
-          {pending.slice(0, 4).map((d) => (
+        <ul className={`m-0 list-none p-0 ${FIT_LIST}`} role="tabpanel">
+          {active.docs.map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => navigate(`/gw/approval?doc=${encodeURIComponent(d.id)}`)} className="group flex w-full cursor-pointer items-center gap-3 py-1.5 text-left">
                 <span className="min-w-0 flex-1 truncate text-[13px] text-ink group-hover:text-[#0876c8]">{d.title}</span>
-                <span className="shrink-0 text-[11px] text-ink3">{d.drafterName ?? ''}</span>
+                <span className="shrink-0 text-[11px] text-ink3">
+                  {active.key === '대기' || active.key === '수신' ? d.drafterName ?? '' : dateOf(d)}
+                </span>
               </button>
             </li>
           ))}
