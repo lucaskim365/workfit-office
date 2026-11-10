@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useBoardPosts } from '@/features/board/useBoardPosts';
-import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { useDepartments } from '@/features/department/useDepartments';
@@ -19,7 +18,6 @@ import {
   DAY_END_MIN,
   DAY_START_MIN,
   bucketOf,
-  companyEventsOn,
   donutSlices,
   firstWeekday,
   monthDates,
@@ -32,7 +30,7 @@ import {
 
 /**
  * 경영 현황 — 로그인 후 첫 화면. 오늘 하루 타임라인(회사·나), 내 근태(달력·도넛·일별 근무시간),
- * 프로젝트, 공지사항·경조사. 데이터는 기존 화면과 같은 곳에서 읽기만 한다.
+ * 프로젝트(준비 중), 공지사항. 데이터는 기존 화면과 같은 곳에서 읽기만 한다.
  */
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -107,52 +105,13 @@ function entryLabel(e: DayEntry): string {
   }
 }
 
-function Lane({ label, items, tone }: { label: string; items: TimelineItem[]; tone: 'company' | 'mine' }) {
-  const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
-  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end));
-  const block = tone === 'company'
-    ? 'bg-[#fff1db] text-[#8a5a17] border-[#f0c98a] dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30'
-    : 'bg-[#e0f0fb] text-[#0c5c96] border-[#9fcfee] dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30';
-  return (
-    <div className="grid grid-cols-[52px_minmax(0,1fr)] items-start gap-3">
-      <div className="pt-2 text-[11.5px] font-bold text-ink2">{label}</div>
-      <div className="min-w-0">
-        {untimed.length > 0 && (
-          <div className="mb-1.5 flex flex-wrap gap-1.5">
-            {untimed.map((i) => (
-              <button key={i.key} type="button" onClick={i.onClick} title={i.title}
-                className={`max-w-[260px] cursor-pointer truncate rounded-md border px-2 py-1 text-[11px] font-bold ${block}`}>
-                종일 {i.title}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="relative h-[38px] rounded-lg bg-panel-alt">
-          {timed.map((i) => {
-            const s = timelineSpan(i.start, i.end)!;
-            return (
-              <button
-                key={i.key}
-                type="button"
-                onClick={i.onClick}
-                title={`${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
-                className={`absolute top-1 bottom-1 cursor-pointer overflow-hidden rounded-md border px-1.5 text-left text-[11px] font-bold leading-[28px] whitespace-nowrap ${block}`}
-                style={{ left: `calc(${s.left}% + 1px)`, width: `calc(${s.width}% - 2px)` }}
-              >
-                {i.title}
-              </button>
-            );
-          })}
-          {timed.length === 0 && untimed.length === 0 && (
-            <span className="absolute inset-0 grid place-items-center text-[11px] text-ink3">일정 없음</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+const BLOCK = {
+  company: 'bg-[#fff1db] text-[#8a5a17] border-[#f0c98a] dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+  mine: 'bg-[#e0f0fb] text-[#0c5c96] border-[#9fcfee] dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30',
+};
 
-function DayTimeline({ company, mine }: { company: TimelineItem[]; mine: TimelineItem[] }) {
+/** 오늘 하루 타임라인 — 내 일정 한 줄. 종일·시간 미정 일정(전사 중요 일정 포함)은 줄 위에 */
+function DayTimeline({ items }: { items: Array<TimelineItem & { tone: keyof typeof BLOCK }> }) {
   // 지금 시각 선 — 1분마다 옮긴다
   const [now, setNow] = useState(() => nowPercent());
   useEffect(() => {
@@ -160,27 +119,46 @@ function DayTimeline({ company, mine }: { company: TimelineItem[]; mine: Timelin
     return () => clearInterval(t);
   }, []);
   const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
+  const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
+  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end));
   return (
-    <div className="flex flex-col gap-2.5">
-      {/* 시간 눈금 */}
-      <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
-        <span />
-        <div className="relative h-4">
-          {hours.map((h, i) => (
-            <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
-              {h}
-            </span>
+    <div className="flex flex-col gap-2">
+      {untimed.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {untimed.map((i) => (
+            <button key={i.key} type="button" onClick={i.onClick} title={i.title}
+              className={`max-w-[320px] cursor-pointer truncate rounded-md border px-2 py-1 text-[11px] font-bold ${BLOCK[i.tone]}`}>
+              {i.title}
+            </button>
           ))}
         </div>
+      )}
+      <div className="relative h-4">
+        {hours.map((h, i) => (
+          <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
+            {h}
+          </span>
+        ))}
       </div>
-      <div className="relative flex flex-col gap-2.5">
-        <Lane label="회사" items={company} tone="company" />
-        <Lane label="나" items={mine} tone="mine" />
+      <div className="relative h-[42px] rounded-lg bg-panel-alt">
+        {timed.map((i) => {
+          const sp = timelineSpan(i.start, i.end)!;
+          return (
+            <button
+              key={i.key}
+              type="button"
+              onClick={i.onClick}
+              title={`${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
+              className={`absolute top-1 bottom-1 cursor-pointer overflow-hidden rounded-md border px-1.5 text-left text-[11px] font-bold leading-[32px] whitespace-nowrap ${BLOCK[i.tone]}`}
+              style={{ left: `calc(${sp.left}% + 1px)`, width: `calc(${sp.width}% - 2px)` }}
+            >
+              {i.title}
+            </button>
+          );
+        })}
         {now !== null && (
-          <div className="pointer-events-none absolute inset-y-0 left-[64px] right-0">
-            <div className="absolute inset-y-[-6px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
-              <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
-            </div>
+          <div className="pointer-events-none absolute inset-y-[-6px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
+            <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
           </div>
         )}
       </div>
@@ -297,25 +275,20 @@ export default function ExecDashboardScreen() {
   const members = useMemo(() => (me ? [me] : []), [me]);
   const { cellOf, workPlans } = useDayEntryIndex({ actor: me, deptId, members, dates: todayDates });
   const myEntries = me ? cellOf(me.id, today).entries : [];
-  const calendarActor = useMemo(() => ({ userId: me?.id ?? '__anonymous__', active: me?.status === '사용', deptId }), [me?.id, me?.status, deptId]);
-  const todayRange = useMemo(() => ({ from: today, to: today }), [today]);
-  const eventsQuery = useCalendarEvents(calendarActor, todayRange, Boolean(me));
   const companyImportant = workPlans.find((p) => p.ownerUserId === COMPANY_PLAN_OWNER && p.date === today && p.content?.trim())?.content?.trim();
 
-  const companyItems: TimelineItem[] = [
-    ...(companyImportant ? [{ key: 'important', title: companyImportant, start: null, end: null, allDay: true, onClick: () => navigate('/gw/work-plan') }] : []),
-    ...companyEventsOn(eventsQuery.data ?? [], today).map((e) => ({
-      key: e.id, title: e.title, start: e.startTime, end: e.endTime, allDay: e.allDay, onClick: () => navigate('/gw/calendar'),
+  const timelineItems = [
+    ...(companyImportant
+      ? [{ key: 'important', title: companyImportant, start: null, end: null, allDay: true, tone: 'company' as const, onClick: () => navigate('/gw/work-plan') }]
+      : []),
+    ...myEntries.map((e) => ({
+      key: e.key, title: `${entryLabel(e)} ${e.title}`, start: e.startTime, end: e.endTime, allDay: e.allDay, tone: 'mine' as const, onClick: () => navigate('/gw/work-plan'),
     })),
   ];
-  const myItems: TimelineItem[] = myEntries.map((e) => ({
-    key: e.key, title: `${entryLabel(e)} ${e.title}`, start: e.startTime, end: e.endTime, allDay: e.allDay, onClick: () => navigate('/gw/work-plan'),
-  }));
 
   /* 게시판 */
   const posts = useBoardPosts().data ?? [];
   const notices = useMemo(() => sortPostsForList(posts.filter((p) => p.boardId === 'notice')).slice(0, 6), [posts]);
-  const events = useMemo(() => sortPostsForList(posts.filter((p) => p.boardId === 'event')).slice(0, 4), [posts]);
   const openPost = (p: Post) => navigate(`/gw/board?board=${p.boardId}&postId=${encodeURIComponent(p.id)}`);
 
   /* 내 근태 */
@@ -349,7 +322,7 @@ export default function ExecDashboardScreen() {
   const avgMin = workedDays.length ? Math.round(workedDays.reduce((s, d) => s + d.minutes, 0) / workedDays.length) : 0;
   const todayRec = myDays.find((d) => d.date === today);
 
-  const scheduleCount = companyItems.length + myItems.length;
+  const scheduleCount = timelineItems.length;
   const isThisMonth = month === today.slice(0, 7);
 
   return (
@@ -371,7 +344,7 @@ export default function ExecDashboardScreen() {
             <button type="button" onClick={() => navigate('/gw/work-plan')} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
           </div>
         </div>
-        <DayTimeline company={companyItems} mine={myItems} />
+        <DayTimeline items={timelineItems} />
       </Panel>
 
       <div className="grid grid-cols-12 gap-4">
@@ -448,7 +421,6 @@ export default function ExecDashboardScreen() {
                 <div className="mt-3 flex gap-4 text-[10.5px] text-ink3">
                   <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#0876c8]" />근무</span>
                   <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#f2a17e]" />지각한 날</span>
-                  <span className="flex items-center gap-1.5"><i className="w-3 border-t border-dashed border-ink3" />4·8·12시간</span>
                 </div>
               </div>
             </div>
@@ -466,15 +438,9 @@ export default function ExecDashboardScreen() {
         </Panel>
 
         {/* ── 공지사항 ── */}
-        <Panel className="col-span-12 lg:col-span-7">
+        <Panel className="col-span-12">
           <Head title="공지사항" to={() => navigate('/gw/board?board=notice')} />
           <PostList posts={notices} onOpen={openPost} empty="등록된 공지사항이 없습니다." />
-        </Panel>
-
-        {/* ── 경조사 ── */}
-        <Panel className="col-span-12 lg:col-span-5">
-          <Head title="경조사" to={() => navigate('/gw/board?board=event')} />
-          <PostList posts={events} onOpen={openPost} empty="등록된 경조사가 없습니다." />
         </Panel>
       </div>
     </div>

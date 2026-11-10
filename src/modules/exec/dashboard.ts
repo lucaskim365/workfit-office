@@ -1,6 +1,4 @@
-import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { CommuteStatus } from '@/domain/commute/schema';
-import type { WorkProject } from '@/domain/workProject/schema';
 
 /** 대시보드 근태 4분류 — 시안(출근·출근 전/휴무·지각·휴가)과 같은 색 묶음 */
 export type AttendanceBucket = 'work' | 'pending' | 'late' | 'leave';
@@ -54,25 +52,6 @@ export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-/** 회사 주요 일정 — 그날의 전사 공개·회사 행사 일정(시간순, 종일 먼저) */
-export function companyEventsOn(events: CalendarEvent[], date: string): CalendarEvent[] {
-  return events
-    .filter((e) => e.date === date && (e.visibility === 'COMPANY' || e.eventType === 'COMPANY_EVENT'))
-    .sort((a, b) => (a.allDay === b.allDay ? (a.startTime ?? '').localeCompare(b.startTime ?? '') : a.allDay ? -1 : 1));
-}
-
-/**
- * 프로젝트 기간 경과율(0~100) — 프로젝트에 진척률 칸이 없어 시작일~종료일 중 오늘까지 지난 비율로 보인다.
- * 기간을 모르면 null.
- */
-export function elapsedPercent(project: Pick<WorkProject, 'startAt' | 'dueAt' | 'contractStartAt' | 'contractEndAt'>, now = new Date()): number | null {
-  const start = Date.parse(project.startAt ?? project.contractStartAt ?? '');
-  const end = Date.parse(project.dueAt ?? project.contractEndAt ?? '');
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
-  const ratio = (now.getTime() - start) / (end - start);
-  return Math.round(Math.min(1, Math.max(0, ratio)) * 100);
 }
 
 /** 하루 타임라인 축 — 08:00 ~ 20:00 */
