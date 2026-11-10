@@ -7,7 +7,16 @@
  */
 import { colLetter, parseNumber } from './formula';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, cellKey, type CellStyle, type Sheet } from './model';
+import { textWidth } from './style';
 import { zip } from './zip';
+
+/** 엑셀에서 쓰는 글꼴 — 글 폭도 이 글꼴로 잰다 */
+const EXCEL_FONT = '맑은 고딕';
+/** 칸보다 긴 글 — wrap: 줄바꿈(줄 높이가 두 줄 이상 될 때), shrink: 칸에 맞춰 글씨 줄이기 */
+type Fit = 'wrap' | 'shrink' | null;
+const EXCEL_FONT_CSS = "'Malgun Gothic', '맑은 고딕', sans-serif";
+/** 칸 안쪽 여백(px) — 엑셀은 글 양옆에 조금씩 비운다 */
+const EXCEL_CELL_PAD = 7;
 
 export interface XlsxExportOptions {
   /** 엑셀 아래 시트 탭 이름(31자까지, 엑셀이 못 쓰는 글자는 뺌) */
@@ -18,6 +27,8 @@ export interface XlsxExportOptions {
   cellText?: (r: number, c: number) => string | undefined;
   /** 수식도 담기(기본 false — 계산된 값만). 행을 빼면 무시하고 값만 */
   formulas?: boolean;
+  /** 줄 높이(px)를 바꿔 담기 — 화면에서 글이 줄바꿈돼 늘어난 높이 등. undefined 면 시트 높이 */
+  rowHeight?: (r: number) => number | undefined;
   /** 칸 위치에 띄울 그림 — 빼는 행에 걸린 그림은 뺀다 */
   pictures?: XlsxPicture[];
 }
@@ -98,7 +109,7 @@ function numFmtCode(style: CellStyle | undefined, n: number | null): string | un
 
 /** 엑셀 서식 표(styles.xml) — 글꼴·채우기·테두리·칸 서식을 겹치지 않게 모은다 */
 class StyleBook {
-  fonts = [`<font><sz val="${DEFAULT_PT}"/><name val="맑은 고딕"/><family val="2"/></font>`];
+  fonts = [`<font><sz val="${DEFAULT_PT}"/><name val="${EXCEL_FONT}"/><family val="2"/></font>`];
   fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
   borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
   numFmts: string[] = [];
@@ -113,10 +124,12 @@ class StyleBook {
   }
 
   /** 칸 하나의 서식 번호(s=) — 아무 서식 없으면 0 */
-  xf(style: CellStyle | undefined, fmt: string | undefined, wrap: boolean): number {
-    const key = JSON.stringify([style ?? null, fmt ?? null, wrap]);
+  xf(style: CellStyle | undefined, fmt: string | undefined, fit: Fit): number {
+    const key = JSON.stringify([style ?? null, fmt ?? null, fit]);
     const hit = this.index.get(key);
-    if (!fmt && !wrap && (!style || Object.keys(style).length === 0)) return 0;
+    if (!fmt && !fit && (!style || Object.keys(style).length === 0)) return 0;
+    const wrap = fit === 'wrap';
+    const shrink = fit === 'shrink' || (!!style?.shrink && !wrap);
     if (hit !== undefined) return hit;
     const s = style ?? {};
     // 글꼴
@@ -128,7 +141,7 @@ class StyleBook {
       (s.underline ? '<u/>' : '') +
       `<sz val="${s.fontSize ?? DEFAULT_PT}"/>` +
       (color ? `<color rgb="${color}"/>` : '') +
-      '<name val="맑은 고딕"/><family val="2"/></font>';
+      `<name val="${EXCEL_FONT}"/><family val="2"/></font>`;
     const fontId = this.add(this.fonts, fontXml);
     // 채우기
     const bg = argb(s.bg);
@@ -147,7 +160,7 @@ class StyleBook {
     // 정렬
     const h = s.align;
     const v = s.valign === 'middle' ? 'center' : s.valign;
-    const align = h || v || wrap || s.shrink ? `<alignment${h ? ` horizontal="${h}"` : ''}${v ? ` vertical="${v}"` : ' vertical="center"'}${wrap ? ' wrapText="1"' : ''}${s.shrink ? ' shrinkToFit="1"' : ''}/>` : '';
+    const align = h || v || wrap || shrink ? `<alignment${h ? ` horizontal="${h}"` : ''}${v ? ` vertical="${v}"` : ' vertical="center"'}${wrap ? ' wrapText="1"' : ''}${shrink ? ' shrinkToFit="1"' : ''}/>` : '';
     const xml =
       `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0"` +
       (numFmtId ? ' applyNumberFormat="1"' : '') +
@@ -202,6 +215,24 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     for (let r = m.startRow; r < m.startRow + m.rowSpan; r++)
       for (let c = m.startCol; c < m.startCol + m.colSpan; c++) if (r !== m.startRow || c !== m.startCol) covered.add(`${r}:${c}`);
 
+  // 줄 높이·칸 크기 — 칸보다 긴 글을 엑셀에서 어떻게 보일지 정한다(화면은 칸 안에서 줄을 바꾸거나 글씨를 줄인다)
+  const heightOf = (r: number) => opts.rowHeight?.(r) ?? s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT;
+  const mergeOf = (r: number, c: number) => s.merges.find((m) => m.startRow === r && m.startCol === c);
+  const fitOf = (r: number, c: number, text: string, style: CellStyle | undefined): Fit => {
+    if (!text) return null;
+    if (text.includes('\n')) return 'wrap';
+    const m = mergeOf(r, c);
+    let w = 0;
+    for (let k = c; k < c + (m?.colSpan ?? 1); k++) w += s.colWidths[s.cols[k]] ?? DEFAULT_COL_WIDTH;
+    let h = 0;
+    for (let k = r; k < r + (m?.rowSpan ?? 1); k++) if (newRow.has(k)) h += heightOf(k);
+    const px = ((style?.fontSize ?? DEFAULT_PT) * 4) / 3;
+    const tw = textWidth(text, px, !!style?.bold, EXCEL_FONT_CSS);
+    if (tw === null || tw <= w - EXCEL_CELL_PAD) return null;
+    // 두 줄 이상 들어갈 높이면 줄바꿈(화면처럼), 아니면 칸에 맞춰 줄인다(잘려 보이지 않게)
+    return h >= px * 1.25 * 2 ? 'wrap' : 'shrink';
+  };
+
   const rowXml: string[] = [];
   keepRows.forEach((r, i) => {
     const cells: string[] = [];
@@ -210,14 +241,13 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       const style = s.styles[key];
       const ref = `${colLetter(c)}${i + 1}`;
       if (covered.has(`${r}:${c}`)) {
-        if (style?.border || style?.bg) cells.push(`<c r="${ref}" s="${book.xf({ border: style.border, bg: style.bg }, undefined, false)}"/>`);
+        if (style?.border || style?.bg) cells.push(`<c r="${ref}" s="${book.xf({ border: style.border, bg: style.bg }, undefined, null)}"/>`);
         return;
       }
       const text = opts.cellText?.(r, c) ?? String(s.rows[r]?.[col] ?? '');
       const formula = withFormulas ? s.formulas[key] : undefined;
       const n = asNumber(text);
-      const wrap = text.includes('\n');
-      const xf = book.xf(style, numFmtCode(style, n), wrap);
+      const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(r, c, text, style) : null);
       const sAttr = xf ? ` s="${xf}"` : '';
       if (formula) {
         const f = `<f>${esc(formula.replace(/^=/, ''))}</f>`;
@@ -230,8 +260,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
         cells.push(`<c r="${ref}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${esc(text)}</t></is></c>`);
       }
     });
-    const h = s.rowHeights[String(r)];
-    const ht = h && h !== DEFAULT_ROW_HEIGHT ? ` ht="${Math.round(h * 0.75 * 10) / 10}" customHeight="1"` : ` ht="${Math.round(DEFAULT_ROW_HEIGHT * 0.75 * 10) / 10}" customHeight="1"`;
+    const ht = ` ht="${Math.round(heightOf(r) * 0.75 * 10) / 10}" customHeight="1"`;
     rowXml.push(`<row r="${i + 1}"${ht}>${cells.join('')}</row>`);
   });
 

@@ -4,7 +4,7 @@
  */
 import type { CSSProperties } from 'react';
 import { parseNumber } from './formula';
-import type { BorderW, CellStyle, Sheet } from './model';
+import { DEFAULT_COL_WIDTH, type BorderW, type CellStyle, type Sheet } from './model';
 
 /** 색 고르기 화면의 미리 정한 색 — 문서는 흰 바탕 고정이라 고정 색 */
 export const SHEET_COLORS: Array<{ label: string; text: string; bg: string }> = [
@@ -66,16 +66,27 @@ const CELL_PADDING_PX = 10;
 
 let measureCtx: CanvasRenderingContext2D | null | undefined;
 let measureFamily = '';
-/** 글 폭 재기(브라우저에서만) — 못 재면 null */
-function textWidth(text: string, px: number, bold: boolean): number | null {
+/** 글 폭 재기(브라우저에서만) — 못 재면 null. family 를 주면 그 글꼴로(엑셀 글꼴로 잴 때), 없으면 화면 글꼴 */
+export function textWidth(text: string, px: number, bold: boolean, family?: string): number | null {
   if (typeof document === 'undefined') return null;
   if (measureCtx === undefined) {
     measureCtx = document.createElement('canvas').getContext('2d');
     measureFamily = getComputedStyle(document.body).fontFamily || 'sans-serif';
   }
   if (!measureCtx) return null;
-  measureCtx.font = `${bold ? '700 ' : ''}${px}px ${measureFamily}`;
+  measureCtx.font = `${bold ? '700 ' : ''}${px}px ${family ?? measureFamily}`;
   return measureCtx.measureText(text).width;
+}
+
+/**
+ * 열 너비 — stretchTo 를 주면 화면 문서처럼 종이 폭에 맞춰 늘린 너비(SheetView 와 같은 규칙).
+ * 원래 폭이 stretchTo 보다 좁고 minRatio 이상일 때만 비율대로 늘린다
+ */
+export function stretchedColWidths(s: Sheet, stretchTo?: number, minRatio = 0.5): Record<string, number> {
+  const raw = (col: string) => s.colWidths[col] ?? DEFAULT_COL_WIDTH;
+  const total = s.cols.reduce((sum, col) => sum + raw(col), 0);
+  const k = stretchTo && total < stretchTo && total >= stretchTo * minRatio ? stretchTo / total : 1;
+  return Object.fromEntries(s.cols.map((col) => [col, raw(col) * k]));
 }
 
 /**

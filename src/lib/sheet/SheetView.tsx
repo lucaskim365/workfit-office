@@ -9,7 +9,7 @@
  */
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, type Merge, type Sheet } from './model';
-import { cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize } from './style';
+import { cellCss, defaultAlign, displayValue, renderStyle, shrinkFontSize, stretchedColWidths } from './style';
 
 export interface SheetViewProps {
   /** 계산까지 끝난 시트(값이 rows 에 들어 있어야 한다) */
@@ -73,11 +73,9 @@ export function SheetView({
 }: SheetViewProps) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { cols, rows, merges } = sheet;
-  const rawWidth = (col: string) => sheet.colWidths[col] ?? DEFAULT_COL_WIDTH;
-  const rawTotal = cols.reduce((sum, col) => sum + rawWidth(col), 0);
-  // 종이 폭에 맞춰 늘리기 — 열 비율 그대로
-  const stretch = stretchTo && rawTotal < stretchTo && rawTotal >= stretchTo * stretchMinRatio ? stretchTo / rawTotal : 1;
-  const widthOf = (col: string) => rawWidth(col) * stretch;
+  // 종이 폭에 맞춰 늘리기 — 열 비율 그대로(엑셀 받기도 같은 함수로 같은 너비)
+  const widths = stretchedColWidths(sheet, stretchTo, stretchMinRatio);
+  const widthOf = (col: string) => widths[col] ?? DEFAULT_COL_WIDTH;
   /** 셀에 맞춤 — 칸(병합 폭)보다 긴 한 줄 글은 글씨를 줄인다 */
   const fitted = (r: number, c: number, col: string, span: number) => {
     const w = cols.slice(c, c + span).reduce((sum, k) => sum + widthOf(k), 0);
@@ -153,7 +151,7 @@ export function SheetView({
         <tbody>
           {rows.map((_row, r) => hiddenRows?.(r) ? null : (
             <Fragment key={r}>
-            <tr className={rowClassName?.(r)} style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
+            <tr data-sheet-row={r} className={rowClassName?.(r)} style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
               {cols.map((col, c) => {
                 const m = mergeAt(r, c);
                 if (m && m.startCol !== c) return null;

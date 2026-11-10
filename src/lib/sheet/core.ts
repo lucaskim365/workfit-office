@@ -51,6 +51,6 @@ export {
   type BorderPreset,
   type PasteOptions,
 } from './ops';
-export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, shrinkFontSize, SHEET_COLORS } from './style';
+export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, shrinkFontSize, stretchedColWidths, SHEET_COLORS } from './style';
 export { importXlsx, xlsxSheetImages, XlsxError, type XlsxImage, type XlsxImport, type XlsxOptions } from './xlsx';
 export { exportXlsx, downloadXlsx, type XlsxExportOptions, type XlsxPicture } from './xlsxWrite';

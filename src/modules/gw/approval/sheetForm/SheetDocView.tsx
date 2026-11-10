@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { DEFAULT_COL_WIDTH, SheetView, downloadXlsx, exportXlsx, type Sheet, type XlsxPicture } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetView, downloadXlsx, exportXlsx, stretchedColWidths, type Sheet, type XlsxPicture } from '@/lib/sheet';
 import { captureElementPng } from '@/shared/lib/pdf';
 import { docExportOptions } from '@/domain/approvalForm/sheet/docExport';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
@@ -43,6 +43,40 @@ async function capturePictures(box: HTMLElement | null, sheet: Sheet): Promise<{
     if (el.dataset.slot) slots.add(el.dataset.slot);
   }
   return { pictures, slots };
+}
+
+/**
+ * 화면 줄 높이(시트 px) — 칸보다 긴 글이 줄바꿈돼 늘어난 줄도 화면과 같게. 표 폭 대비 비율로 잰다
+ */
+function screenRowHeights(box: HTMLElement | null, sheet: Sheet): (r: number) => number | undefined {
+  const table = box?.querySelector('table');
+  const total = sheet.cols.reduce((sum, col) => sum + (sheet.colWidths[col] ?? DEFAULT_COL_WIDTH), 0);
+  const tw = table?.getBoundingClientRect().width ?? 0;
+  if (!table || !tw) return () => undefined;
+  const k = total / tw;
+  const heights = new Map<number, number>();
+  table.querySelectorAll<HTMLElement>('tr[data-sheet-row]').forEach((tr) => heights.set(Number(tr.dataset.sheetRow), tr.getBoundingClientRect().height * k));
+  return (r) => heights.get(r);
+}
+
+/**
+ * 결재란 자리가 비어 있으면(결재 끝난 직인 서식 등) 큰 제목을 그 자리까지 넓힌다 — 화면은 제목을 결재란 뺀 폭 가운데에 놓지만
+ * 엑셀은 병합 칸 가운데라, 결재란 없이 제목 칸만 두면 왼쪽으로 치우쳐 보인다
+ */
+function withTitleOverEmptyStamp(s: Sheet): Sheet {
+  const keyOf = (bind: string) => Object.entries(s.cellMeta.bind ?? {}).find(([, v]) => v === bind)?.[0];
+  const title = keyOf('doc.formTitle');
+  const stamp = keyOf('doc.approvalLine');
+  if (!title || !stamp) return s;
+  const pos = (key: string) => ({ r: Number(key.slice(0, key.indexOf(':'))), c: s.cols.indexOf(key.slice(key.indexOf(':') + 1)) });
+  const t = pos(title);
+  const a = pos(stamp);
+  const tm = s.merges.find((m) => m.startRow === t.r && m.startCol === t.c) ?? { startRow: t.r, startCol: t.c, rowSpan: 1, colSpan: 1 };
+  const am = s.merges.find((m) => m.startRow === a.r && m.startCol === a.c) ?? { startRow: a.r, startCol: a.c, rowSpan: 1, colSpan: 1 };
+  // 같은 줄들에 나란히(결재란이 제목 바로 오른쪽) 있을 때만
+  if (tm.startRow !== am.startRow || tm.rowSpan !== am.rowSpan || am.startCol !== tm.startCol + tm.colSpan) return s;
+  const merged = { ...tm, colSpan: tm.colSpan + am.colSpan };
+  return { ...s, merges: [...s.merges.filter((m) => m !== tm && m !== am), merged] };
 }
 
 /** 시트 서식으로 쓴 문서인가 — 서식 버전이 남아 있으면 */
@@ -122,11 +156,14 @@ export function SheetDocView({
     onExportReady(async (fileName) => {
       const cur = exportRef.current;
       if (!cur.sheet) return;
-      const { pictures, slots } = await capturePictures(boxRef.current, cur.sheet);
+      // 화면과 같은 열 너비(종이 폭에 맞춰 늘린 것) — 그림 자리·글 맞춤도 이 너비 기준
+      const sized: Sheet = { ...cur.sheet, colWidths: stretchedColWidths(cur.sheet, DOC_SHEET_VIEW.stretchTo) };
+      const { pictures, slots } = await capturePictures(boxRef.current, sized);
       const slotText = { ...cur.slotText };
       slots.forEach((s) => (slotText[s as keyof SheetSlots] = ''));
-      const opts = docExportOptions({ ...cur, slotText, sheet: cur.sheet, sheetName: fileName });
-      downloadXlsx(await exportXlsx(cur.sheet, { ...opts, pictures }), fileName);
+      const out = slots.has('approvalLine') ? sized : withTitleOverEmptyStamp(sized);
+      const opts = docExportOptions({ ...cur, slotText, sheet: out, sheetName: fileName });
+      downloadXlsx(await exportXlsx(out, { ...opts, pictures, rowHeight: screenRowHeights(boxRef.current, sized) }), fileName);
     });
     return () => onExportReady(null);
   }, [onExportReady, ready]);
