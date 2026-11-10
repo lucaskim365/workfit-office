@@ -161,7 +161,9 @@ export function SheetDocView({
       const { pictures, slots } = await capturePictures(boxRef.current, sized);
       const slotText = { ...cur.slotText };
       slots.forEach((s) => (slotText[s as keyof SheetSlots] = ''));
-      const out = slots.has('approvalLine') ? sized : withTitleOverEmptyStamp(sized);
+      // 결재란이 정말 비었을 때만(화면에 결재란이 없고 글자도 없음) 제목을 넓힌다 — 그림 뜨기에 실패한 것과 헷갈리지 않게
+      const stampOnScreen = !!boxRef.current?.querySelector('[data-slot="approvalLine"]');
+      const out = stampOnScreen || cur.slotText?.approvalLine ? sized : withTitleOverEmptyStamp(sized);
       const opts = docExportOptions({ ...cur, slotText, sheet: out, sheetName: fileName });
       downloadXlsx(await exportXlsx(out, { ...opts, pictures, rowHeight: screenRowHeights(boxRef.current, sized) }), fileName);
     });
