@@ -158,9 +158,10 @@ export function nextSize(size: WidgetSize): WidgetSize {
 }
 
 /** 끌어 늘린 칸 수 → 가장 가까운 위젯 폭(4·6·8·12) */
-export function snapSize(cols: number): WidgetSize {
-  let best: WidgetSize = WIDGET_SIZES[0];
-  for (const s of WIDGET_SIZES) if (Math.abs(s - cols) < Math.abs(best - cols)) best = s;
+export function snapSize(cols: number, allowed: readonly WidgetSize[] = WIDGET_SIZES): WidgetSize {
+  const list = allowed.length ? allowed : WIDGET_SIZES;
+  let best: WidgetSize = list[0];
+  for (const s of list) if (Math.abs(s - cols) < Math.abs(best - cols)) best = s;
   return best;
 }
 

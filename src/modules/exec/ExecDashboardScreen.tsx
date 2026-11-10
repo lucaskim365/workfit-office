@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from 'react';
 import { GripVertical, Plus, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { insertSlot, moveSlot, normalizeLayout, snapSize, type WidgetSize, type WidgetSlot } from './dashboard';
-import { ApprovalWidget, AttendanceWidget, NoticeWidget, ProjectWidget, ResourceWidget, TeamWidget, TodayWidget } from './widgets';
+import { ApprovalWidget, AttendanceWidget, LeaveWidget, NoticeWidget, ProjectWidget, ResourceWidget, TeamWidget, TodayWidget } from './widgets';
 
 /**
- * 경영 현황 — 로그인 후 첫 화면. 편집 모드에서 모듈별 위젯 목록을 끌어 넣고,
+ * 경영 현황 — 로그인 후 첫 화면. 편집 모드의 '위젯 추가' 창에서 모듈을 골라 위젯을 넣고,
  * 위젯은 끌어서 순서를 바꾸고 오른쪽 가장자리를 끌어 폭을 바꾼다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
-interface WidgetDef { title: string; module: string; size: WidgetSize; Component: ComponentType }
+interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; Component: ComponentType }
 
 const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', size: 12, Component: TodayWidget },
-  attendance: { title: '내 근태', module: '근태', size: 8, Component: AttendanceWidget },
-  approval: { title: '전자결재', module: '전자결재', size: 4, Component: ApprovalWidget },
-  resource: { title: '내 자원예약', module: '자원예약', size: 4, Component: ResourceWidget },
-  team: { title: '우리 부서', module: '조직도', size: 4, Component: TeamWidget },
-  notice: { title: '공지사항', module: '게시판', size: 12, Component: NoticeWidget },
-  project: { title: '프로젝트', module: '프로젝트', size: 4, Component: ProjectWidget },
+  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], Component: TodayWidget },
+  attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], Component: AttendanceWidget },
+  leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], Component: LeaveWidget },
+  approval: { title: '전자결재', module: '전자결재', size: 4, sizes: [4, 6, 8], Component: ApprovalWidget },
+  resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], Component: ResourceWidget },
+  team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], Component: TeamWidget },
+  notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], Component: NoticeWidget },
+  project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
 type WidgetId = keyof typeof WIDGETS;
@@ -46,8 +48,9 @@ const SPAN: Record<WidgetSize, string> = {
 const SIZE_LABEL: Record<WidgetSize, string> = { 4: '1/3', 6: '1/2', 8: '2/3', 12: '전체' };
 /** 미리보기를 그릴 실제 폭 — 이 폭으로 그린 뒤 줄여 보인다 */
 const PREVIEW_WIDTH: Record<WidgetSize, number> = { 4: 420, 6: 620, 8: 860, 12: 1180 };
-const PREVIEW_W = 188;
-const PREVIEW_H = 100;
+/** 위젯 추가 창의 카드 폭 — 실제 폭 비율대로 */
+const CARD_WIDTH: Record<WidgetSize, number> = { 4: 196, 6: 290, 8: 386, 12: 580 };
+const CARD_H = 150;
 
 const storageKey = (userId: string) => `workfit.execDashboard.layout.${userId}`;
 const DRAG_NEW = 'application/x-workfit-widget';
@@ -62,40 +65,133 @@ function loadLayout(userId: string | undefined): WidgetSlot<WidgetId>[] {
   }
 }
 
-/** 위젯 목록의 카드 — 실제 위젯을 줄여 보인다. 끌어서 놓거나 눌러서 맨 끝에 넣는다 */
-function TrayCard({ id, placed, onAdd, onDragStart, onDragEnd }: { id: WidgetId; placed: boolean; onAdd: () => void; onDragStart: () => void; onDragEnd: () => void }) {
+/** 위젯 추가 창의 카드 — 실제 위젯을 그 폭 그대로 줄여 보인다. 누르면 넣고, 끌어서 원하는 자리에 놓을 수도 있다 */
+function PickerCard({ id, size, placed, onAdd, onDragStart, onDragEnd }: {
+  id: WidgetId; size: WidgetSize; placed: boolean; onAdd: () => void; onDragStart: () => void; onDragEnd: () => void;
+}) {
   const def = WIDGETS[id];
-  const w = PREVIEW_WIDTH[def.size];
+  const cardW = CARD_WIDTH[size];
+  const w = PREVIEW_WIDTH[size];
   return (
     <div
       role="button"
       tabIndex={placed ? -1 : 0}
       aria-disabled={placed}
-      data-tray={id}
+      aria-label={`${def.title} ${SIZE_LABEL[size]} 넣기`}
+      data-pick={`${id}:${size}`}
       draggable={!placed}
       onClick={() => { if (!placed) onAdd(); }}
       onKeyDown={(e) => { if (!placed && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onAdd(); } }}
-      onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, id); e.dataTransfer.effectAllowed = 'copy'; onDragStart(); }}
+      onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, `${id}:${size}`); e.dataTransfer.effectAllowed = 'copy'; onDragStart(); }}
       onDragEnd={onDragEnd}
-      className={`group shrink-0 text-left ${placed ? 'cursor-default opacity-45' : 'cursor-grab active:cursor-grabbing'}`}
-      style={{ width: PREVIEW_W }}
+      className={`group shrink-0 ${placed ? 'cursor-default opacity-45' : 'cursor-pointer'}`}
+      style={{ width: cardW }}
     >
-      <div className={`relative overflow-hidden rounded-2xl border bg-[var(--color-bg)] ${placed ? 'border-border' : 'border-border group-hover:border-[#0876c8]'}`} style={{ height: PREVIEW_H }}>
-        <div className="pointer-events-none absolute top-2 left-2 origin-top-left select-none" style={{ width: w, zoom: (PREVIEW_W - 16) / w }} aria-hidden="true" inert>
+      <div className={`relative overflow-hidden rounded-2xl border bg-[var(--color-bg)] transition-colors ${placed ? 'border-border' : 'border-border group-hover:border-[#0876c8] group-focus-visible:border-[#0876c8]'}`} style={{ height: CARD_H }}>
+        <div className="pointer-events-none absolute top-2 left-2 select-none" style={{ width: w, zoom: (cardW - 16) / w }} aria-hidden="true" inert>
           <def.Component />
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--color-bg)] to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--color-bg)] to-transparent" />
         {!placed && (
-          <span className="absolute right-2 bottom-2 grid h-6 w-6 place-items-center rounded-full bg-[#0876c8] text-white opacity-0 shadow-sm group-hover:opacity-100">
-            <Plus size={14} />
+          <span className="absolute right-2.5 bottom-2.5 grid h-7 w-7 place-items-center rounded-full bg-[#0876c8] text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+            <Plus size={15} />
           </span>
         )}
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between px-1">
-        <span className="text-[12px] font-bold text-ink">{def.title}</span>
-        <span className="text-[11px] text-ink3">{placed ? '배치됨' : SIZE_LABEL[def.size]}</span>
-      </div>
+      <div className="mt-1.5 px-1 text-center text-[11.5px] font-bold text-ink3 tabular-nums">{SIZE_LABEL[size]}</div>
     </div>
+  );
+}
+
+/** 위젯 추가 창 — 왼쪽에서 모듈을 고르면 오른쪽에 그 모듈의 위젯이 크기별로 나온다 */
+function WidgetPicker({ open, hiddenForDrag, layout, onAdd, onClose, onDragStart, onDragEnd }: {
+  open: boolean;
+  hiddenForDrag: boolean;
+  layout: WidgetSlot<WidgetId>[];
+  onAdd: (id: WidgetId, size: WidgetSize) => void;
+  onClose: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
+  const [module, setModule] = useState(MODULES[0]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  const ids = WIDGET_IDS.filter((id) => WIDGETS[id].module === module);
+  return createPortal(
+    // 끌어서 놓는 동안에는 창을 투명하게 두어 뒤의 화면에 놓을 수 있게 한다(창을 없애면 끌기가 끊긴다)
+    <div
+      className={`fixed inset-0 z-[80] grid place-items-center bg-[rgba(15,25,45,.38)] transition-opacity ${hiddenForDrag ? 'pointer-events-none opacity-0' : ''}`}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="위젯 추가"
+        className="flex overflow-hidden rounded-[22px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)]"
+        style={{ width: 'min(960px, calc(100vw / var(--font-scale, 1) - 32px))', height: 'min(620px, calc(100vh / var(--font-scale, 1) - 32px))' }}
+      >
+        {/* 모듈 */}
+        <nav className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-border bg-panel-alt p-3">
+          <div className="px-2.5 pt-1 pb-3 text-[15px] font-extrabold text-ink">위젯 추가</div>
+          {MODULES.map((m) => {
+            const n = WIDGET_IDS.filter((id) => WIDGETS[id].module === m).length;
+            const on = m === module;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setModule(m)}
+                className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-left text-[13px] font-bold ${on ? 'bg-panel text-[#0876c8] shadow-sm' : 'text-ink2 hover:bg-panel/70'}`}
+              >
+                {m}
+                <span className={`text-[11px] tabular-nums ${on ? 'text-[#0876c8]' : 'text-ink3'}`}>{n}</span>
+              </button>
+            );
+          })}
+        </nav>
+        {/* 위젯 */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3">
+            <h2 className="text-[17px] font-extrabold tracking-tight text-ink">{module}</h2>
+            <button type="button" onClick={onClose} aria-label="닫기" className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><X size={17} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 pb-6">
+            <div className="flex flex-col gap-7">
+              {ids.map((id) => {
+                const placed = layout.some((s) => s.id === id);
+                return (
+                  <section key={id}>
+                    <div className="mb-2.5 flex items-baseline gap-2">
+                      <h3 className="text-[13.5px] font-extrabold text-ink">{WIDGETS[id].title}</h3>
+                      {placed && <span className="text-[11.5px] text-ink3">배치됨</span>}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-4">
+                      {WIDGETS[id].sizes.map((size) => (
+                        <PickerCard
+                          key={size}
+                          id={id}
+                          size={size}
+                          placed={placed}
+                          onAdd={() => onAdd(id, size)}
+                          onDragStart={onDragStart}
+                          onDragEnd={onDragEnd}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -109,6 +205,7 @@ export default function ExecDashboardScreen() {
   const [resizing, setResizing] = useState<number | null>(null);
   /** 옮기기 끌기를 허락한 위젯 — 폭 손잡이·버튼을 누를 때는 옮기기가 시작되지 않게 */
   const [armed, setArmed] = useState<number | null>(null);
+  const [picking, setPicking] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
   // 로그인 사용자가 늦게 잡히면 그 사람 배치로 다시 읽는다
@@ -124,8 +221,11 @@ export default function ExecDashboardScreen() {
 
   const dropAt = (index: number, e: React.DragEvent) => {
     e.preventDefault();
-    const newId = e.dataTransfer.getData(DRAG_NEW) as WidgetId | '';
-    if (newId && WIDGETS[newId]) save(insertSlot(layout, { id: newId, size: WIDGETS[newId].size }, index));
+    const [newId, rawSize] = e.dataTransfer.getData(DRAG_NEW).split(':') as [WidgetId | '', string | undefined];
+    if (newId && WIDGETS[newId]) {
+      save(insertSlot(layout, { id: newId, size: (Number(rawSize) || WIDGETS[newId].size) as WidgetSize }, index));
+      setPicking(false);
+    }
     else if (dragFrom !== null) save(moveSlot(layout, dragFrom, index > dragFrom ? index - 1 : index));
     resetDrag();
   };
@@ -143,7 +243,7 @@ export default function ExecDashboardScreen() {
     let latest = layout;
     const onMove = (ev: PointerEvent) => {
       const cols = ((ev.clientX - left) / gridRect.width) * 12;
-      const size = snapSize(cols);
+      const size = snapSize(cols, WIDGETS[latest[index].id].sizes);
       if (latest[index].size !== size) {
         latest = latest.map((s, i) => (i === index ? { ...s, size } : s));
         setLayout(latest);
@@ -162,9 +262,14 @@ export default function ExecDashboardScreen() {
   const dragging = dragFrom !== null || dragNew;
 
   return (
-    <div className={`mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 ${editing ? 'pb-[240px]' : 'pb-10'}`}>
+    <div className={`mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 pb-10`}>
       {/* 편집 도구 */}
       <div className="flex min-h-8 items-center justify-end gap-2">
+        {editing && (
+          <button type="button" onClick={() => setPicking(true)} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#9fcfee] px-3 py-1.5 text-[12px] font-bold text-[#0876c8] hover:bg-[#e0f0fb] dark:hover:bg-sky-500/15">
+            <Plus size={14} />위젯 추가
+          </button>
+        )}
         {editing && (
           <button type="button" onClick={() => save(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[12px] font-bold text-ink3 hover:bg-panel-alt">
             기본 배치
@@ -172,41 +277,22 @@ export default function ExecDashboardScreen() {
         )}
         <button
           type="button"
-          onClick={() => { setEditing((v) => !v); resetDrag(); }}
+          onClick={() => { setEditing((v) => !v); setPicking(false); resetDrag(); }}
           className={`cursor-pointer rounded-lg px-3 py-1.5 text-[12px] font-bold ${editing ? 'bg-[#0876c8] text-white hover:bg-[#066aaf]' : 'border border-border text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]'}`}
         >
           {editing ? '완료' : '화면 편집'}
         </button>
       </div>
 
-      {/* 위젯 목록 — 모듈별 */}
-      {editing && (
-        <div
-          className="fixed bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-[22px] border border-border bg-panel/95 px-4 pt-3 pb-3 shadow-[0_16px_40px_-12px_rgba(16,40,80,.35)] backdrop-blur"
-          style={{ width: 'min(1180px, calc(100vw / var(--font-scale, 1) - 32px))' }}
-        >
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          <div className="flex gap-6 overflow-x-auto pb-1">
-            {MODULES.map((module) => (
-              <div key={module} className="shrink-0">
-                <div className="mb-2 px-1 text-[12px] font-extrabold text-ink2">{module}</div>
-                <div className="flex gap-3">
-                  {WIDGET_IDS.filter((id) => WIDGETS[id].module === module).map((id) => (
-                    <TrayCard
-                      key={id}
-                      id={id}
-                      placed={layout.some((s) => s.id === id)}
-                      onAdd={() => save(insertSlot(layout, { id, size: WIDGETS[id].size }, layout.length))}
-                      onDragStart={() => setDragNew(true)}
-                      onDragEnd={resetDrag}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <WidgetPicker
+        open={editing && picking}
+        hiddenForDrag={dragNew}
+        layout={layout}
+        onAdd={(id, size) => { save(insertSlot(layout, { id, size }, layout.length)); setPicking(false); }}
+        onClose={() => setPicking(false)}
+        onDragStart={() => setDragNew(true)}
+        onDragEnd={() => { setDragNew(false); setDragOver(null); }}
+      />
 
       <div ref={gridRef} className="grid grid-cols-12 gap-4">
         {layout.map((slot, index) => {

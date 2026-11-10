@@ -337,7 +337,7 @@ function HoursBars({ days, today }: { days: Array<{ date: string; minutes: numbe
 }
 
 /** 연차 막대 — 사용·신청 중·남음 */
-function LeaveBar() {
+function LeaveBar({ standalone = false }: { standalone?: boolean }) {
   const navigate = useNavigate();
   const { user: me } = useAuth();
   const leave = useLeave(me?.id);
@@ -351,9 +351,9 @@ function LeaveBar() {
   ].filter((s) => s.value > 0);
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   return (
-    <button type="button" onClick={() => navigate('/gw/leave')} className="group mt-5 block w-full cursor-pointer border-t border-border pt-4 text-left">
+    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-5 border-t border-border pt-4'}`}>
       <div className="mb-2.5 flex items-baseline justify-between">
-        <span className="text-[12.5px] font-bold text-ink group-hover:text-[#0876c8]">연차</span>
+        <span className={`font-bold text-ink group-hover:text-[#0876c8] ${standalone ? 'text-[15px] font-extrabold' : 'text-[12.5px]'}`}>연차</span>
         <span className="text-[11.5px] text-ink3">
           남은 연차 <strong className={`text-[15px] tabular-nums ${leave.remaining < 0 ? 'text-[#c4432f] dark:text-red-300' : 'text-ink'}`}>{fmt(leave.remaining)}</strong>일 / {fmt(leave.grant)}일
         </span>
@@ -683,6 +683,16 @@ export function ProjectWidget() {
       <div className="grid min-h-[120px] flex-1 place-items-center rounded-2xl border border-dashed border-border bg-panel-alt/60" aria-disabled="true">
         <div className="text-[14px] font-bold text-ink3">준비 중</div>
       </div>
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 연차(따로) ───────────────────────── */
+
+export function LeaveWidget() {
+  return (
+    <Panel>
+      <LeaveBar standalone />
     </Panel>
   );
 }
