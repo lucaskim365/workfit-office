@@ -7,6 +7,7 @@ import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteVi
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
+import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useLeave } from '@/features/gw/useLeave';
 import { useReservations } from '@/features/resource/useReservations';
@@ -543,19 +544,25 @@ export function AttendanceWidget() {
 export function ApprovalWidget() {
   const navigate = useGo();
   const { user: me } = useAuth();
-  const { byBox, counts } = useApprovalBoxes(me?.id);
+  const { byBox, counts, isLoading: boxesLoading } = useApprovalBoxes(me?.id);
+  const unreadState = useApprovalUnread(me?.id ?? '', byBox, boxesLoading);
   const pending = useMemo(
     () => (me ? (byBox['대기'] ?? []).filter((d) => currentApproverIds(d).includes(me.id)) : []),
     [byBox, me],
   );
   const inProgressDocs = useMemo(() => (byBox['상신'] ?? []).filter((d) => d.status === '진행중'), [byBox]);
   const mineInProgress = inProgressDocs.length;
+  // 수신 — 남에게서 받은 문서 중 안 읽은 것만(내가 기안해 수신으로 잡힌 문서는 뺀다)
+  const receivedUnread = useMemo(
+    () => (byBox['수신'] ?? []).filter((d) => d.drafterId !== me?.id && unreadState.unread['수신'].ids.has(d.id)),
+    [byBox, me?.id, unreadState.unread],
+  );
   // 카드를 누르면 화면을 옮기지 않고 아래 목록이 그 문서함으로 바뀐다
   const tiles = [
     { key: '대기', label: '결재 대기', value: pending.length, docs: pending, empty: '결재할 문서가 없습니다.' },
     { key: '상신', label: '진행 중', value: mineInProgress, docs: inProgressDocs, empty: '진행 중인 문서가 없습니다.' },
     { key: '반려', label: '반려', value: counts['반려'] ?? 0, docs: byBox['반려'] ?? [], empty: '반려된 문서가 없습니다.' },
-    { key: '수신', label: '수신', value: counts['수신'] ?? 0, docs: byBox['수신'] ?? [], empty: '수신한 문서가 없습니다.' },
+    { key: '수신', label: '수신', value: receivedUnread.length, docs: receivedUnread, empty: '새로 받은 문서가 없습니다.' },
   ];
   const [boxKey, setBoxKey] = useState('대기');
   const active = tiles.find((t) => t.key === boxKey) ?? tiles[0];
