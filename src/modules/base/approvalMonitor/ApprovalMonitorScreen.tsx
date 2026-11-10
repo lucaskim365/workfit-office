@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { usePermission } from '@/features/auth/usePermission';
-import { FileText, Printer, Search, X } from 'lucide-react';
+import { Printer, Search, X } from 'lucide-react';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 
 type MonitorTab = 'ALL' | '진행중' | '완료' | '반려' | '임시저장' | '회수';
@@ -57,7 +57,6 @@ export default function ApprovalMonitorScreen() {
   const org = useOrgTree();
   const [tab, setTab] = useState<MonitorTab>('ALL');
   const [q, setQ] = useState('');
-  const [selId, setSelId] = useState<string | null>(null);
   const [viewDoc, setViewDoc] = useState<ApprovalDoc | null>(null);
 
   const nameOf = (id: string) => org.userById(id)?.name ?? id;
@@ -93,8 +92,6 @@ export default function ApprovalMonitorScreen() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // 2. 현재 선택 문서
-  const selDoc = useMemo(() => filtered.find((d) => d.id === selId) ?? pagedList[0] ?? null, [filtered, pagedList, selId]);
 
   // 3. 현재 결재 대기자 구하기
   const getWaitingApprovers = (d: ApprovalDoc) => {
@@ -112,15 +109,15 @@ export default function ApprovalMonitorScreen() {
         <p className="mt-0.5 text-xs text-ink3">기준 정보 / 조직·결재 기준정보 / 전사 결재 문서 진행 상황 실시간 모니터링</p>
       </div>
 
-      <div className="grid grid-cols-[1fr_420px] gap-4 items-start">
-        {/* 좌: 문서 그리드 목록 및 검색/필터 */}
+      <div>
+        {/* 문서 목록 — 화면 전체 폭. 행을 누르면 문서·결재선 진행 상태를 창으로 띄운다 */}
         <div className="flex flex-col rounded-xl border border-border bg-panel overflow-hidden min-w-0 shadow-2xs">
           {/* 필터 탭 */}
           <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1 shrink-0 overflow-x-auto">
             {(Object.keys(TAB_LABELS) as MonitorTab[]).map((t) => (
               <button
                 key={t}
-                onClick={() => { setTab(t); setSelId(null); setPage(1); }}
+                onClick={() => { setTab(t); setPage(1); }}
                 className={`rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${
                   tab === t ? 'bg-teal text-white shadow-sm' : 'text-ink2 hover:bg-panel-alt'
                 }`}
@@ -169,19 +166,19 @@ export default function ApprovalMonitorScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {pagedList.map((d) => {
-                    const isSelected = selDoc?.id === d.id;
+                    const isSelected = viewDoc?.id === d.id;
                     const st = STATUS_STYLE[d.status] || { bg: 'bg-panel-alt', text: 'text-ink3' };
                     return (
                       <tr
                         key={d.id}
-                        onClick={() => setSelId(d.id)}
+                        onClick={() => setViewDoc(d)}
                         className={`cursor-pointer transition-colors ${
                           isSelected ? 'bg-teal-soft/40 hover:bg-teal-soft/50' : 'hover:bg-panel-alt/40'
                         }`}
                       >
                         <td className="px-4 py-3 font-semibold tabular-nums text-ink">{d.docNo || '—'}</td>
                         <td className="px-4 py-3 text-ink2">{d.docType}</td>
-                        <td className="px-4 py-3 font-semibold text-ink truncate max-w-[200px]" title={d.title}>
+                        <td className="px-4 py-3 font-semibold text-ink truncate max-w-[480px]" title={d.title}>
                           {d.title}
                         </td>
                         <td className="px-4 py-3 text-ink2 font-medium">
@@ -250,198 +247,222 @@ export default function ApprovalMonitorScreen() {
           </div>
         </div>
 
-        {/* 우: 결재 상세 뷰 및 결재 흐름 상세 (페이지 스크롤 시 sticky 상단 고정) */}
-        <div className="flex flex-col gap-4 sticky top-[calc(var(--shell-top)+16px)]">
-          {selDoc ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setViewDoc(selDoc)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-panel px-3 py-2 text-[12px] font-bold text-ink2 shadow-sm hover:border-teal hover:text-teal cursor-pointer"
-              >
-                <FileText size={14} /> 문서 보기·인쇄
-              </button>
-              {/* 결재 진행 상황 타임라인 패널 */}
-              <div className="rounded-xl border border-border bg-panel p-4 flex flex-col gap-2.5 shadow-sm">
-                {(() => {
-                  const blockingSteps = selDoc.steps.filter((s) => s.kind !== '참조');
-                  const hasShared = (selDoc.recipients && selDoc.recipients.length > 0) || selDoc.steps.some((s) => s.kind === '참조');
-                  return (
-                    <>
-                      <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
-                        <span className="text-[12px] font-bold text-ink flex items-center gap-1.5">
-                          <span className="h-3 w-1 rounded-sm bg-teal" />
-                          결재선 진행 상태
-                        </span>
-                        <span className="text-[10.5px] font-extrabold text-ink3">
-                          총 {blockingSteps.length}단계
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {blockingSteps.map((s, idx) => {
-                          const displaySeq = idx + 1;
-                          const isCurrent = selDoc.status === '진행중' && currentApproverIds(selDoc).includes(s.approverId);
-                          return (
-                            <div
-                              key={s.seq}
-                              className={`flex items-center justify-between p-2 rounded-lg border text-[11px] ${
-                                isCurrent
-                                  ? 'border-teal/30 bg-teal-soft/30 font-bold'
-                                  : s.decision === '승인'
-                                  ? 'border-border/60 bg-panel-alt/40'
-                                  : 'border-border bg-transparent'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className={`grid h-4.5 w-4.5 place-items-center rounded-full text-[9px] font-bold ${
-                                  s.decision === '승인' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
-                                }`}>
-                                  {displaySeq}
-                                </span>
-                                <span className="text-ink">{nameOf(s.approverId)}</span>
-                                <span className="text-[9.5px] text-ink3">({s.kind})</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                {isCurrent && (
-                                  <span className="animate-pulse rounded bg-amber/20 px-1 py-0.5 text-[9.5px] font-extrabold text-amber">
-                                    ⏳ 대기 중
-                                  </span>
-                                )}
-                                <span className={`text-[9.5px] font-extrabold ${
-                                  s.decision === '승인'
-                                    ? 'text-teal'
-                                    : s.decision === '반려'
-                                    ? 'text-danger'
-                                    : 'text-ink3'
-                                }`}>
-                                  {s.decision}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* 공유처 (수신 / 참조) - 마지막 결재단계 바로 아래 표시 */}
-                      {hasShared && (
-                        <div className="mt-1 border-t border-border/60 pt-2.5">
-                          <div className="mb-1.5 text-[11px] font-bold text-ink flex items-center gap-1.5">
-                            <span className="text-indigo-500">└ 📨 공유처</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 pl-2">
-                            {/* 결재선 내 참조 노드 */}
-                            {selDoc.steps.filter((s) => s.kind === '참조').map((s) => (
-                              <span key={`ref-${s.seq}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-teal/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
-                                <span className="font-bold text-teal">[참조]</span> {nameOf(s.approverId)}
-                              </span>
-                            ))}
-                            {/* 수신/참조처(recipients) 노드 */}
-                            {selDoc.recipients?.map((r) => (
-                              <span key={`rec-${r.id}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-indigo-500/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
-                                <span className="font-bold text-indigo-600">[{r.type === 'dept' ? '수신부서' : r.type === 'drafter' ? '기안자' : '수신'}]</span>
-                                {r.type === 'dept' ? `📁 ${r.name}` : `👤 ${r.name}`}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 시행 정보 - 공유처 아래 표시 */}
-                      {selDoc.execution && (
-                        <div className="mt-1 border-t border-border/60 pt-2.5">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] font-bold text-teal flex items-center gap-1.5">
-                              <span>└ 📦 시행 정보</span>
-                            </span>
-                            <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full ${
-                              selDoc.execution.status === '시행완료'
-                                ? 'bg-teal text-white'
-                                : selDoc.execution.status === '처리중'
-                                ? 'bg-amber text-white'
-                                : 'bg-ink3/10 text-ink3'
-                            }`}>
-                              {selDoc.execution.status}
-                            </span>
-                          </div>
-                          <div className="text-[10.5px] text-ink2 space-y-1 pl-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-ink3">시행 대상</span>
-                              <span className="font-bold text-ink">
-                                {selDoc.execution.targetType === 'DEPT' ? `📁 ${deptNameOf(selDoc.execution.targetId)}` : `👤 ${nameOf(selDoc.execution.targetId)}`}
-                              </span>
-                            </div>
-                            {selDoc.execution.executorId && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-ink3">실무 담당자</span>
-                                <span className="font-bold text-teal">{nameOf(selDoc.execution.executorId)}</span>
-                              </div>
-                            )}
-                            {selDoc.execution.completedAt && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-ink3">시행 완료일</span>
-                                <span className="font-semibold text-ink">{selDoc.execution.completedAt}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 grid place-items-center rounded-xl border border-dashed border-border bg-panel p-8 text-center text-ink3 text-[12px]">
-              목록에서 문서를 선택하면 결재선 진행 흐름을 확인할 수 있습니다.
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* 문서 보기·인쇄 — 모니터링 권한이 있으면 결재선에 없어도 본문을 보고 인쇄한다 */}
+      {/* 문서 창 — 왼쪽 문서(보기·인쇄), 오른쪽 결재선 진행 상태. 모니터링 권한이면 결재선에 없어도 본다 */}
       {viewDoc && (
-        <div
-          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/55 p-4"
-          onClick={() => setViewDoc(null)}
-        >
-          <div
-            className="flex flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-xl"
-            // 화면 배율(--font-scale)만큼 커지므로 실제 화면 크기에 맞춰 제한한다(배율 1.48 에서 아래·오른쪽이 잘리던 것)
-            style={{
-              width: 'min(880px, calc(100vw / var(--font-scale, 1) - 32px))',
-              maxHeight: 'calc(100vh / var(--font-scale, 1) - 32px)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5 print:hidden">
-              <span className="text-[12.5px] font-bold text-ink">{viewDoc.title}</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal cursor-pointer"
-                >
-                  <Printer size={13} /> 인쇄
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewDoc(null)}
-                  className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel-alt hover:text-ink cursor-pointer"
-                  aria-label="닫기"
-                >
-                  <X size={15} />
-                </button>
-              </div>
+        <MonitorDocModal doc={viewDoc} onClose={() => setViewDoc(null)}>
+          {renderFlow(viewDoc)}
+        </MonitorDocModal>
+      )}
+    </div>
+  );
+
+  /** 결재선 진행 상태(결재 단계·공유처·시행 정보) */
+  function renderFlow(doc: ApprovalDoc) {
+    return (
+      <>
+      {(() => {
+        const blockingSteps = doc.steps.filter((s) => s.kind !== '참조');
+        const hasShared = (doc.recipients && doc.recipients.length > 0) || doc.steps.some((s) => s.kind === '참조');
+        return (
+          <>
+            <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
+              <span className="text-[12px] font-bold text-ink flex items-center gap-1.5">
+                <span className="h-3 w-1 rounded-sm bg-teal" />
+                결재선 진행 상태
+              </span>
+              <span className="text-[10.5px] font-extrabold text-ink3">
+                총 {blockingSteps.length}단계
+              </span>
             </div>
-            <div className="menu-scroll flex-1 overflow-auto bg-panel-alt/30 p-4">
-              {/* 창이 문서보다 좁으면 가운데 정렬 때문에 왼쪽이 잘리므로 w-fit + mx-auto 로 가운데 두고 가로 스크롤 */}
-              <div className="mx-auto w-fit">
-                <ApprovalDocumentView doc={viewDoc} isPreview={true} />
-              </div>
+            <div className="space-y-2">
+              {blockingSteps.map((s, idx) => {
+                const displaySeq = idx + 1;
+                const isCurrent = doc.status === '진행중' && currentApproverIds(doc).includes(s.approverId);
+                return (
+                  <div
+                    key={s.seq}
+                    className={`flex items-center justify-between p-2 rounded-lg border text-[11px] ${
+                      isCurrent
+                        ? 'border-teal/30 bg-teal-soft/30 font-bold'
+                        : s.decision === '승인'
+                        ? 'border-border/60 bg-panel-alt/40'
+                        : 'border-border bg-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`grid h-4.5 w-4.5 place-items-center rounded-full text-[9px] font-bold ${
+                        s.decision === '승인' ? 'bg-teal text-white' : 'bg-ink3/15 text-ink2'
+                      }`}>
+                        {displaySeq}
+                      </span>
+                      <span className="text-ink">{nameOf(s.approverId)}</span>
+                      <span className="text-[9.5px] text-ink3">({s.kind})</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {isCurrent && (
+                        <span className="animate-pulse rounded bg-amber/20 px-1 py-0.5 text-[9.5px] font-extrabold text-amber">
+                          ⏳ 대기 중
+                        </span>
+                      )}
+                      <span className={`text-[9.5px] font-extrabold ${
+                        s.decision === '승인'
+                          ? 'text-teal'
+                          : s.decision === '반려'
+                          ? 'text-danger'
+                          : 'text-ink3'
+                      }`}>
+                        {s.decision}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+
+            {/* 공유처 (수신 / 참조) - 마지막 결재단계 바로 아래 표시 */}
+            {hasShared && (
+              <div className="mt-1 border-t border-border/60 pt-2.5">
+                <div className="mb-1.5 text-[11px] font-bold text-ink flex items-center gap-1.5">
+                  <span className="text-indigo-500">└ 📨 공유처</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pl-2">
+                  {/* 결재선 내 참조 노드 */}
+                  {doc.steps.filter((s) => s.kind === '참조').map((s) => (
+                    <span key={`ref-${s.seq}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-teal/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
+                      <span className="font-bold text-teal">[참조]</span> {nameOf(s.approverId)}
+                    </span>
+                  ))}
+                  {/* 수신/참조처(recipients) 노드 */}
+                  {doc.recipients?.map((r) => (
+                    <span key={`rec-${r.id}`} className="flex items-center gap-1 rounded-md bg-panel-alt border border-indigo-500/20 px-2 py-0.5 text-[10.5px] font-semibold text-ink2">
+                      <span className="font-bold text-indigo-600">[{r.type === 'dept' ? '수신부서' : r.type === 'drafter' ? '기안자' : '수신'}]</span>
+                      {r.type === 'dept' ? `📁 ${r.name}` : `👤 ${r.name}`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 시행 정보 - 공유처 아래 표시 */}
+            {doc.execution && (
+              <div className="mt-1 border-t border-border/60 pt-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-teal flex items-center gap-1.5">
+                    <span>└ 📦 시행 정보</span>
+                  </span>
+                  <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-full ${
+                    doc.execution.status === '시행완료'
+                      ? 'bg-teal text-white'
+                      : doc.execution.status === '처리중'
+                      ? 'bg-amber text-white'
+                      : 'bg-ink3/10 text-ink3'
+                  }`}>
+                    {doc.execution.status}
+                  </span>
+                </div>
+                <div className="text-[10.5px] text-ink2 space-y-1 pl-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink3">시행 대상</span>
+                    <span className="font-bold text-ink">
+                      {doc.execution.targetType === 'DEPT' ? `📁 ${deptNameOf(doc.execution.targetId)}` : `👤 ${nameOf(doc.execution.targetId)}`}
+                    </span>
+                  </div>
+                  {doc.execution.executorId && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink3">실무 담당자</span>
+                      <span className="font-bold text-teal">{nameOf(doc.execution.executorId)}</span>
+                    </div>
+                  )}
+                  {doc.execution.completedAt && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink3">시행 완료일</span>
+                      <span className="font-semibold text-ink">{doc.execution.completedAt}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
+      </>
+    );
+  }
+}
+
+/** 문서 종이 폭(px) — ApprovalDocumentView 의 w-[800px] */
+const DOC_PAPER_PX = 800;
+
+/**
+ * 문서 창. 화면 배율(--font-scale)만큼 커지므로 창 크기를 실제 화면에 맞춰 제한하고,
+ * 문서는 화면에서만 창 폭에 맞춰 보인다(인쇄는 print:![zoom:1] 로 원래 크기 그대로).
+ */
+function MonitorDocModal({ doc, onClose, children }: { doc: ApprovalDoc; onClose: () => void; children: ReactNode }) {
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(1);
+
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    const measure = () => {
+      // 칸 폭(여백 제외)을 문서 종이 폭으로 나눈다 — clientWidth 는 같은 배율 안의 CSS px 라 배율과 상관없다
+      const cs = getComputedStyle(pane);
+      const inner = pane.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const next = Math.min(1, Math.max(0.3, inner / DOC_PAPER_PX));
+      setFit((prev) => (Math.abs(prev - next) > 0.005 ? next : prev));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(pane);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
+      <div
+        className="flex flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-xl"
+        style={{
+          width: 'min(1200px, calc(100vw / var(--font-scale, 1) - 32px))',
+          height: 'calc(100vh / var(--font-scale, 1) - 32px)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 print:hidden">
+          <div className="min-w-0 truncate text-[12.5px] font-bold text-ink">
+            <span className="mr-2 tabular-nums text-ink3">{doc.docNo || '—'}</span>
+            {doc.title}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal cursor-pointer"
+            >
+              <Printer size={13} /> 인쇄
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel-alt hover:text-ink cursor-pointer"
+              aria-label="닫기"
+            >
+              <X size={15} />
+            </button>
           </div>
         </div>
-      )}
+        <div className="grid min-h-0 flex-1 grid-cols-[1fr_300px]">
+          <div ref={paneRef} className="menu-scroll min-h-0 overflow-auto bg-panel-alt/30 p-4">
+            <div className="mx-auto w-fit [zoom:var(--doc-fit)] print:![zoom:1]" style={{ '--doc-fit': fit } as React.CSSProperties}>
+              <ApprovalDocumentView doc={doc} isPreview={true} />
+            </div>
+          </div>
+          <div className="menu-scroll min-h-0 overflow-y-auto border-l border-border p-3 print:hidden">
+            <div className="flex flex-col gap-2.5">{children}</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

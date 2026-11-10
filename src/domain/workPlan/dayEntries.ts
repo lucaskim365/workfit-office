@@ -177,22 +177,30 @@ export function indexDayEntries(input: DayEntryInput, dates: string[]): (userId:
     const ownerId = input.members.some((m) => m.id === s.drafterId)
       ? s.drafterId
       : memberIdByName.get(normName(s.drafterName)) ?? s.drafterId;
-    const outside = fromApprovalSchedule(s) ?? undefined;
+    const outside = fromApprovalSchedule(s, (id) => nameById.get(id)) ?? undefined;
     const timed = Boolean(s.startTime && s.endTime);
+    // 기안자 칸 + 동행자 칸(동행 표시)
+    const rows = [
+      { userId: ownerId, companionOf: undefined as string | undefined },
+      ...(s.companionIds ?? []).filter((id) => id !== ownerId).map((id) => ({ userId: id, companionOf: ownerId })),
+    ];
     for (const date of dates) {
       if (!isDateInSchedule(date, s)) continue;
-      push(ownerId, date, {
-        key: `appr-${s.docId}-${ownerId}`,
-        source: 'APPROVAL',
-        allDay: !timed,
-        startTime: timed ? s.startTime ?? null : null,
-        endTime: timed ? s.endTime ?? null : null,
-        title: s.category !== 'LEAVE' && s.destination ? s.destination : s.docTitle,
-        tag: null,
-        roomStatus: null,
-        outside,
-        schedule: s,
-      });
+      for (const row of rows) {
+        push(row.userId, date, {
+          key: `appr-${s.docId}-${row.userId}`,
+          source: 'APPROVAL',
+          allDay: !timed,
+          startTime: timed ? s.startTime ?? null : null,
+          endTime: timed ? s.endTime ?? null : null,
+          title: s.category !== 'LEAVE' && s.destination ? s.destination : s.docTitle,
+          tag: null,
+          companionOf: row.companionOf,
+          roomStatus: null,
+          outside,
+          schedule: s,
+        });
+      }
     }
   }
 

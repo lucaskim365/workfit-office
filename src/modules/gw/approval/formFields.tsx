@@ -15,6 +15,7 @@ import { SelectFieldEditor } from './formFields/SelectFieldEditor';
 import { calculateLeaveDays } from '@/domain/leave/policy';
 import { acceptsDecimal, HOLIDAY_WORK_DATE_KEY, isHolidayWorkLocked, numberFieldInput } from '@/domain/commute/overtimeDraft';
 import { nowLocalIso } from '@/shared/lib/datetime';
+import { splitUserIds } from '@/domain/approvalDoc/scheduleEngine';
 
 // Re-export utility functions and types for backward compatibility
 export { CalendarRangePicker } from './formFields/CalendarRangePicker';
@@ -106,6 +107,76 @@ function UserFieldEditor({
             if (items[0]) {
               onChange(items[0].id);
             }
+            setShowModal(false);
+          }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 조직도에서 고른 것(사람·부서) → 사용자 id. 부서를 고르면 그 부서원 전원 */
+export function pickedUserIds(items: { id: string; type: 'user' | 'dept' }[], org: any): string[] {
+  const ids: string[] = [];
+  for (const it of items) {
+    if (it.type === 'user') ids.push(it.id);
+    else {
+      const dept = (org?.depts ?? []).find((d: any) => d.id === it.id);
+      if (dept) ids.push(...(org?.users ?? []).filter((u: any) => u.dept === dept.name).map((u: any) => u.id));
+    }
+  }
+  return ids;
+}
+
+/** 조직도 기반 여러 사람 선택 필드 위젯 — 값은 사용자 id 콤마 결합 */
+function MultiUserFieldEditor({ field, value, onChange, org }: { field: FormField; value: string; onChange: (val: string) => void; org?: any }) {
+  const fullOrg = useOrgTree();
+  const effectiveOrg = org && (org as any).roots ? org : fullOrg;
+  const [showModal, setShowModal] = useState(false);
+  const ids = splitUserIds(value);
+  const userOf = (id: string) => effectiveOrg.users?.find((u: any) => u.id === id);
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        onClick={() => setShowModal(true)}
+        className="flex min-h-[38px] flex-1 cursor-pointer flex-wrap items-center gap-1.5 rounded-lg border border-border-hi bg-panel-alt px-2.5 py-1.5 text-[12.5px] hover:border-teal"
+      >
+        {ids.length === 0 && <span className="px-0.5 text-ink3">{field.placeholder || '조직도에서 임직원 선택'}</span>}
+        {ids.map((id) => {
+          const u = userOf(id);
+          return (
+            <span key={id} className="flex items-center gap-1 rounded-md border border-border bg-panel px-1.5 py-0.5 text-[12px] font-semibold text-ink">
+              {u?.name ?? id}
+              {u?.dept && <span className="text-[10.5px] font-normal text-ink3">{u.dept}</span>}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onChange(ids.filter((x) => x !== id).join(',')); }}
+                className="text-ink3 hover:text-rose-500"
+                aria-label={`${u?.name ?? id} 빼기`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowModal(true)}
+        className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-teal/40 bg-teal-soft/60 px-3 py-2 text-[12px] font-bold text-teal shadow-2xs transition-all hover:bg-teal hover:text-white"
+      >
+        <Building2 size={13} />
+        <span>조직도</span>
+      </button>
+      {showModal && (
+        <SelectorDialog
+          title={`${field.label || '임직원'} 선택`}
+          org={effectiveOrg}
+          excludeIds={new Set(ids)}
+          deptOnly={false}
+          onConfirm={(items) => {
+            onChange([...new Set([...ids, ...pickedUserIds(items, effectiveOrg)])].join(','));
             setShowModal(false);
           }}
           onClose={() => setShowModal(false)}
@@ -241,6 +312,9 @@ export function DynamicField({
           org={org}
         />
       );
+
+    case '다중사용자':
+      return <MultiUserFieldEditor field={field} value={sv} onChange={(val) => set({ [field.key]: val })} org={org} />;
 
     case '부서':
       return (
