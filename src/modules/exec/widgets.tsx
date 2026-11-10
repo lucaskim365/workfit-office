@@ -758,20 +758,20 @@ export function TodayCommuteWidget() {
               <div className="text-[10px] text-ink3">/ 8시간</div>
             </div>
           </Ring>
-          <dl className="m-0 grid flex-1 grid-cols-2 gap-3">
+          <dl className="m-0 grid min-w-0 flex-1 gap-2">
             {[
               { label: '출근', value: inClock, late: rec?.bucket === 'late' },
               { label: '퇴근', value: outClock, late: false },
             ].map((x) => (
-              <div key={x.label} className="rounded-xl bg-panel-alt px-3 py-2.5">
-                <dt className="text-[11px] font-bold text-ink3">{x.label}</dt>
-                <dd className={`m-0 mt-0.5 text-[22px] leading-tight font-black tabular-nums ${x.value ? (x.late ? 'text-[#c4602f]' : 'text-ink') : 'text-ink3'}`}>
+              <div key={x.label} className="flex items-center justify-between gap-2 rounded-xl bg-panel-alt px-3 py-2">
+                <dt className="shrink-0 text-[11.5px] font-bold text-ink3">{x.label}</dt>
+                <dd className={`m-0 text-[20px] leading-tight font-black whitespace-nowrap tabular-nums ${x.value ? (x.late ? 'text-[#c4602f]' : 'text-ink') : 'text-ink3'}`}>
                   {x.value ?? '--:--'}
                 </dd>
               </div>
             ))}
             {rec && rec.bucket !== 'work' && rec.bucket !== 'pending' && (
-              <div className="col-span-2 text-[11.5px] font-bold text-ink2">{ATTENDANCE_LABELS[rec.bucket]}</div>
+              <div className="text-[11.5px] font-bold text-ink2">{ATTENDANCE_LABELS[rec.bucket]}</div>
             )}
           </dl>
         </div>
