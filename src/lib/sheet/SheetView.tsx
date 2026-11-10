@@ -98,7 +98,10 @@ export function SheetView({
       // 화면에서 문서 상자 안 표 자리의 비율 × 종이 인쇄 폭(화면 배율로 나눠 CSS 단위로)
       const bodyZoom = parseFloat(getComputedStyle(document.body).zoom) || 1;
       const pagePx = (printFit.pageWidthMm / 25.4) * 96 / bodyZoom;
-      const available = pagePx * (box.clientWidth / root.clientWidth);
+      // 인쇄 때 문서 상자의 안쪽 여백은 빠지므로(앱 인쇄 CSS) 화면의 여백을 뺀 폭 대비 비율로 — 문서 머리 표와 양 끝이 맞게
+      const rs = getComputedStyle(root);
+      const inner = root.clientWidth - (parseFloat(rs.paddingLeft) || 0) - (parseFloat(rs.paddingRight) || 0);
+      const available = pagePx * Math.min(1, box.clientWidth / (inner > 0 ? inner : root.clientWidth));
       saved = table.style.zoom;
       table.style.zoom = String(Math.min(1, available / total));
     };
@@ -168,7 +171,8 @@ export function SheetView({
                     data-sheet-cell={`${rr}:${c}`}
                     rowSpan={rowSpan > 1 ? rowSpan : undefined}
                     colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
-                    className={`overflow-hidden px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(rr, c) ?? ''}`}
+                    // 덧그림(직인 등)이 있는 칸은 칸 밖으로 넘쳐도 잘리지 않게 — 직인은 칸보다 크게 걸쳐 찍힌다
+                    className={`${overlay ? 'overflow-visible' : 'overflow-hidden'} px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(rr, c) ?? ''}`}
                     style={{
                       textAlign: defaultAlign(sheet, rr, col),
                       ...cellCss(renderStyle(sheet, rr, c, m?.rowSpan, m?.colSpan), { thinColor: thinBorderColor }),

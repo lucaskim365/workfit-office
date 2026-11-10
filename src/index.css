@@ -238,6 +238,12 @@ body {
     display: none !important;
   }
 
+  /* 문서를 감싼 바깥 틀의 최소 폭(결재함 화면 min-w-[920px] 등)이 인쇄에 남으면 페이지가 종이보다 넓어져
+     브라우저가 문서 전체를 줄여 찍는다(종이 폭의 절반 남짓) — 인쇄 때는 틀의 최소 폭을 푼다 */
+  body *:has(.approval-print) {
+    min-width: 0 !important;
+  }
+
   .approval-print {
     position: absolute !important;
     left: 0 !important;
