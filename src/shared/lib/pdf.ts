@@ -153,31 +153,51 @@ export async function exportElementToPdf(el: HTMLElement, fileName: string): Pro
 }
 
 /**
- * 화면 요소 하나 → PNG 바이트(엑셀에 넣을 직인·결재란·로고 그림). 바탕은 투명, 2배 선명도.
- * PDF 와 같은 방식(다른 서버 그림 미리 받기, 화면 배율 되돌리기). 못 뜨면 null
+ * 화면 요소 하나 → PNG 바이트(엑셀에 넣을 직인·결재란·로고 그림). 바탕은 투명, 2배 선명도. 못 뜨면 null.
+ *
+ * 문서 안 작은 요소를 그 자리에서 바로 뜨면, 캡처 도구가 화면 배율(body zoom)이 걸린 자리로 잘라 내면서
+ * 배율을 되돌린 사본과 어긋나 빈 그림이 된다. 그래서 요소를 화면 왼쪽 위 보이지 않는 자리에 배율 1배로 복사해 두고
+ * 그 복사본을 뜬다(글자 모양은 원래 요소의 계산된 값을 옮긴다). 다른 서버 그림은 PDF 와 같이 미리 받아 넣는다
  */
 export async function captureElementPng(el: HTMLElement): Promise<Uint8Array | null> {
+  const holder = document.createElement('div');
   try {
     await waitForImages(el);
     const inlined = await inlineImageSources(el);
-    const { default: html2canvas } = await import('html2canvas-pro');
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: null,
-      onclone: async (cloned, clonedEl) => {
-        cloned.documentElement.style.zoom = '1';
-        cloned.body.style.zoom = '1';
-        Array.from(clonedEl.querySelectorAll('img')).forEach((img) => {
-          const data = inlined.get(img.currentSrc || img.src);
-          if (data) img.src = data;
-        });
-        await waitForImages(clonedEl);
-      },
+    const zoom = parseFloat(getComputedStyle(document.body).zoom || '1') || 1;
+    const cs = getComputedStyle(el);
+    holder.style.cssText = `position:fixed;left:0;top:0;zoom:${1 / zoom};z-index:-1;pointer-events:none;background:transparent;`;
+    const copy = el.cloneNode(true) as HTMLElement;
+    // 원래 자리 잡기(절대 위치·이동)는 빼고 크기·글자 모양만
+    Object.assign(copy.style, {
+      position: 'static',
+      transform: 'none',
+      margin: '0',
+      width: cs.width,
+      height: cs.height,
+      display: cs.display === 'inline' ? 'inline-block' : cs.display,
+      color: cs.color,
+      fontFamily: cs.fontFamily,
+      fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight,
+      lineHeight: cs.lineHeight,
+      letterSpacing: cs.letterSpacing === 'normal' || cs.letterSpacing === '0px' ? '0.01px' : cs.letterSpacing,
+      textAlign: cs.textAlign,
     });
+    copy.querySelectorAll('img').forEach((img) => {
+      const data = inlined.get(img.currentSrc || img.src);
+      if (data) img.src = data;
+    });
+    holder.appendChild(copy);
+    document.body.appendChild(holder);
+    await waitForImages(holder);
+    const { default: html2canvas } = await import('html2canvas-pro');
+    const canvas = await html2canvas(copy, { scale: 2, useCORS: true, backgroundColor: null, logging: false });
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
   } catch {
     return null;
+  } finally {
+    holder.remove();
   }
 }

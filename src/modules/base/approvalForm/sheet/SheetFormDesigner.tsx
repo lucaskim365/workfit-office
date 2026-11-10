@@ -1171,15 +1171,23 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
     />
   );
   const tabCls = (on: boolean) => `rounded-md px-3 py-1 text-[12px] font-bold ${on ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`;
+  // 창 바깥을 누르면 닫는다 — 창 안에서 누른 채 바깥으로 끌어 놓은 경우(글자 고르기)는 닫지 않게, 누른 곳과 뗀 곳이 모두 바깥일 때만
+  const downOutside = useRef(false);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
       onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      onMouseDown={(e) => (downOutside.current = e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (downOutside.current && e.target === e.currentTarget) onClose();
+        downOutside.current = false;
+      }}
       tabIndex={-1}
       ref={boxRef}
     >
-      <div className="w-full max-w-[880px] rounded-xl bg-panel p-4 shadow-2xl">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      {/* 위 막대는 늘 보이고 문서만 창 안에서 스크롤 — 높이는 화면 배율(body zoom)로 나눠 실제 화면에 맞춘다 */}
+      <div className="flex max-h-[calc(100vh/var(--font-scale,1)-48px)] w-full max-w-[880px] flex-col overflow-hidden rounded-xl bg-panel shadow-2xl">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <div className="text-[13px] font-bold text-ink">미리보기 — {title}</div>
             <div className="text-[11px] text-ink3">실제 문서 그대로입니다. 작성 화면에서 입력해 보고 결재·인쇄 화면으로 확인하세요(저장되지 않음).</div>
@@ -1206,6 +1214,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
             </button>
           </div>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
         <div className="bg-[#878d90] p-4">
           {user ? (
             tab === 'external' ? (
@@ -1221,6 +1230,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
         {tab === 'draft' && missing.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 비어 있는 필수 칸 — {missing.join(', ')}</div>}
         {tab === 'draft' && issues.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-rose-600">상신하면 막히는 칸: 숫자 칸에 숫자가 아닌 값 — {issues.join(', ')}</div>}
         {tab === 'view' && <div className="mt-2 text-[10.5px] text-ink3">결재 완료 모양(직인 칸엔 회사 직인) · 넓은 시트는 종이 폭에 맞춰 줄여 보입니다.</div>}
+        </div>
       </div>
     </div>
   );
