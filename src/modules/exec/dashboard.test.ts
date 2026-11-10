@@ -76,3 +76,15 @@ test('위젯 배치 정리·이동·폭', () => {
   assert.equal(nextSize(12), 4);
   assert.equal(nextSize(4), 6);
 });
+
+import { insertSlot, snapSize } from './dashboard';
+
+test('끌어 늘린 폭 맞추기·위젯 끼우기', () => {
+  assert.equal(snapSize(3), 4);
+  assert.equal(snapSize(5.2), 6);
+  assert.equal(snapSize(9.9), 8);
+  assert.equal(snapSize(10.1), 12);
+  const list = [{ id: 'a', size: 4 as const }];
+  assert.deepEqual(insertSlot(list, { id: 'b', size: 6 }, 0).map((s) => s.id), ['b', 'a']);
+  assert.equal(insertSlot(list, { id: 'a', size: 6 }, 0), list);
+});

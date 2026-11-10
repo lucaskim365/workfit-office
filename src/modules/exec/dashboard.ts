@@ -156,3 +156,18 @@ export function moveSlot<T>(list: T[], from: number, to: number): T[] {
 export function nextSize(size: WidgetSize): WidgetSize {
   return WIDGET_SIZES[(WIDGET_SIZES.indexOf(size) + 1) % WIDGET_SIZES.length];
 }
+
+/** 끌어 늘린 칸 수 → 가장 가까운 위젯 폭(4·6·8·12) */
+export function snapSize(cols: number): WidgetSize {
+  let best: WidgetSize = WIDGET_SIZES[0];
+  for (const s of WIDGET_SIZES) if (Math.abs(s - cols) < Math.abs(best - cols)) best = s;
+  return best;
+}
+
+/** 새 위젯을 at 자리에 끼운다(이미 있으면 그대로) */
+export function insertSlot<Id extends string>(list: WidgetSlot<Id>[], slot: WidgetSlot<Id>, at: number): WidgetSlot<Id>[] {
+  if (list.some((s) => s.id === slot.id)) return list;
+  const next = [...list];
+  next.splice(Math.max(0, Math.min(at, next.length)), 0, slot);
+  return next;
+}
