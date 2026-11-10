@@ -269,7 +269,11 @@ function buildLists(items: ParaInfo[]): WordNode[] {
 // ── 표 ──
 
 function table(tbl: XmlNode, ctx: Ctx): WordNode {
-  const gridCols = children(child(tbl, 'tblGrid'), 'gridCol').map((g) => Math.round(Number(g.attrs.w ?? 0) / TWIP));
+  // 열 너비(px) — 합이 본문 폭을 넘으면(반올림 1~2px 포함) 비율로 줄여 표가 종이 밖으로 나가지 않게
+  const rawCols = children(child(tbl, 'tblGrid'), 'gridCol').map((g) => Number(g.attrs.w ?? 0) / TWIP);
+  const sum = rawCols.reduce((x, y) => x + y, 0);
+  const k = sum > A4_CONTENT_WIDTH ? A4_CONTENT_WIDTH / sum : 1;
+  const gridCols = rawCols.map((w) => Math.floor(w * k));
   const rows = children(tbl, 'tr');
   type Cell = { node: WordNode; col: number; span: number; row: number };
   const grid: Cell[][] = [];

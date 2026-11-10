@@ -77,14 +77,14 @@ const CSS = `
 .wf-word .ProseMirror.resize-cursor{cursor:col-resize}
 .wf-word .ProseMirror .tableWrapper{overflow-x:auto}
 .wf-word .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#aaa;float:left;height:0;pointer-events:none}
-@media print{.wf-word-bar{display:none!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
+@media print{html,body{background:#fff!important}.wf-word-bar{display:none!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
 `;
 
 export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, placeholder = '내용을 입력하세요', toolbarExtra, onReady }: WordEditorProps) {
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
-  /** 편집기가 마지막으로 내보낸 문서 — 같은 값이 돌아오면 편집기에 다시 넣지 않는다 */
-  const sentRef = useRef<WordNode | null>(null);
+  /** 편집기가 가진 문서(처음 넣은 값 또는 마지막으로 내보낸 값) — 같은 값이 돌아오면 편집기에 다시 넣지 않는다 */
+  const sentRef = useRef<WordNode | null>(value);
   const editor = useEditor({
     extensions: [...WORD_EXTENSIONS, Placeholder.configure({ placeholder })],
     content: value,
@@ -102,12 +102,13 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
   }, [editor]);
   // 바깥에서 문서를 통째로 바꾸면(새 문서·파일 열기) 편집기에도 넣는다 — 편집기가 보낸 값이면 그대로
   useEffect(() => {
-    if (!editor || value === sentRef.current) return;
+    // 개발 모드(StrictMode)는 화면을 두 번 붙였다 떼며 편집기를 한 번 정리한다 — 정리된 편집기엔 명령을 보내지 않는다
+    if (!editor || editor.isDestroyed || value === sentRef.current) return;
     sentRef.current = value;
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
   useEffect(() => {
-    editor?.setEditable(!readOnly);
+    if (editor && !editor.isDestroyed) editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
   return (
@@ -121,7 +122,7 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
       <div
         className="wf-word-paper mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,.15)]"
         style={{ width: A4.width, minHeight: A4.height, padding: A4.margin, boxSizing: 'border-box' }}
-        onClick={() => editor && !editor.isFocused && !readOnly && editor.commands.focus()}
+        onClick={() => editor && !editor.isDestroyed && !editor.isFocused && !readOnly && editor.commands.focus()}
       >
         <EditorContent editor={editor} />
       </div>

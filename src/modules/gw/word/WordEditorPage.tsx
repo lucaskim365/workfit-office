@@ -115,7 +115,7 @@ export default function WordEditorPage() {
 
   const btn = 'rounded-lg border border-border-hi bg-panel px-3 py-1.5 text-[12px] font-semibold text-ink hover:border-teal hover:text-teal disabled:opacity-50';
   return (
-    <div className="min-h-screen bg-[#e9ecf1]">
+    <div className="min-h-screen bg-[#e9ecf1] print:bg-white">
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-border bg-panel px-4 py-2 print:hidden">
         <span className="rounded-md bg-[#1d4ed8] px-2 py-0.5 text-[12px] font-black text-white">W</span>
         <input
