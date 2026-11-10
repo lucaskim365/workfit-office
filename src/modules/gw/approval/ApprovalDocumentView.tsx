@@ -980,9 +980,9 @@ export function ApprovalDocumentView({
           </div>
         )}
 
-        {/* 첨부파일 영역 */}
+        {/* 첨부파일 영역 — 공문(직인 서식)은 인쇄·PDF 에서 뺀다(첨부는 본문 '붙임'으로 적는다) */}
         {!externalDoc && doc.attachments && doc.attachments.length > 0 && (
-          <table className="mt-4 w-full border-collapse text-[12px]">
+          <table className={`mt-4 w-full border-collapse text-[12px]${sealForm ? ' print:hidden' : ''}`}>
             <tbody>
               <tr>
                 <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
@@ -1013,12 +1013,12 @@ export function ApprovalDocumentView({
           </table>
         )}
 
-        {/* 수신처 영역 */}
+        {/* 수신처 영역 — 공문(직인 서식)은 인쇄·PDF 에서 뺀다(수신은 문서 머리의 '수신' 줄) */}
         {(() => {
           const effectiveRecipients = getEffectiveRecipients(doc);
           if (effectiveRecipients.length === 0) return null;
           return (
-            <table className="mt-2 w-full border-collapse text-[12px]">
+            <table className={`mt-2 w-full border-collapse text-[12px]${sealForm ? ' print:hidden' : ''}`}>
               <tbody>
                 <tr>
                   <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
