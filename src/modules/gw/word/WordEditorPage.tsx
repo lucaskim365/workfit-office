@@ -54,6 +54,8 @@ export default function WordEditorPage() {
   const [draft, setDraft] = useState<Draft>(() => loadDraft() ?? { name: '주간 업무 보고(예시)', doc: sampleDoc() });
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 브라우저에 남기기 실패(그림이 커서 저장소가 모자람) — 탭을 닫으면 사라진다고 알린다 */
+  const [storeFailed, setStoreFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,8 +66,15 @@ export default function WordEditorPage() {
     const t = setTimeout(() => {
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(draft));
+        setStoreFailed(false);
       } catch {
-        /* 그림이 커서 저장소가 모자라면 남기지 못한다 — 편집은 그대로 */
+        // 그림이 커서 저장소가 모자라면 남기지 못한다 — 옛 내용이 남아 다시 열 때 헷갈리지 않게 지우고 알린다
+        try {
+          localStorage.removeItem(STORE_KEY);
+        } catch {
+          /* 저장소를 아예 못 쓰는 창 */
+        }
+        setStoreFailed(true);
       }
     }, 800);
     return () => clearTimeout(t);
@@ -115,7 +124,11 @@ export default function WordEditorPage() {
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
           aria-label="문서 이름"
         />
-        <span className="text-[11px] text-ink3">이 브라우저에 저절로 남습니다(서버 저장 아님)</span>
+        {storeFailed ? (
+          <span className="text-[11px] font-bold text-rose-600">문서가 커서 브라우저에 남기지 못했습니다 — 탭을 닫기 전에 [저장(.docx)]으로 받아 두세요</span>
+        ) : (
+          <span className="text-[11px] text-ink3">이 브라우저에 저절로 남습니다(서버 저장 아님)</span>
+        )}
         <div className="ml-auto flex flex-wrap gap-1.5">
           <button type="button" className={btn} onClick={newDoc}>
             새 문서

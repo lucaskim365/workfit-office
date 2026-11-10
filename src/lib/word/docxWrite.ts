@@ -35,7 +35,7 @@ const BASE_HALF_PT = 20;
 function esc(s: string): string {
   return s
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -88,11 +88,12 @@ function runProps(marks: WordMark[] = []): string {
   const out: string[] = [];
   const has = (t: string) => marks.find((m) => m.type === t);
   const ts = has('textStyle')?.attrs ?? {};
-  if (ts.fontFamily && typeof ts.fontFamily === 'string') {
+  // 워드 rPr 자식 순서(rFonts → b → i → strike → color → sz → u → shd)를 지킨다 — 순서가 틀리면 워드가 파일이 손상됐다고 본다
+  if (has('code')) out.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
+  else if (ts.fontFamily && typeof ts.fontFamily === 'string') {
     const f = esc(ts.fontFamily.split(',')[0].replace(/['"]/g, '').trim());
     out.push(`<w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}"/>`);
   }
-  if (has('code')) out.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
   if (has('bold')) out.push('<w:b/><w:bCs/>');
   if (has('italic')) out.push('<w:i/><w:iCs/>');
   if (has('strike')) out.push('<w:strike/>');
@@ -177,12 +178,14 @@ async function paragraph(node: WordNode, ctx: Ctx, p: ParaOpts = {}): Promise<st
   const pPr: string[] = [];
   const style = node.type === 'heading' ? `Heading${Math.min(6, Math.max(1, Number(node.attrs?.level) || 1))}` : p.style;
   if (style) pPr.push(`<w:pStyle w:val="${style}"/>`);
+  // 자식 순서는 워드 규칙대로(pStyle → numPr → pBdr → spacing → ind → contextualSpacing → jc) — 틀리면 '읽을 수 없는 내용'
   if (p.num) pPr.push(`<w:numPr><w:ilvl w:val="${p.num.level}"/><w:numId w:val="${p.num.id}"/></w:numPr>`);
-  // 목록 항목끼리는 문단 간격을 두지 않는다(워드 '같은 스타일 문단 사이 간격 없음'), 표 칸 안은 간격 없이
-  if (p.num || p.indentLevel !== undefined) pPr.push('<w:contextualSpacing/>');
-  if (p.tight) pPr.push('<w:spacing w:before="0" w:after="0"/>');
   if (p.border) pPr.push('<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="BFBFBF"/></w:pBdr>');
+  // 표 칸 안은 위아래 간격 없이
+  if (p.tight) pPr.push('<w:spacing w:before="0" w:after="0"/>');
   if (p.indentLevel !== undefined) pPr.push(`<w:ind w:left="${(p.indentLevel + 1) * 720}"/>`);
+  // 목록 항목끼리는 문단 간격을 두지 않는다(워드 '같은 스타일 문단 사이 간격 없음')
+  if (p.num || p.indentLevel !== undefined) pPr.push('<w:contextualSpacing/>');
   const jc = JC[String(node.attrs?.textAlign ?? '')];
   if (jc && jc !== 'left') pPr.push(`<w:jc w:val="${jc}"/>`);
   return `<w:p>${pPr.length ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''}${await inlines(node.content, ctx)}</w:p>`;

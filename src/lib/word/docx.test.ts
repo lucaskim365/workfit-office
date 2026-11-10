@@ -105,6 +105,14 @@ test('인용·구분선 — 인용은 Quote 스타일 문단, 구분선은 아�
   assert.match(xml, /<w:pBdr><w:bottom/);
 });
 
+test('문단 속성 순서는 워드 규칙대로(틀리면 워드가 손상 파일로 봄)', async () => {
+  const li = (...content: WordNode[]): WordNode => ({ type: 'listItem', content });
+  const files = await unzip(await exportDocx(doc({ type: 'bulletList', content: [li(p(t('첫')), { type: 'paragraph', attrs: { textAlign: 'center' }, content: [t('둘')] })] })));
+  const xml = new TextDecoder().decode(files.get('word/document.xml'));
+  assert.ok(xml.includes('<w:pPr><w:ind w:left="720"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr>'));
+  assert.match(xml, /<w:pPr><w:numPr>.*?<\/w:numPr><w:contextualSpacing\/><\/w:pPr>/);
+});
+
 test('색·크기 읽기', () => {
   assert.equal(hexColor('#abc'), 'AABBCC');
   assert.equal(hexColor('rgb(255, 0, 16)'), 'FF0010');

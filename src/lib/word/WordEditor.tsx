@@ -83,12 +83,18 @@ const CSS = `
 export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, placeholder = '내용을 입력하세요', toolbarExtra, onReady }: WordEditorProps) {
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
+  /** 편집기가 마지막으로 내보낸 문서 — 같은 값이 돌아오면 편집기에 다시 넣지 않는다 */
+  const sentRef = useRef<WordNode | null>(null);
   const editor = useEditor({
     extensions: [...WORD_EXTENSIONS, Placeholder.configure({ placeholder })],
     content: value,
     editable: !readOnly,
     shouldRerenderOnTransaction: true,
-    onUpdate: ({ editor: ed }) => changeRef.current(ed.getJSON() as WordNode),
+    onUpdate: ({ editor: ed }) => {
+      const doc = ed.getJSON() as WordNode;
+      sentRef.current = doc;
+      changeRef.current(doc);
+    },
   });
   useEffect(() => {
     if (editor) onReady?.(editor);
@@ -96,8 +102,9 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
   }, [editor]);
   // 바깥에서 문서를 통째로 바꾸면(새 문서·파일 열기) 편집기에도 넣는다 — 편집기가 보낸 값이면 그대로
   useEffect(() => {
-    if (!editor) return;
-    if (JSON.stringify(editor.getJSON()) !== JSON.stringify(value)) editor.commands.setContent(value, { emitUpdate: false });
+    if (!editor || value === sentRef.current) return;
+    sentRef.current = value;
+    editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
   useEffect(() => {
     editor?.setEditable(!readOnly);

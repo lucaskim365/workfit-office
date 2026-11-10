@@ -41,6 +41,8 @@ interface Ctx {
   rels: Map<string, string>;
   files: Map<string, Uint8Array>;
   warnings: Set<string>;
+  /** 본문 파일이 든 폴더('word/') — 그림 경로 기준 */
+  dir: string;
 }
 
 const dec = new TextDecoder();
@@ -150,7 +152,7 @@ function imageNode(drawing: XmlNode, ctx: Ctx): WordNode | null {
   const rid = blip?.attrs.embed;
   const target = rid ? ctx.rels.get(rid) : undefined;
   if (!target) return null;
-  const path = target.startsWith('/') ? target.slice(1) : `word/${target.replace(/^\.\//, '')}`;
+  const path = target.startsWith('/') ? target.slice(1) : `${ctx.dir}${target.replace(/^\.\//, '')}`;
   const data = ctx.files.get(path.replace(/[^/]+\/\.\.\//g, ''));
   const type = data ? sniffImage(data) : null;
   if (!data || !type) {
@@ -269,7 +271,7 @@ function buildLists(items: ParaInfo[]): WordNode[] {
 function table(tbl: XmlNode, ctx: Ctx): WordNode {
   const gridCols = children(child(tbl, 'tblGrid'), 'gridCol').map((g) => Math.round(Number(g.attrs.w ?? 0) / TWIP));
   const rows = children(tbl, 'tr');
-  type Cell = { node: WordNode; col: number; span: number };
+  type Cell = { node: WordNode; col: number; span: number; row: number };
   const grid: Cell[][] = [];
   /** 열 자리 → 세로 합침이 시작된 칸(아래 줄 'continue' 가 이 칸의 rowspan 을 늘린다) */
   const open = new Map<number, WordNode>();
@@ -298,10 +300,18 @@ function table(tbl: XmlNode, ctx: Ctx): WordNode {
       };
       if (vmVal === 'restart') open.set(col, node);
       else for (let k = 0; k < span; k++) open.delete(col + k);
-      out.push({ node, col, span });
+      out.push({ node, col, span, row: grid.length });
       col += span;
     }
     grid.push(out);
+  });
+  // 칸이 하나도 없는 줄(모두 위에서 합쳐 내려온 칸)은 편집기가 그릴 수 없어 빼고, 그 줄까지 센 rowspan 도 하나씩 줄인다
+  grid.forEach((cells, ri) => {
+    if (cells.length) return;
+    for (const c of grid.flat()) {
+      const span = Number(c.node.attrs!.rowspan ?? 1);
+      if (c.row < ri && c.row + span > ri) c.node.attrs!.rowspan = span - 1;
+    }
   });
   return { type: 'table', content: grid.filter((r) => r.length).map((r) => ({ type: 'tableRow', content: r.map((c) => c.node) })) };
 }
@@ -367,6 +377,7 @@ export async function importDocx(bytes: Uint8Array): Promise<DocxImport> {
     rels,
     files,
     warnings: new Set(),
+    dir,
   };
   if (files.has(`${dir}header1.xml`) || files.has(`${dir}footer1.xml`)) ctx.warnings.add('머리글·바닥글은 읽지 않았습니다.');
   if (files.has(`${dir}comments.xml`)) ctx.warnings.add('메모는 읽지 않았습니다.');
