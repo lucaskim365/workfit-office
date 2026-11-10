@@ -120,3 +120,17 @@ test('직접 등록 외근·출장도 결재 외근과 같이 기간 전체 날�
   assert.equal(days.get('2026-09-20')?.[0].leaveType, '국내출장');
   assert.equal(index.lookup({ id: 'U011' }).size, 0);
 });
+
+test('직접 등록 외근의 동행자도 근태에 같은 외근으로 인정된다', () => {
+  const now = new Date().toISOString();
+  const index = buildApprovalDayIndex([], [
+    {
+      id: 'OW-20260922-0001', ownerUserId: 'U010', category: 'OUTSIDE', subType: '종일 외근',
+      startDate: '2026-09-22', endDate: '2026-09-22', allDay: true, startTime: null, endTime: null,
+      destination: '수원', purpose: '', companionUserIds: ['U011'], transportation: '', contact: '', memo: '', linkedApprovalDocId: null,
+      createdAt: now, updatedAt: now,
+    },
+  ]);
+  assert.equal(index.lookup({ id: 'U011' }).get('2026-09-22')?.[0].category, 'OUTSIDE');
+  assert.equal(index.lookup({ id: 'U012' }).size, 0);
+});

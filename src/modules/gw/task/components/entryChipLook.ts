@@ -64,7 +64,7 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
       const view = entry.outside;
       const category = view?.category ?? 'OUTSIDE';
       const chip = scheduleChip({ category, subType: view?.subType });
-      // 동행자 칸은 '동행 · 등록자' 표시(근태에는 반영하지 않는다). 행선지는 칩에 넣지 않는다(열어서 본다)
+      // 동행자 칸은 '동행 · 등록자' 표시(근태도 등록자와 같이 외근·출장으로 인정). 행선지는 칩에 넣지 않는다(열어서 본다)
       const label = outsideChipLabel({
         category,
         subType: view?.subType,

@@ -115,7 +115,9 @@ export function buildApprovalDayIndex(
 
   for (const w of outsideWorks) {
     const info = outsideWorkToDayInfo(w);
-    eachDate(w.startDate, w.endDate, (date) => add(`id:${w.ownerUserId}`, date, info));
+    // 동행자도 등록자와 같은 외근·출장으로 인정한다(2026-11-10 결정)
+    const people = new Set([w.ownerUserId, ...w.companionUserIds]);
+    eachDate(w.startDate, w.endDate, (date) => people.forEach((id) => add(`id:${id}`, date, info)));
   }
 
   return {
