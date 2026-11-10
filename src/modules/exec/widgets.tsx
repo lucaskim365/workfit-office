@@ -1076,7 +1076,7 @@ export function BirthdayWidget() {
   const list = birthdaysInMonth(profiles.filter((p) => byId.has(p.userId)), month);
   return (
     <Panel>
-      <Head title={`${Number(month.slice(5))}월 생일`} note={list.length ? `${list.length}명` : undefined} />
+      <Head title="이달의 생일자" note={list.length ? `${list.length}명` : undefined} />
       {list.length === 0 ? (
         <Empty>이번 달 생일인 사람이 없습니다.</Empty>
       ) : (
