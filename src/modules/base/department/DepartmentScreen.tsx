@@ -6,6 +6,7 @@ import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmen
 import { assignDeptHead, departmentDeleteBlocker } from '@/data/orgSync/orgSync';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
+import { deptCompanyOf } from '@/domain/company/affiliation';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
@@ -178,7 +179,11 @@ export default function DepartmentScreen() {
           )}
           {ordered.map(({ d, depth }) => (
             <div key={d.id} onClick={() => { setSel(d); setMsg(''); }} className={`grid grid-cols-[1fr_70px_90px_70px] items-center border-b border-border px-3.5 py-2.5 text-[12.5px] ${sel?.id === d.id ? 'bg-teal-soft/60' : 'cursor-pointer hover:bg-panel-alt'}`}>
-              <span className="truncate font-semibold text-ink" style={{ paddingLeft: depth * 16 }}>{depth > 0 && <span className="text-ink3">└ </span>}{d.name}</span>
+              <span className="truncate font-semibold text-ink" style={{ paddingLeft: depth * 16 }}>
+                {depth > 0 && <span className="text-ink3">└ </span>}
+                {d.name}
+                {d.company === 'lumefab' && <span className="ml-1.5 rounded bg-indigo-500/10 px-1 py-0.5 text-[9.5px] font-bold text-indigo-600">루미팹</span>}
+              </span>
               <span className={`text-[11px] font-bold ${TYPE_TONE[d.deptType] ?? 'text-ink3'}`}>{d.deptType}</span>
               <span className="truncate text-[11.5px] text-ink2">{nameOf(d.headUserId)}</span>
               <span className="text-right">
@@ -206,6 +211,19 @@ export default function DepartmentScreen() {
                 <select value={sel.deptType} onChange={(e) => setSel({ ...sel, deptType: e.target.value as Department['deptType'] })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal">
                   {DEPT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
+              </Field>
+              <Field label="회사">
+                <select
+                  value={sel.company ?? ''}
+                  onChange={(e) => setSel({ ...sel, company: e.target.value === 'lumefab' ? 'lumefab' : null })}
+                  className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal"
+                >
+                  <option value="">상위 부서를 따름 (지금: {deptCompanyOf(sel.parentId, rows) === 'lumefab' ? '루미팹' : '워크핏'})</option>
+                  <option value="lumefab">루미팹</option>
+                </select>
+                <span className="mt-1 block text-[10.5px] leading-snug text-ink3">
+                  루미팹으로 정하면 이 부서와 하위 부서 사람이 쓰는 결재 문서가 루미팹 문서(LF 번호)가 됩니다. 두 회사에 걸친 사람은 겸직으로 등록하면 문서를 쓸 때 회사를 고릅니다.
+                </span>
               </Field>
               <Field label="부서장">
                 <select value={sel.headUserId ?? ''} onChange={(e) => setSel({ ...sel, headUserId: e.target.value || null })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal">

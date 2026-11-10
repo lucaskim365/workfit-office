@@ -10,6 +10,10 @@ import AuthGate from './app/auth/AuthGate';
 import { TestAccountVisibilitySync } from './features/auth/TestAccountVisibilitySync';
 import { SharedSettingsGate } from './features/sharedSettings/SharedSettingsGate';
 import './index.css';
+import { HOST_BRAND } from '@/shared/lib/hostCompany';
+
+// 접속한 주소의 회사 인트라넷 이름(워크핏 / 루미팹)
+document.title = HOST_BRAND.title;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

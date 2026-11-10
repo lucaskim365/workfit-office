@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { HOST_COMPANY } from '@/shared/lib/hostCompany';
 import { drafterTitleOf, stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -154,7 +155,7 @@ export default function ApprovalScreen() {
   // 회사 보기 — 전체(합쳐서)·워크핏만·루미팹만. 모든 함에 똑같이 적용.
   // 기본은 늘 '전체' — 마지막 보기를 기억하면 '루미팹'으로 둔 채 다시 들어와 워크핏 결재 문서를 못 보는 일이 생긴다.
   // (주소에 ?company= 가 있으면 그것 — 새로고침·뒤로가기 때 고른 보기 유지)
-  const [companyView, setCompanyViewState] = useState<CompanyView>(() => parseCompanyView(params.get('company')) ?? 'all');
+  const [companyView, setCompanyViewState] = useState<CompanyView>(() => parseCompanyView(params.get('company')) ?? (HOST_COMPANY === 'lumefab' ? 'lumefab' : 'all'));
   const setCompanyView = (v: CompanyView) => {
     setCompanyViewState(v);
     const nextUrl = new URL(window.location.href);

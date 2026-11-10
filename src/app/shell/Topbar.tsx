@@ -9,6 +9,9 @@ import { usePermission } from '@/features/auth/usePermission';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
+import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
+import { HOST_BRAND, HOST_COMPANY } from '@/shared/lib/hostCompany';
+import { lumefabLogoOf } from '@/domain/company/host';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '@/features/notification/useNotifications';
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
@@ -33,6 +36,8 @@ interface TopbarProps {
 }
 
 function Brand({ logoUrl, onLogoClick }: { logoUrl?: string; onLogoClick?: () => void }) {
+  // 접속한 주소의 회사 인트라넷 — 루미팹 주소면 루미팹 이름·로고(로고가 없으면 첫 글자)
+  const lumefab = HOST_COMPANY === 'lumefab';
   return (
     <button
       onClick={onLogoClick}
@@ -40,13 +45,17 @@ function Brand({ logoUrl, onLogoClick }: { logoUrl?: string; onLogoClick?: () =>
       title="메인화면으로 이동"
     >
       <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-white overflow-hidden p-0.5 shadow-sm border border-black/5">
-        <img src={logoUrl || defaultLogo} alt="Logo" className="h-full w-full object-contain" />
+        {lumefab && !logoUrl ? (
+          <span className="text-[13px] font-extrabold text-indigo-600">L</span>
+        ) : (
+          <img src={logoUrl || defaultLogo} alt="Logo" className="h-full w-full object-contain" />
+        )}
       </div>
       <div className="leading-[1.1] @max-[760px]:hidden">
         <div style={{ color: 'var(--color-header-text)' }} className="text-sm font-extrabold tracking-tight">
-          WorkFit<span className="text-teal">Intranet</span>
+          {HOST_BRAND.name}<span className="text-teal">{HOST_BRAND.product}</span>
         </div>
-        <div style={{ color: 'var(--color-header-text)', opacity: 0.7 }} className="text-[8.5px] font-semibold">Enterprise Portal Suite</div>
+        <div style={{ color: 'var(--color-header-text)', opacity: 0.7 }} className="text-[8.5px] font-semibold">{HOST_BRAND.tagline}</div>
       </div>
     </button>
   );
@@ -77,7 +86,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
   const showTestToggle = isSuperAdmin && !isTestAccount(user);
   const showTestAccounts = useShowTestAccounts();
   const { data: companyInfo } = useCompanyInfo();
-  const logoUrl = companyInfo?.logoUrl;
+  const { data: companyMarks } = useCompanyMarks();
+  // 루미팹 주소 — 회사 정보의 로고 목록에서 이름에 'LumeFab'·'루미팹'이 든 로고(없으면 글자)
+  const logoUrl = HOST_COMPANY === 'lumefab' ? lumefabLogoOf(companyMarks) : companyInfo?.logoUrl;
   const navigate = useNavigate();
 
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

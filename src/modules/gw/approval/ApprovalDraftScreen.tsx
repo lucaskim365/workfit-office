@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
+import { companyName, defaultDocCompany } from '@/domain/company/affiliation';
+import { useCompanyAffiliation } from '@/features/company/useCompanyAffiliation';
+import { HOST_COMPANY } from '@/shared/lib/hostCompany';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { User } from '@/domain/user/schema';
@@ -184,6 +187,22 @@ function ApprovalDraftInner({
   const [company, setCompany] = useState<ApprovalCompany | null>(
     parseCompany(editDoc ? editDoc.company : cancelTargetDoc ? cancelTargetDoc.company : fixedCompany)
   );
+  // 소속으로 회사 정하기 — 부서에 회사를 정해 두었으면 새 문서는 기안자 소속 회사로 저절로(겸직자는 접속한 주소의 회사가 기본, 머리에서 고름).
+  // 고친 문서·취소 기안·서식 선택에서 회사를 고른 경우·임시 보관을 불러온 경우는 그 값 그대로
+  const affiliation = useCompanyAffiliation(me);
+  const companyTouched = useRef(!!(editDoc || cancelTargetDoc || fixedCompany));
+  useEffect(() => {
+    if (companyTouched.current || affiliation.isLoading || !affiliation.byAffiliation) return;
+    companyTouched.current = true;
+    setCompany(defaultDocCompany(affiliation.companies, HOST_COMPANY));
+  }, [affiliation]);
+  const pickCompany = (c: ApprovalCompany | null) => {
+    companyTouched.current = true;
+    setCompany(c);
+  };
+  // 회사를 고를 수 있나 — 소속으로 정하는 방식이고, 두 회사에 걸친 사람(겸직)이 새로 쓰거나 임시저장한 문서
+  const canPickCompany =
+    affiliation.byAffiliation && affiliation.companies.length > 1 && !cancelTargetDoc && (!editDoc || editDoc.status === '임시저장');
   const [title, setTitle] = useState(editDoc?.title ?? (cancelTargetDoc ? `[취소 신청] ${cancelTargetDoc.title}` : ''));
   const [securityLevel, setSecurityLevel] = useState<'일반' | '대외비' | '극비'>(editDoc?.securityLevel ?? cancelTargetDoc?.securityLevel ?? '일반');
   const [visibility, setVisibility] = useState<'부서' | '비공개'>(editDoc?.visibility === '비공개' || cancelTargetDoc?.visibility === '비공개' ? '비공개' : '부서');
@@ -586,7 +605,8 @@ function ApprovalDraftInner({
   // 모달에서 새 서식을 최종 선택했을 때
   const handleSelectNewForm = (newForm: ApprovalForm, nextCompany?: ApprovalCompany | null) => {
     setCode(newForm.code);
-    setCompany(nextCompany ?? null);
+    // 소속으로 정하는 방식이면 서식을 바꿔도 회사는 그대로
+    if (!affiliation.byAffiliation) setCompany(nextCompany ?? null);
     setValues({});
     setTitle('');
     setAmount('');
@@ -1514,6 +1534,23 @@ function ApprovalDraftInner({
               <span>{form?.icon || '📄'}</span>
               <span>{form?.name || code}</span>
             </div>
+            {canPickCompany ? (
+              // 겸직자 — 어느 회사 문서로 쓸지(문서번호 AP / LF, 결재함 회사 보기)
+              <div className="flex items-center rounded-lg border border-indigo-500/30 bg-white p-0.5 text-[11px] font-bold" title="두 회사에 소속된 분은 어느 회사 문서로 쓸지 고릅니다 — 문서번호(워크핏 AP / 루미팹 LF)와 결재함 회사 보기가 달라집니다">
+                {affiliation.companies.map((c) => (
+                  <button
+                    key={c ?? 'workfit'}
+                    type="button"
+                    onClick={() => pickCompany(c)}
+                    className={`rounded-md px-2.5 py-1 ${company === c ? 'bg-indigo-600 text-white' : 'text-ink3 hover:text-ink'}`}
+                  >
+                    {companyName(c)}
+                  </button>
+                ))}
+              </div>
+            ) : company === 'lumefab' ? (
+              <span className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-extrabold text-indigo-600">루미팹 문서</span>
+            ) : null}
             {canChangeForm && (
               <button
                 type="button"
@@ -1807,7 +1844,7 @@ function ApprovalDraftInner({
           onConfirm={() => {
             if (pendingAutosaveData) {
               const data = pendingAutosaveData;
-              if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
+              if (!editDoc && data.code) { setCode(data.code); pickCompany(parseCompany(data.company)); }
               setTitle(data.title || '');
               setValues(data.values || {});
               setAmount(data.amount || '');
@@ -2070,7 +2107,7 @@ function ApprovalDraftInner({
                             if (window.confirm('이 보관본의 내용을 현재 화면으로 불러오시겠습니까?\n(현재 화면의 입력값이 덮어써집니다)')) {
                               const data = selectedBackup.data;
                               if (data) {
-                                if (!editDoc && data.code) { setCode(data.code); setCompany(parseCompany(data.company)); }
+                                if (!editDoc && data.code) { setCode(data.code); pickCompany(parseCompany(data.company)); }
                                 setTitle(data.title || '');
                                 setValues(data.values || {});
                                 setAmount(data.amount || '');

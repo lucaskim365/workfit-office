@@ -8,6 +8,7 @@ import { departmentMemberRepo } from '@/data/departmentMember/departmentMember.r
 import type { Department } from '@/domain/department/schema';
 import type { User } from '@/domain/user/schema';
 import type { Position } from '@/domain/position/schema';
+import type { DepartmentMember } from '@/domain/departmentMember/schema';
 
 /**
  * 조직 데이터 훅 — 부서(departments) + 사용자(users) + 인사마스터(employeeProfiles) + 소속/겸직(departmentMembers)를 조합해
@@ -39,6 +40,8 @@ export interface OrgTree {
   depts: Department[];
   users: User[];
   positions: Position[];
+  /** 본직·겸직 소속(부서별 회사를 사람에게 이을 때) */
+  deptMembers: DepartmentMember[];
   userById: (id: string | null | undefined) => User | undefined;
   /** 직급명 → 서열(작을수록 상위). positions 마스터 우선, 폴백 상수. */
   rankOf: (position: string) => number;
@@ -219,7 +222,7 @@ export function useOrgTree() {
     };
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
-    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
+    return { roots, depts, users, positions, deptMembers, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
   }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data, deptMembersQ.data]);
 
   const isLoading = deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading;

@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { Search, Folder, FileText, Star, Clock, X, ChevronRight, Check, Building2 } from 'lucide-react';
 import { COMPANY_LABEL, isLumefabForm, type ApprovalCompany } from '@/domain/approvalDoc/company';
+import { companyByAffiliation } from '@/domain/company/affiliation';
 
 interface DraftFormSelectModalProps {
   open: boolean;
@@ -134,14 +135,16 @@ export function DraftFormSelectModal({
   };
 
   // 모든 칸 — 워크핏 서식마다 한 칸, 루미팹 겸용 서식(지출결의서·품의서·법인카드 사용 내역서·채용 품의서 — isLumefabForm)은 바로 뒤에 [루미팹] 칸을 하나 더
+  // 부서에 회사를 정해 두었으면(소속으로 회사를 정함) 서식은 하나씩만 — 회사는 기안 화면에서 저절로(겸직자는 고름)
+  const byAffiliation = companyByAffiliation(org.depts);
   const entries = useMemo<FormEntry[]>(
     () =>
       forms.flatMap((form) => {
         const own: FormEntry = { key: form.code, form, company: null };
-        if (!isLumefabForm(form)) return [own];
+        if (byAffiliation || !isLumefabForm(form)) return [own];
         return [own, { key: form.code + LUMEFAB_KEY_SUFFIX, form, company: 'lumefab' }];
       }),
-    [forms]
+    [forms, byAffiliation]
   );
   const lumefabCount = useMemo(() => entries.filter((e) => e.company === 'lumefab').length, [entries]);
 

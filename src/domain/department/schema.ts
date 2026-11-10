@@ -29,6 +29,12 @@ export const departmentSchema = z.object({
   deptType: z.enum(DEPT_TYPES).default('본사'),
   /** 형제 정렬 순서. */
   order: z.number().default(0),
+  /**
+   * 회사 — 'lumefab'(루미팹) 또는 비움(상위 부서를 따름, 끝까지 없으면 워크핏).
+   * 값이 없으면(undefined) 저장할 때 아예 보내지 않는다 — DB 에 이 칸이 아직 없어도 부서 저장이 깨지지 않게.
+   * ([[company-affiliation]] · src/domain/company/affiliation.ts)
+   */
+  company: z.preprocess((v) => (v === '' || (v != null && v !== 'lumefab') ? null : v), z.enum(['lumefab']).nullable().optional()),
 });
 
 export type Department = z.infer<typeof departmentSchema>;

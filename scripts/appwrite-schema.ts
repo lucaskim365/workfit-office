@@ -233,7 +233,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'departments',
     name: '부서',
-    attributes: [S('id', 64, true), S('name', 128, true), S('parentId', 64), S('headUserId', 64), S('deptType', 16), INT('order')],
+    // company — 부서의 회사('lumefab', 비면 상위 부서를 따르고 끝까지 없으면 워크핏)
+    attributes: [S('id', 64, true), S('name', 128, true), S('parentId', 64), S('headUserId', 64), S('deptType', 16), INT('order'), S('company', 16)],
     indexes: [IX('parentId', ['parentId'])],
   },
   {

@@ -6,6 +6,25 @@ import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfi
 import type { User } from '@/domain/user/schema';
 import { displayEmpNo, hasDisplayEmpNo, publicEmailOf } from '@/domain/user/publicContact';
 import { Button } from '@/shared/ui/Button';
+import { companyByAffiliation, deptInCompanyView } from '@/domain/company/affiliation';
+import { HOST_COMPANY } from '@/shared/lib/hostCompany';
+import type { OrgNode } from '@/features/gw/useOrgTree';
+
+type OrgCompanyView = 'all' | 'workfit' | 'lumefab';
+
+/**
+ * 회사별 조직도 — 그 회사 부서만 남긴 트리. 다른 회사 부서 아래의 이 회사 부서는 위로 끌어올린다
+ * (예: 대표이사(워크핏) 아래 루미팹 → 루미팹 보기에서는 루미팹이 맨 위)
+ */
+function pruneByCompany(nodes: OrgNode[], depts: OrgNode['dept'][], view: OrgCompanyView): OrgNode[] {
+  const out: OrgNode[] = [];
+  for (const n of nodes) {
+    const children = pruneByCompany(n.children, depts, view);
+    if (deptInCompanyView(n.dept.id, depts, view)) out.push({ ...n, children });
+    else out.push(...children);
+  }
+  return out;
+}
 
 // 테스트 계정 숨김은 사람 목록 repo 가 접속자 기준으로 처리한다([[testAccountVisibility]]).
 
@@ -17,7 +36,29 @@ import { Button } from '@/shared/ui/Button';
  * - [🪑 좌석배치도]: 배치도 이미지 위 자리별 이름·직급·부서·근태 (운영자·임원만 배치 수정)
  */
 export default function OrgChartScreen() {
-  const org = useOrgTree();
+  const fullOrg = useOrgTree();
+  // 회사 보기 — 부서에 회사를 정해 두었을 때만. 루미팹 주소로 들어오면 루미팹부터
+  const byAffiliation = companyByAffiliation(fullOrg.depts);
+  const [companyView, setCompanyView] = useState<OrgCompanyView>(HOST_COMPANY === 'lumefab' ? 'lumefab' : 'all');
+  const view: OrgCompanyView = byAffiliation ? companyView : 'all';
+  const org = useMemo(() => {
+    if (view === 'all') return fullOrg;
+    const roots = pruneByCompany(fullOrg.roots, fullOrg.depts, view);
+    const keptDepts = new Set<string>();
+    const memberIds = new Set<string>();
+    const walk = (n: OrgNode) => {
+      keptDepts.add(n.dept.id);
+      n.members.forEach((m) => memberIds.add(m.id));
+      n.children.forEach(walk);
+    };
+    roots.forEach(walk);
+    return {
+      ...fullOrg,
+      roots,
+      depts: fullOrg.depts.filter((d) => keptDepts.has(d.id)),
+      users: fullOrg.users.filter((u) => memberIds.has(u.id)),
+    };
+  }, [fullOrg, view]);
   const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const profileMap = useMemo(() => {
     return new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
@@ -52,6 +93,28 @@ export default function OrgChartScreen() {
           </span>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        {byAffiliation && (
+          // 회사 보기 — 전체·워크핏·루미팹(겸직자는 두 회사 모두에 보인다)
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-panel-alt/60 p-1 shadow-xs">
+            {(
+              [
+                ['all', '전체'],
+                ['workfit', '워크핏'],
+                ['lumefab', '루미팹'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCompanyView(k)}
+                className={`rounded-lg px-3 py-1.5 text-[11.5px] font-bold transition-all ${companyView === k ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {/* 뷰 모드 전환 버튼 (비주얼 차트 / 비상연락망 / 좌석배치도) */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-panel-alt/60 p-1 shadow-xs">
           <button
@@ -91,12 +154,18 @@ export default function OrgChartScreen() {
             <span>좌석배치도</span>
           </button>
         </div>
+        </div>
       </div>
 
       {/* ── 1. 비주얼 차트 뷰 (엑셀 원본 스타일 다이어그램) ── */}
       {viewMode === 'visual' && (
         <div className="mt-5">
-          <VisualDiagramOrgChart org={org} validUsers={validUsers} validDepts={validDepts} onSelectUserId={setSelectedUserId} />
+          {view === 'lumefab' ? (
+            // 루미팹 — 워크핏 조직도 모양(대표·위원회·연구소·본부 칸)이 아니라 부서 트리로
+            <CompanyTreeOrgChart roots={org.roots} onSelectUserId={setSelectedUserId} />
+          ) : (
+            <VisualDiagramOrgChart org={org} validUsers={validUsers} validDepts={validDepts} onSelectUserId={setSelectedUserId} />
+          )}
         </div>
       )}
 
@@ -301,6 +370,39 @@ function chunk<T>(items: T[], size: number): T[][] {
  * 1px 또는 2px 로 반올림돼 선마다 굵기가 달라 보였다. 테두리 두께는 위치와 무관하게
  * 같은 장치픽셀 수로 맞춰지므로 모든 선이 같은 굵기로 그려진다.
  */
+/** 회사별 조직도(부서 트리) — 부서마다 부서장·구성원, 하위 부서는 들여 씀 */
+function CompanyTreeOrgChart({ roots, onSelectUserId }: { roots: OrgNode[]; onSelectUserId: (id: string) => void }) {
+  if (roots.length === 0) {
+    return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12.5px] text-ink3">이 회사로 정한 부서가 없습니다 — 기준 정보 › 부서관리에서 부서의 회사를 정하세요.</div>;
+  }
+  const renderNode = (n: OrgNode, depth: number) => (
+    <div key={n.dept.id} className={depth > 0 ? 'ml-6 border-l-2 border-slate-300 pl-4' : ''}>
+      <div className="mb-2 rounded-xl border border-border bg-panel p-3 shadow-xs">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[13px] font-extrabold text-ink">{n.dept.name}</span>
+          <span className="text-[11px] text-ink3">{n.members.length}명</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {n.members.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onSelectUserId(m.id)}
+              className={`rounded-lg border px-2 py-1 text-[11.5px] hover:border-teal hover:text-teal ${m.id === n.dept.headUserId ? 'border-teal/40 bg-teal-soft/50 font-bold' : 'border-border bg-panel-alt/60'}`}
+            >
+              {m.name} <span className="text-ink3">{m.jobTitle || m.position}</span>
+              {m.isConcurrent && <span className="ml-1 text-[10px] text-indigo-600">겸직</span>}
+            </button>
+          ))}
+          {n.members.length === 0 && <span className="text-[11px] text-ink3">구성원 없음</span>}
+        </div>
+      </div>
+      {n.children.map((c) => renderNode(c, depth + 1))}
+    </div>
+  );
+  return <div>{roots.map((r) => renderNode(r, 0))}</div>;
+}
+
 const V_LINE = 'w-0 border-l-2 border-slate-400';
 const H_LINE = 'h-0 border-t-2 border-slate-400';
 

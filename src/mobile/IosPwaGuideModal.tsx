@@ -348,7 +348,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                           <tr>
                             <td className="px-3 py-2 font-medium text-slate-600">접속 주소</td>
                             <td className="px-3 py-2 font-mono text-[11.5px] font-semibold text-slate-800">
-                              https://intra.widdyax.com/m
+                              {`https://${window.location.host}/m`}
                             </td>
                           </tr>
                         </tbody>
@@ -551,7 +551,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                           <tr>
                             <td className="px-3 py-2 font-medium text-slate-600">접속 주소</td>
                             <td className="px-3 py-2 font-mono text-[11.5px] font-semibold text-slate-800">
-                              https://intra.widdyax.com/m
+                              {`https://${window.location.host}/m`}
                             </td>
                           </tr>
                         </tbody>
@@ -581,7 +581,7 @@ export default function MobilePwaGuideModal({ isOpen, onClose, onDismissToday }:
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="font-bold text-slate-400">2.</span>
-                        <span>주소창에 <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-slate-800">intra.widdyax.com/m</code> 를 입력해 접속합니다.</span>
+                        <span>주소창에 <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-slate-800">{`${window.location.host}/m`}</code> 를 입력해 접속합니다.</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="font-bold text-slate-400">3.</span>

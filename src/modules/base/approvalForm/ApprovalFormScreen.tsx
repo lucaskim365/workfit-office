@@ -8,6 +8,7 @@ import {
   useRemoveApprovalFolder,
 } from '@/features/gw/useApprovalForms';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { companyByAffiliation } from '@/domain/company/affiliation';
 import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
 import { blankForm } from './utils';
 import { isLumefabForm } from '@/domain/approvalDoc/company';
@@ -25,6 +26,8 @@ export default function ApprovalFormScreen() {
   const removeFolder = useRemoveApprovalFolder();
 
   const org = useOrgTree();
+  // 부서에 회사를 정해 두었으면 회사는 기안자 소속으로 정한다 — 서식의 '루미팹 겸용' 표시는 예전 방식일 때만
+  const byAffiliation = companyByAffiliation(org.depts);
 
   // 현재 편집 중인 서식 (null 이면 카탈로그 목록 뷰, 객체면 전용 A4 위지윅 디자이너 뷰)
   const [sel, setSel] = useState<ApprovalForm | null>(null);
@@ -314,7 +317,7 @@ export default function ApprovalFormScreen() {
                                   기본
                                 </span>
                               )}
-                              {isLumefabForm(f) && (
+                              {!byAffiliation && isLumefabForm(f) && (
                                 <span
                                   className="ml-1 rounded bg-indigo-500/10 px-1 py-0.2 text-[8px] font-bold text-indigo-600"
                                   title={`서식 선택에서 [루미팹] ${f.name}으로도 쓰입니다 — 이 서식을 고치면 루미팹 문서에도 똑같이 적용됩니다`}
@@ -406,7 +409,7 @@ export default function ApprovalFormScreen() {
                                     기본
                                   </span>
                                 )}
-                                {isLumefabForm(formItem) && (
+                                {!byAffiliation && isLumefabForm(formItem) && (
                                   <span
                                     className="ml-1 rounded bg-indigo-500/10 px-1 py-0.2 text-[8px] font-bold text-indigo-600"
                                     title={`서식 선택에서 [루미팹] ${formItem.name}으로도 쓰입니다 — 이 서식을 고치면 루미팹 문서에도 똑같이 적용됩니다`}
