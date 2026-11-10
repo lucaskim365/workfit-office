@@ -26,13 +26,21 @@ export interface OutsideScheduleView {
   memo?: string;
   /** source === 'APPROVAL' */
   approval?: { docId: string; docNo: string; docTitle: string };
+  /** 결재 건 동행자 id */
+  companionIds?: string[];
+  /** 결재 후 일정을 바꿨으면 원래 일정 */
+  changedFrom?: StandardScheduleInfo['changedFrom'];
   /** source === 'SELF' — 수정·삭제할 원본 */
   self?: OutsideWork;
 }
 
 /** 결재 완료 일정 → 표시 모델. 휴가는 대상이 아니다(사유 비공개라 상세를 열지 않는다). */
-export function fromApprovalSchedule(s: StandardScheduleInfo): OutsideScheduleView | null {
+export function fromApprovalSchedule(s: StandardScheduleInfo, nameOf?: (id: string) => string | undefined): OutsideScheduleView | null {
   if (s.category === 'LEAVE') return null;
+  // 동행자를 사람으로 고른 건 이름으로 바꿔 보인다(글자로 적은 예전 건은 그대로)
+  const companions = s.companionIds?.length
+    ? s.companionIds.map((id) => nameOf?.(id) ?? id).join(', ')
+    : s.companions;
   return {
     key: `appr-${s.docId}`,
     source: 'APPROVAL',
@@ -46,11 +54,13 @@ export function fromApprovalSchedule(s: StandardScheduleInfo): OutsideScheduleVi
     endTime: s.endTime,
     destination: s.destination,
     purpose: s.purpose,
-    companions: s.companions,
+    companions,
     transportation: s.transportation,
     contact: s.emergencyContact,
     memo: s.body,
     approval: { docId: s.docId, docNo: s.docNo, docTitle: s.docTitle },
+    companionIds: s.companionIds,
+    changedFrom: s.changedFrom,
   };
 }
 

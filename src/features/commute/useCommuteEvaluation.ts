@@ -7,6 +7,7 @@ import type { CommuteRecord, CommuteStatus } from '@/domain/commute/schema';
 import { evaluateCommuteRecord } from '@/domain/commute/engine';
 import { buildApprovalDayIndex, type ApprovalDayMap } from '@/domain/commute/approvalDayIndex';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 
 export type CommuteRawRecord = {
   empId: number;
@@ -26,11 +27,12 @@ export function useCommuteEvaluation() {
   const { data: holidays = [] } = useHolidays();
   const approvalsQuery = useAllApprovals();
   const outsideWorksQuery = useOutsideWorks();
+  const scheduleChanges = useScheduleChanges();
 
   const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
   const approvalIndex = useMemo(
-    () => buildApprovalDayIndex(approvalsQuery.data ?? [], outsideWorksQuery.data ?? []),
-    [approvalsQuery.data, outsideWorksQuery.data],
+    () => buildApprovalDayIndex(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], scheduleChanges),
+    [approvalsQuery.data, outsideWorksQuery.data, scheduleChanges],
   );
 
   /** 사람(사용자 id·이름)의 날짜별 승인 일정 — 한 사람에 대해 한 번 구해 여러 날짜 판정에 재사용 */

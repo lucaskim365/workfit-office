@@ -8,6 +8,7 @@ import type { WorkPlan } from '@/domain/workPlan/schema';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { useReservations } from '@/features/resource/useReservations';
 import { useWorkPlanItems, useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
@@ -66,6 +67,7 @@ export function useDayEntryIndex({ actor, deptId, members, dates }: DayEntryInde
   const calendarEventsQuery = useCalendarEvents(calendarActor, range, enabled);
   // 결재 없이 직접 등록한 외근·출장 (전사 공개)
   const outsideWorksQuery = useOutsideWorks(range, enabled);
+  const scheduleChanges = useScheduleChanges();
   // 회의의 연결 예약 상태(대기·반려) — 예약 시각은 ISO(UTC)라 앞뒤 하루씩 넉넉히 읽는다
   const reservationRange = useMemo(() => {
     const start = new Date(`${from}T00:00:00${RESOURCE_UTC_OFFSET}`).getTime();
@@ -82,7 +84,7 @@ export function useDayEntryIndex({ actor, deptId, members, dates }: DayEntryInde
       tags: tagsQuery.data ?? [],
       events: calendarEventsQuery.data ?? [],
       outsideWorks: outsideWorksQuery.data ?? [],
-      approvedSchedules: extractApprovedSchedules(approvalsQuery.data ?? []),
+      approvedSchedules: extractApprovedSchedules(approvalsQuery.data ?? [], scheduleChanges),
       legacyPlans: plansQuery.data ?? [],
       reservations: reservationsQuery.data ?? [],
       members: members.map((m) => ({ id: m.id, name: m.name })),
@@ -94,6 +96,7 @@ export function useDayEntryIndex({ actor, deptId, members, dates }: DayEntryInde
     calendarEventsQuery.data,
     outsideWorksQuery.data,
     approvalsQuery.data,
+    scheduleChanges,
     plansQuery.data,
     reservationsQuery.data,
     members,

@@ -39,6 +39,8 @@ import { nowLocalIso } from '@/shared/lib/datetime';
 import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, titleRowShown } from '@/domain/approvalForm/headerItems';
 import type { SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
 import { CompanyLetterhead, CompanyLetterheadBlock } from './CompanyLetterhead';
+import { splitUserIds } from '@/domain/approvalDoc/scheduleEngine';
+import { pickedUserIds } from '../formFields';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -1456,10 +1458,15 @@ export function ApprovalDraftDocumentSheet({
         <SelectorDialog
           title={`${activeUserField.label || '사용자'} 선택`}
           org={org}
-          singleSelect={true}
+          singleSelect={activeUserField.type !== '다중사용자'}
+          excludeIds={activeUserField.type === '다중사용자' ? new Set(splitUserIds(values[activeUserField.key])) : undefined}
           deptOnly={false}
           onConfirm={(items) => {
-            if (items[0]) {
+            if (activeUserField.type === '다중사용자') {
+              // 여러 명 — 이미 고른 사람에 더한다(부서를 고르면 부서원 전원)
+              const prev = splitUserIds(values[activeUserField.key]);
+              setVals({ [activeUserField.key]: [...new Set([...prev, ...pickedUserIds(items, org)])].join(',') });
+            } else if (items[0]) {
               setVals({ [activeUserField.key]: items[0].id });
             }
             setActiveUserField(null);
@@ -1675,6 +1682,38 @@ function InlineFieldEditor({
               <X size={12} />
             </button>
           )}
+        </div>
+      );
+    }
+
+    case '다중사용자': {
+      const ids = splitUserIds(sv);
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ids.map((id) => {
+            const u = org.users?.find((x: any) => x.id === id);
+            return (
+              <span key={id} className="flex items-center gap-1 rounded bg-[#f0f4f4] px-1.5 py-0.5 text-[11.5px] font-semibold text-[#222]">
+                {u ? `${u.name} (${u.dept})` : id}
+                <button
+                  type="button"
+                  onClick={() => setVals({ [field.key]: ids.filter((x) => x !== id).join(',') })}
+                  className="cursor-pointer text-[#999] hover:text-rose-500"
+                  aria-label={`${u?.name ?? id} 빼기`}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => onOpenUserPicker(field)}
+            className="flex cursor-pointer items-center gap-1 rounded bg-[#f0f4f4] px-2 py-0.5 text-[11.5px] font-semibold text-teal hover:bg-[#e0ecec]"
+          >
+            <Building2 size={12} />
+            <span>{ids.length ? '추가' : '임직원 검색'}</span>
+          </button>
         </div>
       );
     }

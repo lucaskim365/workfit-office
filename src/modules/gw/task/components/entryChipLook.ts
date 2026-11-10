@@ -64,7 +64,7 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
       const view = entry.outside;
       const category = view?.category ?? 'OUTSIDE';
       const chip = scheduleChip({ category, subType: view?.subType });
-      // 동행자 칸은 '동행 · 등록자' 표시(근태에는 반영하지 않는다). 행선지는 칩에 넣지 않는다(열어서 본다)
+      // 동행자 칸은 '동행 · 등록자' 표시(근태도 등록자와 같이 외근·출장으로 인정). 행선지는 칩에 넣지 않는다(열어서 본다)
       const label = outsideChipLabel({
         category,
         subType: view?.subType,
@@ -79,10 +79,32 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
       const chip = scheduleChip(s);
       if (s.category === 'LEAVE') return { label: `[휴가] ${chip.label}`, badgeClass: STATUS_TONES[chip.kind].badge };
       return {
-        label: outsideChipLabel({ category: s.category, subType: s.subType, purpose: s.purpose }),
+        // 동행자 칸은 직접 등록 외근과 같이 '동행 · 기안자'로
+        label: outsideChipLabel({
+          category: s.category,
+          subType: s.subType,
+          purpose: s.purpose,
+          companionOwnerName: entry.companionOf ? s.drafterName ?? '' : null,
+        }),
         badgeClass: STATUS_TONES[chip.kind].badge,
       };
     }
+  }
+}
+
+/** 칸 하나를 점 하나로 그릴 때의 색 — 달력처럼 좁은 곳에서 칩 대신 쓴다(칩과 같은 계열) */
+export function entryDotClass(entry: DayEntry): string {
+  switch (entry.source) {
+    case 'ITEM':
+      return chipLook(entry).dotClass ?? FALLBACK_TAG_DOT_CLASS;
+    case 'MEETING':
+      return PERSON_TONES.meeting.dot;
+    case 'CALENDAR':
+      return entry.event?.eventType === 'VACATION' ? PERSON_TONES.leave.dot : entry.event?.eventType === 'OUTSIDE' ? PERSON_TONES.outside.dot : PERSON_TONES.meeting.dot;
+    case 'OUTSIDE':
+      return STATUS_TONES[scheduleChip({ category: entry.outside?.category ?? 'OUTSIDE', subType: entry.outside?.subType }).kind].dot;
+    case 'APPROVAL':
+      return entry.schedule ? STATUS_TONES[scheduleChip(entry.schedule).kind].dot : FALLBACK_TAG_DOT_CLASS;
   }
 }
 
