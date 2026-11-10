@@ -182,16 +182,14 @@ export default function App() {
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩.
   // 단, 모바일 PWA(/m)는 자체 px 디자인이므로 데스크톱 확대(zoom, 기본 1.48)를 적용하면
   // 아이폰 화면보다 크게 렌더되어 축소해야 하는 문제가 생긴다 → PWA 는 항상 1(확대 없음).
-  // 시트 서식 편집기 새 탭도 배율 없이 — 엑셀처럼 화면에 칸을 많이 보이게
-  const isSheetEditorTab = location.pathname.startsWith('/sheet-editor');
   useEffect(() => {
-    if (isMobilePwa || isSheetEditorTab) {
+    if (isMobilePwa) {
       document.documentElement.style.setProperty('--font-scale', '1');
       return;
     }
     const savedScale = loadUserTheme(user?.id).fontScale;
     document.documentElement.style.setProperty('--font-scale', savedScale);
-  }, [isMobilePwa, isSheetEditorTab, user?.id]);
+  }, [isMobilePwa, user?.id]);
 
   // 타 MES 시스템 연동: /exec?from=mes 진입 시 대시보드를 노출하지 않고 독립 도크 뷰로 전환
   const isFromMes = new URLSearchParams(location.search).get('from') === 'mes';
