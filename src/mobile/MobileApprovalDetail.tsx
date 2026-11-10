@@ -14,6 +14,7 @@ import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
 import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
+import { ScheduleChangeNotice } from '@/modules/gw/approval/components/ScheduleChangeNotice';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
 import { SealFieldRow, SealMarkProvider } from '@/modules/gw/approval/components/CompanySeal';
 import { sealMarkIdOf } from '@/domain/approvalForm/seal';
@@ -289,6 +290,9 @@ export default function MobileApprovalDetail() {
                   </>
                 )}
               </Card>
+
+              {/* 결재 후 외근·출장 일정 변경 이력 */}
+              <ScheduleChangeNotice docId={doc.id} />
 
               {/* 선조치 결재(사후 감사 대상) 카드 */}
               {doc.isPostApproval && (

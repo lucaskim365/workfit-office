@@ -27,6 +27,7 @@ import { isLumefabDoc } from '@/domain/approvalDoc/company';
 import { CompanyTopMark } from './components/CompanyTopMark';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
+import { ScheduleChangeNotice } from './components/ScheduleChangeNotice';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -534,6 +535,9 @@ export function ApprovalDocumentView({
           <div className="text-[11px] text-[#888] self-center">{doc.docNo ? docNoOf(doc) : ''}</div>
         </div>
         )}
+
+        {/* 결재 후 외근·출장 일정 변경 이력 */}
+        <ScheduleChangeNotice docId={doc.id} />
 
         {/* 취소 기안 문서 안내 배너 */}
         {doc.cancelTargetDocId && (

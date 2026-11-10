@@ -84,6 +84,25 @@ export function birthdaysOn<T extends BirthdayPerson & { birthdayPublic?: boolea
   return people.filter((p) => p.birthdayPublic !== false && isBirthdayOn(p, date));
 }
 
+/**
+ * 그달(YYYY-MM)에 양력 생일이 오는 사람과 그 날짜 — 공개한 사람만, 날짜순(같은 날은 넣은 순서).
+ * 음력 생일은 전년도 음력이 올해 1~2월로 넘어올 수 있어 전년도도 본다.
+ */
+export function birthdaysInMonth<T extends BirthdayPerson & { birthdayPublic?: boolean }>(
+  people: readonly T[],
+  month: string,
+): { person: T; date: string }[] {
+  const year = Number(month.slice(0, 4));
+  if (!Number.isFinite(year)) return [];
+  const out: { person: T; date: string }[] = [];
+  for (const person of people) {
+    if (person.birthdayPublic === false) continue;
+    const date = [year - 1, year].map((y) => solarBirthdayInYear(person, y)).find((d) => d?.startsWith(`${month}-`));
+    if (date) out.push({ person, date });
+  }
+  return out.sort((x, y) => x.date.localeCompare(y.date));
+}
+
 /** 표시용 — "양력 3월 5일" / "음력 1월 15일 (올해 양력 2월 12일)" */
 export function describeBirthday(person: BirthdayPerson, today: string): string {
   const md = parseMonthDay(person.birthDate);

@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Car, CheckCircle2, FileText, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
+import { Calendar, CalendarClock, Car, CheckCircle2, FileText, History, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import { OUTSIDE_WORK_CATEGORY_LABELS, outsideKindLabel } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
@@ -9,6 +9,13 @@ import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from 
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { usePermission } from '@/features/auth/usePermission';
+import { useAllApprovals } from '@/features/gw/useApprovals';
+import { useChangeSchedule, useScheduleChangeList, useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
+import { canChangeSchedule } from '@/data/scheduleChange/scheduleChange.repo';
+import { extractScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
+import { changesOfDoc, scheduleRangeText, validateScheduleChange } from '@/domain/scheduleChange/schema';
+import { Field } from '@/shared/ui/form/Field';
+import { TextField } from '@/shared/ui/form/TextField';
 
 interface OutsideWorkDetailModalProps {
   view: OutsideScheduleView;
@@ -57,6 +64,22 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState('');
 
+  // ── 결재 건 일정 변경(기안자 본인·관리자) — 문서는 그대로, 변경 기록만 남긴다 ──
+  const approvals = useAllApprovals();
+  const changeMap = useScheduleChanges();
+  const changeList = useScheduleChangeList();
+  const changeSchedule = useChangeSchedule();
+  const doc = view.approval ? approvals.data?.find((d) => d.id === view.approval!.docId) : undefined;
+  const current = useMemo(() => (doc ? extractScheduleInfo(doc, changeMap) : null), [doc, changeMap]);
+  const history = view.approval ? changesOfDoc(changeList.data ?? [], view.approval.docId) : [];
+  const [changing, setChanging] = useState(false);
+  const [cStart, setCStart] = useState(view.startDate);
+  const [cEnd, setCEnd] = useState(view.endDate);
+  const [cAllDay, setCAllDay] = useState(!(view.startTime && view.endTime));
+  const [cStartTime, setCStartTime] = useState(view.startTime ?? '09:00');
+  const [cEndTime, setCEndTime] = useState(view.endTime ?? '18:00');
+  const [cReason, setCReason] = useState('');
+
   const owner = users.find((u) => u.id === view.ownerUserId);
   const ownerLabel = [owner?.name ?? view.ownerName ?? '', owner?.position ?? ''].filter(Boolean).join(' ');
   const { isAdmin } = usePermission();
@@ -64,6 +87,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
   const isMine = view.ownerUserId === viewer.userId;
   // 직접 등록 건은 본인과 관리자가 고치고 지운다. 결재 건과 연결은 본인만.
   const canEdit = view.source === 'SELF' && (isMine || isAdmin) && viewer.active;
+  const canChange = Boolean(current && view.source === 'APPROVAL' && canChangeSchedule(current, { userId: viewer.userId, active: viewer.active, isAdmin }));
   const sameDept = Boolean(owner?.dept && viewer.dept && owner.dept === viewer.dept);
   const contact = view.contact ? (isMine || sameDept ? view.contact : maskContact(view.contact)) : '';
 
@@ -85,6 +109,21 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '연결하지 못했습니다.');
+    }
+  };
+
+  const doChange = async () => {
+    if (!current) return;
+    const input = { startDate: cStart, endDate: cEnd, allDay: cAllDay, startTime: cAllDay ? null : cStartTime, endTime: cAllDay ? null : cEndTime, reason: cReason };
+    const invalid = validateScheduleChange(input);
+    if (invalid) return setError(invalid);
+    setError('');
+    try {
+      const me = users.find((u) => u.id === viewer.userId);
+      await changeSchedule.mutateAsync({ actor: { userId: viewer.userId, name: me?.name ?? '', active: viewer.active, isAdmin }, current, doc, input });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '일정을 바꾸지 못했습니다.');
     }
   };
 
@@ -125,6 +164,19 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
               <FileText size={13} /> 결재 문서 보기
             </Button>
           )}
+          {canChange && !changing && (
+            <Button onClick={() => { setError(''); setChanging(true); }}>
+              <CalendarClock size={13} /> 일정 변경
+            </Button>
+          )}
+          {changing && (
+            <>
+              <Button onClick={() => { setError(''); setChanging(false); }} disabled={changeSchedule.isPending}>취소</Button>
+              <Button variant="primary" onClick={() => void doChange()} disabled={changeSchedule.isPending}>
+                {changeSchedule.isPending ? '저장 중…' : '변경 저장'}
+              </Button>
+            </>
+          )}
           {canEdit && !confirmDelete && (
             <>
               {isMine && (
@@ -148,7 +200,7 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
               </Button>
             </>
           )}
-          {!canEdit && <Button onClick={onClose}>닫기</Button>}
+          {!canEdit && !changing && <Button onClick={onClose}>닫기</Button>}
         </>
       )}
     >
@@ -191,6 +243,51 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
           </Row>
         )}
       </div>
+      {history.length > 0 && (
+        <div className="mt-3 rounded-lg border border-border bg-panel-alt/40 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink2"><History size={12} /> 결재 후 일정 변경</div>
+          <ul className="m-0 list-none space-y-1 p-0">
+            {history.map((h) => (
+              <li key={h.id} className="text-[11.5px] text-ink2">
+                <span className="text-ink3 line-through">{scheduleRangeText(h.prevStartDate, h.prevEndDate, h.prevStartTime, h.prevEndTime)}</span>
+                <span className="mx-1 text-ink3">→</span>
+                <span className="font-semibold text-ink">{scheduleRangeText(h.startDate, h.endDate, h.startTime, h.endTime)}</span>
+                <span className="ml-1.5 text-ink3">{h.reason} · {h.changedByName} {h.createdAt.slice(5, 10).replace('-', '/')}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {changing && (
+        <div className="mt-3 space-y-2.5 rounded-lg border border-teal/40 bg-teal-soft/30 p-3">
+          <div className="grid grid-cols-2 gap-2.5">
+            <Field label="시작일" required>
+              <TextField type="date" value={cStart} onChange={(e) => { setCStart(e.target.value); if (cEnd < e.target.value) setCEnd(e.target.value); }} />
+            </Field>
+            <Field label="종료일" required>
+              <TextField type="date" value={cEnd} min={cStart} onChange={(e) => setCEnd(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="시간">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
+                <input type="checkbox" checked={cAllDay} onChange={(e) => setCAllDay(e.target.checked)} />
+                종일
+              </label>
+              {!cAllDay && (
+                <>
+                  <TextField type="time" value={cStartTime} onChange={(e) => setCStartTime(e.target.value)} className="w-[120px]" />
+                  <span className="text-ink3">~</span>
+                  <TextField type="time" value={cEndTime} onChange={(e) => setCEndTime(e.target.value)} className="w-[120px]" />
+                </>
+              )}
+            </div>
+          </Field>
+          <Field label="변경 사유" required>
+            <TextField value={cReason} maxLength={300} placeholder="예: 고객사 요청으로 하루 미룸" onChange={(e) => setCReason(e.target.value)} />
+          </Field>
+        </div>
+      )}
       {linking && canEdit && isMine && (
         <div className="mt-3 space-y-1.5 rounded-lg border border-border bg-panel-alt/40 p-2.5">
           <p className="text-[11px] text-ink2">연결할 결재 문서를 고르세요. 연결하면 이 등록은 업무계획·캘린더·근태에서 빠지고 결재 건만 보입니다.</p>

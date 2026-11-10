@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAllApprovals } from '@/features/gw/useApprovals';
+import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import { outsideWorkRepo, type OutsideWorkActor, type OutsideWorkFilter } from '@/data/outsideWork/outsideWork.repo';
@@ -61,13 +62,14 @@ export function useRemoveOutsideWork() {
 export function useOutsideSchedulesOf(userId: string, userName: string): OutsideScheduleView[] {
   const approvalsQuery = useAllApprovals();
   const worksQuery = useOutsideWorks();
+  const scheduleChanges = useScheduleChanges();
   return useMemo(() => {
     const norm = (v?: string | null) => (v ?? '').replace(/\s+/g, '');
-    const approved = extractApprovedSchedules(approvalsQuery.data ?? [])
+    const approved = extractApprovedSchedules(approvalsQuery.data ?? [], scheduleChanges)
       .filter((s) => s.drafterId === userId || norm(s.drafterName) === norm(userName))
-      .map(fromApprovalSchedule)
+      .map((s) => fromApprovalSchedule(s))
       .filter((v): v is OutsideScheduleView => v !== null);
     const self = (worksQuery.data ?? []).filter((w) => w.ownerUserId === userId).map((w) => fromOutsideWork(w));
     return [...approved, ...self];
-  }, [approvalsQuery.data, worksQuery.data, userId, userName]);
+  }, [approvalsQuery.data, worksQuery.data, scheduleChanges, userId, userName]);
 }

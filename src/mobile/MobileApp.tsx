@@ -15,6 +15,7 @@ import MobileApprovalList from './MobileApprovalList';
 import MobileApprovalDetail from './MobileApprovalDetail';
 import MobileGroupwareScreen from './MobileGroupwareScreen';
 import MobileTabLayout from './MobileTabLayout';
+import MobileExecScreen from './MobileExecScreen';
 import MobileWiddyScreen, { MobileWiddyProvider } from './MobileWiddyScreen';
 import MobileCommuteScreen from './MobileCommuteScreen';
 import MobileCommuteAdminScreen from './MobileCommuteAdminScreen';
@@ -163,7 +164,7 @@ export default function MobileApp() {
             {/* 하단 탭 — 상단바·하단바가 있는 공통 틀. 채팅방 등 안쪽 화면은 틀 밖이라 자기 헤더만 쓴다 */}
             <Route element={<MobileTabLayout />}>
               <Route index element={<MobileGroupwareScreen />} />
-              <Route path="exec" element={<div className="grid h-full place-items-center text-[15px] font-semibold text-ink3">아직 준비 중입니다.</div>} />
+              <Route path="exec" element={<MobileExecScreen />} />
               <Route path="widdy" element={<MobileWiddyScreen />} />
               <Route path="chat" element={<MobileChatList />} />
             </Route>

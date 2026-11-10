@@ -1,5 +1,6 @@
 import type { ApprovalDoc } from './schema';
 import { calculateLeaveDays } from '@/domain/leave/policy';
+import type { ScheduleChange } from '@/domain/scheduleChange/schema';
 
 /**
  * 전사 표준 일정/근태 연동 정보 규격 (Single Source of Truth)
@@ -26,6 +27,13 @@ export interface StandardScheduleInfo {
   transportation?: string;
   emergencyContact?: string;
   companions?: string;
+  /**
+   * 동행자 사용자 id — 서식의 '다중사용자' 필드(key 'companions')로 고른 사람.
+   * 기안자와 같이 업무계획·캘린더·근태(외근·출장 인정)에 반영된다. 예전 글자 동행자는 이름이라 어느 계정과도 맞지 않는다.
+   */
+  companionIds?: string[];
+  /** 결재 후 일정을 바꿨으면 문서에 적힌 원래 일정 — [[scheduleChange]] */
+  changedFrom?: { startDate: string; endDate: string; startTime?: string; endTime?: string; reason: string; changedAt: string };
   substituteId?: string;
   substituteName?: string;
   amount?: number | null;
@@ -36,7 +44,44 @@ export interface StandardScheduleInfo {
  * 단일 결재 문서로부터 표준 일정 정보를 안전하게 추출하는 순수 함수.
  * doc.form 및 doc.fieldValues 모두에서 안전하게 추출하며, 기존 DB 문서(Read-Only)와 100% 하위 호환됩니다.
  */
-export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | null {
+export function extractScheduleInfo(doc: ApprovalDoc, changes?: ReadonlyMap<string, ScheduleChange>): StandardScheduleInfo | null {
+  const s = extractRawScheduleInfo(doc);
+  return s ? applyScheduleChange(s, changes?.get(doc.id)) : null;
+}
+
+/** 다중사용자 값('id1,id2') → id 목록. 빈 칸·중복은 뺀다 */
+export function splitUserIds(v: unknown): string[] {
+  if (v == null || v === '') return [];
+  return [...new Set(String(v).split(',').map((x) => x.trim()).filter(Boolean))];
+}
+
+/** 날짜 두 개 사이 일수(양끝 포함) */
+function dayCount(start: string, end: string): number {
+  const a = Date.parse(start + 'T00:00:00Z');
+  const b = Date.parse(end + 'T00:00:00Z');
+  return Number.isNaN(a) || Number.isNaN(b) ? 1 : Math.round((b - a) / 86_400_000) + 1;
+}
+
+/**
+ * 결재 후 바뀐 일정을 덮어쓴다 — 외근·출장만. 휴가는 연차와 묶여 있어 바꾸지 않는다.
+ * 행선지·목적 등 나머지는 문서 그대로.
+ */
+export function applyScheduleChange(s: StandardScheduleInfo, change: ScheduleChange | undefined): StandardScheduleInfo {
+  if (!change || s.category === 'LEAVE') return s;
+  const days = change.startDate === change.endDate ? (s.startDate === s.endDate ? s.days : 1) : dayCount(change.startDate, change.endDate);
+  return {
+    ...s,
+    startDate: change.startDate,
+    endDate: change.endDate,
+    startTime: change.startTime ?? undefined,
+    endTime: change.endTime ?? undefined,
+    days,
+    changedFrom: { startDate: s.startDate, endDate: s.endDate, startTime: s.startTime, endTime: s.endTime, reason: change.reason, changedAt: change.createdAt },
+  };
+}
+
+/** 문서에 적힌 그대로의 일정 */
+function extractRawScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | null {
   // 취소 기안 문서는 원문서의 일정을 취소하기 위한 결재 문서이므로 자체 일정을 생성하지 않음
   if (doc.cancelTargetDocId) return null;
 
@@ -127,6 +172,7 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
 
   // 7. 동행자(companions)
   const companions = fVals['companions'] ? String(fVals['companions']) : undefined;
+  const companionIds = category === 'LEAVE' ? [] : splitUserIds(fVals['companions']).filter((id) => id !== doc.drafterId);
 
   // 8. 업무대행자(substituteId)
   const substituteId = fVals['substituteId'] ? String(fVals['substituteId']) : undefined;
@@ -165,6 +211,7 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
     transportation,
     emergencyContact,
     companions,
+    companionIds,
     substituteId,
     amount: doc.amount,
     body,
@@ -174,11 +221,11 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
 /**
  * 승인 완료(`status === '완료'`)된 문서들 중 표준 일정 데이터만 추출하는 순수 함수
  */
-export function extractApprovedSchedules(docs: ApprovalDoc[]): StandardScheduleInfo[] {
+export function extractApprovedSchedules(docs: ApprovalDoc[], changes?: ReadonlyMap<string, ScheduleChange>): StandardScheduleInfo[] {
   const list: StandardScheduleInfo[] = [];
   for (const doc of docs) {
     if (doc.status !== '완료') continue;
-    const schedule = extractScheduleInfo(doc);
+    const schedule = extractScheduleInfo(doc, changes);
     if (schedule) list.push(schedule);
   }
   return list;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { birthdaysOn, birthdayUserIds, describeBirthday, isBirthdayOn, nextSolarBirthday, solarBirthdayInYear } from './engine';
+import { birthdaysInMonth, birthdaysOn, birthdayUserIds, describeBirthday, isBirthdayOn, nextSolarBirthday, solarBirthdayInYear } from './engine';
 
 test('양력 생일은 그해 같은 날', () => {
   assert.equal(solarBirthdayInYear({ birthDate: '1990-03-05' }, 2026), '2026-03-05');
@@ -65,4 +65,17 @@ test('오늘 생일인 재직자 id — 비공개·생년월일 없음·사용 �
     { userId: 'E', birthDate: '1985-09-05', birthLunar: true }, // 음력 9/5 → 2026 양력 10/15
   ];
   assert.deepEqual([...birthdayUserIds(people, new Set(['A', 'B', 'C', 'E']), '2026-10-15')].sort(), ['A', 'E']);
+});
+
+test('그달 생일 — 공개한 사람만, 음력은 올해 양력으로, 날짜순', () => {
+  const people = [
+    { id: 'a', birthDate: '1990-02-20' },
+    { id: 'b', birthDate: '1985-01-01', birthLunar: true }, // 2026년 양력 2/17
+    { id: 'c', birthDate: '1991-02-03', birthdayPublic: false },
+    { id: 'd', birthDate: '1988-03-01' },
+    { id: 'e', birthDate: null },
+  ];
+  assert.deepEqual(birthdaysInMonth(people, '2026-02').map((x) => [x.person.id, x.date]), [['b', '2026-02-17'], ['a', '2026-02-20']]);
+  assert.deepEqual(birthdaysInMonth(people, '2026-03').map((x) => x.person.id), ['d']);
+  assert.deepEqual(birthdaysInMonth(people, 'x'), []);
 });
