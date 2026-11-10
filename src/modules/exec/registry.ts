@@ -52,14 +52,13 @@ export type WidgetId = keyof typeof WIDGETS;
 export const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[];
 export const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
 
+/** 웹 기본 배치(2026-11-10 사용자가 맞춘 배치) — 칸 자리(x·y)와 세로 칸 수까지 */
 export const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
-  { id: 'today', size: 12 },
-  { id: 'attendance', size: 8 },
-  { id: 'approval', size: 4 },
-  { id: 'resource', size: 4 },
-  { id: 'team', size: 4 },
-  { id: 'project', size: 4 },
-  { id: 'notice', size: 12 },
+  { id: 'today', size: 12, x: 0, y: 0 },
+  { id: 'attendance', size: 8, x: 0, y: 4 },
+  { id: 'approval', size: 4, x: 8, y: 4 },
+  { id: 'notice', size: 8, x: 0, y: 11, rows: 3 },
+  { id: 'birthday', size: 4, x: 8, y: 8, rows: 6 },
 ];
 
 /** 휴대폰 기본 — size 6 은 반 칸(요약), 12 는 한 줄 전체 */
