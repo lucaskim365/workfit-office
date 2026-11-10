@@ -98,12 +98,14 @@ export default function SheetEditorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg p-3">
+    // 엑셀처럼 창을 꽉 채운다 — 페이지는 스크롤하지 않고 격자·옆 막대가 각자 안에서 스크롤
+    <div className="flex h-screen flex-col bg-bg p-2">
       {otherTab && (
-        <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] font-semibold text-amber-800">
+        <div className="mb-2 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] font-semibold text-amber-800">
           이 서식이 다른 탭에서도 열려 있습니다 — 두 곳에서 저장하면 나중에 저장한 것이 새 버전이 됩니다(앞의 것도 버전 기록에 남음).
         </div>
       )}
+      <div className="min-h-0 flex-1">
       <SheetFormDesigner
         form={payload.form}
         version={payload.version}
@@ -133,6 +135,7 @@ export default function SheetEditorPage() {
             : undefined
         }
       />
+      </div>
     </div>
   );
 }

@@ -563,16 +563,20 @@ function Designer({
   }, []);
 
   const GAP = 12;
+  // 새 탭(엑셀처럼) — 편집기가 남는 폭을 다 쓰고 안에서 스크롤하므로, 편집기 최소 폭만 있으면 된다
+  const needEditor = standalone ? 720 : editorWidth;
   const layout: 'three' | 'compact' | 'two' | 'stack' =
-    rootW === 0 || rootW >= editorWidth + PALETTE_W + SIDE_W + GAP * 2
+    rootW === 0 || rootW >= needEditor + PALETTE_W + SIDE_W + GAP * 2
       ? 'three'
-      : rootW >= editorWidth + PALETTE_ICONS_W + SIDE_W + GAP * 2
+      : rootW >= needEditor + PALETTE_ICONS_W + SIDE_W + GAP * 2
         ? 'compact'
-        : rootW >= editorWidth + SIDE_MIN_W + GAP
+        : rootW >= needEditor + SIDE_MIN_W + GAP
           ? 'two'
           : 'stack';
+  // 새 탭은 창 높이를 꽉 채우는 틀 — 옆 막대도 붙일 필요 없이 그 칸 높이만큼(안에서 스크롤)
+  const fill = standalone && layout !== 'stack';
   // 화면에 붙는 옆 막대(부품·설정) — 앱 상단바·탭 막대 바로 아래, 화면 높이를 넘지 않게(넘치면 안에서만 스크롤). 화면 높이는 글자 크기 배율(body zoom)로 나눈다
-  const stickyStyle = layout === 'stack' ? undefined : { top: stickTop + 8, maxHeight: `calc(100vh / var(--font-scale, 1) - ${stickTop + 16}px)` };
+  const stickyStyle = layout === 'stack' || fill ? undefined : { top: stickTop + 8, maxHeight: `calc(100vh / var(--font-scale, 1) - ${stickTop + 16}px)` };
 
   const msgCls =
     msg?.kind === 'err'
@@ -582,9 +586,9 @@ function Designer({
         : 'border-teal/30 bg-teal-soft/70 text-teal';
 
   return (
-    <div ref={rootRef} className="space-y-3">
+    <div ref={rootRef} className={fill ? 'flex h-full min-h-0 flex-col gap-2' : 'space-y-3'}>
       {/* 머리 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel px-4 py-2.5 shadow-xs">
+      <div className={`flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel shadow-xs ${standalone ? 'px-3 py-1.5' : 'px-4 py-2.5'}`}>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -601,7 +605,7 @@ function Designer({
               {baseVersion !== null && <span className="rounded bg-teal-soft px-1.5 font-mono text-[10px] font-bold text-teal">v{baseVersion}</span>}
               {dirty && <span className="text-[10.5px] font-bold text-amber-600">저장 안 됨</span>}
             </div>
-            <span className="text-[10.5px] text-ink3">
+            <span className={`text-[10.5px] text-ink3 ${standalone ? 'hidden' : ''}`}>
               {legacy
                 ? "기존 서식에 시트 틀을 붙입니다 — 서식 코드·항목 목록은 그대로라 옛 문서는 지금 모습, 결재선 규칙·권한도 그대로. '시트로 기안'을 켜면 새 기안부터 시트로"
                 : "엑셀처럼 틀을 만들고, 기안자가 쓸 칸을 '입력 칸'으로 정합니다 · 사용을 켜면 기안 서식 목록에 나옵니다"}
@@ -709,7 +713,7 @@ function Designer({
       </div>
 
       {msg && (
-        <div className={`rounded-lg border px-4 py-2.5 text-[12px] font-bold ${msgCls}`}>
+        <div className={`shrink-0 rounded-lg border px-4 py-2.5 text-[12px] font-bold ${msgCls} ${fill ? 'max-h-40 overflow-y-auto' : ''}`}>
           <div className="flex items-start justify-between gap-3">
             <span>{msg.text}</span>
             <button type="button" onClick={() => setMsg(null)} className="opacity-60 hover:opacity-100" aria-label="닫기">
@@ -726,6 +730,7 @@ function Designer({
         </div>
       )}
 
+      <InfoBlock collapsible={standalone} defaultOpen={isNew}>
       {/* 서식 정보 */}
       <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1.4fr]">
         <Field label="아이콘">
@@ -842,14 +847,15 @@ function Designer({
           대외 문서
         </label>
       </div>
+      </InfoBlock>
 
       {/* 편집기 + 옆 패널 */}
       {/* 편집기는 문서(A4 세로) 폭에 맞춘 폭만 — 넓은 화면에서 빈 공간이 생기지 않게 옆 패널을 바로 붙인다 */}
-      <div className={`flex gap-3 ${layout === 'stack' ? 'flex-col' : 'items-start'}`}>
+      <div className={`flex gap-3 ${layout === 'stack' ? 'flex-col' : fill ? 'min-h-0 flex-1 gap-2' : 'items-start'}`}>
         {(layout === 'three' || layout === 'compact') && (
           // 부품 — 편집기 왼쪽(끌어다 놓기 거리가 짧고, 오른쪽 설정 패널이 짧아진다)
           <div
-            className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2"
+            className={`shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2 ${fill ? '' : 'sticky'}`}
             style={{ ...stickyStyle, width: layout === 'three' ? PALETTE_W : PALETTE_ICONS_W }}
           >
             {layout === 'three' && <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>}
@@ -857,8 +863,8 @@ function Designer({
           </div>
         )}
         <div
-          className={`min-w-0 rounded-xl border border-border bg-panel p-2 ${layout === 'stack' ? 'w-full' : 'flex-none'}`}
-          style={layout === 'stack' ? undefined : { width: editorWidth, maxWidth: '100%' }}
+          className={`min-w-0 rounded-xl border border-border bg-panel p-2 ${layout === 'stack' ? 'w-full' : fill ? 'flex flex-1 flex-col' : 'flex-none'}`}
+          style={layout === 'stack' || fill ? undefined : { width: editorWidth, maxWidth: '100%' }}
           onDragOver={(e) => {
             if (!e.dataTransfer.types.includes(PART_MIME)) return;
             e.preventDefault();
@@ -874,6 +880,7 @@ function Designer({
               <DocFrame form={docForm} me={user} only="header" />
             </details>
           )}
+          <div className={fill ? 'min-h-0 flex-1' : 'contents'}>
           <SheetEditor
             value={sheet}
             onChange={setSheet}
@@ -893,7 +900,8 @@ function Designer({
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
             // 화면 높이에 맞춤 — 글자 크기 배율(body zoom)로 나눠야 실제 화면 높이(안 그러면 페이지 전체를 위아래로 스크롤해야 함)
-            height="auto"
+            // 새 탭 — 엑셀처럼 격자 안에서 스크롤(도구 막대·열 머리는 그대로 위에). 앱 안 — 아래로 펼치고 페이지가 스크롤
+            height={fill ? '100%' : 'auto'}
             stickyTop={stickTop}
             paper={user && view === 'paper' ? (table) => <DocFrame form={docForm} me={user} interactive body={table} paperWidth={sheetWidth + PAPER_PAD > 800 ? sheetWidth + PAPER_PAD : undefined} /> : undefined}
             toolbarExtra={
@@ -942,7 +950,8 @@ function Designer({
               </>
             }
           />
-          <div className="space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3">
+          </div>
+          <div className={`space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3 ${fill ? 'shrink-0' : ''}`}>
             {pageScale < 1 && (
               <div className="font-semibold text-amber-700 dark:text-amber-400">
                 A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
@@ -958,7 +967,7 @@ function Designer({
 
         {/* 화면에 붙어 있고 안에서만 스크롤 — 시트를 내려 봐도 패널은 그 자리에. 높이는 글자 크기 배율(body zoom)로 나눠야 화면 높이와 맞는다 */}
         <div
-          className={`rounded-xl border border-border bg-panel p-3 ${layout === 'stack' ? 'w-full' : 'sticky min-w-0 shrink overflow-y-auto'}`}
+          className={`rounded-xl border border-border bg-panel p-3 ${layout === 'stack' ? 'w-full' : `min-w-0 shrink overflow-y-auto ${fill ? '' : 'sticky'}`}`}
           style={layout === 'stack' ? undefined : { ...stickyStyle, width: SIDE_W, minWidth: SIDE_MIN_W }}
         >
           <div className="mb-3 flex rounded-lg border border-border bg-panel-alt p-0.5 text-[11.5px]">
@@ -1013,6 +1022,21 @@ function Designer({
 
       {preview && <PreviewModal form={form} sheet={preview.sheet} title={preview.title} link={link} onClose={() => setPreview(null)} />}
     </div>
+  );
+}
+
+/** 서식 정보·문서 머리 항목 — 새 탭에서는 접어 두는 띠(새 서식은 펼쳐서), 앱 안에서는 그대로 */
+function InfoBlock({ collapsible, defaultOpen, children }: { collapsible: boolean; defaultOpen: boolean; children: React.ReactNode }) {
+  if (!collapsible) return <>{children}</>;
+  return (
+    <details open={defaultOpen} className="group shrink-0 rounded-xl border border-border bg-panel [&[open]>summary]:border-b [&[open]>summary]:border-border">
+      <summary className="flex cursor-pointer select-none list-none items-center gap-2 px-3 py-1.5 text-[11.5px] font-bold text-ink2 hover:text-ink">
+        <span className="text-ink3 group-open:rotate-90">▸</span>
+        서식 정보 · 문서 머리 항목
+        <span className="font-normal text-ink3">(서식명·코드·격식 문서명·폴더·연동·저장 메모·대외 문서)</span>
+      </summary>
+      <div className="space-y-2 p-2 [&>div]:border-0 [&>div]:shadow-none">{children}</div>
+    </details>
   );
 }
 
