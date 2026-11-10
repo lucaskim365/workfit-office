@@ -126,16 +126,22 @@ export function packLanes<T extends { start: string | null; end: string | null }
 /** 위젯 폭 — 12칸 중 몇 칸 */
 export const WIDGET_SIZES = [4, 6, 8, 12] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
-/** h — 직접 늘리거나 줄인 높이(px). 없으면 내용 높이 그대로 */
-export interface WidgetSlot<Id extends string = string> { id: Id; size: WidgetSize; h?: number }
+/** rows — 차지하는 세로 칸 수(없으면 위젯 기본 칸 수) */
+export interface WidgetSlot<Id extends string = string> { id: Id; size: WidgetSize; rows?: number }
 
-export const MIN_WIDGET_H = 120;
-const MAX_WIDGET_H = 2400;
-const H_STEP = 20;
+/** 모눈 한 칸 높이와 칸 사이 간격(px) — 위젯 높이는 늘 이 칸에 맞춘다 */
+export const CELL_H = 48;
+export const CELL_GAP = 16;
+const PITCH = CELL_H + CELL_GAP;
+export const MAX_ROWS = 40;
 
-/** 끌어 바꾼 높이 → 20px 단위, 위젯마다 정한 최소 높이(min) 이상 */
-export function snapHeight(px: number, min = MIN_WIDGET_H): number {
-  return Math.min(MAX_WIDGET_H, Math.max(min, MIN_WIDGET_H, Math.round(px / H_STEP) * H_STEP));
+/** 칸 수 → 높이(px) */
+export const rowsHeight = (rows: number) => rows * PITCH - CELL_GAP;
+/** 이 높이(px)가 다 들어가는 가장 적은 칸 수 */
+export const rowsFor = (px: number) => Math.max(1, Math.ceil((px + CELL_GAP) / PITCH));
+/** 끌어 바꾼 높이(px) → 가장 가까운 칸 수, 최소 칸 수(minRows) 이상 */
+export function snapRows(px: number, minRows = 1): number {
+  return Math.min(MAX_ROWS, Math.max(minRows, 1, Math.round((px + CELL_GAP) / PITCH)));
 }
 
 /** 저장된 배치 정리 — 모르는 위젯·중복·잘못된 폭은 버린다. 비어 있으면 기본 배치 */
@@ -146,11 +152,11 @@ export function normalizeLayout<Id extends string>(saved: unknown, known: readon
   for (const raw of saved) {
     const id = (raw as { id?: unknown })?.id;
     const size = (raw as { size?: unknown })?.size;
-    const h = (raw as { h?: unknown })?.h;
+    const rows = (raw as { rows?: unknown })?.rows;
     if (typeof id !== 'string' || !known.includes(id as Id) || seen.has(id)) continue;
     seen.add(id);
     const slot: WidgetSlot<Id> = { id: id as Id, size: (WIDGET_SIZES as readonly number[]).includes(size as number) ? (size as WidgetSize) : 6 };
-    if (typeof h === 'number' && Number.isFinite(h)) slot.h = snapHeight(h);
+    if (typeof rows === 'number' && Number.isInteger(rows) && rows >= 1) slot.rows = Math.min(MAX_ROWS, rows);
     out.push(slot);
   }
   return out.length ? out : fallback;

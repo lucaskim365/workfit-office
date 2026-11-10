@@ -90,15 +90,20 @@ test('끌어 늘린 폭 맞추기·위젯 끼우기', () => {
   assert.equal(insertSlot(list, { id: 'a', size: 6 }, 0), list);
 });
 
-import { snapHeight } from './dashboard';
+import { rowsFor, rowsHeight, snapRows } from './dashboard';
 
-test('끌어 바꾼 높이 — 20px 단위, 위젯 최소 높이 이상', () => {
-  assert.equal(snapHeight(333), 340);
-  assert.equal(snapHeight(50), 120);
-  assert.equal(snapHeight(300, 420), 420);
+test('모눈 칸 — 높이는 칸 수로, 최소 칸 수 이상', () => {
+  assert.equal(rowsHeight(1), 48);
+  assert.equal(rowsHeight(4), 240);
+  assert.equal(rowsFor(240), 4);
+  assert.equal(rowsFor(241), 5);
+  assert.equal(snapRows(250), 4);
+  assert.equal(snapRows(10, 3), 3);
+  assert.equal(snapRows(99999), 40);
   const known = ['a'] as const;
-  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 301 }], known, []), [{ id: 'a', size: 4, h: 300 }]);
-  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 'x' }], known, []), [{ id: 'a', size: 4 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, rows: 5 }], known, []), [{ id: 'a', size: 4, rows: 5 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, rows: 2.5 }], known, []), [{ id: 'a', size: 4 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 300 }], known, []), [{ id: 'a', size: 4 }]);
 });
 
 import { hoursText, timeAgo, weekDates } from './dashboard';
