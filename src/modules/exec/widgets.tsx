@@ -6,6 +6,7 @@ import { useBoardPosts } from '@/features/board/useBoardPosts';
 import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { useDepartments } from '@/features/department/useDepartments';
+import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useLeave } from '@/features/gw/useLeave';
 import { useReservations } from '@/features/resource/useReservations';
@@ -14,6 +15,7 @@ import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
+import { birthdaysInMonth } from '@/domain/birthday/engine';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
@@ -1035,11 +1037,7 @@ export function AwayTodayWidget() {
               <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
                 {g.people.slice(0, 12).map((u) => (
                   <li key={u.id} className="flex items-center gap-1.5 rounded-full bg-panel-alt py-1 pr-2.5 pl-1">
-                    {u.photoThumbUrl || u.photoUrl ? (
-                      <img src={u.photoThumbUrl || u.photoUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
-                    ) : (
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-panel text-[10px] font-bold text-ink2">{u.name.slice(0, 1)}</span>
-                    )}
+                    <MiniAvatar user={u} />
                     <span className="text-[11.5px] text-ink">{u.name}</span>
                     <span className="text-[10.5px] text-ink3">{u.dept}</span>
                   </li>
@@ -1049,6 +1047,60 @@ export function AwayTodayWidget() {
             </div>
           ))}
         </div>
+      )}
+    </Panel>
+  );
+}
+
+/** 작은 얼굴 — 사진이 없으면 이름 첫 글자 */
+function MiniAvatar({ user, size = 20 }: { user: { name: string; photoUrl?: string | null; photoThumbUrl?: string | null }; size?: number }) {
+  const src = user.photoThumbUrl || user.photoUrl;
+  return src ? (
+    <img src={src} alt="" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+  ) : (
+    <span className="grid shrink-0 place-items-center rounded-full bg-panel-alt font-bold text-ink2" style={{ width: size, height: size, fontSize: size * 0.48 }}>
+      {user.name.slice(0, 1)}
+    </span>
+  );
+}
+
+/* ───────────────────────── 조직도: 이달의 생일 ───────────────────────── */
+
+/** 이번 달 생일인 사람 — 공개한 사람만, 날짜순. 오늘 생일은 강조, 지난 생일은 흐리게 */
+export function BirthdayWidget() {
+  const users = useUsers({ status: '사용' }).data ?? [];
+  const profiles = useEmployeeProfiles().data ?? [];
+  const today = todayKst();
+  const month = today.slice(0, 7);
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const list = birthdaysInMonth(profiles.filter((p) => byId.has(p.userId)), month);
+  return (
+    <Panel>
+      <Head title={`${Number(month.slice(5))}월 생일`} note={list.length ? `${list.length}명` : undefined} />
+      {list.length === 0 ? (
+        <Empty>이번 달 생일인 사람이 없습니다.</Empty>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+          {list.map(({ person, date }) => {
+            const u = byId.get(person.userId)!;
+            const isToday = date === today;
+            return (
+              <li
+                key={person.userId}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 ${isToday ? 'bg-[#fdeef3] dark:bg-pink-500/15' : ''} ${date < today ? 'opacity-45' : ''}`}
+              >
+                <span className={`w-10 shrink-0 text-[15px] font-black tabular-nums ${isToday ? 'text-[#d6336c]' : 'text-ink'}`}>
+                  {Number(date.slice(8))}
+                  <span className="ml-0.5 text-[10.5px] font-bold text-ink3">일</span>
+                </span>
+                <MiniAvatar user={u} size={24} />
+                <span className="truncate text-[12.5px] font-bold text-ink">{u.name}</span>
+                <span className="truncate text-[11px] text-ink3">{u.dept}</span>
+                {isToday && <span className="ml-auto shrink-0 rounded-full bg-[#d6336c] px-2 py-0.5 text-[10.5px] font-bold text-white">오늘</span>}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </Panel>
   );
