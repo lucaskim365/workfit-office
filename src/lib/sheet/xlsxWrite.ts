@@ -284,25 +284,35 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
   const colW = s.cols.map((col) => s.colWidths[col] ?? DEFAULT_COL_WIDTH);
   const rowH = keepRows.map((r) => s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT);
   const pics = (opts.pictures ?? []).filter((p) => newRow.has(p.r) && p.c >= 0 && p.c < s.cols.length && p.width > 0 && p.height > 0);
-  const anchors = pics.map((p, i) => {
-    let col = p.c;
-    let x = p.x;
+  // 자리(시트 px) → 칸 번호 + 칸 안 거리. 음수나 칸보다 큰 값은 옆·위·아래 칸으로 넘긴다
+  const locate = (c0: number, x0: number, r0: number, y0: number) => {
+    let col = c0;
+    let x = x0;
     while (x < 0 && col > 0) x += colW[--col];
     while (col < colW.length - 1 && x >= colW[col]) x -= colW[col++];
-    let row = newRow.get(p.r)!;
-    let y = p.y;
+    let row = r0;
+    let y = y0;
     while (y < 0 && row > 0) y += rowH[--row];
     while (row < rowH.length - 1 && y >= rowH[row]) y -= rowH[row++];
+    return `<xdr:col>${col}</xdr:col><xdr:colOff>${Math.max(0, Math.round(x * EMU))}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${Math.max(0, Math.round(y * EMU))}</xdr:rowOff>`;
+  };
+  /*
+    그림은 네 모서리 중 왼쪽 위·오른쪽 아래를 칸에 묶는다(twoCellAnchor) — 엑셀은 열 너비를 '글자 수'로 저장하고 그 컴퓨터의
+    화면 배율로 픽셀을 정하므로, 그림을 절대 크기로만 두면 열이 넓게 그려지는 컴퓨터에서 오른쪽 그림일수록 왼쪽으로 밀려 보인다.
+    칸에 묶으면 어디서 열어도 같은 칸 자리에 놓인다(열 너비를 바꿔도 함께 움직이고, 크기는 그대로 — editAs oneCell)
+  */
+  const anchors = pics.map((p, i) => {
+    const row = newRow.get(p.r)!;
     const cx = Math.round(p.width * EMU);
     const cy = Math.round(p.height * EMU);
     return (
-      '<xdr:oneCellAnchor>' +
-      `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${Math.max(0, Math.round(x * EMU))}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${Math.max(0, Math.round(y * EMU))}</xdr:rowOff></xdr:from>` +
-      `<xdr:ext cx="${cx}" cy="${cy}"/>` +
+      '<xdr:twoCellAnchor editAs="oneCell">' +
+      `<xdr:from>${locate(p.c, p.x, row, p.y)}</xdr:from>` +
+      `<xdr:to>${locate(p.c, p.x + p.width, row, p.y + p.height)}</xdr:to>` +
       `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i + 2}" name="그림 ${i + 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
       `<xdr:blipFill><a:blip r:embed="rId${i + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
       `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
-      '<xdr:clientData/></xdr:oneCellAnchor>'
+      '<xdr:clientData/></xdr:twoCellAnchor>'
     );
   });
   const hasPics = pics.length > 0;
