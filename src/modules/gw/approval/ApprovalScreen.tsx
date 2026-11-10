@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { drafterTitleOf, stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
-import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search, Settings } from 'lucide-react';
+import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search, Settings, FileSpreadsheet } from 'lucide-react';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { correctSelection, resolveSelectedDoc } from './selection';
 import { arrangeList, docPosition, type ListOrder } from './listView';
@@ -1275,6 +1275,10 @@ function DocDetail({
   const permDeleteM = usePermanentlyDelete();
   const confirmPostReadM = useConfirmPostRead();
   const [reject, setReject] = useState<{ seq: number; comment: string } | null>(null);
+  // 시트 서식 문서 엑셀 받기 — 문서 보기가 다 읽으면 받는 함수를 넘겨준다(시트 문서가 아니면 null)
+  const [sheetExport, setSheetExport] = useState<{ run: () => Promise<void> } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const onSheetExportReady = useCallback((fn: (() => Promise<void>) | null) => setSheetExport(fn ? { run: fn } : null), []);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRecallModal, setShowRecallModal] = useState(false);
   const [approveComment, setApproveComment] = useState('');
@@ -1828,6 +1832,28 @@ function DocDetail({
         <div className="border-t border-border pt-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11.5px] font-bold text-ink2">결재 문서</div>
+            <div className="flex items-center gap-1.5 print:hidden">
+            {sheetExport && (
+              <button
+                type="button"
+                disabled={exporting}
+                onClick={async () => {
+                  setExporting(true);
+                  try {
+                    await sheetExport.run();
+                  } catch (e) {
+                    setErr(`엑셀 파일을 만들지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+                title="이 문서를 엑셀 파일(.xlsx)로 받기 — 화면에 보이는 모양 그대로(비공개 칸은 가린 대로)"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border-hi bg-panel px-2.5 py-1 text-[11px] font-semibold text-ink2 hover:border-teal hover:text-teal transition-all disabled:opacity-50"
+              >
+                <FileSpreadsheet size={13} />
+                <span>{exporting ? '만드는 중…' : '엑셀'}</span>
+              </button>
+            )}
             {/* 인쇄 버튼을 결재 문서 섹션으로 이동 */}
             <button
               onClick={() => window.print()}
@@ -1837,9 +1863,10 @@ function DocDetail({
               <Printer size={13} />
               <span>인쇄</span>
             </button>
+            </div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm p-3 sm:p-4">
-            <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} />
+            <ApprovalDocumentView doc={doc} currentUser={{ id: me, dept: org.userById(me)?.dept }} onSheetExportReady={onSheetExportReady} />
           </div>
         </div>
 

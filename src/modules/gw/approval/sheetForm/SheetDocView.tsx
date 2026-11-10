@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { SheetView, type Sheet } from '@/lib/sheet';
+import { useEffect, useMemo, useRef } from 'react';
+import { SheetView, downloadXlsx, exportXlsx, type Sheet } from '@/lib/sheet';
+import { docExportOptions } from '@/domain/approvalForm/sheet/docExport';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
@@ -32,9 +33,18 @@ export function SheetDocView({
   template,
   external = false,
   slots,
+  slotText,
+  onExportReady,
 }: {
   /** 문서 머리 부품 칸(결재란·회사 로고·기안자 서명)에 그릴 것 */
   slots?: SheetSlots;
+  /** 엑셀로 받을 때 문서 머리 부품 칸에 넣을 글자(결재란 → '팀장 홍길동 승인 …') */
+  slotText?: Partial<Record<keyof SheetSlots, string>>;
+  /**
+   * 엑셀로 받기 — 문서를 다 읽으면 받는 함수(파일 이름을 넣어 부름)를, 못 받는 동안엔 null 을 넘긴다.
+   * 받는 쪽(결재 문서 화면)이 [엑셀] 단추를 보이고 누르면 부른다. 화면과 같은 내용(숨은 행·비공개 가림·자동 채우기 값)
+   */
+  onExportReady?: (fn: ((fileName: string) => Promise<void>) | null) => void;
   /** 대외 문서 모양(서식 '대외 문서' + 결재 완료, 발주서 PDF) — '대외 문서에서 숨김' 행을 뺀다 */
   external?: boolean;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기 미리보기(편집 중인 틀) */
@@ -66,6 +76,25 @@ export function SheetDocView({
     const hiddenRows = conditionHiddenRows(filled);
     return external ? { sheet: withoutExternalRows(filled, hiddenRows), condHidden: new Set<number>() } : { sheet: filled, condHidden: hiddenRows };
   }, [loaded, rawValues, rawRows, external]);
+
+  // 엑셀로 받기 — 최신 값으로 부르게(문서·가림 상태가 바뀌어도 함수는 한 번만 넘긴다)
+  const exportRef = useRef({ sheet, condHidden, masked, docInfo, slotText });
+  exportRef.current = { sheet, condHidden, masked, docInfo, slotText };
+  const ready = !!sheet;
+  useEffect(() => {
+    if (!onExportReady) return;
+    if (!ready) {
+      onExportReady(null);
+      return;
+    }
+    onExportReady(async (fileName) => {
+      const cur = exportRef.current;
+      if (!cur.sheet) return;
+      const bytes = await exportXlsx(cur.sheet, docExportOptions({ ...cur, sheet: cur.sheet, sheetName: fileName }));
+      downloadXlsx(bytes, fileName);
+    });
+    return () => onExportReady(null);
+  }, [onExportReady, ready]);
 
   if (!ver && !template) return null;
   if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;

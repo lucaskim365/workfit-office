@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { usePermission } from '@/features/auth/usePermission';
@@ -70,6 +70,7 @@ export function ApprovalDocumentView({
   currentUser,
   isPreview = false,
   external = false,
+  onSheetExportReady,
 }: {
   doc: ApprovalDoc;
   formOverride?: ApprovalForm;
@@ -77,6 +78,8 @@ export function ApprovalDocumentView({
   isPreview?: boolean;
   /** 서식 설정과 상관없이 대외 문서 모양으로(결재 완료 문서) — 거래처로 보내는 발주서 PDF 등 */
   external?: boolean;
+  /** 시트 서식 문서를 엑셀로 받는 함수(문서를 다 읽으면, 시트 문서가 아니면 null) — 화면의 [엑셀] 단추가 쓴다 */
+  onSheetExportReady?: (fn: (() => Promise<void>) | null) => void;
 }) {
   const org = useOrgTree();
   const { data: users = [] } = useUsers();
@@ -566,6 +569,28 @@ export function ApprovalDocumentView({
     drafterSign: drafterSignNode,
   };
 
+  // 엑셀로 받을 때 문서 머리 부품 칸 글자 — 결재란은 결재자·결과를 한 줄로
+  const sheetSlotText = {
+    approvalLine: showStamp
+      ? steps
+          .map((st) => {
+            const who = [posOf(st.approverId), st.approverName || nameOf(st.approverId)].filter(Boolean).join(' ');
+            const when = st.decidedAt ? ' ' + st.decidedAt.slice(5, 10).replace('-', '.') : '';
+            return `${st.kind} ${who} (${st.decision}${when})`;
+          })
+          .join(' / ')
+      : '',
+    drafterSign: [drafterName, drafterPos].filter(Boolean).join(' '),
+  };
+  // 시트 문서 엑셀 받기 — 파일 이름은 문서번호_제목
+  const exportFileName = [docNoOf(doc), doc.title].filter(Boolean).join('_') || doc.id;
+  const exportNameRef = useRef(exportFileName);
+  exportNameRef.current = exportFileName;
+  const onExportReadyForDoc = useCallback(
+    (fn: ((fileName: string) => Promise<void>) | null) => onSheetExportReady?.(fn ? () => fn(exportNameRef.current) : null),
+    [onSheetExportReady]
+  );
+
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
       {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
@@ -776,6 +801,8 @@ export function ApprovalDocumentView({
               stamped={doc.status === '완료'}
               external={externalDoc}
               slots={sheetSlots}
+              slotText={sheetSlotText}
+              onExportReady={onExportReadyForDoc}
               // 자동 채우기 '기안 정보'·'문서 항목' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)
               docInfo={{
                 drafter: [drafterName, drafterPos].filter(Boolean).join(' '),
