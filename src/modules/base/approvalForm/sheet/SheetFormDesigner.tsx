@@ -72,6 +72,10 @@ interface Props {
   initialNotice?: { text: string; list?: string[] };
   /** 기존 양식(항목 목록) 편집기로 — 기존 서식에 시트를 붙인 경우 */
   onOpenLegacy?: () => void;
+  /** 편집기만 있는 새 탭(/sheet-editor) — 앱 상단바·메뉴가 없어 화면 맨 위에 붙고, 왼쪽 메뉴 접기도 안 함 */
+  standalone?: boolean;
+  /** 저장한 뒤(서식 코드·버전) — 새 탭이면 결재서식 관리 창에 알린다 */
+  onSaved?: (formId: string, version: number) => void;
 }
 
 export function SheetFormDesigner(props: Props) {
@@ -115,6 +119,8 @@ function Designer({
   initialLink,
   initialNotice,
   onOpenLegacy,
+  standalone = false,
+  onSaved,
 }: Omit<Props, 'initialLink'> & { initial: Sheet; initialLink: string | null }) {
   const { user } = useAuth();
   const save = useSaveSheetForm();
@@ -192,6 +198,16 @@ function Designer({
     if (dirty && !confirm('저장하지 않은 변경이 있습니다. 닫을까요?')) return;
     onClose();
   };
+  // 저장 안 한 채 탭을 닫거나 새로고침하면 브라우저가 한 번 묻는다
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   // ── 엑셀 불러오기 ──
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -267,6 +283,7 @@ function Designer({
           (res.created ? `저장했습니다 — v${res.version}` : `틀이 바뀌지 않아 서식 정보만 저장했습니다(v${res.version} 그대로).`) +
           (legacy && !applied ? " 아직 '시트로 기안'이 꺼져 있어 기안자는 기존 양식으로 씁니다 — 다 다듬으면 위에서 켜세요." : ''),
       });
+      onSaved?.(code, res.version);
     } catch (err) {
       setMsg({ kind: 'err', text: `저장 실패: ${err instanceof Error ? err.message : String(err)}` });
     }
@@ -496,12 +513,13 @@ function Designer({
   // 화면 위에 붙는 도구 막대·열 머리·옆 패널(sticky)이 그 상자 기준이 되어 페이지를 내려도 따라오지 않았다
   const rootRef = useRef<HTMLDivElement>(null);
   // 화면 위에 붙을 자리 — 창이 스크롤하면 앱 상단바·탭 막대 아래, 본문 상자가 스크롤하면 그 상자 맨 위
-  const [stickTop, setStickTop] = useState(APP_STICKY_TOP);
-  // 편집하는 동안 앱 왼쪽 메뉴를 접는다(닫으면 원래대로)
+  const [stickTop, setStickTop] = useState(standalone ? 0 : APP_STICKY_TOP);
+  // 편집하는 동안 앱 왼쪽 메뉴를 접는다(닫으면 원래대로) — 새 탭엔 메뉴가 없다
   useEffect(() => {
+    if (standalone) return;
     requestSidebarCollapse(true);
     return () => requestSidebarCollapse(false);
-  }, []);
+  }, [standalone]);
   // 화면 폭에 따라 배치 — three: 부품(왼쪽)·문서·설정(오른쪽) / compact: 부품을 아이콘 막대로 / two: 부품도 오른쪽 패널 안에 / stack: 위아래로
   // 쓸 수 있는 폭은 창 기준으로 잰다 — 앱 바탕이 내용 폭에 맞춰 늘어나므로(min-w-fit) 이 상자 폭을 재면 늘 '다 들어감'이 된다
   const [rootW, setRootW] = useState(0);
@@ -528,7 +546,10 @@ function Designer({
   useEffect(() => {
     const main = rootRef.current?.closest('main');
     window.scrollTo({ top: 0 });
-    if (!main) return;
+    if (!main) {
+      setStickTop(0); // 앱 틀 밖(새 탭) — 화면 맨 위에 붙는다
+      return;
+    }
     main.scrollTop = 0;
     if (main.scrollHeight > main.clientHeight + 1) {
       setStickTop(0); // 본문 상자가 정말 스크롤하는 화면이면 그대로(그 상자 맨 위에 붙는다)
@@ -570,8 +591,8 @@ function Designer({
             onClick={close}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-bold text-ink2 hover:text-ink cursor-pointer"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>서식 목록</span>
+            {standalone ? <X className="h-3.5 w-3.5" /> : <ArrowLeft className="h-3.5 w-3.5" />}
+            <span>{standalone ? '탭 닫기' : '서식 목록'}</span>
           </button>
           <div>
             <div className="flex items-center gap-1.5">

@@ -1,6 +1,7 @@
-import { lazy as reactLazy, useEffect, type ComponentType } from 'react';
+import { lazy as reactLazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from './shell/AppShell';
+const SheetEditorPage = lazy(() => import('@/modules/base/approvalForm/sheet/SheetEditorPage'));
 import MobileApp from '@/mobile/MobileApp';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
@@ -260,6 +261,9 @@ export default function App() {
 
       {/* /exec?from=mes 진입 시 AppShell(GNB/사이드바) 및 대시보드를 일체 띄우지 않고 도크만 렌더링 */}
       {isFromMes && <Route path="/exec" element={<StandaloneDockScreen />} />}
+
+      {/* 결재서식 시트 편집기 — 편집기만 있는 새 탭(앱 상단바·탭·메뉴 없음) */}
+      <Route path="/sheet-editor" element={<Suspense fallback={null}><SheetEditorPage /></Suspense>} />
 
       <Route path="/*" element={<AppShell routes={shellRoutes} />} />
     </Routes>

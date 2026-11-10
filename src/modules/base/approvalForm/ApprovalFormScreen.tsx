@@ -17,6 +17,8 @@ import { isLumefabForm } from '@/domain/approvalDoc/company';
 import { ApprovalFormEditor } from './components/ApprovalFormEditor';
 import { ApprovalFormCatalog } from './components/ApprovalFormCatalog';
 import { SheetFormDesigner } from './sheet/SheetFormDesigner';
+import { openSheetEditorTab, pruneSheetEditorPayloads, sheetEditorChannel, type SheetEditorMessage, type SheetEditorPayload } from './sheet/sheetEditorTab';
+import { useQueryClient } from '@tanstack/react-query';
 import { legacyFormToSheet, type LegacyConversion } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
 import { Pencil, Trash2, Folder, Layers } from 'lucide-react';
 
@@ -49,10 +51,39 @@ export default function ApprovalFormScreen() {
   const { latest: sheetVersions } = useSheetFormVersions();
   const { switches: sheetSwitches } = useSheetSwitches();
 
+  /** 시트 편집기 열기 — 편집기만 있는 새 탭으로. 팝업이 막혔으면 이 창 안에서 */
+  const openSheet = (payload: SheetEditorPayload) => {
+    if (!openSheetEditorTab(payload)) setSheetSel(payload);
+  };
+  // 새 탭에서 저장하면 목록·버전을 다시 읽고, '기존 양식 편집'을 누르면 이 창에서 기존 편집기를 연다
+  const qc = useQueryClient();
+  const formsRef = useRef(forms);
+  formsRef.current = forms;
+  useEffect(() => {
+    pruneSheetEditorPayloads();
+    const ch = sheetEditorChannel();
+    if (!ch) return;
+    ch.onmessage = (e: MessageEvent<SheetEditorMessage>) => {
+      const m = e.data;
+      if (m.type === 'saved') {
+        void qc.invalidateQueries({ queryKey: ['approvalForms'] });
+        void qc.invalidateQueries({ queryKey: ['approvalFormVersions'] });
+      } else if (m.type === 'open-legacy') {
+        const f = formsRef.current.find((x) => x.id === m.formId);
+        if (f) {
+          setSheetSel(null);
+          setSel(f);
+          window.focus();
+        }
+      }
+    };
+    return () => ch.close();
+  }, [qc]);
+
   /** 서식 열기 — 시트 서식(버전이 있는 서식)은 시트 편집기로, 나머지는 기존 편집기로 */
   const openForm = (form: ApprovalForm) => {
     const v = sheetVersions.get(form.id);
-    if (v !== undefined) setSheetSel({ form, version: v });
+    if (v !== undefined) openSheet({ form, version: v });
     else setSel(form);
     setMsg('');
   };
@@ -154,7 +185,7 @@ export default function ApprovalFormScreen() {
    * 저장하면 시트 틀만 버전으로 쌓이고 '시트로 기안'을 켜기 전까지 기안은 기존 양식 그대로(결재선 규칙·권한·필터·번호 순번도 그대로)
    */
   const toSheet = (form: ApprovalForm) => {
-    setSheetSel({ form, version: null, draft: legacyFormToSheet(form), source: form.name });
+    openSheet({ form, version: null, draft: legacyFormToSheet(form), source: form.name });
     setMsg('');
   };
 
@@ -165,14 +196,14 @@ export default function ApprovalFormScreen() {
 
   // 새 시트 서식 추가(엑셀 불러오기·시트 편집) — 다 만들 때까지 기안 목록에 나오지 않게 처음엔 사용 안 함
   const handleAddSheetForm = () => {
-    setSheetSel({ form: { ...blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null), fields: [], active: false }, version: null });
+    openSheet({ form: { ...blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null), fields: [], active: false }, version: null });
     setMsg('');
   };
   // 기본 서식 묶음에서 시작 — 그 서식을 시트로 바꾼 새 서식(코드는 편집기가 서식명에서)
   const startFromStarter = (seed: ApprovalForm) => {
     const { form, draft } = starterSheetForm(seed, blankForm(selFolderId && selFolderId !== 'root' ? selFolderId : null));
     setPickStarter(false);
-    setSheetSel({ form, version: null, draft, source: seed.name, starter: true });
+    openSheet({ form, version: null, draft, source: seed.name, starter: true });
     setMsg('');
   };
 
