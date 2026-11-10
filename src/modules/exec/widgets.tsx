@@ -113,6 +113,25 @@ export function Panel({ className = '', children }: { className?: string; childr
   return <section className={`h-full min-w-0 rounded-[20px] border border-border bg-panel p-5 ${className}`}>{children}</section>;
 }
 
+/** 작게 보기 — 모바일에서 반 칸짜리 위젯. 지원하는 위젯은 요약만 크게 보여 준다 */
+const MiniContext = createContext(false);
+export const WidgetMiniProvider = MiniContext.Provider;
+const useMini = () => useContext(MiniContext);
+
+/** 작은 위젯 틀 — 위에 제목, 아래에 큰 숫자. 누르면 그 화면으로 */
+function MiniPanel({ title, onClick, children }: { title: string; onClick?: () => void; children: ReactNode }) {
+  return (
+    <section className="h-full min-w-0 rounded-[20px] border border-border bg-panel">
+      <button type="button" onClick={onClick} className="flex h-full w-full cursor-pointer flex-col justify-between p-4 text-left">
+        <span className="truncate text-[12.5px] font-extrabold text-ink2">{title}</span>
+        <span className="flex min-w-0 flex-col gap-1">{children}</span>
+      </button>
+    </section>
+  );
+}
+const MINI_BIG = 'text-[26px] leading-none font-black tracking-[-.03em] tabular-nums text-ink';
+const MINI_SUB = 'truncate text-[11.5px] font-semibold text-ink3';
+
 function Empty({ children }: { children: ReactNode }) {
   return <div className="py-6 text-[12px] text-ink3">{children}</div>;
 }
@@ -173,7 +192,7 @@ function LaneGroup({ items }: { items: TimelineItem[] }) {
             key={i.key}
             type="button"
             onClick={i.onClick}
-            title={`${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
+            title={i.start === '08:00' && i.end === '20:00' ? i.title : `${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
             className={`absolute cursor-pointer overflow-hidden rounded-md border px-1.5 text-left text-[11px] font-bold whitespace-nowrap ${BLOCK[i.tone]}`}
             style={{
               left: `calc(${sp.left}% + 1px)`,
@@ -199,22 +218,14 @@ function DayTimeline({ items }: { items: TimelineItem[] }) {
     return () => clearInterval(t);
   }, []);
   const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
+  // 종일·시간 미정(외근·출장·휴가·회사 중요 일정)은 위 칸에 하루 전체 길이로 — 따로 줄을 두지 않는다
+  const fullDay = { start: '08:00', end: '20:00' };
   const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
-  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end));
-  const special = timed.filter((i) => i.tone === 'special');
+  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end)).map((i) => ({ ...i, ...fullDay, allDay: false }));
+  const special = [...untimed, ...timed.filter((i) => i.tone === 'special')];
   const general = timed.filter((i) => i.tone !== 'special');
   return (
     <div className="flex flex-col gap-2">
-      {untimed.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {untimed.map((i) => (
-            <button key={i.key} type="button" onClick={i.onClick} title={i.title}
-              className={`max-w-[320px] cursor-pointer truncate rounded-md border px-2 py-1 text-[11px] font-bold ${BLOCK[i.tone]}`}>
-              {i.title}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="relative h-4">
         {hours.map((h, i) => (
           <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
@@ -530,6 +541,16 @@ export function ApprovalWidget() {
     { label: '반려', value: counts['반려'] ?? 0, box: '반려' },
     { label: '수신', value: counts['수신'] ?? 0, box: '수신' },
   ];
+  if (useMini()) {
+    return (
+      <MiniPanel title="결재 대기" onClick={() => navigate('/gw/approval?box=대기')}>
+        <span className={`${MINI_BIG} ${pending.length ? '!text-[#0876c8]' : ''}`}>
+          {pending.length}<span className="ml-0.5 text-[14px] font-bold text-ink3">건</span>
+        </span>
+        <span className={MINI_SUB}>진행 중 {mineInProgress}건</span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <Head title="전자결재" to={() => navigate('/gw/approval')} />
@@ -714,6 +735,20 @@ export function ProjectWidget() {
 /* ───────────────────────── 연차(따로) ───────────────────────── */
 
 export function LeaveWidget() {
+  const navigate = useGo();
+  const { user: me } = useAuth();
+  const leave = useLeave(me?.id);
+  if (useMini()) {
+    const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+    return (
+      <MiniPanel title="남은 연차" onClick={() => navigate('/gw/leave')}>
+        <span className={`${MINI_BIG} ${leave.remaining < 0 ? '!text-[#c4432f]' : ''}`}>
+          {leave.isLoading ? '-' : fmt(leave.remaining)}<span className="ml-0.5 text-[14px] font-bold text-ink3">일</span>
+        </span>
+        <span className={MINI_SUB}>총 {fmt(leave.grant)}일 중 {fmt(leave.used)}일 사용</span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <LeaveBar standalone />
@@ -758,6 +793,15 @@ export function TodayCommuteWidget() {
   const inClock = clockOf(rec?.inAt);
   const outClock = clockOf(rec?.outAt);
   const worked = rec?.inAt && !rec.outAt ? Math.max(0, Math.round((nowMs - Date.parse(rec.inAt)) / 60_000)) : rec?.minutes ?? 0;
+  if (useMini()) {
+    const status = rec && rec.bucket !== 'pending' && rec.status !== 'unknown' && !rec.inAt ? COMMUTE_STATUS_LABELS[rec.status] : null;
+    return (
+      <MiniPanel title="오늘 출퇴근" onClick={() => navigate('/gw/commute')}>
+        <span className={`${MINI_BIG} ${rec?.bucket === 'late' ? '!text-[#c4602f]' : ''}`}>{inClock ?? status ?? '--:--'}</span>
+        <span className={MINI_SUB}>{outClock ? `퇴근 ${outClock}` : `${hoursText(worked)} 근무`}</span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <Head title="오늘 출퇴근" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
@@ -808,6 +852,16 @@ export function WeekHoursWidget() {
   const total = days.reduce((s, d) => s + d.minutes, 0);
   const GOAL = 40 * 60;
   const MAX = 12 * 60;
+  if (useMini()) {
+    return (
+      <MiniPanel title="이번 주 근무" onClick={() => navigate('/gw/commute')}>
+        <span className={MINI_BIG}>{hoursText(total)}</span>
+        <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-panel-alt">
+          <span className="block h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+        </span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <Head title="이번 주 근무시간" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
@@ -1033,6 +1087,17 @@ export function AwayTodayWidget() {
     people: users.filter((u) => presences[u.id]?.status === s).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
   }));
   const total = groups.reduce((n, g) => n + g.people.length, 0);
+  if (useMini()) {
+    const people = groups.flatMap((g) => g.people);
+    return (
+      <MiniPanel title="오늘 휴가·외근" onClick={() => navigate('/gw/orgchart')}>
+        <span className={MINI_BIG}>{total}<span className="ml-0.5 text-[14px] font-bold text-ink3">명</span></span>
+        <span className="flex h-6 items-center -space-x-1.5">
+          {people.slice(0, 5).map((u) => <span key={u.id} className="rounded-full ring-2 ring-panel"><MiniAvatar user={u} size={22} /></span>)}
+        </span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <Head title="오늘 휴가·외근" note={total ? `${total}명` : undefined} to={() => navigate('/gw/orgchart')} toLabel="조직도" />
@@ -1086,6 +1151,18 @@ export function BirthdayWidget() {
   const month = today.slice(0, 7);
   const byId = new Map(users.map((u) => [u.id, u]));
   const list = birthdaysInMonth(profiles.filter((p) => byId.has(p.userId)), month);
+  if (useMini()) {
+    const next = list.find((x) => x.date >= today);
+    const nextUser = next ? byId.get(next.person.userId) : undefined;
+    return (
+      <MiniPanel title="이달의 생일자">
+        <span className={MINI_BIG}>{list.length}<span className="ml-0.5 text-[14px] font-bold text-ink3">명</span></span>
+        <span className={`${MINI_SUB} ${next?.date === today ? '!text-[#d6336c]' : ''}`}>
+          {nextUser ? (next!.date === today ? `오늘 ${nextUser.name}` : `${Number(next!.date.slice(8))}일 ${nextUser.name}`) : '남은 생일 없음'}
+        </span>
+      </MiniPanel>
+    );
+  }
   return (
     <Panel>
       <Head title="이달의 생일자" note={list.length ? `${list.length}명` : undefined} />
