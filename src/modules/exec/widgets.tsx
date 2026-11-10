@@ -22,7 +22,8 @@ import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
 import { USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
-import { chipLook } from '@/modules/gw/task/components/entryChipLook';
+import { chipLook, entryDotClass } from '@/modules/gw/task/components/entryChipLook';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import type { Post } from '@/domain/board/schema';
 import {
   ATTENDANCE_BUCKETS,
@@ -878,6 +879,105 @@ export function WeekHoursWidget() {
         {days.map((d) => (
           <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
         ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 일정: 달력 ───────────────────────── */
+
+/** 한 달 달력 — 날마다 내 일정을 색 점으로, 날짜를 누르면 그날 일정이 아래에 */
+export function CalendarWidget() {
+  const navigate = useGo();
+  const { user: me } = useAuth();
+  const deptId = useDeptId();
+  const today = todayKst();
+  const [month, setMonth] = useState(today.slice(0, 7));
+  const [picked, setPicked] = useState(today);
+  const dates = useMemo(() => monthDates(month), [month]);
+  const members = useMemo(() => (me ? [me] : []), [me]);
+  const { cellOf } = useDayEntryIndex({ actor: me, deptId, members, dates });
+  const holidays = useHolidays(month.slice(0, 4)).data ?? [];
+  const holidayOf = new Map(holidays.map((h) => [h.date, h.name]));
+  const lead = firstWeekday(month);
+  const entriesOf = (date: string) => (me ? cellOf(me.id, date).entries : []);
+  const pickedEntries = picked.startsWith(month) ? entriesOf(picked) : [];
+  const move = (delta: number) => {
+    const next = shiftMonth(month, delta);
+    setMonth(next);
+    setPicked(today.startsWith(next) ? today : `${next}-01`);
+  };
+  return (
+    <Panel>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => move(-1)} aria-label="이전 달" className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><ChevronLeft size={16} /></button>
+          <h2 className="min-w-[86px] text-center text-[15px] font-extrabold tracking-tight text-ink tabular-nums">{Number(month.slice(0, 4))}. {Number(month.slice(5))}월</h2>
+          <button type="button" onClick={() => move(1)} aria-label="다음 달" className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><ChevronRight size={16} /></button>
+          {month !== today.slice(0, 7) && (
+            <button type="button" onClick={() => { setMonth(today.slice(0, 7)); setPicked(today); }} className="ml-1 cursor-pointer text-[11.5px] font-bold text-ink3 hover:text-[#0876c8]">오늘</button>
+          )}
+        </div>
+        <button type="button" onClick={() => navigate('/gw/calendar')} className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">캘린더</button>
+      </div>
+      <div className="grid grid-cols-7 text-center">
+        {WEEKDAYS.map((w, i) => (
+          <span key={w} className={`pb-1.5 text-[10.5px] font-bold ${i === 0 ? 'text-[#d97a7a]' : i === 6 ? 'text-[#6f9cc4]' : 'text-ink3'}`}>{w}</span>
+        ))}
+        {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
+        {dates.map((date) => {
+          const wd = weekdayOf(date);
+          const holiday = holidayOf.get(date);
+          const dots = entriesOf(date);
+          const isToday = date === today;
+          const isPicked = date === picked;
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => setPicked(date)}
+              title={holiday}
+              className={`flex h-11 cursor-pointer flex-col items-center gap-1 rounded-lg pt-1 ${isPicked ? 'bg-[#e6f1fb] dark:bg-sky-500/15' : 'hover:bg-panel-alt'}`}
+            >
+              <span
+                className={`grid h-6 w-6 place-items-center rounded-full text-[12px] font-bold tabular-nums ${
+                  isToday ? 'bg-[#0876c8] text-white' : holiday || wd === 0 ? 'text-[#d97a7a]' : wd === 6 ? 'text-[#6f9cc4]' : 'text-ink'
+                }`}
+              >
+                {Number(date.slice(8))}
+              </span>
+              <span className="flex h-1.5 items-center gap-[3px]">
+                {dots.slice(0, 3).map((e) => <i key={e.key} className={`h-1.5 w-1.5 rounded-full ${entryDotClass(e)}`} />)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 border-t border-border pt-3">
+        <div className="mb-2 text-[12px] font-bold text-ink2">
+          {Number(picked.slice(5, 7))}월 {Number(picked.slice(8))}일 {WEEKDAYS[weekdayOf(picked)]}요일
+          {holidayOf.get(picked) && <span className="ml-1.5 text-[#d97a7a]">{holidayOf.get(picked)}</span>}
+        </div>
+        {pickedEntries.length === 0 ? (
+          <div className="text-[12px] text-ink3">일정이 없습니다.</div>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {pickedEntries.map((e) => {
+              const look = chipLook(e);
+              return (
+                <li key={e.key}>
+                  <button type="button" onClick={() => navigate('/gw/work-plan')} className="group flex w-full cursor-pointer items-center gap-2 text-left">
+                    <i className={`h-2 w-2 shrink-0 rounded-full ${entryDotClass(e)}`} />
+                    <span className="w-[74px] shrink-0 text-[11px] font-semibold tabular-nums text-ink3">
+                      {e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)}${e.endTime ? `~${e.endTime.slice(0, 5)}` : ''}` : '종일'}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink group-hover:text-[#0876c8]">{look.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </Panel>
   );

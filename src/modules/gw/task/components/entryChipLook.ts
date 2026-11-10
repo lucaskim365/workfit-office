@@ -92,6 +92,22 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
   }
 }
 
+/** 칸 하나를 점 하나로 그릴 때의 색 — 달력처럼 좁은 곳에서 칩 대신 쓴다(칩과 같은 계열) */
+export function entryDotClass(entry: DayEntry): string {
+  switch (entry.source) {
+    case 'ITEM':
+      return chipLook(entry).dotClass ?? FALLBACK_TAG_DOT_CLASS;
+    case 'MEETING':
+      return PERSON_TONES.meeting.dot;
+    case 'CALENDAR':
+      return entry.event?.eventType === 'VACATION' ? PERSON_TONES.leave.dot : entry.event?.eventType === 'OUTSIDE' ? PERSON_TONES.outside.dot : PERSON_TONES.meeting.dot;
+    case 'OUTSIDE':
+      return STATUS_TONES[scheduleChip({ category: entry.outside?.category ?? 'OUTSIDE', subType: entry.outside?.subType }).kind].dot;
+    case 'APPROVAL':
+      return entry.schedule ? STATUS_TONES[scheduleChip(entry.schedule).kind].dot : FALLBACK_TAG_DOT_CLASS;
+  }
+}
+
 /** 시각 없는 칸 글 — 업무는 '미정'(시간을 모르는 일), 그 밖(외근·출장 등)은 '종일' */
 const noTimeOf = (entry: DayEntry) => (entry.source === 'ITEM' ? '미정' : '종일');
 export const timeOf = (entry: DayEntry) =>

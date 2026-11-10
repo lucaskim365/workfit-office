@@ -5,6 +5,7 @@ import {
   AttendanceWidget,
   AwayTodayWidget,
   BirthdayWidget,
+  CalendarWidget,
   LeaveWidget,
   MyDraftsWidget,
   NoticeWidget,
@@ -28,6 +29,7 @@ interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: re
 
 export const WIDGETS = {
   today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 220, Component: TodayWidget },
+  calendar: { title: '캘린더', module: '일정', size: 4, sizes: [4, 6, 8], minH: 420, Component: CalendarWidget },
   weekSchedule: { title: '이번 주 내 일정', module: '일정', size: 6, sizes: [4, 6, 8, 12], minH: 260, Component: WeekScheduleWidget },
   attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
   todayCommute: { title: '오늘 출퇴근', module: '근태', size: 4, sizes: [4, 6], minH: 180, mini: true, Component: TodayCommuteWidget },
