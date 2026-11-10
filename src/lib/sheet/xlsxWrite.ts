@@ -109,11 +109,17 @@ function numFmtCode(style: CellStyle | undefined, n: number | null): string | un
 
 /** 엑셀 서식 표(styles.xml) — 글꼴·채우기·테두리·칸 서식을 겹치지 않게 모은다 */
 class StyleBook {
-  fonts = [`<font><sz val="${DEFAULT_PT}"/><name val="${EXCEL_FONT}"/><family val="2"/></font>`];
+  /**
+   * 0번 글꼴 = 통합 문서 기본(표준 스타일) — 엑셀은 열 너비 단위를 이 글꼴의 숫자 폭으로 잰다.
+   * 엑셀 표준(Calibri 11, 숫자 폭 7px)으로 둬야 픽셀 → 글자 수 환산((px-5)/7)이 맞는다.
+   * (맑은 고딕 9pt 로 두면 숫자 폭이 6px 이라 열이 6/7 로 좁아진다) 칸 글자는 1번 글꼴(맑은 고딕)로 따로 준다
+   */
+  fonts = ['<font><sz val="11"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>', `<font><sz val="${DEFAULT_PT}"/><name val="${EXCEL_FONT}"/><family val="2"/></font>`];
   fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
   borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
   numFmts: string[] = [];
-  xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
+  // 0: 표준(빈 칸) / 1: 서식 없는 칸 — 글꼴만 맑은 고딕
+  xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>', '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'];
   private index = new Map<string, number>();
 
   private add(list: string[], xml: string): number {
@@ -123,11 +129,11 @@ class StyleBook {
     return list.length - 1;
   }
 
-  /** 칸 하나의 서식 번호(s=) — 아무 서식 없으면 0 */
+  /** 칸 하나의 서식 번호(s=) — 아무 서식 없으면 1(맑은 고딕만) */
   xf(style: CellStyle | undefined, fmt: string | undefined, fit: Fit): number {
     const key = JSON.stringify([style ?? null, fmt ?? null, fit]);
     const hit = this.index.get(key);
-    if (!fmt && !fit && (!style || Object.keys(style).length === 0)) return 0;
+    if (!fmt && !fit && (!style || Object.keys(style).length === 0)) return 1;
     const wrap = fit === 'wrap';
     const shrink = fit === 'shrink' || (!!style?.shrink && !wrap);
     if (hit !== undefined) return hit;
@@ -241,6 +247,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       const style = s.styles[key];
       const ref = `${colLetter(c)}${i + 1}`;
       if (covered.has(`${r}:${c}`)) {
+        // 가려진 칸 — 테두리·배경만(값 없음)
         if (style?.border || style?.bg) cells.push(`<c r="${ref}" s="${book.xf({ border: style.border, bg: style.bg }, undefined, null)}"/>`);
         return;
       }
@@ -253,7 +260,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
         const f = `<f>${esc(formula.replace(/^=/, ''))}</f>`;
         cells.push(n !== null ? `<c r="${ref}"${sAttr}>${f}<v>${n}</v></c>` : `<c r="${ref}"${sAttr} t="str">${f}<v>${esc(text)}</v></c>`);
       } else if (text === '') {
-        if (xf) cells.push(`<c r="${ref}"${sAttr}/>`);
+        if (xf > 1) cells.push(`<c r="${ref}"${sAttr}/>`);
       } else if (n !== null) {
         cells.push(`<c r="${ref}"${sAttr}><v>${n}</v></c>`);
       } else {
@@ -304,6 +311,8 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
   const sheetXml =
     XML_HEAD +
     `<worksheet xmlns="${NS_MAIN}" xmlns:r="${NS_REL}">` +
+    // 인쇄 — 폭을 종이 한 장에 맞춤(아래로는 여러 장). fitToPage 를 켜야 pageSetup 의 fitToWidth 가 먹는다
+    '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
     `<dimension ref="A1:${lastRef}"/>` +
     '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>' +
     `<sheetFormatPr defaultRowHeight="${Math.round(DEFAULT_ROW_HEIGHT * 0.75 * 10) / 10}"/>` +
