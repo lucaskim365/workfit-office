@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from 'react';
-import { GripVertical, Plus, X } from 'lucide-react';
+import { GripVertical, MoveDiagonal2, MoveHorizontal, MoveVertical, Plus, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { insertSlot, moveSlot, normalizeLayout, snapSize, type WidgetSize, type WidgetSlot } from './dashboard';
+import { insertSlot, moveSlot, normalizeLayout, snapHeight, snapSize, type WidgetSize, type WidgetSlot } from './dashboard';
 import { ApprovalWidget, AttendanceWidget, LeaveWidget, NoticeWidget, ProjectWidget, ResourceWidget, TeamWidget, TodayWidget } from './widgets';
 
 /**
@@ -11,17 +11,18 @@ import { ApprovalWidget, AttendanceWidget, LeaveWidget, NoticeWidget, ProjectWid
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
-interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; Component: ComponentType }
+/** sizes — 고를 수 있는 폭(가장 좁은 것이 최소 폭), minH — 이보다 낮게는 줄이지 못하는 높이(px) */
+interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; minH: number; Component: ComponentType }
 
 const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], Component: TodayWidget },
-  attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], Component: AttendanceWidget },
-  leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], Component: LeaveWidget },
-  approval: { title: '전자결재', module: '전자결재', size: 4, sizes: [4, 6, 8], Component: ApprovalWidget },
-  resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], Component: ResourceWidget },
-  team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], Component: TeamWidget },
-  notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], Component: NoticeWidget },
-  project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], Component: ProjectWidget },
+  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 220, Component: TodayWidget },
+  attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
+  leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], minH: 120, Component: LeaveWidget },
+  approval: { title: '전자결재', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 240, Component: ApprovalWidget },
+  resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], minH: 180, Component: ResourceWidget },
+  team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 200, Component: TeamWidget },
+  notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], minH: 150, Component: NoticeWidget },
+  project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], minH: 160, Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
 type WidgetId = keyof typeof WIDGETS;
@@ -230,22 +231,31 @@ export default function ExecDashboardScreen() {
     resetDrag();
   };
 
-  /** 오른쪽 가장자리를 끌어 폭 바꾸기 — 12칸 기준 가장 가까운 폭으로 맞춘다 */
-  const startResize = (index: number, e: ReactPointerEvent<HTMLElement>) => {
+  /**
+   * 크기 바꾸기 — 오른쪽 단추는 폭(12칸 중 가장 가까운 허용 폭), 아래 단추는 높이(20px 단위),
+   * 모서리 단추는 둘 다. 화면 배율이 걸려 있어 마우스 이동량을 위젯의 실제 px 로 바꿔 쓴다.
+   */
+  const startResize = (index: number, axis: 'x' | 'y' | 'xy', e: ReactPointerEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const grid = gridRef.current;
     const cell = (e.currentTarget as HTMLElement).closest('[data-slot]') as HTMLElement | null;
-    if (!grid || !cell) return;
+    const body = cell?.querySelector('[data-widget-body]') as HTMLElement | null;
+    if (!grid || !cell || !body) return;
     const gridRect = grid.getBoundingClientRect();
     const left = cell.getBoundingClientRect().left;
+    const bodyRect = body.getBoundingClientRect();
+    const pxPerClient = bodyRect.height ? body.offsetHeight / bodyRect.height : 1;
+    const startH = body.offsetHeight;
+    const startY = e.clientY;
     setResizing(index);
     let latest = layout;
     const onMove = (ev: PointerEvent) => {
-      const cols = ((ev.clientX - left) / gridRect.width) * 12;
-      const size = snapSize(cols, WIDGETS[latest[index].id].sizes);
-      if (latest[index].size !== size) {
-        latest = latest.map((s, i) => (i === index ? { ...s, size } : s));
+      let next = latest[index];
+      if (axis !== 'y') next = { ...next, size: snapSize(((ev.clientX - left) / gridRect.width) * 12, WIDGETS[next.id].sizes) };
+      if (axis !== 'x') next = { ...next, h: snapHeight(startH + (ev.clientY - startY) * pxPerClient, WIDGETS[next.id].minH) };
+      if (next.size !== latest[index].size || next.h !== latest[index].h) {
+        latest = latest.map((s, i) => (i === index ? next : s));
         setLayout(latest);
       }
     };
@@ -259,30 +269,41 @@ export default function ExecDashboardScreen() {
     window.addEventListener('pointerup', onUp);
   };
 
+  /** 높이를 내용 높이로 되돌리기(아래 단추 두 번 누르기) */
+  const resetHeight = (index: number) => save(layout.map((s, i) => (i === index ? { id: s.id, size: s.size } : s)));
+
   const dragging = dragFrom !== null || dragNew;
 
   return (
     <div className={`mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 pb-10`}>
-      {/* 편집 도구 */}
-      <div className="flex min-h-8 items-center justify-end gap-2">
-        {editing && (
-          <button type="button" onClick={() => setPicking(true)} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#9fcfee] px-3 py-1.5 text-[12px] font-bold text-[#0876c8] hover:bg-[#e0f0fb] dark:hover:bg-sky-500/15">
-            <Plus size={14} />위젯 추가
+      {/* 편집 도구 — 편집 중에는 파란 띠로 */}
+      {editing ? (
+        <div className="flex items-center gap-2 rounded-2xl bg-[#e0f0fb] px-3 py-2 dark:bg-sky-500/15">
+          <button type="button" onClick={() => setPicking(true)} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#0876c8] px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-[#066aaf]">
+            <Plus size={15} />위젯 추가
           </button>
-        )}
-        {editing && (
-          <button type="button" onClick={() => save(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[12px] font-bold text-ink3 hover:bg-panel-alt">
+          <button type="button" onClick={() => save(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
             기본 배치
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => { setEditing((v) => !v); setPicking(false); resetDrag(); }}
-          className={`cursor-pointer rounded-lg px-3 py-1.5 text-[12px] font-bold ${editing ? 'bg-[#0876c8] text-white hover:bg-[#066aaf]' : 'border border-border text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]'}`}
-        >
-          {editing ? '완료' : '화면 편집'}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => { setEditing(false); setPicking(false); resetDrag(); }}
+            className="ml-auto cursor-pointer rounded-lg border border-[#0876c8] bg-panel px-4 py-2 text-[12.5px] font-bold text-[#0876c8] hover:bg-white"
+          >
+            완료
+          </button>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => { setEditing(true); resetDrag(); }}
+            className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]"
+          >
+            화면 편집
+          </button>
+        </div>
+      )}
 
       <WidgetPicker
         open={editing && picking}
@@ -294,7 +315,7 @@ export default function ExecDashboardScreen() {
         onDragEnd={() => { setDragNew(false); setDragOver(null); }}
       />
 
-      <div ref={gridRef} className="grid grid-cols-12 gap-4">
+      <div ref={gridRef} className={`grid grid-cols-12 ${editing ? 'gap-5' : 'gap-4'}`}>
         {layout.map((slot, index) => {
           const { Component, title } = WIDGETS[slot.id];
           const isTarget = editing && dragging && dragOver === index && dragFrom !== index;
@@ -302,9 +323,15 @@ export default function ExecDashboardScreen() {
             <div
               key={slot.id}
               data-slot
-              className={`${SPAN[slot.size]} relative min-w-0 transition-[outline-color] ${
-                editing ? 'rounded-[22px] outline-2 outline-offset-2 outline-dashed' : ''
-              } ${isTarget || resizing === index ? 'outline-[#0876c8]' : 'outline-[#c9d6e6] dark:outline-white/20'} ${editing && dragFrom === index ? 'opacity-40' : ''}`}
+              className={`${SPAN[slot.size]} group/slot relative flex min-w-0 flex-col ${
+                editing
+                  ? `rounded-[24px] p-2 ring-2 transition-[box-shadow,background-color] ${
+                      isTarget || resizing === index
+                        ? 'bg-[#dcebf9] ring-[#0876c8] dark:bg-sky-500/15'
+                        : 'bg-[#e8f0f9] ring-transparent hover:ring-[#9fcfee] dark:bg-white/5'
+                    }`
+                  : ''
+              } ${editing && dragFrom === index ? 'opacity-40' : ''}`}
               draggable={editing && armed === index}
               onPointerDown={(e) => {
                 if (!editing || (e.target as HTMLElement).closest('[role="separator"], button')) return;
@@ -318,42 +345,54 @@ export default function ExecDashboardScreen() {
             >
               {/* 놓을 자리 표시 — 이 위젯 앞에 들어간다 */}
               {isTarget && <div className="absolute inset-y-2 -left-[10px] z-20 w-1 rounded-full bg-[#0876c8]" />}
-              <div className={editing ? 'pointer-events-none h-full select-none' : 'h-full'}>
+              {/* 편집 줄 — 위젯 내용을 가리지 않게 위젯 위에 따로 둔다 */}
+              {editing && (
+                <div className="flex cursor-grab items-center gap-2 px-1.5 pb-2 active:cursor-grabbing" title="끌어서 옮기기">
+                  <GripVertical size={16} className="shrink-0 text-[#6f8fb3]" aria-label={`${title} 옮기기`} />
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => save(layout.filter((_, i) => i !== index))}
+                    className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-lg bg-panel text-ink3 shadow-sm hover:text-[#c4432f]"
+                    aria-label={`${title} 빼기`}
+                    title="빼기"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
+              <div
+                data-widget-body
+                className={`${editing ? 'pointer-events-none flex-1 select-none opacity-80' : 'h-full'} ${slot.h ? 'overflow-hidden [&>section]:overflow-y-auto' : ''}`}
+                style={slot.h ? { height: Math.max(slot.h, WIDGETS[slot.id].minH), flex: 'none' } : { minHeight: WIDGETS[slot.id].minH }}
+              >
                 <Component />
               </div>
               {editing && (
                 <>
-                  <div className="absolute top-3 right-3 z-10 flex items-center gap-0.5 rounded-xl border border-border bg-panel p-1 shadow-sm">
-                    <span className="grid h-7 w-7 cursor-grab place-items-center text-ink3" title="끌어서 옮기기" aria-label={`${title} 옮기기`}>
-                      <GripVertical size={15} />
-                    </span>
-                    <span className="min-w-[34px] px-1 text-center text-[11.5px] font-bold text-ink2 tabular-nums">{SIZE_LABEL[slot.size]}</span>
-                    <button
-                      type="button"
-                      onClick={() => save(layout.filter((_, i) => i !== index))}
-                      className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt hover:text-[#c4432f]"
-                      aria-label={`${title} 빼기`}
-                      title="빼기"
+                  {/* 크기 단추 — 오른쪽(폭), 아래(높이), 오른쪽 아래(둘 다) */}
+                  {([
+                    { axis: 'x', label: '폭 조절', cls: 'top-1/2 -right-[15px] -translate-y-1/2 cursor-ew-resize', Icon: MoveHorizontal },
+                    { axis: 'y', label: '높이 조절', cls: 'left-1/2 -bottom-[15px] -translate-x-1/2 cursor-ns-resize', Icon: MoveVertical },
+                    { axis: 'xy', label: '크기 조절', cls: '-right-[13px] -bottom-[13px] cursor-nwse-resize', Icon: MoveDiagonal2 },
+                  ] as const).map(({ axis, label, cls, Icon }) => (
+                    <div
+                      key={axis}
+                      role="separator"
+                      aria-orientation={axis === 'y' ? 'horizontal' : 'vertical'}
+                      aria-label={`${title} ${label}`}
+                      title={axis === 'y' && slot.h ? '끌어서 높이 조절, 두 번 누르면 원래 높이' : `끌어서 ${label}`}
+                      onPointerDown={(e) => startResize(index, axis, e)}
+                      onDoubleClick={axis === 'y' ? () => resetHeight(index) : undefined}
+                      className={`absolute z-10 grid h-9 w-9 touch-none place-items-center rounded-full border-2 shadow-md transition-opacity ${cls} ${
+                        resizing === index
+                          ? 'border-[#0876c8] bg-[#0876c8] text-white opacity-100'
+                          : 'border-[#0876c8] bg-panel text-[#0876c8] opacity-0 group-hover/slot:opacity-100 hover:bg-[#e0f0fb] focus-visible:opacity-100'
+                      }`}
                     >
-                      <X size={15} />
-                    </button>
-                  </div>
-                  {/* 폭 조절 손잡이 — 오른쪽 가장자리 */}
-                  <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label={`${title} 폭 조절`}
-                    title="끌어서 폭 조절"
-                    onPointerDown={(e) => startResize(index, e)}
-                    className="group/rs absolute inset-y-0 -right-[11px] z-10 flex w-[14px] cursor-ew-resize touch-none items-center justify-center"
-                  >
-                    <span className={`h-14 w-1.5 rounded-full ${resizing === index ? 'bg-[#0876c8]' : 'bg-[#b7c6d9] group-hover/rs:bg-[#0876c8] dark:bg-white/30'}`} />
-                  </div>
-                  {resizing === index && (
-                    <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-[20px] bg-[#0876c8]/8">
-                      <span className="rounded-xl bg-[#0876c8] px-4 py-2 text-[18px] font-black text-white tabular-nums shadow">{SIZE_LABEL[slot.size]}</span>
+                      <Icon size={16} />
                     </div>
-                  )}
+                  ))}
                 </>
               )}
             </div>

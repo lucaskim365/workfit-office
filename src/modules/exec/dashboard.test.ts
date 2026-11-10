@@ -89,3 +89,14 @@ test('끌어 늘린 폭 맞추기·위젯 끼우기', () => {
   assert.deepEqual(insertSlot(list, { id: 'b', size: 6 }, 0).map((s) => s.id), ['b', 'a']);
   assert.equal(insertSlot(list, { id: 'a', size: 6 }, 0), list);
 });
+
+import { snapHeight } from './dashboard';
+
+test('끌어 바꾼 높이 — 20px 단위, 위젯 최소 높이 이상', () => {
+  assert.equal(snapHeight(333), 340);
+  assert.equal(snapHeight(50), 120);
+  assert.equal(snapHeight(300, 420), 420);
+  const known = ['a'] as const;
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 301 }], known, []), [{ id: 'a', size: 4, h: 300 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 'x' }], known, []), [{ id: 'a', size: 4 }]);
+});
