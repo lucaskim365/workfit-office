@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ComponentType, type HTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { MoveDiagonal2, Plus, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { CELL_GAP, CELL_H, insertSlot, normalizeLayout, rowsFor, rowsHeight, snapRows, snapSize, type WidgetSize, type WidgetSlot } from './dashboard';
+import { arrange, CELL_GAP, CELL_H, GRID_COLS, MAX_ROWS, normalizeLayout, PITCH, rowsFor, rowsHeight, type WidgetSize, type WidgetSlot } from './dashboard';
 import {
   ApprovalWidget,
   AttendanceWidget,
@@ -24,8 +24,8 @@ import {
 
 /**
  * 경영 현황 — 로그인 후 첫 화면. 편집 모드의 '위젯 추가' 창에서 모듈을 골라 위젯을 넣고,
- * 위젯은 12칸 바둑판에 맞춰 붙는다 — 끌어서 옮기면 놓일 자리가 점선으로 보이고, 오른쪽 아래 단추로 폭·높이를 바꾼다.
- * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고 위젯의 폭·높이는 늘 칸에 맞는다. 빈칸은 뒤 위젯이 자동으로 채운다.
+ * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고, 위젯은 원하는 칸에 끌어다 놓는다(빈칸이 남아도 된다).
+ * 오른쪽 아래 단추로 폭·높이를 칸 단위로 바꾸고, 겹치는 위젯은 아래로 비켜 선다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
@@ -65,13 +65,6 @@ const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
   { id: 'notice', size: 12 },
 ];
 
-/** 폭 → 칸 클래스. 좁은 화면에서는 한 줄 전체 */
-const SPAN: Record<WidgetSize, string> = {
-  4: 'col-span-12 lg:col-span-6 xl:col-span-4',
-  6: 'col-span-12 lg:col-span-6',
-  8: 'col-span-12 xl:col-span-8',
-  12: 'col-span-12',
-};
 /** 미리보기를 그릴 실제 폭 — 이 폭으로 그린 뒤 줄여 보인다 */
 const PREVIEW_WIDTH: Record<WidgetSize, number> = { 4: 420, 6: 620, 8: 860, 12: 1180 };
 /** 위젯 추가 창의 카드 폭 — 실제 폭 비율대로 */
@@ -213,46 +206,60 @@ function WidgetPicker({ open, hiddenForDrag, layout, onAdd, onClose, onDragStart
 
 /** 위젯의 최소(기본) 세로 칸 수 */
 const minRowsOf = (id: WidgetId) => rowsFor(WIDGETS[id].minH);
+/** 위젯의 최소 가로 칸 수 */
+const minColsOf = (id: WidgetId) => Math.min(...WIDGETS[id].sizes);
 /** 위젯이 차지하는 세로 칸 수 */
 const rowsOf = (slot: WidgetSlot<WidgetId>) => Math.max(slot.rows ?? 0, minRowsOf(slot.id));
+const placementsOf = (list: WidgetSlot<WidgetId>[]) =>
+  list.map((s) => ({ id: s.id, w: Math.max(s.size, minColsOf(s.id)), h: rowsOf(s), x: s.x, y: s.y }));
 
-/** 모눈 위의 위젯 한 개 — 가로 칸은 폭, 세로 칸은 rows 만큼 차지한다 */
-function Cell({ rows, order, className, innerClass, children, ...rest }: {
-  rows: number; order: number; className: string; innerClass: string; children: ReactNode;
-} & Omit<HTMLAttributes<HTMLDivElement>, 'className' | 'children'>) {
-  return (
-    <div {...rest} data-slot className={`${className} relative z-[1] min-w-0`} style={{ order, gridRowEnd: `span ${rows}` }}>
-      <div data-slot-inner className={innerClass}>{children}</div>
-    </div>
-  );
+/** 넓은 화면(모눈 배치)인지 — 좁은 화면에서는 위젯을 위에서부터 차례로 쌓는다 */
+function useWide() {
+  const query = '(min-width: 1280px)';
+  const [wide, setWide] = useState(() => typeof window === 'undefined' || window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setWide(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
+
+/** 모눈 점 — 칸과 칸 사이 교차점마다 작은 점 하나 */
+function GridDots({ rows }: { rows: number }) {
+  const dots: ReactNode[] = [];
+  for (let r = 0; r <= rows; r++) {
+    for (let c = 0; c <= GRID_COLS; c++) {
+      dots.push(
+        <span
+          key={`${r}-${c}`}
+          className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#b9d2ea] dark:bg-white/15"
+          style={{ left: `calc(${c} * (100% + ${CELL_GAP}px) / ${GRID_COLS} - ${CELL_GAP / 2}px)`, top: r * PITCH - CELL_GAP / 2 }}
+        />,
+      );
+    }
+  }
+  return <div aria-hidden="true" className="pointer-events-none absolute inset-0">{dots}</div>;
 }
 
 export default function ExecDashboardScreen() {
   const { user: me } = useAuth();
+  const wide = useWide();
   const [layout, setLayout] = useState(() => loadLayout(me?.id));
   const [editing, setEditing] = useState(false);
+  /** 끄는 동안 미리 보는 배치와, 그 안에서 방금 옮기거나 키운 위젯 */
+  const [draft, setDraft] = useState<{ list: WidgetSlot<WidgetId>[]; pin: WidgetId } | null>(null);
   /** 옮기는 중인 위젯 / 위젯 추가 창에서 끌어 오는 위젯 */
   const [dragId, setDragId] = useState<WidgetId | null>(null);
   const [dragNew, setDragNew] = useState<WidgetId | null>(null);
-  /** 놓일 자리(옮기는 위젯을 뺀 목록에서의 순번) */
-  const [target, setTarget] = useState<number | null>(null);
-  /** 크기 조절 중 미리 보이는 윤곽(px) */
-  const [resize, setResize] = useState<{ id: WidgetId; w: number; h: number } | null>(null);
+  const [resizing, setResizing] = useState<WidgetId | null>(null);
   /** 옮기기 끌기를 허락한 위젯 — 크기 단추·버튼을 누를 때는 옮기기가 시작되지 않게 */
   const [armed, setArmed] = useState<WidgetId | null>(null);
   const [picking, setPicking] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
-  /** 편집 중 바탕에 그리는 모눈 줄 수 */
-  const [paperRows, setPaperRows] = useState(0);
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!editing || !el) return;
-    const measure = () => setPaperRows(Math.round((el.offsetHeight + CELL_GAP) / (CELL_H + CELL_GAP)));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [editing]);
+  /** 잡은 곳이 위젯의 몇 번째 칸인지 — 끌 때 그 칸이 마우스를 따라간다 */
+  const grab = useRef({ col: 0, row: 0 });
 
   // 로그인 사용자가 늦게 잡히면 그 사람 배치로 다시 읽는다
   useEffect(() => { setLayout(loadLayout(me?.id)); }, [me?.id]);
@@ -261,102 +268,110 @@ export default function ExecDashboardScreen() {
     if (!me?.id) return;
     try { localStorage.setItem(storageKey(me.id), JSON.stringify(next)); } catch { /* 저장 못 해도 화면은 그대로 */ }
   };
-  const save = (next: WidgetSlot<WidgetId>[]) => { setLayout(next); persist(next); };
-
-  const resetDrag = () => { setDragId(null); setDragNew(null); setTarget(null); setArmed(null); };
-
-  const gap = CELL_GAP;
-  const dragging = dragId !== null || dragNew !== null;
-  const base = dragId ? layout.filter((s) => s.id !== dragId) : layout;
-  const at = target ?? (dragId ? layout.findIndex((s) => s.id === dragId) : base.length);
-  /** 화면 순서 — 놓일 자리 앞뒤로 나머지가 비켜 선다(실제 순서는 놓을 때 바뀐다) */
-  const orderOf = (id: WidgetId) => {
-    if (id === dragId) return at;
-    const i = base.findIndex((s) => s.id === id);
-    return dragging && i >= at ? i + 1 : i;
+  /** 자리를 다시 잡아(겹친 위젯은 아래로) 저장한다 */
+  const commit = (next: WidgetSlot<WidgetId>[], pin: WidgetId | null = null) => {
+    const boxes = arrange(placementsOf(next), pin);
+    const placed = next.map((s) => {
+      const b = boxes.get(s.id)!;
+      return { ...s, size: b.w, x: b.x, y: b.y };
+    });
+    setLayout(placed);
+    persist(placed);
   };
 
-  /** 끌고 있는 위젯이 다른 위젯 위에 오면 — 그 위젯의 앞쪽 반이면 앞에, 뒤쪽 반이면 뒤에 놓는다 */
-  const overSlot = (id: WidgetId, e: React.DragEvent<HTMLDivElement>) => {
-    if (!editing || !dragging) return;
+  const resetDrag = () => { setDraft(null); setDragId(null); setDragNew(null); setArmed(null); };
+
+  const shown = draft?.list ?? layout;
+  const boxes = arrange(placementsOf(shown), draft?.pin ?? null);
+  const bottom = Math.max(0, ...[...boxes.values()].map((b) => b.y + b.h));
+
+  /** 마우스 위치 → 모눈 칸(화면 배율을 걷어 내고 센다) */
+  const cellAt = (clientX: number, clientY: number) => {
+    const grid = gridRef.current!;
+    const rect = grid.getBoundingClientRect();
+    const scale = rect.width ? grid.offsetWidth / rect.width : 1;
+    const pitchX = (grid.offsetWidth + CELL_GAP) / GRID_COLS;
+    return { col: Math.floor(((clientX - rect.left) * scale) / pitchX), row: Math.floor(((clientY - rect.top) * scale) / PITCH), x: (clientX - rect.left) * scale, y: (clientY - rect.top) * scale, pitchX };
+  };
+
+  /** 끄는 동안 — 마우스가 가리키는 칸에 위젯을 두어 본다 */
+  const dragOverGrid = (e: React.DragEvent<HTMLDivElement>) => {
+    const id = dragId ?? dragNew;
+    if (!editing || !id) return;
     e.preventDefault();
-    if (id === dragId) return;
-    const j = base.findIndex((s) => s.id === id);
-    const r = e.currentTarget.getBoundingClientRect();
-    const gridW = gridRef.current?.getBoundingClientRect().width ?? r.width;
-    const before = r.width > gridW * 0.6 ? e.clientY < r.top + r.height / 2 : e.clientX < r.left + r.width / 2;
-    const next = before ? j : j + 1;
-    if (next !== target) setTarget(next);
+    const at = cellAt(e.clientX, e.clientY);
+    const base = layout.some((s) => s.id === id) ? layout : [...layout, { id, size: WIDGETS[id].size }];
+    const slot = base.find((s) => s.id === id)!;
+    const w = Math.max(slot.size, minColsOf(id));
+    const x = Math.min(Math.max(0, at.col - grab.current.col), GRID_COLS - w);
+    const y = Math.max(0, at.row - grab.current.row);
+    const cur = draft?.list.find((s) => s.id === id);
+    if (cur && cur.x === x && cur.y === y) return;
+    setDraft({ list: base.map((s) => (s.id === id ? { ...s, x, y } : s)), pin: id });
   };
 
   const drop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (dragNew) {
-      save(insertSlot(layout, { id: dragNew, size: WIDGETS[dragNew].size }, at));
-      setPicking(false);
-    } else if (dragId) {
-      const slot = layout.find((s) => s.id === dragId);
-      if (slot) save(insertSlot(base, slot, at));
-    }
+    if (draft) commit(draft.list, draft.pin);
+    if (dragNew) setPicking(false);
     resetDrag();
   };
 
   /**
-   * 크기 바꾸기 — 오른쪽 아래 단추 하나로 폭(12칸 중 허용 폭)과 높이(모눈 칸 수)를 함께.
-   * 끄는 동안에는 점선 윤곽으로만 보이고, 놓을 때 바뀐다. 화면 배율 때문에 마우스 이동량을 실제 px 로 바꿔 쓴다.
+   * 크기 바꾸기 — 오른쪽 아래 단추를 끌면 마우스가 있는 칸까지 폭·높이가 칸 단위로 늘고 준다.
+   * 겹치는 위젯은 끄는 동안 아래로 비켜 서고, 놓으면 그대로 저장된다.
    */
-  const startResize = (index: number, e: ReactPointerEvent<HTMLElement>) => {
+  const startResize = (id: WidgetId, e: ReactPointerEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const grid = gridRef.current;
-    const cell = (e.currentTarget as HTMLElement).closest('[data-slot]') as HTMLElement | null;
-    if (!grid || !cell) return;
-    const slot = layout[index];
-    const def = WIDGETS[slot.id];
-    const gridRect = grid.getBoundingClientRect();
-    const cellRect = cell.getBoundingClientRect();
-    const pxPerClient = cellRect.height ? cell.offsetHeight / cellRect.height : 1;
-    const w0 = cell.offsetWidth;
-    const h0 = cell.offsetHeight;
-    const colW = (n: number) => ((grid.offsetWidth + gap) * n) / 12 - gap;
-    const startY = e.clientY;
-    const minRows = minRowsOf(slot.id);
-    let size = slot.size;
-    let rows = rowsOf(slot);
+    const box = boxes.get(id);
+    if (!gridRef.current || !box) return;
+    const minW = minColsOf(id);
+    const minH = minRowsOf(id);
+    let list = layout.map((s) => (s.id === id ? { ...s, x: box.x, y: box.y } : s));
     let moved = false;
-    const draw = () => setResize({ id: slot.id, w: size === slot.size ? w0 : colW(size), h: rowsHeight(rows) });
-    draw();
+    setResizing(id);
     const onMove = (ev: PointerEvent) => {
-      const nextSize = snapSize(((ev.clientX - cellRect.left) / gridRect.width) * 12, def.sizes);
-      const nextRows = snapRows(h0 + (ev.clientY - startY) * pxPerClient, minRows);
-      if (nextSize === size && nextRows === rows) return;
+      const at = cellAt(ev.clientX, ev.clientY);
+      const w = Math.min(Math.max(minW, Math.round((at.x + CELL_GAP) / at.pitchX) - box.x), GRID_COLS - box.x);
+      const h = Math.min(Math.max(minH, Math.round((at.y + CELL_GAP) / PITCH) - box.y), MAX_ROWS);
+      const cur = list.find((s) => s.id === id)!;
+      if (cur.size === w && rowsOf(cur) === h) return;
       moved = true;
-      size = nextSize;
-      rows = nextRows;
-      draw();
+      list = list.map((s) => (s.id === id ? { ...s, size: w, rows: h } : s));
+      setDraft({ list, pin: id });
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      setResize(null);
-      if (moved) save(layout.map((s, i) => (i === index ? { ...s, size, rows } : s)));
+      setResizing(null);
+      setDraft(null);
+      if (moved) commit(list, id);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
 
   /** 높이를 기본 칸 수로 되돌리기(크기 단추 두 번 누르기) */
-  const resetHeight = (index: number) => save(layout.map((s, i) => (i === index ? { id: s.id, size: s.size } : s)));
+  const resetHeight = (id: WidgetId) => commit(layout.map((s) => (s.id === id ? { ...s, rows: undefined } : s)), id);
+
+  const canEdit = editing && wide;
+  // 좁은 화면 — 모눈 자리 순서(위→아래, 왼→오)대로 쌓는다
+  const order = [...shown].sort((a, b) => {
+    const p = boxes.get(a.id)!;
+    const q = boxes.get(b.id)!;
+    return p.y - q.y || p.x - q.x;
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 pb-10">
       {/* 편집 도구 — 편집 중에는 파란 띠로 */}
-      {editing ? (
+      {canEdit ? (
         <div className="flex items-center gap-2 rounded-2xl bg-[#e0f0fb] px-3 py-2 dark:bg-sky-500/15">
           <button type="button" onClick={() => setPicking(true)} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#0876c8] px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-[#066aaf]">
             <Plus size={15} />위젯 추가
           </button>
-          <button type="button" onClick={() => save(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
+          <button type="button" onClick={() => commit(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
             기본 배치
           </button>
           <button
@@ -367,7 +382,7 @@ export default function ExecDashboardScreen() {
             완료
           </button>
         </div>
-      ) : (
+      ) : wide ? (
         <div className="flex justify-end">
           <button
             type="button"
@@ -377,138 +392,125 @@ export default function ExecDashboardScreen() {
             화면 편집
           </button>
         </div>
-      )}
+      ) : null}
 
       <WidgetPicker
-        open={editing && picking}
+        open={canEdit && picking}
         hiddenForDrag={dragNew !== null}
         layout={layout}
-        onAdd={(id, size) => { save(insertSlot(layout, { id, size }, layout.length)); setPicking(false); }}
+        onAdd={(id, size) => { commit([...layout, { id, size }]); setPicking(false); }}
         onClose={() => setPicking(false)}
-        onDragStart={(id) => setDragNew(id)}
+        onDragStart={(id) => { grab.current = { col: 0, row: 0 }; setDragNew(id); }}
         onDragEnd={resetDrag}
       />
 
-      <div
-        ref={gridRef}
-        className="relative grid grid-cols-12"
-        style={{ gridAutoRows: CELL_H, gap: CELL_GAP, gridAutoFlow: 'row dense' }}
-        onDragOver={(e) => { if (editing && dragging) e.preventDefault(); }}
-        onDrop={(e) => { if (editing && dragging) drop(e); }}
-      >
-        {/* 모눈 — 편집 중에만, 위젯이 붙는 칸을 바탕에 보여 준다 */}
-        {editing && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 grid grid-cols-12"
-            style={{ gridAutoRows: CELL_H, gap: CELL_GAP }}
-          >
-            {Array.from({ length: paperRows * 12 }, (_, i) => (
-              <div key={i} className="rounded-[10px] border border-dashed border-[#bcd8ef] bg-[#0876c8]/[.03] dark:border-white/10" />
-            ))}
-          </div>
-        )}
-        {layout.map((slot, index) => {
-          const { Component, title } = WIDGETS[slot.id];
-          const isDragged = dragId === slot.id;
-          const preview = resize?.id === slot.id ? resize : null;
-          return (
-            <Cell
-              key={slot.id}
-              rows={rowsOf(slot)}
-              order={orderOf(slot.id)}
-              className={`${SPAN[slot.size]} group/slot`}
-              innerClass={`relative flex flex-col ${
-                editing
-                  ? `-m-1.5 h-[calc(100%+12px)] cursor-grab rounded-[24px] p-1.5 active:cursor-grabbing ${
-                      isDragged
-                        ? 'border-2 border-dashed border-[#0876c8] bg-[#0876c8]/[.06]'
-                        : `ring-2 transition-[box-shadow,background-color] ${preview ? 'bg-[#dcebf9] ring-[#0876c8] dark:bg-sky-500/15' : 'bg-[#e8f0f9] ring-transparent hover:ring-[#9fcfee] dark:bg-white/5'}`
-                    }`
-                  : 'h-full'
-              }`}
-              draggable={editing && armed === slot.id}
-              onPointerDown={(e) => {
-                if (!editing || (e.target as HTMLElement).closest('[role="separator"], button')) return;
-                setArmed(slot.id);
-              }}
-              onPointerUp={() => { if (!dragId) setArmed(null); }}
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', slot.id);
-                // 끌리는 그림을 뜬 다음에 자리 표시로 바꾼다
-                setTimeout(() => setDragId(slot.id), 0);
-              }}
-              onDragOver={(e) => overSlot(slot.id, e)}
-              onDragEnd={resetDrag}
-            >
-              <div className={isDragged ? 'invisible flex min-h-0 flex-1 flex-col' : 'contents'}>
-                <div
-                  data-widget-body
-                  className={`min-h-0 flex-1 overflow-hidden [&>section]:overflow-y-auto ${editing ? 'pointer-events-none select-none opacity-80' : ''}`}
-                >
-                  <Component />
-                </div>
+      {wide ? (
+        <div
+          ref={gridRef}
+          className="relative grid grid-cols-12"
+          style={{ gridAutoRows: CELL_H, gap: CELL_GAP, minHeight: canEdit ? rowsHeight(bottom + 4) : undefined }}
+          onDragOver={dragOverGrid}
+          onDrop={(e) => { if (canEdit && (dragId || dragNew)) drop(e); }}
+        >
+          {/* 모눈 — 편집 중에만 칸 사이 점으로 */}
+          {canEdit && <GridDots rows={bottom + 4} />}
+          {shown.map((slot) => {
+            const box = boxes.get(slot.id)!;
+            const isNew = !layout.some((s) => s.id === slot.id);
+            const isDragged = dragId === slot.id || isNew;
+            const isResizing = resizing === slot.id;
+            const { Component, title } = WIDGETS[slot.id];
+            return (
+              <div
+                key={slot.id}
+                data-slot
+                className="group/slot relative z-[1] min-w-0"
+                style={{ gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` }}
+                draggable={canEdit && armed === slot.id}
+                onPointerDown={(e) => {
+                  if (!canEdit || (e.target as HTMLElement).closest('[role="separator"], button')) return;
+                  setArmed(slot.id);
+                }}
+                onPointerUp={() => { if (!dragId) setArmed(null); }}
+                onDragStart={(e) => {
+                  const at = cellAt(e.clientX, e.clientY);
+                  grab.current = { col: Math.max(0, at.col - box.x), row: Math.max(0, at.row - box.y) };
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', slot.id);
+                  // 끌리는 그림을 뜬 다음에 자리 표시로 바꾼다
+                  setTimeout(() => setDragId(slot.id), 0);
+                }}
+                onDragEnd={resetDrag}
+              >
+                {isDragged ? (
+                  // 놓일 자리
+                  <div className="h-full rounded-[22px] border-2 border-dashed border-[#0876c8] bg-[#0876c8]/[.07]" />
+                ) : (
+                  <div
+                    className={`flex h-full flex-col ${
+                      canEdit
+                        ? `-m-1.5 h-[calc(100%+12px)] cursor-grab rounded-[24px] p-1.5 ring-2 transition-[box-shadow,background-color] active:cursor-grabbing ${
+                            isResizing ? 'bg-[#dcebf9] ring-[#0876c8] dark:bg-sky-500/15' : 'bg-[#e8f0f9] ring-transparent hover:ring-[#9fcfee] dark:bg-white/5'
+                          }`
+                        : ''
+                    }`}
+                  >
+                    <div
+                      data-widget-body
+                      className={`min-h-0 flex-1 overflow-hidden [&>section]:overflow-y-auto ${canEdit ? 'pointer-events-none select-none opacity-80' : ''}`}
+                    >
+                      <Component />
+                    </div>
+                  </div>
+                )}
+                {canEdit && !isDragged && (
+                  <>
+                    {/* 빼기 — 위젯에 커서를 올리면 오른쪽 위에 뜬다 */}
+                    <button
+                      type="button"
+                      onClick={() => commit(layout.filter((s) => s.id !== slot.id))}
+                      className="absolute -top-2.5 -right-2.5 z-40 grid h-8 w-8 cursor-pointer place-items-center rounded-full border-2 border-border bg-panel text-ink3 opacity-0 shadow-md transition-opacity group-hover/slot:opacity-100 hover:border-[#c4432f] hover:text-[#c4432f] focus-visible:opacity-100"
+                      aria-label={`${title} 빼기`}
+                      title="빼기"
+                    >
+                      <X size={15} />
+                    </button>
+                    {/* 크기 단추 — 오른쪽 아래 */}
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`${title} 크기 조절`}
+                      title={slot.rows ? '끌어서 크기 조절, 두 번 누르면 원래 높이' : '끌어서 크기 조절'}
+                      onPointerDown={(e) => startResize(slot.id, e)}
+                      onDoubleClick={() => resetHeight(slot.id)}
+                      className={`absolute -right-2.5 -bottom-2.5 z-40 grid h-8 w-8 cursor-nwse-resize touch-none place-items-center rounded-full border-2 border-[#0876c8] shadow-md ${
+                        isResizing ? 'bg-[#0876c8] text-white' : 'bg-panel text-[#0876c8] hover:bg-[#e0f0fb]'
+                      }`}
+                    >
+                      <MoveDiagonal2 size={15} />
+                    </div>
+                  </>
+                )}
               </div>
-              {/* 빼기 — 위젯에 커서를 올리면 오른쪽 위에 뜬다 */}
-              {editing && !isDragged && (
-                <button
-                  type="button"
-                  onClick={() => save(layout.filter((_, i) => i !== index))}
-                  className="absolute -top-2.5 -right-2.5 z-40 grid h-8 w-8 cursor-pointer place-items-center rounded-full border-2 border-border bg-panel text-ink3 opacity-0 shadow-md transition-opacity group-hover/slot:opacity-100 hover:border-[#c4432f] hover:text-[#c4432f] focus-visible:opacity-100"
-                  aria-label={`${title} 빼기`}
-                  title="빼기"
-                >
-                  <X size={15} />
-                </button>
-              )}
-              {/* 크기 조절 중 — 바뀔 크기를 점선 윤곽으로 */}
-              {preview && (
-                <div
-                  className="pointer-events-none absolute top-0 left-0 z-30 rounded-[24px] border-2 border-dashed border-[#0876c8] bg-[#0876c8]/[.08]"
-                  style={{ width: preview.w, height: preview.h }}
-                />
-              )}
-              {/* 크기 단추 — 오른쪽 아래 하나 */}
-              {editing && !isDragged && (
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label={`${title} 크기 조절`}
-                  title={slot.rows ? '끌어서 크기 조절, 두 번 누르면 원래 높이' : '끌어서 크기 조절'}
-                  onPointerDown={(e) => startResize(index, e)}
-                  onDoubleClick={() => resetHeight(index)}
-                  className={`absolute -right-2.5 -bottom-2.5 z-40 grid h-8 w-8 cursor-nwse-resize touch-none place-items-center rounded-full border-2 border-[#0876c8] shadow-md ${
-                    preview ? 'bg-[#0876c8] text-white' : 'bg-panel text-[#0876c8] hover:bg-[#e0f0fb]'
-                  }`}
-                >
-                  <MoveDiagonal2 size={15} />
-                </div>
-              )}
-            </Cell>
-          );
-        })}
-        {/* 위젯 추가 창에서 끌어 오는 위젯이 놓일 자리 */}
-        {dragNew && target !== null && (
-          <Cell
-            rows={minRowsOf(dragNew)}
-            order={at}
-            className={SPAN[WIDGETS[dragNew].size]}
-            innerClass="-m-1.5 h-[calc(100%+12px)] rounded-[24px] border-2 border-dashed border-[#0876c8] bg-[#0876c8]/[.06]"
-            onDragOver={(e) => { e.preventDefault(); }}
-          >
-            <span />
-          </Cell>
-        )}
-        {/* 맨 끝에 놓을 자리 */}
-        {editing && dragging && (
-          <div
-            className={`relative z-[1] col-span-12 rounded-[20px] border-2 border-dashed ${target === base.length ? 'border-[#0876c8] bg-[#0876c8]/[.06]' : 'border-[#9fcfee]'}`}
-            style={{ order: 10000, gridRowEnd: 'span 2' }}
-            onDragOver={(e) => { e.preventDefault(); if (target !== base.length) setTarget(base.length); }}
-          />
-        )}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-12 gap-4" style={{ gridAutoRows: CELL_H, gridAutoFlow: 'row dense' }}>
+          {order.map((slot) => {
+            const { Component } = WIDGETS[slot.id];
+            return (
+              <div
+                key={slot.id}
+                className={`min-w-0 ${slot.size <= 6 ? 'col-span-12 lg:col-span-6' : 'col-span-12'}`}
+                style={{ gridRowEnd: `span ${rowsOf(slot)}` }}
+              >
+                <div className="h-full overflow-hidden [&>section]:overflow-y-auto"><Component /></div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

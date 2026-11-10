@@ -51,7 +51,7 @@ test('도넛 조각 — 0 은 빼고 누적', () => {
   assert.deepEqual(donutSlices([{ key: 'a', value: 0 }]), []);
 });
 
-import { moveSlot, nextSize, normalizeLayout, packLanes } from './dashboard';
+import { arrange, firstFit, normalizeLayout, overlaps, packLanes } from './dashboard';
 
 test('겹치는 일정은 다음 칸으로', () => {
   const r = packLanes([
@@ -65,29 +65,32 @@ test('겹치는 일정은 다음 칸으로', () => {
   assert.equal(packLanes([]).count, 0);
 });
 
-test('위젯 배치 정리·이동·폭', () => {
+test('저장된 배치 정리 — 모르는 위젯·중복 버림, 잘못된 폭은 6칸, 자리는 정수만', () => {
   const known = ['a', 'b', 'c'] as const;
-  const fb = [{ id: 'a' as const, size: 12 as const }];
+  const fb = [{ id: 'a' as const, size: 12 }];
   assert.deepEqual(normalizeLayout(null, known, fb), fb);
   assert.deepEqual(normalizeLayout([{ id: 'x', size: 4 }], known, fb), fb);
-  assert.deepEqual(normalizeLayout([{ id: 'b', size: 5 }, { id: 'b', size: 4 }, { id: 'c', size: 8 }], known, fb), [{ id: 'b', size: 6 }, { id: 'c', size: 8 }]);
-  assert.deepEqual(moveSlot(['a', 'b', 'c'], 0, 2), ['b', 'c', 'a']);
-  assert.deepEqual(moveSlot(['a', 'b', 'c'], 2, 0), ['c', 'a', 'b']);
-  assert.equal(nextSize(12), 4);
-  assert.equal(nextSize(4), 6);
+  assert.deepEqual(normalizeLayout([{ id: 'b', size: 13 }, { id: 'b', size: 4 }, { id: 'c', size: 5 }], known, fb), [{ id: 'b', size: 6 }, { id: 'c', size: 5 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, x: 3, y: 2 }], known, fb), [{ id: 'a', size: 4, x: 3, y: 2 }]);
+  assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, x: 1.5, y: 2 }], known, fb), [{ id: 'a', size: 4 }]);
 });
 
-import { insertSlot, snapSize } from './dashboard';
-
-test('끌어 늘린 폭 맞추기·위젯 끼우기', () => {
-  assert.equal(snapSize(3), 4);
-  assert.equal(snapSize(5.2), 6);
-  assert.equal(snapSize(9.9), 8);
-  assert.equal(snapSize(10.1), 12);
-  assert.equal(snapSize(3, [8, 12]), 8);
-  const list = [{ id: 'a', size: 4 as const }];
-  assert.deepEqual(insertSlot(list, { id: 'b', size: 6 }, 0).map((s) => s.id), ['b', 'a']);
-  assert.equal(insertSlot(list, { id: 'a', size: 6 }, 0), list);
+test('자리 잡기 — 빈자리 채우기, 겹치면 아래로 밀기, 빈칸은 그대로', () => {
+  // 자리 없는 위젯은 위에서부터 빈자리에
+  const a = arrange([{ id: 'a', w: 12, h: 2 }, { id: 'b', w: 8, h: 3 }, { id: 'c', w: 4, h: 2 }, { id: 'd', w: 4, h: 2 }]);
+  assert.deepEqual(a.get('b'), { x: 0, y: 2, w: 8, h: 3 });
+  assert.deepEqual(a.get('c'), { x: 8, y: 2, w: 4, h: 2 });
+  assert.deepEqual(a.get('d'), { x: 8, y: 4, w: 4, h: 2 });
+  // 원하는 칸에 두면 그 위에 빈칸이 남아도 그대로
+  assert.deepEqual(arrange([{ id: 'a', w: 4, h: 2, x: 6, y: 5 }]).get('a'), { x: 6, y: 5, w: 4, h: 2 });
+  // 옮긴 위젯이 이기고, 겹친 위젯은 바로 아래로
+  const m = arrange([{ id: 'a', w: 6, h: 3, x: 0, y: 0 }, { id: 'b', w: 6, h: 2, x: 3, y: 1 }], 'b');
+  assert.deepEqual(m.get('b'), { x: 3, y: 1, w: 6, h: 2 });
+  assert.deepEqual(m.get('a'), { x: 0, y: 3, w: 6, h: 3 });
+  // 오른쪽 끝을 넘으면 안으로 들인다
+  assert.deepEqual(arrange([{ id: 'a', w: 6, h: 1, x: 10, y: 0 }]).get('a'), { x: 6, y: 0, w: 6, h: 1 });
+  assert.deepEqual(firstFit([{ x: 0, y: 0, w: 12, h: 1 }], 4, 1), { x: 0, y: 1 });
+  assert.equal(overlaps({ x: 0, y: 0, w: 4, h: 2 }, { x: 4, y: 0, w: 4, h: 2 }), false);
 });
 
 import { rowsFor, rowsHeight, snapRows } from './dashboard';

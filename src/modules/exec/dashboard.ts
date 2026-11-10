@@ -123,16 +123,17 @@ export function packLanes<T extends { start: string | null; end: string | null }
 
 /* ───────── 위젯 배치 ───────── */
 
-/** 위젯 폭 — 12칸 중 몇 칸 */
-export const WIDGET_SIZES = [4, 6, 8, 12] as const;
-export type WidgetSize = (typeof WIDGET_SIZES)[number];
-/** rows — 차지하는 세로 칸 수(없으면 위젯 기본 칸 수) */
-export interface WidgetSlot<Id extends string = string> { id: Id; size: WidgetSize; rows?: number }
+/** 모눈 가로 칸 수 */
+export const GRID_COLS = 12;
+/** 위젯 기본 폭 — 12칸 중 몇 칸 */
+export type WidgetSize = 4 | 6 | 8 | 12;
+/** size — 가로 칸 수, rows — 세로 칸 수(없으면 위젯 기본), x·y — 왼쪽 위 칸(없으면 빈자리에 놓는다) */
+export interface WidgetSlot<Id extends string = string> { id: Id; size: number; rows?: number; x?: number; y?: number }
 
 /** 모눈 한 칸 높이와 칸 사이 간격(px) — 위젯 높이는 늘 이 칸에 맞춘다 */
 export const CELL_H = 48;
 export const CELL_GAP = 16;
-const PITCH = CELL_H + CELL_GAP;
+export const PITCH = CELL_H + CELL_GAP;
 export const MAX_ROWS = 40;
 
 /** 칸 수 → 높이(px) */
@@ -144,52 +145,67 @@ export function snapRows(px: number, minRows = 1): number {
   return Math.min(MAX_ROWS, Math.max(minRows, 1, Math.round((px + CELL_GAP) / PITCH)));
 }
 
-/** 저장된 배치 정리 — 모르는 위젯·중복·잘못된 폭은 버린다. 비어 있으면 기본 배치 */
+const isCount = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+
+/** 저장된 배치 정리 — 모르는 위젯·중복은 버리고, 잘못된 폭은 6칸으로. 비어 있으면 기본 배치 */
 export function normalizeLayout<Id extends string>(saved: unknown, known: readonly Id[], fallback: WidgetSlot<Id>[]): WidgetSlot<Id>[] {
   if (!Array.isArray(saved)) return fallback;
   const seen = new Set<string>();
   const out: WidgetSlot<Id>[] = [];
   for (const raw of saved) {
-    const id = (raw as { id?: unknown })?.id;
-    const size = (raw as { size?: unknown })?.size;
-    const rows = (raw as { rows?: unknown })?.rows;
+    const r = (raw ?? {}) as Record<string, unknown>;
+    const id = r.id;
     if (typeof id !== 'string' || !known.includes(id as Id) || seen.has(id)) continue;
     seen.add(id);
-    const slot: WidgetSlot<Id> = { id: id as Id, size: (WIDGET_SIZES as readonly number[]).includes(size as number) ? (size as WidgetSize) : 6 };
-    if (typeof rows === 'number' && Number.isInteger(rows) && rows >= 1) slot.rows = Math.min(MAX_ROWS, rows);
+    const slot: WidgetSlot<Id> = { id: id as Id, size: isCount(r.size, 1, GRID_COLS) ? r.size : 6 };
+    if (isCount(r.rows, 1, MAX_ROWS)) slot.rows = r.rows;
+    if (isCount(r.x, 0, GRID_COLS - 1) && isCount(r.y, 0, 999)) { slot.x = r.x; slot.y = r.y; }
     out.push(slot);
   }
   return out.length ? out : fallback;
 }
 
-/** from 자리의 위젯을 to 자리로 옮긴다 */
-export function moveSlot<T>(list: T[], from: number, to: number): T[] {
-  if (from === to || from < 0 || from >= list.length) return list;
-  const next = [...list];
-  const [x] = next.splice(from, 1);
-  next.splice(Math.max(0, Math.min(to, next.length)), 0, x);
-  return next;
+/** 모눈 위의 네모 — 왼쪽 위 칸(x, y)과 가로·세로 칸 수 */
+export interface Box { x: number; y: number; w: number; h: number }
+export const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** 위에서부터, 왼쪽부터 훑어 w×h 가 들어가는 첫 빈자리 */
+export function firstFit(boxes: Box[], w: number, h: number): { x: number; y: number } {
+  const ww = Math.min(Math.max(1, w), GRID_COLS);
+  for (let y = 0; ; y++) {
+    for (let x = 0; x + ww <= GRID_COLS; x++) if (!boxes.some((b) => overlaps(b, { x, y, w: ww, h }))) return { x, y };
+  }
 }
 
-/** 다음 폭 — 4 → 6 → 8 → 12 → 4 */
-export function nextSize(size: WidgetSize): WidgetSize {
-  return WIDGET_SIZES[(WIDGET_SIZES.indexOf(size) + 1) % WIDGET_SIZES.length];
-}
+export interface Placement { id: string; w: number; h: number; x?: number; y?: number }
 
-/** 끌어 늘린 칸 수 → 가장 가까운 위젯 폭(4·6·8·12) */
-export function snapSize(cols: number, allowed: readonly WidgetSize[] = WIDGET_SIZES): WidgetSize {
-  const list = allowed.length ? allowed : WIDGET_SIZES;
-  let best: WidgetSize = list[0];
-  for (const s of list) if (Math.abs(s - cols) < Math.abs(best - cols)) best = s;
-  return best;
-}
-
-/** 새 위젯을 at 자리에 끼운다(이미 있으면 그대로) */
-export function insertSlot<Id extends string>(list: WidgetSlot<Id>[], slot: WidgetSlot<Id>, at: number): WidgetSlot<Id>[] {
-  if (list.some((s) => s.id === slot.id)) return list;
-  const next = [...list];
-  next.splice(Math.max(0, Math.min(at, next.length)), 0, slot);
-  return next;
+/**
+ * 자리 잡기 — 방금 옮기거나 키운 위젯(pinned)을 먼저 그 자리에 두고, 자리가 정해진 나머지는 위에서부터 놓되
+ * 겹치면 겹친 위젯 바로 아래로 밀어 낸다. 자리가 없는 위젯은 첫 빈자리에. 빈칸은 그대로 둔다(당겨 올리지 않는다).
+ */
+export function arrange(items: Placement[], pinned?: string | null): Map<string, Box> {
+  const out = new Map<string, Box>();
+  const placed: Box[] = [];
+  const clamp = (it: Placement): Box => {
+    const w = Math.min(Math.max(1, it.w), GRID_COLS);
+    return { x: Math.min(Math.max(0, it.x ?? 0), GRID_COLS - w), y: Math.max(0, it.y ?? 0), w, h: Math.max(1, it.h) };
+  };
+  const put = (id: string, b: Box) => { out.set(id, b); placed.push(b); };
+  const has = (it: Placement) => it.x !== undefined && it.y !== undefined;
+  const pin = pinned ? items.find((it) => it.id === pinned && has(it)) : undefined;
+  if (pin) put(pin.id, clamp(pin));
+  const rest = items.filter((it) => it !== pin && has(it)).sort((a, b) => a.y! - b.y! || a.x! - b.x!);
+  for (const it of rest) {
+    const b = clamp(it);
+    for (let hit = placed.find((p) => overlaps(p, b)); hit; hit = placed.find((p) => overlaps(p, b))) b.y = hit.y + hit.h;
+    put(it.id, b);
+  }
+  for (const it of items) {
+    if (out.has(it.id)) continue;
+    const w = Math.min(Math.max(1, it.w), GRID_COLS);
+    put(it.id, { ...firstFit(placed, w, it.h), w, h: Math.max(1, it.h) });
+  }
+  return out;
 }
 
 /** 그 날이 속한 주(월~일) 날짜 7개 */
