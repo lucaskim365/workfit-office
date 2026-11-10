@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { MoveDiagonal2, Plus, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { arrange, CELL_GAP, CELL_H, GRID_COLS, MAX_ROWS, PITCH, rowsFor, rowsHeight, type WidgetSize, type WidgetSlot } from './dashboard';
+import { arrange, CELL_GAP, CELL_H, GRID_COLS, MAX_ROWS, PITCH, rowsHeight, type WidgetSize, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, loadLayout, minColsOf, minRowsOf, MODULES, placementsOf, rowsOf, storageKey, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
 
 /**
@@ -153,59 +153,6 @@ function useWide() {
   return wide;
 }
 
-/**
- * 위젯 내용의 실제 높이(px) — 위젯 틀(section)의 높이와 상관없이 안쪽 내용 맨 아래까지.
- * 화면 배율을 걷어 내고 잰다.
- */
-function contentHeight(body: HTMLElement): number | null {
-  const sec = body.firstElementChild as HTMLElement | null;
-  if (!sec) return null;
-  if (!sec.offsetHeight) return null;
-  // 틀 높이에 맞춰 늘어나는 내용(빈 칸 채우기 등)이 있어도 끝없이 커지지 않게, 잠깐 높이를 풀고 본래 높이를 잰다
-  const prevH = sec.style.height;
-  const prevO = sec.style.overflow;
-  sec.style.height = 'auto';
-  sec.style.overflow = 'visible';
-  const h = sec.offsetHeight;
-  sec.style.height = prevH;
-  sec.style.overflow = prevO;
-  return h;
-}
-
-/** 위젯마다 내용이 차지하는 칸 수 — 내용이 바뀌면 다시 잰다 */
-function useContentRows(gridRef: React.RefObject<HTMLDivElement | null>, deps: unknown[]) {
-  const [fit, setFit] = useState<Partial<Record<WidgetId, number>>>({});
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    let frame = 0;
-    const measure = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const next: Partial<Record<WidgetId, number>> = {};
-        grid.querySelectorAll<HTMLElement>('[data-widget-body]').forEach((body) => {
-          const id = body.dataset.widgetBody as WidgetId;
-          const h = contentHeight(body);
-          if (id && h) next[id] = rowsFor(h);
-        });
-        setFit((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-      });
-    };
-    const ro = new ResizeObserver(measure);
-    const observeAll = () => {
-      ro.disconnect();
-      grid.querySelectorAll<HTMLElement>('[data-widget-body] > section, [data-widget-body] > section > *').forEach((el) => ro.observe(el));
-      measure();
-    };
-    const mo = new MutationObserver(observeAll);
-    mo.observe(grid, { childList: true, subtree: true });
-    observeAll();
-    return () => { ro.disconnect(); mo.disconnect(); cancelAnimationFrame(frame); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return fit;
-}
-
 /** 모눈 점 — 칸과 칸 사이 교차점마다 작은 점 하나 */
 function GridDots({ rows }: { rows: number }) {
   const dots: ReactNode[] = [];
@@ -250,7 +197,7 @@ export default function ExecDashboardScreen() {
   };
   /** 자리를 다시 잡아(겹친 위젯은 아래로) 저장한다 */
   const commit = (next: WidgetSlot<WidgetId>[], pin: WidgetId | null = null) => {
-    const boxes = arrange(placementsOf(next, fit), pin);
+    const boxes = arrange(placementsOf(next), pin);
     const placed = next.map((s) => {
       const b = boxes.get(s.id)!;
       return { ...s, size: b.w, x: b.x, y: b.y };
@@ -262,8 +209,7 @@ export default function ExecDashboardScreen() {
   const resetDrag = () => { setDraft(null); setDragId(null); setDragNew(null); setArmed(null); };
 
   const shown = draft?.list ?? layout;
-  const fit = useContentRows(gridRef, [wide]);
-  const boxes = arrange(placementsOf(shown, fit), draft?.pin ?? null);
+  const boxes = arrange(placementsOf(shown), draft?.pin ?? null);
   const bottom = Math.max(0, ...[...boxes.values()].map((b) => b.y + b.h));
 
   /** 마우스 위치 → 모눈 칸(화면 배율을 걷어 내고 센다) */
@@ -438,7 +384,7 @@ export default function ExecDashboardScreen() {
                   >
                     <div
                       data-widget-body={slot.id}
-                      className={`min-h-0 flex-1 overflow-hidden [&>section]:overflow-y-auto ${canEdit ? 'pointer-events-none select-none opacity-80' : ''}`}
+                      className={`min-h-0 flex-1 overflow-hidden [&>section]:overflow-hidden ${canEdit ? 'pointer-events-none select-none opacity-80' : ''}`}
                     >
                       <Component />
                     </div>
@@ -486,7 +432,7 @@ export default function ExecDashboardScreen() {
                 className={`min-w-0 ${slot.size <= 6 ? 'col-span-12 lg:col-span-6' : 'col-span-12'}`}
                 style={{ gridRowEnd: `span ${rowsOf(slot)}` }}
               >
-                <div className="h-full overflow-hidden [&>section]:overflow-y-auto"><Component /></div>
+                <div className="h-full overflow-hidden [&>section]:overflow-hidden"><Component /></div>
               </div>
             );
           })}

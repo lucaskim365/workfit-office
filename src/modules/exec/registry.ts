@@ -28,7 +28,7 @@ import {
 interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; minH: number; mini?: boolean; Component: ComponentType }
 
 export const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 220, Component: TodayWidget },
+  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 290, Component: TodayWidget },
   calendar: { title: '캘린더', module: '일정', size: 4, sizes: [4, 6, 8], minH: 420, Component: CalendarWidget },
   weekSchedule: { title: '이번 주 내 일정', module: '일정', size: 6, sizes: [4, 6, 8, 12], minH: 260, Component: WeekScheduleWidget },
   attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
@@ -55,10 +55,10 @@ export const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
 /** 웹 기본 배치(2026-11-10 사용자가 맞춘 배치) — 칸 자리(x·y)와 세로 칸 수까지 */
 export const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
   { id: 'today', size: 12, x: 0, y: 0 },
-  { id: 'attendance', size: 8, x: 0, y: 4 },
-  { id: 'approval', size: 4, x: 8, y: 4 },
-  { id: 'notice', size: 8, x: 0, y: 11, rows: 3 },
-  { id: 'birthday', size: 4, x: 8, y: 8, rows: 6 },
+  { id: 'attendance', size: 8, x: 0, y: 5 },
+  { id: 'approval', size: 4, x: 8, y: 5 },
+  { id: 'notice', size: 8, x: 0, y: 12, rows: 3 },
+  { id: 'birthday', size: 4, x: 8, y: 9, rows: 6 },
 ];
 
 /** 휴대폰 기본 — size 6 은 반 칸(요약), 12 는 한 줄 전체 */
@@ -93,7 +93,7 @@ export const minRowsOf = (id: WidgetId) => rowsFor(WIDGETS[id].minH);
 export const minColsOf = (id: WidgetId) => Math.min(...WIDGETS[id].sizes);
 /** 위젯이 차지하는 세로 칸 수 */
 export const rowsOf = (slot: WidgetSlot<WidgetId>) => Math.max(slot.rows ?? 0, minRowsOf(slot.id));
-/** fit — 내용이 실제로 차지하는 칸 수. 정한 칸보다 내용이 길면 그만큼 늘려 위젯 안에 스크롤이 생기지 않게 한다 */
-export const placementsOf = (list: WidgetSlot<WidgetId>[], fit: Partial<Record<WidgetId, number>> = {}) =>
-  list.map((s) => ({ id: s.id, w: Math.max(s.size, minColsOf(s.id)), h: Math.max(rowsOf(s), fit[s.id] ?? 0), x: s.x, y: s.y }));
+/** 높이는 정한 칸 그대로 — 내용이 길면 위젯 안에서 들어가는 만큼만 보인다 */
+export const placementsOf = (list: WidgetSlot<WidgetId>[]) =>
+  list.map((s) => ({ id: s.id, w: Math.max(s.size, minColsOf(s.id)), h: rowsOf(s), x: s.x, y: s.y }));
 

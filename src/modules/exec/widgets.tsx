@@ -112,8 +112,14 @@ export function Head({ title, note, to, toLabel = '전체 보기' }: { title: st
 }
 
 export function Panel({ className = '', children }: { className?: string; children: ReactNode }) {
-  return <section className={`h-full min-w-0 rounded-[20px] border border-border bg-panel p-5 ${className}`}>{children}</section>;
+  return <section className={`flex h-full min-w-0 flex-col rounded-[20px] border border-border bg-panel p-5 ${className}`}>{children}</section>;
 }
+
+/**
+ * 높이가 정해진 위젯의 목록 — 칸에 다 들어가는 줄까지만 보이고 나머지는 숨는다(스크롤 없음).
+ * 세로 flex 를 줄바꿈시켜 넘치는 줄을 오른쪽 보이지 않는 열로 보낸다. 높이가 자유로운 모바일에서는 다 보인다.
+ */
+const FIT_LIST = 'min-h-0 flex-1 flex flex-col flex-wrap content-start overflow-hidden [&>li]:w-full';
 
 /** 작게 보기 — 모바일에서 반 칸짜리 위젯. 지원하는 위젯은 요약만 크게 보여 준다 */
 const MiniContext = createContext(false);
@@ -565,7 +571,7 @@ export function ApprovalWidget() {
       {pending.length === 0 ? (
         <Empty>결재할 문서가 없습니다.</Empty>
       ) : (
-        <ul className="m-0 list-none p-0">
+        <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
           {pending.slice(0, 4).map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => navigate(`/gw/approval?doc=${encodeURIComponent(d.id)}`)} className="group flex w-full cursor-pointer items-center gap-3 py-1.5 text-left">
@@ -600,7 +606,7 @@ export function ResourceWidget() {
       {upcoming.length === 0 ? (
         <Empty>다가오는 예약이 없습니다.</Empty>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        <ul className={`m-0 list-none gap-2 p-0 ${FIT_LIST}`}>
           {upcoming.map((r) => {
             const date = kstDate(r.startAt);
             const isToday = date === today;
@@ -696,7 +702,7 @@ export function NoticeWidget() {
       {notices.length === 0 ? (
         <Empty>등록된 공지사항이 없습니다.</Empty>
       ) : (
-        <ul className="m-0 list-none p-0">
+        <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
           {notices.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => openPost(p)} className="group grid w-full cursor-pointer grid-cols-[44px_minmax(0,1fr)] items-center gap-3 rounded-lg py-2 text-left">
@@ -953,7 +959,7 @@ export function CalendarWidget() {
           );
         })}
       </div>
-      <div className="mt-3 border-t border-border pt-3">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-border pt-3">
         <div className="mb-2 text-[12px] font-bold text-ink2">
           {Number(picked.slice(5, 7))}월 {Number(picked.slice(8))}일 {WEEKDAYS[weekdayOf(picked)]}요일
           {holidayOf.get(picked) && <span className="ml-1.5 text-[#d97a7a]">{holidayOf.get(picked)}</span>}
@@ -961,7 +967,7 @@ export function CalendarWidget() {
         {pickedEntries.length === 0 ? (
           <div className="text-[12px] text-ink3">일정이 없습니다.</div>
         ) : (
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+          <ul className={`m-0 list-none gap-1.5 p-0 ${FIT_LIST}`}>
             {pickedEntries.map((e) => {
               const look = chipLook(e);
               return (
@@ -996,7 +1002,7 @@ export function WeekScheduleWidget() {
   return (
     <Panel>
       <Head title="이번 주 내 일정" to={() => navigate('/gw/work-plan')} toLabel="업무계획" />
-      <ul className="m-0 flex list-none flex-col p-0">
+      <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
         {week.map((date) => {
           const entries = me ? cellOf(me.id, date).entries : [];
           const isToday = date === today;
@@ -1045,7 +1051,7 @@ export function PendingApprovalWidget() {
       {pending.length === 0 ? (
         <Empty>결재할 문서가 없습니다.</Empty>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        <ul className={`m-0 list-none gap-1.5 p-0 ${FIT_LIST}`}>
           {pending.slice(0, 6).map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => navigate(`/gw/approval?doc=${encodeURIComponent(d.id)}`)} className="group flex w-full cursor-pointer items-center gap-3 rounded-xl bg-panel-alt px-3 py-2 text-left hover:bg-[#e6eef8] dark:hover:bg-white/10">
@@ -1079,7 +1085,7 @@ export function MyDraftsWidget() {
       {docs.length === 0 ? (
         <Empty>진행 중인 문서가 없습니다.</Empty>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        <ul className={`m-0 list-none gap-3 p-0 ${FIT_LIST}`}>
           {docs.slice(0, 5).map((d) => {
             const line = d.steps.filter((s) => s.kind !== '참조').slice().sort((a, b) => a.seq - b.seq);
             const done = line.filter((s) => s.decision === '승인').length;
@@ -1267,7 +1273,7 @@ export function BirthdayWidget() {
       {list.length === 0 ? (
         <Empty>이번 달 생일인 사람이 없습니다.</Empty>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+        <ul className={`m-0 list-none gap-0.5 p-0 ${FIT_LIST}`}>
           {list.map(({ person, date }) => {
             const u = byId.get(person.userId)!;
             const isToday = date === today;
@@ -1307,7 +1313,7 @@ export function RecentPostsWidget() {
       {recent.length === 0 ? (
         <Empty>게시글이 없습니다.</Empty>
       ) : (
-        <ul className="m-0 list-none p-0">
+        <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
           {recent.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => navigate(`/gw/board?board=${p.boardId}&postId=${encodeURIComponent(p.id)}`)} className="group grid w-full cursor-pointer grid-cols-[60px_minmax(0,1fr)_40px] items-center gap-2.5 py-2 text-left">
