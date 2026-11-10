@@ -101,3 +101,58 @@ export function donutSlices<K extends string>(counts: Array<{ key: K; value: num
       return { ...c, from, to: acc / total };
     });
 }
+
+/**
+ * 겹치는 일정 줄 나누기 — 시작 순으로 놓으며, 앞 일정과 겹치면 다음 칸으로 내린다.
+ * 반환: 각 항목의 칸 번호(0부터)와 전체 칸 수.
+ */
+export function packLanes<T extends { start: string | null; end: string | null }>(items: T[]): { lanes: Array<{ item: T; lane: number }>; count: number } {
+  const spans = items
+    .map((item) => ({ item, s: minutesOf(item.start), e: minutesOf(item.end) }))
+    .filter((x): x is { item: T; s: number; e: number | null } => x.s !== null)
+    .map((x) => ({ item: x.item, s: x.s, e: x.e === null || x.e <= x.s ? x.s + 60 : x.e }))
+    .sort((a, b) => a.s - b.s || b.e - a.e);
+  const laneEnds: number[] = [];
+  const lanes = spans.map(({ item, s, e }) => {
+    let lane = laneEnds.findIndex((end) => end <= s);
+    if (lane < 0) { lane = laneEnds.length; laneEnds.push(e); } else laneEnds[lane] = e;
+    return { item, lane };
+  });
+  return { lanes, count: laneEnds.length };
+}
+
+/* ───────── 위젯 배치 ───────── */
+
+/** 위젯 폭 — 12칸 중 몇 칸 */
+export const WIDGET_SIZES = [4, 6, 8, 12] as const;
+export type WidgetSize = (typeof WIDGET_SIZES)[number];
+export interface WidgetSlot<Id extends string = string> { id: Id; size: WidgetSize }
+
+/** 저장된 배치 정리 — 모르는 위젯·중복·잘못된 폭은 버린다. 비어 있으면 기본 배치 */
+export function normalizeLayout<Id extends string>(saved: unknown, known: readonly Id[], fallback: WidgetSlot<Id>[]): WidgetSlot<Id>[] {
+  if (!Array.isArray(saved)) return fallback;
+  const seen = new Set<string>();
+  const out: WidgetSlot<Id>[] = [];
+  for (const raw of saved) {
+    const id = (raw as { id?: unknown })?.id;
+    const size = (raw as { size?: unknown })?.size;
+    if (typeof id !== 'string' || !known.includes(id as Id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id: id as Id, size: (WIDGET_SIZES as readonly number[]).includes(size as number) ? (size as WidgetSize) : 6 });
+  }
+  return out.length ? out : fallback;
+}
+
+/** from 자리의 위젯을 to 자리로 옮긴다 */
+export function moveSlot<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || from >= list.length) return list;
+  const next = [...list];
+  const [x] = next.splice(from, 1);
+  next.splice(Math.max(0, Math.min(to, next.length)), 0, x);
+  return next;
+}
+
+/** 다음 폭 — 4 → 6 → 8 → 12 → 4 */
+export function nextSize(size: WidgetSize): WidgetSize {
+  return WIDGET_SIZES[(WIDGET_SIZES.indexOf(size) + 1) % WIDGET_SIZES.length];
+}

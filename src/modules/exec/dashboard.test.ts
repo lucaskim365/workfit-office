@@ -50,3 +50,29 @@ test('도넛 조각 — 0 은 빼고 누적', () => {
   assert.deepEqual(s.map((x) => [x.key, x.from, x.to]), [['a', 0, 0.25], ['c', 0.25, 1]]);
   assert.deepEqual(donutSlices([{ key: 'a', value: 0 }]), []);
 });
+
+import { moveSlot, nextSize, normalizeLayout, packLanes } from './dashboard';
+
+test('겹치는 일정은 다음 칸으로', () => {
+  const r = packLanes([
+    { id: 'a', start: '10:00', end: '11:00' },
+    { id: 'b', start: '10:30', end: '12:00' },
+    { id: 'c', start: '11:00', end: '11:30' },
+    { id: 'd', start: null, end: null },
+  ]);
+  assert.equal(r.count, 2);
+  assert.deepEqual(r.lanes.map((x) => [x.item.id, x.lane]), [['a', 0], ['b', 1], ['c', 0]]);
+  assert.equal(packLanes([]).count, 0);
+});
+
+test('위젯 배치 정리·이동·폭', () => {
+  const known = ['a', 'b', 'c'] as const;
+  const fb = [{ id: 'a' as const, size: 12 as const }];
+  assert.deepEqual(normalizeLayout(null, known, fb), fb);
+  assert.deepEqual(normalizeLayout([{ id: 'x', size: 4 }], known, fb), fb);
+  assert.deepEqual(normalizeLayout([{ id: 'b', size: 5 }, { id: 'b', size: 4 }, { id: 'c', size: 8 }], known, fb), [{ id: 'b', size: 6 }, { id: 'c', size: 8 }]);
+  assert.deepEqual(moveSlot(['a', 'b', 'c'], 0, 2), ['b', 'c', 'a']);
+  assert.deepEqual(moveSlot(['a', 'b', 'c'], 2, 0), ['c', 'a', 'b']);
+  assert.equal(nextSize(12), 4);
+  assert.equal(nextSize(4), 6);
+});
