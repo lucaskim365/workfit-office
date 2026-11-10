@@ -22,6 +22,7 @@ import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
 import { USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { chipLook } from '@/modules/gw/task/components/entryChipLook';
 import type { Post } from '@/domain/board/schema';
 import {
   ATTENDANCE_BUCKETS,
@@ -145,11 +146,8 @@ function useDeptId() {
 /* ───────────────────────── 오늘 일정 ───────────────────────── */
 
 type Tone = 'company' | 'special' | 'general';
-const BLOCK: Record<Tone, string> = {
-  company: 'bg-panel-alt text-ink2 border-border',
-  special: 'bg-[#fff1db] text-[#8a5a17] border-[#f0c98a] dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
-  general: 'bg-[#e0f0fb] text-[#0c5c96] border-[#9fcfee] dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30',
-};
+/** 회사 중요 일정 칸 — 나머지 칸 색은 업무계획과 같은 chipLook 을 쓴다 */
+const COMPANY_BLOCK = 'bg-panel-alt text-ink2 border border-border';
 
 interface TimelineItem {
   key: string;
@@ -158,17 +156,10 @@ interface TimelineItem {
   end: string | null;
   allDay: boolean;
   tone: Tone;
+  /** 칸 색(업무계획과 같은 색) · 태그 색 점 */
+  badgeClass: string;
+  dotClass?: string;
   onClick: () => void;
-}
-
-function entryLabel(e: DayEntry): string {
-  switch (e.source) {
-    case 'MEETING': return '회의';
-    case 'OUTSIDE': return '외근';
-    case 'APPROVAL': return e.schedule?.category === 'LEAVE' ? '휴가' : '출장';
-    case 'CALENDAR': return '일정';
-    default: return e.tag?.name || '업무';
-  }
 }
 
 /** 회의·외근·출장·휴가는 위 줄, 업무·일정은 아래 줄 */
@@ -193,7 +184,7 @@ function LaneGroup({ items }: { items: TimelineItem[] }) {
             type="button"
             onClick={i.onClick}
             title={i.start === '08:00' && i.end === '20:00' ? i.title : `${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
-            className={`absolute cursor-pointer overflow-hidden rounded-md border px-1.5 text-left text-[11px] font-bold whitespace-nowrap ${BLOCK[i.tone]}`}
+            className={`absolute flex cursor-pointer items-center gap-1 overflow-hidden rounded-md px-1.5 text-left text-[11px] font-bold whitespace-nowrap ${i.badgeClass}`}
             style={{
               left: `calc(${sp.left}% + 1px)`,
               width: `calc(${sp.width}% - 2px)`,
@@ -202,7 +193,8 @@ function LaneGroup({ items }: { items: TimelineItem[] }) {
               lineHeight: `${LANE_H - 2}px`,
             }}
           >
-            {i.title}
+            {i.dotClass && <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${i.dotClass}`} />}
+            <span className="truncate">{i.title}</span>
           </button>
         );
       })}
@@ -259,11 +251,13 @@ export function TodayWidget() {
 
   const items: TimelineItem[] = [
     ...(companyImportant
-      ? [{ key: 'important', title: companyImportant, start: null, end: null, allDay: true, tone: 'company' as const, onClick: () => navigate('/gw/work-plan') }]
+      ? [{ key: 'important', title: companyImportant, start: null, end: null, allDay: true, tone: 'company' as const, badgeClass: COMPANY_BLOCK, onClick: () => navigate('/gw/work-plan') }]
       : []),
     ...myEntries.map((e) => ({
       key: e.key,
-      title: `${entryLabel(e)} ${e.title}`,
+      title: chipLook(e).label,
+      badgeClass: chipLook(e).badgeClass,
+      dotClass: chipLook(e).dotClass,
       start: e.startTime,
       end: e.endTime,
       allDay: e.allDay,
@@ -914,11 +908,15 @@ export function WeekScheduleWidget() {
               </span>
               <span className="flex min-w-0 flex-wrap gap-1">
                 {entries.length === 0 && <span className="text-[12px] text-ink3">-</span>}
-                {entries.slice(0, 3).map((e) => (
-                  <span key={e.key} className={`max-w-full truncate rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${isSpecial(e) ? BLOCK.special : BLOCK.general}`}>
-                    {e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)} ` : ''}{entryLabel(e)} {e.title}
-                  </span>
-                ))}
+                {entries.slice(0, 3).map((e) => {
+                  const look = chipLook(e);
+                  return (
+                    <span key={e.key} className={`flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${look.badgeClass}`}>
+                      {look.dotClass && <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${look.dotClass}`} />}
+                      <span className="truncate">{e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)} ` : ''}{look.label}</span>
+                    </span>
+                  );
+                })}
                 {entries.length > 3 && <span className="px-1 text-[11px] font-bold text-ink3">+{entries.length - 3}</span>}
               </span>
             </li>
