@@ -2,6 +2,7 @@ import { lazy as reactLazy, Suspense, useEffect, type ComponentType } from 'reac
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from './shell/AppShell';
 const SheetEditorPage = lazy(() => import('@/modules/base/approvalForm/sheet/SheetEditorPage'));
+const WordEditorPage = lazy(() => import('@/modules/gw/word/WordEditorPage'));
 import MobileApp from '@/mobile/MobileApp';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
@@ -264,6 +265,8 @@ export default function App() {
 
       {/* 결재서식 시트 편집기 — 편집기만 있는 새 탭(앱 상단바·탭·메뉴 없음) */}
       <Route path="/sheet-editor" element={<Suspense fallback={null}><SheetEditorPage /></Suspense>} />
+      {/* 워드 편집기 확인용 — 편집기만 있는 새 탭(쓰일 곳이 정해지면 붙인다) */}
+      <Route path="/word-editor" element={<Suspense fallback={null}><WordEditorPage /></Suspense>} />
 
       <Route path="/*" element={<AppShell routes={shellRoutes} />} />
     </Routes>
