@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { SheetView, downloadXlsx, exportXlsx, type Sheet } from '@/lib/sheet';
+import { DEFAULT_COL_WIDTH, SheetView, downloadXlsx, exportXlsx, type Sheet, type XlsxPicture } from '@/lib/sheet';
+import { captureElementPng } from '@/shared/lib/pdf';
 import { docExportOptions } from '@/domain/approvalForm/sheet/docExport';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
@@ -13,6 +14,36 @@ import { SealMarkProvider } from '../components/CompanySeal';
 
 /** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
 const PRINT_FIT = { rootSelector: '.approval-print', pageWidthMm: 182 };
+
+/**
+ * 엑셀에 넣을 그림 — 화면에 그려진 문서 머리 부품(결재란·회사 로고·기안자 서명·회사 정보)과 찍힌 직인을 그대로 떠서
+ * 그 칸 자리(시트 px)에 놓는다. 화면 배율·맞춤 축소와 상관없이 칸 폭 대비 비율로 잰다. 떠낸 부품 칸은 글자를 비운다
+ */
+async function capturePictures(box: HTMLElement | null, sheet: Sheet): Promise<{ pictures: XlsxPicture[]; slots: Set<string> }> {
+  const pictures: XlsxPicture[] = [];
+  const slots = new Set<string>();
+  if (!box) return { pictures, slots };
+  const els = Array.from(box.querySelectorAll<HTMLElement>('[data-slot], [data-seal]'));
+  for (const el of els) {
+    // 직인은 찍혔을 때만(그림이 있을 때) — 안 찍힌 '(직인)' 글자는 칸 글자 그대로
+    if (el.dataset.seal !== undefined && !el.querySelector('img')) continue;
+    const td = el.closest<HTMLElement>('td[data-sheet-cell]');
+    if (!td) continue;
+    const [r, c] = (td.dataset.sheetCell ?? '').split(':').map(Number);
+    const m = sheet.merges.find((x) => x.startRow === r && x.startCol === c);
+    let cellPx = 0;
+    for (let k = c; k < c + (m?.colSpan ?? 1); k++) cellPx += sheet.colWidths[sheet.cols[k]] ?? DEFAULT_COL_WIDTH;
+    const tdBox = td.getBoundingClientRect();
+    const elBox = el.getBoundingClientRect();
+    if (!tdBox.width || !elBox.width || !elBox.height) continue;
+    const k = cellPx / tdBox.width;
+    const data = await captureElementPng(el);
+    if (!data) continue;
+    pictures.push({ r, c, x: (elBox.left - tdBox.left) * k, y: (elBox.top - tdBox.top) * k, width: elBox.width * k, height: elBox.height * k, data, type: 'png' });
+    if (el.dataset.slot) slots.add(el.dataset.slot);
+  }
+  return { pictures, slots };
+}
 
 /** 시트 서식으로 쓴 문서인가 — 서식 버전이 남아 있으면 */
 export function isSheetDoc(fieldValues: Record<string, unknown> | undefined): boolean {
@@ -78,6 +109,7 @@ export function SheetDocView({
   }, [loaded, rawValues, rawRows, external]);
 
   // 엑셀로 받기 — 최신 값으로 부르게(문서·가림 상태가 바뀌어도 함수는 한 번만 넘긴다)
+  const boxRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef({ sheet, condHidden, masked, docInfo, slotText });
   exportRef.current = { sheet, condHidden, masked, docInfo, slotText };
   const ready = !!sheet;
@@ -90,8 +122,11 @@ export function SheetDocView({
     onExportReady(async (fileName) => {
       const cur = exportRef.current;
       if (!cur.sheet) return;
-      const bytes = await exportXlsx(cur.sheet, docExportOptions({ ...cur, sheet: cur.sheet, sheetName: fileName }));
-      downloadXlsx(bytes, fileName);
+      const { pictures, slots } = await capturePictures(boxRef.current, cur.sheet);
+      const slotText = { ...cur.slotText };
+      slots.forEach((s) => (slotText[s as keyof SheetSlots] = ''));
+      const opts = docExportOptions({ ...cur, slotText, sheet: cur.sheet, sheetName: fileName });
+      downloadXlsx(await exportXlsx(cur.sheet, { ...opts, pictures }), fileName);
     });
     return () => onExportReady(null);
   }, [onExportReady, ready]);
@@ -124,14 +159,16 @@ export function SheetDocView({
       }}
       renderOverlay={(r, c) =>
         isSealCell(sheet, r, c) ? (
-          <span className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2">
+          <span data-seal="" className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2">
             <SealImage stamped={stamped} size={56} />
           </span>
         ) : null
       }
     />
   );
-  const body = sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
+  const inner = sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
+  // 엑셀 받기 때 그림 자리를 재는 상자
+  const body = <div ref={boxRef}>{inner}</div>;
   // 결재자가 알아보게 — 기안자가 서식의 표 모양(열·행·수식)을 고친 문서. 인쇄·대외 문서에는 안 나옴
   if (!own || external) return body;
   return (

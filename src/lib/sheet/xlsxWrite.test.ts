@@ -80,3 +80,26 @@ test('파일 구조 — 시트 탭 이름은 엑셀 규칙대로', async () => {
   assert.deepEqual([...files.keys()].sort(), ['[Content_Types].xml', '_rels/.rels', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml']);
   assert.match(new TextDecoder().decode(files.get('xl/workbook.xml')), /name="발주 2026 11  사본"/);
 });
+
+test('그림 — 칸 자리에 띄우고, 넘친 자리는 옆·아래 칸으로, 빼는 행의 그림은 뺀다', async () => {
+  const { xlsxSheetImages } = await import('./xlsx');
+  const s = sample(); // 열 A=150px, 나머지 96px, 0행 40px
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const bytes = await exportXlsx(s, {
+    skipRow: (r) => r === 3,
+    pictures: [
+      { r: 2, c: 0, x: 160, y: 2, width: 56, height: 56, data: png, type: 'png' }, // A열(150px)을 넘어 B열로
+      { r: 3, c: 1, x: 0, y: 0, width: 10, height: 10, data: png, type: 'png' }, // 빼는 행 → 없음
+    ],
+  });
+  const files = await unzip(bytes);
+  assert.ok(files.has('xl/media/image1.png'));
+  assert.ok(!files.has('xl/media/image2.png'));
+  const drawing = new TextDecoder().decode(files.get('xl/drawings/drawing1.xml'));
+  assert.match(drawing, /<xdr:col>1<\/xdr:col><xdr:colOff>95250<\/xdr:colOff><xdr:row>2<\/xdr:row>/); // B3, 10px 안쪽
+  const imgs = await xlsxSheetImages(bytes);
+  assert.equal(imgs.length, 1);
+  assert.equal(imgs[0].row, 2);
+  assert.equal(imgs[0].col, 1);
+  assert.equal(Math.round(imgs[0].width), 56);
+});

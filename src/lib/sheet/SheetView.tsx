@@ -165,6 +165,7 @@ export function SheetView({
                 return (
                   <td
                     key={col}
+                    data-sheet-cell={`${rr}:${c}`}
                     rowSpan={rowSpan > 1 ? rowSpan : undefined}
                     colSpan={m && m.colSpan > 1 ? m.colSpan : undefined}
                     className={`overflow-hidden px-1 align-middle whitespace-pre-wrap break-words ${cellClassName?.(rr, c) ?? ''}`}

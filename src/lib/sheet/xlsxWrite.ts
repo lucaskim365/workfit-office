@@ -2,6 +2,7 @@
  * 엑셀(.xlsx) 내보내기 — 외부 라이브러리 없이 시트를 엑셀 파일로 만든다(불러오기 xlsx.ts 의 반대).
  * 담는 것: 값(숫자는 숫자로), 수식(계산된 값과 함께, 고를 때만), 병합, 열 너비·행 높이,
  *          글자(굵게·기울임·밑줄·크기·색), 배경색, 정렬, 숫자 표시(금액·백분율), 테두리, 줄바꿈.
+ * 그림(PNG·JPEG)은 칸 위치에 띄운다(직인·로고·결재란 등 — 쓰는 쪽이 그림을 만들어 넘긴다).
  * 시트 한 장 = 엑셀 시트 한 장. 문자열은 칸 안에 바로 넣는다(inlineStr — 공유 문자열 표 없이).
  */
 import { colLetter, parseNumber } from './formula';
@@ -17,7 +18,27 @@ export interface XlsxExportOptions {
   cellText?: (r: number, c: number) => string | undefined;
   /** 수식도 담기(기본 false — 계산된 값만). 행을 빼면 무시하고 값만 */
   formulas?: boolean;
+  /** 칸 위치에 띄울 그림 — 빼는 행에 걸린 그림은 뺀다 */
+  pictures?: XlsxPicture[];
 }
+
+/**
+ * 칸 위치에 띄우는 그림. 자리는 (r, c) 칸의 왼쪽 위에서 x·y(px, 시트 기준)만큼 — 음수나 칸보다 큰 값이면 옆·위·아래 칸으로 넘어간다.
+ * 크기도 시트 px(열 너비·행 높이와 같은 단위)
+ */
+export interface XlsxPicture {
+  r: number;
+  c: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  data: Uint8Array;
+  type: 'png' | 'jpeg';
+}
+
+/** px → 엑셀 도형 단위(EMU, 96dpi 기준 1px = 9525) */
+const EMU = 9525;
 
 /** 엑셀 기본 글자 크기(pt) — 화면 기본(12px = 9pt)보다 조금 크게, 엑셀에서 읽기 좋게 */
 const DEFAULT_PT = 10;
@@ -223,6 +244,33 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     })
     .join('');
 
+  // 그림 — 칸 기준 자리를 실제 칸(남긴 행 기준)으로 옮겨 놓는다
+  const colW = s.cols.map((col) => s.colWidths[col] ?? DEFAULT_COL_WIDTH);
+  const rowH = keepRows.map((r) => s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT);
+  const pics = (opts.pictures ?? []).filter((p) => newRow.has(p.r) && p.c >= 0 && p.c < s.cols.length && p.width > 0 && p.height > 0);
+  const anchors = pics.map((p, i) => {
+    let col = p.c;
+    let x = p.x;
+    while (x < 0 && col > 0) x += colW[--col];
+    while (col < colW.length - 1 && x >= colW[col]) x -= colW[col++];
+    let row = newRow.get(p.r)!;
+    let y = p.y;
+    while (y < 0 && row > 0) y += rowH[--row];
+    while (row < rowH.length - 1 && y >= rowH[row]) y -= rowH[row++];
+    const cx = Math.round(p.width * EMU);
+    const cy = Math.round(p.height * EMU);
+    return (
+      '<xdr:oneCellAnchor>' +
+      `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${Math.max(0, Math.round(x * EMU))}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${Math.max(0, Math.round(y * EMU))}</xdr:rowOff></xdr:from>` +
+      `<xdr:ext cx="${cx}" cy="${cy}"/>` +
+      `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i + 2}" name="그림 ${i + 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+      `<xdr:blipFill><a:blip r:embed="rId${i + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+      `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
+      '<xdr:clientData/></xdr:oneCellAnchor>'
+    );
+  });
+  const hasPics = pics.length > 0;
+
   const lastRef = `${colLetter(Math.max(0, s.cols.length - 1))}${Math.max(1, keepRows.length)}`;
   const sheetXml =
     XML_HEAD +
@@ -235,16 +283,20 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     (merges.length ? `<mergeCells count="${merges.length}">${merges.join('')}</mergeCells>` : '') +
     '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
     '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' +
+    (hasPics ? '<drawing r:id="rId1"/>' : '') +
     '</worksheet>';
 
   const name = safeSheetName(opts.sheetName);
-  const files: [string, string][] = [
+
+  const files: [string, string | Uint8Array][] = [
     [
       '[Content_Types].xml',
       XML_HEAD +
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
         '<Default Extension="xml" ContentType="application/xml"/>' +
+        (hasPics ? '<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>' : '') +
+        (hasPics ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : '') +
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
@@ -276,6 +328,34 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     ['xl/worksheets/sheet1.xml', sheetXml],
     ['xl/styles.xml', book.toXml()],
   ];
+  if (hasPics) {
+    files.push(
+      [
+        'xl/worksheets/_rels/sheet1.xml.rels',
+        XML_HEAD +
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>' +
+          '</Relationships>',
+      ],
+      [
+        'xl/drawings/drawing1.xml',
+        XML_HEAD +
+          '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="' +
+          NS_REL +
+          '">' +
+          anchors.join('') +
+          '</xdr:wsDr>',
+      ],
+      [
+        'xl/drawings/_rels/drawing1.xml.rels',
+        XML_HEAD +
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          pics.map((p, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${i + 1}.${p.type}"/>`).join('') +
+          '</Relationships>',
+      ],
+      ...pics.map((p, i): [string, Uint8Array] => [`xl/media/image${i + 1}.${p.type}`, p.data])
+    );
+  }
   return zip(files);
 }
 

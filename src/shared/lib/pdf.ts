@@ -151,3 +151,33 @@ export async function exportElementToPdf(el: HTMLElement, fileName: string): Pro
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * 화면 요소 하나 → PNG 바이트(엑셀에 넣을 직인·결재란·로고 그림). 바탕은 투명, 2배 선명도.
+ * PDF 와 같은 방식(다른 서버 그림 미리 받기, 화면 배율 되돌리기). 못 뜨면 null
+ */
+export async function captureElementPng(el: HTMLElement): Promise<Uint8Array | null> {
+  try {
+    await waitForImages(el);
+    const inlined = await inlineImageSources(el);
+    const { default: html2canvas } = await import('html2canvas-pro');
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: null,
+      onclone: async (cloned, clonedEl) => {
+        cloned.documentElement.style.zoom = '1';
+        cloned.body.style.zoom = '1';
+        Array.from(clonedEl.querySelectorAll('img')).forEach((img) => {
+          const data = inlined.get(img.currentSrc || img.src);
+          if (data) img.src = data;
+        });
+        await waitForImages(clonedEl);
+      },
+    });
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+  } catch {
+    return null;
+  }
+}
