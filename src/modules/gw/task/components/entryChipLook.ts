@@ -79,7 +79,13 @@ function chipLookOf(entry: DayEntry): { label: string; badgeClass: string; dotCl
       const chip = scheduleChip(s);
       if (s.category === 'LEAVE') return { label: `[휴가] ${chip.label}`, badgeClass: STATUS_TONES[chip.kind].badge };
       return {
-        label: outsideChipLabel({ category: s.category, subType: s.subType, purpose: s.purpose }),
+        // 동행자 칸은 직접 등록 외근과 같이 '동행 · 기안자'로
+        label: outsideChipLabel({
+          category: s.category,
+          subType: s.subType,
+          purpose: s.purpose,
+          companionOwnerName: entry.companionOf ? s.drafterName ?? '' : null,
+        }),
         badgeClass: STATUS_TONES[chip.kind].badge,
       };
     }

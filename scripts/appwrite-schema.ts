@@ -974,6 +974,31 @@ const COLLECTIONS: CollectionDef[] = [
     ],
   },
   {
+    id: 'scheduleChanges',
+    name: '결재 일정 변경 기록',
+    /*
+      결재 완료 외근·출장의 날짜·시간을 결재 후에 바꾼 기록(더하기만 한다). 문서별 마지막 기록이
+      업무계획·캘린더·근태·재실 상태의 일정을 덮어쓴다. 결재 문서(approvalDocs)는 건드리지 않는다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('docId', 64, true),
+      S('startDate', 40, true),
+      S('endDate', 40, true),
+      S('startTime', 8),
+      S('endTime', 8),
+      S('prevStartDate', 40, true),
+      S('prevEndDate', 40, true),
+      S('prevStartTime', 8),
+      S('prevEndTime', 8),
+      S('reason', 300, true),
+      S('changedBy', 64, true),
+      S('changedByName', 60),
+      S('createdAt', 40, true),
+    ],
+    indexes: [IX('scDoc', ['docId'])],
+  },
+  {
     id: 'resources',
     name: '예약 자원',
     attributes: [

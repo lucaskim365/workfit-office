@@ -24,6 +24,7 @@ import { Button } from '@/shared/ui/Button';
 import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { buildScheduleEvents } from '@/domain/calendarEvent/scheduleEvents';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
@@ -243,10 +244,11 @@ function LocalCalendarScreen() {
   const approvalsQuery = useAllApprovals();
   // 결재 없이 직접 등록한 외근·출장도 같은 모양으로 투영한다(전사 공개)
   const outsideWorksQuery = useOutsideWorks(range);
+  const scheduleChanges = useScheduleChanges();
   // outsideViewByEventId: 투영 일정 id → 외근·출장 상세. 외근·출장 칩을 누르면 일정 창 대신 상세를 연다.
   const { scheduleEvents, outsideViewByEventId } = useMemo(
-    () => buildScheduleEvents(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], userMap, activeUserIdSet),
-    [approvalsQuery.data, outsideWorksQuery.data, activeUserIdSet, userMap],
+    () => buildScheduleEvents(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], userMap, activeUserIdSet, scheduleChanges),
+    [approvalsQuery.data, outsideWorksQuery.data, activeUserIdSet, userMap, scheduleChanges],
   );
   const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
   const [outsideEdit, setOutsideEdit] = useState<OutsideWork | null>(null);

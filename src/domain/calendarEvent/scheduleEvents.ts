@@ -3,6 +3,7 @@ import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { scheduleChip } from '@/domain/commute/statusDisplay';
 import { outsideTitleOf, type OutsideWork } from '@/domain/outsideWork/schema';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { ScheduleChange } from '@/domain/scheduleChange/schema';
 import type { CalendarEvent, CalendarEventType } from './schema';
 
 interface ScheduleUser {
@@ -39,6 +40,7 @@ export function buildScheduleEvents(
   outsideWorks: OutsideWork[],
   userMap: Map<string, ScheduleUser>,
   activeUserIds: Set<string>,
+  changes?: ReadonlyMap<string, ScheduleChange>,
 ): ScheduleEventsResult {
   const scheduleEvents: CalendarEvent[] = [];
   const outsideViewByEventId = new Map<string, OutsideScheduleView>();
@@ -48,19 +50,21 @@ export function buildScheduleEvents(
     return user?.position ? `${name} ${user.position}` : name;
   };
 
-  for (const s of extractApprovedSchedules(approvalDocs)) {
+  for (const s of extractApprovedSchedules(approvalDocs, changes)) {
     if (s.drafterId && !activeUserIds.has(s.drafterId)) continue;
 
     const isLeave = s.category === 'LEAVE';
+    const companions = (s.companionIds ?? []).filter((id) => activeUserIds.has(id));
+    const withCompanions = companions.length ? ` 외 ${companions.length}명` : '';
     const eventType: CalendarEventType = isLeave ? 'VACATION' : 'OUTSIDE';
     const who = nameWithPos(s.drafterId, s.drafterName);
     // 외근·출장은 업무계획과 같이 제목(목적 첫 줄)만 — 행선지는 상세에서
     const subject = outsideTitleOf(s.purpose);
     const title = isLeave
       ? `[휴가] ${who} (${scheduleChip(s).label})`
-      : `${s.category === 'TRIP' ? '[출장]' : '[외근]'} ${who}${subject ? ` · ${subject}` : ''}`;
+      : `${s.category === 'TRIP' ? '[출장]' : '[외근]'} ${who}${withCompanions}${subject ? ` · ${subject}` : ''}`;
     const isAllDay = !s.startTime || !s.endTime || s.startTime >= s.endTime;
-    const outsideView = fromApprovalSchedule(s);
+    const outsideView = fromApprovalSchedule(s, (id) => userMap.get(id)?.name);
 
     eachDate(s.startDate, s.endDate, (date) => {
       const id = `${APPROVAL_EVENT_PREFIX}${s.docId}-${date}`;
@@ -76,7 +80,7 @@ export function buildScheduleEvents(
         memo: isLeave ? '' : (s.body ? `업무: ${s.body}` : ''),
         visibility: 'COMPANY',
         eventType,
-        attendeeUserIds: [],
+        attendeeUserIds: isLeave ? [] : companions,
         deptId: null,
         projectId: null,
         reminded: true,

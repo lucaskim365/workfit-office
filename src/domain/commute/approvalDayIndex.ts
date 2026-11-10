@@ -4,6 +4,7 @@ import { isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@
 import type { ApprovedLeaveInfo } from './engine';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { outsideWorkToDayInfo } from '@/domain/outsideWork/view';
+import type { ScheduleChange } from '@/domain/scheduleChange/schema';
 
 /** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 + 직접 등록 외근·출장 목록. 같은 날 여러 건을 모두 담는다. */
 export type ApprovalDayMap = Map<string, ApprovedLeaveInfo[]>;
@@ -72,7 +73,11 @@ function holidayWorkRange(doc: ApprovalDoc): { start: string; end: string } | nu
  * `outsideWorks`(결재 없이 직접 등록한 외근·출장)도 결재 완료 외근·출장과 같은 효력으로 넣는다.
  * 근태 판정과 재실 상태가 모두 이 인덱스를 보므로 한 곳에서 넣으면 둘 다 반영된다.
  */
-export function buildApprovalDayIndex(docs: ApprovalDoc[], outsideWorks: readonly OutsideWork[] = []): ApprovalDayIndex {
+export function buildApprovalDayIndex(
+  docs: ApprovalDoc[],
+  outsideWorks: readonly OutsideWork[] = [],
+  changes?: ReadonlyMap<string, ScheduleChange>,
+): ApprovalDayIndex {
   const byKey = new Map<string, ApprovalDayMap>();
   const add = (key: string, date: string, info: ApprovedLeaveInfo) => {
     if (!key) return;
@@ -95,7 +100,7 @@ export function buildApprovalDayIndex(docs: ApprovalDoc[], outsideWorks: readonl
       });
       continue;
     }
-    const s = extractScheduleInfo(doc);
+    const s = extractScheduleInfo(doc, changes);
     if (!s) continue;
     const info = toInfo(doc, s);
     const name = normName(s.drafterName || doc.drafterName);
@@ -103,6 +108,8 @@ export function buildApprovalDayIndex(docs: ApprovalDoc[], outsideWorks: readonl
       add(`id:${s.drafterId}`, date, info);
       if (doc.drafterId !== s.drafterId) add(`id:${doc.drafterId}`, date, info);
       if (name) add(`name:${name}`, date, info);
+      // 동행자도 같은 외근·출장으로 인정한다
+      for (const id of s.companionIds ?? []) add(`id:${id}`, date, info);
     });
   }
 

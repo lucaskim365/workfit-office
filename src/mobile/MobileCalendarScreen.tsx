@@ -20,6 +20,7 @@ import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useUsers } from '@/features/user/useUsers';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { useDepartments } from '@/features/department/useDepartments';
 import { resolveDeptId } from '@/domain/department/engine';
 import { usePermission } from '@/features/auth/usePermission';
@@ -104,9 +105,10 @@ export default function MobileCalendarScreen() {
   // 2. 전자결재 승인 일정(휴가·외근·출장) + 결재 없이 직접 등록한 외근·출장
   const approvalsQuery = useAllApprovals();
   const outsideWorksQuery = useOutsideWorks();
+  const scheduleChanges = useScheduleChanges();
   const { scheduleEvents, outsideViewByEventId } = useMemo(
-    () => buildScheduleEvents(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], userMap, activeUserIdSet),
-    [approvalsQuery.data, outsideWorksQuery.data, userMap, activeUserIdSet],
+    () => buildScheduleEvents(approvalsQuery.data ?? [], outsideWorksQuery.data ?? [], userMap, activeUserIdSet, scheduleChanges),
+    [approvalsQuery.data, outsideWorksQuery.data, userMap, activeUserIdSet, scheduleChanges],
   );
   const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
   const [outsideEdit, setOutsideEdit] = useState<OutsideWork | null>(null);

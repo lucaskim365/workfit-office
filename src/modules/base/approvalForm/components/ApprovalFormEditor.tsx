@@ -51,6 +51,7 @@ import {
   ChevronDown,
   MousePointerClick,
   SlidersHorizontal,
+  UsersRound,
 } from 'lucide-react';
 
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal';
@@ -319,6 +320,14 @@ const COMPONENT_PALETTE = [
     desc: '조직도 임직원 피커',
     defaultWidth: 'half' as const,
     defaultLabel: '대상자',
+  },
+  {
+    type: '다중사용자' as FieldType,
+    label: '임직원 여러 명',
+    icon: '',
+    desc: '조직도에서 여러 명 선택(동행자 등)',
+    defaultWidth: 'full' as const,
+    defaultLabel: '동행자',
   },
   {
     type: '표' as FieldType,
@@ -799,7 +808,7 @@ export function ApprovalFormEditor({
                       onClick={() => handleAddPaletteField(comp)}
                       className="flex items-center gap-2 rounded-lg border border-border/80 bg-panel px-2.5 py-1.5 text-left hover:border-teal hover:bg-teal-soft/30 hover:text-teal transition-all group cursor-pointer shadow-2xs"
                     >
-                      <span className="text-[15px] shrink-0">{comp.icon}</span>
+                      <span className="text-[15px] shrink-0">{comp.icon || <UsersRound size={15} className="text-ink2" />}</span>
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-ink group-hover:text-teal truncate">
                           {comp.label}

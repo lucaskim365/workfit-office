@@ -1,4 +1,5 @@
 import type { FormField, FieldValue } from '@/domain/approvalForm/schema';
+import { splitUserIds } from '@/domain/approvalDoc/scheduleEngine';
 import type { User } from '@/domain/user/schema';
 import type { Department } from '@/domain/department/schema';
 
@@ -90,6 +91,10 @@ export function fieldText(field: FormField, values: Record<string, FieldValue>, 
       return '';
     case '사용자':
       return org?.users.find((u) => u.id === v)?.name ?? (v ? String(v) : '—');
+    case '다중사용자': {
+      const names = splitUserIds(v).map((id) => org?.users.find((u) => u.id === id)?.name ?? id);
+      return names.length ? names.join(', ') : '—';
+    }
     default:
       return v === '' || v == null ? '—' : String(v);
   }
