@@ -233,3 +233,33 @@ export function hoursText(min: number): string {
   if (!h) return `${m}분`;
   return m ? `${h}시간 ${m}분` : `${h}시간`;
 }
+
+/**
+ * 위젯 안의 링크(웹 주소)를 모바일 화면 주소로 — 모바일 경영 현황 탭에서 쓴다.
+ * 결재 문서는 문서 화면으로, 게시글은 게시판의 그 글로, 모바일에 없는 화면은 그룹웨어 첫 화면으로.
+ */
+export function mobilePath(path: string): string {
+  const [pathname, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  switch (pathname) {
+    case '/gw/approval': {
+      const doc = params.get('doc');
+      return doc ? `/m/approval/${encodeURIComponent(doc)}` : '/m/approval';
+    }
+    case '/gw/board':
+      return query ? `/m/board?${query}` : '/m/board';
+    case '/gw/commute':
+    case '/gw/leave':
+      return '/m/commute';
+    case '/gw/calendar':
+      return '/m/calendar';
+    case '/gw/work-plan':
+      return '/m/task';
+    case '/gw/resource':
+      return '/m/resource';
+    case '/gw/orgchart':
+      return '/m/orgchart';
+    default:
+      return '/m';
+  }
+}

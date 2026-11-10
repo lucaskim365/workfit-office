@@ -1,27 +1,9 @@
-import { useEffect, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { MoveDiagonal2, Plus, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { arrange, CELL_GAP, CELL_H, GRID_COLS, MAX_ROWS, normalizeLayout, PITCH, rowsFor, rowsHeight, type WidgetSize, type WidgetSlot } from './dashboard';
-import {
-  ApprovalWidget,
-  AttendanceWidget,
-  AwayTodayWidget,
-  BirthdayWidget,
-  LeaveWidget,
-  MyDraftsWidget,
-  NoticeWidget,
-  PendingApprovalWidget,
-  ProjectWidget,
-  RecentPostsWidget,
-  ResourceTodayWidget,
-  ResourceWidget,
-  TeamWidget,
-  TodayCommuteWidget,
-  TodayWidget,
-  WeekHoursWidget,
-  WeekScheduleWidget,
-} from './widgets';
+import { arrange, CELL_GAP, CELL_H, GRID_COLS, MAX_ROWS, PITCH, rowsHeight, type WidgetSize, type WidgetSlot } from './dashboard';
+import { DEFAULT_LAYOUT, loadLayout, minColsOf, minRowsOf, MODULES, placementsOf, rowsOf, storageKey, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
 
 /**
  * 경영 현황 — 로그인 후 첫 화면. 편집 모드의 '위젯 추가' 창에서 모듈을 골라 위젯을 넣고,
@@ -30,61 +12,13 @@ import {
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
-/** sizes — 고를 수 있는 폭(가장 좁은 것이 최소 폭), minH — 내용이 다 보이는 높이(px). 이 높이가 들어가는 칸 수가 기본이자 최소 칸 수 */
-interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; minH: number; Component: ComponentType }
-
-const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 220, Component: TodayWidget },
-  weekSchedule: { title: '이번 주 내 일정', module: '일정', size: 6, sizes: [4, 6, 8, 12], minH: 260, Component: WeekScheduleWidget },
-  attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
-  todayCommute: { title: '오늘 출퇴근', module: '근태', size: 4, sizes: [4, 6], minH: 180, Component: TodayCommuteWidget },
-  weekHours: { title: '이번 주 근무시간', module: '근태', size: 4, sizes: [4, 6, 8], minH: 220, Component: WeekHoursWidget },
-  leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], minH: 120, Component: LeaveWidget },
-  approval: { title: '전자결재 현황', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 240, Component: ApprovalWidget },
-  approvalPending: { title: '결재 대기', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: PendingApprovalWidget },
-  approvalMine: { title: '내가 올린 문서', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: MyDraftsWidget },
-  resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], minH: 180, Component: ResourceWidget },
-  resourceToday: { title: '오늘 자원 사용', module: '자원예약', size: 8, sizes: [6, 8, 12], minH: 180, Component: ResourceTodayWidget },
-  team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 200, Component: TeamWidget },
-  awayToday: { title: '오늘 휴가·외근', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 160, Component: AwayTodayWidget },
-  birthday: { title: '이달의 생일자', module: '조직도', size: 4, sizes: [4, 6], minH: 200, Component: BirthdayWidget },
-  notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], minH: 150, Component: NoticeWidget },
-  recentPosts: { title: '최근 게시글', module: '게시판', size: 6, sizes: [4, 6, 8, 12], minH: 180, Component: RecentPostsWidget },
-  project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], minH: 220, Component: ProjectWidget },
-} satisfies Record<string, WidgetDef>;
-
-type WidgetId = keyof typeof WIDGETS;
-const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[];
-const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
-
-const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
-  { id: 'today', size: 12 },
-  { id: 'attendance', size: 8 },
-  { id: 'approval', size: 4 },
-  { id: 'resource', size: 4 },
-  { id: 'team', size: 4 },
-  { id: 'project', size: 4 },
-  { id: 'notice', size: 12 },
-];
-
 /** 미리보기를 그릴 실제 폭 — 이 폭으로 그린 뒤 줄여 보인다 */
 const PREVIEW_WIDTH: Record<WidgetSize, number> = { 4: 420, 6: 620, 8: 860, 12: 1180 };
 /** 위젯 추가 창의 카드 폭 — 실제 폭 비율대로 */
 const CARD_WIDTH: Record<WidgetSize, number> = { 4: 196, 6: 290, 8: 386, 12: 580 };
 const CARD_H = 150;
 
-const storageKey = (userId: string) => `workfit.execDashboard.layout.${userId}`;
 const DRAG_NEW = 'application/x-workfit-widget';
-
-function loadLayout(userId: string | undefined): WidgetSlot<WidgetId>[] {
-  if (!userId) return DEFAULT_LAYOUT;
-  try {
-    const raw = localStorage.getItem(storageKey(userId));
-    return normalizeLayout(raw ? JSON.parse(raw) : null, WIDGET_IDS, DEFAULT_LAYOUT);
-  } catch {
-    return DEFAULT_LAYOUT;
-  }
-}
 
 /** 위젯 추가 창의 카드 — 실제 위젯을 그 폭 그대로 줄여 보인다. 누르면 넣고, 끌어서 원하는 자리에 놓을 수도 있다 */
 function PickerCard({ id, size, placed, onAdd, onDragStart, onDragEnd }: {
@@ -205,15 +139,6 @@ function WidgetPicker({ open, hiddenForDrag, layout, onAdd, onClose, onDragStart
     document.body,
   );
 }
-
-/** 위젯의 최소(기본) 세로 칸 수 */
-const minRowsOf = (id: WidgetId) => rowsFor(WIDGETS[id].minH);
-/** 위젯의 최소 가로 칸 수 */
-const minColsOf = (id: WidgetId) => Math.min(...WIDGETS[id].sizes);
-/** 위젯이 차지하는 세로 칸 수 */
-const rowsOf = (slot: WidgetSlot<WidgetId>) => Math.max(slot.rows ?? 0, minRowsOf(slot.id));
-const placementsOf = (list: WidgetSlot<WidgetId>[]) =>
-  list.map((s) => ({ id: s.id, w: Math.max(s.size, minColsOf(s.id)), h: rowsOf(s), x: s.x, y: s.y }));
 
 /** 넓은 화면(모눈 배치)인지 — 좁은 화면에서는 위젯을 위에서부터 차례로 쌓는다 */
 function useWide() {

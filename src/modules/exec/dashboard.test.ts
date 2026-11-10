@@ -124,3 +124,15 @@ test('주간 날짜·지난 시간·시간 글자', () => {
   assert.equal(hoursText(120), '2시간');
   assert.equal(hoursText(40), '40분');
 });
+
+import { mobilePath } from './dashboard';
+
+test('위젯 링크 → 모바일 화면 주소', () => {
+  assert.equal(mobilePath('/gw/approval?doc=AB%2F1'), '/m/approval/AB%2F1');
+  assert.equal(mobilePath('/gw/approval?box=대기'), '/m/approval');
+  assert.equal(mobilePath('/gw/board?board=notice&postId=p1'), '/m/board?board=notice&postId=p1');
+  assert.equal(mobilePath('/gw/board'), '/m/board');
+  assert.equal(mobilePath('/gw/leave'), '/m/commute');
+  assert.equal(mobilePath('/gw/work-plan'), '/m/task');
+  assert.equal(mobilePath('/gw/unknown'), '/m');
+});

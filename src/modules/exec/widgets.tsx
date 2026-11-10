@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -15,6 +15,7 @@ import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
+import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
@@ -79,6 +80,16 @@ function kstTime(iso: string): string {
 }
 function kstDate(iso: string): string {
   return new Date(Date.parse(iso) + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+
+/** 위젯 링크 바꾸기 — 모바일에서는 웹 주소를 모바일 화면 주소로 바꿔 연다 */
+const LinkMapContext = createContext<((path: string) => string) | null>(null);
+export const WidgetLinkProvider = LinkMapContext.Provider;
+function useGo() {
+  const navigate = useNavigate();
+  const map = useContext(LinkMapContext);
+  return (path: string) => navigate(map ? map(path) : path);
 }
 
 /** 카드 머리 — 제목과 오른쪽 이동 버튼만 */
@@ -225,7 +236,7 @@ function DayTimeline({ items }: { items: TimelineItem[] }) {
 }
 
 export function TodayWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const deptId = useDeptId();
   const today = todayKst();
@@ -251,13 +262,13 @@ export function TodayWidget() {
   ];
 
   return (
-    <Panel className="p-6">
+    <Panel className="sm:p-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div className="flex items-end gap-4">
-          <div className="text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
+        <div className="flex items-end gap-3 sm:gap-4">
+          <div className="text-[40px] sm:text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
           <div className="pb-0.5">
             <div className="text-[13px] font-bold text-ink2">{Number(today.slice(0, 4))}년 {Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
-            <h1 className="mt-0.5 text-[22px] font-extrabold tracking-[-.04em] text-ink">
+            <h1 className="mt-0.5 text-[17px] sm:text-[22px] font-extrabold tracking-[-.04em] text-ink">
               {me?.name ? `${me.name}님, 오늘 일정은 ${items.length}건입니다` : `오늘 일정은 ${items.length}건입니다`}
             </h1>
           </div>
@@ -344,7 +355,7 @@ function HoursBars({ days, today }: { days: Array<{ date: string; minutes: numbe
 
 /** 연차 막대 — 사용·신청 중·남음 */
 function LeaveBar({ standalone = false }: { standalone?: boolean }) {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const leave = useLeave(me?.id);
   if (leave.isLoading) return null;
@@ -409,7 +420,7 @@ function useMyCommuteDays(month: string) {
 }
 
 export function AttendanceWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const today = todayKst();
   const [month, setMonth] = useState(today.slice(0, 7));
   const { myDays, myEmpId, settled } = useMyCommuteDays(month);
@@ -505,7 +516,7 @@ export function AttendanceWidget() {
 /* ───────────────────────── 전자결재 ───────────────────────── */
 
 export function ApprovalWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const { byBox, counts } = useApprovalBoxes(me?.id);
   const pending = useMemo(
@@ -556,7 +567,7 @@ export function ApprovalWidget() {
 /* ───────────────────────── 자원예약 ───────────────────────── */
 
 export function ResourceWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const today = todayKst();
   const query = useReservations(me ? { requesterUserId: me.id } : undefined);
@@ -605,7 +616,7 @@ export function ResourceWidget() {
 const PRESENCE_ORDER: UserPresenceStatus[] = ['ONLINE', 'MEETING', 'FOCUS', 'OUTSIDE', 'AWAY', 'LEAVE', 'OFFLINE'];
 
 export function TeamWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const users = useUsers(me?.dept ? { dept: me.dept, status: '사용' } : undefined).data ?? [];
   const presences = useAllUserPresences();
@@ -659,7 +670,7 @@ export function TeamWidget() {
 /* ───────────────────────── 공지사항 ───────────────────────── */
 
 export function NoticeWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const posts = useBoardPosts().data ?? [];
   const notices = useMemo(() => sortPostsForList(posts.filter((p) => p.boardId === 'notice')).slice(0, 6), [posts]);
   const openPost = (p: Post) => navigate(`/gw/board?board=${p.boardId}&postId=${encodeURIComponent(p.id)}`);
@@ -734,7 +745,7 @@ function Ring({ value, size = 104, stroke = 10, children }: { value: number; siz
 }
 
 export function TodayCommuteWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const today = todayKst();
   const { myDays, myEmpId, settled } = useMyCommuteDays(today.slice(0, 7));
   const rec = myDays.find((d) => d.date === today);
@@ -772,8 +783,9 @@ export function TodayCommuteWidget() {
                 </dd>
               </div>
             ))}
-            {rec && rec.bucket !== 'work' && rec.bucket !== 'pending' && (
-              <div className="text-[11.5px] font-bold text-ink2">{ATTENDANCE_LABELS[rec.bucket]}</div>
+            {/* 외근·출장·휴가처럼 출퇴근 기록 없이 인정된 날은 그 상태를 적는다 */}
+            {rec && rec.bucket !== 'pending' && rec.status !== 'unknown' && (rec.bucket !== 'work' || !rec.inAt) && (
+              <div className="text-[11.5px] font-bold text-ink2">{COMMUTE_STATUS_LABELS[rec.status]}</div>
             )}
           </dl>
         </div>
@@ -785,7 +797,7 @@ export function TodayCommuteWidget() {
 /* ───────────────────────── 근태: 이번 주 근무시간 ───────────────────────── */
 
 export function WeekHoursWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const today = todayKst();
   const week = weekDates(today);
   // 주가 두 달에 걸칠 수 있어 두 달을 읽는다(같은 달이면 한 번만 읽는다)
@@ -826,7 +838,7 @@ export function WeekHoursWidget() {
 /* ───────────────────────── 일정: 이번 주 내 일정 ───────────────────────── */
 
 export function WeekScheduleWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const deptId = useDeptId();
   const today = todayKst();
@@ -866,7 +878,7 @@ export function WeekScheduleWidget() {
 /* ───────────────────────── 전자결재: 결재 대기 목록 ───────────────────────── */
 
 export function PendingApprovalWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const { byBox } = useApprovalBoxes(me?.id);
   const pending = useMemo(
@@ -902,7 +914,7 @@ export function PendingApprovalWidget() {
 /* ───────────────────────── 전자결재: 내가 올린 문서 ───────────────────────── */
 
 export function MyDraftsWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const { user: me } = useAuth();
   const { byBox } = useApprovalBoxes(me?.id);
   const docs = useMemo(
@@ -948,7 +960,7 @@ export function MyDraftsWidget() {
 /* ───────────────────────── 자원예약: 오늘 자원 사용 현황 ───────────────────────── */
 
 export function ResourceTodayWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const today = todayKst();
   const range = useMemo(() => ({
     from: new Date(`${today}T00:00:00+09:00`).toISOString(),
@@ -1013,7 +1025,7 @@ export function ResourceTodayWidget() {
 const AWAY_STATUSES: UserPresenceStatus[] = ['LEAVE', 'OUTSIDE'];
 
 export function AwayTodayWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const users = useUsers({ status: '사용' }).data ?? [];
   const presences = useAllUserPresences();
   const groups = AWAY_STATUSES.map((s) => ({
@@ -1111,7 +1123,7 @@ export function BirthdayWidget() {
 const BOARD_NAMES: Record<string, string> = Object.fromEntries(BOARDS_SEED.map((b) => [b.id, b.name]));
 
 export function RecentPostsWidget() {
-  const navigate = useNavigate();
+  const navigate = useGo();
   const posts = useBoardPosts().data ?? [];
   const recent = useMemo(() => [...posts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6), [posts]);
   return (
