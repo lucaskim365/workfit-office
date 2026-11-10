@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Megaphone } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useBoardPosts } from '@/features/board/useBoardPosts';
 import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
@@ -14,6 +14,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
+import { stripInlineMarks } from '@/domain/workPlan/richText';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
@@ -152,9 +153,7 @@ function useDeptId() {
 
 /* ───────────────────────── 오늘 일정 ───────────────────────── */
 
-type Tone = 'company' | 'special' | 'general';
-/** 회사 중요 일정 칸 — 나머지 칸 색은 업무계획과 같은 chipLook 을 쓴다 */
-const COMPANY_BLOCK = 'bg-panel-alt text-ink2 border border-border';
+type Tone = 'special' | 'general';
 
 interface TimelineItem {
   key: string;
@@ -217,7 +216,7 @@ function DayTimeline({ items }: { items: TimelineItem[] }) {
     return () => clearInterval(t);
   }, []);
   const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
-  // 종일·시간 미정(외근·출장·휴가·회사 중요 일정)은 위 칸에 하루 전체 길이로 — 따로 줄을 두지 않는다
+  // 종일·시간 미정(외근·출장·휴가)은 위 칸에 하루 전체 길이로 — 따로 줄을 두지 않는다
   const fullDay = { start: '08:00', end: '20:00' };
   const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
   const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end)).map((i) => ({ ...i, ...fullDay, allDay: false }));
@@ -255,11 +254,13 @@ export function TodayWidget() {
   const { cellOf, workPlans } = useDayEntryIndex({ actor: me, deptId, members, dates: todayDates });
   const myEntries = me ? cellOf(me.id, today).entries : [];
   const companyImportant = workPlans.find((p) => p.ownerUserId === COMPANY_PLAN_OWNER && p.date === today && p.content?.trim())?.content?.trim();
+  // 전사 주요 일정 — 업무계획 '중요 일정' 줄. 줄마다 서식 기호·목록 기호를 걷어 한 줄로
+  const companyLines = (companyImportant ?? '')
+    .split('\n')
+    .map((l) => stripInlineMarks(l).replace(/^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
+    .filter(Boolean);
 
   const items: TimelineItem[] = [
-    ...(companyImportant
-      ? [{ key: 'important', title: companyImportant, start: null, end: null, allDay: true, tone: 'company' as const, badgeClass: COMPANY_BLOCK, onClick: () => navigate('/gw/work-plan') }]
-      : []),
     ...myEntries.map((e) => ({
       key: e.key,
       title: chipLook(e).label,
@@ -290,6 +291,18 @@ export function TodayWidget() {
           <button type="button" onClick={() => navigate('/gw/work-plan')} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
         </div>
       </div>
+      {companyLines.length > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/gw/work-plan')}
+          title={companyLines.join('\n')}
+          className="-mt-1 mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-3 py-1.5 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
+        >
+          <Megaphone size={14} className="shrink-0 text-[#0876c8]" />
+          <span className="shrink-0 text-[11.5px] font-extrabold text-[#0876c8]">전사 주요 일정</span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
+        </button>
+      )}
       <DayTimeline items={items} />
     </Panel>
   );
