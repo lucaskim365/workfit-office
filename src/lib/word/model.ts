@@ -3,7 +3,7 @@
  * 저장(.docx)·불러오기(.docx)·편집기가 모두 이 형식을 쓴다.
  *
  * 쓰는 노드: doc · paragraph · heading(level 1~6) · bulletList · orderedList(start) · listItem · blockquote ·
- *           horizontalRule · hardBreak · image(src·alt·width·height, 글 사이에 들어감) · table · tableRow · tableCell · tableHeader(colspan·rowspan·colwidth·background·verticalAlign)
+ *           horizontalRule · hardBreak · image(src·alt·width·height, 글 사이에 들어감) · table · tableRow(height) · tableCell · tableHeader(colspan·rowspan·colwidth·background·verticalAlign)
  * 쓰는 글 표시(mark): bold · italic · underline · strike · code · link(href) · highlight(color) · textStyle(color·fontSize·fontFamily·backgroundColor)
  * 문단·제목은 textAlign(left·center·right·justify)
  */

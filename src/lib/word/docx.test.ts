@@ -100,6 +100,20 @@ test('표 칸 배경색·세로 맞춤 — 저장하고 다시 읽어도 그대�
   assert.equal(cells[1].attrs?.verticalAlign, undefined);
 });
 
+test('표 행 높이 — 정한 줄만 워드 행 높이로 저장하고 다시 읽으면 같은 높이', async () => {
+  const row = (text: string, height?: number): WordNode => ({
+    type: 'tableRow',
+    ...(height ? { attrs: { height } } : {}),
+    content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1 }, content: [p(t(text))] }],
+  });
+  const d = doc({ type: 'table', content: [row('제목', 47), row('보통')] });
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(d))).get('word/document.xml'));
+  assert.match(xml, /<w:tr><w:trPr><w:trHeight w:val="705"\/><\/w:trPr><w:tc>/);
+  const rows = (await importDocx(await exportDocx(d))).doc.content![0].content!;
+  assert.equal(rows[0].attrs?.height, 47);
+  assert.equal(rows[1].attrs, undefined);
+});
+
 test('불러온 표는 바깥 테두리까지 본문 폭 안 — 종이보다 넓은 표에 가로 스크롤이 생기지 않게', async () => {
   const wide = doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1, colwidth: [900] }, content: [p(t('넓은 표'))] }] }] });
   const back = (await importDocx(await exportDocx(wide))).doc.content![0];

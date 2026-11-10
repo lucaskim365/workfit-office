@@ -269,7 +269,10 @@ async function table(node: WordNode, ctx: Ctx): Promise<string> {
     }
     slots.sort((a, b) => a.at.localeCompare(b.at));
     for (const s of slots) tcs.push(await s.xml());
-    out.push(`<w:tr>${tcs.join('')}</w:tr>`);
+    // 행 높이(px) → 워드 '최소' 행 높이(글이 늘면 행도 늘어난다)
+    const h = Number(rows[ri].attrs?.height);
+    const trPr = h > 0 ? `<w:trPr><w:trHeight w:val="${tw(h)}"/></w:trPr>` : '';
+    out.push(`<w:tr>${trPr}${tcs.join('')}</w:tr>`);
   }
   out.push('</w:tbl>');
   return out.join('');

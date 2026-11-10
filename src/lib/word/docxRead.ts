@@ -1,7 +1,7 @@
 /**
  * 워드(.docx) 불러오기 — 외부 라이브러리 없이 .docx 를 문서 JSON(model.ts)으로 읽는다.
  * 읽는 것: 문단·제목(스타일 이름·개요 수준)·정렬, 글자(굵게·기울임·밑줄·취소선·크기·색·글꼴·형광펜·음영), 링크, 줄바꿈·탭,
- *          글머리·번호 목록(여러 단계), 표(가로·세로 합친 칸·열 너비·칸 배경색·세로 맞춤), 그림(PNG·JPEG·GIF).
+ *          글머리·번호 목록(여러 단계), 표(가로·세로 합친 칸·열 너비·행 높이·칸 배경색·세로 맞춤), 그림(PNG·JPEG·GIF).
  * 읽지 않는 것: 머리글·바닥글, 각주, 메모, 변경 내용 추적, 글상자·도형, 쪽 나누기·단(본문 흐름만 읽는다)
  */
 import { A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, emptyWordDoc, type WordMark, type WordNode } from './model';
@@ -288,6 +288,8 @@ function table(tbl: XmlNode, ctx: Ctx): WordNode {
   const rows = children(tbl, 'tr');
   type Cell = { node: WordNode; col: number; span: number; row: number };
   const grid: Cell[][] = [];
+  /** 줄마다 높이(px) — 워드 '행 높이'. 정하지 않은 줄은 undefined */
+  const heights: (number | undefined)[] = [];
   /** 열 자리 → 세로 합침이 시작된 칸(아래 줄 'continue' 가 이 칸의 rowspan 을 늘린다) */
   const open = new Map<number, WordNode>();
   rows.forEach((tr) => {
@@ -324,6 +326,7 @@ function table(tbl: XmlNode, ctx: Ctx): WordNode {
       col += span;
     }
     grid.push(out);
+    heights.push(rowHeight(child(tr, 'trPr')));
   });
   // 칸이 하나도 없는 줄(모두 위에서 합쳐 내려온 칸)은 편집기가 그릴 수 없어 빼고, 그 줄까지 센 rowspan 도 하나씩 줄인다
   grid.forEach((cells, ri) => {
@@ -333,7 +336,19 @@ function table(tbl: XmlNode, ctx: Ctx): WordNode {
       if (c.row < ri && c.row + span > ri) c.node.attrs!.rowspan = span - 1;
     }
   });
-  return { type: 'table', content: grid.filter((r) => r.length).map((r) => ({ type: 'tableRow', content: r.map((c) => c.node) })) };
+  const tableRows = grid
+    .map((r, ri): WordNode | null =>
+      r.length ? { type: 'tableRow', ...(heights[ri] ? { attrs: { height: heights[ri] } } : {}), content: r.map((c) => c.node) } : null,
+    )
+    .filter((r): r is WordNode => r !== null);
+  return { type: 'table', content: tableRows };
+}
+
+/** 행 높이(px) — 워드는 '최소'(atLeast, 기본)·'고정'(exact) 둘 다 쓰지만 화면은 최소 높이로 맞춘다(글이 넘쳐 잘리지 않게) */
+function rowHeight(trPr: XmlNode | undefined): number | undefined {
+  const h = child(trPr, 'trHeight');
+  const twips = Number(h?.attrs.val);
+  return h && h.attrs.hRule !== 'auto' && twips > 0 ? Math.round(twips / TWIP) : undefined;
 }
 
 // ── 블록 ──
