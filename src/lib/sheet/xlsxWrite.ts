@@ -40,8 +40,8 @@ export interface XlsxPicture {
 /** px → 엑셀 도형 단위(EMU, 96dpi 기준 1px = 9525) */
 const EMU = 9525;
 
-/** 엑셀 기본 글자 크기(pt) — 화면 기본(12px = 9pt)보다 조금 크게, 엑셀에서 읽기 좋게 */
-const DEFAULT_PT = 10;
+/** 엑셀 기본 글자 크기(pt) — 화면 기본(12px = 9pt)과 같게(크게 하면 좁은 칸 글자가 잘린다) */
+const DEFAULT_PT = 9;
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';

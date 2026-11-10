@@ -173,7 +173,8 @@ export async function captureElementPng(el: HTMLElement): Promise<Uint8Array | n
       position: 'static',
       transform: 'none',
       margin: '0',
-      width: cs.width,
+      // 글자 폭 반올림 차이로 마지막 글자가 다음 줄로 넘어가지 않게 조금 넉넉히
+      width: `${Math.ceil(parseFloat(cs.width) || 0) + 2}px`,
       height: cs.height,
       display: cs.display === 'inline' ? 'inline-block' : cs.display,
       color: cs.color,
