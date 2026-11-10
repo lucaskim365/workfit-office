@@ -47,3 +47,28 @@ test('프로젝트 기간 경과율', () => {
   assert.equal(elapsedPercent({ startAt: null, dueAt: null, contractStartAt: '2025-01-01T00:00:00Z', contractEndAt: '2025-12-31T00:00:00Z' }, now), 100);
   assert.equal(elapsedPercent({ startAt: null, dueAt: null, contractStartAt: null, contractEndAt: null }, now), null);
 });
+
+import { donutSlices, minutesOf, nowPercent, timelineSpan } from './dashboard';
+
+test('타임라인 자리 — 08~20시 축', () => {
+  assert.equal(minutesOf('09:30'), 570);
+  assert.equal(minutesOf(null), null);
+  assert.deepEqual(timelineSpan('08:00', '20:00'), { left: 0, width: 100 });
+  const near = (a: { left: number; width: number } | null, left: number, width: number) =>
+    assert.ok(a && Math.abs(a.left - left) < 1e-9 && Math.abs(a.width - width) < 1e-9, JSON.stringify(a));
+  near(timelineSpan('14:00', null), 50, 100 / 12);
+  near(timelineSpan('07:00', '09:00'), 0, 100 / 12);
+  assert.equal(timelineSpan('21:00', '22:00'), null);
+  assert.equal(timelineSpan(null, null), null);
+});
+
+test('지금 시각 — 한국 시간 기준', () => {
+  assert.equal(nowPercent(new Date('2026-11-10T05:00:00Z')), 50); // 14:00 KST
+  assert.equal(nowPercent(new Date('2026-11-10T13:00:00Z')), null); // 22:00 KST
+});
+
+test('도넛 조각 — 0 은 빼고 누적', () => {
+  const s = donutSlices([{ key: 'a', value: 1 }, { key: 'b', value: 0 }, { key: 'c', value: 3 }]);
+  assert.deepEqual(s.map((x) => [x.key, x.from, x.to]), [['a', 0, 0.25], ['c', 0.25, 1]]);
+  assert.deepEqual(donutSlices([{ key: 'a', value: 0 }]), []);
+});

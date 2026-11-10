@@ -74,3 +74,51 @@ export function elapsedPercent(project: Pick<WorkProject, 'startAt' | 'dueAt' | 
   const ratio = (now.getTime() - start) / (end - start);
   return Math.round(Math.min(1, Math.max(0, ratio)) * 100);
 }
+
+/** 하루 타임라인 축 — 08:00 ~ 20:00 */
+export const DAY_START_MIN = 8 * 60;
+export const DAY_END_MIN = 20 * 60;
+
+/** 'HH:MM' → 분. 못 읽으면 null */
+export function minutesOf(time: string | null | undefined): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(time ?? '');
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * 타임라인 위 자리(축 대비 %) — 시작이 없으면 null(종일·시간 미정은 축 밖에 따로 둔다).
+ * 끝이 없거나 시작보다 이르면 1시간으로 본다. 축 밖은 잘라 낸다.
+ */
+export function timelineSpan(start: string | null, end: string | null): { left: number; width: number } | null {
+  const s = minutesOf(start);
+  if (s === null) return null;
+  let e = minutesOf(end);
+  if (e === null || e <= s) e = s + 60;
+  const span = DAY_END_MIN - DAY_START_MIN;
+  const a = Math.min(Math.max(s, DAY_START_MIN), DAY_END_MIN);
+  const b = Math.min(Math.max(e, DAY_START_MIN), DAY_END_MIN);
+  if (b <= a) return null;
+  return { left: ((a - DAY_START_MIN) / span) * 100, width: ((b - a) / span) * 100 };
+}
+
+/** 지금 시각의 축 위 자리(%) — 축 밖이면 null */
+export function nowPercent(now = new Date()): number | null {
+  const kst = new Date(now.getTime() + 9 * 3600_000);
+  const min = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  if (min < DAY_START_MIN || min > DAY_END_MIN) return null;
+  return ((min - DAY_START_MIN) / (DAY_END_MIN - DAY_START_MIN)) * 100;
+}
+
+/** 도넛 조각 — 합계 대비 시작·끝 각도(0~1). 값이 0인 조각은 뺀다 */
+export function donutSlices<K extends string>(counts: Array<{ key: K; value: number }>): Array<{ key: K; value: number; from: number; to: number }> {
+  const total = counts.reduce((s, c) => s + c.value, 0);
+  if (total <= 0) return [];
+  let acc = 0;
+  return counts
+    .filter((c) => c.value > 0)
+    .map((c) => {
+      const from = acc / total;
+      acc += c.value;
+      return { ...c, from, to: acc / total };
+    });
+}
