@@ -103,3 +103,35 @@ test('그림 — 칸 자리에 띄우고, 넘친 자리는 옆·아래 칸으로
   assert.equal(imgs[0].col, 1);
   assert.equal(Math.round(imgs[0].width), 56);
 });
+
+test('병합의 첫 행이 빠져도 값·서식·그림은 남은 첫 행으로 옮겨 간다', async () => {
+  let s = createSheet(4, 2);
+  s = setCellValue(s, 0, 0, '품목');
+  s = mergeRange(s, { r1: 0, c1: 0, r2: 2, c2: 0 });
+  s = applyStyle(s, { r1: 0, c1: 0, r2: 0, c2: 0 }, { bold: true });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  const bytes = await exportXlsx(s, { skipRow: (r) => r === 0, pictures: [{ r: 0, c: 0, x: 2, y: 2, width: 10, height: 10, data: png, type: 'png' }] });
+  const back = (await importXlsx(bytes, { ignorePrintArea: true })).sheet;
+  assert.equal(back.rows[0][back.cols[0]], '품목');
+  assert.equal(back.styles[cellKey(0, back.cols[0])]?.bold, true);
+  assert.deepEqual(back.merges, [{ startRow: 0, startCol: 0, rowSpan: 2, colSpan: 1 }]);
+  const files = await unzip(bytes);
+  assert.ok(files.has('xl/media/image1.png'));
+});
+
+test('그림 자리는 엑셀에 쓰는 행 높이(바꾼 높이) 기준', async () => {
+  const s = createSheet(4, 2); // 행 기본 28px
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  // 0행을 80px 로 쓰면 높이 60px 그림은 0행 안에서 끝난다(시트 높이 28px 로 재면 2행까지 걸침)
+  const bytes = await exportXlsx(s, { rowHeight: (r) => (r === 0 ? 80 : undefined), pictures: [{ r: 0, c: 0, x: 0, y: 0, width: 20, height: 60, data: png, type: 'png' }] });
+  const drawing = new TextDecoder().decode((await unzip(bytes)).get('xl/drawings/drawing1.xml'));
+  assert.match(drawing, /<xdr:to><xdr:col>0<\/xdr:col><xdr:colOff>\d+<\/xdr:colOff><xdr:row>0<\/xdr:row>/);
+});
+
+test("시트 이름 앞뒤 작은따옴표·XML 금지 문자는 뺀다", async () => {
+  let s = createSheet(1, 1);
+  s = setCellValue(s, 0, 0, 'a￾b');
+  const files = await unzip(await exportXlsx(s, { sheetName: "'발주'" }));
+  assert.match(new TextDecoder().decode(files.get('xl/workbook.xml')), /name="발주"/);
+  assert.match(new TextDecoder().decode(files.get('xl/worksheets/sheet1.xml')), />ab</);
+});

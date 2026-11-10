@@ -61,7 +61,7 @@ const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationsh
 function esc(s: string): string {
   return s
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -76,7 +76,7 @@ function argb(color: string | undefined): string | undefined {
 
 /** 시트 탭 이름 — 엑셀 규칙(31자, : \ / ? * [ ] 금지) */
 function safeSheetName(name: string | undefined): string {
-  const n = (name ?? '').replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 31);
+  const n = (name ?? '').replace(/[:\\/?*[\]]/g, ' ').trim().replace(/^'+|'+$/g, '').trim().slice(0, 31);
   return n || 'Sheet1';
 }
 
@@ -215,15 +215,28 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     const r2 = newRow.get(rows[rows.length - 1])!;
     merges.push(`<mergeCell ref="${colLetter(m.startCol)}${r1 + 1}:${colLetter(m.startCol + m.colSpan - 1)}${r2 + 1}"/>`);
   }
-  // 병합에 가려진 칸 — 값은 비우되 테두리는 남긴다(엑셀은 병합 바깥선을 가려진 칸의 테두리로 그린다)
+  // 병합에 가려진 칸 — 값은 비우되 테두리는 남긴다(엑셀은 병합 바깥선을 가려진 칸의 테두리로 그린다).
+  // 병합의 첫 행이 빠지면(조건으로 숨은 행 등) 남은 첫 행이 대표 칸 — 원래 첫 칸의 값·서식을 그 자리에 쓴다(화면과 같게)
   const covered = new Set<string>();
-  for (const m of s.merges)
+  /** 대표 칸이 옮겨 온 자리 'r:c' → 원래 첫 행 */
+  const movedFrom = new Map<string, number>();
+  /** 원래 첫 행(빠진 행)의 대표 칸 'r:c' → 옮겨 간 행 — 그 칸에 놓을 그림도 옮긴다 */
+  const movedTo = new Map<string, number>();
+  for (const m of s.merges) {
+    const first = keepRows.find((r) => r >= m.startRow && r < m.startRow + m.rowSpan);
+    const anchorRow = first !== undefined && first !== m.startRow ? first : m.startRow;
+    if (anchorRow !== m.startRow) {
+      movedFrom.set(`${anchorRow}:${m.startCol}`, m.startRow);
+      movedTo.set(`${m.startRow}:${m.startCol}`, anchorRow);
+    }
     for (let r = m.startRow; r < m.startRow + m.rowSpan; r++)
-      for (let c = m.startCol; c < m.startCol + m.colSpan; c++) if (r !== m.startRow || c !== m.startCol) covered.add(`${r}:${c}`);
+      for (let c = m.startCol; c < m.startCol + m.colSpan; c++) if (r !== anchorRow || c !== m.startCol) covered.add(`${r}:${c}`);
+  }
 
   // 줄 높이·칸 크기 — 칸보다 긴 글을 엑셀에서 어떻게 보일지 정한다(화면은 칸 안에서 줄을 바꾸거나 글씨를 줄인다)
   const heightOf = (r: number) => opts.rowHeight?.(r) ?? s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT;
   const mergeOf = (r: number, c: number) => s.merges.find((m) => m.startRow === r && m.startCol === c);
+  /** r 은 원래 첫 행(병합 크기를 찾는 기준) */
   const fitOf = (r: number, c: number, text: string, style: CellStyle | undefined): Fit => {
     if (!text) return null;
     if (text.includes('\n')) return 'wrap';
@@ -243,18 +256,21 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
   keepRows.forEach((r, i) => {
     const cells: string[] = [];
     s.cols.forEach((col, c) => {
-      const key = cellKey(r, col);
-      const style = s.styles[key];
       const ref = `${colLetter(c)}${i + 1}`;
       if (covered.has(`${r}:${c}`)) {
+        const style = s.styles[cellKey(r, col)];
         // 가려진 칸 — 테두리·배경만(값 없음)
         if (style?.border || style?.bg) cells.push(`<c r="${ref}" s="${book.xf({ border: style.border, bg: style.bg }, undefined, null)}"/>`);
         return;
       }
-      const text = opts.cellText?.(r, c) ?? String(s.rows[r]?.[col] ?? '');
+      // 옮겨 온 대표 칸이면 원래 첫 행의 값·서식으로
+      const src = movedFrom.get(`${r}:${c}`) ?? r;
+      const key = cellKey(src, col);
+      const style = s.styles[key];
+      const text = opts.cellText?.(src, c) ?? String(s.rows[src]?.[col] ?? '');
       const formula = withFormulas ? s.formulas[key] : undefined;
       const n = asNumber(text);
-      const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(r, c, text, style) : null);
+      const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(src, c, text, style) : null);
       const sAttr = xf ? ` s="${xf}"` : '';
       if (formula) {
         const f = `<f>${esc(formula.replace(/^=/, ''))}</f>`;
@@ -282,8 +298,10 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
 
   // 그림 — 칸 기준 자리를 실제 칸(남긴 행 기준)으로 옮겨 놓는다
   const colW = s.cols.map((col) => s.colWidths[col] ?? DEFAULT_COL_WIDTH);
-  const rowH = keepRows.map((r) => s.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT);
-  const pics = (opts.pictures ?? []).filter((p) => newRow.has(p.r) && p.c >= 0 && p.c < s.cols.length && p.width > 0 && p.height > 0);
+  const rowH = keepRows.map((r) => heightOf(r));
+  const pics = (opts.pictures ?? [])
+    .map((p) => (newRow.has(p.r) ? p : { ...p, r: movedTo.get(`${p.r}:${p.c}`) ?? p.r }))
+    .filter((p) => newRow.has(p.r) && p.c >= 0 && p.c < s.cols.length && p.width > 0 && p.height > 0);
   // 자리(시트 px) → 칸 번호 + 칸 안 거리. 음수나 칸보다 큰 값은 옆·위·아래 칸으로 넘긴다
   const locate = (c0: number, x0: number, r0: number, y0: number) => {
     let col = c0;
