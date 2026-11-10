@@ -3,7 +3,7 @@
  * 저장(.docx)·불러오기(.docx)·편집기가 모두 이 형식을 쓴다.
  *
  * 쓰는 노드: doc · paragraph · heading(level 1~6) · bulletList · orderedList(start) · listItem · blockquote ·
- *           horizontalRule · hardBreak · image(src·alt·width·height, 글 사이에 들어감) · table · tableRow · tableCell · tableHeader(colspan·rowspan·colwidth)
+ *           horizontalRule · hardBreak · image(src·alt·width·height, 글 사이에 들어감) · table · tableRow · tableCell · tableHeader(colspan·rowspan·colwidth·background·verticalAlign)
  * 쓰는 글 표시(mark): bold · italic · underline · strike · code · link(href) · highlight(color) · textStyle(color·fontSize·fontFamily·backgroundColor)
  * 문단·제목은 textAlign(left·center·right·justify)
  */
@@ -53,3 +53,5 @@ export function wordDocText(node: WordNode): string {
 export const A4 = { width: 794, height: 1123, margin: 96 } as const;
 /** 본문 폭(px) — 그림·표 최대 폭 */
 export const A4_CONTENT_WIDTH = A4.width - A4.margin * 2;
+/** 표 최대 폭(px, 저장·불러오기 같은 기준) — 표 바깥 테두리(1px)까지 본문 폭 안에 들어야 가로 스크롤이 생기지 않는다 */
+export const TABLE_MAX_WIDTH = A4_CONTENT_WIDTH - 2;

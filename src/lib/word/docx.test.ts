@@ -8,7 +8,7 @@ import { importDocx } from './docxRead';
 import { halfPoints, hexColor } from './docxWrite';
 import { imageSize, toDataUrl } from './image';
 import { unzip } from './zip';
-import type { WordNode } from './model';
+import { TABLE_MAX_WIDTH, type WordNode } from './model';
 
 const t = (text: string, ...marks: WordNode['marks'] & object): WordNode => (marks.length ? { type: 'text', text, marks } : { type: 'text', text });
 const p = (...content: WordNode[]): WordNode => ({ type: 'paragraph', content });
@@ -82,6 +82,29 @@ test('표 — 가로·세로로 합친 칸, 머리 칸, 열 너비', async () =>
   assert.deepEqual(back.content![0].content![0].attrs?.colwidth, [120]);
   // 머리 칸 글은 굵게
   assert.deepEqual(back.content![0].content![0].content![0].content![0].marks, [{ type: 'bold' }]);
+});
+
+test('표 칸 배경색·세로 맞춤 — 저장하고 다시 읽어도 그대로, 흰 글씨 제목 칸이 바탕과 함께 온다', async () => {
+  const cell = (text: string, attrs: Record<string, unknown>): WordNode => ({ type: 'tableCell', attrs: { colspan: 1, rowspan: 1, ...attrs }, content: [p(t(text))] });
+  const d = doc({
+    type: 'table',
+    content: [{ type: 'tableRow', content: [cell('제목', { background: '#1f2d50', verticalAlign: 'middle' }), cell('보통', {})] }],
+  });
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(d))).get('word/document.xml'));
+  // tcPr 안 순서: shd 다음 vAlign
+  assert.match(xml, /<w:shd w:val="clear" w:color="auto" w:fill="1F2D50"\/><w:vAlign w:val="center"\/><\/w:tcPr>/);
+  const cells = (await importDocx(await exportDocx(d))).doc.content![0].content![0].content!;
+  assert.equal(cells[0].attrs?.background, '#1f2d50');
+  assert.equal(cells[0].attrs?.verticalAlign, 'middle');
+  assert.equal(cells[1].attrs?.background, undefined);
+  assert.equal(cells[1].attrs?.verticalAlign, undefined);
+});
+
+test('불러온 표는 바깥 테두리까지 본문 폭 안 — 종이보다 넓은 표에 가로 스크롤이 생기지 않게', async () => {
+  const wide = doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1, colwidth: [900] }, content: [p(t('넓은 표'))] }] }] });
+  const back = (await importDocx(await exportDocx(wide))).doc.content![0];
+  const w = (back.content![0].content![0].attrs?.colwidth as number[])[0];
+  assert.ok(w <= TABLE_MAX_WIDTH, `열 너비 ${w}`);
 });
 
 test('그림 — 파일에 담고 다시 읽으면 같은 그림·크기', async () => {

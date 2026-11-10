@@ -4,7 +4,7 @@
  *          글머리·번호 목록(여러 단계), 인용, 구분선, 표(칸 합치기·열 너비·머리 칸), 그림(PNG·JPEG·GIF).
  * 쪽은 A4 세로, 여백 2.54cm(편집 화면과 같음). 글꼴은 맑은 고딕 10pt.
  */
-import { A4, A4_CONTENT_WIDTH, type WordMark, type WordNode } from './model';
+import { A4, A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, type WordMark, type WordNode } from './model';
 import { imageSize, loadImage, type ImageType } from './image';
 import { zip } from './zip';
 
@@ -193,6 +193,14 @@ async function paragraph(node: WordNode, ctx: Ctx, p: ParaOpts = {}): Promise<st
 
 // ── 표 ──
 
+/** 칸 음영·세로 맞춤 — tcPr 자식 순서(gridSpan → vMerge → shd → vAlign)를 지킨다. 머리 칸은 정한 색이 없으면 연회색 */
+function cellLookXml(cell: WordNode, head: boolean): string {
+  const fill = hexColor(cell.attrs?.background) ?? (head ? 'F2F2F2' : undefined);
+  const v = cell.attrs?.verticalAlign;
+  const jc = v === 'middle' ? 'center' : v === 'bottom' ? 'bottom' : undefined;
+  return (fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : '') + (jc ? `<w:vAlign w:val="${jc}"/>` : '');
+}
+
 async function table(node: WordNode, ctx: Ctx): Promise<string> {
   const rows = node.content ?? [];
   // 칸 자리(격자) — rowspan 으로 아래 줄까지 덮는 칸은 아래 줄에 '이어 합침(vMerge)' 칸을 넣어야 워드가 맞게 그린다
@@ -216,13 +224,13 @@ async function table(node: WordNode, ctx: Ctx): Promise<string> {
     gridCols = Math.max(gridCols, col);
     return cells;
   });
-  // 열 너비 — 정한 열은 그대로, 나머지는 남은 폭을 나눠서. 본문 폭을 넘으면 비율로 줄인다
+  // 열 너비 — 정한 열은 그대로, 나머지는 남은 폭을 나눠서. 표 최대 폭(불러올 때와 같은 기준)을 넘으면 비율로 줄인다
   const fixed = widths.slice(0, gridCols).reduce<number>((a, b) => a + (b ?? 0), 0);
   const free = Array.from({ length: gridCols }, (_, i) => widths[i] === undefined).filter(Boolean).length;
-  const each = free ? Math.max(40, (A4_CONTENT_WIDTH - fixed) / free) : 0;
+  const each = free ? Math.max(40, (TABLE_MAX_WIDTH - fixed) / free) : 0;
   let cols = Array.from({ length: gridCols }, (_, i) => widths[i] ?? each);
   const total = cols.reduce((a, b) => a + b, 0);
-  if (total > A4_CONTENT_WIDTH) cols = cols.map((w) => (w * A4_CONTENT_WIDTH) / total);
+  if (total > TABLE_MAX_WIDTH) cols = cols.map((w) => (w * TABLE_MAX_WIDTH) / total);
   const tw = (px: number) => Math.round(px * TWIP);
   const border = (tag: string) => `<w:${tag} w:val="single" w:sz="4" w:space="0" w:color="808080"/>`;
   const out: string[] = [
@@ -250,7 +258,7 @@ async function table(node: WordNode, ctx: Ctx): Promise<string> {
             `<w:tcW w:w="${tw(w)}" w:type="dxa"/>` +
             (c.span > 1 ? `<w:gridSpan w:val="${c.span}"/>` : '') +
             (c.rspan > 1 ? '<w:vMerge w:val="restart"/>' : '') +
-            (head ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : '');
+            cellLookXml(c.cell, head);
           let body = await blocks(c.cell.content ?? [], ctx, { bold: head, tight: true });
           if (!body.includes('<w:p')) body += '<w:p/>';
           // 표 칸은 문단으로 끝나야 한다

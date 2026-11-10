@@ -14,6 +14,7 @@ import { TableKit } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
 import { A4, A4_CONTENT_WIDTH, type WordNode } from './model';
 import { fromDataUrl, imageSize } from './image';
+import { WordTableCell, WordTableHeader } from './cell';
 
 export interface WordEditorProps {
   value: WordNode;
@@ -36,7 +37,9 @@ export const WORD_EXTENSIONS = [
   Highlight.configure({ multicolor: true }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Image.configure({ inline: true, allowBase64: true, resize: { enabled: true, alwaysPreserveAspectRatio: true, minWidth: 24, minHeight: 24 } }),
-  TableKit.configure({ table: { resizable: true, cellMinWidth: 40 } }),
+  TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false }),
+  WordTableCell,
+  WordTableHeader,
 ];
 
 const FONT_SIZES = ['8', '9', '10', '10.5', '11', '12', '14', '16', '18', '20', '24', '28', '36'];

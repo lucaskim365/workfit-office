@@ -1,10 +1,10 @@
 /**
  * 워드(.docx) 불러오기 — 외부 라이브러리 없이 .docx 를 문서 JSON(model.ts)으로 읽는다.
  * 읽는 것: 문단·제목(스타일 이름·개요 수준)·정렬, 글자(굵게·기울임·밑줄·취소선·크기·색·글꼴·형광펜·음영), 링크, 줄바꿈·탭,
- *          글머리·번호 목록(여러 단계), 표(가로·세로 합친 칸·열 너비), 그림(PNG·JPEG·GIF).
+ *          글머리·번호 목록(여러 단계), 표(가로·세로 합친 칸·열 너비·칸 배경색·세로 맞춤), 그림(PNG·JPEG·GIF).
  * 읽지 않는 것: 머리글·바닥글, 각주, 메모, 변경 내용 추적, 글상자·도형, 쪽 나누기·단(본문 흐름만 읽는다)
  */
-import { A4_CONTENT_WIDTH, emptyWordDoc, type WordMark, type WordNode } from './model';
+import { A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, emptyWordDoc, type WordMark, type WordNode } from './model';
 import { sniffImage, toDataUrl } from './image';
 import { child, children, find, parseXml, type XmlNode } from './xml';
 import { unzip } from './zip';
@@ -268,11 +268,22 @@ function buildLists(items: ParaInfo[]): WordNode[] {
 
 // ── 표 ──
 
+/** 칸 음영(배경색)·세로 맞춤 — 기본값(흰 바탕·위 맞춤)은 넣지 않는다 */
+function cellLook(tcPr: XmlNode | undefined): { background?: string; verticalAlign?: string } {
+  const out: { background?: string; verticalAlign?: string } = {};
+  const fill = child(tcPr, 'shd')?.attrs.fill;
+  if (fill && /^[0-9a-f]{6}$/i.test(fill) && fill.toUpperCase() !== 'FFFFFF') out.background = `#${fill.toLowerCase()}`;
+  const v = val(child(tcPr, 'vAlign'));
+  if (v === 'center') out.verticalAlign = 'middle';
+  else if (v === 'bottom') out.verticalAlign = 'bottom';
+  return out;
+}
+
 function table(tbl: XmlNode, ctx: Ctx): WordNode {
-  // 열 너비(px) — 합이 본문 폭을 넘으면(반올림 1~2px 포함) 비율로 줄여 표가 종이 밖으로 나가지 않게
+  // 열 너비(px) — 합이 본문 폭을 넘으면 비율로 줄여 표가 종이 밖으로 나가지 않게(바깥 테두리까지 들어가게)
   const rawCols = children(child(tbl, 'tblGrid'), 'gridCol').map((g) => Number(g.attrs.w ?? 0) / TWIP);
   const sum = rawCols.reduce((x, y) => x + y, 0);
-  const k = sum > A4_CONTENT_WIDTH ? A4_CONTENT_WIDTH / sum : 1;
+  const k = sum > TABLE_MAX_WIDTH ? TABLE_MAX_WIDTH / sum : 1;
   const gridCols = rawCols.map((w) => Math.floor(w * k));
   const rows = children(tbl, 'tr');
   type Cell = { node: WordNode; col: number; span: number; row: number };
@@ -299,7 +310,12 @@ function table(tbl: XmlNode, ctx: Ctx): WordNode {
       const content = blocks(tc.children, ctx);
       const node: WordNode = {
         type: 'tableCell',
-        attrs: { colspan: span, rowspan: 1, colwidth: widths.length === span && widths.every((w) => w > 0) ? widths : null },
+        attrs: {
+          colspan: span,
+          rowspan: 1,
+          colwidth: widths.length === span && widths.every((w) => w > 0) ? widths : null,
+          ...cellLook(tcPr),
+        },
         content: content.length ? content : [{ type: 'paragraph' }],
       };
       if (vmVal === 'restart') open.set(col, node);
