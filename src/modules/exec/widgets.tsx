@@ -15,6 +15,7 @@ import { useDayEntryIndex } from '@/features/workPlan/useDayEntryIndex';
 import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { sortPostsForList } from '@/domain/board/rules';
+import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
 import { USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
@@ -27,6 +28,9 @@ import {
   bucketOf,
   donutSlices,
   firstWeekday,
+  hoursText,
+  timeAgo,
+  weekDates,
   monthDates,
   nowPercent,
   packLanes,
@@ -372,11 +376,10 @@ function LeaveBar({ standalone = false }: { standalone?: boolean }) {
   );
 }
 
-export function AttendanceWidget() {
-  const navigate = useNavigate();
+/** 내 근태 한 달 — 근태 위젯들이 함께 쓴다(같은 달은 한 번만 읽는다) */
+function useMyCommuteDays(month: string) {
   const { user: me } = useAuth();
   const today = todayKst();
-  const [month, setMonth] = useState(today.slice(0, 7));
   const boot = useCommuteBootstrap(month, false);
   const viewer = useCommuteViewer({ enabled: boot.isSettled }).data;
   const employees = useCommuteEmployees({ enabled: boot.isSettled }).data ?? [];
@@ -397,9 +400,17 @@ export function AttendanceWidget() {
       const rec = evaluate({ empId: myEmpId ?? 0, date, inAt: raw?.inAt ?? null, outAt: raw?.outAt ?? null }, approvalDays);
       let bucket = bucketOf(rec.status);
       if (date > today && bucket !== 'leave') bucket = 'pending';
-      return { date, bucket, minutes: rec.totalMin ?? 0, inAt: rec.inAt };
+      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, inAt: rec.inAt, outAt: rec.outAt };
     });
   }, [month, myMonthQuery.data, evaluate, approvalDaysOf, me?.id, me?.name, myEmpId, today]);
+  return { myDays, myEmpId, settled: boot.isSettled };
+}
+
+export function AttendanceWidget() {
+  const navigate = useNavigate();
+  const today = todayKst();
+  const [month, setMonth] = useState(today.slice(0, 7));
+  const { myDays, myEmpId, settled } = useMyCommuteDays(month);
   const passed = myDays.filter((d) => d.date <= today);
   const counts = ATTENDANCE_BUCKETS.reduce((acc, k) => ({ ...acc, [k]: passed.filter((d) => d.bucket === k).length }), {} as Record<AttendanceBucket, number>);
   const workedDays = passed.filter((d) => d.minutes > 0);
@@ -429,7 +440,7 @@ export function AttendanceWidget() {
         </div>
       </div>
 
-      {myEmpId === null && boot.isSettled ? (
+      {myEmpId === null && settled ? (
         <Empty>근태 기록과 연결된 사번이 없어 근태를 불러오지 못했습니다. 인사 담당자에게 사번 연결을 요청하세요.</Empty>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -693,6 +704,382 @@ export function LeaveWidget() {
   return (
     <Panel>
       <LeaveBar standalone />
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 근태: 오늘 출퇴근 ───────────────────────── */
+
+const DAY_GOAL_MIN = 8 * 60;
+
+function clockOf(iso: string | null | undefined): string | null {
+  return iso ? new Date(iso).toTimeString().slice(0, 5) : null;
+}
+
+/** 진행 고리 — 0~1 */
+function Ring({ value, size = 104, stroke = 10, children }: { value: number; size?: number; stroke?: number; children?: ReactNode }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="stroke-panel-alt" />
+        {value > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke="#0876c8" strokeLinecap="round" strokeDasharray={`${Math.min(1, value) * c} ${c}`} />}
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">{children}</div>
+    </div>
+  );
+}
+
+export function TodayCommuteWidget() {
+  const navigate = useNavigate();
+  const today = todayKst();
+  const { myDays, myEmpId, settled } = useMyCommuteDays(today.slice(0, 7));
+  const rec = myDays.find((d) => d.date === today);
+  // 아직 퇴근 전이면 지금까지 일한 시간
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const inClock = clockOf(rec?.inAt);
+  const outClock = clockOf(rec?.outAt);
+  const worked = rec?.inAt && !rec.outAt ? Math.max(0, Math.round((nowMs - Date.parse(rec.inAt)) / 60_000)) : rec?.minutes ?? 0;
+  return (
+    <Panel>
+      <Head title="오늘 출퇴근" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
+      {myEmpId === null && settled ? (
+        <Empty>근태 기록과 연결된 사번이 없습니다.</Empty>
+      ) : (
+        <div className="flex items-center gap-5">
+          <Ring value={worked / DAY_GOAL_MIN}>
+            <div>
+              <div className="text-[16px] leading-tight font-extrabold tabular-nums text-ink">{hoursText(worked)}</div>
+              <div className="text-[10px] text-ink3">/ 8시간</div>
+            </div>
+          </Ring>
+          <dl className="m-0 grid flex-1 grid-cols-2 gap-3">
+            {[
+              { label: '출근', value: inClock, late: rec?.bucket === 'late' },
+              { label: '퇴근', value: outClock, late: false },
+            ].map((x) => (
+              <div key={x.label} className="rounded-xl bg-panel-alt px-3 py-2.5">
+                <dt className="text-[11px] font-bold text-ink3">{x.label}</dt>
+                <dd className={`m-0 mt-0.5 text-[22px] leading-tight font-black tabular-nums ${x.value ? (x.late ? 'text-[#c4602f]' : 'text-ink') : 'text-ink3'}`}>
+                  {x.value ?? '--:--'}
+                </dd>
+              </div>
+            ))}
+            {rec && rec.bucket !== 'work' && rec.bucket !== 'pending' && (
+              <div className="col-span-2 text-[11.5px] font-bold text-ink2">{ATTENDANCE_LABELS[rec.bucket]}</div>
+            )}
+          </dl>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 근태: 이번 주 근무시간 ───────────────────────── */
+
+export function WeekHoursWidget() {
+  const navigate = useNavigate();
+  const today = todayKst();
+  const week = weekDates(today);
+  // 주가 두 달에 걸칠 수 있어 두 달을 읽는다(같은 달이면 한 번만 읽는다)
+  const a = useMyCommuteDays(week[0].slice(0, 7));
+  const b = useMyCommuteDays(today.slice(0, 7));
+  const byDate = new Map([...a.myDays, ...b.myDays].map((d) => [d.date, d]));
+  const days = week.map((date) => ({ date, minutes: date <= today ? byDate.get(date)?.minutes ?? 0 : 0, late: byDate.get(date)?.bucket === 'late' }));
+  const total = days.reduce((s, d) => s + d.minutes, 0);
+  const GOAL = 40 * 60;
+  const MAX = 12 * 60;
+  return (
+    <Panel>
+      <Head title="이번 주 근무시간" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
+      <div className="mb-3 flex items-baseline gap-2">
+        <span className="text-[24px] leading-none font-black tabular-nums text-ink">{hoursText(total)}</span>
+        <span className="text-[12px] text-ink3">/ 40시간</span>
+      </div>
+      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-panel-alt">
+        <div className="h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+      </div>
+      <div className="relative flex h-[84px] items-end gap-2">
+        <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
+        {days.map((d) => (
+          <div key={d.date} className="flex h-full flex-1 items-end" title={`${WEEKDAYS[weekdayOf(d.date)]} ${hoursText(d.minutes)}`}>
+            {d.minutes > 0 && <div className={`w-full rounded-t-[5px] ${d.late ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(Math.min(d.minutes, MAX) / MAX) * 100}%` }} />}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 flex gap-2">
+        {days.map((d) => (
+          <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 일정: 이번 주 내 일정 ───────────────────────── */
+
+export function WeekScheduleWidget() {
+  const navigate = useNavigate();
+  const { user: me } = useAuth();
+  const deptId = useDeptId();
+  const today = todayKst();
+  const week = useMemo(() => weekDates(today), [today]);
+  const members = useMemo(() => (me ? [me] : []), [me]);
+  const { cellOf } = useDayEntryIndex({ actor: me, deptId, members, dates: week });
+  return (
+    <Panel>
+      <Head title="이번 주 내 일정" to={() => navigate('/gw/work-plan')} toLabel="업무계획" />
+      <ul className="m-0 flex list-none flex-col p-0">
+        {week.map((date) => {
+          const entries = me ? cellOf(me.id, date).entries : [];
+          const isToday = date === today;
+          const wd = weekdayOf(date);
+          return (
+            <li key={date} className={`grid grid-cols-[52px_minmax(0,1fr)] items-start gap-3 border-b border-border py-2 last:border-b-0 ${date < today ? 'opacity-55' : ''}`}>
+              <span className={`text-[12px] font-bold tabular-nums ${isToday ? 'text-[#0876c8]' : wd === 0 ? 'text-[#d97a7a]' : wd === 6 ? 'text-[#6f9cc4]' : 'text-ink2'}`}>
+                {Number(date.slice(8))}일 {WEEKDAYS[wd]}
+              </span>
+              <span className="flex min-w-0 flex-wrap gap-1">
+                {entries.length === 0 && <span className="text-[12px] text-ink3">-</span>}
+                {entries.slice(0, 3).map((e) => (
+                  <span key={e.key} className={`max-w-full truncate rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${isSpecial(e) ? BLOCK.special : BLOCK.general}`}>
+                    {e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)} ` : ''}{entryLabel(e)} {e.title}
+                  </span>
+                ))}
+                {entries.length > 3 && <span className="px-1 text-[11px] font-bold text-ink3">+{entries.length - 3}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 전자결재: 결재 대기 목록 ───────────────────────── */
+
+export function PendingApprovalWidget() {
+  const navigate = useNavigate();
+  const { user: me } = useAuth();
+  const { byBox } = useApprovalBoxes(me?.id);
+  const pending = useMemo(
+    () => (me ? (byBox['대기'] ?? []).filter((d) => currentApproverIds(d).includes(me.id)) : [])
+      .slice()
+      .sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? '')),
+    [byBox, me],
+  );
+  return (
+    <Panel>
+      <Head title="결재 대기" note={pending.length ? `${pending.length}건` : undefined} to={() => navigate('/gw/approval?box=대기')} />
+      {pending.length === 0 ? (
+        <Empty>결재할 문서가 없습니다.</Empty>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+          {pending.slice(0, 6).map((d) => (
+            <li key={d.id}>
+              <button type="button" onClick={() => navigate(`/gw/approval?doc=${encodeURIComponent(d.id)}`)} className="group flex w-full cursor-pointer items-center gap-3 rounded-xl bg-panel-alt px-3 py-2 text-left hover:bg-[#e6eef8] dark:hover:bg-white/10">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-bold text-ink group-hover:text-[#0876c8]">{d.title}</span>
+                  <span className="block truncate text-[11px] text-ink3">{d.drafterName ?? ''}{d.drafterDept ? ` ${d.drafterDept}` : ''}</span>
+                </span>
+                <span className="shrink-0 text-[11px] font-bold text-[#c4602f] tabular-nums">{timeAgo(d.submittedAt)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 전자결재: 내가 올린 문서 ───────────────────────── */
+
+export function MyDraftsWidget() {
+  const navigate = useNavigate();
+  const { user: me } = useAuth();
+  const { byBox } = useApprovalBoxes(me?.id);
+  const docs = useMemo(
+    () => (byBox['상신'] ?? []).filter((d) => d.status === '진행중').slice().sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? '')),
+    [byBox],
+  );
+  return (
+    <Panel>
+      <Head title="내가 올린 문서" note={docs.length ? `진행 중 ${docs.length}건` : undefined} to={() => navigate('/gw/approval?box=상신')} />
+      {docs.length === 0 ? (
+        <Empty>진행 중인 문서가 없습니다.</Empty>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {docs.slice(0, 5).map((d) => {
+            const line = d.steps.filter((s) => s.kind !== '참조').slice().sort((a, b) => a.seq - b.seq);
+            const done = line.filter((s) => s.decision === '승인').length;
+            return (
+              <li key={d.id}>
+                <button type="button" onClick={() => navigate(`/gw/approval?doc=${encodeURIComponent(d.id)}`)} className="group block w-full cursor-pointer text-left">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-[12.5px] font-bold text-ink group-hover:text-[#0876c8]">{d.title}</span>
+                    <span className="shrink-0 text-[11px] font-bold text-ink3 tabular-nums">{done}/{line.length}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {line.map((s, i) => (
+                      <span
+                        key={`${s.seq}-${i}`}
+                        title={`${s.approverName ?? ''} ${s.decision}`}
+                        className={`h-1.5 flex-1 rounded-full ${s.decision === '승인' ? 'bg-[#0876c8]' : s.decision === '반려' ? 'bg-[#e5484d]' : i === done ? 'bg-[#7cc4ec]' : 'bg-panel-alt'}`}
+                      />
+                    ))}
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 자원예약: 오늘 자원 사용 현황 ───────────────────────── */
+
+export function ResourceTodayWidget() {
+  const navigate = useNavigate();
+  const today = todayKst();
+  const range = useMemo(() => ({
+    from: new Date(`${today}T00:00:00+09:00`).toISOString(),
+    to: new Date(`${today}T23:59:59+09:00`).toISOString(),
+  }), [today]);
+  const rows = useReservations(range).data ?? [];
+  const byResource = useMemo(() => {
+    const map = new Map<string, { name: string; items: typeof rows }>();
+    for (const r of rows) {
+      if (r.status !== 'CONFIRMED' && r.status !== 'PENDING' && r.status !== 'COMPLETED') continue;
+      const g = map.get(r.resourceId) ?? { name: r.resourceNameSnapshot, items: [] };
+      g.items.push(r);
+      map.set(r.resourceId, g);
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko')).slice(0, 6);
+  }, [rows]);
+  const now = nowPercent();
+  const hours = [8, 10, 12, 14, 16, 18, 20];
+  return (
+    <Panel>
+      <Head title="오늘 자원 사용" to={() => navigate('/gw/resource')} toLabel="예약하기" />
+      {byResource.length === 0 ? (
+        <Empty>오늘 예약이 없습니다.</Empty>
+      ) : (
+        <div className="grid grid-cols-[minmax(80px,120px)_minmax(0,1fr)] gap-x-3 gap-y-2">
+          <span />
+          <div className="relative h-3.5">
+            {hours.map((h) => (
+              <span key={h} className="absolute -translate-x-1/2 text-[9.5px] tabular-nums text-ink3" style={{ left: `${((h * 60 - DAY_START_MIN) / (DAY_END_MIN - DAY_START_MIN)) * 100}%` }}>{h}</span>
+            ))}
+          </div>
+          {byResource.map((g) => (
+            <div key={g.name} className="contents">
+              <span className="truncate pt-1 text-[12px] font-bold text-ink2" title={g.name}>{g.name}</span>
+              <div className="relative h-7 rounded-md bg-panel-alt">
+                {g.items.map((r) => {
+                  const sp = timelineSpan(kstTime(r.startAt), kstTime(r.endAt));
+                  if (!sp) return null;
+                  return (
+                    <span
+                      key={r.id}
+                      title={`${kstTime(r.startAt)}~${kstTime(r.endAt)} ${r.title}`}
+                      className={`absolute top-1 bottom-1 overflow-hidden rounded px-1 text-[10px] leading-[20px] font-bold whitespace-nowrap ${r.status === 'PENDING' ? 'border border-dashed border-[#7cc4ec] bg-[#eef7fd] text-[#2f86c4] dark:bg-sky-500/10' : 'bg-[#0876c8] text-white'}`}
+                      style={{ left: `${sp.left}%`, width: `${sp.width}%` }}
+                    >
+                      {r.title}
+                    </span>
+                  );
+                })}
+                {now !== null && <span className="pointer-events-none absolute inset-y-0 w-0.5 bg-[#e5484d]" style={{ left: `${now}%` }} />}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 조직도: 오늘 휴가·외근 ───────────────────────── */
+
+const AWAY_STATUSES: UserPresenceStatus[] = ['LEAVE', 'OUTSIDE'];
+
+export function AwayTodayWidget() {
+  const navigate = useNavigate();
+  const users = useUsers({ status: '사용' }).data ?? [];
+  const presences = useAllUserPresences();
+  const groups = AWAY_STATUSES.map((s) => ({
+    s,
+    people: users.filter((u) => presences[u.id]?.status === s).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+  }));
+  const total = groups.reduce((n, g) => n + g.people.length, 0);
+  return (
+    <Panel>
+      <Head title="오늘 휴가·외근" note={total ? `${total}명` : undefined} to={() => navigate('/gw/orgchart')} toLabel="조직도" />
+      {total === 0 ? (
+        <Empty>오늘 휴가나 외근 중인 사람이 없습니다.</Empty>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {groups.filter((g) => g.people.length).map((g) => (
+            <div key={g.s}>
+              <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-bold text-ink2">
+                <i className={`h-2 w-2 rounded-full ${USER_PRESENCE_META[g.s].dotColor}`} />
+                {USER_PRESENCE_META[g.s].label} <span className="tabular-nums text-ink">{g.people.length}</span>
+              </div>
+              <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                {g.people.slice(0, 12).map((u) => (
+                  <li key={u.id} className="flex items-center gap-1.5 rounded-full bg-panel-alt py-1 pr-2.5 pl-1">
+                    {u.photoThumbUrl || u.photoUrl ? (
+                      <img src={u.photoThumbUrl || u.photoUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-panel text-[10px] font-bold text-ink2">{u.name.slice(0, 1)}</span>
+                    )}
+                    <span className="text-[11.5px] text-ink">{u.name}</span>
+                    <span className="text-[10.5px] text-ink3">{u.dept}</span>
+                  </li>
+                ))}
+                {g.people.length > 12 && <li className="px-1 py-1 text-[11px] font-bold text-ink3">+{g.people.length - 12}</li>}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 게시판: 최근 게시글 ───────────────────────── */
+
+const BOARD_NAMES: Record<string, string> = Object.fromEntries(BOARDS_SEED.map((b) => [b.id, b.name]));
+
+export function RecentPostsWidget() {
+  const navigate = useNavigate();
+  const posts = useBoardPosts().data ?? [];
+  const recent = useMemo(() => [...posts].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6), [posts]);
+  return (
+    <Panel>
+      <Head title="최근 게시글" to={() => navigate('/gw/board')} />
+      {recent.length === 0 ? (
+        <Empty>게시글이 없습니다.</Empty>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {recent.map((p) => (
+            <li key={p.id}>
+              <button type="button" onClick={() => navigate(`/gw/board?board=${p.boardId}&postId=${encodeURIComponent(p.id)}`)} className="group grid w-full cursor-pointer grid-cols-[60px_minmax(0,1fr)_40px] items-center gap-2.5 py-2 text-left">
+                <span className="truncate rounded-md bg-panel-alt px-1.5 py-0.5 text-center text-[10.5px] font-bold text-ink2">{BOARD_NAMES[p.boardId] ?? '게시판'}</span>
+                <span className="truncate text-[13px] text-ink group-hover:text-[#0876c8]">{p.title}</span>
+                <span className="text-right text-[11px] tabular-nums text-ink3">{p.date.slice(5, 10).replace('-', '.')}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }

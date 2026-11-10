@@ -3,7 +3,24 @@ import { GripVertical, MoveDiagonal2, MoveHorizontal, MoveVertical, Plus, X } fr
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { insertSlot, moveSlot, normalizeLayout, snapHeight, snapSize, type WidgetSize, type WidgetSlot } from './dashboard';
-import { ApprovalWidget, AttendanceWidget, LeaveWidget, NoticeWidget, ProjectWidget, ResourceWidget, TeamWidget, TodayWidget } from './widgets';
+import {
+  ApprovalWidget,
+  AttendanceWidget,
+  AwayTodayWidget,
+  LeaveWidget,
+  MyDraftsWidget,
+  NoticeWidget,
+  PendingApprovalWidget,
+  ProjectWidget,
+  RecentPostsWidget,
+  ResourceTodayWidget,
+  ResourceWidget,
+  TeamWidget,
+  TodayCommuteWidget,
+  TodayWidget,
+  WeekHoursWidget,
+  WeekScheduleWidget,
+} from './widgets';
 
 /**
  * 경영 현황 — 로그인 후 첫 화면. 편집 모드의 '위젯 추가' 창에서 모듈을 골라 위젯을 넣고,
@@ -16,12 +33,20 @@ interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: re
 
 const WIDGETS = {
   today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 220, Component: TodayWidget },
+  weekSchedule: { title: '이번 주 내 일정', module: '일정', size: 6, sizes: [4, 6, 8, 12], minH: 260, Component: WeekScheduleWidget },
   attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
+  todayCommute: { title: '오늘 출퇴근', module: '근태', size: 4, sizes: [4, 6], minH: 180, Component: TodayCommuteWidget },
+  weekHours: { title: '이번 주 근무시간', module: '근태', size: 4, sizes: [4, 6, 8], minH: 220, Component: WeekHoursWidget },
   leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], minH: 120, Component: LeaveWidget },
-  approval: { title: '전자결재', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 240, Component: ApprovalWidget },
+  approval: { title: '전자결재 현황', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 240, Component: ApprovalWidget },
+  approvalPending: { title: '결재 대기', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: PendingApprovalWidget },
+  approvalMine: { title: '내가 올린 문서', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: MyDraftsWidget },
   resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], minH: 180, Component: ResourceWidget },
+  resourceToday: { title: '오늘 자원 사용', module: '자원예약', size: 8, sizes: [6, 8, 12], minH: 180, Component: ResourceTodayWidget },
   team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 200, Component: TeamWidget },
+  awayToday: { title: '오늘 휴가·외근', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 160, Component: AwayTodayWidget },
   notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], minH: 150, Component: NoticeWidget },
+  recentPosts: { title: '최근 게시글', module: '게시판', size: 6, sizes: [4, 6, 8, 12], minH: 180, Component: RecentPostsWidget },
   project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], minH: 160, Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
@@ -46,7 +71,6 @@ const SPAN: Record<WidgetSize, string> = {
   8: 'col-span-12 xl:col-span-8',
   12: 'col-span-12',
 };
-const SIZE_LABEL: Record<WidgetSize, string> = { 4: '1/3', 6: '1/2', 8: '2/3', 12: '전체' };
 /** 미리보기를 그릴 실제 폭 — 이 폭으로 그린 뒤 줄여 보인다 */
 const PREVIEW_WIDTH: Record<WidgetSize, number> = { 4: 420, 6: 620, 8: 860, 12: 1180 };
 /** 위젯 추가 창의 카드 폭 — 실제 폭 비율대로 */
@@ -78,8 +102,8 @@ function PickerCard({ id, size, placed, onAdd, onDragStart, onDragEnd }: {
       role="button"
       tabIndex={placed ? -1 : 0}
       aria-disabled={placed}
-      aria-label={`${def.title} ${SIZE_LABEL[size]} 넣기`}
-      data-pick={`${id}:${size}`}
+      aria-label={`${def.title} 넣기`}
+      data-pick={id}
       draggable={!placed}
       onClick={() => { if (!placed) onAdd(); }}
       onKeyDown={(e) => { if (!placed && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onAdd(); } }}
@@ -99,7 +123,10 @@ function PickerCard({ id, size, placed, onAdd, onDragStart, onDragEnd }: {
           </span>
         )}
       </div>
-      <div className="mt-1.5 px-1 text-center text-[11.5px] font-bold text-ink3 tabular-nums">{SIZE_LABEL[size]}</div>
+      <div className="mt-2 flex items-baseline justify-between gap-2 px-1">
+        <span className="truncate text-[13px] font-bold text-ink">{def.title}</span>
+        {placed && <span className="shrink-0 text-[11px] text-ink3">배치됨</span>}
+      </div>
     </div>
   );
 }
@@ -162,31 +189,18 @@ function WidgetPicker({ open, hiddenForDrag, layout, onAdd, onClose, onDragStart
             <button type="button" onClick={onClose} aria-label="닫기" className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><X size={17} /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-6 pb-6">
-            <div className="flex flex-col gap-7">
-              {ids.map((id) => {
-                const placed = layout.some((s) => s.id === id);
-                return (
-                  <section key={id}>
-                    <div className="mb-2.5 flex items-baseline gap-2">
-                      <h3 className="text-[13.5px] font-extrabold text-ink">{WIDGETS[id].title}</h3>
-                      {placed && <span className="text-[11.5px] text-ink3">배치됨</span>}
-                    </div>
-                    <div className="flex flex-wrap items-end gap-4">
-                      {WIDGETS[id].sizes.map((size) => (
-                        <PickerCard
-                          key={size}
-                          id={id}
-                          size={size}
-                          placed={placed}
-                          onAdd={() => onAdd(id, size)}
-                          onDragStart={onDragStart}
-                          onDragEnd={onDragEnd}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+            <div className="flex flex-wrap items-start gap-5">
+              {ids.map((id) => (
+                <PickerCard
+                  key={id}
+                  id={id}
+                  size={WIDGETS[id].size}
+                  placed={layout.some((s) => s.id === id)}
+                  onAdd={() => onAdd(id, WIDGETS[id].size)}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                />
+              ))}
             </div>
           </div>
         </div>

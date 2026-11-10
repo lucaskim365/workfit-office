@@ -185,3 +185,29 @@ export function insertSlot<Id extends string>(list: WidgetSlot<Id>[], slot: Widg
   next.splice(Math.max(0, Math.min(at, next.length)), 0, slot);
   return next;
 }
+
+/** 그 날이 속한 주(월~일) 날짜 7개 */
+export function weekDates(date: string): string[] {
+  const d = new Date(`${date}T00:00:00Z`);
+  const back = (d.getUTCDay() + 6) % 7; // 월요일까지 며칠 전
+  return Array.from({ length: 7 }, (_, i) => new Date(d.getTime() + (i - back) * 86_400_000).toISOString().slice(0, 10));
+}
+
+/** 지난 시간 — 방금, n분 전, n시간 전, n일 전 */
+export function timeAgo(iso: string | null | undefined, now = new Date()): string {
+  const t = Date.parse(iso ?? '');
+  if (Number.isNaN(t)) return '';
+  const min = Math.max(0, Math.floor((now.getTime() - t) / 60_000));
+  if (min < 1) return '방금';
+  if (min < 60) return `${min}분 전`;
+  if (min < 60 * 24) return `${Math.floor(min / 60)}시간 전`;
+  return `${Math.floor(min / (60 * 24))}일 전`;
+}
+
+/** 분 → 'n시간 m분' (0분은 생략) */
+export function hoursText(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (!h) return `${m}분`;
+  return m ? `${h}시간 ${m}분` : `${h}시간`;
+}

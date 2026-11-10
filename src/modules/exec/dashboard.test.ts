@@ -100,3 +100,19 @@ test('끌어 바꾼 높이 — 20px 단위, 위젯 최소 높이 이상', () => 
   assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 301 }], known, []), [{ id: 'a', size: 4, h: 300 }]);
   assert.deepEqual(normalizeLayout([{ id: 'a', size: 4, h: 'x' }], known, []), [{ id: 'a', size: 4 }]);
 });
+
+import { hoursText, timeAgo, weekDates } from './dashboard';
+
+test('주간 날짜·지난 시간·시간 글자', () => {
+  assert.deepEqual(weekDates('2026-11-10'), ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']);
+  assert.equal(weekDates('2026-11-01')[0], '2026-10-26'); // 일요일은 그 주 마지막 날
+  const now = new Date('2026-11-10T05:00:00Z');
+  assert.equal(timeAgo('2026-11-10T04:59:30Z', now), '방금');
+  assert.equal(timeAgo('2026-11-10T04:30:00Z', now), '30분 전');
+  assert.equal(timeAgo('2026-11-10T01:00:00Z', now), '4시간 전');
+  assert.equal(timeAgo('2026-11-08T05:00:00Z', now), '2일 전');
+  assert.equal(timeAgo(null, now), '');
+  assert.equal(hoursText(125), '2시간 5분');
+  assert.equal(hoursText(120), '2시간');
+  assert.equal(hoursText(40), '40분');
+});
