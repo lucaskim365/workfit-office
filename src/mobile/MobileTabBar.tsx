@@ -1,8 +1,8 @@
-import { LayoutDashboard, Globe, MessageSquare, Sparkles } from 'lucide-react';
+import { House, Globe, MessageSquare, Sparkles } from 'lucide-react';
 
-/** 하단 탭 — 왼쪽부터 경영 현황·그룹웨어·Widdy·메신저 */
+/** 하단 탭 — 왼쪽부터 홈·그룹웨어·Widdy·메신저 */
 const TABS = [
-  { path: '/m/exec', label: '경영 현황', icon: LayoutDashboard },
+  { path: '/m/exec', label: '홈', icon: House },
   { path: '/m', label: '그룹웨어', icon: Globe },
   { path: '/m/widdy', label: 'Widdy', icon: Sparkles },
   { path: '/m/chat', label: '메신저', icon: MessageSquare },
