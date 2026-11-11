@@ -283,9 +283,8 @@ export default function ExecDashboardScreen() {
   /** 위젯 구역 폭 — 편집 중에는 이 폭으로 그린 뒤 오른쪽 보관함 자리만큼 줄여 보인다 */
   const areaRef = useRef<HTMLDivElement>(null);
   const [areaW, setAreaW] = useState(0);
-  /** 위젯 구역의 폭과 왼쪽 여백 */
+  /** 위젯 구역의 폭 */
   const viewW = Math.min(AREA_MAX, Math.round(areaW * AREA_RATIO));
-  const sideGap = Math.max(0, Math.round((areaW - viewW) / 2));
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
@@ -588,9 +587,14 @@ export default function ExecDashboardScreen() {
             {areaW <= 0 ? (
               grid
             ) : canEdit ? (
-              // 편집 중 — 왼쪽 여백은 평소와 같게 두고, 오른쪽 보관함 자리만큼 줄여 보인다
-              <div style={{ paddingLeft: sideGap }}>
-                <div style={{ width: viewW, zoom: Math.min(1, (areaW - sideGap - LIBRARY_W - 28) / viewW) }}>{grid}</div>
+              // 편집 중에도 가운데. 보관함을 열면 양옆 여백이 보관함 폭만큼 되도록 줄여 보인다(어느 쪽에 두어도 가리지 않게, 글이 안 읽힐 만큼은 줄이지 않음)
+              <div className="flex justify-center">
+                <div
+                  className="transition-[zoom] duration-200"
+                  style={{ width: viewW, zoom: libOpen ? Math.max(0.62, Math.min(1, (areaW - 2 * (LIBRARY_W + 28)) / viewW)) : 1 }}
+                >
+                  {grid}
+                </div>
               </div>
             ) : (
               <div className="mx-auto" style={{ width: viewW }}>{grid}</div>
