@@ -211,7 +211,7 @@ export default function HolidayScreen() {
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="text-xs font-medium text-ink3 mb-1">
-            기준 정보 <span className="px-1">/</span> 조직·결재 기준정보
+            회사·운영 <span className="px-1">/</span> 공휴일 관리
           </div>
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-soft text-lg text-teal">

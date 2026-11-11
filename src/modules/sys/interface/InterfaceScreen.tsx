@@ -26,7 +26,7 @@ export default function InterfaceScreen() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">인터페이스 관리</h1>
-          <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 인터페이스 관리</p>
+          <p className="mt-0.5 text-xs text-ink3">시스템 / 인터페이스 관리</p>
         </div>
         <ActionBar screenId="S_SYS_IF" actions={[{ preset: 'add', label: 'I/F 추가' }, 'save', 'refresh']} />
       </div>

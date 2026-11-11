@@ -153,7 +153,7 @@ export default function DepartmentScreen() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">부서/조직관리</h1>
-          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 부서·조직관리</p>
+          <p className="mt-0.5 text-xs text-ink3">구성원·조직 / 부서·조직 관리</p>
         </div>
         <button
           onClick={() => { setSel({ ...BLANK }); setMsg(''); }}

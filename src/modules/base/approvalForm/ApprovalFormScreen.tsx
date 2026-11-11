@@ -219,7 +219,7 @@ export default function ApprovalFormScreen() {
             <div>
               <h1 className="text-xl font-extrabold tracking-tight text-ink">결재서식 관리</h1>
               <p className="mt-0.5 text-xs text-ink3">
-                기준 정보 / 결재서식 관리 · 전사 전자결재 문서 양식 및 위지윅 A4 디자인 관리
+                전자결재 / 결재서식 관리 · 전사 전자결재 문서 양식 및 위지윅 A4 디자인 관리
               </p>
             </div>
             <button

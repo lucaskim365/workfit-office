@@ -20,7 +20,7 @@ export default function CodeScreen() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">공통코드정보</h1>
-          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 공통코드정보</p>
+          <p className="mt-0.5 text-xs text-ink3">회사·운영 / 공통코드</p>
         </div>
         <ActionBar screenId="S_BASE_CODE" actions={[{ preset: 'add', label: '코드 추가' }, 'save', 'refresh']} />
       </div>

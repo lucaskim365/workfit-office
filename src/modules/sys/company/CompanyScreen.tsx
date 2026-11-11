@@ -136,7 +136,7 @@ export default function CompanyScreen() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">회사 정보</h1>
-          <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 회사 정보</p>
+          <p className="mt-0.5 text-xs text-ink3">회사·운영 / 회사 정보</p>
         </div>
         <SaveStatus pending={pending} dirty={dirty} />
       </div>

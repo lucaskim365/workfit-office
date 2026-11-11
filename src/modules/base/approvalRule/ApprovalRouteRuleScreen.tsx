@@ -242,9 +242,9 @@ export default function ApprovalRouteRuleScreen() {
         <div>
           <div className="flex items-center gap-2">
             <span className="rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-extrabold text-teal border border-teal/20">
-              기준 정보
+              전자결재
             </span>
-            <span className="text-[12px] text-ink3 font-medium">조직·결재 기준정보</span>
+            <span className="text-[12px] text-ink3 font-medium">결재선 규칙</span>
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2.5">
             <GitMerge className="h-6 w-6 text-teal" />

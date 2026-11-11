@@ -46,7 +46,7 @@ export default function BackupScreen() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">데이터 백업</h1>
-          <p className="mt-0.5 text-xs text-ink3">시스템 관리 / 데이터 백업</p>
+          <p className="mt-0.5 text-xs text-ink3">시스템 / 데이터 백업</p>
         </div>
         <ActionBar screenId="S_SYS_BACKUP" actions={['save', 'refresh']} />
       </div>

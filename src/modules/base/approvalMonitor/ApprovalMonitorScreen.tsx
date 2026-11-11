@@ -106,7 +106,7 @@ export default function ApprovalMonitorScreen() {
       {/* 헤더 */}
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">결재문서 모니터링</h1>
-        <p className="mt-0.5 text-xs text-ink3">기준 정보 / 조직·결재 기준정보 / 전사 결재 문서 진행 상황 실시간 모니터링</p>
+        <p className="mt-0.5 text-xs text-ink3">전자결재 / 전사 결재 문서 진행 상황 실시간 모니터링</p>
       </div>
 
       <div>
