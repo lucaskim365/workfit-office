@@ -25,31 +25,33 @@ import {
 
 /**
  * tier — 처음 넣을 때 크기(소·중·대). 모든 위젯이 세 단계를 다 가진다.
- * rows — 단계별 세로 칸 수(한 칸 64px). 숫자 하나면 세 단계 모두 같은 높이. 높이는 끌어서 바꾸지 않는다.
+ * 높이는 모든 위젯·모든 단계가 같다(WIDGET_ROWS) — 끌어서 바꾸지 않는다.
  * mini — 휴대폰에서 반 칸(요약)으로 둘 수 있는가
  */
-type Rows = number | Record<Tier, number>;
-interface WidgetDef { title: string; module: string; tier: Tier; rows: Rows; mini?: boolean; Component: ComponentType }
+interface WidgetDef { title: string; module: string; tier: Tier; mini?: boolean; Component: ComponentType }
+
+/** 위젯 높이(세로 칸 수) — 모든 위젯이 같다. 6칸 = 368px */
+export const WIDGET_ROWS = 6;
 
 export const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', tier: 'L', rows: 5, Component: TodayWidget },
-  calendar: { title: '캘린더', module: '일정', tier: 'S', rows: 7, Component: CalendarWidget },
-  weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'M', rows: 5, Component: WeekScheduleWidget },
-  attendance: { title: '내 근태', module: '근태', tier: 'M', rows: { S: 4, M: 7, L: 7 }, Component: AttendanceWidget },
-  todayCommute: { title: '오늘 출퇴근', module: '근태', tier: 'S', rows: 4, mini: true, Component: TodayCommuteWidget },
-  weekHours: { title: '이번 주 근무시간', module: '근태', tier: 'S', rows: 4, mini: true, Component: WeekHoursWidget },
-  leave: { title: '연차', module: '근태', tier: 'S', rows: 3, mini: true, Component: LeaveWidget },
-  approval: { title: '전자결재 현황', module: '전자결재', tier: 'S', rows: 4, mini: true, Component: ApprovalWidget },
-  approvalPending: { title: '결재 대기', module: '전자결재', tier: 'S', rows: 4, Component: PendingApprovalWidget },
-  approvalMine: { title: '내가 올린 문서', module: '전자결재', tier: 'S', rows: 4, Component: MyDraftsWidget },
-  resource: { title: '내 자원예약', module: '자원예약', tier: 'S', rows: 4, Component: ResourceWidget },
-  resourceToday: { title: '오늘 자원 사용', module: '자원예약', tier: 'M', rows: 4, Component: ResourceTodayWidget },
-  team: { title: '우리 부서', module: '조직도', tier: 'S', rows: 4, Component: TeamWidget },
-  awayToday: { title: '오늘 휴가·외근', module: '조직도', tier: 'S', rows: 3, mini: true, Component: AwayTodayWidget },
-  birthday: { title: '이달의 생일자', module: '조직도', tier: 'S', rows: { S: 4, M: 3, L: 3 }, mini: true, Component: BirthdayWidget },
-  notice: { title: '공지사항', module: '게시판', tier: 'M', rows: 3, Component: NoticeWidget },
-  recentPosts: { title: '최근 게시글', module: '게시판', tier: 'M', rows: 4, Component: RecentPostsWidget },
-  project: { title: '프로젝트', module: '프로젝트', tier: 'S', rows: 4, Component: ProjectWidget },
+  today: { title: '오늘 일정', module: '일정', tier: 'L', Component: TodayWidget },
+  calendar: { title: '캘린더', module: '일정', tier: 'S', Component: CalendarWidget },
+  weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'M', Component: WeekScheduleWidget },
+  attendance: { title: '내 근태', module: '근태', tier: 'M', Component: AttendanceWidget },
+  todayCommute: { title: '오늘 출퇴근', module: '근태', tier: 'S', mini: true, Component: TodayCommuteWidget },
+  weekHours: { title: '이번 주 근무시간', module: '근태', tier: 'S', mini: true, Component: WeekHoursWidget },
+  leave: { title: '연차', module: '근태', tier: 'S', mini: true, Component: LeaveWidget },
+  approval: { title: '전자결재 현황', module: '전자결재', tier: 'S', mini: true, Component: ApprovalWidget },
+  approvalPending: { title: '결재 대기', module: '전자결재', tier: 'S', Component: PendingApprovalWidget },
+  approvalMine: { title: '내가 올린 문서', module: '전자결재', tier: 'S', Component: MyDraftsWidget },
+  resource: { title: '내 자원예약', module: '자원예약', tier: 'S', Component: ResourceWidget },
+  resourceToday: { title: '오늘 자원 사용', module: '자원예약', tier: 'M', Component: ResourceTodayWidget },
+  team: { title: '우리 부서', module: '조직도', tier: 'S', Component: TeamWidget },
+  awayToday: { title: '오늘 휴가·외근', module: '조직도', tier: 'S', mini: true, Component: AwayTodayWidget },
+  birthday: { title: '이달의 생일자', module: '조직도', tier: 'S', mini: true, Component: BirthdayWidget },
+  notice: { title: '공지사항', module: '게시판', tier: 'M', Component: NoticeWidget },
+  recentPosts: { title: '최근 게시글', module: '게시판', tier: 'M', Component: RecentPostsWidget },
+  project: { title: '프로젝트', module: '프로젝트', tier: 'S', Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
 export type WidgetId = keyof typeof WIDGETS;
@@ -93,11 +95,8 @@ export function loadLayout(userId: string | undefined, fallback: WidgetSlot<Widg
 
 /** 위젯의 크기 단계 — 저장된 폭(예전 배치의 4·8칸 등)도 가장 가까운 단계로 */
 export const tierOfSlot = (slot: WidgetSlot<WidgetId>): Tier => tierOf(slot.size);
-/** 단계별 세로 칸 수 */
-export const rowsAt = (id: WidgetId, tier: Tier) => {
-  const r = (WIDGETS[id] as WidgetDef).rows;
-  return typeof r === 'number' ? r : r[tier];
-};
+/** 세로 칸 수 — 모든 위젯·모든 단계가 같다 */
+export const rowsAt = (_id: WidgetId, _tier: Tier) => WIDGET_ROWS;
 /** 위젯이 차지하는 세로 칸 수 */
 export const rowsOf = (slot: WidgetSlot<WidgetId>) => rowsAt(slot.id, tierOfSlot(slot));
 /** 처음 넣을 때 폭 */

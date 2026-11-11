@@ -1,14 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, Undo2, X } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, Undo2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, tierOf, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
+import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
 import { WidgetTierProvider } from './widgets';
 
 /**
  * 홈(경영 현황) — 로그인 후 첫 화면.
  * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고, 위젯은 늘 왼쪽 위로 붙는다(빈칸은 높이가 다른 위젯 옆에만).
- * 편집: 위젯은 끌어서 옮기고, 크기는 소(4칸)·중(6칸)·대(12칸) 단추나 오른쪽 아래 손잡이를 끌어 바꾼다(가까운 단계로 맞춤).
+ * 편집: 위젯은 끌어서 옮기고, 크기는 소(4칸)·중(6칸)·대(12칸) 단추로 바꾼다. 높이는 모든 위젯이 같다.
  * 편집 띠의 '위젯 보관함'을 열면 화면 위에 떠서(모듈 → 위젯, 끌어서 옮기고 모듈별로 펴고 접기) 눈을 켜고 끈다. 닫으면 화면에는 놓인 위젯만 깔린다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
@@ -256,10 +256,9 @@ export default function ExecDashboardScreen() {
   const [editing, setEditing] = useState(false);
   /** 끄는 동안 미리 보는 배치와, 그 안에서 방금 옮기거나 키운 위젯 */
   const [draft, setDraft] = useState<{ list: WidgetSlot<WidgetId>[]; pin: WidgetId } | null>(null);
-  /** 옮기는 중인 위젯 / 보관함에서 끌어 오는 위젯 / 크기를 끌어 바꾸는 위젯 */
+  /** 옮기는 중인 위젯 / 보관함에서 끌어 오는 위젯 */
   const [dragId, setDragId] = useState<WidgetId | null>(null);
   const [dragNew, setDragNew] = useState<WidgetId | null>(null);
-  const [resizing, setResizing] = useState<WidgetId | null>(null);
   /** 옮기기 끌기를 허락한 위젯 — 크기 단추·손잡이를 누를 때는 옮기기가 시작되지 않게 */
   const [armed, setArmed] = useState<WidgetId | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -328,7 +327,7 @@ export default function ExecDashboardScreen() {
       const at = { x: (r.left - g.left) * k, y: (r.top - g.top) * k };
       next.set(id, at);
       const before = prevRects.current.get(id);
-      if (!editing || still || !before || id === resizing) return;
+      if (!editing || still || !before) return;
       const dx = before.x - at.x;
       const dy = before.y - at.y;
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
@@ -393,39 +392,6 @@ export default function ExecDashboardScreen() {
   /** 크기 바꾸기 — 소·중·대 단추. 폭과 높이가 그 단계로 바뀌고, 나머지 위젯은 다시 왼쪽 위로 붙는다 */
   const setTier = (id: WidgetId, tier: Tier) => commit(layout.map((s) => (s.id === id ? { ...s, size: TIER_COLS[tier] } : s)), id);
 
-  /** 오른쪽 아래 손잡이를 끌어 크기 바꾸기 — 마우스가 있는 폭에서 가장 가까운 단계(소·중·대)로 맞춘다 */
-  const startResize = (id: WidgetId, e: ReactPointerEvent<HTMLElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const box = boxes.get(id);
-    if (!gridRef.current || !box) return;
-    let list = layout.map((s) => (s.id === id ? { ...s, x: box.x, y: box.y } : s));
-    let moved = false;
-    setResizing(id);
-    const onMove = (ev: PointerEvent) => {
-      const at = cellAt(ev.clientX, ev.clientY);
-      const cols = Math.round((at.x + CELL_GAP) / at.pitchX) - box.x;
-      // 오른쪽 끝까지 끌면 한 줄 전체(대) — 가운데서 시작한 위젯도 대로 키울 수 있게
-      const toEdge = at.x >= gridRef.current!.offsetWidth - at.pitchX / 2;
-      const size = toEdge ? TIER_COLS.L : TIER_COLS[tierOf(cols)];
-      const cur = list.find((s) => s.id === id)!;
-      if (cur.size === size) return;
-      moved = true;
-      // 오른쪽 끝을 넘는 폭이면 왼쪽으로 당겨 둔다
-      list = list.map((s) => (s.id === id ? { ...s, size, x: Math.min(box.x, GRID_COLS - size) } : s));
-      setDraft({ list, pin: id });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      setResizing(null);
-      setDraft(null);
-      if (moved) commit(list, id);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
   /** 보관함의 눈 — 켜면 첫 빈자리에 기본 크기로, 끄면 홈에서 뺀다 */
   const toggleWidget = (id: WidgetId) =>
     commit(layout.some((s) => s.id === id) ? layout.filter((s) => s.id !== id) : [...layout, { id, size: defaultSizeOf(id) }]);
@@ -452,7 +418,6 @@ export default function ExecDashboardScreen() {
         const box = boxes.get(slot.id)!;
         const isNew = !layout.some((s) => s.id === slot.id);
         const isDragged = dragId === slot.id || (isNew && canEdit);
-        const isResizing = resizing === slot.id;
         const tier = tierOfSlot(slot);
         const { Component, title } = WIDGETS[slot.id];
         return (
@@ -465,7 +430,7 @@ export default function ExecDashboardScreen() {
             style={{ gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` }}
             draggable={canEdit && armed === slot.id}
             onPointerDown={(e) => {
-              if (!canEdit || (e.target as HTMLElement).closest('button, [role="separator"]')) return;
+              if (!canEdit || (e.target as HTMLElement).closest('button')) return;
               setArmed(slot.id);
             }}
             onPointerUp={() => { if (!dragId) setArmed(null); }}
@@ -486,9 +451,7 @@ export default function ExecDashboardScreen() {
               <div
                 className={`flex h-full flex-col ${
                   canEdit
-                    ? `-m-1.5 h-[calc(100%+12px)] cursor-grab rounded-[24px] p-1.5 ring-2 transition-[box-shadow,background-color] active:cursor-grabbing ${
-                        isResizing ? 'bg-[#dcebf9] ring-[#0876c8] dark:bg-sky-500/15' : 'bg-[#e8f0f9] ring-transparent hover:ring-[#9fcfee] dark:bg-white/5'
-                      }`
+                    ? '-m-1.5 h-[calc(100%+12px)] cursor-grab rounded-[24px] bg-[#e8f0f9] p-1.5 ring-2 ring-transparent transition-[box-shadow,background-color] hover:ring-[#9fcfee] active:cursor-grabbing dark:bg-white/5'
                     : ''
                 }`}
               >
@@ -502,8 +465,8 @@ export default function ExecDashboardScreen() {
             )}
             {canEdit && !isDragged && (
               <>
-                {/* 크기(소·중·대)와 숨기기 — 오른쪽 위 */}
-                <div className={`absolute -top-3 right-3 z-40 flex items-center gap-0.5 rounded-full border-2 border-[#0876c8] bg-panel p-0.5 shadow-md transition-opacity focus-within:opacity-100 group-hover/slot:opacity-100 ${isResizing ? 'opacity-100' : 'opacity-0'}`}>
+                {/* 크기(소·중·대)와 숨기기 — 오른쪽 위, 커서를 올리면 */}
+                <div className={`absolute -top-3 right-3 z-40 flex items-center gap-0.5 rounded-full border-2 border-[#0876c8] bg-panel p-0.5 shadow-md transition-opacity focus-within:opacity-100 opacity-0 group-hover/slot:opacity-100`}>
                   <div role="radiogroup" aria-label={`${title} 크기`} className="flex gap-0.5">
                     {TIERS.map((t) => {
                       const on = t === tier;
@@ -532,19 +495,6 @@ export default function ExecDashboardScreen() {
                   >
                     <EyeOff size={14} />
                   </button>
-                </div>
-                {/* 크기 손잡이 — 끌면 가까운 단계로 맞춰진다 */}
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label={`${title} 크기 조절`}
-                  title="끌어서 크기 조절"
-                  onPointerDown={(e) => startResize(slot.id, e)}
-                  className={`absolute -right-2.5 -bottom-2.5 z-40 grid h-8 w-8 cursor-ew-resize touch-none place-items-center rounded-full border-2 border-[#0876c8] shadow-md transition-opacity group-hover/slot:opacity-100 ${
-                    isResizing ? 'bg-[#0876c8] text-white opacity-100' : 'bg-panel text-[#0876c8] opacity-0 hover:bg-[#e0f0fb]'
-                  }`}
-                >
-                  <MoveDiagonal2 size={15} />
                 </div>
               </>
             )}

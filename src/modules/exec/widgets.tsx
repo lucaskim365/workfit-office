@@ -376,7 +376,7 @@ function Donut({ counts, centerTop, centerBottom }: { counts: Record<AttendanceB
   const C = 2 * Math.PI * R;
   const GAP = slices.length > 1 ? 2 : 0; // 조각 사이 2px 틈
   return (
-    <svg viewBox="0 0 132 132" className="h-[116px] w-[116px] shrink-0" role="img" aria-label={`이번 달 근태 ${ATTENDANCE_BUCKETS.map((k) => `${ATTENDANCE_LABELS[k]} ${counts[k]}일`).join(', ')}`}>
+    <svg viewBox="0 0 132 132" className="h-[104px] w-[104px] shrink-0" role="img" aria-label={`이번 달 근태 ${ATTENDANCE_BUCKETS.map((k) => `${ATTENDANCE_LABELS[k]} ${counts[k]}일`).join(', ')}`}>
       <circle cx="66" cy="66" r={R} fill="none" strokeWidth="14" className="stroke-panel-alt" />
       {slices.map((s) => (
         <circle
@@ -580,10 +580,10 @@ export function AttendanceWidget() {
       {myEmpId === null && settled ? (
         <Empty>근태 기록과 연결된 사번이 없어 근태를 불러오지 못했습니다. 인사 담당자에게 사번 연결을 요청하세요.</Empty>
       ) : (
-        <div className={`grid gap-6 ${tier ? 'grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]'}`}>
-          {/* 왼쪽: 도넛 + 범례, 달력 */}
-          <div>
-            <div className="mb-4 flex items-center gap-4">
+        <div className={`grid gap-6 ${tier ? 'min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]'}`}>
+          {/* 왼쪽: 도넛 + 범례, 달력(달력 칸은 남은 높이에 맞춰 줄어든다) */}
+          <div className="flex min-h-0 flex-col">
+            <div className="mb-3 flex items-center gap-4">
               <Donut counts={counts} centerTop={`${counts.work + counts.late}일`} centerBottom="출근한 날" />
               <ul className="m-0 flex shrink-0 list-none flex-col gap-2 p-0">
                 {ATTENDANCE_BUCKETS.map((k) => (
@@ -600,7 +600,7 @@ export function AttendanceWidget() {
                 <span key={w} className={`text-center text-[10px] font-bold ${i === 0 ? 'text-[#d97a7a]' : i === 6 ? 'text-[#6f9cc4]' : 'text-ink3'}`}>{w}</span>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 gap-1">
               {Array.from({ length: firstWeekday(month) }, (_, i) => <div key={`e${i}`} />)}
               {myDays.map((d) => (
                 <button
@@ -608,7 +608,7 @@ export function AttendanceWidget() {
                   type="button"
                   onClick={() => navigate('/gw/commute')}
                   title={`${Number(d.date.slice(8))}일 ${d.date > today && d.bucket === 'pending' ? '' : ATTENDANCE_LABELS[d.bucket]}`}
-                  className={`h-8 cursor-pointer rounded-md text-[11px] font-bold tabular-nums ${BUCKET_CELL[d.bucket]} ${d.date === today ? 'ring-2 ring-[#0876c8] ring-offset-1 ring-offset-panel' : ''} ${d.date > today ? 'opacity-50' : ''}`}
+                  className={`h-full max-h-8 min-h-[22px] cursor-pointer rounded-md text-[11px] font-bold tabular-nums ${BUCKET_CELL[d.bucket]} ${d.date === today ? 'ring-2 ring-[#0876c8] ring-offset-1 ring-offset-panel' : ''} ${d.date > today ? 'opacity-50' : ''}`}
                 >
                   {Number(d.date.slice(8))}
                 </button>
@@ -1073,7 +1073,7 @@ export function CalendarWidget() {
               type="button"
               onClick={() => setPicked(date)}
               title={holiday}
-              className={`flex h-11 cursor-pointer flex-col items-center gap-1 rounded-lg pt-1 ${isPicked ? 'bg-[#e6f1fb] dark:bg-sky-500/15' : 'hover:bg-panel-alt'}`}
+              className={`flex h-9 cursor-pointer flex-col items-center gap-0.5 rounded-lg pt-0.5 ${isPicked ? 'bg-[#e6f1fb] dark:bg-sky-500/15' : 'hover:bg-panel-alt'}`}
             >
               <span
                 className={`grid h-6 w-6 place-items-center rounded-full text-[12px] font-bold tabular-nums ${
