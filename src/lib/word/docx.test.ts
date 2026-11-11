@@ -9,7 +9,7 @@ import { halfPoints, hexColor } from './docxWrite';
 import { imageSize, toDataUrl } from './image';
 import { unzip, zip } from './zip';
 import { TABLE_MAX_WIDTH, type WordNode } from './model';
-import { CELL_MIN_WIDTH, fitWidths } from './format';
+import { CELL_MIN_WIDTH, TABLE_SNAP, fitWidths, snapColumnWidth } from './format';
 
 const t = (text: string, ...marks: WordNode['marks'] & object): WordNode => (marks.length ? { type: 'text', text, marks } : { type: 'text', text });
 const p = (...content: WordNode[]): WordNode => ({ type: 'paragraph', content });
@@ -268,6 +268,15 @@ test('열 너비 맞추기 — 합은 표 너비 그대로, 최소 너비보다 
   assert.ok(out.reduce((a, b) => a + b, 0) <= 600);
   assert.ok(out.every((w) => w >= CELL_MIN_WIDTH));
   assert.deepEqual(fitWidths([100, 100], 300), [150, 150]);
+});
+
+test('열 끌기 — 표 끝이 본문 경계 앞뒤 근처면 경계에 붙고, 더 끌면 넘어간다. 너비 모르는 열이 있으면 그대로', () => {
+  const w = [100, 200, 200];
+  assert.equal(snapColumnWidth(w, 2, 150, 600), 150);
+  assert.equal(snapColumnWidth(w, 2, 300 - TABLE_SNAP + 1, 600), 300);
+  assert.equal(snapColumnWidth(w, 2, 300 + TABLE_SNAP - 1, 600), 300);
+  assert.equal(snapColumnWidth(w, 2, 450, 600), 450);
+  assert.equal(snapColumnWidth([100, undefined, 200], 2, 450, 600), 450);
 });
 
 test('글꼴 불러오기 — 영문 글꼴만 정한 글은 한글 자리에 문서 기본 한글 글꼴(화면이 한글을 엉뚱한 글꼴로 그리지 않게), 다시 저장해도 같은 짝', async () => {

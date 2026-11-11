@@ -5,6 +5,8 @@
  *   borders(네 변 테두리 — format.ts)
  */
 import type { Editor } from '@tiptap/react';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Transaction } from '@tiptap/pm/state';
 import { TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { CellSelection, TableMap, isInTable, selectedRect } from '@tiptap/pm/tables';
 import { TABLE_MAX_WIDTH } from './model';
@@ -110,6 +112,34 @@ export function setCellBorders(editor: Editor, border: CellBorder | null): boole
     .run();
 }
 
+/** 표 열마다 정한 너비(px) — 정하지 않은 열은 undefined */
+export function columnWidths(table: PMNode): (number | undefined)[] {
+  const map = TableMap.get(table);
+  const widths: (number | undefined)[] = Array(map.width).fill(undefined);
+  for (const rel of new Set(map.map)) {
+    const cw = table.nodeAt(rel)?.attrs.colwidth as number[] | null | undefined;
+    const { left } = map.findCell(rel);
+    cw?.forEach((w, k) => {
+      if (w > 0 && widths[left + k] === undefined) widths[left + k] = w;
+    });
+  }
+  return widths;
+}
+
+/** 표의 한 열(col) 너비를 바꾼다 — 그 열을 덮는 칸들의 colwidth 만 고친다(합친 칸은 그 자리만) */
+export function setColumnWidth(tr: Transaction, tableStart: number, table: PMNode, col: number, width: number): void {
+  const map = TableMap.get(table);
+  for (const rel of new Set(map.map)) {
+    const { left, right } = map.findCell(rel);
+    if (col < left || col >= right) continue;
+    const cell = table.nodeAt(rel);
+    if (!cell) continue;
+    const colwidth = Array.isArray(cell.attrs.colwidth) ? [...(cell.attrs.colwidth as number[])] : Array(right - left).fill(0);
+    colwidth[col - left] = width;
+    tr.setNodeMarkup(tableStart + rel, undefined, { ...cell.attrs, colwidth });
+  }
+}
+
 /**
  * 열 넣기 — 워드처럼 표 너비는 그대로 두고 열들을 비율로 좁힌다(새 열은 기존 열 평균 너비로 시작).
  * 새 칸은 옆 칸(넣은 기준 칸)의 배경색·세로 맞춤·테두리를 이어받는다.
@@ -145,14 +175,7 @@ export function addColumnKeepWidth(editor: Editor, side: 'before' | 'after'): bo
       }
 
       // 열마다 지금 너비(새 열은 아직 없음)
-      const widths: (number | undefined)[] = Array(map.width).fill(undefined);
-      for (const rel of cells) {
-        const cw = table.nodeAt(rel)?.attrs.colwidth as number[] | null | undefined;
-        const { left } = map.findCell(rel);
-        cw?.forEach((w, k) => {
-          if (w > 0 && widths[left + k] === undefined) widths[left + k] = w;
-        });
-      }
+      const widths = columnWidths(table);
       const known = widths.filter((w): w is number => w !== undefined);
       if (known.length && known.length < map.width) {
         const total = Math.min(known.reduce((x, y) => x + y, 0), TABLE_MAX_WIDTH);

@@ -6,7 +6,7 @@
  * - spaceBefore·spaceAfter: 문단 앞·뒤 간격(pt)
  * - indent: 왼쪽 들여쓰기(pt), firstLine: 첫 줄 들여쓰기(pt, 음수면 내어쓰기)
  *
- * 표 열 너비 맞추기(fitWidths — 열을 넣어도 표 너비 그대로).
+ * 표 열 너비 맞추기(fitWidths — 열을 넣어도 표 너비 그대로), 끌어 바꿀 때 본문 경계에 붙이기(snapColumnWidth).
  * 표 칸(tableCell·tableHeader) attrs.borders: { top, right, bottom, left } 마다 { style, width(px, 소수 — 워드 0.5pt 선은 0.67px), color('#rrggbb') }
  */
 
@@ -86,6 +86,20 @@ export function fitWidths(widths: number[], total: number): number[] {
     if (narrow < 0 || fixed.size + 1 >= widths.length) return out.map((w) => Math.max(CELL_MIN_WIDTH, w));
     fixed.add(narrow);
   }
+}
+
+/** 표 오른쪽 끝이 본문 경계 앞뒤로 이만큼(px) 안에 오면 경계에 붙인다 */
+export const TABLE_SNAP = 12;
+
+/**
+ * 열 너비를 끌어 바꿀 때 — 표 오른쪽 끝이 본문 경계(limit) 앞뒤 근처면 경계에 붙인다(워드처럼). 더 끌면 경계를 넘어간다.
+ * 너비를 정하지 않은 열이 있으면 그대로
+ */
+export function snapColumnWidth(widths: (number | undefined)[], col: number, width: number, limit: number): number {
+  if (widths.some((w, i) => i !== col && w === undefined)) return width;
+  const others = widths.reduce<number>((sum, w, i) => (i === col ? sum : sum + (w ?? 0)), 0);
+  const snapped = limit - others;
+  return snapped >= CELL_MIN_WIDTH && Math.abs(others + width - limit) <= TABLE_SNAP ? snapped : width;
 }
 
 // ── 표 테두리 ──

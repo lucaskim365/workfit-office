@@ -19,6 +19,8 @@ import { Btn, Palette, Popover, SELECT_CLS, Sep, closePopover } from './controls
 import { ParagraphFormat, INDENT_STEP, changeIndent, setParaFormat } from './paragraph';
 import { CELL_MIN_WIDTH, paraDefault } from './format';
 import { TableBar } from './TableBar';
+import { TableSnap } from './tableSnap';
+import { PAGE_GAP, PAGE_PITCH, Pagination, pageCount } from './pagination';
 
 export interface WordEditorProps {
   value: WordNode;
@@ -46,6 +48,8 @@ export const WORD_EXTENSIONS = [
   WordTableCell,
   WordTableHeader,
   ParagraphFormat,
+  TableSnap,
+  Pagination,
 ];
 
 /** 줄 간격(워드 배수)·문단 앞뒤 간격(pt) 고르기 */
@@ -65,7 +69,7 @@ const FONTS = [
 
 /** 종이 안 문서 모양 — 앱 공통 CSS(Tailwind 초기화)가 목록 점·표 선을 지우므로 여기서 다시 그린다 */
 const CSS = `
-.wf-word .ProseMirror{outline:none;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;line-height:1.5;color:#111;word-break:keep-all;overflow-wrap:anywhere}
+.wf-word .ProseMirror{outline:none;display:flow-root;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;line-height:1.5;color:#111;word-break:keep-all;overflow-wrap:anywhere}
 .wf-word .ProseMirror p{margin:0 0 6pt}
 .wf-word .ProseMirror h1,.wf-word .ProseMirror h2,.wf-word .ProseMirror h3,.wf-word .ProseMirror h4,.wf-word .ProseMirror h5,.wf-word .ProseMirror h6{font-weight:700;margin:12pt 0 6pt;line-height:1.3}
 .wf-word .ProseMirror h1,.wf-word .ProseMirror h2{margin-top:18pt}
@@ -74,7 +78,7 @@ const CSS = `
 .wf-word .ProseMirror ul{list-style:disc;padding-left:2em;margin:0 0 6pt}.wf-word .ProseMirror ul ul{list-style:circle}.wf-word .ProseMirror ul ul ul{list-style:square}
 .wf-word .ProseMirror ol{list-style:decimal;padding-left:2em;margin:0 0 6pt}.wf-word .ProseMirror ol ol{list-style:lower-alpha}.wf-word .ProseMirror ol ol ol{list-style:lower-roman}
 .wf-word .ProseMirror li>p{margin:0 0 2pt}
-.wf-word .ProseMirror blockquote{border-left:3px solid #bfbfbf;padding-left:10px;color:#595959;margin:0 0 6pt}
+.wf-word .ProseMirror blockquote{border-left:3px solid #bfbfbf;padding-left:10px;color:#595959;margin:0 0 6pt;display:flow-root}
 .wf-word .ProseMirror hr{border:none;border-top:1px solid #bfbfbf;margin:8pt 0}
 .wf-word .ProseMirror a{color:#0563c1;text-decoration:underline}
 .wf-word .ProseMirror code{font-family:Consolas,monospace;background:#f2f2f2;padding:0 2px;border-radius:2px}
@@ -91,7 +95,7 @@ const CSS = `
 .wf-word .ProseMirror.resize-cursor{cursor:col-resize}
 .wf-word .ProseMirror .tableWrapper{overflow-x:auto}
 .wf-word .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#aaa;float:left;height:0;pointer-events:none}
-@media print{html,body{background:#fff!important}.wf-word-bar{display:none!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
+@media print{html,body{background:#fff!important}.wf-word-bar,.wf-word-sheets,.wf-pg-spacer{display:none!important}.wf-pg-push{padding-top:0!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
 `;
 
 export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, placeholder = '내용을 입력하세요', toolbarExtra, onReady }: WordEditorProps) {
@@ -124,6 +128,7 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
   useEffect(() => {
     if (editor && !editor.isDestroyed) editor.setEditable(!readOnly);
   }, [editor, readOnly]);
+  const pages = editor && !editor.isDestroyed ? pageCount(editor.state) : 1;
 
   return (
     <div className="wf-word">
@@ -134,12 +139,51 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
         </div>
       )}
       <div
-        className="wf-word-paper mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,.15)]"
-        style={{ width: A4.width, minHeight: A4.height, padding: A4.margin, boxSizing: 'border-box' }}
+        className="wf-word-paper relative mx-auto"
+        style={{ width: A4.width, minHeight: pages * PAGE_PITCH - PAGE_GAP, padding: A4.margin, boxSizing: 'border-box' }}
         onClick={() => editor && !editor.isDestroyed && !editor.isFocused && !readOnly && editor.commands.focus()}
       >
-        <EditorContent editor={editor} />
+        <PageSheets pages={pages} />
+        {/* 종이(위치 지정된 요소)보다 위에 그려지게 */}
+        <div className="relative z-[1]">
+          <EditorContent editor={editor} />
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** 모서리 표시 길이(px)·색 */
+const MARK = 20;
+const MARK_COLOR = '#b4b4b4';
+
+/**
+ * A4 종이들 — 장마다 흰 종이와 본문 영역 네 모서리 표시(┘ └ ┐ ┌, 워드처럼 여백 경계). 장 사이는 틈(PAGE_GAP).
+ * 어느 내용이 어느 장에 오는지는 쪽 나눔(pagination.ts)이 정한다. 인쇄에는 나오지 않는다
+ */
+function PageSheets({ pages }: { pages: number }) {
+  const left = A4.margin - MARK;
+  const right = A4.width - A4.margin;
+  const line = `1px solid ${MARK_COLOR}`;
+  return (
+    <div className="wf-word-sheets pointer-events-none absolute inset-0" aria-hidden>
+      {Array.from({ length: pages }, (_, i) => {
+        const top = i * PAGE_PITCH;
+        const marks = [
+          { left, top: top + A4.margin - MARK, borderRight: line, borderBottom: line },
+          { left: right, top: top + A4.margin - MARK, borderLeft: line, borderBottom: line },
+          { left, top: top + A4.height - A4.margin, borderRight: line, borderTop: line },
+          { left: right, top: top + A4.height - A4.margin, borderLeft: line, borderTop: line },
+        ];
+        return (
+          <div key={i}>
+            <div className="absolute left-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,.15)]" style={{ top, width: A4.width, height: A4.height }} />
+            {marks.map((st, k) => (
+              <span key={k} className="absolute" style={{ width: MARK, height: MARK, ...st }} />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
