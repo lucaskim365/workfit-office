@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, Undo2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, tierOf, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
@@ -275,20 +275,32 @@ export default function ExecDashboardScreen() {
     setLayout(next);
   }, [me?.id]);
 
-  /** 자리를 다시 잡는다(겹친 위젯은 아래로, 모두 왼쪽 위로) — 저장은 '적용'에서 */
+  /** 편집 중 되돌리기 기록 — 바꿀 때마다 직전 배치를 쌓는다(최근 30번) */
+  const [history, setHistory] = useState<WidgetSlot<WidgetId>[][]>([]);
+
+  /** 자리를 다시 잡는다(빈틈없이 왼쪽 위부터) — 저장은 '적용'에서 */
   const commit = (next: WidgetSlot<WidgetId>[], pin: WidgetId | null = null) => {
     const boxes = arrange(placementsOf(next), pin);
-    setLayout(next.map((s) => {
+    const placed = next.map((s) => {
       const b = boxes.get(s.id)!;
       return { ...s, size: b.w, x: b.x, y: b.y };
-    }));
+    });
+    if (JSON.stringify(placed) === JSON.stringify(layout)) return;
+    setHistory((h) => [...h.slice(-29), layout]);
+    setLayout(placed);
+  };
+  const undo = () => {
+    if (!history.length) return;
+    setLayout(history[history.length - 1]);
+    setHistory((h) => h.slice(0, -1));
   };
 
   const resetDrag = () => { setDraft(null); setDragId(null); setDragNew(null); setArmed(null); };
-  const startEdit = () => { setLayout(saved); setEditing(true); setLibOpen(false); resetDrag(); };
-  const cancelEdit = () => { setLayout(saved); setEditing(false); setLibOpen(false); resetDrag(); };
+  const startEdit = () => { setLayout(saved); setHistory([]); setEditing(true); setLibOpen(false); resetDrag(); };
+  const cancelEdit = () => { setLayout(saved); setHistory([]); setEditing(false); setLibOpen(false); resetDrag(); };
   const applyEdit = () => {
     setSaved(layout);
+    setHistory([]);
     setEditing(false);
     setLibOpen(false);
     resetDrag();
@@ -298,6 +310,54 @@ export default function ExecDashboardScreen() {
 
   const shown = draft?.list ?? (editing ? layout : saved);
   const boxes = arrange(placementsOf(shown), draft?.pin ?? null);
+  /** 적용하지 않은 바뀐 것이 있는가 */
+  const dirty = editing && JSON.stringify(layout) !== JSON.stringify(saved);
+
+  // 위젯 자리가 바뀌면 원래 자리에서 새 자리로 미끄러지듯 옮겨 보인다(무엇이 어디로 갔는지 보이게)
+  const prevRects = useRef(new Map<string, { x: number; y: number }>());
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const g = grid.getBoundingClientRect();
+    const k = g.width ? grid.offsetWidth / g.width : 1;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const next = new Map<string, { x: number; y: number }>();
+    grid.querySelectorAll<HTMLElement>('[data-slot-id]').forEach((el) => {
+      const id = el.dataset.slotId!;
+      const r = el.getBoundingClientRect();
+      const at = { x: (r.left - g.left) * k, y: (r.top - g.top) * k };
+      next.set(id, at);
+      const before = prevRects.current.get(id);
+      if (!editing || still || !before || id === resizing) return;
+      const dx = before.x - at.x;
+      const dy = before.y - at.y;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' });
+    });
+    prevRects.current = next;
+  });
+
+  // 편집 중 Ctrl+Z(⌘+Z) — 한 단계 되돌리기
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // 적용하지 않고 창을 닫거나 새로 고치면 한 번 묻는다
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [dirty]);
   const bottom = Math.max(0, ...[...boxes.values()].map((b) => b.y + b.h));
 
   /** 마우스 위치 → 모눈 칸(화면 배율을 걷어 내고 센다) */
@@ -399,6 +459,7 @@ export default function ExecDashboardScreen() {
           <div
             key={slot.id}
             data-slot
+            data-slot-id={slot.id}
             data-tier={tier}
             className="group/slot relative z-[1] min-w-0"
             style={{ gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` }}
@@ -442,7 +503,7 @@ export default function ExecDashboardScreen() {
             {canEdit && !isDragged && (
               <>
                 {/* 크기(소·중·대)와 숨기기 — 오른쪽 위 */}
-                <div className="absolute -top-3 right-3 z-40 flex items-center gap-0.5 rounded-full border-2 border-[#0876c8] bg-panel p-0.5 shadow-md">
+                <div className={`absolute -top-3 right-3 z-40 flex items-center gap-0.5 rounded-full border-2 border-[#0876c8] bg-panel p-0.5 shadow-md transition-opacity focus-within:opacity-100 group-hover/slot:opacity-100 ${isResizing ? 'opacity-100' : 'opacity-0'}`}>
                   <div role="radiogroup" aria-label={`${title} 크기`} className="flex gap-0.5">
                     {TIERS.map((t) => {
                       const on = t === tier;
@@ -479,8 +540,8 @@ export default function ExecDashboardScreen() {
                   aria-label={`${title} 크기 조절`}
                   title="끌어서 크기 조절"
                   onPointerDown={(e) => startResize(slot.id, e)}
-                  className={`absolute -right-2.5 -bottom-2.5 z-40 grid h-8 w-8 cursor-ew-resize touch-none place-items-center rounded-full border-2 border-[#0876c8] shadow-md ${
-                    isResizing ? 'bg-[#0876c8] text-white' : 'bg-panel text-[#0876c8] hover:bg-[#e0f0fb]'
+                  className={`absolute -right-2.5 -bottom-2.5 z-40 grid h-8 w-8 cursor-ew-resize touch-none place-items-center rounded-full border-2 border-[#0876c8] shadow-md transition-opacity group-hover/slot:opacity-100 ${
+                    isResizing ? 'bg-[#0876c8] text-white opacity-100' : 'bg-panel text-[#0876c8] opacity-0 hover:bg-[#e0f0fb]'
                   }`}
                 >
                   <MoveDiagonal2 size={15} />
@@ -508,6 +569,16 @@ export default function ExecDashboardScreen() {
             <LayoutGrid size={15} />위젯 보관함
           </button>
           <div className="ml-auto flex items-center gap-2">
+            {dirty && <span className="mr-1 text-[12px] font-bold text-[#2f6fa5] dark:text-sky-200">적용하지 않은 변경</span>}
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!history.length}
+              title="되돌리기 (Ctrl+Z)"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent dark:text-sky-200 dark:hover:bg-white/10"
+            >
+              <Undo2 size={15} />되돌리기
+            </button>
             <button type="button" onClick={() => commit(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
               기본 배치
             </button>
