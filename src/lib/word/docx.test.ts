@@ -160,8 +160,8 @@ test('워드 문서 불러오기 — 문서 기본 간격·스타일 간격·글
   assert.deepEqual(d.content![0].attrs, { lineHeight: 1.08, spaceAfter: 0 });
   // Body 는 Normal 위에 앞 6pt, 글자 단위 들여쓰기(2글자·첫 줄 1글자 = 20pt·10pt)
   assert.deepEqual(d.content![1].attrs, { lineHeight: 1.08, spaceBefore: 6, spaceAfter: 0, indent: 20, firstLine: 10 });
-  // 고정 줄 간격은 기본 글자 기준 배수로(18pt ÷ 13pt)
-  assert.equal(d.content![2].attrs?.lineHeight, 1.38);
+  // 고정 줄 간격은 기본 글자 한 줄 기준 배수로(18pt ÷ 17.28pt)
+  assert.equal(d.content![2].attrs?.lineHeight, 1.04);
 });
 
 test('표 테두리 — 칸 테두리를 저장했다 불러와도 그대로', async () => {

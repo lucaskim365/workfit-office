@@ -17,7 +17,7 @@ import { fromDataUrl, imageSize } from './image';
 import { WordTableCell, WordTableHeader, WordTableRow } from './cell';
 import { Btn, Palette, Popover, SELECT_CLS, Sep, closePopover } from './controls';
 import { ParagraphFormat, INDENT_STEP, changeIndent, setParaFormat } from './paragraph';
-import { CELL_MIN_WIDTH, paraDefault } from './format';
+import { CELL_MIN_WIDTH, PARA_DEFAULT, WORD_SINGLE_LINE, paraDefault } from './format';
 import { TableBar } from './TableBar';
 import { TableSnap } from './tableSnap';
 import { PAGE_GAP, PAGE_PITCH, Pagination, pageCount } from './pagination';
@@ -67,17 +67,17 @@ const FONTS = [
   { label: 'Times New Roman', value: "'Times New Roman', serif" },
 ];
 
-/** 종이 안 문서 모양 — 앱 공통 CSS(Tailwind 초기화)가 목록 점·표 선을 지우므로 여기서 다시 그린다 */
+/** 종이 안 문서 모양(줄 높이는 워드 '한 줄' 기준 — format.ts) — 앱 공통 CSS(Tailwind 초기화)가 목록 점·표 선을 지우므로 여기서 다시 그린다 */
 const CSS = `
-.wf-word .ProseMirror{outline:none;display:flow-root;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;line-height:1.5;color:#111;word-break:keep-all;overflow-wrap:anywhere}
+.wf-word .ProseMirror{outline:none;display:flow-root;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;line-height:${PARA_DEFAULT.lineHeight * WORD_SINGLE_LINE};color:#111;word-break:keep-all;overflow-wrap:anywhere}
 .wf-word .ProseMirror p{margin:0 0 6pt}
-.wf-word .ProseMirror h1,.wf-word .ProseMirror h2,.wf-word .ProseMirror h3,.wf-word .ProseMirror h4,.wf-word .ProseMirror h5,.wf-word .ProseMirror h6{font-weight:700;margin:12pt 0 6pt;line-height:1.3}
+.wf-word .ProseMirror h1,.wf-word .ProseMirror h2,.wf-word .ProseMirror h3,.wf-word .ProseMirror h4,.wf-word .ProseMirror h5,.wf-word .ProseMirror h6{font-weight:700;margin:12pt 0 6pt;line-height:${WORD_SINGLE_LINE}}
 .wf-word .ProseMirror h1,.wf-word .ProseMirror h2{margin-top:18pt}
 .wf-word .ProseMirror h1{font-size:18pt}.wf-word .ProseMirror h2{font-size:15pt}.wf-word .ProseMirror h3{font-size:13pt}
 .wf-word .ProseMirror h4{font-size:12pt}.wf-word .ProseMirror h5{font-size:11pt}.wf-word .ProseMirror h6{font-size:10pt}
 .wf-word .ProseMirror ul{list-style:disc;padding-left:2em;margin:0 0 6pt}.wf-word .ProseMirror ul ul{list-style:circle}.wf-word .ProseMirror ul ul ul{list-style:square}
 .wf-word .ProseMirror ol{list-style:decimal;padding-left:2em;margin:0 0 6pt}.wf-word .ProseMirror ol ol{list-style:lower-alpha}.wf-word .ProseMirror ol ol ol{list-style:lower-roman}
-.wf-word .ProseMirror li>p{margin:0 0 2pt}
+.wf-word .ProseMirror li>p{margin:0}
 .wf-word .ProseMirror blockquote{border-left:3px solid #bfbfbf;padding-left:10px;color:#595959;margin:0 0 6pt;display:flow-root}
 .wf-word .ProseMirror hr{border:none;border-top:1px solid #bfbfbf;margin:8pt 0}
 .wf-word .ProseMirror a{color:#0563c1;text-decoration:underline}

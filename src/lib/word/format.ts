@@ -10,8 +10,11 @@
  * 표 칸(tableCell·tableHeader) attrs.borders: { top, right, bottom, left } 마다 { style, width(px, 소수 — 워드 0.5pt 선은 0.67px), color('#rrggbb') }
  */
 
-/** 워드 '한 줄' 간격이 글자 크기의 몇 배인지(맑은 고딕 기준) — 화면 줄 높이 = 워드 배수 × 이 값 */
-export const WORD_SINGLE_LINE = 1.3;
+/**
+ * 워드 '한 줄' 간격이 글자 크기의 몇 배인지 — 화면 줄 높이 = 워드 배수 × 이 값.
+ * 워드에서 잰 값: 맑은 고딕 1.728배(10pt 한 줄 17.28pt, 20pt 34.56pt). 바탕·굴림·돋움·Arial 은 1.32배쯤이지만 문서 기본 글꼴(맑은 고딕)에 맞춘다
+ */
+export const WORD_SINGLE_LINE = 1.728;
 /** 편집기 기본 문단 모양(값이 없을 때) — 화면 CSS·저장 기본값과 같다. 표 칸 안은 문단 간격 0 */
 export const PARA_DEFAULT = { lineHeight: 1.15, spaceBefore: 0, spaceAfter: 6 } as const;
 export const PARA_DEFAULT_IN_CELL = { lineHeight: 1.15, spaceBefore: 0, spaceAfter: 0 } as const;
