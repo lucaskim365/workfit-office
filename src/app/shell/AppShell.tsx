@@ -1,7 +1,7 @@
 import { Activity, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Routes, useLocation, useNavigate, type Location } from 'react-router-dom';
 import type { FlatScreen } from '@/shared/types/menu';
-import { closeTab as closeTabModel, restoreTabState, syncTab, type ShellNavState, type ShellTab } from './tabModel';
+import { closeTab as closeTabModel, pinHome, restoreTabState, syncTab, type ShellNavState, type ShellTab } from './tabModel';
 import { MENU_TREE } from '../menu-tree';
 import { SCREEN_BY_URL, HOME_URL } from './screens';
 import { gwScreen } from './gw-screens';
@@ -58,11 +58,10 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
    * 라우트를 그리고, 보이지 않는 탭은 <Activity mode=hidden> 으로 상태만 남긴다 —
    * 숨긴 동안에는 effect(구독·타이머·리스너)가 정리돼 뒤에서 돌지 않는다.
    */
-  const [tabs, setTabs] = useState<ShellTab[]>(() => {
-    if (activeScreen) return [{ ...activeScreen, href }];
-    const home = SCREEN_BY_URL[HOME_URL];
-    return home ? [{ ...home, href: home.url }] : [];
-  });
+  /** 홈 탭 — 늘 맨 앞에 있고 닫을 수 없다 */
+  const homeScreen = SCREEN_BY_URL[HOME_URL];
+  const homeTab: ShellTab | undefined = homeScreen ? { ...homeScreen, href: homeScreen.url } : undefined;
+  const [tabs, setTabs] = useState<ShellTab[]>(() => pinHome(activeScreen ? [{ ...activeScreen, href }] : [], homeTab));
   /** 탭별 화면 위치. 탭 전환(restore)은 저장된 위치를 그대로 되살려 딥링크가 다시 적용되지 않게 한다. */
   const [tabLocations, setTabLocations] = useState<Record<string, Location>>(() =>
     activeScreen ? { [activeScreen.id]: location } : {},
@@ -71,7 +70,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
   // 이번 렌더의 탭·위치 — 이동 직후 첫 렌더부터 올바른 탭에 그려야 화면이 다시 마운트되지 않는다.
   const existingTab = activeScreen ? tabs.find((t) => t.id === activeScreen.id) : undefined;
   const keepStored = Boolean(existingTab && (navMode === 'restore' || navMode === 'open-app'));
-  const viewTabs = !activeScreen || keepStored ? tabs : syncTab(tabs, activeScreen, href);
+  const viewTabs = pinHome(!activeScreen || keepStored ? tabs : syncTab(tabs, activeScreen, href), tabs.find((t) => t.id === homeTab?.id) ?? homeTab);
   const viewLocations =
     !activeScreen || keepStored || tabLocations[activeScreen.id] === location
       ? tabLocations
@@ -203,7 +202,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
   };
   const closeTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const result = closeTabModel(tabs, id, activeTabId);
+    const result = closeTabModel(tabs, id, activeTabId, homeTab?.id);
     setTabs(result.tabs);
     setTabLocations((prev) => {
       const next = { ...prev };
@@ -260,6 +259,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
         <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 flex-col min-w-fit w-full' : 'flex flex-1 flex-col min-w-0'}>
           <TabBar
             tabs={viewTabs}
+            homeId={homeTab?.id}
             activeTabId={activeTabId}
             onSelect={selectTab}
             onClose={closeTab}

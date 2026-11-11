@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { ShellTab } from './tabModel';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
-import { X, Plus, ChevronDown, LayoutGrid } from 'lucide-react';
+import { X, Plus, ChevronDown, House, LayoutGrid } from 'lucide-react';
 import { isGwUrl } from './gw-screens';
 
 interface TabBarProps {
   tabs: ShellTab[];
+  /** 고정 탭(홈) — 맨 앞, 닫기 단추 없음 */
+  homeId?: string;
   activeTabId: string | null;
   onSelect: (tab: ShellTab) => void;
   onClose: (id: string, e: React.MouseEvent) => void;
@@ -13,7 +15,7 @@ interface TabBarProps {
   setMenuOpen: (v: boolean) => void;
 }
 
-export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenuOpen }: TabBarProps) {
+export function TabBar({ tabs, homeId, activeTabId, onSelect, onClose, menuOpen, setMenuOpen }: TabBarProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   // 탭이 막대보다 많으면 막대 안에서 가로로 넘긴다 — 휠을 가로 스크롤로 바꾼다
@@ -51,6 +53,7 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenu
         {tabs.map((t) => {
           const a = t.id === activeTabId;
           const gw = isGwUrl(t.url);
+          const home = t.id === homeId;
           return (
             <button
               key={t.id}
@@ -61,18 +64,24 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenu
                 a ? 'h-[30px] border-l border-r border-t border-border-hi bg-panel shadow-[0_-1px_2px_rgba(23,34,65,0.04)]' : 'h-[26px] bg-[#dde3ee]'
               }`}
             >
-              {gw ? (
+              {home ? (
+                <House size={13} className={`shrink-0 ${a ? 'text-teal' : 'text-ink2'}`} />
+              ) : gw ? (
                 <MenuGlyph glyph={t.icon} size={13} className="shrink-0 text-ink2" />
               ) : (
                 <span className={`h-1.5 w-1.5 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
               )}
               <span className={`whitespace-nowrap text-[11px] ${a ? 'font-bold text-ink' : 'font-semibold text-ink2'}`}>{t.name}</span>
-              <span
-                onClick={(e) => onClose(t.id, e)}
-                className={`grid h-4 w-4 place-items-center rounded-full transition-colors ${a ? 'bg-panel-alt text-ink2 hover:bg-border' : 'text-ink3 hover:text-ink'}`}
-              >
-                <X size={10} />
-              </span>
+              {home ? (
+                <span className="w-1" />
+              ) : (
+                <span
+                  onClick={(e) => onClose(t.id, e)}
+                  className={`grid h-4 w-4 place-items-center rounded-full transition-colors ${a ? 'bg-panel-alt text-ink2 hover:bg-border' : 'text-ink3 hover:text-ink'}`}
+                >
+                  <X size={10} />
+                </span>
+              )}
             </button>
           );
         })}
@@ -111,9 +120,11 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenu
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a ? 'bg-teal' : 'bg-ink3'}`} />
                     )}
                     <span className={`min-w-0 flex-1 truncate text-[11.5px] ${a ? 'font-bold text-teal' : 'font-medium text-ink2'}`}>{t.name}</span>
-                    <span onClick={(e) => onClose(t.id, e)} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-ink3 hover:text-ink">
-                      <X size={11} />
-                    </span>
+                    {t.id !== homeId && (
+                      <span onClick={(e) => onClose(t.id, e)} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-ink3 hover:text-ink">
+                        <X size={11} />
+                      </span>
+                    )}
                   </div>
                 );
               })}
