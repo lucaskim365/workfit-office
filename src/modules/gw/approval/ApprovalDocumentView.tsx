@@ -798,7 +798,8 @@ export function ApprovalDocumentView({
           form={form}
           drafterName={drafterName}
           drafterPos={drafterPos}
-          isAmountInDetails={isAmountInDetails}
+          // 시트 문서의 금액은 늘 시트 칸(금액 키)에서 온다 — 본문에 이미 있으므로 머리에 따로 두지 않는다
+          isAmountInDetails={sheetDoc || isAmountInDetails}
           amountLabel={amountLabel}
         />
 

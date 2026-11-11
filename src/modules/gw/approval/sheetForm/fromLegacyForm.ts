@@ -231,6 +231,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (input) {
       const options = input === 'select' || input === 'multiSelect' ? { options: f.options ?? [] } : {};
       s = setApprovalProp(s, at, APPROVAL_NS.input, { type: input, ...options });
+      // 금액은 천 단위 쉼표·오른쪽 정렬(기존 양식처럼 35,000)
+      if (input === 'currency') s = applyStyle(s, at, { numFmt: 'currency', align: 'right' });
       if (f.required) s = setApprovalProp(s, at, APPROVAL_NS.required, true);
     } else if (f.type === '자동번호') {
       // 같은 서식 코드에 붙이므로 그 항목의 순번을 이어 쓴다(1번부터 다시 시작하지 않게)
@@ -450,6 +452,12 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     if (f.label) tables.set(f.label.trim(), { top, cols: t.cols, rows: t.rows });
     const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
     const repeat = legacyRepeatRows(t, headerRows);
+    /** 금액 수식(소계 등)이 든 열 — 그 열의 빈 입력 칸도 금액(쉼표)으로. 기존 표는 입력 칸에 금액 서식을 안 건 경우가 많다 */
+    const currencyCols = new Set(
+      Object.entries(t.cellFormulas)
+        .filter(([, v]) => (v as { format?: string } | undefined)?.format === 'currency')
+        .map(([k]) => k.slice(k.indexOf(':') + 1))
+    );
     const untranslated: string[] = [];
     t.rows.forEach((tr, i) => {
       const r = nextRow();
@@ -489,7 +497,9 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
           // 금액 서식은 숫자 칸에만 — 기존 표는 줄·열째 금액 서식을 걸어 '매출(원)'·'단가' 같은 이름표 칸에도 붙어 있다
           // (금액 입력 칸이 되면 글자라서 '숫자가 아님'으로 빨갛게 뜬다)
           const numeric = !text || parseNumber(text) !== null;
-          s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: st?.numFmt === 'currency' && numeric ? 'currency' : 'text' });
+          const currency = numeric && (st?.numFmt === 'currency' || (!text && i >= headerRows && currencyCols.has(tcol)));
+          s = setApprovalProp(s, span(r, j, j), APPROVAL_NS.input, { type: currency ? 'currency' : 'text' });
+          if (currency && st?.numFmt !== 'currency') s = applyStyle(s, span(r, j, j), { numFmt: 'currency', align: 'right' });
         }
       });
       if (f.hideOnExternal) s = setRowMeta(s, APPROVAL_NS.extHide, r, true);

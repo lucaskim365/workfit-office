@@ -312,6 +312,26 @@ test('열 너비 — 고르게 나누되 한 열에만 든 긴 이름표는 잘�
   assert.ok(Math.abs(w.reduce((a, b) => a + b, 0) - 718) <= s.cols.length, '전체 폭은 A4 폭');
 });
 
+test('금액 모양 — 금액 항목, 금액 수식(소계)이 든 열의 빈 입력 칸은 천 단위 쉼표', () => {
+  const tbl = JSON.stringify({
+    version: 2,
+    cols: ['구분', '금액'],
+    rows: [{ 구분: '구분', 금액: '금액' }, { 구분: 'SW', 금액: '' }, { 구분: '소계', 금액: '' }],
+    legacyHeaderRow: true,
+    colWidths: {}, tableWidth: '100%', merges: [], cellFormulas: { '2:금액': { expression: '=SUM(ABOVE)', format: 'currency' } }, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [],
+  });
+  const { sheet: s } = legacyFormToSheet(legacyForm('계약', [
+    { key: 'amount', label: '청구 금액', type: '금액' },
+    { key: 't', label: '매출', type: '표', placeholder: tbl },
+  ]));
+  const amt = findText(s, '청구 금액')!;
+  assert.equal(s.styles[`${amt.r}:${s.cols[1]}`]?.numFmt, 'currency');
+  const sw = findText(s, 'SW')!;
+  assert.equal(approvalCellProps(s, sw.r, 1).input?.type, 'currency');
+  assert.equal(s.styles[`${sw.r}:${s.cols[1]}`]?.numFmt, 'currency');
+  assert.equal(approvalCellProps(s, findText(s, '금액')!.r, 1).input?.type, 'text', '머리 줄 이름표는 그대로');
+});
+
 test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(기존 표의 가운데 정렬 대신), 글자 칸은 그대로', () => {
   const table = JSON.stringify({
     version: 2,
