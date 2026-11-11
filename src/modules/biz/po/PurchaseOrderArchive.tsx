@@ -109,6 +109,9 @@ export function PurchaseOrderArchive({
   );
 
   const [viewDoc, setViewDoc] = useState<ApprovalDoc | null>(null);
+  // PDF 는 보고 있는 모양(처음은 거래처용)으로 — 문서를 열 때마다 거래처용부터
+  const [pdfExternal, setPdfExternal] = useState(true);
+  useEffect(() => setPdfExternal(true), [viewDoc?.id]);
   const [err, setErr] = useState<string | null>(null);
 
   // ── 회신 문서·세금계산서 업로드 — 클릭(숨긴 file input 하나를 행마다 돌려 씀)과 끌어다 놓기가 같은 길로 올린다 ──
@@ -382,7 +385,7 @@ export function PurchaseOrderArchive({
       >
         {viewDoc && (
           <div className="overflow-x-auto">
-            <ApprovalDocumentView doc={viewDoc} currentUser={{ id: me.id, dept: me.dept }} external />
+            <ApprovalDocumentView doc={viewDoc} currentUser={{ id: me.id, dept: me.dept }} external onExternalViewChange={setPdfExternal} />
           </div>
         )}
       </Modal>
@@ -390,7 +393,7 @@ export function PurchaseOrderArchive({
       {/* PDF 생성용 — 화면 밖에 A4 폭으로 그린다 */}
       {pdfDoc && (
         <div ref={pdfHostRef} aria-hidden className="pointer-events-none fixed top-0" style={{ left: -10000, width: 800 }}>
-          <ApprovalDocumentView doc={pdfDoc} currentUser={{ id: me.id, dept: me.dept }} external />
+          <ApprovalDocumentView doc={pdfDoc} currentUser={{ id: me.id, dept: me.dept }} external={pdfExternal} viewToggle={false} />
         </div>
       )}
     </main>

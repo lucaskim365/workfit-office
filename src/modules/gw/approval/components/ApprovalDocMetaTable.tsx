@@ -50,9 +50,8 @@ export function ApprovalDocMetaTable({
   isAmountInDetails: boolean;
   amountLabel: string;
 }) {
-  // 서식 설정 — 결재 완료 문서에서는 자동 정보 표와 제목을 모두 숨김(대외 문서용)
-  const hideAutoInfo = hidden || (!!form?.hideDocInfoOnComplete && doc.status === '완료');
-  if (hideAutoInfo) return null;
+  // 거래처용 모양 — 자동 정보 표와 제목을 모두 숨김
+  if (hidden) return null;
   // 서식에서 끈 머리 항목은 빼고 두 칸씩 채운다(남는 하나는 한 줄 전체)
   const shown = (item: HeaderItem) => headerShown(form, item);
   const cells = ([

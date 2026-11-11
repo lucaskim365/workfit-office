@@ -7,6 +7,7 @@
  */
 import type { Sheet, XlsxExportOptions } from '@/lib/sheet/core';
 import { approvalCellProps, completedDateRows, draftInfoValue, isSecretCell, slotOf, type DraftInfo, type SheetSlots } from './approvalSheet';
+import { extrasHiddenRows, isExtrasDrawCell } from './docExtras';
 
 export interface DocExportInput {
   /** 값이 얹힌 문서 시트(반복 구간 펼침, 대외 문서면 숨김 행 뺀 것) */
@@ -22,14 +23,17 @@ export interface DocExportInput {
 
 export function docExportOptions({ sheet, condHidden, masked, docInfo, slotText, sheetName }: DocExportInput): XlsxExportOptions {
   const completedRows = new Set(completedDateRows(sheet));
+  // 첨부·관련 문서 자리 — 넣을 글자가 없으면 줄째 뺀다(화면에서 숨는 것과 같게)
+  const emptyExtras = extrasHiddenRows(sheet, !!slotText?.extras);
   return {
     sheetName,
-    skipRow: (r) => condHidden.has(r) || (!docInfo?.completedDate && completedRows.has(r)),
+    skipRow: (r) => condHidden.has(r) || (!docInfo?.completedDate && completedRows.has(r)) || emptyExtras.has(r),
     cellText: (r, c) => {
       const p = approvalCellProps(sheet, r, c);
       if (p.guide) return '';
       if (masked && isSecretCell(sheet, r, c)) return '비공개';
       const slot = slotOf(p.bind);
+      if (slot === 'extras') return isExtrasDrawCell(sheet, r, c) ? (slotText?.extras ?? '') : '';
       if (slot) return slotText?.[slot] ?? '';
       if (p.bind) return draftInfoValue(p.bind, docInfo);
       return undefined;

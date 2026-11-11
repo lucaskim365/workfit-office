@@ -34,6 +34,7 @@ import {
   withBranchOptions,
 } from '@/domain/approvalForm/sheet/valueRules';
 import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
+import { EXTRAS_BIND, placeExtras } from '@/domain/approvalForm/sheet/docExtras';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { isExternalHiddenRow, setExternalHiddenRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { AutoNumberSettings } from '../components/ApprovalFormEditor';
@@ -76,7 +77,6 @@ export function SheetCellPanel({
   selection,
   onChange,
   link = null,
-  external = false,
   onPreview,
 }: {
   sheet: Sheet;
@@ -84,8 +84,6 @@ export function SheetCellPanel({
   onChange: (next: Sheet) => void;
   /** '값에 따라 바뀌는 것' 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 편집 화면에서 흐리게 */
   onPreview?: (preview: { name: string; value: string } | null) => void;
-  /** 서식의 '대외 문서'가 켜져 있는지 — 행 숨김 안내 문구 */
-  external?: boolean;
   /** 연동 기능(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
   link?: string | null;
 }) {
@@ -271,7 +269,14 @@ export function SheetCellPanel({
         <select
           className={inp}
           value={props.bind ?? ''}
-          onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}
+          onChange={(e) => {
+            // 첨부·관련 문서 자리는 서식에 하나·한 줄 — 부품 목록과 같은 규칙으로
+            if (e.target.value === EXTRAS_BIND) {
+              const placed = placeExtras(sheet, range);
+              return 'notice' in placed ? alert(placed.notice) : onChange(placed);
+            }
+            onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined));
+          }}
         >
           <option value="">채우지 않음</option>
           {BIND_GROUPS.map((g) => (
@@ -404,11 +409,7 @@ export function SheetCellPanel({
           checked={rowsExternalHidden}
           onChange={(v) => onChange(setExternalHiddenRows(sheet, range.r1, range.r2, v))}
           label={`대외 문서에서 숨김 (${rowLabel})`}
-          hint={
-            external
-              ? '결재가 끝난 대외 문서(거래처용·발주서 PDF)에서 이 행을 통째로 뺍니다.'
-              : "위 '대외 문서'를 켜면 적용됩니다 — 결재가 끝난 문서를 거래처용으로 볼 때 이 행을 통째로 뺍니다."
-          }
+          hint="문서를 거래처용으로 볼 때(문서 화면의 [거래처용]·발주서 PDF) 이 행을 통째로 뺍니다."
         />
       </div>
 

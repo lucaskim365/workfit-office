@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, Paperclip, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -11,6 +11,7 @@ import {
   type CellInputType,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
+import { placeExtras } from '@/domain/approvalForm/sheet/docExtras';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 
 /**
@@ -70,6 +71,7 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'doc.logo': ImageIcon,
   'draft.sign': Signature,
   'doc.letterhead': Landmark,
+  'doc.extras': Paperclip,
   'doc.preservation': Archive,
   'doc.visibility': Eye,
 };
@@ -79,6 +81,7 @@ const DOC_HINTS: Record<string, string> = {
   'doc.approvalLine': '결재자 이름·도장 칸 — 결재선에 따라 칸 수가 바뀌고, 기안 화면에서 누르면 결재선을 고칩니다. 넓게 합친 칸에 두세요. 시트에 결재란이 있으면 문서 머리 전체가 빠집니다',
   'doc.logo': '회사 로고 그림',
   'doc.letterhead': '회사 주소·사업장 주소·전화·팩스·홈페이지·이메일 머리글 — 회사 정보 화면의 값이 저절로(기존 서식 \'회사정보\'와 같음)',
+  'doc.extras': '첨부파일·수신처·관련 문서가 이 줄에 들어갑니다(기존 문서처럼 본문과 맺음말 사이). 한 줄을 고르면 그 줄을 합쳐 씁니다. 없으면 시트 아래에 붙고, 보일 것이 없으면 줄째 숨습니다',
   'draft.sign': '맺음말 아래 \'기안자 이름 (인)\' — 기안자 도장이나 서명',
   'draft.completedDate': '결재가 끝난 날짜를 채웁니다(작성·결재 중엔 비어 있음). 문서 머리의 결재 완료일은 빠집니다',
   'doc.title': '기안자가 여기서 문서 제목을 씁니다(필수, 문서 목록·검색에 쓰는 제목). 문서 머리의 제목 줄은 빠집니다',
@@ -118,12 +121,15 @@ const bindPart = (value: string, label: string): Part => ({
   remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.bind, undefined),
 });
 
+/** 첨부·관련 문서 자리 — 서식에 하나, 한 줄(고른 칸을 합침), 반복 구간 밖 */
+const extrasPart = (label: string): Part => ({ ...bindPart('doc.extras', label), apply: placeExtras });
+
 export const PART_GROUPS: { label: string; parts: Part[] }[] = [
   // 묶음 이름은 아래 '칸 속성'과 같게 — 입력 칸 / 자동 채우기 / 문서 항목
   { label: '입력 칸', parts: (Object.keys(CELL_INPUT_LABELS) as CellInputType[]).map(inputPart) },
   { label: '자동 채우기', parts: (BIND_GROUPS.find((g) => g.label === '기안 정보')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
   { label: '문서 항목', parts: (BIND_GROUPS.find((g) => g.label === '문서 항목')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
-  { label: '문서 머리', parts: (BIND_GROUPS.find((g) => g.label === '문서 머리')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
+  { label: '문서 머리', parts: (BIND_GROUPS.find((g) => g.label === '문서 머리')?.items ?? []).map((i) => (i.value === 'doc.extras' ? extrasPart(i.label) : bindPart(i.value, i.label))) },
   {
     label: '기타',
     parts: [
