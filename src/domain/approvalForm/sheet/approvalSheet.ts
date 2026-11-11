@@ -18,7 +18,7 @@ export const APPROVAL_NS = {
   seal: 'seal',
   /** 반복 구간(행) — rowMeta, 값 { id, label } */
   repeat: 'repeat',
-  /** 대외 문서에서 숨길 행 — rowMeta, 값 true. 서식의 '대외 문서'가 켜진 결재 완료 문서(거래처용 모양·발주서 PDF)에서 행째 뺀다 */
+  /** 대외 문서에서 숨길 행 — rowMeta, 값 true. 문서를 거래처용 모양으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 행째 뺀다 */
   extHide: 'extHide',
   /** 안내문 칸 — 값 true. 칸 글자를 작성 화면에만 흐리게(결재·인쇄·대외 문서엔 안 나옴). 기존 서식 '안내문' */
   guide: 'guide',
@@ -146,15 +146,28 @@ export interface SheetSlots {
   drafterSign?: import('react').ReactNode;
   /** 회사 정보 머리글(주소·전화·팩스…) — 기존 서식 '회사정보' 항목과 같음 */
   letterhead?: import('react').ReactNode;
+  /**
+   * 첨부파일·수신처·관련 문서 — 기존 문서처럼 본문과 맺음말 사이에 오게 시트 안 자리(한 줄 전체 칸)에 둔다.
+   * 시트에 이 자리가 없으면 그리는 쪽이 시트 아래에 붙인다. 보일 것이 없으면(비어 있음) 그 줄째 숨긴다
+   */
+  extras?: import('react').ReactNode;
 }
 const SLOT_OF: Record<string, keyof SheetSlots> = {
   'doc.approvalLine': 'approvalLine',
   'doc.logo': 'logo',
   'draft.sign': 'drafterSign',
   'doc.letterhead': 'letterhead',
+  'doc.extras': 'extras',
 };
 /** 이 칸이 문서 머리 부품이면 그 이름 */
 export const slotOf = (bind: string | undefined): keyof SheetSlots | undefined => (bind ? SLOT_OF[bind] : undefined);
+/** 이 부품 자리가 놓인 행들 */
+export function slotRows(s: Sheet, slot: keyof SheetSlots): number[] {
+  return Object.entries(s.cellMeta[APPROVAL_NS.bind] ?? {})
+    .filter(([, v]) => typeof v === 'string' && SLOT_OF[v] === slot)
+    .map(([k]) => Number(k.slice(0, k.indexOf(':'))))
+    .filter((r) => r >= 0 && r < s.rows.length);
+}
 /** 맺음말 기본 문구 — 문서 머리와 같음 */
 export const DEFAULT_CLOSING = '위와 같이 상신하오니 재가하여 주시기 바랍니다.';
 
@@ -420,6 +433,7 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
       { value: 'doc.logo', label: '회사 로고' },
       { value: 'doc.letterhead', label: '회사 정보(주소·전화)' },
       { value: 'draft.sign', label: '기안자 서명' },
+      { value: 'doc.extras', label: '첨부·관련 문서 자리' },
     ],
   },
 ];

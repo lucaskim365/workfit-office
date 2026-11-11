@@ -482,12 +482,169 @@ export function ApprovalDraftDocumentSheet({
       )}
     </div>
   );
+  // 첨부파일·수신처·관련 문서 — 기존 서식은 본문 아래, 시트 서식은 시트 안 '첨부·관련 문서 자리'에(SheetSlots.extras)
+  const extrasBlock = (
+    <>
+      {/* 9. 첨부파일 영역 (ApprovalDocumentView와 100% 일치 표 규격 + 드래그앤드롭 업로더) */}
+      <table className="mt-4 w-full border-collapse text-[12px] table-fixed">
+        <tbody>
+          <tr>
+            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+              첨부파일
+            </th>
+            <td className="border border-[#bbb] px-2.5 py-2 text-left align-middle text-[#222]">
+              {/* 드래그앤드롭 영역 */}
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex items-center justify-between border border-dashed rounded px-3 py-2 cursor-pointer transition-colors ${isDragActive
+                  ? 'border-teal bg-teal/5'
+                  : 'border-[#ccc] bg-[#fafafa] hover:bg-[#f0f0f0]'
+                  }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    await onFileUpload(files);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="hidden"
+                />
+                <div className="flex items-center gap-2 text-[11.5px] text-[#555]">
+                  <Upload size={14} className="text-[#888]" />
+                  <span>
+                    {uploading
+                      ? '파일을 업로드하는 중...'
+                      : '여기에 파일을 드래그하거나 클릭하여 추가'}
+                  </span>
+                </div>
+                <span className="text-[10.5px] text-[#888]">
+                  보존기한: {attachmentRetention === 'permanent' ? '영구' : attachmentRetention}
+                </span>
+              </div>
+
+              {/* 첨부파일 리스트 */}
+              {attachments.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {attachments.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-[11.5px] bg-[#f7f7f7] px-2.5 py-1 rounded border border-[#eee]"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Paperclip size={12} className="text-[#888] shrink-0" />
+                        <span className="truncate font-medium text-[#222]">{file.name}</span>
+                        {file.size && (
+                          <span className="text-[10.5px] text-[#888]">
+                            ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttachments((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="text-rose-500 hover:text-rose-700 p-0.5 ml-2 shrink-0 cursor-pointer"
+                        title="파일 삭제"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 10. 수신처 영역 (선택된 수신처가 있을 경우 공문서 표로 표시) */}
+      {recipients.length > 0 && (
+        <table className="mt-2 w-full border-collapse text-[12px] table-fixed">
+          <tbody>
+            <tr>
+              <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+                수 신 처
+              </th>
+              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11.5px]">
+                  {recipients.map((r, idx) => (
+                    <span key={r.id} className="font-semibold text-[#333]">
+                      {r.name}
+                      {idx < recipients.length - 1 ? ',' : ''}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      {/* 11. 관련 문서 영역 */}
+      <table className="mt-2 w-full border-collapse text-[12px] table-fixed">
+        <tbody>
+          <tr>
+            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
+              관련 문서
+            </th>
+            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
+              <div className="flex items-center justify-between mb-1">
+                <button
+                  type="button"
+                  onClick={() => setShowRelatedModal(true)}
+                  className="rounded border border-dashed border-[#bbb] bg-white px-2 py-0.5 text-[11px] font-semibold text-teal hover:border-teal cursor-pointer transition-colors"
+                >
+                  + 관련 결재 문서 연결
+                </button>
+                <span className="text-[10.5px] text-[#888]">
+                  {relatedDocs.length}건 연결됨
+                </span>
+              </div>
+              {relatedDocs.length > 0 && (
+                <div className="space-y-1 mt-1.5">
+                  {relatedDocs.map((rd, i) => (
+                    <div
+                      key={rd.docId}
+                      className="flex items-center justify-between text-[11.5px] bg-[#f7f7f7] px-2 py-0.5 rounded"
+                    >
+                      <span className="truncate flex items-center gap-1.5">
+                        <FileText size={12} className="text-[#888] shrink-0" />
+                        <span className="font-mono text-[11px] text-teal">[{rd.docNo}]</span>
+                        <span className="font-semibold text-[#222] truncate">{rd.title}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRelatedDocs((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="text-[10.5px] text-rose-500 hover:underline ml-2 shrink-0 cursor-pointer"
+                      >
+                        연결 해제
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+    </>
+  );
   const slots: SheetSlots = {
     approvalLine: stampBlock,
     // 기존 문서 상단 바와 같은 모양 — 회사 정보 화면에 등록한 로고(없으면 기존 상단 바 로고) + 그룹웨어 글자
     logo: <SheetTopMark fallbackSrc={processedLogo} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignBlock,
+    extras: extrasBlock,
   };
 
   return (
@@ -1273,156 +1430,8 @@ export function ApprovalDraftDocumentSheet({
       {/* 문서 머리 전체가 시트 안이면(위에 아무것도 없음) 띄우지 않는다 — 시트 맨 위 로고 줄이 기존 상단 바 자리에 붙게 */}
       {sheetBody && <div className={sheetOnlyHead ? '' : 'mt-3'}>{typeof sheetBody === 'function' ? sheetBody(slots) : sheetBody}</div>}
 
-      {/* 9. 첨부파일 영역 (ApprovalDocumentView와 100% 일치 표 규격 + 드래그앤드롭 업로더) */}
-      <table className="mt-4 w-full border-collapse text-[12px] table-fixed">
-        <tbody>
-          <tr>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              첨부파일
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-2 text-left align-middle text-[#222]">
-              {/* 드래그앤드롭 영역 */}
-              <div
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex items-center justify-between border border-dashed rounded px-3 py-2 cursor-pointer transition-colors ${isDragActive
-                  ? 'border-teal bg-teal/5'
-                  : 'border-[#ccc] bg-[#fafafa] hover:bg-[#f0f0f0]'
-                  }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    await onFileUpload(files);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="hidden"
-                />
-                <div className="flex items-center gap-2 text-[11.5px] text-[#555]">
-                  <Upload size={14} className="text-[#888]" />
-                  <span>
-                    {uploading
-                      ? '파일을 업로드하는 중...'
-                      : '여기에 파일을 드래그하거나 클릭하여 추가'}
-                  </span>
-                </div>
-                <span className="text-[10.5px] text-[#888]">
-                  보존기한: {attachmentRetention === 'permanent' ? '영구' : attachmentRetention}
-                </span>
-              </div>
-
-              {/* 첨부파일 리스트 */}
-              {attachments.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {attachments.map((file, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between text-[11.5px] bg-[#f7f7f7] px-2.5 py-1 rounded border border-[#eee]"
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Paperclip size={12} className="text-[#888] shrink-0" />
-                        <span className="truncate font-medium text-[#222]">{file.name}</span>
-                        {file.size && (
-                          <span className="text-[10.5px] text-[#888]">
-                            ({(file.size / 1024).toFixed(1)} KB)
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAttachments((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        className="text-rose-500 hover:text-rose-700 p-0.5 ml-2 shrink-0 cursor-pointer"
-                        title="파일 삭제"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* 10. 수신처 영역 (선택된 수신처가 있을 경우 공문서 표로 표시) */}
-      {recipients.length > 0 && (
-        <table className="mt-2 w-full border-collapse text-[12px] table-fixed">
-          <tbody>
-            <tr>
-              <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                수 신 처
-              </th>
-              <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11.5px]">
-                  {recipients.map((r, idx) => (
-                    <span key={r.id} className="font-semibold text-[#333]">
-                      {r.name}
-                      {idx < recipients.length - 1 ? ',' : ''}
-                    </span>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-
-      {/* 11. 관련 문서 영역 */}
-      <table className="mt-2 w-full border-collapse text-[12px] table-fixed">
-        <tbody>
-          <tr>
-            <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-              관련 문서
-            </th>
-            <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-              <div className="flex items-center justify-between mb-1">
-                <button
-                  type="button"
-                  onClick={() => setShowRelatedModal(true)}
-                  className="rounded border border-dashed border-[#bbb] bg-white px-2 py-0.5 text-[11px] font-semibold text-teal hover:border-teal cursor-pointer transition-colors"
-                >
-                  + 관련 결재 문서 연결
-                </button>
-                <span className="text-[10.5px] text-[#888]">
-                  {relatedDocs.length}건 연결됨
-                </span>
-              </div>
-              {relatedDocs.length > 0 && (
-                <div className="space-y-1 mt-1.5">
-                  {relatedDocs.map((rd, i) => (
-                    <div
-                      key={rd.docId}
-                      className="flex items-center justify-between text-[11.5px] bg-[#f7f7f7] px-2 py-0.5 rounded"
-                    >
-                      <span className="truncate flex items-center gap-1.5">
-                        <FileText size={12} className="text-[#888] shrink-0" />
-                        <span className="font-mono text-[11px] text-teal">[{rd.docNo}]</span>
-                        <span className="font-semibold text-[#222] truncate">{rd.title}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setRelatedDocs((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-[10.5px] text-rose-500 hover:underline ml-2 shrink-0 cursor-pointer"
-                      >
-                        연결 해제
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      {/* 9~11. 첨부파일·수신처·관련 문서 — 시트 서식은 시트 안 자리(없으면 시트 아래)에 */}
+      {typeof sheetBody !== 'function' && extrasBlock}
 
       {/* 12. 공문서 하단 격식 맺음말 및 기안자 서명/직인란 (ApprovalDocumentView와 100% 일치) */}
       <div className={`mt-8 text-center text-[12.5px] leading-loose text-[#222] ${headerShown(form, 'closing') ? '' : 'hidden'}`}>

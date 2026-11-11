@@ -367,7 +367,7 @@ function Designer({
           )}
           {ext && (
             <span
-              title="대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다"
+              title="대외 문서에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다"
               className="rounded-sm bg-slate-500/80 px-1 text-[8.5px] font-bold leading-[13px] text-white"
             >
               대외 숨김
@@ -485,7 +485,7 @@ function Designer({
     if (p.guide) icons.push({ key: 'guide', icon: <Info className={ic} />, cls: 'text-ink3', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
     const rowIcons: Mark[] = [];
     if (condText) rowIcons.push({ key: 'cond', icon: <Filter className={ic} />, cls: 'text-indigo-500', title: `행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)` });
-    if (ext) rowIcons.push({ key: 'ext', icon: <EyeOff className={ic} />, cls: 'text-slate-500', title: "대외 문서에서 숨김 — 서식 '대외 문서'가 켜진 결재 완료 문서(거래처용)에서 이 행을 뺍니다" });
+    if (ext) rowIcons.push({ key: 'ext', icon: <EyeOff className={ic} />, cls: 'text-slate-500', title: '대외 문서에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다' });
     const iconRow = (list: Mark[], pos: string) =>
       list.length ? (
         <span className={`pointer-events-none absolute ${pos} z-[1] flex gap-px rounded-sm bg-white/85 px-px`}>
@@ -852,14 +852,6 @@ function Designer({
             제목 줄
           </span>
         )}
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <label
-          className="flex cursor-pointer items-center gap-1 font-semibold text-ink2"
-          title="결재가 끝난 문서는 거래처에 보낼 모양으로 — 상단 바·문서 정보·제목·결재란·첨부·맺음말과, 시트에서 '대외 문서에서 숨김' 행을 뺍니다(발주서 PDF와 같은 모양)"
-        >
-          <input type="checkbox" checked={!!form.hideDocInfoOnComplete} onChange={(e) => set({ hideDocInfoOnComplete: e.target.checked })} className="h-3 w-3 accent-teal" />
-          대외 문서
-        </label>
       </div>
       </InfoBlock>
 
@@ -1012,7 +1004,7 @@ function Designer({
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
               )}
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} onPreview={setRulePreview} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} onPreview={setRulePreview} />
             </>
           ) : side === 'settings' ? (
             <SheetFormSettings form={form} onChange={set} />
@@ -1165,9 +1157,10 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       onRequired={setMissing}
     />
   );
+  // 결재·인쇄 미리보기 — 문서 틀(DocFrame)이 넘기는 첨부 칸은 기안용(파일 올리기)이라 빼고, 첨부가 없는 실제 문서처럼 그 줄을 숨긴다
   const viewBody = (slots?: SheetSlots) => (
     <SheetDocView
-      slots={slots}
+      slots={slots && { ...slots, extras: undefined }}
       template={sheet}
       fieldValues={{ ...values, __formVersion: '미리보기@v1' }}
       masked={false}
@@ -1214,11 +1207,9 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
               <button type="button" className={tabCls(tab === 'view')} onClick={() => setTab('view')}>
                 결재·인쇄 화면
               </button>
-              {form.hideDocInfoOnComplete && (
-                <button type="button" className={tabCls(tab === 'external')} onClick={() => setTab('external')} title="결재가 끝난 뒤 거래처에 보낼 모양(발주서 PDF와 같음)">
-                  대외 문서
-                </button>
-              )}
+              <button type="button" className={tabCls(tab === 'external')} onClick={() => setTab('external')} title="거래처에 보내는 모양 — 문서 화면의 [거래처용]·발주서 PDF와 같음">
+                거래처용
+              </button>
             </div>
             <button type="button" onClick={() => setValues({})} className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink2 hover:text-ink">
               입력 지우기
@@ -1232,7 +1223,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
         <div className="bg-[#878d90] p-4">
           {user ? (
             tab === 'external' ? (
-              // 대외 문서 — 문서 머리·결재란·첨부·맺음말 없이 시트만(숨김 행 뺌)
+              // 거래처용 — 문서 머리·결재란·첨부·맺음말 없이 시트만(대외 숨김 행 뺌)
               <div className="mx-auto w-full max-w-[800px] bg-white px-8 py-7">{viewBody()}</div>
             ) : (
               <DocFrame form={docForm} me={user} interactive={tab === 'draft'} body={tab === 'draft' ? draftBody : viewBody} />
@@ -1320,10 +1311,13 @@ function DocFrame({
         isDesignMode
         only={only}
         paperWidth={paperWidth}
-        sheetBody={(slots: SheetSlots) => {
-          const b = typeof body === 'function' ? body(slots) : body;
-          return interactive ? <div className="pointer-events-auto select-text">{b}</div> : b;
-        }}
+        sheetBody={
+          typeof body === 'function'
+            ? (slots: SheetSlots) => (interactive ? <div className="pointer-events-auto select-text">{body(slots)}</div> : body(slots))
+            : interactive
+              ? <div className="pointer-events-auto select-text">{body}</div>
+              : body
+        }
       />
     </div>
   );

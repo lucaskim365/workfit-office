@@ -127,7 +127,10 @@ export const approvalFormSchema = z.object({
   securityLevel: z.enum(['일반', '대외비', '극비']).nullable().optional(),
   /** 기본 공개 범위 */
   visibility: z.enum(['부서', '비공개']).nullable().optional(),
-  /** 결재 완료 문서에서 상단 자동 정보(문서번호·기안부서·기안자·기안일·완료일·보존연한) 숨김 — 대외 문서용 */
+  /**
+   * (쓰지 않음) 옛 '대외 문서' 설정 — 결재 완료 문서를 늘 거래처용 모양으로. 이제는 문서 화면에서 누구나 [내부용 | 거래처용]을 바꿔 보므로 읽지 않는다.
+   * 저장된 값은 지우지 않는다(옛 데이터 그대로)
+   */
   hideDocInfoOnComplete: z.boolean().nullable().optional(),
   /** 문서 종이에서 늘 숨기는 머리 항목(문서번호·기안부서 등) — 작성·결재 중·완료·인쇄 모두. 공문처럼 배치가 다른 서식용 */
   hiddenHeaderItems: z.array(z.string()).nullable().optional(),

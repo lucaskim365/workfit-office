@@ -8,6 +8,7 @@ import { SealImage } from '../components/CompanySeal';
 import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
+import { extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell } from '@/domain/approvalForm/sheet/docExtras';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { SheetFormTitle, SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
@@ -27,6 +28,8 @@ async function capturePictures(box: HTMLElement | null, sheet: Sheet): Promise<{
   for (const el of els) {
     // 직인은 찍혔을 때만(그림이 있을 때) — 안 찍힌 '(직인)' 글자는 칸 글자 그대로
     if (el.dataset.seal !== undefined && !el.querySelector('img')) continue;
+    // 첨부·관련 문서는 그림 대신 글자로(파일 이름·문서번호가 엑셀에서 읽히게)
+    if (el.dataset.slot === 'extras') continue;
     const td = el.closest<HTMLElement>('td[data-sheet-cell]');
     if (!td) continue;
     const [r, c] = (td.dataset.sheetCell ?? '').split(':').map(Number);
@@ -110,7 +113,7 @@ export function SheetDocView({
    * 받는 쪽(결재 문서 화면)이 [엑셀] 단추를 보이고 누르면 부른다. 화면과 같은 내용(숨은 행·비공개 가림·자동 채우기 값)
    */
   onExportReady?: (fn: ((fileName: string) => Promise<void>) | null) => void;
-  /** 대외 문서 모양(서식 '대외 문서' + 결재 완료, 발주서 PDF) — '대외 문서에서 숨김' 행을 뺀다 */
+  /** 거래처용 모양(문서 화면 [거래처용]·발주서 PDF) — '대외 문서에서 숨김' 행을 뺀다 */
   external?: boolean;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기 미리보기(편집 중인 틀) */
   template?: Sheet;
@@ -171,27 +174,43 @@ export function SheetDocView({
   }, [onExportReady, ready]);
 
   if (!ver && !template) return null;
-  if (isLoading) return <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>;
-  if (error || !sheet) return <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver?.formId} v{ver?.version})을 읽지 못했습니다.</div>;
+  // 시트를 못 그려도 첨부·관련 문서는 받을 수 있게 아래에 둔다
+  if (isLoading || error || !sheet)
+    return (
+      <>
+        {isLoading ? (
+          <div className="py-8 text-center text-[12px] text-[#888]">문서를 불러오는 중…</div>
+        ) : (
+          <div className="py-8 text-center text-[12px] text-rose-600">서식 틀({ver?.formId} v{ver?.version})을 읽지 못했습니다.</div>
+        )}
+        {slots?.extras}
+      </>
+    );
 
   const completedRows = new Set(completedDateRows(sheet));
+  // 첨부·관련 문서 자리 — 보일 것이 없으면 줄째 숨기고, 시트에 자리가 없으면 시트 아래에 붙인다
+  const extrasHidden = extrasHiddenRows(sheet, !!slots?.extras);
+  const extrasBelow = slots?.extras && !hasExtrasPlace(sheet) ? <div>{slots.extras}</div> : null;
   // 직인 칸이 고른 직인 — 없으면 바깥(문서 틀)이 정한 것·대표 직인
   const sealMark = sheetSealMarkId(sheet);
+  // 결재란을 그리지 않을 때(거래처용 모양·결재 끝난 직인 서식 등) — 큰 제목을 그 자리까지 넓혀 가운데에(왼쪽으로 치우치지 않게)
+  const shown = slots?.approvalLine ? sheet : withTitleOverEmptyStamp(sheet);
   const view = (
     <SheetView
-      sheet={sheet}
+      sheet={shown}
       {...DOC_SHEET_VIEW}
       fitWidth={fitWidth}
       printFit={PRINT_FIT}
       hidden={masked ? (r, c) => isSecretCell(sheet, r, c) : undefined}
       // 결재 완료일 줄 — 결재가 끝난 문서만(기존 문서 머리와 같음)
-      hiddenRows={(r) => condHidden.has(r) || (!docInfo?.completedDate && completedRows.has(r))}
+      hiddenRows={(r) => condHidden.has(r) || (!docInfo?.completedDate && completedRows.has(r)) || extrasHidden.has(r)}
       renderCell={(r, c) => {
         const props = approvalCellProps(sheet, r, c);
         // 안내문 칸 — 작성 화면에만(결재·인쇄·대외 문서엔 안 나옴)
         if (props.guide) return '';
         const bind = props.bind;
         const slot = slotOf(bind);
+        if (slot === 'extras' && !isExtrasDrawCell(sheet, r, c)) return '';
         if (slot) return <SlotCell node={slots?.[slot]} slot={slot} />;
         if (bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(bind, docInfo) ?? ''} />;
         return draftInfoValue(bind, docInfo);
@@ -207,7 +226,12 @@ export function SheetDocView({
   );
   const inner = sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
   // 엑셀 받기 때 그림 자리를 재는 상자
-  const body = <div ref={boxRef}>{inner}</div>;
+  const body = (
+    <>
+      <div ref={boxRef}>{inner}</div>
+      {extrasBelow}
+    </>
+  );
   // 결재자가 알아보게 — 기안자가 서식의 표 모양(열·행·수식)을 고친 문서. 인쇄·대외 문서에는 안 나옴
   if (!own || external) return body;
   return (

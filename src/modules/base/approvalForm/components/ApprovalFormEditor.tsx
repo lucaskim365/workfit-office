@@ -1215,18 +1215,6 @@ export function ApprovalFormEditor({
                     className={inp}
                   />
                 </F>
-                <label className="flex cursor-pointer items-start gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    checked={!!form.hideDocInfoOnComplete}
-                    onChange={(e) => set({ hideDocInfoOnComplete: e.target.checked })}
-                    className="mt-0.5 accent-teal"
-                  />
-                  <span>
-                    <span className="font-semibold text-ink">대외 문서 — 결재 완료 문서는 서식 본문만 표시</span>
-                    <span className="block text-[10.5px] text-ink3">상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명을 숨깁니다 (발주서 보관함·PDF 포함)</span>
-                  </span>
-                </label>
                 <div className="space-y-1.5 border-t border-border/60 pt-2">
                   <span className="block font-semibold text-ink">문서 머리 항목</span>
                   <span className="block text-[10.5px] text-ink3">끈 항목은 작성·결재 중·완료·인쇄 모두에서 문서에 나오지 않습니다</span>

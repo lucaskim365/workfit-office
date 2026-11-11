@@ -72,14 +72,20 @@ export function ApprovalDocumentView({
   currentUser,
   isPreview = false,
   external = false,
+  viewToggle = !isPreview,
+  onExternalViewChange,
   onSheetExportReady,
 }: {
   doc: ApprovalDoc;
   formOverride?: ApprovalForm;
   currentUser?: { id: string; dept?: string };
   isPreview?: boolean;
-  /** 서식 설정과 상관없이 대외 문서 모양으로(결재 완료 문서) — 거래처로 보내는 발주서 PDF 등 */
+  /** 처음에 거래처용 모양으로 연다 — 발주서 보관함(거래처로 보내는 발주서 화면·PDF) */
   external?: boolean;
+  /** 위의 [내부용 | 거래처용] 전환 — 미리보기(관련 문서 창·결재 모니터 등)와 PDF 만들기용으로는 기본으로 끈다 */
+  viewToggle?: boolean;
+  /** 전환을 바꿨을 때 — 발주서 보관함이 PDF 를 같은 모양으로 만들려고 */
+  onExternalViewChange?: (external: boolean) => void;
   /** 시트 서식 문서를 엑셀로 받는 함수(문서를 다 읽으면, 시트 문서가 아니면 null) — 화면의 [엑셀] 단추가 쓴다 */
   onSheetExportReady?: (fn: (() => Promise<void>) | null) => void;
 }) {
@@ -88,6 +94,14 @@ export function ApprovalDocumentView({
   const { data: forms = [] } = useApprovalForms();
   const [accessibleRelatedDocs, setAccessibleRelatedDocs] = useState<RelatedDoc[]>([]);
   const [activeRelatedDocId, setActiveRelatedDocId] = useState<string | null>(null);
+  // 거래처용 모양 — 누구나 언제든(결재 중에도) 바꿔 본다. 다른 문서를 열면 그리기 전에 처음 모양으로
+  const [view, setView] = useState({ docId: doc.id, base: external, external });
+  if (view.docId !== doc.id || view.base !== external) setView({ docId: doc.id, base: external, external });
+  const externalView = view.docId === doc.id && view.base === external ? view.external : external;
+  const setExternalView = (on: boolean) => {
+    setView({ docId: doc.id, base: external, external: on });
+    onExternalViewChange?.(on);
+  };
 
   useEffect(() => {
     if (!doc.relatedDocs || doc.relatedDocs.length === 0) {
@@ -349,8 +363,8 @@ export function ApprovalDocumentView({
   // 시트 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
   const form = headForm && sheetVer ? { ...headForm, fields: [] } : headForm;
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
-  // 대외 문서(서식 설정) — 결재 완료 문서는 서식 본문만: 상단 바·기본 정보·제목·결재란·맺음말·기안일·기안자 서명 숨김
-  const externalDoc = (external || !!form?.hideDocInfoOnComplete) && doc.status === '완료';
+  // 거래처용 모양 — 상단 바·문서 정보·제목·결재란·첨부·관련 문서·맺음말·기안일·기안자 서명과 '대외 문서에서 숨김' 항목을 뺀다
+  const externalDoc = externalView;
   // '문서제목' 칸은 문서 제목을 보여 준다
   const titleField = titleFieldOf(form?.fields);
   const viewValues = titleField ? { ...doc.fieldValues, [titleField.key]: doc.title } : doc.fieldValues;
@@ -563,12 +577,113 @@ export function ApprovalDocumentView({
       )}
     </div>
   );
+  // 첨부파일·수신처·관련 문서 — 거래처용 모양엔 수신처만(기존과 같음)
+  const recipientsShown = getEffectiveRecipients(doc);
+  const attachmentsShown = externalDoc ? [] : doc.attachments ?? [];
+  const relatedShown = externalDoc ? [] : accessibleRelatedDocs;
+  const hasExtras = attachmentsShown.length > 0 || recipientsShown.length > 0 || relatedShown.length > 0;
+  // 수신처 이름 — 사람이면 직위를 붙인다('홍길동 · 개발팀' → '홍길동 과장 · 개발팀')
+  const recipientName = (r: (typeof recipientsShown)[number]) => {
+    const pos = r.type === 'user' ? org.users.find((x) => x.id === r.id)?.position : undefined;
+    if (!pos) return r.name;
+    const [name, ...dept] = r.name.split(' · ');
+    return dept.length ? `${name} ${pos} · ${dept.join(' · ')}` : `${r.name} ${pos}`;
+  };
+  const extrasTh = 'w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]';
+  const extrasTd = 'border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]';
+  // 공문(직인 서식)은 첨부·수신처를 인쇄·PDF 에서 뺀다(첨부는 본문 '붙임', 수신은 문서 머리의 '수신' 줄)
+  const sealPrintHidden = sealForm ? ' print:hidden' : '';
+  const extrasBlock = (
+    <>
+      {attachmentsShown.length > 0 && (
+        <table className={`mt-4 w-full border-collapse text-[12px]${sealPrintHidden}`}>
+          <tbody>
+            <tr>
+              <th className={extrasTh}>첨부파일</th>
+              <td className={extrasTd}>
+                <div className="space-y-1">
+                  {attachmentsShown.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <a onClick={(e) => handlePreview(e, file.url, file.name)} className="font-semibold hover:underline text-[#222] cursor-pointer">
+                        {file.name}
+                      </a>
+                      <button
+                        onClick={(e) => handleDownload(e, file.url, file.name)}
+                        className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
+                      >
+                        (다운로드)
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+      {recipientsShown.length > 0 && (
+        <table className={`mt-2 w-full border-collapse text-[12px]${sealPrintHidden}`}>
+          <tbody>
+            <tr>
+              <th className={extrasTh}>수 신 처</th>
+              <td className={extrasTd}>
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {recipientsShown.map((r, idx) => (
+                    <span key={r.id} className="font-semibold">
+                      {recipientName(r)}
+                      {idx < recipientsShown.length - 1 ? ',' : ''}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+      {relatedShown.length > 0 && (
+        <table className="mt-2 w-full border-collapse text-[12px]">
+          <tbody>
+            <tr>
+              <th className={extrasTh}>관련 문서</th>
+              <td className={extrasTd}>
+                <div className="space-y-1">
+                  {relatedShown.map((rd) => (
+                    <div key={rd.docId} className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
+                      <button
+                        type="button"
+                        onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
+                        className={`font-semibold text-ink2 text-left transition-colors ${isPreview ? 'cursor-default' : 'cursor-pointer text-[#008080] hover:underline hover:text-[#4ea8de]'}`}
+                      >
+                        {rd.title}
+                      </button>
+                      <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+  // 엑셀로 받을 때 첨부·관련 문서 자리 글자 — 화면처럼 항목마다 한 줄
+  const extrasText = [
+    attachmentsShown.length ? `첨부파일: ${attachmentsShown.map((f) => f.name).join(', ')}` : '',
+    recipientsShown.length ? `수신처: ${recipientsShown.map(recipientName).join(', ')}` : '',
+    relatedShown.length ? `관련 문서: ${relatedShown.map((rd) => `[${rd.docNo}] ${rd.title}`).join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   // 문서 머리를 시트에 넣은 시트 서식 — 결재란·로고·기안자 서명 칸에 그릴 것
   const sheetSlots: SheetSlots = {
     approvalLine: showStamp ? stampNode : null,
     logo: <SheetTopMark fallbackSrc={processedLogo} external={externalDoc} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignNode,
+    extras: hasExtras ? extrasBlock : null,
   };
 
   // 엑셀로 받을 때 문서 머리 부품 칸 글자 — 결재란은 결재자·결과를 한 줄로
@@ -583,6 +698,7 @@ export function ApprovalDocumentView({
           .join(' / ')
       : '',
     drafterSign: [drafterName, drafterPos].filter(Boolean).join(' '),
+    extras: extrasText,
   };
   // 시트 문서 엑셀 받기 — 파일 이름은 문서번호_제목
   const exportFileName = [docNoOf(doc), doc.title].filter(Boolean).join('_') || doc.id;
@@ -595,6 +711,24 @@ export function ApprovalDocumentView({
 
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
+      {/* 내부용 | 거래처용 — 거래처용은 거래처에 보내는 모양(인쇄·엑셀도 이 모양으로). 화면 전용 */}
+      {viewToggle && (
+        <div className="mx-auto mb-2 flex max-w-[800px] flex-wrap items-center justify-end gap-2 print:hidden" onClick={(e) => e.stopPropagation()}>
+          {externalView && <span className="text-[10.5px] text-ink3">거래처에 보내는 모양 — 결재란·문서 정보·첨부·맺음말과 '대외 문서에서 숨김' 항목이 빠집니다</span>}
+          <div className="flex rounded-lg border border-border bg-panel-alt p-0.5">
+            {([false, true] as const).map((on) => (
+              <button
+                key={String(on)}
+                type="button"
+                onClick={() => setExternalView(on)}
+                className={`rounded-md px-2.5 py-0.5 text-[11px] font-bold ${externalView === on ? 'bg-panel text-teal shadow-xs' : 'text-ink3 hover:text-ink'}`}
+              >
+                {on ? '거래처용' : '내부용'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* 보안 필드 안내 및 마스킹 토글 배너 (화면 전용, 인쇄 시 숨김) */}
       {hasSecretFields && (
         <div className="mx-auto mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl max-w-[800px] flex items-center justify-between text-[11.5px] font-bold text-amber-800 print:hidden shadow-2xs">
@@ -1017,115 +1151,8 @@ export function ApprovalDocumentView({
           </div>
         )}
 
-        {/* 첨부파일 영역 — 공문(직인 서식)은 인쇄·PDF 에서 뺀다(첨부는 본문 '붙임'으로 적는다) */}
-        {!externalDoc && doc.attachments && doc.attachments.length > 0 && (
-          <table className={`mt-4 w-full border-collapse text-[12px]${sealForm ? ' print:hidden' : ''}`}>
-            <tbody>
-              <tr>
-                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                  첨부파일
-                </th>
-                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                  <div className="space-y-1">
-                    {doc.attachments.map((file, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <a
-                          onClick={(e) => handlePreview(e, file.url, file.name)}
-                          className="font-semibold hover:underline text-[#222] cursor-pointer"
-                        >
-                          {file.name}
-                        </a>
-                        <button
-                          onClick={(e) => handleDownload(e, file.url, file.name)}
-                          className="text-[10px] text-[#666] hover:text-teal underline cursor-pointer print:hidden bg-transparent border-none p-0 inline"
-                        >
-                          (다운로드)
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        )}
-
-        {/* 수신처 영역 — 공문(직인 서식)은 인쇄·PDF 에서 뺀다(수신은 문서 머리의 '수신' 줄) */}
-        {(() => {
-          const effectiveRecipients = getEffectiveRecipients(doc);
-          if (effectiveRecipients.length === 0) return null;
-          return (
-            <table className={`mt-2 w-full border-collapse text-[12px]${sealForm ? ' print:hidden' : ''}`}>
-              <tbody>
-                <tr>
-                  <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                    수 신 처
-                  </th>
-                  <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                    <div className="flex flex-wrap gap-x-2 gap-y-1">
-                      {effectiveRecipients.map((r, idx) => {
-                        let displayName = r.name;
-                        if (r.type === 'user') {
-                          const u = org.users.find((x) => x.id === r.id);
-                          if (u && u.position) {
-                            if (r.name.includes(' · ')) {
-                              const parts = r.name.split(' · ');
-                              const namePart = parts[0];
-                              const deptPart = parts.slice(1).join(' · ');
-                              displayName = `${namePart} ${u.position} · ${deptPart}`;
-                            } else {
-                              displayName = `${r.name} ${u.position}`;
-                            }
-                          }
-                        }
-                        return (
-                          <span key={r.id} className="font-semibold">
-                            {displayName}{idx < effectiveRecipients.length - 1 ? ',' : ''}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          );
-        })()}
-
-
-
-        {/* 관련 문서 연동 영역 */}
-        {!externalDoc && accessibleRelatedDocs && accessibleRelatedDocs.length > 0 && (
-          <table className="mt-2 w-full border-collapse text-[12px]">
-            <tbody>
-              <tr>
-                <th className="w-[80px] border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]">
-                  관련 문서
-                </th>
-                <td className="border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]">
-                  <div className="space-y-1">
-                    {accessibleRelatedDocs.map((rd) => (
-                      <div key={rd.docId} className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] font-semibold text-[#008080]">[{rd.docNo}]</span>
-                        <button
-                          type="button"
-                          onClick={() => !isPreview && setActiveRelatedDocId(rd.docId)}
-                          className={`font-semibold text-ink2 text-left transition-colors ${isPreview
-                              ? 'cursor-default'
-                              : 'cursor-pointer text-[#008080] hover:underline hover:text-[#4ea8de]'
-                            }`}
-                        >
-                          {rd.title}
-                        </button>
-                        <span className="text-[11px] text-[#666]">({rd.docType} | {rd.drafterName})</span>
-                      </div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        )}
+        {/* 첨부파일·수신처·관련 문서 — 시트 문서는 시트 안 자리(없으면 시트 아래)에 */}
+        {!sheetDoc && extrasBlock}
 
         {!externalDoc && headerShown(form, 'closing') && (
         <div className="mt-8 text-center text-[12.5px] leading-loose text-[#222]">
