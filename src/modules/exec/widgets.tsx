@@ -405,7 +405,7 @@ function HoursBars({ days, today }: { days: Array<{ date: string; minutes: numbe
   const MAX = 12 * 60;
   return (
     <div className="pl-[26px]">
-      <div className="relative h-[110px]">
+      <div className="relative h-[96px]">
         {[4, 8, 12].map((h) => (
           <div key={h} className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(h * 60 / MAX) * 100}%` }}>
             <span className="absolute -top-[7px] -left-[26px] w-[22px] text-right text-[9.5px] tabular-nums text-ink3">{h}h</span>
@@ -453,7 +453,7 @@ function LeaveBar({ standalone = false }: { standalone?: boolean }) {
   ].filter((s) => s.value > 0);
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   return (
-    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-5 border-t border-border pt-4'}`}>
+    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-3 border-t border-border pt-3'}`}>
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className={`font-bold text-ink group-hover:text-[#0876c8] ${standalone ? 'text-[15px] font-extrabold' : 'text-[12.5px]'}`}>연차</span>
         <span className="text-[11.5px] text-ink3">

@@ -36,8 +36,8 @@ export const WIDGET_ROWS = 6;
 export const WIDGETS = {
   today: { title: '오늘 일정', module: '일정', tier: 'L', Component: TodayWidget },
   calendar: { title: '캘린더', module: '일정', tier: 'S', Component: CalendarWidget },
-  weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'M', Component: WeekScheduleWidget },
-  attendance: { title: '내 근태', module: '근태', tier: 'M', Component: AttendanceWidget },
+  weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'S', Component: WeekScheduleWidget },
+  attendance: { title: '내 근태', module: '근태', tier: 'S', Component: AttendanceWidget },
   todayCommute: { title: '오늘 출퇴근', module: '근태', tier: 'S', mini: true, Component: TodayCommuteWidget },
   weekHours: { title: '이번 주 근무시간', module: '근태', tier: 'S', mini: true, Component: WeekHoursWidget },
   leave: { title: '연차', module: '근태', tier: 'S', mini: true, Component: LeaveWidget },
@@ -45,12 +45,12 @@ export const WIDGETS = {
   approvalPending: { title: '결재 대기', module: '전자결재', tier: 'S', Component: PendingApprovalWidget },
   approvalMine: { title: '내가 올린 문서', module: '전자결재', tier: 'S', Component: MyDraftsWidget },
   resource: { title: '내 자원예약', module: '자원예약', tier: 'S', Component: ResourceWidget },
-  resourceToday: { title: '오늘 자원 사용', module: '자원예약', tier: 'M', Component: ResourceTodayWidget },
+  resourceToday: { title: '오늘 자원 사용', module: '자원예약', tier: 'S', Component: ResourceTodayWidget },
   team: { title: '우리 부서', module: '조직도', tier: 'S', Component: TeamWidget },
   awayToday: { title: '오늘 휴가·외근', module: '조직도', tier: 'S', mini: true, Component: AwayTodayWidget },
   birthday: { title: '이달의 생일자', module: '조직도', tier: 'S', mini: true, Component: BirthdayWidget },
-  notice: { title: '공지사항', module: '게시판', tier: 'M', Component: NoticeWidget },
-  recentPosts: { title: '최근 게시글', module: '게시판', tier: 'M', Component: RecentPostsWidget },
+  notice: { title: '공지사항', module: '게시판', tier: 'S', Component: NoticeWidget },
+  recentPosts: { title: '최근 게시글', module: '게시판', tier: 'S', Component: RecentPostsWidget },
   project: { title: '프로젝트', module: '프로젝트', tier: 'S', Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
@@ -58,7 +58,7 @@ export type WidgetId = keyof typeof WIDGETS;
 export const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[];
 export const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
 
-/** 웹 기본 배치 — 오늘 일정(대), 내 근태·전자결재(중), 이달의 생일자·공지사항(중). 높이가 같아 빈칸 없이 맞물린다 */
+/** 웹 기본 배치 — 오늘 일정(대), 내 근태·전자결재(소), 공지사항·이달의 생일자(소). 높이가 같아 빈칸 없이 맞물린다 */
 export const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
   { id: 'today', size: 12, x: 0, y: 0 },
   { id: 'attendance', size: 6, x: 0, y: 6 },
