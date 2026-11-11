@@ -248,6 +248,70 @@ test('기존 표에서 줄을 더하던 곳 — 같은 모양 품목 줄이 이�
   assert.equal(legacyRepeatRows({ cols: ['A', 'B'], rows: [{ A: '발주자', B: '' }, { A: '날짜', B: '년 월 일' }], cellFormulas: {} }, 1), null);
 });
 
+test('짝 없는 반쪽 항목은 값 칸을 줄 끝까지(오른쪽에 이름 없는 빈 칸을 남기지 않음)', () => {
+  const form = legacyForm('지출결의', [
+    { key: 'item', label: '지출 항목', type: '선택', options: ['식대'], width: 'half' },
+    { key: 'guide', label: '안내', type: '안내문', placeholder: '안내' },
+    { key: 'amount', label: '청구 금액', type: '금액', width: 'half' },
+    { key: 'date', label: '사용 일자', type: '날짜' },
+  ]);
+  const { sheet: s } = legacyFormToSheet(form);
+  for (const t of ['지출 항목', '청구 금액']) {
+    const at = findText(s, t)!;
+    const m = s.merges.find((x) => x.startRow === at.r && x.startCol === 1)!;
+    assert.equal(m.startCol + m.colSpan - 1, s.cols.length - 1, `${t} 값 칸이 줄 끝까지`);
+  }
+});
+
+test('기존 표에서 줄을 더하던 곳 — 빈 품목 두 줄, 줄마다 똑같이 미리 쓴 글자(2026.)도 품목 줄', () => {
+  // 원자재: 머리 두 줄 뒤 빈 품목 두 줄
+  const blank = { cols: ['A', 'B', 'C'], rows: [{ A: '품명', B: '규격', C: '금액' }, { A: '', B: '', C: '수량' }, { A: '', B: '', C: '' }, { A: '', B: '', C: '' }], cellFormulas: {} };
+  assert.deepEqual(legacyRepeatRows(blank, 1), { first: 2, last: 3 });
+  // 개인 경비: 번호 + 날짜 칸에 '2026.' 이 미리 써 있는 품목 줄들 + 합계 줄
+  const rows = [{ A: 'NO', B: '날짜', C: '금액', D: '기타' }, ...Array.from({ length: 5 }, (_, i) => ({ A: String(i + 1), B: '2026.', C: '', D: '' })), { A: '합계', B: '', C: '', D: '' }];
+  assert.deepEqual(legacyRepeatRows({ cols: ['A', 'B', 'C', 'D'], rows, cellFormulas: { '6:C': { expression: '=SUM(C2:C6)' } } }, 1), { first: 1, last: 5 });
+  // 줄마다 이름표가 다른 표(선급금·중도금·잔금)는 품목 줄 아님
+  const fixed = { cols: ['A', 'B', 'C'], rows: [{ A: '구분', B: '년-월', C: '금액' }, { A: '선급금', B: '', C: '' }, { A: '중도금', B: '', C: '' }, { A: '잔금', B: '', C: '' }], cellFormulas: {} };
+  assert.equal(legacyRepeatRows(fixed, 1), null);
+});
+
+test('기존 표 수식 — 열 이름은 머리 줄 글자로도, 다른 표([표]![줄:열])는 그 표 자리를 알면 옮긴다', () => {
+  const cols = ['a', 'b', 'c'];
+  const rows = [{ a: '인정거리', b: '단가', c: '주유비' }, { a: '', b: '', c: '' }];
+  assert.equal(translateLegacyFormula('=[인정거리] * [단가]', { r: 1, col: 'c', top: 4, cols, rows }), '=A6 * B6');
+  const sales = { top: 20, cols: ['구분', '금액'], rows: [{ 구분: '구분', 금액: '금액' }, { 구분: 'SW', 금액: '' }, { 구분: '소계', 금액: '' }] };
+  const at = { r: 1, col: 'c', top: 4, cols, rows, tables: new Map([['매출구분', sales]]) };
+  assert.equal(translateLegacyFormula('=[매출구분]![소계:금액] - [단가]', at), '=B23 - B6');
+  assert.equal(translateLegacyFormula('=[없는표]![소계:금액]', at), null);
+});
+
+test('다른 표를 가리키는 수식은 그 표가 아래에 놓여도 옮긴다', () => {
+  const tbl = (cols: string[], rows: Record<string, string>[], cellFormulas: Record<string, unknown> = {}) =>
+    JSON.stringify({ version: 2, cols, rows, legacyHeaderRow: true, colWidths: {}, tableWidth: '100%', merges: [], cellFormulas, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [] });
+  const form = legacyForm('계약', [
+    { key: 'p', label: '매입', type: '표', placeholder: tbl(['x', 'y'], [{ x: '구분', y: '금액' }, { x: '이익', y: '' }], { '1:y': { expression: '=[매출]![소계:금액] - 1' } }) },
+    { key: 's', label: '매출', type: '표', section: '분석', placeholder: tbl(['구분', '금액'], [{ 구분: '구분', 금액: '금액' }, { 구분: '소계', 금액: '' }]) },
+  ]);
+  const { sheet: s, warnings } = legacyFormToSheet(form);
+  const profit = findText(s, '이익')!;
+  const total = findText(s, '소계')!;
+  assert.equal(s.formulas[`${profit.r}:${s.cols[1]}`], `=B${total.r + 1} - 1`);
+  assert.ok(!warnings.some((w) => w.includes('수식')));
+});
+
+test('열 너비 — 고르게 나누되 한 열에만 든 긴 이름표는 잘리지 않게 넓히고, 전체 폭은 그대로', () => {
+  const tbl = JSON.stringify({
+    version: 2,
+    cols: ['a', 'b', 'c', 'd', 'e', 'f'],
+    rows: [{ a: '공급자 담당 / 연락처', b: '', c: '', d: '', e: '', f: '' }],
+    colWidths: {}, tableWidth: '100%', merges: [], cellFormulas: {}, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [],
+  });
+  const { sheet: s } = legacyFormToSheet(legacyForm('발주', [{ key: 't', label: '정보', type: '표', placeholder: tbl }]));
+  const w = s.cols.map((c) => s.colWidths[c]);
+  assert.ok(w[0] > w[1], '긴 이름표 열이 더 넓다');
+  assert.ok(Math.abs(w.reduce((a, b) => a + b, 0) - 718) <= s.cols.length, '전체 폭은 A4 폭');
+});
+
 test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(기존 표의 가운데 정렬 대신), 글자 칸은 그대로', () => {
   const table = JSON.stringify({
     version: 2,
