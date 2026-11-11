@@ -17,6 +17,9 @@ import { WidgetTierProvider } from './widgets';
 const PREVIEW_WIDTH: Record<Tier, number> = { S: 620, M: 900, L: 1180 };
 /** 위젯 보관함 폭 */
 const LIBRARY_W = 264;
+/** 위젯 구역 — 가운데 두고 양옆에 늘 여백을 남긴다(최대 1280px, 화면 폭의 88%까지) */
+const AREA_MAX = 1280;
+const AREA_RATIO = 0.88;
 /** 보관함 미리보기 폭 */
 const PREVIEW_BOX = 300;
 
@@ -280,6 +283,9 @@ export default function ExecDashboardScreen() {
   /** 위젯 구역 폭 — 편집 중에는 이 폭으로 그린 뒤 오른쪽 보관함 자리만큼 줄여 보인다 */
   const areaRef = useRef<HTMLDivElement>(null);
   const [areaW, setAreaW] = useState(0);
+  /** 위젯 구역의 폭과 왼쪽 여백 */
+  const viewW = Math.min(AREA_MAX, Math.round(areaW * AREA_RATIO));
+  const sideGap = Math.max(0, Math.round((areaW - viewW) / 2));
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
@@ -565,7 +571,7 @@ export default function ExecDashboardScreen() {
           </div>
         </div>
       ) : wide ? (
-        <div className="flex justify-end">
+        <div className="mx-auto flex justify-end" style={areaW > 0 ? { width: viewW } : undefined}>
           <button
             type="button"
             onClick={startEdit}
@@ -579,10 +585,15 @@ export default function ExecDashboardScreen() {
       {wide ? (
         <>
           <div ref={areaRef}>
-            {canEdit && areaW > 0 ? (
-              <div style={{ width: areaW, zoom: (areaW - LIBRARY_W - 28) / areaW }}>{grid}</div>
-            ) : (
+            {areaW <= 0 ? (
               grid
+            ) : canEdit ? (
+              // 편집 중 — 왼쪽 여백은 평소와 같게 두고, 오른쪽 보관함 자리만큼 줄여 보인다
+              <div style={{ paddingLeft: sideGap }}>
+                <div style={{ width: viewW, zoom: Math.min(1, (areaW - sideGap - LIBRARY_W - 28) / viewW) }}>{grid}</div>
+              </div>
+            ) : (
+              <div className="mx-auto" style={{ width: viewW }}>{grid}</div>
             )}
           </div>
           {canEdit && libOpen && (
