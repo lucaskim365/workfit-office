@@ -593,6 +593,8 @@ export function ApprovalDocumentView({
   const extrasTd = 'border border-[#bbb] px-2.5 py-1.5 text-left align-middle text-[#222]';
   // 공문(직인 서식)은 첨부·수신처를 인쇄·PDF 에서 뺀다(첨부는 본문 '붙임', 수신은 문서 머리의 '수신' 줄)
   const sealPrintHidden = sealForm ? ' print:hidden' : '';
+  // 그러면 관련 문서도 없을 때 시트 안 자리 줄이 인쇄에서 빈 줄로 남는다 — 줄째 뺀다
+  const extrasPrintHidden = sealForm && relatedShown.length === 0;
   const extrasBlock = (
     <>
       {attachmentsShown.length > 0 && (
@@ -945,6 +947,7 @@ export function ApprovalDocumentView({
               stamped={doc.status === '완료'}
               external={externalDoc}
               slots={sheetSlots}
+              extrasPrintHidden={extrasPrintHidden}
               slotText={sheetSlotText}
               onExportReady={onExportReadyForDoc}
               // 자동 채우기 '기안 정보'·'문서 항목' 칸 — 문서에 남은 값(상신 뒤 바뀌지 않음)

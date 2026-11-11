@@ -8,7 +8,7 @@ import { SealImage } from '../components/CompanySeal';
 import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
-import { extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell } from '@/domain/approvalForm/sheet/docExtras';
+import { extrasCell, extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell } from '@/domain/approvalForm/sheet/docExtras';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { SheetFormTitle, SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
@@ -101,11 +101,14 @@ export function SheetDocView({
   template,
   external = false,
   slots,
+  extrasPrintHidden = false,
   slotText,
   onExportReady,
 }: {
   /** 문서 머리 부품 칸(결재란·회사 로고·기안자 서명)에 그릴 것 */
   slots?: SheetSlots;
+  /** 첨부·관련 문서 자리 줄을 인쇄에서 뺀다 — 공문(직인 서식)은 첨부·수신처를 인쇄하지 않아 빈 줄만 남을 때 */
+  extrasPrintHidden?: boolean;
   /** 엑셀로 받을 때 문서 머리 부품 칸에 넣을 글자(결재란 → '팀장 홍길동 승인 …') */
   slotText?: Partial<Record<keyof SheetSlots, string>>;
   /**
@@ -191,6 +194,7 @@ export function SheetDocView({
   // 첨부·관련 문서 자리 — 보일 것이 없으면 줄째 숨기고, 시트에 자리가 없으면 시트 아래에 붙인다
   const extrasHidden = extrasHiddenRows(sheet, !!slots?.extras);
   const extrasBelow = slots?.extras && !hasExtrasPlace(sheet) ? <div>{slots.extras}</div> : null;
+  const extrasRow = extrasPrintHidden ? extrasCell(sheet)?.r : undefined;
   // 직인 칸이 고른 직인 — 없으면 바깥(문서 틀)이 정한 것·대표 직인
   const sealMark = sheetSealMarkId(sheet);
   // 결재란을 그리지 않을 때(거래처용 모양·결재 끝난 직인 서식 등) — 큰 제목을 그 자리까지 넓혀 가운데에(왼쪽으로 치우치지 않게)
@@ -204,6 +208,7 @@ export function SheetDocView({
       hidden={masked ? (r, c) => isSecretCell(sheet, r, c) : undefined}
       // 결재 완료일 줄 — 결재가 끝난 문서만(기존 문서 머리와 같음)
       hiddenRows={(r) => condHidden.has(r) || (!docInfo?.completedDate && completedRows.has(r)) || extrasHidden.has(r)}
+      rowClassName={(r) => (r === extrasRow ? 'print:hidden' : undefined)}
       renderCell={(r, c) => {
         const props = approvalCellProps(sheet, r, c);
         // 안내문 칸 — 작성 화면에만(결재·인쇄·대외 문서엔 안 나옴)
