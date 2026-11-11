@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, X } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, tierOf, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
@@ -9,7 +9,7 @@ import { WidgetTierProvider } from './widgets';
  * 홈(경영 현황) — 로그인 후 첫 화면.
  * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고, 위젯은 늘 왼쪽 위로 붙는다(빈칸은 높이가 다른 위젯 옆에만).
  * 편집: 위젯은 끌어서 옮기고, 크기는 소(4칸)·중(6칸)·대(12칸) 단추나 오른쪽 아래 손잡이를 끌어 바꾼다(가까운 단계로 맞춤).
- * 편집 띠의 '위젯 보관함'을 열면 오른쪽에 떠서(모듈 → 위젯) 눈을 켜고 끈다. 닫으면 화면에는 놓인 위젯만 깔린다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
+ * 편집 띠의 '위젯 보관함'을 열면 화면 위에 떠서(모듈 → 위젯, 끌어서 옮기고 모듈별로 펴고 접기) 눈을 켜고 끈다. 닫으면 화면에는 놓인 위젯만 깔린다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
@@ -22,15 +22,19 @@ const PREVIEW_BOX = 300;
 
 const DRAG_NEW = 'application/x-workfit-widget';
 
-/** 보관함에서 위젯에 커서를 올리면 왼쪽에 뜨는 미리보기 — 실제 위젯을 기본 크기로 그려 줄여 보인다 */
-function WidgetPreview({ id }: { id: WidgetId }) {
+/** 보관함에서 위젯에 커서를 올리면 옆에 뜨는 미리보기 — 실제 위젯을 기본 크기로 그려 줄여 보인다.
+ *  보관함이 화면 오른쪽에 있으면 왼쪽에, 왼쪽에 있으면 오른쪽에 */
+function WidgetPreview({ id, side }: { id: WidgetId; side: 'left' | 'right' }) {
   const def = WIDGETS[id];
   const tier = def.tier;
   const w = PREVIEW_WIDTH[tier];
   const zoom = PREVIEW_BOX / w;
   const h = rowsHeight(rowsAt(id, tier));
   return (
-    <div className="pointer-events-none absolute top-0 right-full z-50 mr-3 rounded-2xl border border-border bg-[var(--color-bg)] p-2 shadow-[0_16px_40px_-12px_rgba(16,40,80,.35)]" aria-hidden="true">
+    <div
+      className={`pointer-events-none absolute top-0 z-50 rounded-2xl border border-border bg-[var(--color-bg)] p-2 shadow-[0_16px_40px_-12px_rgba(16,40,80,.35)] ${side === 'left' ? 'right-full mr-3' : 'left-full ml-3'}`}
+      aria-hidden="true"
+    >
       <div className="overflow-hidden" style={{ width: PREVIEW_BOX, height: Math.round(h * zoom) }}>
         <div className="select-none" data-tier={tier} style={{ width: w, height: h, zoom }} inert>
           <WidgetTierProvider value={tier}><def.Component /></WidgetTierProvider>
@@ -41,7 +45,24 @@ function WidgetPreview({ id }: { id: WidgetId }) {
   );
 }
 
-/** 위젯 보관함 — 모듈 아래 위젯을 나열하고, 오른쪽 눈으로 홈에 보이기/숨기기. 숨긴 위젯은 끌어서 원하는 자리에 놓을 수도 있다 */
+const LIB_POS_KEY = 'workfit.execDashboard.libraryPos';
+const LIB_FOLD_KEY = 'workfit.execDashboard.libraryFold';
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writeJson = (key: string, value: unknown) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 못 남겨도 그대로 쓴다 */ }
+};
+
+/**
+ * 위젯 보관함 — 화면 위에 떠 있는 판. 머리를 끌어 아무 데나 옮기고(자리는 이 브라우저에 기억),
+ * 모듈별로 펴고 접는다. 위젯 오른쪽 눈으로 홈에 보이기/숨기기, 숨긴 위젯은 끌어서 원하는 자리에 놓을 수도 있다.
+ */
 function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
   layout: WidgetSlot<WidgetId>[];
   onClose: () => void;
@@ -50,58 +71,147 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
   onDragEnd: () => void;
 }) {
   const [hover, setHover] = useState<WidgetId | null>(null);
+  const [folded, setFolded] = useState<string[]>(() => readJson<string[]>(LIB_FOLD_KEY, []));
+  /** 판의 왼쪽 위(화면 배율을 걷어 낸 px). 없으면 오른쪽 기본 자리 */
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => readJson<{ x: number; y: number } | null>(LIB_POS_KEY, null));
+  const [moving, setMoving] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+  /** 화면 배율 — 화면 좌표를 판 좌표로 */
+  const scaleOf = () => {
+    const el = ref.current;
+    const r = el?.getBoundingClientRect();
+    return el && r?.width ? el.offsetWidth / r.width : 1;
+  };
+  const viewport = () => {
+    const k = scaleOf();
+    return { w: window.innerWidth * k, h: window.innerHeight * k };
+  };
+  const clamp = (p: { x: number; y: number }) => {
+    const el = ref.current;
+    const { w, h } = viewport();
+    return {
+      x: Math.min(Math.max(8, p.x), w - (el?.offsetWidth ?? LIBRARY_W) - 8),
+      y: Math.min(Math.max(8, p.y), h - 120),
+    };
+  };
+  // 창 크기가 바뀌어 화면 밖으로 나가면 안으로 들인다
+  useEffect(() => {
+    const on = () => setPos((p) => (p ? clamp(p) : p));
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  });
+
+  /** 머리를 끌어 옮기기 */
+  const startMove = (e: ReactPointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const el = ref.current;
+    if (!el) return;
+    e.preventDefault();
+    const k = scaleOf();
+    const r = el.getBoundingClientRect();
+    const from = { x: r.left * k, y: r.top * k };
+    const start = { x: e.clientX, y: e.clientY };
+    let last = from;
+    setMoving(true);
+    setHover(null);
+    const onMove = (ev: PointerEvent) => {
+      last = clamp({ x: from.x + (ev.clientX - start.x) * k, y: from.y + (ev.clientY - start.y) * k });
+      setPos(last);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setMoving(false);
+      writeJson(LIB_POS_KEY, last);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const toggleFold = (m: string) =>
+    setFolded((f) => {
+      const next = f.includes(m) ? f.filter((x) => x !== m) : [...f, m];
+      writeJson(LIB_FOLD_KEY, next);
+      return next;
+    });
+
+  // 판이 화면 왼쪽 절반에 있으면 미리보기를 오른쪽에
+  const side: 'left' | 'right' = pos && pos.x + LIBRARY_W / 2 < viewport().w / 2 ? 'right' : 'left';
   const shownCount = layout.length;
   return (
     <aside
+      ref={ref}
       aria-label="위젯 보관함"
-      style={{ width: LIBRARY_W }}
-      className="fixed top-[262px] right-5 bottom-5 z-[70] flex flex-col rounded-[20px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)]"
+      style={pos ? { width: LIBRARY_W, left: pos.x, top: pos.y } : { width: LIBRARY_W, right: 20, top: 262 }}
+      className={`fixed z-[70] flex max-h-[min(680px,calc(100vh/var(--font-scale,1)-40px))] flex-col rounded-[20px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)] ${moving ? 'select-none ring-2 ring-[#9fcfee]' : ''}`}
     >
-      {hover && <WidgetPreview id={hover} />}
-      <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
+      {hover && !moving && <WidgetPreview id={hover} side={side} />}
+      {/* 머리 — 끌어서 옮긴다 */}
+      <div
+        onPointerDown={startMove}
+        className={`flex touch-none items-center gap-1.5 rounded-t-[20px] px-3 pt-3 pb-2 ${moving ? 'cursor-grabbing' : 'cursor-grab'}`}
+        title="끌어서 옮기기"
+      >
+        <GripVertical size={15} className="shrink-0 text-ink3" aria-hidden="true" />
         <h2 className="text-[15px] font-extrabold tracking-tight text-ink">위젯 보관함</h2>
         <span className="ml-auto text-[11.5px] text-ink3">표시 <strong className="tabular-nums text-[#0876c8]">{shownCount}</strong> / {WIDGET_IDS.length}</span>
         <button type="button" onClick={onClose} aria-label="위젯 보관함 닫기" className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><X size={16} /></button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
-        {MODULES.map((m) => (
-          <section key={m}>
-            <h3 className="mb-1 px-1 text-[11.5px] font-extrabold text-ink3">{m}</h3>
-            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-              {WIDGET_IDS.filter((id) => WIDGETS[id].module === m).map((id) => {
-                const on = layout.some((s) => s.id === id);
-                const title = WIDGETS[id].title;
-                return (
-                  <li
-                    key={id}
-                    onMouseEnter={() => setHover(id)}
-                    onMouseLeave={() => setHover((h) => (h === id ? null : h))}
-                  >
-                    <div
-                      draggable={!on}
-                      onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, id); e.dataTransfer.effectAllowed = 'copy'; setHover(null); onDragStart(id); }}
-                      onDragEnd={onDragEnd}
-                      className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-1.5 ${on ? 'bg-[#eef6fd] dark:bg-sky-500/10' : 'cursor-grab hover:bg-panel-alt active:cursor-grabbing'}`}
-                    >
-                      <GripVertical size={14} className={`shrink-0 ${on ? 'text-transparent' : 'text-ink3'}`} aria-hidden="true" />
-                      <span className={`min-w-0 flex-1 truncate text-[13px] ${on ? 'font-bold text-ink' : 'text-ink2'}`}>{title}</span>
-                      <button
-                        type="button"
-                        onClick={() => onToggle(id)}
-                        aria-pressed={on}
-                        aria-label={on ? `${title} 숨기기` : `${title} 보이기`}
-                        title={on ? '숨기기' : '보이기'}
-                        className={`grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md ${on ? 'text-[#0876c8] hover:bg-white dark:hover:bg-white/10' : 'text-ink3 hover:bg-white hover:text-ink2 dark:hover:bg-white/10'}`}
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
+        {MODULES.map((m) => {
+          const ids = WIDGET_IDS.filter((id) => WIDGETS[id].module === m);
+          const onCount = ids.filter((id) => layout.some((s) => s.id === id)).length;
+          const open = !folded.includes(m);
+          return (
+            <section key={m}>
+              <button
+                type="button"
+                onClick={() => toggleFold(m)}
+                aria-expanded={open}
+                className="flex w-full cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-panel-alt"
+              >
+                <ChevronDown size={14} className={`shrink-0 text-ink3 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
+                <span className="flex-1 text-[12.5px] font-extrabold text-ink2">{m}</span>
+                <span className={`text-[11px] tabular-nums ${onCount ? 'font-bold text-[#0876c8]' : 'text-ink3'}`}>{onCount}/{ids.length}</span>
+              </button>
+              {open && (
+                <ul className="m-0 mb-1 flex list-none flex-col gap-0.5 p-0 pl-3">
+                  {ids.map((id) => {
+                    const on = layout.some((s) => s.id === id);
+                    const title = WIDGETS[id].title;
+                    return (
+                      <li
+                        key={id}
+                        onMouseEnter={() => setHover(id)}
+                        onMouseLeave={() => setHover((h) => (h === id ? null : h))}
                       >
-                        {on ? <Eye size={16} /> : <EyeOff size={16} />}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+                        <div
+                          draggable={!on}
+                          onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, id); e.dataTransfer.effectAllowed = 'copy'; setHover(null); onDragStart(id); }}
+                          onDragEnd={onDragEnd}
+                          className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-1.5 ${on ? 'bg-[#eef6fd] dark:bg-sky-500/10' : 'cursor-grab hover:bg-panel-alt active:cursor-grabbing'}`}
+                        >
+                          <GripVertical size={14} className={`shrink-0 ${on ? 'text-transparent' : 'text-ink3'}`} aria-hidden="true" />
+                          <span className={`min-w-0 flex-1 truncate text-[13px] ${on ? 'font-bold text-ink' : 'text-ink2'}`}>{title}</span>
+                          <button
+                            type="button"
+                            onClick={() => onToggle(id)}
+                            aria-pressed={on}
+                            aria-label={on ? `${title} 숨기기` : `${title} 보이기`}
+                            title={on ? '숨기기' : '보이기'}
+                            className={`grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md ${on ? 'text-[#0876c8] hover:bg-white dark:hover:bg-white/10' : 'text-ink3 hover:bg-white hover:text-ink2 dark:hover:bg-white/10'}`}
+                          >
+                            {on ? <Eye size={16} /> : <EyeOff size={16} />}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          );
+        })}
       </div>
     </aside>
   );
