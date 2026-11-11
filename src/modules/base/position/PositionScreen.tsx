@@ -94,7 +94,7 @@ export default function PositionScreen() {
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">직급/직책 관리</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">직급·직책 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">구성원·조직 / 직급 및 직책 관리</p>
         </div>
         {tab === 'position' ? (

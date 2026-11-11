@@ -38,7 +38,7 @@ export default function InterfaceScreen() {
         <Card><Kpi label="오류" value="1" unit="개" /></Card>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card title="외부 연동 모니터링" action={<span className="text-[10.5px] text-ink3">실시간 · 30초 자동 갱신</span>} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[11.5px]">
@@ -77,16 +77,16 @@ export default function InterfaceScreen() {
           <div className="flex flex-col gap-3">
             <DetailField label="I/F ID" required value={cur.id} mono />
             <DetailField label="I/F 명" required value={cur.name} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <DetailField label="대상" select value={cur.target} />
               <DetailField label="방향" select value={cur.dir} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <DetailField label="연동 방식" select value={cur.method} />
               <DetailField label="주기" select value={cur.cycle} />
             </div>
             <DetailField label="연동 주소" required value={cur.addr} mono />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <DetailField label="포트" value="443" mono />
               <DetailField label="타임아웃" value="30초" />
             </div>

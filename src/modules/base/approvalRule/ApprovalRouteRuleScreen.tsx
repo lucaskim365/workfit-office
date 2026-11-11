@@ -236,22 +236,13 @@ export default function ApprovalRouteRuleScreen() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-1">
+    <div className="flex flex-col gap-3.5">
       {/* 1. 상단 타이틀 & 통계 카드 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-extrabold text-teal border border-teal/20">
-              전자결재
-            </span>
-            <span className="text-[12px] text-ink3 font-medium">결재선 규칙</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2.5">
-            <GitMerge className="h-6 w-6 text-teal" />
-            <span>결재 규칙 관리</span>
-          </h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">결재선 규칙</h1>
           <p className="mt-0.5 text-xs text-ink3">
-            전사 공통 및 서식별 결재 규정, 부서·직급·금액 조건에 따른 자동 결재선을 총괄 관리합니다.
+            전자결재 / 결재선 규칙 · 전사 공통 및 서식별 결재 규정, 부서·직급·금액 조건에 따른 자동 결재선을 관리합니다.
           </p>
         </div>
 

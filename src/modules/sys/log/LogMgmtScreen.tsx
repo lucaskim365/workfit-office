@@ -134,7 +134,7 @@ export default function LogMgmtScreen() {
       {/* ── 화면 헤더 ── */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">로그 및 접속 모니터링</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">로그 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">시스템 / 실시간 로그인 이력 및 감사 로그</p>
         </div>
         <ActionBar actions={[{ preset: 'refresh', onClick: handleRefresh }]} />

@@ -230,7 +230,7 @@ export default function ApprovalFormScreen() {
             </button>
           </div>
 
-          <div className="grid grid-cols-[260px_1fr] items-start gap-3.5">
+          <div className="grid grid-cols-[260px_minmax(0,1fr)] items-start gap-3.5">
             {/* 좌측: 폴더 탐색 트리 패널 */}
             <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-panel">
               <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">

@@ -208,22 +208,11 @@ export default function HolidayScreen() {
   return (
     <div className="flex flex-col gap-4 max-w-7xl mx-auto pb-16">
       {/* ── 화면 헤더 ── */}
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-ink3 mb-1">
-            회사·운영 <span className="px-1">/</span> 공휴일 관리
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-teal-soft text-lg text-teal">
-              📅
-            </span>
-            <h1 className="text-xl font-extrabold tracking-tight text-ink">공휴일 관리</h1>
-            <span className="rounded-full bg-panel-alt px-2.5 py-0.5 text-xs font-mono font-semibold text-ink2 border border-border">
-              {filtered.length}건
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-ink3">
-            대한민국 법정공휴일, 대체공휴일 및 사내 창립기념일 등 회사 지정 휴일을 등록하고 근태/휴가에 연동합니다.
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">공휴일 관리</h1>
+          <p className="mt-0.5 text-xs text-ink3">
+            회사·운영 / 공휴일 관리 · 법정공휴일, 대체공휴일, 창립기념일 같은 회사 지정 휴일을 등록하고 근태·휴가에 연동합니다.
           </p>
         </div>
 

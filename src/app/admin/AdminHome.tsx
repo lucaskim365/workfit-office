@@ -28,12 +28,12 @@ export default function AdminHome() {
 
   return (
     <div className="mx-auto max-w-[1080px]">
-      <h1 className="mb-1 text-[20px] font-extrabold tracking-tight text-ink">관리자 콘솔</h1>
-      <p className="mb-5 text-[13px] text-ink3">구성원·권한·전자결재·회사 정보를 관리합니다.</p>
+      <h1 className="text-xl font-extrabold tracking-tight text-ink">관리자 콘솔</h1>
+      <p className="mb-5 mt-0.5 text-xs text-ink3">구성원·권한·전자결재·회사 정보를 관리합니다.</p>
 
       <div className="mb-7 grid grid-cols-5 gap-3">
         {stats.map((s) => (
-          <Link key={s.label} to={s.to} className="rounded-xl border border-border bg-panel px-4 py-3.5 hover:border-ink3">
+          <Link key={s.label} to={s.to} className="rounded-xl border border-border bg-panel px-4 py-3.5 hover:border-teal">
             <div className="text-[12px] text-ink3">{s.label}</div>
             <div className="mt-1 text-[22px] font-extrabold tabular-nums text-ink">{s.value ?? '–'}</div>
           </Link>
@@ -48,7 +48,7 @@ export default function AdminHome() {
               {g.children.map((s) => (
                 <li key={s.id} className="border-t border-border first:border-t-0">
                   <Link to={adminPath(s.url!)} className="group flex items-baseline gap-3 py-2">
-                    <span className="w-[132px] shrink-0 text-[13px] font-semibold text-ink group-hover:text-[#0876c8]">{s.name}</span>
+                    <span className="w-[132px] shrink-0 text-[13px] font-semibold text-ink group-hover:text-teal">{s.name}</span>
                     <span className="min-w-0 truncate text-[12px] text-ink3">{DESC_BY_URL.get(s.url!) ?? ''}</span>
                   </Link>
                 </li>

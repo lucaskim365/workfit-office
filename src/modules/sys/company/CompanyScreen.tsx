@@ -19,7 +19,7 @@ const CELL = 'w-full rounded-md border border-border-hi bg-panel px-2 py-1 text-
 /** 라벨(좌) + 입력(우) 행 — 회사정보 폼 공통. compact: 2단 배치용(라벨 폭 자동·간격 확보). */
 function FRow({ label, required, children, multiline, compact }: { label: string; required?: boolean; children: ReactNode; multiline?: boolean; compact?: boolean }) {
   return (
-    <div className={`grid ${compact ? 'grid-cols-[auto_1fr] gap-2.5' : 'grid-cols-[112px_1fr] gap-3.5'} ${multiline ? 'items-start' : 'items-center'}`}>
+    <div className={`grid min-w-0 ${compact ? 'grid-cols-[auto_minmax(0,1fr)] gap-2.5' : 'grid-cols-[112px_minmax(0,1fr)] gap-3.5'} ${multiline ? 'items-start' : 'items-center'}`}>
       <span className={`whitespace-nowrap text-[12px] font-bold text-ink2 ${multiline ? 'pt-2' : ''}`}>
         {label}{required && <span className="ml-0.5 text-danger">*</span>}
       </span>
@@ -141,14 +141,14 @@ export default function CompanyScreen() {
         <SaveStatus pending={pending} dirty={dirty} />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card title="기본 정보">
           <div className="flex flex-col gap-3">
             <FRow label="회사명" required><TextField value={v('name')} onChange={(e) => set('name', e.target.value)} /></FRow>
             <FRow label="영문 회사명"><TextField value={v('nameEn')} onChange={(e) => set('nameEn', e.target.value)} /></FRow>
             <FRow label="사업자등록번호"><TextField value={v('bizNo')} onChange={(e) => set('bizNo', e.target.value)} className="font-mono tabular-nums" /></FRow>
             <FRow label="법인등록번호"><TextField value={v('corpNo')} onChange={(e) => set('corpNo', e.target.value)} className="font-mono tabular-nums" /></FRow>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-5 gap-y-3">
               <FRow label="대표자" required compact><TextField value={v('ceo')} onChange={(e) => set('ceo', e.target.value)} /></FRow>
               <FRow label="설립일" compact><TextField value={v('foundedDate')} onChange={(e) => set('foundedDate', e.target.value)} className="tabular-nums" /></FRow>
             </div>
@@ -174,7 +174,7 @@ export default function CompanyScreen() {
 
         <Card title="연락처 / 주소">
           <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-5 gap-y-3">
               <FRow label="대표 전화" compact><TextField value={v('tel')} onChange={(e) => set('tel', e.target.value)} className="tabular-nums" /></FRow>
               <FRow label="팩스" compact><TextField value={v('fax')} onChange={(e) => set('fax', e.target.value)} className="tabular-nums" /></FRow>
             </div>

@@ -14,7 +14,7 @@ interface DetailFieldProps {
 /** 상세 패널의 읽기 필드 — 와이어프레임 AField 정본(라벨 88px + 값 박스). */
 export function DetailField({ label, value, required, mono, select, multiline }: DetailFieldProps) {
   return (
-    <div className={`grid grid-cols-[88px_1fr] gap-3.5 ${multiline ? 'items-start' : 'items-center'}`}>
+    <div className={`grid grid-cols-[88px_minmax(0,1fr)] gap-3.5 ${multiline ? 'items-start' : 'items-center'}`}>
       <span className={`text-[12px] font-bold text-ink2 ${multiline ? 'pt-2' : ''}`}>
         {label}
         {required && <span className="ml-0.5 text-danger">*</span>}
@@ -29,7 +29,7 @@ export function DetailField({ label, value, required, mono, select, multiline }:
             mono ? 'font-mono tabular-nums' : ''
           }`}
         >
-          <span className="truncate">{value}</span>
+          <span className="min-w-0 truncate">{value}</span>
           {select && <span className="text-[8px] text-ink3">▾</span>}
         </div>
       )}

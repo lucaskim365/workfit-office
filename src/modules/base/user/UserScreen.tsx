@@ -116,7 +116,7 @@ export default function UserScreen() {
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자관리</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">구성원·조직 / 사용자 관리</p>
         </div>
         <ActionBar actions={['refresh']} />
