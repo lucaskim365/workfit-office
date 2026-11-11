@@ -95,7 +95,7 @@ const CSS = `
 .wf-word .ProseMirror.resize-cursor{cursor:col-resize}
 .wf-word .ProseMirror .tableWrapper{overflow-x:auto}
 .wf-word .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#aaa;float:left;height:0;pointer-events:none}
-@media print{html,body{background:#fff!important}.wf-word-bar,.wf-word-sheets,.wf-pg-spacer{display:none!important}.wf-pg-push{padding-top:0!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
+@media print{html,body{background:#fff!important}.wf-word-bar,.wf-word-sheets,.wf-pg-spacer,.wf-pg-split{display:none!important}.wf-pg-push{padding-top:0!important}.wf-word-paper{box-shadow:none!important;margin:0!important;padding:0!important;width:auto!important;min-height:0!important}}
 `;
 
 export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, placeholder = '내용을 입력하세요', toolbarExtra, onReady }: WordEditorProps) {
