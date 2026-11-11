@@ -1,7 +1,7 @@
 /** 표 도구 막대 — 커서가 표 안에 있을 때 나온다(행·열·합치기, 칸 색·세로 맞춤·행 높이·테두리) */
 import type { Editor } from '@tiptap/react';
 import { Btn, Palette, Popover, SELECT_CLS, Sep, Swatches, closePopover } from './controls';
-import { setCellBorders, setRowHeight, type CellVAlign } from './cell';
+import { addColumnKeepWidth, setCellBorders, setRowHeight, type CellVAlign } from './cell';
 import type { CellBorder, CellBorders } from './format';
 
 const CELL_COLORS = ['#1f2d50', '#2b4c7e', '#dde7f5', '#eaf0fa', '#f5f7fa', '#f2f2f2', '#d9d9d9', '#fff2cc', '#e2efda', '#fce4d6'];
@@ -35,8 +35,8 @@ export function TableBar({ editor }: { editor: Editor }) {
       <span className="mr-1 text-[11.5px] font-bold text-[#56607a]">표</span>
       <Btn title="위에 행 넣기" onClick={() => c().addRowBefore().run()}>↑행</Btn>
       <Btn title="아래에 행 넣기" onClick={() => c().addRowAfter().run()}>↓행</Btn>
-      <Btn title="왼쪽에 열 넣기" onClick={() => c().addColumnBefore().run()}>←열</Btn>
-      <Btn title="오른쪽에 열 넣기" onClick={() => c().addColumnAfter().run()}>→열</Btn>
+      <Btn title="왼쪽에 열 넣기" onClick={() => addColumnKeepWidth(editor, 'before')}>←열</Btn>
+      <Btn title="오른쪽에 열 넣기" onClick={() => addColumnKeepWidth(editor, 'after')}>→열</Btn>
       <Btn title="행 지우기" onClick={() => c().deleteRow().run()}>행 삭제</Btn>
       <Btn title="열 지우기" onClick={() => c().deleteColumn().run()}>열 삭제</Btn>
       <Sep />

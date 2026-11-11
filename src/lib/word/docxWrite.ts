@@ -4,7 +4,7 @@
  *          글머리·번호 목록(여러 단계), 인용, 구분선, 표(칸 합치기·열 너비·행 높이·머리 칸·칸 배경색·세로 맞춤·테두리), 그림(PNG·JPEG·GIF).
  * 쪽은 A4 세로, 여백 2.54cm(편집 화면과 같음). 글꼴은 맑은 고딕 10pt.
  */
-import { A4, A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, type WordMark, type WordNode } from './model';
+import { A4, A4_CONTENT_WIDTH, DEFAULT_FONT, TABLE_MAX_WIDTH, type WordMark, type WordNode } from './model';
 import { imageSize, loadImage, type ImageType } from './image';
 import { PARA_DEFAULT, bordersXml, headingDefault, paraXml } from './format';
 import { zip } from './zip';
@@ -29,7 +29,7 @@ const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships
 /** px → twip(1/20pt), px → EMU */
 const TWIP = 15;
 const EMU = 9525;
-const FONT = '맑은 고딕';
+const FONT = DEFAULT_FONT;
 /** 기본 글자 크기(반 pt 단위) — 10pt */
 const BASE_HALF_PT = 20;
 
@@ -95,9 +95,10 @@ function runProps(marks: WordMark[] = []): string {
   // 워드 rPr 자식 순서(rFonts → b → i → strike → color → sz → u → shd)를 지킨다 — 순서가 틀리면 워드가 파일이 손상됐다고 본다
   if (has('code')) out.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
   else if (ts.fontFamily && typeof ts.fontFamily === 'string') {
-    const f = esc(ts.fontFamily.split(',')[0].replace(/['"]/g, '').trim());
-    // 한글 글꼴만 한글 자리(eastAsia)에도 — 영문 글꼴을 넣으면 워드가 한글을 바탕체로 바꿔 그린다
-    out.push(`<w:rFonts w:ascii="${f}" w:hAnsi="${f}"${KOREAN_FONT.test(f) ? ` w:eastAsia="${f}"` : ''}/>`);
+    // 글꼴 목록의 첫 글꼴은 영문 자리, 목록 안 첫 한글 글꼴은 한글 자리(eastAsia) — 영문 글꼴을 한글 자리에 넣으면 워드가 한글을 바탕체로 그린다
+    const names = ts.fontFamily.split(',').map((x) => esc(x.replace(/['"]/g, '').trim())).filter(Boolean);
+    const ko = names.find((x) => KOREAN_FONT.test(x));
+    if (names.length) out.push(`<w:rFonts w:ascii="${names[0]}" w:hAnsi="${names[0]}"${ko ? ` w:eastAsia="${ko}"` : ''}/>`);
   }
   if (has('bold')) out.push('<w:b/><w:bCs/>');
   if (has('italic')) out.push('<w:i/><w:iCs/>');

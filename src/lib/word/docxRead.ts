@@ -4,7 +4,7 @@
  *          글머리·번호 목록(여러 단계), 표(가로·세로 합친 칸·열 너비·행 높이·칸 배경색·세로 맞춤·테두리), 그림(PNG·JPEG·GIF).
  * 읽지 않는 것: 머리글·바닥글, 각주, 메모, 변경 내용 추적, 글상자·도형, 쪽 나누기·단(본문 흐름만 읽는다)
  */
-import { A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, emptyWordDoc, type WordMark, type WordNode } from './model';
+import { A4_CONTENT_WIDTH, DEFAULT_FONT, TABLE_MAX_WIDTH, emptyWordDoc, type WordMark, type WordNode } from './model';
 import { sniffImage, toDataUrl } from './image';
 import { BORDER_SIDES, WORD_SINGLE_LINE, paraDefault, borderFromWord, type CellBorders, type ParaFormat } from './format';
 import { child, children, find, parseXml, type XmlNode } from './xml';
@@ -150,7 +150,11 @@ function runMarks(rPr: XmlNode | undefined, link?: string): WordMark[] {
   const sz = Number(val(child(rPr, 'sz')));
   if (sz > 0) style.fontSize = `${sz / 2}pt`;
   const font = child(rPr, 'rFonts');
-  const family = font?.attrs.eastAsia ?? font?.attrs.ascii ?? font?.attrs.hAnsi;
+  // 워드는 글자 종류마다 글꼴을 따로 쓴다(영문 ascii·한글 eastAsia, 한글 글꼴이 없으면 문서 기본 한글 글꼴).
+  // 화면은 '영문 글꼴, 한글 글꼴' 목록으로 같게 — 영문 글꼴만 주면 브라우저가 한글을 엉뚱한 글꼴로 그린다
+  const latin = font?.attrs.ascii ?? font?.attrs.hAnsi;
+  const korean = font?.attrs.eastAsia ?? (latin ? DEFAULT_FONT : undefined);
+  const family = [...new Set([latin, korean].filter(Boolean))].join(', ');
   if (family) style.fontFamily = family;
   if (Object.keys(style).length) marks.push({ type: 'textStyle', attrs: style });
   const hl = val(child(rPr, 'highlight'));

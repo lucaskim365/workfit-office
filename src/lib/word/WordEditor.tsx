@@ -17,7 +17,7 @@ import { fromDataUrl, imageSize } from './image';
 import { WordTableCell, WordTableHeader, WordTableRow } from './cell';
 import { Btn, Palette, Popover, SELECT_CLS, Sep, closePopover } from './controls';
 import { ParagraphFormat, INDENT_STEP, changeIndent, setParaFormat } from './paragraph';
-import { paraDefault } from './format';
+import { CELL_MIN_WIDTH, paraDefault } from './format';
 import { TableBar } from './TableBar';
 
 export interface WordEditorProps {
@@ -41,7 +41,7 @@ export const WORD_EXTENSIONS = [
   Highlight.configure({ multicolor: true }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Image.configure({ inline: true, allowBase64: true, resize: { enabled: true, alwaysPreserveAspectRatio: true, minWidth: 24, minHeight: 24 } }),
-  TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableRow: false, tableCell: false, tableHeader: false }),
+  TableKit.configure({ table: { resizable: true, cellMinWidth: CELL_MIN_WIDTH }, tableRow: false, tableCell: false, tableHeader: false }),
   WordTableRow,
   WordTableCell,
   WordTableHeader,
@@ -204,6 +204,8 @@ function Toolbar({ editor, extra }: { editor: Editor; extra?: ReactNode }) {
         <option value="h4">제목 4</option>
       </select>
       <select className={sel} title="글꼴" value={ts.fontFamily ?? ''} onChange={(e) => (e.target.value ? c().setFontFamily(e.target.value).run() : c().unsetFontFamily().run())}>
+        {/* 목록에 없는 글꼴(불러온 문서) — 첫 글꼴 이름으로 보인다 */}
+        {ts.fontFamily && !FONTS.some((f) => f.value === ts.fontFamily) && <option value={ts.fontFamily}>{ts.fontFamily.split(',')[0]}</option>}
         {FONTS.map((f) => (
           <option key={f.label} value={f.value}>
             {f.label}

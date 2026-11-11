@@ -49,6 +49,9 @@ export function wordDocText(node: WordNode): string {
   return node.type === 'tableCell' || node.type === 'tableHeader' ? inner + '\t' : inner;
 }
 
+/** 기본 글꼴 — 편집 화면·저장 문서 기본, 불러온 글에 한글 글꼴이 따로 없을 때 한글 글꼴 */
+export const DEFAULT_FONT = '맑은 고딕';
+
 /** A4 종이(px, 96dpi)와 여백 — 편집 화면과 .docx 의 쪽 설정이 같게 */
 export const A4 = { width: 794, height: 1123, margin: 96 } as const;
 /** 본문 폭(px) — 그림·표 최대 폭 */

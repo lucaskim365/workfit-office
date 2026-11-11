@@ -9,6 +9,7 @@ import { halfPoints, hexColor } from './docxWrite';
 import { imageSize, toDataUrl } from './image';
 import { unzip, zip } from './zip';
 import { TABLE_MAX_WIDTH, type WordNode } from './model';
+import { CELL_MIN_WIDTH, fitWidths } from './format';
 
 const t = (text: string, ...marks: WordNode['marks'] & object): WordNode => (marks.length ? { type: 'text', text, marks } : { type: 'text', text });
 const p = (...content: WordNode[]): WordNode => ({ type: 'paragraph', content });
@@ -260,6 +261,23 @@ test('글꼴 — 영문 글꼴은 한글 자리에 넣지 않는다(워드가 �
   const xml = new TextDecoder().decode((await unzip(await exportDocx(doc(font('Segoe UI'), font('Batang, 바탕, serif'))))).get('word/document.xml'));
   assert.ok(xml.includes('<w:rFonts w:ascii="Segoe UI" w:hAnsi="Segoe UI"/>'));
   assert.ok(xml.includes('<w:rFonts w:ascii="Batang" w:hAnsi="Batang" w:eastAsia="Batang"/>'));
+});
+
+test('열 너비 맞추기 — 합은 표 너비 그대로, 최소 너비보다 좁은 열은 최소 너비로 두고 나머지를 줄인다', () => {
+  const out = fitWidths([32, 165, 119, 225, 64], 600);
+  assert.ok(out.reduce((a, b) => a + b, 0) <= 600);
+  assert.ok(out.every((w) => w >= CELL_MIN_WIDTH));
+  assert.deepEqual(fitWidths([100, 100], 300), [150, 150]);
+});
+
+test('글꼴 불러오기 — 영문 글꼴만 정한 글은 한글 자리에 문서 기본 한글 글꼴(화면이 한글을 엉뚱한 글꼴로 그리지 않게), 다시 저장해도 같은 짝', async () => {
+  const body = '<w:p><w:r><w:rPr><w:rFonts w:ascii="Segoe UI" w:hAnsi="Segoe UI"/></w:rPr><w:t>가a</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Arial" w:eastAsia="바탕"/></w:rPr><w:t>나b</w:t></w:r></w:p>';
+  const { doc: d } = await importDocx(await wordFile(body, ''));
+  const fam = d.content![0].content!.map((n) => n.marks?.[0]?.attrs?.fontFamily);
+  assert.deepEqual(fam, ['Segoe UI, 맑은 고딕', 'Arial, 바탕']);
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(d))).get('word/document.xml'));
+  assert.ok(xml.includes('<w:rFonts w:ascii="Segoe UI" w:hAnsi="Segoe UI" w:eastAsia="맑은 고딕"/>'));
+  assert.ok(xml.includes('<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="바탕"/>'));
 });
 
 test('색·크기 읽기', () => {

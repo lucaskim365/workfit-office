@@ -6,6 +6,7 @@
  * - spaceBefore·spaceAfter: 문단 앞·뒤 간격(pt)
  * - indent: 왼쪽 들여쓰기(pt), firstLine: 첫 줄 들여쓰기(pt, 음수면 내어쓰기)
  *
+ * 표 열 너비 맞추기(fitWidths — 열을 넣어도 표 너비 그대로).
  * 표 칸(tableCell·tableHeader) attrs.borders: { top, right, bottom, left } 마다 { style, width(px, 소수 — 워드 0.5pt 선은 0.67px), color('#rrggbb') }
  */
 
@@ -66,6 +67,25 @@ export function paraXml(a: Record<string, unknown> | undefined, opts: { tight?: 
   if (left) ind.push(`w:left="${Math.round(left * 20)}"`);
   if (fl) ind.push(fl > 0 ? `w:firstLine="${Math.round(fl * 20)}"` : `w:hanging="${Math.round(-fl * 20)}"`);
   return { spacing: sp.length ? `<w:spacing ${sp.join(' ')}/>` : '', ind: ind.length ? `<w:ind ${ind.join(' ')}/>` : '' };
+}
+
+// ── 표 열 너비 ──
+
+/** 칸 최소 너비(px) — 편집기가 이보다 좁게 그리지 않는다 */
+export const CELL_MIN_WIDTH = 40;
+
+/** 열 너비들을 합이 total 이 되게 비율로 — 최소 너비보다 좁아지는 열은 최소 너비로 두고 나머지를 더 줄인다(넘치면 가로 스크롤이 생기므로) */
+export function fitWidths(widths: number[], total: number): number[] {
+  const fixed = new Set<number>();
+  for (;;) {
+    const rest = total - fixed.size * CELL_MIN_WIDTH;
+    const free = widths.reduce((a, w, i) => (fixed.has(i) ? a : a + w), 0);
+    const k = free > 0 ? rest / free : 0;
+    const out = widths.map((w, i) => (fixed.has(i) ? CELL_MIN_WIDTH : Math.floor(w * k)));
+    const narrow = out.findIndex((w, i) => !fixed.has(i) && w < CELL_MIN_WIDTH);
+    if (narrow < 0 || fixed.size + 1 >= widths.length) return out.map((w) => Math.max(CELL_MIN_WIDTH, w));
+    fixed.add(narrow);
+  }
 }
 
 // ── 표 테두리 ──

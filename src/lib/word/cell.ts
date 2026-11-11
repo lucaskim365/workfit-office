@@ -6,8 +6,9 @@
  */
 import type { Editor } from '@tiptap/react';
 import { TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
-import { CellSelection, isInTable, selectedRect } from '@tiptap/pm/tables';
-import { allSides, bordersCss, type BorderSide, type CellBorder, type CellBorders } from './format';
+import { CellSelection, TableMap, isInTable, selectedRect } from '@tiptap/pm/tables';
+import { TABLE_MAX_WIDTH } from './model';
+import { allSides, bordersCss, fitWidths, type BorderSide, type CellBorder, type CellBorders } from './format';
 
 export type CellVAlign = 'top' | 'middle' | 'bottom';
 
@@ -103,6 +104,69 @@ export function setCellBorders(editor: Editor, border: CellBorder | null): boole
         // 고른 칸은 통째로, 이웃 칸은 맞닿은 변만 덮어 쓴다
         const borders = inside.has(pos) ? value : { ...((cell.attrs.borders as CellBorders | null) ?? {}), ...value };
         tr.setNodeMarkup(pos, undefined, { ...cell.attrs, borders });
+      });
+      return true;
+    })
+    .run();
+}
+
+/**
+ * 열 넣기 — 워드처럼 표 너비는 그대로 두고 열들을 비율로 좁힌다(새 열은 기존 열 평균 너비로 시작).
+ * 새 칸은 옆 칸(넣은 기준 칸)의 배경색·세로 맞춤·테두리를 이어받는다.
+ * 열 너비를 정하지 않은 표(편집기에서 만든 표)는 종이 폭에 맞춰 늘어나므로 너비는 그대로 둔다
+ */
+export function addColumnKeepWidth(editor: Editor, side: 'before' | 'after'): boolean {
+  if (!isInTable(editor.state)) return false;
+  const sel = selectedRect(editor.state);
+  // 넣은 뒤 표에서 새 열·기준 열 자리(앞에 넣으면 기준 열이 한 칸 밀린다)
+  const newCol = side === 'before' ? sel.left : sel.right;
+  const srcCol = side === 'before' ? sel.left + 1 : sel.right - 1;
+  const chain = editor.chain().focus();
+  return (side === 'before' ? chain.addColumnBefore() : chain.addColumnAfter())
+    .command(({ tr }) => {
+      const $pos = tr.selection.$from;
+      let depth = $pos.depth;
+      while (depth > 0 && $pos.node(depth).type.spec.tableRole !== 'table') depth--;
+      if (!depth) return true;
+      const table = $pos.node(depth);
+      const tableStart = $pos.start(depth);
+      const map = TableMap.get(table);
+      const cells = [...new Set(map.map)];
+      /** 칸 위치(표 안) → 바꿀 속성 */
+      const patches = new Map<number, Record<string, unknown>>();
+      const patch = (rel: number, attrs: Record<string, unknown>) => patches.set(rel, { ...(patches.get(rel) ?? {}), ...attrs });
+
+      for (let r = 0; r < map.height; r++) {
+        const fresh = map.map[r * map.width + newCol];
+        const src = map.map[r * map.width + srcCol];
+        if (fresh === undefined || src === undefined || fresh === src) continue;
+        const a = table.nodeAt(src)?.attrs ?? {};
+        patch(fresh, { background: a.background ?? null, verticalAlign: a.verticalAlign ?? null, borders: a.borders ?? null });
+      }
+
+      // 열마다 지금 너비(새 열은 아직 없음)
+      const widths: (number | undefined)[] = Array(map.width).fill(undefined);
+      for (const rel of cells) {
+        const cw = table.nodeAt(rel)?.attrs.colwidth as number[] | null | undefined;
+        const { left } = map.findCell(rel);
+        cw?.forEach((w, k) => {
+          if (w > 0 && widths[left + k] === undefined) widths[left + k] = w;
+        });
+      }
+      const known = widths.filter((w): w is number => w !== undefined);
+      if (known.length && known.length < map.width) {
+        const total = Math.min(known.reduce((x, y) => x + y, 0), TABLE_MAX_WIDTH);
+        const avg = total / known.length;
+        const next = fitWidths(widths.map((w) => w ?? avg), total);
+        for (const rel of cells) {
+          const { left, right } = map.findCell(rel);
+          patch(rel, { colwidth: next.slice(left, right) });
+        }
+      }
+
+      patches.forEach((attrs, rel) => {
+        const cell = table.nodeAt(rel);
+        if (cell) tr.setNodeMarkup(tableStart + rel, undefined, { ...cell.attrs, ...attrs });
       });
       return true;
     })
