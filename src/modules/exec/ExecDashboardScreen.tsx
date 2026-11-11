@@ -91,15 +91,28 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
     const { w, h } = viewport();
     return {
       x: Math.min(Math.max(8, p.x), w - (el?.offsetWidth ?? LIBRARY_W) - 8),
-      y: Math.min(Math.max(8, p.y), h - 120),
+      y: Math.min(Math.max(8, p.y), h - 220),
     };
   };
-  // 창 크기가 바뀌어 화면 밖으로 나가면 안으로 들인다
-  useEffect(() => {
-    const on = () => setPos((p) => (p ? clamp(p) : p));
+  /** 화면에 남는 높이 — 판이 화면 아래로 빠져나가지 않게 */
+  const [maxH, setMaxH] = useState<number | null>(null);
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    const k = scaleOf();
+    const { h } = viewport();
+    const top = el.getBoundingClientRect().top * k;
+    setMaxH(Math.max(200, h - top - 16));
+  };
+  // 열 때마다(예전에 둔 자리가 지금 화면 밖이어도) 화면 안으로 들이고 높이를 맞춘다. 창 크기가 바뀔 때도
+  useLayoutEffect(() => {
+    setPos((p) => (p ? clamp(p) : p));
+    const on = () => { setPos((p) => (p ? clamp(p) : p)); fit(); };
     window.addEventListener('resize', on);
     return () => window.removeEventListener('resize', on);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useLayoutEffect(fit, [pos]);
 
   /** 머리를 끌어 옮기기 */
   const startMove = (e: ReactPointerEvent<HTMLElement>) => {
@@ -142,8 +155,8 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
     <aside
       ref={ref}
       aria-label="위젯 보관함"
-      style={pos ? { width: LIBRARY_W, left: pos.x, top: pos.y } : { width: LIBRARY_W, right: 20, top: 262 }}
-      className={`fixed z-[70] flex max-h-[min(680px,calc(100vh/var(--font-scale,1)-40px))] flex-col rounded-[20px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)] ${moving ? 'select-none ring-2 ring-[#9fcfee]' : ''}`}
+      style={{ width: LIBRARY_W, maxHeight: Math.min(680, maxH ?? 680), ...(pos ? { left: pos.x, top: pos.y } : { right: 20, top: 262 }) }}
+      className={`fixed z-[70] flex flex-col rounded-[20px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)] ${moving ? 'select-none ring-2 ring-[#9fcfee]' : ''}`}
     >
       {hover && !moving && <WidgetPreview id={hover} side={side} />}
       {/* 머리 — 끌어서 옮긴다 */}
@@ -264,6 +277,17 @@ export default function ExecDashboardScreen() {
   const gridRef = useRef<HTMLDivElement>(null);
   /** 위젯 보관함을 띄웠는가(편집 중에만) */
   const [libOpen, setLibOpen] = useState(false);
+  /** 위젯 구역 폭 — 편집 중에는 이 폭으로 그린 뒤 오른쪽 보관함 자리만큼 줄여 보인다 */
+  const areaRef = useRef<HTMLDivElement>(null);
+  const [areaW, setAreaW] = useState(0);
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setAreaW(el.offsetWidth));
+    ro.observe(el);
+    setAreaW(el.offsetWidth);
+    return () => ro.disconnect();
+  }, [wide]);
   /** 잡은 곳이 위젯의 몇 번째 칸인지 — 끌 때 그 칸이 마우스를 따라간다 */
   const grab = useRef({ col: 0, row: 0 });
 
@@ -554,7 +578,13 @@ export default function ExecDashboardScreen() {
 
       {wide ? (
         <>
-          {grid}
+          <div ref={areaRef}>
+            {canEdit && areaW > 0 ? (
+              <div style={{ width: areaW, zoom: (areaW - LIBRARY_W - 28) / areaW }}>{grid}</div>
+            ) : (
+              grid
+            )}
+          </div>
           {canEdit && libOpen && (
             <WidgetLibrary
               layout={layout}
