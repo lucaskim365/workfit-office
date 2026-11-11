@@ -236,7 +236,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
 
       <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 w-full min-w-fit' : 'flex min-h-0 flex-1 w-full'}>
         {/* /gw 하위 라우트(:조직도, 전자결재 등)에서는 좌측 사이드바 숨김 */}
-        {!activeUrl.startsWith('/gw') && (
+        {!activeUrl.startsWith('/gw') && activeUrl !== '/exec' && (
           <Sidebar
             module={activeModule}
             activeUrl={activeUrl}

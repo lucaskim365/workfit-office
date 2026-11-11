@@ -181,7 +181,8 @@ export interface Placement { id: string; w: number; h: number; x?: number; y?: n
 
 /**
  * 자리 잡기 — 방금 옮기거나 키운 위젯(pinned)을 먼저 그 자리에 두고, 자리가 정해진 나머지는 위에서부터 놓되
- * 겹치면 겹친 위젯 바로 아래로 밀어 낸다. 자리가 없는 위젯은 첫 빈자리에. 빈칸은 그대로 둔다(당겨 올리지 않는다).
+ * 겹치면 겹친 위젯 바로 아래로 밀어 낸다. 자리가 없는 위젯은 첫 빈자리에.
+ * 마지막에 왼쪽 위로 당겨 붙인다(compact) — 빈칸은 옆 위젯과 높이가 달라 생기는 곳에만 남는다.
  */
 export function arrange(items: Placement[], pinned?: string | null): Map<string, Box> {
   const out = new Map<string, Box>();
@@ -204,6 +205,30 @@ export function arrange(items: Placement[], pinned?: string | null): Map<string,
     if (out.has(it.id)) continue;
     const w = Math.min(Math.max(1, it.w), GRID_COLS);
     put(it.id, { ...firstFit(placed, w, it.h), w, h: Math.max(1, it.h) });
+  }
+  return compact(out);
+}
+
+/**
+ * 왼쪽 위 정렬 — 위에서부터(같은 줄이면 왼쪽부터) 하나씩, 먼저 놓인 위젯에 닿을 때까지 위로, 다시 왼쪽으로 민다.
+ * 위로 더 못 가는 까닭은 위 위젯뿐이라, 남는 빈칸은 높이가 다른 위젯 옆자리뿐이다.
+ */
+export function compact(boxes: Map<string, Box>): Map<string, Box> {
+  const order = [...boxes.entries()].sort(([, a], [, b]) => a.y - b.y || a.x - b.x);
+  const placed: Box[] = [];
+  const out = new Map<string, Box>();
+  const free = (b: Box) => !placed.some((p) => overlaps(p, b));
+  for (const [id, box] of order) {
+    const b = { ...box };
+    // 왼쪽으로 민 앞 위젯과 겹치면 먼저 그 아래로
+    for (let hit = placed.find((p) => overlaps(p, b)); hit; hit = placed.find((p) => overlaps(p, b))) b.y = hit.y + hit.h;
+    for (let moved = true; moved; ) {
+      moved = false;
+      while (b.y > 0 && free({ ...b, y: b.y - 1 })) { b.y--; moved = true; }
+      while (b.x > 0 && free({ ...b, x: b.x - 1 })) { b.x--; moved = true; }
+    }
+    placed.push(b);
+    out.set(id, b);
   }
   return out;
 }

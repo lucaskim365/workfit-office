@@ -5,12 +5,12 @@ import type { MenuNode } from '@/shared/types/menu';
  * 8개 모듈 / 약 40개 그룹 / 약 170개 화면. 상단 모듈 내비·좌측 사이드바·라우팅이 공유.
  */
 export const MENU_TREE: MenuNode[] = [
-  /* ── 경영 현황 (로그인 후 랜딩, 운영 현황 통합) ── */
+  /* ── 홈 (로그인 후 랜딩) — 상단 '홈'을 누르면 펼침 메뉴 없이 바로 /exec ── */
   {
-    id: 'M_EXEC', name: '경영 현황', icon: '▦', order: 5, use: true, children: [
+    id: 'M_EXEC', name: '홈', icon: 'home', order: 5, use: true, children: [
       {
         id: 'G_EXEC_DASH', name: '대시보드', icon: '▦', order: 10, use: true, children: [
-          { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', icon: '▦', order: 10, use: true },
+          { id: 'S_EXEC_DASH', name: '홈', url: '/exec', icon: 'home', order: 10, use: true },
         ]
       },
     ]

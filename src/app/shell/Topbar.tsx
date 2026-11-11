@@ -178,7 +178,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             return accessibleCount > 0;
           }).map((m) => {
             const active = m.id === activeModuleId;
-            const isSpecial = m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
+            // 홈은 화면이 하나뿐이라 펼침 메뉴 없이 바로 연다
+            const isHome = m.id === 'M_EXEC';
+            const isSpecial = isHome || m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
             const isOpen = isSpecial
               ? (m.id === 'M_GW' && dockOpen === 'gw') ||
               (m.id === 'M_WIDDY' && dockOpen === 'bot') ||
@@ -201,7 +203,11 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
               >
                 <button
                   onClick={() => {
-                    if (m.id === 'M_GW') {
+                    if (isHome) {
+                      const g = m.children?.[0];
+                      const s = g?.children?.[0];
+                      if (g && s?.url) onPick({ id: s.id, name: s.name, url: s.url, icon: s.icon, moduleId: m.id, moduleName: m.name, groupId: g.id, groupName: g.name });
+                    } else if (m.id === 'M_GW') {
                       setDockOpen(dockOpen === 'gw' ? null : 'gw');
                     } else if (m.id === 'M_WIDDY') {
                       setDockOpen(dockOpen === 'bot' ? null : 'bot');
