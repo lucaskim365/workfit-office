@@ -145,9 +145,3 @@ test('위젯 링크 → 모바일 화면 주소', () => {
   assert.equal(mobilePath('/gw/work-plan'), '/m/task');
   assert.equal(mobilePath('/gw/unknown'), '/m');
 });
-
-import { tierOf } from './dashboard';
-
-test('위젯 크기 단계 — 칸 수는 가장 가까운 소·중·대로', () => {
-  assert.deepEqual([1, 4, 5, 6, 8, 9, 10, 12].map(tierOf), ['S', 'S', 'S', 'M', 'M', 'M', 'L', 'L']);
-});

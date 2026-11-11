@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { normalizeLayout, tierOf, TIER_COLS, type Tier, type WidgetSlot } from './dashboard';
+import { normalizeLayout, rowsFor, type WidgetSize, type WidgetSlot } from './dashboard';
 import {
   ApprovalWidget,
   AttendanceWidget,
@@ -23,46 +23,42 @@ import {
 
 /** 경영 현황 위젯 목록과 저장된 배치 읽기 — 웹(모눈 배치)과 모바일(차례로 쌓기)이 함께 쓴다 */
 
-/**
- * tier — 처음 넣을 때 크기(소·중·대). 모든 위젯이 세 단계를 다 가진다.
- * rows — 단계별 세로 칸 수(한 칸 64px). 숫자 하나면 세 단계 모두 같은 높이. 높이는 끌어서 바꾸지 않는다.
- * mini — 휴대폰에서 반 칸(요약)으로 둘 수 있는가
- */
-type Rows = number | Record<Tier, number>;
-interface WidgetDef { title: string; module: string; tier: Tier; rows: Rows; mini?: boolean; Component: ComponentType }
+/** sizes — 고를 수 있는 폭(가장 좁은 것이 최소 폭), minH — 내용이 다 보이는 높이(px). 이 높이가 들어가는 칸 수가 기본이자 최소 칸 수 */
+/** mini — 휴대폰에서 반 칸(요약)으로 둘 수 있는가 */
+interface WidgetDef { title: string; module: string; size: WidgetSize; sizes: readonly WidgetSize[]; minH: number; mini?: boolean; Component: ComponentType }
 
 export const WIDGETS = {
-  today: { title: '오늘 일정', module: '일정', tier: 'L', rows: 5, Component: TodayWidget },
-  calendar: { title: '캘린더', module: '일정', tier: 'S', rows: 7, Component: CalendarWidget },
-  weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'M', rows: 5, Component: WeekScheduleWidget },
-  attendance: { title: '내 근태', module: '근태', tier: 'M', rows: { S: 4, M: 7, L: 7 }, Component: AttendanceWidget },
-  todayCommute: { title: '오늘 출퇴근', module: '근태', tier: 'S', rows: 4, mini: true, Component: TodayCommuteWidget },
-  weekHours: { title: '이번 주 근무시간', module: '근태', tier: 'S', rows: 4, mini: true, Component: WeekHoursWidget },
-  leave: { title: '연차', module: '근태', tier: 'S', rows: 3, mini: true, Component: LeaveWidget },
-  approval: { title: '전자결재 현황', module: '전자결재', tier: 'S', rows: 4, mini: true, Component: ApprovalWidget },
-  approvalPending: { title: '결재 대기', module: '전자결재', tier: 'S', rows: 4, Component: PendingApprovalWidget },
-  approvalMine: { title: '내가 올린 문서', module: '전자결재', tier: 'S', rows: 4, Component: MyDraftsWidget },
-  resource: { title: '내 자원예약', module: '자원예약', tier: 'S', rows: 4, Component: ResourceWidget },
-  resourceToday: { title: '오늘 자원 사용', module: '자원예약', tier: 'M', rows: 4, Component: ResourceTodayWidget },
-  team: { title: '우리 부서', module: '조직도', tier: 'S', rows: 4, Component: TeamWidget },
-  awayToday: { title: '오늘 휴가·외근', module: '조직도', tier: 'S', rows: 3, mini: true, Component: AwayTodayWidget },
-  birthday: { title: '이달의 생일자', module: '조직도', tier: 'S', rows: { S: 4, M: 3, L: 3 }, mini: true, Component: BirthdayWidget },
-  notice: { title: '공지사항', module: '게시판', tier: 'M', rows: 3, Component: NoticeWidget },
-  recentPosts: { title: '최근 게시글', module: '게시판', tier: 'M', rows: 4, Component: RecentPostsWidget },
-  project: { title: '프로젝트', module: '프로젝트', tier: 'S', rows: 4, Component: ProjectWidget },
+  today: { title: '오늘 일정', module: '일정', size: 12, sizes: [8, 12], minH: 290, Component: TodayWidget },
+  calendar: { title: '캘린더', module: '일정', size: 4, sizes: [4, 6, 8], minH: 420, Component: CalendarWidget },
+  weekSchedule: { title: '이번 주 내 일정', module: '일정', size: 6, sizes: [4, 6, 8, 12], minH: 260, Component: WeekScheduleWidget },
+  attendance: { title: '내 근태', module: '근태', size: 8, sizes: [8, 12], minH: 420, Component: AttendanceWidget },
+  todayCommute: { title: '오늘 출퇴근', module: '근태', size: 4, sizes: [4, 6], minH: 180, mini: true, Component: TodayCommuteWidget },
+  weekHours: { title: '이번 주 근무시간', module: '근태', size: 4, sizes: [4, 6, 8], minH: 220, mini: true, Component: WeekHoursWidget },
+  leave: { title: '연차', module: '근태', size: 4, sizes: [4, 6], minH: 120, mini: true, Component: LeaveWidget },
+  approval: { title: '전자결재 현황', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 240, mini: true, Component: ApprovalWidget },
+  approvalPending: { title: '결재 대기', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: PendingApprovalWidget },
+  approvalMine: { title: '내가 올린 문서', module: '전자결재', size: 4, sizes: [4, 6, 8], minH: 200, Component: MyDraftsWidget },
+  resource: { title: '내 자원예약', module: '자원예약', size: 4, sizes: [4, 6], minH: 180, Component: ResourceWidget },
+  resourceToday: { title: '오늘 자원 사용', module: '자원예약', size: 8, sizes: [6, 8, 12], minH: 180, Component: ResourceTodayWidget },
+  team: { title: '우리 부서', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 200, Component: TeamWidget },
+  awayToday: { title: '오늘 휴가·외근', module: '조직도', size: 4, sizes: [4, 6, 8], minH: 160, mini: true, Component: AwayTodayWidget },
+  birthday: { title: '이달의 생일자', module: '조직도', size: 4, sizes: [4, 6], minH: 200, mini: true, Component: BirthdayWidget },
+  notice: { title: '공지사항', module: '게시판', size: 12, sizes: [4, 6, 8, 12], minH: 150, Component: NoticeWidget },
+  recentPosts: { title: '최근 게시글', module: '게시판', size: 6, sizes: [4, 6, 8, 12], minH: 180, Component: RecentPostsWidget },
+  project: { title: '프로젝트', module: '프로젝트', size: 4, sizes: [4, 6], minH: 220, Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;
 
 export type WidgetId = keyof typeof WIDGETS;
 export const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[];
 export const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
 
-/** 웹 기본 배치 — 오늘 일정(대), 내 근태·전자결재·생일자(중), 공지사항(대). 빈칸 없이 맞물린다 */
+/** 웹 기본 배치(2026-11-10 사용자가 맞춘 배치) — 칸 자리(x·y)와 세로 칸 수까지 */
 export const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
   { id: 'today', size: 12, x: 0, y: 0 },
-  { id: 'attendance', size: 6, x: 0, y: 5 },
-  { id: 'approval', size: 6, x: 6, y: 5 },
-  { id: 'birthday', size: 6, x: 6, y: 9 },
-  { id: 'notice', size: 12, x: 0, y: 12 },
+  { id: 'attendance', size: 8, x: 0, y: 5 },
+  { id: 'approval', size: 4, x: 8, y: 5 },
+  { id: 'notice', size: 8, x: 0, y: 12, rows: 3 },
+  { id: 'birthday', size: 4, x: 8, y: 9, rows: 6 },
 ];
 
 /** 휴대폰 기본 — size 6 은 반 칸(요약), 12 는 한 줄 전체 */
@@ -91,20 +87,13 @@ export function loadLayout(userId: string | undefined, fallback: WidgetSlot<Widg
   }
 }
 
-/** 위젯의 크기 단계 — 저장된 폭(예전 배치의 4·8칸 등)도 가장 가까운 단계로 */
-export const tierOfSlot = (slot: WidgetSlot<WidgetId>): Tier => tierOf(slot.size);
-/** 단계별 세로 칸 수 */
-export const rowsAt = (id: WidgetId, tier: Tier) => {
-  const r = (WIDGETS[id] as WidgetDef).rows;
-  return typeof r === 'number' ? r : r[tier];
-};
+/** 위젯의 최소(기본) 세로 칸 수 */
+export const minRowsOf = (id: WidgetId) => rowsFor(WIDGETS[id].minH);
+/** 위젯의 최소 가로 칸 수 */
+export const minColsOf = (id: WidgetId) => Math.min(...WIDGETS[id].sizes);
 /** 위젯이 차지하는 세로 칸 수 */
-export const rowsOf = (slot: WidgetSlot<WidgetId>) => rowsAt(slot.id, tierOfSlot(slot));
-/** 처음 넣을 때 폭 */
-export const defaultSizeOf = (id: WidgetId) => TIER_COLS[(WIDGETS[id] as WidgetDef).tier];
-/** 웹 배치 정리 — 폭은 단계의 칸 수로, 끌어서 맞췄던 높이(rows)는 버린다 */
-export const snapToTiers = (list: WidgetSlot<WidgetId>[]): WidgetSlot<WidgetId>[] =>
-  list.map(({ rows: _rows, ...s }) => ({ ...s, size: TIER_COLS[tierOfSlot(s)] }));
-/** 높이는 단계에 정한 칸 그대로 — 내용이 길면 위젯 안에서 들어가는 만큼만 보인다 */
+export const rowsOf = (slot: WidgetSlot<WidgetId>) => Math.max(slot.rows ?? 0, minRowsOf(slot.id));
+/** 높이는 정한 칸 그대로 — 내용이 길면 위젯 안에서 들어가는 만큼만 보인다 */
 export const placementsOf = (list: WidgetSlot<WidgetId>[]) =>
-  list.map((s) => ({ id: s.id, w: s.size, h: rowsOf(s), x: s.x, y: s.y }));
+  list.map((s) => ({ id: s.id, w: Math.max(s.size, minColsOf(s.id)), h: rowsOf(s), x: s.x, y: s.y }));
+

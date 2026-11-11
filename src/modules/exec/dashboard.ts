@@ -127,18 +127,6 @@ export function packLanes<T extends { start: string | null; end: string | null }
 export const GRID_COLS = 12;
 /** 위젯 기본 폭 — 12칸 중 몇 칸 */
 export type WidgetSize = 4 | 6 | 8 | 12;
-
-/** 위젯 크기 단계 — 소(4칸, 한 줄에 3개)·중(6칸, 2개)·대(12칸, 1개). 모든 위젯이 세 단계를 다 가진다 */
-export type Tier = 'S' | 'M' | 'L';
-export const TIERS: readonly Tier[] = ['S', 'M', 'L'];
-export const TIER_COLS: Record<Tier, 4 | 6 | 12> = { S: 4, M: 6, L: 12 };
-export const TIER_LABEL: Record<Tier, string> = { S: '소', M: '중', L: '대' };
-/** 칸 수 → 가장 가까운 단계(예전에 끌어서 맞춘 폭도 여기로). 같은 거리면 작은 쪽 */
-export function tierOf(cols: number): Tier {
-  let best: Tier = 'S';
-  for (const t of TIERS) if (Math.abs(TIER_COLS[t] - cols) < Math.abs(TIER_COLS[best] - cols)) best = t;
-  return best;
-}
 /** size — 가로 칸 수, rows — 세로 칸 수(없으면 위젯 기본), x·y — 왼쪽 위 칸(없으면 빈자리에 놓는다) */
 export interface WidgetSlot<Id extends string = string> { id: Id; size: number; rows?: number; x?: number; y?: number }
 

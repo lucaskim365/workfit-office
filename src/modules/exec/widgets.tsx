@@ -45,7 +45,6 @@ import {
   timelineSpan,
   todayKst,
   type AttendanceBucket,
-  type Tier,
 } from './dashboard';
 
 /**
@@ -122,14 +121,7 @@ export function Panel({ className = '', children }: { className?: string; childr
  * 높이가 정해진 위젯의 목록 — 칸에 다 들어가는 줄까지만 보이고 나머지는 숨는다(스크롤 없음).
  * 세로 flex 를 줄바꿈시켜 넘치는 줄을 오른쪽 보이지 않는 열로 보낸다. 높이가 자유로운 모바일에서는 다 보인다.
  */
-const FIT_LIST =
-  'min-h-0 flex-1 flex flex-col flex-wrap content-start overflow-hidden [&>li]:w-full in-data-[tier=L]:gap-x-10 in-data-[tier=L]:[&>li]:w-[calc(50%-20px)]';
-
-/** 위젯 크기 단계(소·중·대) — 웹 모눈에서만 정해 준다. 없으면(휴대폰 등) 위젯 기본 모양.
- *  대(한 줄 전체)에서는 목록이 두 단으로 흐른다(FIT_LIST) */
-const TierContext = createContext<Tier | null>(null);
-export const WidgetTierProvider = TierContext.Provider;
-const useTier = () => useContext(TierContext);
+const FIT_LIST = 'min-h-0 flex-1 flex flex-col flex-wrap content-start overflow-hidden [&>li]:w-full';
 
 /** 작게 보기 — 모바일에서 반 칸짜리 위젯. 지원하는 위젯은 요약만 크게 보여 준다 */
 const MiniContext = createContext(false);
@@ -282,57 +274,6 @@ export function TodayWidget() {
       onClick: () => navigate('/gw/work-plan'),
     })),
   ];
-
-  const tier = useTier();
-  if (tier === 'S') {
-    // 시간 있는 일정은 시간순, 종일·시간 미정은 맨 위
-    const sorted = [...myEntries].sort((a, b) => Number(!a.allDay && Boolean(a.startTime)) - Number(!b.allDay && Boolean(b.startTime)) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
-    return (
-      <Panel>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div className="flex min-w-0 items-end gap-2.5">
-            <div className="text-[38px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
-            <div className="min-w-0 pb-0.5">
-              <div className="text-[11.5px] font-bold text-ink3">{Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
-              <h2 className="truncate text-[15px] font-extrabold tracking-tight text-ink">오늘 일정 {items.length}건</h2>
-            </div>
-          </div>
-          <button type="button" onClick={() => navigate('/gw/work-plan')} className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">업무계획</button>
-        </div>
-        {companyLines.length > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/gw/work-plan')}
-            title={companyLines.join('\n')}
-            className="mb-2 flex w-full cursor-pointer items-center gap-2 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-2.5 py-1 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
-          >
-            <Megaphone size={13} className="shrink-0 text-[#0876c8]" />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
-          </button>
-        )}
-        {sorted.length === 0 ? (
-          <Empty>오늘 일정이 없습니다.</Empty>
-        ) : (
-          <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
-            {sorted.map((e) => {
-              const look = chipLook(e);
-              return (
-                <li key={e.key}>
-                  <button type="button" onClick={() => navigate('/gw/work-plan')} className="group flex w-full cursor-pointer items-center gap-2.5 py-1.5 text-left">
-                    <span className="w-[66px] shrink-0 text-[11px] font-bold tabular-nums text-ink3">
-                      {e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)}${e.endTime ? `~${e.endTime.slice(0, 5)}` : ''}` : '종일'}
-                    </span>
-                    <i className={`h-2 w-2 shrink-0 rounded-full ${look.dotClass}`} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink group-hover:text-[#0876c8]">{look.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
-    );
-  }
 
   return (
     <Panel className="sm:p-6">
@@ -515,45 +456,6 @@ export function AttendanceWidget() {
   const avgMin = workedDays.length ? Math.round(workedDays.reduce((s, d) => s + d.minutes, 0) / workedDays.length) : 0;
   const todayRec = myDays.find((d) => d.date === today);
   const isThisMonth = month === today.slice(0, 7);
-  const tier = useTier();
-
-  if (tier === 'S') {
-    const stats = [
-      { label: '출근', value: counts.work + counts.late, unit: '일' },
-      { label: '지각', value: counts.late, unit: '일', warn: counts.late > 0 },
-      { label: '휴가', value: counts.leave, unit: '일' },
-    ];
-    return (
-      <Panel>
-        <Head
-          title="내 근태"
-          note={todayRec?.inAt ? `오늘 ${new Date(todayRec.inAt).toTimeString().slice(0, 5)} 출근` : '오늘 출근 기록 없음'}
-          to={() => navigate('/gw/commute')}
-          toLabel="근태 화면"
-        />
-        {myEmpId === null && settled ? (
-          <Empty>근태 기록과 연결된 사번이 없습니다.</Empty>
-        ) : (
-          <>
-            <div className="grid grid-cols-3 gap-1.5">
-              {stats.map((t) => (
-                <div key={t.label} className="rounded-xl bg-panel-alt px-2 py-2.5 text-center">
-                  <div className={`text-[22px] leading-none font-black tabular-nums ${t.warn ? 'text-[#e0703f]' : 'text-ink'}`}>
-                    {t.value}<span className="ml-0.5 text-[11px] font-bold text-ink3">{t.unit}</span>
-                  </div>
-                  <div className="mt-1.5 text-[10.5px] font-bold text-ink3">{t.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-auto flex items-baseline justify-between pt-3 text-[11.5px] text-ink3">
-              <span>{Number(month.slice(5))}월 하루 평균</span>
-              <strong className="text-[13px] tabular-nums text-ink">{Math.floor(avgMin / 60)}시간 {avgMin % 60}분</strong>
-            </div>
-          </>
-        )}
-      </Panel>
-    );
-  }
 
   return (
     <Panel>
@@ -580,7 +482,7 @@ export function AttendanceWidget() {
       {myEmpId === null && settled ? (
         <Empty>근태 기록과 연결된 사번이 없어 근태를 불러오지 못했습니다. 인사 담당자에게 사번 연결을 요청하세요.</Empty>
       ) : (
-        <div className={`grid gap-6 ${tier ? 'grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]'}`}>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           {/* 왼쪽: 도넛 + 범례, 달력 */}
           <div>
             <div className="mb-4 flex items-center gap-4">
@@ -1267,29 +1169,6 @@ export function ResourceTodayWidget() {
   }, [rows]);
   const now = nowPercent();
   const hours = [8, 10, 12, 14, 16, 18, 20];
-  const tier = useTier();
-  if (tier === 'S') {
-    return (
-      <Panel>
-        <Head title="오늘 자원 사용" to={() => navigate('/gw/resource')} toLabel="예약하기" />
-        {byResource.length === 0 ? (
-          <Empty>오늘 예약이 없습니다.</Empty>
-        ) : (
-          <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
-            {byResource.map((g) => (
-              <li key={g.name} className="flex items-center gap-3 py-1.5">
-                <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink2" title={g.name}>{g.name}</span>
-                <span className="shrink-0 truncate text-[11.5px] tabular-nums text-ink3">
-                  {g.items.slice(0, 2).map((r) => kstTime(r.startAt)).join(' · ')}
-                  {g.items.length > 2 ? ` 외 ${g.items.length - 2}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-    );
-  }
   return (
     <Panel>
       <Head title="오늘 자원 사용" to={() => navigate('/gw/resource')} toLabel="예약하기" />
