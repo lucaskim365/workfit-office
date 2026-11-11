@@ -1,18 +1,18 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { BizHead } from '../_biz';
 import { PurchaseOrderArchive } from './PurchaseOrderArchive';
 
 /** 사업관리 › 발주 현황 — 결재 완료된 발주서 목록·PDF·회신 문서(예전 문서관리 발주서 보관함) */
 export default function BizPoScreen() {
   const { user } = useAuth();
-  const { isAdmin, canAction } = usePermission();
   const me = useMemo(
     () => ({ id: user?.id || 'guest', name: user?.name ?? '', dept: user?.dept || '-' }),
     [user]
   );
-  const isManager = isAdmin || canAction('S_BIZ_PO', 'update');
+  const { can: canAuthz } = useAuthz();
+  const isManager = canAuthz('biz.po.manage');
 
   return (
     <div className="flex flex-col gap-4">

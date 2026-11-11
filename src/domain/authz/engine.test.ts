@@ -88,3 +88,24 @@ test('옛 그룹 변환 — 최고 관리자 대상, 전 직원 권한은 다른
   assert.ok(resolveGrants(boss, roles, assignments, org).grants.has('approval.secure'), '임원 직급');
   assert.ok(canOnUser(resolveGrants(lead, roles, assignments, org), 'commute.view', staff1, org), '부서장 근태');
 });
+
+import { checkLockout, describeAssignment, describeRoleChange } from './audit';
+
+test('변경 기록 문장', () => {
+  const a = role('결재', ['admin.code.view']);
+  assert.equal(describeRoleChange(a, { ...a, permissions: ['admin.code.view', 'admin.code.manage'] }), "역할 '결재' — 권한 추가: 공통코드 관리");
+  assert.equal(describeRoleChange(a, a), null);
+  assert.match(describeRoleChange(null, a)!, /만듦/);
+  const s = describeAssignment('추가', role('H', ['commute.view']), asg('H', { targetType: 'DEPT', targetId: 'D1', targetSub: true, scopeType: 'OWN_DEPT' }), org, [], true);
+  assert.equal(s, "역할 'H' 지정 추가 — 대상: 부서 본부(하위 부서 포함), 범위: 본인 소속 부서 (하위 포함)");
+});
+
+test('잠금 방지 — 마지막 최고 관리자, 본인 해제', () => {
+  const roles = [role('S', [], 'super')];
+  const one = [asg('S', { targetId: 's1' })];
+  const two = [...one, asg('S', { targetId: 's2' })];
+  const users = [staff1, staff2];
+  assert.deepEqual(checkLockout({ users, org, roles, before: one, after: [], meId: 's1' }), { block: true, selfLoss: true });
+  assert.deepEqual(checkLockout({ users, org, roles, before: two, after: [two[1]], meId: 's1' }), { block: false, selfLoss: true });
+  assert.deepEqual(checkLockout({ users, org, roles, before: two, after: [two[0]], meId: 's1' }), { block: false, selfLoss: false });
+});

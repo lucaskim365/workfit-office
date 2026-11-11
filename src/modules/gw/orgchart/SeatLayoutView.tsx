@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutTemplate, Minus, MousePointer2, Pencil, Plus, Search, Square, Trash2, Type as TypeIcon, Armchair, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -8,7 +9,6 @@ import { buildHqTemplateGrid } from '@/domain/seatLayout/template';
 import { USER_PRESENCE_META, USER_PRESENCE_STATUSES, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import { useRemoveSeatLayout, useSaveSeatLayout, useSeatLayouts } from '@/features/seatLayout/useSeatLayouts';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
-import { usePermission } from '@/features/auth/usePermission';
 import { Button } from '@/shared/ui/Button';
 
 /** 한 칸 크기(px, 확대 100% 기준) — 엑셀 한 열 = 4칸, 한 행 = 2칸 */
@@ -44,8 +44,8 @@ export function SeatLayoutView({
   onSelectUserId: (id: string) => void;
 }) {
   const { user: me } = useAuth();
-  const { isOperator, isExecutive } = usePermission();
-  const canEdit = isOperator || isExecutive;
+  const { can } = useAuthz();
+  const canEdit = can('seat.manage');
 
   const layoutsQuery = useSeatLayouts();
   const layouts = layoutsQuery.data ?? [];

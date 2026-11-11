@@ -5,6 +5,7 @@ import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
 import { SYSTEM_SCREENS, type RoleGroup, type ActionPermission } from '@/domain/roleGroup/schema';
 import { resolveUserRoles } from '@/domain/roleGroup/roleResolver';
 import type { SecurityContext, OrgRelationship } from '@/domain/security/types';
+import { useAuthz } from '@/features/authz/useAuthz';
 
 const EXEC_KEYWORDS = ['대표이사', '대표', '상무', '상무이사', '전무', '부사장', '사장', '이사', '위원장', '부위원장'];
 const LEADER_KEYWORDS = ['팀장', '부서장', '파트장', '실장', '본부장', '그룹장', '센터장', '지사장', 'leader', 'manager', 'head'];
@@ -18,6 +19,8 @@ export function useSecurityContext(): SecurityContext {
   const { user } = useAuth();
   const org = useOrgTree();
   const { data: groups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
+  // 새 권한 체계로 옮긴 뒤에는 화면·최고 관리자 판정을 새 체계가 맡는다
+  const authz = useAuthz();
 
   // 1. 활성 역할 그룹 목록 해석 (SSOT: roleGroups)
   const myGroups = useMemo(() => {
@@ -31,11 +34,12 @@ export function useSecurityContext(): SecurityContext {
   // 2. 최고 관리자 판정
   const isSuperAdmin = useMemo(() => {
     if (!user) return false;
+    if (authz.active) return authz.isSuperAdmin;
     return (
       myGroups.some((g) => (g.code === 'ADMIN' || g.code === 'ROLE_ADMIN') && g.use) ||
       (user as any).role === 'admin'
     );
-  }, [user, myGroups]);
+  }, [user, myGroups, authz.active, authz.isSuperAdmin]);
 
   // 3. 직급/직책 마스터 객체 조회 (SSOT: positions)
   const userPosDef = useMemo(() => {
@@ -47,6 +51,7 @@ export function useSecurityContext(): SecurityContext {
   // ⚠️ 최고관리자(isSuperAdmin)라도 비임원인 개발팀은 임원으로 판정하지 않음 (전사 관제 자동 노출 방지)
   const isExecutive = useMemo(() => {
     if (!user) return false;
+    if (authz.active) return authz.can('approval.secure');
 
     // A. 역할 그룹에 EXEC/OPERATOR 가 포함된 경우
     if (roles.includes('EXEC') || roles.includes('EXECUTIVE') || roles.includes('OPERATOR')) {
@@ -62,7 +67,7 @@ export function useSecurityContext(): SecurityContext {
     const pos = (user.position || '').trim();
     const title = ((user as any).jobTitle || '').trim();
     return EXEC_KEYWORDS.some((kw) => pos.includes(kw) || title.includes(kw));
-  }, [user, roles, userPosDef]);
+  }, [user, roles, userPosDef, authz]);
 
   // 5. 부서장/팀장(LEADER) 판정 및 관리 부서 목록 (겸직 assignments 포괄)
   const managedDepts = useMemo(() => {
@@ -144,6 +149,7 @@ export function useSecurityContext(): SecurityContext {
   const canMenuAccess = useCallback(
     (urlOrId: string): boolean => {
       if (!user || user.status === '미사용') return false;
+      if (authz.active) return authz.canScreen(urlOrId, 'access');
 
       const targetScreen = SYSTEM_SCREENS.find((s) => s.id === urlOrId || s.url === urlOrId);
       const screenId = targetScreen?.id || urlOrId;
@@ -157,12 +163,13 @@ export function useSecurityContext(): SecurityContext {
         return perm?.access === true;
       });
     },
-    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS]
+    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS, authz]
   );
 
   const canMenuAction = useCallback(
     (urlOrId: string, action: keyof ActionPermission): boolean => {
       if (!user || user.status === '미사용') return false;
+      if (authz.active) return authz.canScreen(urlOrId, action);
 
       const targetScreen = SYSTEM_SCREENS.find((s) => s.id === urlOrId || s.url === urlOrId);
       const screenId = targetScreen?.id || urlOrId;
@@ -175,7 +182,7 @@ export function useSecurityContext(): SecurityContext {
         return perm?.[action] === true;
       });
     },
-    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS]
+    [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS, authz]
   );
 
   return {

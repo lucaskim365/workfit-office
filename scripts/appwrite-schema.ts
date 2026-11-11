@@ -999,6 +999,46 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('scDoc', ['docId'])],
   },
   {
+    id: 'authRoles',
+    name: '역할(새 권한 체계)',
+    /*
+      권한 묶음. 권한 키 목록은 코드(src/domain/authz/permissions.ts)에 있다.
+      kind: super(최고 관리자) · base(전 직원) · custom. 옛 roleGroups 는 읽기만 하고 건드리지 않는다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('name', 128, true),
+      S('desc', 512),
+      J('permissions', 8000),
+      S('kind', 16, true),
+      BOOL('use', true),
+      INT('sort', false, 0),
+      S('migratedFrom', 128),
+      S('updatedAt', 40),
+      S('updatedBy', 64),
+    ],
+    indexes: [],
+  },
+  {
+    id: 'authAssignments',
+    name: '역할 지정(새 권한 체계)',
+    /* 역할을 누구에게(사람·부서·직급·부서장), 어느 범위로(전사·본인 부서·지정 조직) 줄지 */
+    attributes: [
+      S('id', 64, true),
+      S('roleId', 64, true),
+      S('targetType', 16, true),
+      S('targetId', 64),
+      BOOL('targetSub', false),
+      S('positionMode', 8),
+      S('scopeType', 16, true),
+      J('scopeDeptIds', 4000),
+      BOOL('scopeSub', true),
+      S('regBy', 64),
+      S('regAt', 40),
+    ],
+    indexes: [IX('aaRole', ['roleId'])],
+  },
+  {
     id: 'resources',
     name: '예약 자원',
     attributes: [

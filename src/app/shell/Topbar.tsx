@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MENU_TREE } from '../menu-tree';
@@ -75,9 +76,10 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
-  const { canAccess, isSuperAdmin } = usePermission();
+  const { canAccess } = usePermission();
   // 최고관리자 전용 — 사람 목록에 테스트 계정을 보일지 전환(테스트 계정 본인은 항상 보이므로 숨김)
-  const showTestToggle = isSuperAdmin && !isTestAccount(user);
+  const { can: canAuthz } = useAuthz();
+  const showTestToggle = canAuthz('admin.testAccounts') && !isTestAccount(user);
   const showTestAccounts = useShowTestAccounts();
   // 관리자 콘솔 입구 — 들어갈 수 있는 사람에게만 보인다
   const { canUse: canUseAdminConsole } = useAdminConsoleAccess();

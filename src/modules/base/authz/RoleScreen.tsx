@@ -10,9 +10,10 @@ import { TextField } from '@/shared/ui/form/TextField';
 import { AUTHZ_AREAS, PERMISSIONS, PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions, type PermissionDef } from '@/domain/authz/permissions';
 import { ROLE_TEMPLATES } from '@/domain/authz/templates';
 import type { AuthRole } from '@/domain/authz/types';
-import { authzDraft, useAuthzDraft } from '@/features/authz/useAuthzDraft';
+import { useAuthzActions, useAuthzDraft } from '@/features/authz/useAuthzDraft';
 import { adminPath } from '@/app/shell/screens';
-import { Loading, PageHead, RoleList, TARGET_ICON, roleUserCount, scopeText, targetText } from './parts';
+import { MigrationPanel } from './MigrationPanel';
+import { Loading, PageHead, RoleList, TARGET_ICON, roleUserCount, scopeText, targetText, useAuthzNotice } from './parts';
 
 type Tab = 'work' | 'admin';
 
@@ -25,6 +26,8 @@ function impliedBy(keys: Set<string>): Map<string, string> {
 
 export default function RoleScreen() {
   const { ready, roles, assignments, org, authzOrg, activeUsers } = useAuthzDraft();
+  const actions = useAuthzActions();
+  const notice = useAuthzNotice();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('role') ?? roles.find((r) => r.kind === 'custom')?.id ?? roles[0]?.id ?? null;
@@ -44,6 +47,14 @@ export default function RoleScreen() {
   const select = (id: string) => setParams({ role: id });
   const countOf = (r: AuthRole) => roleUserCount(r, assignments, activeUsers, authzOrg);
 
+  if (ready && roles.length === 0) {
+    return (
+      <div className="flex flex-col gap-3.5">
+        <PageHead title="역할 관리" path="권한 / 역할 관리" desc="권한을 묶어 역할을 만듭니다" />
+        <MigrationPanel org={org} />
+      </div>
+    );
+  }
   if (!ready || !draft) {
     return (
       <div className="flex flex-col gap-3.5">
@@ -117,7 +128,7 @@ export default function RoleScreen() {
                 <Button size="sm" disabled={!dirty} onClick={() => setDraft(selected)}>
                   되돌리기
                 </Button>
-                <Button variant="primary" size="sm" disabled={!dirty || !draft.name.trim()} onClick={() => authzDraft.saveRole({ ...draft, name: draft.name.trim() })}>
+                <Button variant="primary" size="sm" disabled={!dirty || !draft.name.trim() || actions.pending} onClick={() => notice.run(() => actions.saveRole(draft))}>
                   저장
                 </Button>
               </div>
@@ -264,14 +275,17 @@ export default function RoleScreen() {
         </div>
       </div>
 
+      {notice.node}
       <NewRoleDialog
         open={creating}
         names={roles.map((r) => r.name)}
         onClose={() => setCreating(false)}
         onCreate={(p) => {
-          const r = authzDraft.createRole(p);
-          setCreating(false);
-          select(r.id);
+          void notice.run(async () => {
+            const r = await actions.createRole(p);
+            setCreating(false);
+            select(r.id);
+          });
         }}
       />
 
@@ -285,9 +299,11 @@ export default function RoleScreen() {
             <Button
               variant="dangerSolid"
               onClick={() => {
-                authzDraft.removeRole(draft.id);
                 setDeleting(false);
-                setParams({});
+                void notice.run(async () => {
+                  await actions.removeRole(draft.id);
+                  setParams({});
+                });
               }}
             >
               삭제

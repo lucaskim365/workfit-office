@@ -11,6 +11,8 @@ export interface AuthRole {
   sort: number;
   /** 변환 출처(옛 그룹 이름·규칙). 새로 만든 역할은 빈 값 */
   migratedFrom?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 /** 지정 — 역할을 누구에게, 어느 범위로 (authAssignments) */

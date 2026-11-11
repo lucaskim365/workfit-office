@@ -1,10 +1,10 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, useRoomFiles } from '@/features/chat/useChatThread';
@@ -53,7 +53,8 @@ export default function MobileChatThread() {
   const nav = useNavigate();
   const back = useMobileBack('/m/chat');
   const { user } = useAuth();
-  const { isAdmin: isSuperAdmin } = usePermission();
+  const { can: canAuthz } = useAuthz();
+  const isSuperAdmin = canAuthz('messenger.manage');
   const me = user!.id;
   const meName = user!.name;
   const isAdmin = Boolean(isSuperAdmin);

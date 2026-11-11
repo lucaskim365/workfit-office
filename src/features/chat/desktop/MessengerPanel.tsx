@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import type { MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
@@ -84,13 +85,13 @@ function downloadAttachment(att: Attachment) {
   void downloadFile(att.url, att.name);
 }
 
-import { usePermission } from '@/features/auth/usePermission';
 import { ChatAvatarPhoto } from '@/features/chat/ChatAvatarPhoto';
 
 /** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
 export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const { user } = useAuth();
-  const { isAdmin: isSuperAdmin } = usePermission();
+  const { can: canAuthz } = useAuthz();
+  const isSuperAdmin = canAuthz('messenger.manage');
   const me = user?.id ?? 'U001';
   const meName = user?.name ?? '김승기';
   const isAdmin = Boolean(isSuperAdmin);

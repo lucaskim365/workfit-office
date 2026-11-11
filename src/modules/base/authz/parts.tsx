@@ -1,7 +1,11 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Modal } from '@/shared/ui/Modal';
+import { adminPath } from '@/app/shell/screens';
+import { Button } from '@/shared/ui/Button';
+import { AuthzBlockedError } from '@/features/authz/useAuthzDraft';
 import { Building2, Crown, Layers, User as UserIcon, Users } from 'lucide-react';
 import type { AuthAssignment, AuthRole } from '@/domain/authz/types';
-import { SCOPE_TYPE_LABEL } from '@/domain/authz/types';
 import { matchAssignment, type AuthzOrg, type AuthzUser } from '@/domain/authz/engine';
 import { PERMISSION_BY_KEY } from '@/domain/authz/permissions';
 
@@ -11,7 +15,7 @@ export function PageHead({ title, path, desc, actions }: { title: string; path: 
       <div>
         <h1 className="text-xl font-extrabold tracking-tight text-ink">{title}</h1>
         <p className="mt-0.5 text-xs text-ink3">
-          {path} · {desc}
+          {path}{desc ? ` · ${desc}` : ''}
         </p>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -34,29 +38,7 @@ export function roleUserCount(role: AuthRole, assignments: AuthAssignment[], use
   return ids.size;
 }
 
-export function targetText(a: AuthAssignment, org: AuthzOrg, users: { id: string; name: string; dept?: string; position?: string }[]): { main: string; sub: string } {
-  switch (a.targetType) {
-    case 'USER': {
-      const u = users.find((x) => x.id === a.targetId);
-      return { main: u?.name ?? '퇴사·삭제된 사용자', sub: u ? [u.dept, u.position].filter(Boolean).join(' · ') : '' };
-    }
-    case 'DEPT':
-      return { main: org.depts.find((d) => d.id === a.targetId)?.name ?? '삭제된 부서', sub: a.targetSub ? '하위 부서 포함' : '이 부서만' };
-    case 'POSITION':
-      return { main: org.positions.find((p) => p.id === a.targetId)?.name ?? '삭제된 직급', sub: a.positionMode === 'GTE' ? '이 직급 이상' : '이 직급만' };
-    case 'DEPT_HEAD':
-      return { main: '모든 부서장', sub: '조직도에서 부서장으로 지정된 사람' };
-  }
-}
-
-export function scopeText(a: AuthAssignment, org: AuthzOrg): string {
-  if (a.scopeType === 'DEPTS') {
-    const names = a.scopeDeptIds.map((id) => org.depts.find((d) => d.id === id)?.name ?? '삭제된 부서');
-    return `${names.join(', ') || '조직 없음'}${a.scopeSub ? ' (하위 포함)' : ''}`;
-  }
-  if (a.scopeType === 'OWN_DEPT') return `${SCOPE_TYPE_LABEL.OWN_DEPT}${a.scopeSub ? ' (하위 포함)' : ''}`;
-  return SCOPE_TYPE_LABEL.ALL;
-}
+export { targetText, scopeText } from '@/domain/authz/labels';
 
 export const TARGET_ICON = { USER: UserIcon, DEPT: Building2, POSITION: Layers, DEPT_HEAD: Crown } as const;
 
@@ -115,4 +97,69 @@ export function RoleList({
 
 export function Loading() {
   return <div className="grid h-60 place-items-center text-[12.5px] text-ink3">불러오는 중…</div>;
+}
+
+/**
+ * 저장 결과 알림 — 막힌 이유를 보여주고, 본인 권한이 빠지는 경우엔 '계속'을 받는다.
+ * run(작업, 다시하기) : 작업이 selfLoss 로 막히면 확인 후 다시하기(confirmSelf)를 부른다.
+ */
+export function useAuthzNotice() {
+  const [state, setState] = useState<{ message: string; retry?: () => void } | null>(null);
+  const run = async (fn: () => Promise<unknown>, retry?: () => Promise<unknown>) => {
+    try {
+      await fn();
+      return true;
+    } catch (e) {
+      if (e instanceof AuthzBlockedError) {
+        setState({ message: e.message, retry: e.kind === 'selfLoss' && retry ? () => void run(retry) : undefined });
+      } else {
+        setState({ message: `저장하지 못했습니다. 잠시 뒤 다시 해 주세요. (${(e as Error)?.message ?? e})` });
+      }
+      return false;
+    }
+  };
+  const node = (
+    <Modal
+      open={Boolean(state)}
+      onClose={() => setState(null)}
+      title={state?.retry ? '확인' : '저장할 수 없음'}
+      footer={
+        state?.retry ? (
+          <>
+            <Button onClick={() => setState(null)}>취소</Button>
+            <Button
+              variant="dangerSolid"
+              onClick={() => {
+                const r = state.retry!;
+                setState(null);
+                r();
+              }}
+            >
+              계속
+            </Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={() => setState(null)}>
+            확인
+          </Button>
+        )
+      }
+    >
+      <p className="m-0 text-[13px] leading-relaxed text-ink2">{state?.message}</p>
+    </Modal>
+  );
+  return { run, node };
+}
+
+/** 아직 새 권한 체계로 옮기지 않았을 때 */
+export function NotMigrated() {
+  const navigate = useNavigate();
+  return (
+    <div className="grid place-items-center rounded-[10px] border border-border bg-panel px-5 py-16 text-center">
+      <p className="m-0 mb-3 text-[13px] text-ink2">아직 새 권한 체계로 옮기지 않았습니다.</p>
+      <Button variant="accent" onClick={() => navigate(adminPath('/base/authz/roles'))}>
+        역할 관리에서 옮기기
+      </Button>
+    </div>
+  );
 }

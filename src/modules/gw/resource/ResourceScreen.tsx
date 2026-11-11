@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -73,7 +74,8 @@ function LocalResourceScreen() {
   const requestedTab = searchParams.get('tab') as TabId | null;
   const tab: TabId = requestedTab && requestedTab in TAB_LABELS ? requestedTab : 'overview';
 
-  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update');
+  const { can: canAuthz } = useAuthz();
+  const canManage = canAuthz('resource.manage');
   const canApprove = useMemo(() => isAdmin || (actor ? resources.some((resource) => canApproveResource(actor, resource)) : false), [isAdmin, actor, resources]);
   const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove).filter((item) => item !== 'admin' || canManage);
   const loading = resourcesQuery.isLoading || reservationsQuery.isLoading || usersQuery.isLoading || departmentsQuery.isLoading;

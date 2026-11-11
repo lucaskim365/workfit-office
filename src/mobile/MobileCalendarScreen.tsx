@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -23,7 +24,6 @@ import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { useDepartments } from '@/features/department/useDepartments';
 import { resolveDeptId } from '@/domain/department/engine';
-import { usePermission } from '@/features/auth/usePermission';
 import { buildScheduleEvents } from '@/domain/calendarEvent/scheduleEvents';
 import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
@@ -69,8 +69,8 @@ export default function MobileCalendarScreen() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | undefined>(undefined);
 
   /** 사내행사 등록 권한 — 웹과 같이 캘린더에서 직접 등록하는 건 사내행사뿐이다. 회의는 업무계획에서 등록한다. */
-  const { isOperator, isExecutive } = usePermission();
-  const canManageCompanyEvent = isOperator || isExecutive;
+  const { can } = useAuthz();
+  const canManageCompanyEvent = can('calendar.company');
 
   const usersQuery = useUsers();
   const users = useMemo(

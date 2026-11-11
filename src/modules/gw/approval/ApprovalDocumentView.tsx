@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useMemo, useState } from 'react';
 import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -159,8 +160,10 @@ export function ApprovalDocumentView({
   // 사용자 정보 조회
   const userObj = currentUser?.id ? org.userById(currentUser.id) : null;
   const userPos = userObj?.position ?? '';
-  const isExecutive =
-    isAdmin ||
+  const authz = useAuthz();
+  const isExecutive = authz.active
+    ? Boolean(authz.result.grants.get('approval.secure')?.all)
+    : isAdmin ||
     hasExecRole ||
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';

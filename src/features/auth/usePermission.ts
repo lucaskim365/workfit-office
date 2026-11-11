@@ -3,6 +3,7 @@ import { useSecurityContext } from './useSecurityContext';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
 import type { ActionPermission } from '@/domain/roleGroup/schema';
+import { useAuthAssignmentsQuery, useAuthRolesQuery } from '@/features/authz/useAuthzDraft';
 
 /**
  * 전사 통합 권한 판정 훅 (usePermission) - v2 하위 호환 어댑터
@@ -14,6 +15,8 @@ export function usePermission() {
   const context = useSecurityContext();
   const org = useOrgTree();
   const { isLoading: isGroupsLoading } = useRoleGroups() as { isLoading: boolean };
+  const rolesQ = useAuthRolesQuery();
+  const asgQ = useAuthAssignmentsQuery();
 
   const user = context.user;
   const myGroups = context.roleGroups;
@@ -65,7 +68,7 @@ export function usePermission() {
     canAccess,
     canAction,
     hasRole,
-    isLoading: isGroupsLoading || org.isLoading,
+    isLoading: isGroupsLoading || org.isLoading || rolesQ.isLoading || asgQ.isLoading,
   };
 }
 

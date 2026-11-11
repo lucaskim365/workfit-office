@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { isTestAccount } from '@/domain/user/testAccount';
@@ -16,8 +17,6 @@ import {
 } from '@/features/commute/useCommute';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveCommuteScope } from '@/features/auth/scopeHelper';
-import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { GwHead } from '@/modules/gw/_gw';
@@ -112,14 +111,14 @@ const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border bor
 
 export default function CommuteScreen() {
   const { user } = useAuth();
-  const { userRoles, isAdmin } = usePermission();
-  const org = useOrgTree();
+  const { isAdmin } = usePermission();
   const { savePolicy } = useCommutePolicy();
   const { policy, holidays, holidayMap, approvals = [], approvalDaysOf, evaluate } = useCommuteEvaluation();
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
 
-  const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
+  const { commuteScope: authzCommuteScope } = useAuthz();
+  const commuteScope = authzCommuteScope();
   // 보안 지침 준수: 비임원/비팀장 사원은 ADMIN 권한이 있더라도 전사 근태 관제 센터에 접근할 수 없으며, 오직 ALL 스코프 보유자만 canAll 부여
   const canAll = commuteScope === 'ALL';
   const canManagePolicy = isAdmin || canAll;

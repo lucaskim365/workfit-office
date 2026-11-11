@@ -7,7 +7,7 @@ import { AUTHZ_AREAS, PERMISSIONS } from '@/domain/authz/permissions';
 import { canUseAdminConsole, resolveGrants, type Grant } from '@/domain/authz/engine';
 import { useAuthzDraft } from '@/features/authz/useAuthzDraft';
 import { adminPath } from '@/app/shell/screens';
-import { Loading, PageHead } from './parts';
+import { Loading, NotMigrated, PageHead } from './parts';
 
 type Tab = 'work' | 'admin';
 
@@ -23,6 +23,14 @@ export default function PeopleScreen() {
   const selected = sorted.find((u) => u.id === params.get('user')) ?? sorted[0] ?? null;
   const result = useMemo(() => (selected ? resolveGrants(selected, roles, assignments, authzOrg) : null), [selected, roles, assignments, authzOrg]);
 
+  if (ready && roles.length === 0) {
+    return (
+      <div className="flex flex-col gap-3.5">
+        <PageHead title="사람별 권한" path="권한 / 사람별 권한" desc="" />
+        <NotMigrated />
+      </div>
+    );
+  }
   if (!ready || !selected || !result) {
     return (
       <div className="flex flex-col gap-3.5">

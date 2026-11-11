@@ -1,10 +1,10 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { drafterTitleOf, stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import { inCompanyView, isLumefabDoc, parseCompanyView, type CompanyView } from '@/domain/approvalDoc/company';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search, Settings } from 'lucide-react';
@@ -125,8 +125,8 @@ export default function ApprovalScreen() {
   const [box, setBox] = useState<ScreenBox>(() => boxParam || '대기');
 
   // 후열(공람) 전달 — 본인 앞 전달을 읽는다.
-  const { isOperator: isOp, isAdmin: isAdm } = usePermission();
-  useLegacyPostReadImport(me, isOp || isAdm);
+  const { can: canAuthz } = useAuthz();
+  useLegacyPostReadImport(me, canAuthz('approval.postread.forward'));
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const postReadIdsOf = (uid: string) => postReadDocIdsFor(recvPostReads, uid);
   const myUnreadPostReadIds = useMemo(() => unreadPostReadDocIdsFor(recvPostReads, me), [recvPostReads, me]);
@@ -1265,8 +1265,8 @@ function DocDetail({
 }) {
   const navigate = useNavigate();
   const org = useOrgTree();
-  const { isOperator, isAdmin } = usePermission();
-  const canForwardPostRead = isOperator || isAdmin;
+  const { can: canAuthz } = useAuthz();
+  const canForwardPostRead = canAuthz('approval.postread.forward');
   const decide = useDecideStep();
   const submitM = useSubmitApproval();
   const recallM = useRecallApproval();

@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState, useMemo, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -92,10 +93,11 @@ export default function CalendarEventModal({
   onRemoved,
   zClass,
 }: CalendarEventModalProps) {
-  const { isOperator, isExecutive, isSuperAdmin } = usePermission();
+  const { isSuperAdmin } = usePermission();
+  const { can } = useAuthz();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const canManageCompanyEvent = isOperator || isExecutive;
+  const canManageCompanyEvent = can('calendar.company');
 
   const usersQuery = useUsers();
   const allUsers = usersQuery.data ?? [];

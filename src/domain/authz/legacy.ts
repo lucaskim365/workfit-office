@@ -58,6 +58,9 @@ export function legacyPermissions(menuPermissions: Record<string, Partial<Record
   return [...out].sort();
 }
 
+/** 옛 체계에서 권한 검사 없이 모두가 쓰던 기능 */
+export const UNGATED_PERMISSIONS = ['messenger.use'];
+
 /** 이름·플래그로 판정하던 역할의 권한 */
 export const RULE_PERMISSIONS = {
   exec: ['approval.secure', 'commute.view', 'calendar.company', 'seat.manage'],
@@ -66,6 +69,7 @@ export const RULE_PERMISSIONS = {
 };
 
 let seq = 0;
+export const blankAssignment = (roleId: string, p: Partial<AuthAssignment>) => blank(roleId, p);
 const aid = () => `ASG-${(++seq).toString(36)}`;
 const blank = (roleId: string, p: Partial<AuthAssignment>): AuthAssignment => ({
   id: aid(),
@@ -120,7 +124,7 @@ export function convertLegacy(
   for (const u of users) if (u.role === 'admin' && !assignments.some((a) => a.roleId === 'ROLE-SUPER' && a.targetId === u.id)) assignments.push(blank('ROLE-SUPER', { targetType: 'USER', targetId: u.id }));
 
   const base = byCode.get('USER');
-  roles.push({ id: 'ROLE-BASE', name: '전 직원', desc: '사용 중인 모든 직원이 자동으로 받는 기본 권한', permissions: legacyPermissions(base?.menuPermissions as never).filter((k) => !k.startsWith('admin.')), kind: 'base', use: true, sort: 1, migratedFrom: base?.name ?? '' });
+  roles.push({ id: 'ROLE-BASE', name: '전 직원', desc: '사용 중인 모든 직원이 자동으로 받는 기본 권한', permissions: [...new Set([...legacyPermissions(base?.menuPermissions as never).filter((k) => !k.startsWith('admin.')), ...UNGATED_PERMISSIONS])].sort(), kind: 'base', use: true, sort: 1, migratedFrom: base?.name ?? '' });
 
   const basePerms = new Set(roles[1].permissions);
   const minusBase = (keys: Iterable<string>) => [...new Set(keys)].filter((k) => !basePerms.has(k)).sort();
@@ -136,8 +140,8 @@ export function convertLegacy(
 
   // 부서장 — 조직도 부서장 + 리더 직급, 본인 부서 범위
   roles.push({ id: 'ROLE-HEAD', name: '부서장', desc: '본인 부서 직원의 근태·휴가 열람', permissions: [...RULE_PERMISSIONS.head], kind: 'custom', use: true, sort: 20, migratedFrom: '부서장 판정 규칙' });
-  assignments.push(blank('ROLE-HEAD', { targetType: 'DEPT_HEAD', scopeType: 'OWN_DEPT' }));
-  for (const p of org.positions.filter((x) => x.isLeaderRole && !x.isExecutiveRole)) assignments.push(blank('ROLE-HEAD', { targetType: 'POSITION', targetId: p.id, scopeType: 'OWN_DEPT' }));
+  assignments.push(blank('ROLE-HEAD', { targetType: 'DEPT_HEAD', scopeType: 'OWN_DEPT', scopeSub: false }));
+  for (const p of org.positions.filter((x) => x.isLeaderRole && !x.isExecutiveRole)) assignments.push(blank('ROLE-HEAD', { targetType: 'POSITION', targetId: p.id, scopeType: 'OWN_DEPT', scopeSub: false }));
 
   // 운영자
   const op = byCode.get('OPERATOR');

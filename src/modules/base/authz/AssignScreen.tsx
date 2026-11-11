@@ -9,8 +9,8 @@ import { PERMISSION_BY_KEY } from '@/domain/authz/permissions';
 import type { AuthAssignment, AuthRole, AuthScopeType, AuthTargetType } from '@/domain/authz/types';
 import { SCOPE_TYPE_LABEL, TARGET_TYPE_LABEL } from '@/domain/authz/types';
 import { matchAssignment, type AuthzOrg } from '@/domain/authz/engine';
-import { authzDraft, useAuthzDraft } from '@/features/authz/useAuthzDraft';
-import { Loading, PageHead, RoleList, TARGET_ICON, matchedUsers, roleHasScoped, roleUserCount, scopeText, targetText } from './parts';
+import { useAuthzActions, useAuthzDraft } from '@/features/authz/useAuthzDraft';
+import { NotMigrated, useAuthzNotice, Loading, PageHead, RoleList, TARGET_ICON, matchedUsers, roleHasScoped, roleUserCount, scopeText, targetText } from './parts';
 
 /** 부서를 트리 순서로 펼친 목록(깊이 포함) */
 function deptTree(org: AuthzOrg) {
@@ -49,6 +49,8 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
 
 export default function AssignScreen() {
   const { ready, roles, assignments, org, authzOrg, activeUsers } = useAuthzDraft();
+  const actions = useAuthzActions();
+  const notice = useAuthzNotice();
   const [params, setParams] = useSearchParams();
   const assignable = roles.filter((r) => r.kind !== 'base');
   const selectedId = params.get('role') ?? assignable.find((r) => r.kind === 'custom')?.id ?? assignable[0]?.id ?? null;
@@ -58,6 +60,14 @@ export default function AssignScreen() {
 
   const countOf = (r: AuthRole) => roleUserCount(r, assignments, activeUsers, authzOrg);
 
+  if (ready && roles.length === 0) {
+    return (
+      <div className="flex flex-col gap-3.5">
+        <PageHead title="역할 지정" path="권한 / 역할 지정" desc="" />
+        <NotMigrated />
+      </div>
+    );
+  }
   if (!ready || !role) {
     return (
       <div className="flex flex-col gap-3.5">
@@ -141,7 +151,7 @@ export default function AssignScreen() {
                             <button type="button" title="바꾸기" onClick={() => setEditing(a)} className="grid h-7 w-7 place-items-center rounded-md text-ink2 hover:bg-ink3/10">
                               <Pencil size={13} />
                             </button>
-                            <button type="button" title="빼기" onClick={() => authzDraft.removeAssignment(a.id)} className="grid h-7 w-7 place-items-center rounded-md text-danger hover:bg-danger/10">
+                            <button type="button" title="빼기" onClick={() => notice.run(() => actions.removeAssignment(a.id), () => actions.removeAssignment(a.id, { confirmSelf: true }))} className="grid h-7 w-7 place-items-center rounded-md text-danger hover:bg-danger/10">
                               <Trash2 size={13} />
                             </button>
                           </div>
@@ -184,8 +194,23 @@ export default function AssignScreen() {
         </div>
       </div>
 
+      {notice.node}
       <TargetDialog
         open={adding || Boolean(editing)}
+        onSave={(drafts) => {
+          const ed = editing;
+          const close = () => {
+            setAdding(false);
+            setEditing(null);
+          };
+          if (ed) {
+            const next = { ...drafts[0], id: ed.id, regBy: ed.regBy, regAt: ed.regAt };
+            void notice.run(async () => { await actions.updateAssignment(next); close(); }, async () => { await actions.updateAssignment(next, { confirmSelf: true }); close(); });
+          } else {
+            void notice.run(async () => { await actions.addAssignments(drafts); close(); });
+          }
+        }}
+        pending={actions.pending}
         role={role}
         editing={editing}
         authzOrg={authzOrg}
@@ -210,6 +235,8 @@ function TargetDialog({
   activeUsers,
   existing,
   onClose,
+  onSave,
+  pending,
 }: {
   open: boolean;
   role: AuthRole;
@@ -218,6 +245,8 @@ function TargetDialog({
   activeUsers: OrgT['users'];
   existing: AuthAssignment[];
   onClose: () => void;
+  onSave: (drafts: Omit<AuthAssignment, 'id'>[]) => void;
+  pending: boolean;
 }) {
   const [type, setType] = useState<AuthTargetType>('USER');
   const [ids, setIds] = useState<Set<string>>(new Set());
@@ -274,11 +303,7 @@ function TargetDialog({
   for (const d of drafts) for (const u of matchedUsers({ ...d, id: '' }, activeUsers, authzOrg)) reach.add(u.id);
   const valid = (type === 'DEPT_HEAD' || ids.size > 0) && (!scoped || scopeType !== 'DEPTS' || scopeIds.size > 0);
 
-  const save = () => {
-    if (editing) authzDraft.updateAssignment({ ...drafts[0], id: editing.id, regBy: editing.regBy, regAt: editing.regAt });
-    else authzDraft.addAssignments(drafts);
-    onClose();
-  };
+  const save = () => onSave(drafts);
 
   const kw = q.trim();
   const users = activeUsers.filter((u) => !kw || u.name.includes(kw) || u.dept.includes(kw) || u.position.includes(kw));
@@ -297,7 +322,7 @@ function TargetDialog({
           </span>
           <div className="flex gap-2">
             <Button onClick={onClose}>취소</Button>
-            <Button variant="primary" disabled={!valid} onClick={save}>
+            <Button variant="primary" disabled={!valid || pending} onClick={save}>
               {editing ? '바꾸기' : '추가'}
             </Button>
           </div>
