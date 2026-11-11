@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Eye, EyeOff, GripVertical, MoveDiagonal2 } from 'lucide-react';
+import { Eye, EyeOff, GripVertical, LayoutGrid, MoveDiagonal2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, tierOf, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
@@ -9,7 +9,7 @@ import { WidgetTierProvider } from './widgets';
  * 홈(경영 현황) — 로그인 후 첫 화면.
  * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고, 위젯은 늘 왼쪽 위로 붙는다(빈칸은 높이가 다른 위젯 옆에만).
  * 편집: 위젯은 끌어서 옮기고, 크기는 소(4칸)·중(6칸)·대(12칸) 단추나 오른쪽 아래 손잡이를 끌어 바꾼다(가까운 단계로 맞춤).
- * 오른쪽 위젯 보관함(모듈 → 위젯)에서 눈을 켜고 끈다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
+ * 편집 띠의 '위젯 보관함'을 열면 오른쪽에 떠서(모듈 → 위젯) 눈을 켜고 끈다. 닫으면 화면에는 놓인 위젯만 깔린다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
@@ -30,7 +30,7 @@ function WidgetPreview({ id }: { id: WidgetId }) {
   const zoom = PREVIEW_BOX / w;
   const h = rowsHeight(rowsAt(id, tier));
   return (
-    <div className="pointer-events-none absolute top-1/2 right-full z-50 mr-3 -translate-y-1/2 rounded-2xl border border-border bg-[var(--color-bg)] p-2 shadow-[0_16px_40px_-12px_rgba(16,40,80,.35)]" aria-hidden="true">
+    <div className="pointer-events-none absolute top-0 right-full z-50 mr-3 rounded-2xl border border-border bg-[var(--color-bg)] p-2 shadow-[0_16px_40px_-12px_rgba(16,40,80,.35)]" aria-hidden="true">
       <div className="overflow-hidden" style={{ width: PREVIEW_BOX, height: Math.round(h * zoom) }}>
         <div className="select-none" data-tier={tier} style={{ width: w, height: h, zoom }} inert>
           <WidgetTierProvider value={tier}><def.Component /></WidgetTierProvider>
@@ -42,8 +42,9 @@ function WidgetPreview({ id }: { id: WidgetId }) {
 }
 
 /** 위젯 보관함 — 모듈 아래 위젯을 나열하고, 오른쪽 눈으로 홈에 보이기/숨기기. 숨긴 위젯은 끌어서 원하는 자리에 놓을 수도 있다 */
-function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd }: {
+function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
   layout: WidgetSlot<WidgetId>[];
+  onClose: () => void;
   onToggle: (id: WidgetId) => void;
   onDragStart: (id: WidgetId) => void;
   onDragEnd: () => void;
@@ -51,12 +52,18 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd }: {
   const [hover, setHover] = useState<WidgetId | null>(null);
   const shownCount = layout.length;
   return (
-    <aside aria-label="위젯 보관함" style={{ width: LIBRARY_W }} className="shrink-0 self-start rounded-[20px] border border-border bg-panel p-4">
-      <div className="mb-3 flex items-baseline justify-between px-1">
+    <aside
+      aria-label="위젯 보관함"
+      style={{ width: LIBRARY_W }}
+      className="fixed top-[262px] right-5 bottom-5 z-[70] flex flex-col rounded-[20px] border border-border bg-panel shadow-[0_24px_60px_-20px_rgba(16,40,80,.45)]"
+    >
+      {hover && <WidgetPreview id={hover} />}
+      <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
         <h2 className="text-[15px] font-extrabold tracking-tight text-ink">위젯 보관함</h2>
-        <span className="text-[11.5px] text-ink3">표시 <strong className="tabular-nums text-[#0876c8]">{shownCount}</strong> / {WIDGET_IDS.length}</span>
+        <span className="ml-auto text-[11.5px] text-ink3">표시 <strong className="tabular-nums text-[#0876c8]">{shownCount}</strong> / {WIDGET_IDS.length}</span>
+        <button type="button" onClick={onClose} aria-label="위젯 보관함 닫기" className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><X size={16} /></button>
       </div>
-      <div className="flex flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
         {MODULES.map((m) => (
           <section key={m}>
             <h3 className="mb-1 px-1 text-[11.5px] font-extrabold text-ink3">{m}</h3>
@@ -67,7 +74,6 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd }: {
                 return (
                   <li
                     key={id}
-                    className="relative"
                     onMouseEnter={() => setHover(id)}
                     onMouseLeave={() => setHover((h) => (h === id ? null : h))}
                   >
@@ -90,7 +96,6 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd }: {
                         {on ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
                     </div>
-                    {hover === id && <WidgetPreview id={id} />}
                   </li>
                 );
               })}
@@ -148,17 +153,8 @@ export default function ExecDashboardScreen() {
   /** 옮기기 끌기를 허락한 위젯 — 크기 단추·손잡이를 누를 때는 옮기기가 시작되지 않게 */
   const [armed, setArmed] = useState<WidgetId | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  /** 화면 폭 — 편집 중에는 모눈을 이 폭 그대로 그린 뒤 보관함 자리만큼 줄여 보인다(위젯 모양이 평소와 같게) */
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [rowW, setRowW] = useState(0);
-  useEffect(() => {
-    const el = rowRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setRowW(el.offsetWidth));
-    ro.observe(el);
-    setRowW(el.offsetWidth);
-    return () => ro.disconnect();
-  }, [editing, wide]);
+  /** 위젯 보관함을 띄웠는가(편집 중에만) */
+  const [libOpen, setLibOpen] = useState(false);
   /** 잡은 곳이 위젯의 몇 번째 칸인지 — 끌 때 그 칸이 마우스를 따라간다 */
   const grab = useRef({ col: 0, row: 0 });
 
@@ -179,11 +175,12 @@ export default function ExecDashboardScreen() {
   };
 
   const resetDrag = () => { setDraft(null); setDragId(null); setDragNew(null); setArmed(null); };
-  const startEdit = () => { setLayout(saved); setEditing(true); resetDrag(); };
-  const cancelEdit = () => { setLayout(saved); setEditing(false); resetDrag(); };
+  const startEdit = () => { setLayout(saved); setEditing(true); setLibOpen(false); resetDrag(); };
+  const cancelEdit = () => { setLayout(saved); setEditing(false); setLibOpen(false); resetDrag(); };
   const applyEdit = () => {
     setSaved(layout);
     setEditing(false);
+    setLibOpen(false);
     resetDrag();
     if (!me?.id) return;
     try { localStorage.setItem(storageKey(me.id), JSON.stringify(layout)); } catch { /* 저장 못 해도 화면은 그대로 */ }
@@ -274,7 +271,7 @@ export default function ExecDashboardScreen() {
   const grid = (
     <div
       ref={gridRef}
-      className="relative grid min-w-0 flex-1 grid-cols-12"
+      className="relative grid min-w-0 grid-cols-12"
       style={{ gridAutoRows: CELL_H, gap: CELL_GAP, minHeight: canEdit ? rowsHeight(bottom + 4) : undefined }}
       onDragOver={dragOverGrid}
       onDrop={(e) => { if (canEdit && (dragId || dragNew)) drop(e); }}
@@ -392,6 +389,14 @@ export default function ExecDashboardScreen() {
       {canEdit ? (
         <div className="flex items-center gap-2 rounded-2xl bg-[#e0f0fb] px-4 py-2.5 dark:bg-sky-500/15">
           <span className="text-[14px] font-extrabold text-[#0b4f86] dark:text-sky-200">홈 편집</span>
+          <button
+            type="button"
+            onClick={() => setLibOpen((v) => !v)}
+            aria-pressed={libOpen}
+            className={`ml-3 flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-bold ${libOpen ? 'bg-[#0876c8] text-white hover:bg-[#066aaf]' : 'border border-[#0876c8] bg-panel text-[#0876c8] hover:bg-white'}`}
+          >
+            <LayoutGrid size={15} />위젯 보관함
+          </button>
           <div className="ml-auto flex items-center gap-2">
             <button type="button" onClick={() => commit(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
               기본 배치
@@ -417,19 +422,18 @@ export default function ExecDashboardScreen() {
       ) : null}
 
       {wide ? (
-        canEdit ? (
-          <div ref={rowRef} className="flex items-start gap-5">
-            <div className="shrink-0" style={rowW ? { width: rowW, zoom: (rowW - LIBRARY_W - 20) / rowW } : { flex: 1 }}>{grid}</div>
+        <>
+          {grid}
+          {canEdit && libOpen && (
             <WidgetLibrary
               layout={layout}
               onToggle={toggleWidget}
               onDragStart={(id) => { grab.current = { col: 0, row: 0 }; setDragNew(id); }}
               onDragEnd={resetDrag}
+              onClose={() => setLibOpen(false)}
             />
-          </div>
-        ) : (
-          <div ref={rowRef}>{grid}</div>
-        )
+          )}
+        </>
       ) : (
         <div className="grid grid-cols-12 gap-4" style={{ gridAutoRows: CELL_H, gridAutoFlow: 'row dense' }}>
           {order.map((slot) => {

@@ -83,14 +83,19 @@ test('자리 잡기 — 빈자리 채우기, 겹치면 아래로 밀기, 빈칸�
   assert.deepEqual(a.get('d'), { x: 8, y: 4, w: 4, h: 2 });
   // 빈 곳에 두면 왼쪽 위로 당겨 붙는다
   assert.deepEqual(arrange([{ id: 'a', w: 4, h: 2, x: 6, y: 5 }]).get('a'), { x: 0, y: 0, w: 4, h: 2 });
-  // 옮긴 위젯이 이기고(그 자리 차지), 밀려난 위젯은 그 아래로
-  const m = arrange([{ id: 'a', w: 6, h: 3, x: 0, y: 0 }, { id: 'b', w: 6, h: 2, x: 3, y: 1 }], 'b');
+  // 옮긴 위젯이 놓은 칸의 순서를 차지하고, 원래 있던 위젯은 그 뒤로
+  const m = arrange([{ id: 'a', w: 6, h: 3, x: 0, y: 0 }, { id: 'b', w: 6, h: 2, x: 0, y: 0 }], 'b');
   assert.deepEqual(m.get('b'), { x: 0, y: 0, w: 6, h: 2 });
-  assert.deepEqual(m.get('a'), { x: 0, y: 2, w: 6, h: 3 });
-  // 오른쪽 끝을 넘으면 안으로 들인다 — 옆에 위젯이 있으면 그 옆에 붙는다
-  const e = arrange([{ id: 'z', w: 6, h: 1, x: 0, y: 0 }, { id: 'a', w: 6, h: 1, x: 10, y: 0 }]);
-  assert.deepEqual(e.get('a'), { x: 6, y: 0, w: 6, h: 1 });
-  // 빈칸은 높이가 다를 때만 — 짧은 위젯 아래 빈칸은 옆의 긴 위젯 때문에 아래 넓은 위젯이 못 올라와서 남는다
+  assert.deepEqual(m.get('a'), { x: 6, y: 0, w: 6, h: 3 });
+  // 빈틈없이 — 넓은 위젯이 못 들어가는 빈칸에는 뒤의 작은 위젯이 들어간다
+  const d = arrange([
+    { id: 'half', w: 6, h: 4, x: 0, y: 0 },
+    { id: 'wide', w: 12, h: 5, x: 0, y: 4 },
+    { id: 'small', w: 6, h: 3, x: 0, y: 9 },
+  ]);
+  assert.deepEqual(d.get('small'), { x: 6, y: 0, w: 6, h: 3 });
+  assert.deepEqual(d.get('wide'), { x: 0, y: 4, w: 12, h: 5 });
+  // 빈칸은 높이가 다를 때만 — 짧은 위젯 아래 빈칸은 옆의 긴 위젯 때문에 넓은 위젯이 못 들어가서 남는다
   const g = arrange([
     { id: 'tall', w: 8, h: 6, x: 0, y: 0 },
     { id: 'short', w: 4, h: 2, x: 8, y: 3 },

@@ -192,55 +192,25 @@ export function firstFit(boxes: Box[], w: number, h: number): { x: number; y: nu
 export interface Placement { id: string; w: number; h: number; x?: number; y?: number }
 
 /**
- * 자리 잡기 — 방금 옮기거나 키운 위젯(pinned)을 먼저 그 자리에 두고, 자리가 정해진 나머지는 위에서부터 놓되
- * 겹치면 겹친 위젯 바로 아래로 밀어 낸다. 자리가 없는 위젯은 첫 빈자리에.
- * 마지막에 왼쪽 위로 당겨 붙인다(compact) — 빈칸은 옆 위젯과 높이가 달라 생기는 곳에만 남는다.
+ * 자리 잡기 — 위젯을 순서대로(자리가 있으면 위→아래, 왼→오 순, 없으면 맨 뒤) 첫 빈자리에 채워 넣는다.
+ * 늘 왼쪽 위부터 빈틈없이 깔리고, 빈칸은 높이가 달라 아무것도 들어가지 않는 곳에만 남는다.
+ * 방금 옮긴 위젯(pinned)은 놓은 칸의 순서를 차지한다 — 같은 칸이면 원래 있던 위젯보다 앞에.
  */
 export function arrange(items: Placement[], pinned?: string | null): Map<string, Box> {
-  const out = new Map<string, Box>();
-  const placed: Box[] = [];
-  const clamp = (it: Placement): Box => {
-    const w = Math.min(Math.max(1, it.w), GRID_COLS);
-    return { x: Math.min(Math.max(0, it.x ?? 0), GRID_COLS - w), y: Math.max(0, it.y ?? 0), w, h: Math.max(1, it.h) };
-  };
-  const put = (id: string, b: Box) => { out.set(id, b); placed.push(b); };
   const has = (it: Placement) => it.x !== undefined && it.y !== undefined;
-  const pin = pinned ? items.find((it) => it.id === pinned && has(it)) : undefined;
-  if (pin) put(pin.id, clamp(pin));
-  const rest = items.filter((it) => it !== pin && has(it)).sort((a, b) => a.y! - b.y! || a.x! - b.x!);
-  for (const it of rest) {
-    const b = clamp(it);
-    for (let hit = placed.find((p) => overlaps(p, b)); hit; hit = placed.find((p) => overlaps(p, b))) b.y = hit.y + hit.h;
-    put(it.id, b);
-  }
-  for (const it of items) {
-    if (out.has(it.id)) continue;
-    const w = Math.min(Math.max(1, it.w), GRID_COLS);
-    put(it.id, { ...firstFit(placed, w, it.h), w, h: Math.max(1, it.h) });
-  }
-  return compact(out);
-}
-
-/**
- * 왼쪽 위 정렬 — 위에서부터(같은 줄이면 왼쪽부터) 하나씩, 먼저 놓인 위젯에 닿을 때까지 위로, 다시 왼쪽으로 민다.
- * 위로 더 못 가는 까닭은 위 위젯뿐이라, 남는 빈칸은 높이가 다른 위젯 옆자리뿐이다.
- */
-export function compact(boxes: Map<string, Box>): Map<string, Box> {
-  const order = [...boxes.entries()].sort(([, a], [, b]) => a.y - b.y || a.x - b.x);
-  const placed: Box[] = [];
+  const clampX = (it: Placement) => Math.min(Math.max(0, it.x ?? 0), GRID_COLS - Math.min(Math.max(1, it.w), GRID_COLS));
+  const placedOrder = items
+    .filter(has)
+    .sort((a, b) => a.y! - b.y! || clampX(a) - clampX(b) || Number(b.id === pinned) - Number(a.id === pinned));
+  const order = [...placedOrder, ...items.filter((it) => !has(it))];
   const out = new Map<string, Box>();
-  const free = (b: Box) => !placed.some((p) => overlaps(p, b));
-  for (const [id, box] of order) {
-    const b = { ...box };
-    // 왼쪽으로 민 앞 위젯과 겹치면 먼저 그 아래로
-    for (let hit = placed.find((p) => overlaps(p, b)); hit; hit = placed.find((p) => overlaps(p, b))) b.y = hit.y + hit.h;
-    for (let moved = true; moved; ) {
-      moved = false;
-      while (b.y > 0 && free({ ...b, y: b.y - 1 })) { b.y--; moved = true; }
-      while (b.x > 0 && free({ ...b, x: b.x - 1 })) { b.x--; moved = true; }
-    }
+  const placed: Box[] = [];
+  for (const it of order) {
+    const w = Math.min(Math.max(1, it.w), GRID_COLS);
+    const h = Math.max(1, it.h);
+    const b = { ...firstFit(placed, w, h), w, h };
     placed.push(b);
-    out.set(id, b);
+    out.set(it.id, b);
   }
   return out;
 }
