@@ -59,26 +59,54 @@ export interface LegacyConversion {
  * 시트에선 표가 top 행부터 같은 열 순서로 놓이므로 행 번호만 top 만큼 민다(열 글자는 그대로).
  * 기존 엔진은 계산이 안 되면(0으로 나눔 등) 0 — 나눗셈이 든 식만 IFERROR(…,0)으로 감싼다. 백분율(percent1·2)은 식에 ×100 이 들어 있어
  * 시트 백분율 모양(값×100 에 %)에 맞게 ×100 을 뗀다(없으면 /100).
- * 다른 표를 가리키는 식([표]!…)이나 모르는 열 이름은 옮기지 못한다 — null
+ * 열 이름은 열 키(금액)나 머리 줄 글자(인정거리) 어느 쪽이든. 다른 표는 [표 이름]![줄 이름:열] — 그 표가 놓인 자리(tables)를 알 때만.
+ * 모르는 열·줄·표는 옮기지 못한다 — null
  */
+export interface LegacyTableAt {
+  /** 표 0번 줄이 놓인 시트 행(0부터) */
+  top: number;
+  cols: string[];
+  rows: Array<Record<string, string>>;
+}
+
+/** 표 열 자리 — 열 키 또는 머리 줄(0번 줄) 글자 */
+function tableColOf(t: LegacyTableAt, name: string): number {
+  const n = name.trim();
+  const byKey = t.cols.indexOf(n);
+  return byKey >= 0 ? byKey : t.cols.findIndex((c) => String(t.rows[0]?.[c] ?? '').trim() === n);
+}
+
 export function translateLegacyFormula(
   expression: string | undefined,
-  at: {
+  at: LegacyTableAt & {
     /** 수식이 든 표 줄(0부터)·열 이름 — [열]·SUM(ABOVE) 의 기준 */
     r: number;
     col: string;
-    /** 표 0번 줄이 놓인 시트 행(0부터) */
-    top: number;
-    cols: string[];
-    rows: Array<Record<string, string>>;
+    /** 다른 표 — 표 이름(항목 라벨) → 놓인 자리 */
+    tables?: ReadonlyMap<string, LegacyTableAt>;
   },
   format?: string
 ): string | null {
   let expr = String(expression ?? '').trim().replace(/^=/, '');
-  if (!expr || expr.includes('!')) return null;
+  if (!expr) return null;
   const sheetRow = (tableRow: number) => at.top + tableRow + 1; // 표 줄(0부터) → 시트 행 번호(1부터)
-  const colOf = (name: string) => at.cols.indexOf(name.trim());
+  const colOf = (name: string) => tableColOf(at, name);
   let failed = false;
+  // 다른 표 [표]![줄:열] → 그 표 칸 주소. 아래 표 안 좌표 변환이 이 주소를 또 밀지 않게 자리표(@@0@@)로 두었다가 끝에 넣는다
+  const outside: string[] = [];
+  expr = expr.replace(/\[([^\]]+)\]\s*!\s*\[([^\]]+)\]/g, (m, table: string, ref: string) => {
+    const t = at.tables?.get(table.trim());
+    const k = ref.indexOf(':');
+    const j = t && k >= 0 ? tableColOf(t, ref.slice(k + 1)) : -1;
+    const rr = t && k >= 0 ? t.rows.findIndex((row) => String(row[t.cols[0]] ?? '').trim() === ref.slice(0, k).trim()) : -1;
+    if (!t || j < 0 || rr < 0) {
+      failed = true;
+      return m;
+    }
+    outside.push(`${colLetter(j)}${t.top + rr + 1}`);
+    return `@@${outside.length - 1}@@`;
+  });
+  if (failed || expr.includes('!')) return null;
   expr = expr.replace(
     /SUM\s*\(\s*ABOVE\s*\)|SUM\s*\(\s*\[([^\]]+)\]\s*\)|\[([^\]]+)\]|\b([A-Z]{1,3})(\d+)\b/gi,
     (m, sumCol: string | undefined, bracket: string | undefined, L: string | undefined, num: string | undefined) => {
@@ -113,6 +141,7 @@ export function translateLegacyFormula(
     }
   );
   if (failed) return null;
+  expr = expr.replace(/@@(\d+)@@/g, (_, i: string) => outside[Number(i)]);
   if (format === 'percent1' || format === 'percent2') {
     const dropped = expr.replace(/\s*\*\s*100\s*$/, '');
     // ×100 이 없는 식: 백분율 칸들의 합(소계 비중 =SUM(ABOVE))은 이미 시트 백분율 값이라 그대로, 그 밖은 /100
@@ -125,30 +154,36 @@ export function translateLegacyFormula(
 }
 
 /**
- * 기존 '표'에서 기안자가 줄을 더하고 지우던 곳 — 품목 줄: 미리 쓴 글자가 없는 줄(줄 번호 1·2·3… 은 빼고).
- * 같은 모양(수식 열이 같음)의 품목 줄이 3줄 넘게 이어지면 그 줄들 전체(품목 1~8 뒤에 합계 줄이 오는 발주 세부내역 → 1~8번 줄 —
- * 기안자가 [행 삭제]로 안 쓰는 품목 줄을 아래부터 지운다), 데이터 줄이 하나뿐이고 비어 있으면 그 줄(빈 줄 하나로 시작하는 품목 표).
- * 이름표가 든 줄(작성일·상호 같은 라벨·값 표, '공급가액 합계' 같은 합계 줄, 직인란)은 품목 줄이 아니다 — 반복 구간 없음(관리자가 지정)
+ * 기존 '표'에서 기안자가 줄을 더하고 지우던 곳 — 품목 줄: 빈 칸이 있고 미리 쓴 글자가 칸의 절반이 안 되는 줄.
+ * 같은 모양(칸마다 수식·빈 칸·같은 글자)의 품목 줄이 두 줄 넘게 이어지는 마지막 묶음 전체 — 줄 번호(1·2·3…)는 빈 칸으로 보고,
+ * 줄마다 똑같이 미리 써 둔 글자('2026.', '-')는 같은 모양으로 본다(품목 1~8 뒤에 합계 줄이 오는 발주 세부내역 → 1~8번 줄 —
+ * 기안자가 [행 삭제]로 안 쓰는 품목 줄을 아래부터 지운다). 데이터 줄이 하나뿐이고 품목 줄이면 그 줄(빈 줄 하나로 시작하는 품목 표).
+ * 줄마다 이름표가 다른 표(선급금·중도금·잔금, 작성일·상호 같은 라벨·값 표, 합계 줄, 직인란)는 품목 줄이 아니다 — 반복 구간 없음
  */
 export function legacyRepeatRows(
   t: { cols: string[]; rows: Array<Record<string, string>>; cellFormulas: Record<string, unknown> },
   headerRows: number
 ): { first: number; last: number } | null {
   const data = t.rows.map((_, i) => i).filter((i) => i >= headerRows);
-  const pattern = (i: number) => t.cols.map((c) => (t.cellFormulas[`${i}:${c}`] ? 'f' : 'x')).join('');
-  const itemRow = (i: number) =>
-    t.cols.every((c) => {
-      if (t.cellFormulas[`${i}:${c}`]) return true;
-      const v = String(t.rows[i][c] ?? '').trim();
-      return v === '' || /^\d+$/.test(v);
-    });
+  /** 칸 모양 — 수식(f)·빈 칸이나 줄 번호(_)·미리 쓴 글자(t:글자) */
+  const kind = (i: number, c: string) => {
+    if (t.cellFormulas[`${i}:${c}`]) return 'f';
+    const v = String(t.rows[i][c] ?? '').trim();
+    return v === '' || /^\d+$/.test(v) ? '_' : `t:${v}`;
+  };
+  const shape = (i: number) => t.cols.map((c) => kind(i, c)).join('|');
+  const itemRow = (i: number) => {
+    const texts = t.cols.filter((c) => kind(i, c).startsWith('t:')).length;
+    const blanks = t.cols.filter((c) => !t.cellFormulas[`${i}:${c}`] && !String(t.rows[i][c] ?? '').trim()).length;
+    return blanks > 0 && texts * 2 < t.cols.length;
+  };
   if (data.length === 1) return itemRow(data[0]) ? { first: data[0], last: data[0] } : null;
-  for (let k = data.length - 1; k >= 2; k--) {
-    const [a, b, c] = [data[k - 2], data[k - 1], data[k]];
-    if (pattern(a) === pattern(c) && pattern(b) === pattern(c) && itemRow(a) && itemRow(b) && itemRow(c)) {
+  for (let k = data.length - 1; k >= 1; k--) {
+    const [b, c] = [data[k - 1], data[k]];
+    if (shape(b) === shape(c) && itemRow(b) && itemRow(c)) {
       // 같은 모양 품목 줄이 위로 이어지는 데까지
-      let first = k - 2;
-      while (first - 1 >= 0 && pattern(data[first - 1]) === pattern(c) && itemRow(data[first - 1])) first--;
+      let first = k - 1;
+      while (first - 1 >= 0 && shape(data[first - 1]) === shape(c) && itemRow(data[first - 1])) first--;
       return { first: data[first], last: c };
     }
   }
@@ -220,13 +255,28 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const condRows: { r: number; visibleIf: string }[] = [];
   /** 항목 키 → 값 칸(조건 칸에 이름을 붙이려고) */
   const valueAt = new Map<string, { r: number; c: number }>();
+  /** 표 이름(항목 라벨) → 놓인 자리 — 다른 표를 가리키는 수식용 */
+  const tables = new Map<string, LegacyTableAt>();
+  /** 아래에 놓일 표를 가리켜 아직 못 옮긴 수식 — 표를 다 놓은 뒤 다시 */
+  const deferred: { r: number; j: number; expr: string; format?: string; at: LegacyTableAt & { r: number; col: string }; table: string }[] = [];
+  /** 옮긴 수식을 칸에 — 금액·백분율 모양 */
+  const putFormula = (r: number, j: number, formula: string, format?: string) => {
+    s = setCellValue(s, r, j, formula);
+    const numFmt = format === 'currency' ? 'currency' : format === 'percent1' || format === 'percent2' ? 'percent' : undefined;
+    if (numFmt) s = applyStyle(s, span(r, j, j), { numFmt });
+  };
 
   // 섹션 순서대로
   const sections: string[] = [];
   fields.forEach((f) => !sections.includes(f.section ?? '') && sections.push(f.section ?? ''));
   let pendingHalf: FormField | null = null;
   let halfRow = -1;
+  /** 짝을 못 찾은 반쪽 항목 — 값 칸을 줄 끝까지 넓힌다(오른쪽 절반이 이름 없는 빈 칸으로 남지 않게) */
   const flushHalf = () => {
+    if (pendingHalf) {
+      s = { ...s, merges: s.merges.filter((m) => !(m.startRow === halfRow && m.startCol === 1)) };
+      merge(halfRow, 1, n - 1);
+    }
     pendingHalf = null;
   };
 
@@ -343,6 +393,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         pendingHalf = null;
         return;
       }
+      flushHalf();
       const r = nextRow();
       label(r, 0, f.label);
       value(r, 1, mid - 1, f);
@@ -381,6 +432,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       if (f.visibleIf && !groupOf.has(f.key)) for (let r = before; r < row; r++) condRows.push({ r, visibleIf: f.visibleIf });
     }
   }
+  flushHalf();
 
   /** '표' — 제목 줄 + 표 칸(병합·굵게·정렬·회색 바탕), 빈 칸은 입력 칸, 마지막 줄은 반복 구간 */
   function placeTable(f: FormField): Sheet {
@@ -395,6 +447,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     }
     const top = row;
     const tc = t.cols.length;
+    if (f.label) tables.set(f.label.trim(), { top, cols: t.cols, rows: t.rows });
     const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
     const repeat = legacyRepeatRows(t, headerRows);
     const untranslated: string[] = [];
@@ -406,14 +459,14 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
         if (c2 > j) merge(r, j, c2);
         const text = String(tr[tcol] ?? '');
         const legacyFormula = t.cellFormulas[`${i}:${tcol}`] ?? (t.sumCell && t.sumCell.rIdx === i && t.sumCell.col === tcol ? { expression: '=SUM(ABOVE)' } : undefined);
-        const formula = legacyFormula ? translateLegacyFormula(legacyFormula.expression, { r: i, col: tcol, top, cols: t.cols, rows: t.rows }, legacyFormula.format) : null;
-        if (formula) {
-          s = setCellValue(s, r, j, formula);
-          const fmt = legacyFormula?.format;
-          const numFmt = fmt === 'currency' ? 'currency' : fmt === 'percent1' || fmt === 'percent2' ? 'percent' : undefined;
-          if (numFmt) s = applyStyle(s, span(r, j, j), { numFmt });
-        } else {
-          if (legacyFormula) untranslated.push(`${colLetter(j)}${r + 1}`);
+        const at = { r: i, col: tcol, top, cols: t.cols, rows: t.rows };
+        const formula = legacyFormula ? translateLegacyFormula(legacyFormula.expression, { ...at, tables }, legacyFormula.format) : null;
+        if (formula) putFormula(r, j, formula, legacyFormula?.format);
+        else {
+          // 다른 표를 가리키는 식은 그 표가 아래에 있을 수 있어 표를 다 놓은 뒤 다시(그동안은 값)
+          const expr = String(legacyFormula?.expression ?? '');
+          if (legacyFormula && expr.includes('!')) deferred.push({ r, j, expr, format: legacyFormula.format, at, table: f.label || '표' });
+          else if (legacyFormula) untranslated.push(`${colLetter(j)}${r + 1}`);
           if (text) s = setCellValue(s, r, j, text, { allowFormula: false });
         }
         const st = t.cellStyles[`${i}:${tcol}`];
@@ -456,9 +509,20 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     return s;
   }
 
+  // 다른 표를 가리키던 수식 — 이제 모든 표 자리를 안다
+  const unresolved = new Map<string, string[]>();
+  for (const d of deferred) {
+    const formula = translateLegacyFormula(d.expr, { ...d.at, tables }, d.format);
+    if (formula) putFormula(d.r, d.j, formula, d.format);
+    else unresolved.set(d.table, [...(unresolved.get(d.table) ?? []), `${colLetter(d.j)}${d.r + 1}`]);
+  }
+  unresolved.forEach((cells, table) =>
+    warnings.push(`'${table}'의 수식 중 ${cells.join(', ')}은(는) 옮기지 못해 값만 넣었습니다(찾지 못한 표·줄을 가리키는 식) — 시트 수식으로 다시 넣어 주세요.`)
+  );
+
   // 빈 마지막 줄(시작용 한 줄을 안 썼을 때) 정리는 하지 않는다 — 본문 아래 여유 줄
   if (row === 0) warnings.push('옮길 항목이 없습니다 — 빈 본문으로 만들었습니다.');
-  if (noRepeat.length) warnings.push(`표 ${noRepeat.join(', ')}에는 품목처럼 같은 모양으로 이어지는 빈 줄이 없어 [행 추가] 구간을 두지 않았습니다 — 기안자가 줄을 더해야 하는 표면 그 줄을 골라 반복 구간으로 지정하세요.`);
+  if (noRepeat.length) warnings.push(`표 ${noRepeat.join(', ')}은(는) 줄이 정해진 표(줄마다 이름표가 다름)로 보고 [행 추가] 구간을 두지 않았습니다 — 기안자가 줄을 더해야 하는 표면 그 줄을 골라 반복 구간으로 지정하세요.`);
 
   // 행 보이기 조건 — 기존 visibleIf '키:값'. 조건 칸에는 기존 키를 칸 이름으로(선택 칸은 이미 붙어 있음)
   const missing = new Set<string>();
@@ -489,5 +553,49 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     info: withInfo,
     closingBlock: !hiddenHead.has('closing'),
   });
-  return { sheet: s, link, warnings };
+  return { sheet: fitColumnWidths(s, PAGE), link, warnings };
+}
+
+/** 글자 폭 어림(px, 12px 글꼴) — 변환은 화면 없이도 돌아야 해서(엑셀 불러오기·시험) 글자 종류로 어림한다 */
+export function approxTextWidth(text: string, bold = false): number {
+  const line = (t: string) =>
+    [...t].reduce((w, ch) => w + (/[ᄀ-ᇿ　-鿿가-힯＀-￯]/.test(ch) ? 12 : /[A-Z0-9%@#]/.test(ch) ? 7.5 : ch === ' ' ? 3.5 : 6.5), 0);
+  const w = Math.max(0, ...text.split('\n').map(line));
+  return bold ? w * 1.06 : w;
+}
+
+/**
+ * 열 너비 — 고르게 나눈 너비에서 시작해, 한 열에만 든 글자(이름표 등)가 잘리는 열은 넓히고 여유 있는 열에서 덜어 낸다.
+ * 여러 열을 합친 칸·수식 칸의 글자는 보지 않는다. 다 넓힐 자리가 없으면 필요한 너비 비율대로 나눈다(전체 폭은 그대로)
+ */
+export function fitColumnWidths(s: Sheet, total: number): Sheet {
+  const PAD = 12;
+  const MIN = 36;
+  const CAP = 180;
+  const wide = new Set<string>();
+  for (const m of s.merges) {
+    if (m.colSpan < 2) continue;
+    for (let r = m.startRow; r < m.startRow + m.rowSpan; r++) for (let c = m.startCol; c < m.startCol + m.colSpan; c++) wide.add(`${r}:${c}`);
+  }
+  const need = s.cols.map((col, c) => {
+    let w = MIN;
+    s.rows.forEach((row, r) => {
+      const t = String(row[col] ?? '');
+      if (!t || wide.has(`${r}:${c}`) || s.formulas[`${r}:${col}`]) return;
+      w = Math.max(w, Math.min(CAP, approxTextWidth(t, !!s.styles[`${r}:${col}`]?.bold) + PAD));
+    });
+    return w;
+  });
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  let widths: number[];
+  if (sum(need) > total) widths = need.map((w) => (w * total) / sum(need));
+  else {
+    const even = total / s.cols.length;
+    widths = need.map((w) => Math.max(w, even));
+    // 넓힌 만큼 여유 있는 열(필요보다 넓은 열)에서 여유에 비례해 덜어 낸다
+    const over = sum(widths) - total;
+    const spare = widths.map((w, c) => w - need[c]);
+    if (over > 0 && sum(spare) > 0) widths = widths.map((w, c) => w - (over * spare[c]) / sum(spare));
+  }
+  return { ...s, colWidths: Object.fromEntries(s.cols.map((c, i) => [c, Math.floor(widths[i])])) };
 }
