@@ -51,7 +51,8 @@ function WidgetPreview({ id, side }: { id: WidgetId; side: 'left' | 'right' }) {
 }
 
 const LIB_POS_KEY = 'workfit.execDashboard.libraryPos';
-const LIB_FOLD_KEY = 'workfit.execDashboard.libraryFold';
+/** 펼쳐 둔 모듈 — 처음에는 모두 접혀 있다 */
+const LIB_OPEN_KEY = 'workfit.execDashboard.libraryOpen';
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key);
@@ -76,7 +77,7 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
   onDragEnd: () => void;
 }) {
   const [hover, setHover] = useState<WidgetId | null>(null);
-  const [folded, setFolded] = useState<string[]>(() => readJson<string[]>(LIB_FOLD_KEY, []));
+  const [opened, setOpened] = useState<string[]>(() => readJson<string[]>(LIB_OPEN_KEY, []));
   /** 판의 왼쪽 위(화면 배율을 걷어 낸 px). 없으면 오른쪽 기본 자리 */
   const [pos, setPos] = useState<{ x: number; y: number } | null>(() => readJson<{ x: number; y: number } | null>(LIB_POS_KEY, null));
   const [moving, setMoving] = useState(false);
@@ -147,9 +148,9 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
   };
 
   const toggleFold = (m: string) =>
-    setFolded((f) => {
+    setOpened((f) => {
       const next = f.includes(m) ? f.filter((x) => x !== m) : [...f, m];
-      writeJson(LIB_FOLD_KEY, next);
+      writeJson(LIB_OPEN_KEY, next);
       return next;
     });
 
@@ -179,7 +180,7 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
         {MODULES.map((m) => {
           const ids = WIDGET_IDS.filter((id) => WIDGETS[id].module === m);
           const onCount = ids.filter((id) => layout.some((s) => s.id === id)).length;
-          const open = !folded.includes(m);
+          const open = opened.includes(m);
           return (
             <section key={m}>
               <button
@@ -207,9 +208,8 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
                           draggable={!on}
                           onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, id); e.dataTransfer.effectAllowed = 'copy'; setHover(null); onDragStart(id); }}
                           onDragEnd={onDragEnd}
-                          className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-1.5 ${on ? 'bg-[#eef6fd] dark:bg-sky-500/10' : 'cursor-grab hover:bg-panel-alt active:cursor-grabbing'}`}
+                          className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-2.5 ${on ? 'bg-[#eef6fd] dark:bg-sky-500/10' : 'cursor-grab hover:bg-panel-alt active:cursor-grabbing'}`}
                         >
-                          <GripVertical size={14} className={`shrink-0 ${on ? 'text-transparent' : 'text-ink3'}`} aria-hidden="true" />
                           <span className={`min-w-0 flex-1 truncate text-[13px] ${on ? 'font-bold text-ink' : 'text-ink2'}`}>{title}</span>
                           <button
                             type="button"
