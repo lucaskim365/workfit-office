@@ -58,13 +58,13 @@ export type WidgetId = keyof typeof WIDGETS;
 export const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[];
 export const MODULES = [...new Set(WIDGET_IDS.map((id) => WIDGETS[id].module))];
 
-/** 웹 기본 배치 — 오늘 일정(대), 내 근태·전자결재·생일자(중), 공지사항(대). 빈칸 없이 맞물린다 */
+/** 웹 기본 배치 — 오늘 일정(대), 내 근태·전자결재(중), 이달의 생일자·공지사항(중). 높이가 같아 빈칸 없이 맞물린다 */
 export const DEFAULT_LAYOUT: WidgetSlot<WidgetId>[] = [
   { id: 'today', size: 12, x: 0, y: 0 },
-  { id: 'attendance', size: 6, x: 0, y: 5 },
-  { id: 'approval', size: 6, x: 6, y: 5 },
-  { id: 'birthday', size: 6, x: 6, y: 9 },
-  { id: 'notice', size: 12, x: 0, y: 12 },
+  { id: 'attendance', size: 6, x: 0, y: 6 },
+  { id: 'approval', size: 6, x: 6, y: 6 },
+  { id: 'notice', size: 6, x: 0, y: 12 },
+  { id: 'birthday', size: 6, x: 6, y: 12 },
 ];
 
 /** 휴대폰 기본 — size 6 은 반 칸(요약), 12 는 한 줄 전체 */
