@@ -128,10 +128,13 @@ export const GRID_COLS = 12;
 /** 위젯 기본 폭 — 12칸 중 몇 칸 */
 export type WidgetSize = 4 | 6 | 8 | 12;
 
-/** 위젯 크기 단계 — 소(6칸, 대의 절반)·중(9칸, 소와 대의 중간)·대(12칸, 한 줄 전체). 모든 위젯이 세 단계를 다 가진다 */
+/**
+ * 위젯 크기 단계 — 소(4칸, 한 줄에 3개)·중(6칸, 2개)·대(12칸, 1개). 모든 위젯이 세 단계를 다 가진다.
+ * 중 1 + 소 1 줄은 두 위젯을 비율대로 늘려 줄을 채운다(stretchRows).
+ */
 export type Tier = 'S' | 'M' | 'L';
 export const TIERS: readonly Tier[] = ['S', 'M', 'L'];
-export const TIER_COLS: Record<Tier, 6 | 9 | 12> = { S: 6, M: 9, L: 12 };
+export const TIER_COLS: Record<Tier, 4 | 6 | 12> = { S: 4, M: 6, L: 12 };
 export const TIER_LABEL: Record<Tier, string> = { S: '소', M: '중', L: '대' };
 /** 칸 수 → 가장 가까운 단계(예전에 끌어서 맞춘 폭도 여기로). 같은 거리면 작은 쪽 */
 export function tierOf(cols: number): Tier {
@@ -269,4 +272,33 @@ export function mobilePath(path: string): string {
     default:
       return '/m';
   }
+}
+
+/** 그릴 때의 가로 칸 수 — 한 칸을 5로 나눠 중+소 줄(10칸)도 줄 끝까지 맞춰 늘릴 수 있게 한다 */
+export const DRAW_COLS = GRID_COLS * 5;
+
+/**
+ * 그릴 자리 — 같은 줄의 위젯 폭 합이 10~11칸이라 빈 끝이 소(4칸)보다 좁으면(중+소),
+ * 그 줄의 위젯을 폭 비율대로 늘려 줄을 채운다. 나머지는 칸 그대로(×5).
+ */
+export function stretchRows(boxes: Map<string, Box>): Map<string, { x: number; w: number }> {
+  const out = new Map<string, { x: number; w: number }>();
+  const rows = new Map<number, [string, Box][]>();
+  for (const [id, b] of boxes) {
+    out.set(id, { x: b.x * 5, w: b.w * 5 });
+    rows.set(b.y, [...(rows.get(b.y) ?? []), [id, b]]);
+  }
+  for (const row of rows.values()) {
+    if (row.length < 2 || row.some(([, b]) => b.h !== row[0][1].h)) continue;
+    const used = row.reduce((n, [, b]) => n + b.w, 0);
+    if (used >= GRID_COLS || GRID_COLS - used >= TIER_COLS.S) continue;
+    row.sort((a, b) => a[1].x - b[1].x);
+    let x = 0;
+    row.forEach(([id, b], i) => {
+      const w = i === row.length - 1 ? DRAW_COLS - x : Math.round((b.w * DRAW_COLS) / used);
+      out.set(id, { x, w });
+      x += w;
+    });
+  }
+  return out;
 }

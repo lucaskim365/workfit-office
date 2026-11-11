@@ -1,27 +1,27 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, Undo2, X } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, Pencil, Undo2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { arrange, CELL_GAP, CELL_H, GRID_COLS, PITCH, rowsHeight, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
+import { arrange, CELL_GAP, CELL_H, DRAW_COLS, GRID_COLS, PITCH, rowsHeight, stretchRows, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
 import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
 import { WidgetTierProvider } from './widgets';
 
 /**
  * 홈(경영 현황) — 로그인 후 첫 화면.
  * 화면은 모눈(가로 12칸, 세로 64px 칸)으로 나뉘고, 위젯은 늘 왼쪽 위로 붙는다(빈칸은 높이가 다른 위젯 옆에만).
- * 편집: 위젯은 끌어서 옮기고, 크기는 소(6칸, 대의 절반)·중(9칸)·대(12칸) 단추로 바꾼다. 높이는 모든 위젯이 같다.
+ * 편집: 위젯은 끌어서 옮기고, 크기는 소(4칸)·중(6칸)·대(12칸) 단추로 바꾼다. 중+소 줄은 두 위젯을 늘려 줄을 채운다. 높이는 모든 위젯이 같다.
  * 편집 띠의 '위젯 보관함'을 열면 화면 위에 떠서(모듈 → 위젯, 끌어서 옮기고 모듈별로 펴고 접기) 눈을 켜고 끈다. 닫으면 화면에는 놓인 위젯만 깔린다. 바꾼 것은 '적용'을 눌러야 저장되고, '취소'면 그대로 돌아간다.
  * 배치는 사용자별로 이 브라우저에 저장한다(데이터베이스는 건드리지 않는다).
  */
 
 /** 미리보기를 그릴 실제 폭 — 이 폭으로 그린 뒤 줄여 보인다 */
-const PREVIEW_WIDTH: Record<Tier, number> = { S: 620, M: 900, L: 1180 };
+const PREVIEW_WIDTH: Record<Tier, number> = { S: 420, M: 620, L: 1180 };
 /** 위젯 보관함 폭 */
 const LIBRARY_W = 264;
 /** 위젯 구역 — 가운데 두고 양옆에 늘 여백을 남긴다(보이는 폭 최대 1200px, 화면 폭의 80%까지) */
 const AREA_MAX = 1200;
 const AREA_RATIO = 0.8;
 /** 홈 화면 배율 — 홈에서만 위젯을 조금 작게 그린다 */
-const HOME_ZOOM = 0.9;
+const HOME_ZOOM = 0.7;
 /** 보관함 미리보기 폭 */
 const PREVIEW_BOX = 300;
 
@@ -176,13 +176,13 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
         <span className="ml-auto text-[11.5px] text-ink3">표시 <strong className="tabular-nums text-[#0876c8]">{shownCount}</strong> / {WIDGET_IDS.length}</span>
         <button type="button" onClick={onClose} aria-label="위젯 보관함 닫기" className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><X size={16} /></button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
         {MODULES.map((m) => {
           const ids = WIDGET_IDS.filter((id) => WIDGETS[id].module === m);
           const onCount = ids.filter((id) => layout.some((s) => s.id === id)).length;
           const open = opened.includes(m);
           return (
-            <section key={m}>
+            <section key={m} className="border-t border-border py-1 first:border-t-0">
               <button
                 type="button"
                 onClick={() => toggleFold(m)}
@@ -194,7 +194,7 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
                 <span className={`text-[11px] tabular-nums ${onCount ? 'font-bold text-[#0876c8]' : 'text-ink3'}`}>{onCount}/{ids.length}</span>
               </button>
               {open && (
-                <ul className="m-0 mb-1 flex list-none flex-col gap-0.5 p-0 pl-3">
+                <ul className="m-0 mb-1 ml-[13px] flex list-none flex-col gap-0.5 border-l border-border p-0 pl-2">
                   {ids.map((id) => {
                     const on = layout.some((s) => s.id === id);
                     const title = WIDGETS[id].title;
@@ -208,16 +208,16 @@ function WidgetLibrary({ layout, onToggle, onDragStart, onDragEnd, onClose }: {
                           draggable={!on}
                           onDragStart={(e) => { e.dataTransfer.setData(DRAG_NEW, id); e.dataTransfer.effectAllowed = 'copy'; setHover(null); onDragStart(id); }}
                           onDragEnd={onDragEnd}
-                          className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-2.5 ${on ? 'bg-[#eef6fd] dark:bg-sky-500/10' : 'cursor-grab hover:bg-panel-alt active:cursor-grabbing'}`}
+                          className={`flex items-center gap-1.5 rounded-lg py-1 pr-1 pl-2 hover:bg-panel-alt ${on ? '' : 'cursor-grab active:cursor-grabbing'}`}
                         >
-                          <span className={`min-w-0 flex-1 truncate text-[13px] ${on ? 'font-bold text-ink' : 'text-ink2'}`}>{title}</span>
+                          <span className={`min-w-0 flex-1 truncate text-[13px] ${on ? 'font-semibold text-ink' : 'text-ink3'}`}>{title}</span>
                           <button
                             type="button"
                             onClick={() => onToggle(id)}
                             aria-pressed={on}
                             aria-label={on ? `${title} 숨기기` : `${title} 보이기`}
                             title={on ? '숨기기' : '보이기'}
-                            className={`grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md ${on ? 'text-[#0876c8] hover:bg-white dark:hover:bg-white/10' : 'text-ink3 hover:bg-white hover:text-ink2 dark:hover:bg-white/10'}`}
+                            className={`grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md hover:bg-white dark:hover:bg-white/10 ${on ? 'text-[#0876c8]' : 'text-ink3/70 hover:text-ink2'}`}
                           >
                             {on ? <Eye size={16} /> : <EyeOff size={16} />}
                           </button>
@@ -257,7 +257,7 @@ function GridDots({ rows }: { rows: number }) {
         <span
           key={`${r}-${c}`}
           className="absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#b9d2ea] dark:bg-white/15"
-          style={{ left: `calc(${c} * (100% + ${CELL_GAP}px) / ${GRID_COLS} - ${CELL_GAP / 2}px)`, top: r * PITCH - CELL_GAP / 2 }}
+          style={{ left: `calc(${c} * 100% / ${GRID_COLS})`, top: r * PITCH - CELL_GAP / 2 }}
         />,
       );
     }
@@ -399,7 +399,7 @@ export default function ExecDashboardScreen() {
     const grid = gridRef.current!;
     const rect = grid.getBoundingClientRect();
     const scale = rect.width ? grid.offsetWidth / rect.width : 1;
-    const pitchX = (grid.offsetWidth + CELL_GAP) / GRID_COLS;
+    const pitchX = grid.offsetWidth / GRID_COLS;
     return { col: Math.floor(((clientX - rect.left) * scale) / pitchX), row: Math.floor(((clientY - rect.top) * scale) / PITCH), x: (clientX - rect.left) * scale, y: (clientY - rect.top) * scale, pitchX };
   };
 
@@ -439,11 +439,19 @@ export default function ExecDashboardScreen() {
     return p.y - q.y || p.x - q.x;
   });
 
+  /** 그릴 자리 — 중+소 줄은 늘려 채운다. 칸 사이 간격은 위젯 양옆 안쪽 여백으로(늘린 줄도 간격이 같게) */
+  const drawn = stretchRows(boxes);
   const grid = (
     <div
       ref={gridRef}
-      className="relative grid min-w-0 grid-cols-12"
-      style={{ gridAutoRows: CELL_H, gap: CELL_GAP, minHeight: canEdit ? rowsHeight(bottom + 4) : undefined }}
+      className="relative grid min-w-0"
+      style={{
+        gridTemplateColumns: `repeat(${DRAW_COLS}, minmax(0, 1fr))`,
+        gridAutoRows: CELL_H,
+        rowGap: CELL_GAP,
+        marginInline: -CELL_GAP / 2,
+        minHeight: canEdit ? rowsHeight(bottom + 4) : undefined,
+      }}
       onDragOver={dragOverGrid}
       onDrop={(e) => { if (canEdit && (dragId || dragNew)) drop(e); }}
     >
@@ -451,6 +459,7 @@ export default function ExecDashboardScreen() {
       {canEdit && <GridDots rows={bottom + 4} />}
       {shown.map((slot) => {
         const box = boxes.get(slot.id)!;
+        const at = drawn.get(slot.id)!;
         const isNew = !layout.some((s) => s.id === slot.id);
         const isDragged = dragId === slot.id || (isNew && canEdit);
         const tier = tierOfSlot(slot);
@@ -462,7 +471,7 @@ export default function ExecDashboardScreen() {
             data-slot-id={slot.id}
             data-tier={tier}
             className="group/slot relative z-[1] min-w-0"
-            style={{ gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` }}
+            style={{ gridColumn: `${at.x + 1} / span ${at.w}`, gridRow: `${box.y + 1} / span ${box.h}`, paddingInline: CELL_GAP / 2 }}
             draggable={canEdit && armed === slot.id}
             onPointerDown={(e) => {
               if (!canEdit || (e.target as HTMLElement).closest('button')) return;
@@ -501,7 +510,7 @@ export default function ExecDashboardScreen() {
             {canEdit && !isDragged && (
               <>
                 {/* 크기(소·중·대)와 숨기기 — 오른쪽 위, 커서를 올리면 */}
-                <div className={`absolute -top-3 right-3 z-40 flex items-center gap-0.5 rounded-full border-2 border-[#0876c8] bg-panel p-0.5 shadow-md transition-opacity focus-within:opacity-100 opacity-0 group-hover/slot:opacity-100`}>
+                <div className="absolute -top-3 right-5 z-40 flex items-center gap-0.5 rounded-md border border-border bg-panel p-0.5 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover/slot:opacity-100">
                   <div role="radiogroup" aria-label={`${title} 크기`} className="flex gap-0.5">
                     {TIERS.map((t) => {
                       const on = t === tier;
@@ -513,7 +522,7 @@ export default function ExecDashboardScreen() {
                           aria-checked={on}
                           aria-label={`${title} ${TIER_LABEL[t]}`}
                           onClick={() => { if (!on) setTier(slot.id, t); }}
-                          className={`grid h-6 w-7 cursor-pointer place-items-center rounded-full text-[11.5px] font-extrabold ${on ? 'bg-[#0876c8] text-white' : 'text-[#0876c8] hover:bg-[#e0f0fb] dark:hover:bg-white/10'}`}
+                          className={`grid h-6 w-7 cursor-pointer place-items-center rounded text-[11.5px] ${on ? 'bg-panel-alt font-bold text-ink' : 'text-ink3 hover:bg-panel-alt hover:text-ink2'}`}
                         >
                           {TIER_LABEL[t]}
                         </button>
@@ -526,7 +535,7 @@ export default function ExecDashboardScreen() {
                     onClick={() => commit(layout.filter((s) => s.id !== slot.id))}
                     aria-label={`${title} 숨기기`}
                     title="숨기기"
-                    className="grid h-6 w-7 cursor-pointer place-items-center rounded-full text-ink3 hover:bg-[#fdecea] hover:text-[#c4432f]"
+                    className="grid h-6 w-7 cursor-pointer place-items-center rounded text-ink3 hover:bg-panel-alt hover:text-ink2"
                   >
                     <EyeOff size={14} />
                   </button>
@@ -540,49 +549,52 @@ export default function ExecDashboardScreen() {
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 pb-10">
-      {/* 편집 도구 — 편집 중에는 파란 띠로, 적용해야 저장된다 */}
+    <div className="relative mx-auto flex w-full max-w-[1440px] min-w-0 flex-col gap-3 pb-10">
+      {/* 편집 도구 — 편집 중에는 위에 얇은 줄로, 적용해야 저장된다 */}
       {canEdit ? (
-        <div className="flex items-center gap-2 rounded-2xl bg-[#e0f0fb] px-4 py-2.5 dark:bg-sky-500/15">
-          <span className="text-[14px] font-extrabold text-[#0b4f86] dark:text-sky-200">홈 편집</span>
+        <div className="flex items-center gap-1 border-b border-border pb-2 text-[12px]">
+          <span className="mr-2 font-bold text-ink">홈 편집</span>
           <button
             type="button"
             onClick={() => setLibOpen((v) => !v)}
             aria-pressed={libOpen}
-            className={`ml-3 flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-bold ${libOpen ? 'bg-[#0876c8] text-white hover:bg-[#066aaf]' : 'border border-[#0876c8] bg-panel text-[#0876c8] hover:bg-white'}`}
+            className={`flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-semibold hover:bg-panel-alt ${libOpen ? 'text-[#0876c8]' : 'text-ink2'}`}
           >
-            <LayoutGrid size={15} />위젯 보관함
+            <LayoutGrid size={13} />위젯 보관함
           </button>
-          <div className="ml-auto flex items-center gap-2">
-            {dirty && <span className="mr-1 text-[12px] font-bold text-[#2f6fa5] dark:text-sky-200">적용하지 않은 변경</span>}
+          <div className="ml-auto flex items-center gap-1">
+            {dirty && <span className="mr-2 text-[11.5px] text-ink3">적용하지 않은 변경</span>}
             <button
               type="button"
               onClick={undo}
               disabled={!history.length}
               title="되돌리기 (Ctrl+Z)"
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent dark:text-sky-200 dark:hover:bg-white/10"
+              aria-label="되돌리기"
+              className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-ink2 hover:bg-panel-alt disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent"
             >
-              <Undo2 size={15} />되돌리기
+              <Undo2 size={14} />
             </button>
-            <button type="button" onClick={() => commit(DEFAULT_LAYOUT)} className="cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-bold text-[#2f6fa5] hover:bg-white/70 dark:text-sky-200 dark:hover:bg-white/10">
+            <button type="button" onClick={() => commit(DEFAULT_LAYOUT)} className="cursor-pointer rounded-md px-2 py-1 font-semibold text-ink2 hover:bg-panel-alt">
               기본 배치
             </button>
-            <button type="button" onClick={cancelEdit} className="cursor-pointer rounded-lg border border-border bg-panel px-4 py-2 text-[12.5px] font-bold text-ink2 hover:border-ink3">
+            <button type="button" onClick={cancelEdit} className="cursor-pointer rounded-md px-2 py-1 font-semibold text-ink2 hover:bg-panel-alt">
               취소
             </button>
-            <button type="button" onClick={applyEdit} className="cursor-pointer rounded-lg bg-[#0876c8] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#066aaf]">
+            <button type="button" onClick={applyEdit} className="ml-1 cursor-pointer rounded-md bg-[#0876c8] px-3 py-1 font-semibold text-white hover:bg-[#066aaf]">
               적용
             </button>
           </div>
         </div>
       ) : wide ? (
-        <div className="mx-auto flex justify-end" style={areaW > 0 ? { width: viewW } : undefined}>
+        // 화면 편집 — 줄을 차지하지 않고 오른쪽 위 여백에 작게
+        <div className="absolute top-0 right-0 z-10">
           <button
             type="button"
             onClick={startEdit}
-            className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]"
+            title="화면 편집"
+            className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-ink3 hover:bg-panel-alt hover:text-ink2"
           >
-            화면 편집
+            <Pencil size={12} />편집
           </button>
         </div>
       ) : null}

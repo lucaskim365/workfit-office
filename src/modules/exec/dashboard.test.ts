@@ -154,5 +154,20 @@ test('위젯 링크 → 모바일 화면 주소', () => {
 import { tierOf } from './dashboard';
 
 test('위젯 크기 단계 — 칸 수는 가장 가까운 소·중·대로', () => {
-  assert.deepEqual([1, 4, 6, 7, 8, 9, 10, 11, 12].map(tierOf), ['S', 'S', 'S', 'S', 'M', 'M', 'M', 'L', 'L']);
+  assert.deepEqual([1, 4, 5, 6, 8, 9, 10, 12].map(tierOf), ['S', 'S', 'S', 'M', 'M', 'M', 'L', 'L']);
+});
+
+import { stretchRows } from './dashboard';
+
+test('stretchRows: 중+소 줄만 줄 끝까지 비율대로 늘리고, 소3·중2·대·덜 찬 줄은 칸 그대로', () => {
+  const m = (list: [string, number, number, number][]) => new Map(list.map(([id, x, y, w]) => [id, { x, y, w, h: 6 }]));
+  const r = stretchRows(m([['mid', 0, 0, 6], ['sm', 6, 0, 4], ['a', 0, 6, 4], ['b', 4, 6, 4], ['c', 8, 6, 4], ['d', 0, 12, 4], ['e', 4, 12, 4], ['big', 0, 18, 12]]));
+  assert.deepEqual(r.get('mid'), { x: 0, w: 36 });
+  assert.deepEqual(r.get('sm'), { x: 36, w: 24 });
+  assert.deepEqual(r.get('c'), { x: 40, w: 20 });
+  assert.deepEqual(r.get('e'), { x: 20, w: 20 });
+  assert.deepEqual(r.get('big'), { x: 0, w: 60 });
+  // 소 먼저, 중 나중
+  const s = stretchRows(m([['sm', 0, 0, 4], ['mid', 4, 0, 6]]));
+  assert.deepEqual([s.get('sm'), s.get('mid')], [{ x: 0, w: 24 }, { x: 24, w: 36 }]);
 });
