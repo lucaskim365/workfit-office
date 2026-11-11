@@ -17,9 +17,11 @@ import { WidgetTierProvider } from './widgets';
 const PREVIEW_WIDTH: Record<Tier, number> = { S: 620, M: 900, L: 1180 };
 /** 위젯 보관함 폭 */
 const LIBRARY_W = 264;
-/** 위젯 구역 — 가운데 두고 양옆에 늘 여백을 남긴다(최대 1280px, 화면 폭의 88%까지) */
-const AREA_MAX = 1280;
-const AREA_RATIO = 0.88;
+/** 위젯 구역 — 가운데 두고 양옆에 늘 여백을 남긴다(보이는 폭 최대 1200px, 화면 폭의 80%까지) */
+const AREA_MAX = 1200;
+const AREA_RATIO = 0.8;
+/** 홈 화면 배율 — 홈에서만 위젯을 조금 작게 그린다 */
+const HOME_ZOOM = 0.9;
 /** 보관함 미리보기 폭 */
 const PREVIEW_BOX = 300;
 
@@ -285,6 +287,10 @@ export default function ExecDashboardScreen() {
   const [areaW, setAreaW] = useState(0);
   /** 위젯 구역의 폭 */
   const viewW = Math.min(AREA_MAX, Math.round(areaW * AREA_RATIO));
+  /** 위젯 구역을 그리는 폭(배율을 곱하면 보이는 폭 viewW) */
+  const drawW = Math.round(viewW / HOME_ZOOM);
+  /** 편집 중 보관함을 열면 양옆 여백이 보관함 폭만큼 되도록 더 줄인다(글이 안 읽힐 만큼은 아님) */
+  const editZoom = libOpen ? Math.max(0.6, Math.min(HOME_ZOOM, (areaW - 2 * (LIBRARY_W + 28)) / drawW)) : HOME_ZOOM;
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
@@ -591,13 +597,15 @@ export default function ExecDashboardScreen() {
               <div className="flex justify-center">
                 <div
                   className="transition-[zoom] duration-200"
-                  style={{ width: viewW, zoom: libOpen ? Math.max(0.62, Math.min(1, (areaW - 2 * (LIBRARY_W + 28)) / viewW)) : 1 }}
+                  style={{ width: drawW, zoom: editZoom }}
                 >
                   {grid}
                 </div>
               </div>
             ) : (
-              <div className="mx-auto" style={{ width: viewW }}>{grid}</div>
+              <div className="flex justify-center">
+                <div style={{ width: drawW, zoom: HOME_ZOOM }}>{grid}</div>
+              </div>
             )}
           </div>
           {canEdit && libOpen && (
