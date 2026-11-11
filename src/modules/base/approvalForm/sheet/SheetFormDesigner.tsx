@@ -40,6 +40,7 @@ import {
   setApprovalCellValue,
   validateApprovalSheet,
 } from '@/domain/approvalForm/sheet/approvalSheet';
+import { rowsHiddenWhen } from '@/domain/approvalForm/sheet/valueRules';
 import { SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
@@ -319,6 +320,19 @@ function Designer({
   const sections = useMemo(() => repeatSections(sheet), [sheet]);
   // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
   const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
+  // '값에 따라 바뀌는 것' 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 흐리게
+  const [rulePreview, setRulePreview] = useState<{ name: string; value: string } | null>(null);
+  const previewHidden = useMemo(() => (rulePreview ? rowsHiddenWhen(sheet, rulePreview.name, rulePreview.value) : null), [sheet, rulePreview]);
+  const badgeWithPreview = (r: number, c: number) => {
+    const inner = badge(r, c);
+    if (!previewHidden?.has(r)) return inner;
+    return (
+      <>
+        {inner}
+        <span aria-hidden title={`미리보기 — '${rulePreview?.value}'일 때 이 행은 숨습니다`} className="pointer-events-none absolute inset-0 z-[2] bg-slate-500/30 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgba(255,255,255,.35)_6px_8px)]" />
+      </>
+    );
+  };
   const badge = (r: number, c: number) => {
     if (markMode === 'off') return null;
     const p = approvalCellProps(sheet, r, c);
@@ -894,7 +908,7 @@ function Designer({
             canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}
             canDeleteCol={(s, c) => !isStructureLocked(s, 'col', c)}
             setValue={setApprovalCellValue}
-            renderBadge={badge}
+            renderBadge={badgeWithPreview}
             onSelect={setSelection}
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
@@ -998,7 +1012,7 @@ function Designer({
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
               )}
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} external={!!form.hideDocInfoOnComplete} onPreview={setRulePreview} />
             </>
           ) : side === 'settings' ? (
             <SheetFormSettings form={form} onChange={set} />
