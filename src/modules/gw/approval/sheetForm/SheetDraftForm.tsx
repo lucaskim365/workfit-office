@@ -9,6 +9,7 @@ import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
 import { SelectorDialog } from '../components/DraftRecipientSection';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { versionKey } from '@/domain/approvalForm/sheetVersion';
+import { docTitleLook } from '@/domain/approvalForm/docTitle';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import {
   CHECK_MARK,
@@ -214,9 +215,15 @@ export function SheetFormTitle({ text }: { text: string }) {
     if (stamp) ro.observe(stamp);
     return () => ro.disconnect();
   }, [text]);
+  // 글자 간격은 제목 길이에 맞춰(docTitle.ts) — 마지막 글자 뒤에도 붙는 간격만큼 왼쪽 여백을 줘 가운데를 맞춘다
+  const look = docTitleLook(text);
   return (
-    <span ref={ref} className="inline-block font-extrabold tracking-[0.15em]" style={shift ? { transform: `translateX(${shift}px)` } : undefined}>
-      {text}
+    <span
+      ref={ref}
+      className="inline-block font-extrabold"
+      style={{ letterSpacing: look.letterSpacing, paddingLeft: look.letterSpacing, ...(shift ? { transform: `translateX(${shift}px)` } : {}) }}
+    >
+      {look.text}
     </span>
   );
 }
