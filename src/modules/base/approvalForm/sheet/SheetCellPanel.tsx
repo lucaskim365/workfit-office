@@ -7,8 +7,8 @@ import {
   COMMON_CELL_NAMES,
   approvalCellProps,
   cellAddress,
+  cellCaption,
   CHECK_MARK,
-  conditionSources,
   DIRECT_INPUT_OPTION,
   isDirectInputOption,
   rowConditionOf,
@@ -22,6 +22,18 @@ import {
   linkTypeDef,
   nameLabel,
 } from '@/domain/approvalForm/sheet/approvalSheet';
+import {
+  clearDependent,
+  dependentCheck,
+  ensureSourceName,
+  makeDependent,
+  rowsWithOtherCondition,
+  showRowsFor,
+  valueSourceAt,
+  valueSources,
+  withBranchOptions,
+} from '@/domain/approvalForm/sheet/valueRules';
+import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { isExternalHiddenRow, setExternalHiddenRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { AutoNumberSettings } from '../components/ApprovalFormEditor';
@@ -65,10 +77,13 @@ export function SheetCellPanel({
   onChange,
   link = null,
   external = false,
+  onPreview,
 }: {
   sheet: Sheet;
   selection: SheetSelection;
   onChange: (next: Sheet) => void;
+  /** '값에 따라 바뀌는 것' 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 편집 화면에서 흐리게 */
+  onPreview?: (preview: { name: string; value: string } | null) => void;
   /** 서식의 '대외 문서'가 켜져 있는지 — 행 숨김 안내 문구 */
   external?: boolean;
   /** 연동 기능(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
@@ -123,8 +138,77 @@ export function SheetCellPanel({
     onChange(setCellName(sheet, focus.r, focus.c, name));
   };
 
+  // ── 값에 따라 바뀌는 것(기준 칸 중심 설정) ──
+  // 고정하면 다른 칸을 눌러도 그 기준 칸 설정이 남는다(행·칸을 시트에서 눌러 고르는 동안에도)
+  // 고르기는 '선택을 모아 두었다가 [적용]' — 누르는 순간 넣으면 끌어서 여러 행 고르기·화살표 이동과 구분이 안 된다.
+  // 고르는 동안·적용 직후(다른 칸을 누르기 전)에는 기준 칸 설정을 계속 보인다 — 사용자가 켜지 않은 고정은 남기지 않는다
+  const [pinned, setPinned] = useState<{ r: number; c: number } | null>(null);
+  const [pick, setPick] = useState<{ what: ValuePick; src: { r: number; c: number }; from: string } | null>(null);
+  const [hold, setHold] = useState<{ src: { r: number; c: number }; at: string } | null>(null);
+  const selKey = `${range.r1}:${range.c1}:${range.r2}:${range.c2}:${focus.r}:${focus.c}`;
+  const isSource = (p: { r: number; c: number } | null | undefined) => (p && valueSourceAt(sheet, p.r, p.c) ? p : null);
+  const focusSource = multi ? null : isSource(focus);
+  const ruleSource = isSource(pinned) ?? isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? focusSource;
+  // 고정한 칸이 더는 기준 칸이 아니면(입력 종류를 바꿈 등) 고정·고르기를 푼다
+  useEffect(() => {
+    if (pinned && !isSource(pinned)) setPinned(null);
+    if (pick && !isSource(pick.src)) setPick(null);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  // 종속 칸을 누르면 그 기준 칸 설정으로 갈 수 있게
+  const dependsOn = props.input?.depends?.name;
+  const dependsSource = dependsOn ? valueSources(sheet).find((x) => x.name === dependsOn) : undefined;
+  const startPick = (what: ValuePick | null) => setPick(what && ruleSource ? { what, src: ruleSource, from: selKey } : null);
+
+  // 지금 선택을 고른 것으로 보면 — 넣을 수 있나(block), 넣기 전에 물을 것(ask), 무엇을(target)
+  const pickPlan = (() => {
+    if (!pick || pick.from === selKey) return null;
+    const src = valueSourceAt(sheet, pick.src.r, pick.src.c);
+    if (!src) return null;
+    if (pick.what.kind === 'rows') {
+      const r1 = Math.min(range.r1, range.r2);
+      const r2 = Math.max(range.r1, range.r2);
+      const target = r1 === r2 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`;
+      if (src.r >= r1 && src.r <= r2) return { target, block: '기준 칸이 있는 행은 고를 수 없습니다(자기를 숨기면 다시 못 보임).' };
+      const others = rowsWithOtherCondition(sheet, r1, r2, src.name ?? '');
+      return { target, ask: others.length ? `${others.map((r) => r + 1).join('·')}행에는 다른 칸 조건이 걸려 있습니다. 이 조건으로 바꿀까요?` : undefined };
+    }
+    return { target: `${cellCaption(sheet, focus.r, focus.c)}(${cellAddress(focus.r, focus.c)})`, ...dependentCheck(sheet, focus.r, focus.c, src) };
+  })();
+  const applyPick = () => {
+    if (!pick || !pickPlan || pickPlan.block) return;
+    if (pickPlan.ask && !confirm(pickPlan.ask)) return;
+    const { sheet: named, name } = ensureSourceName(sheet, pick.src.r, pick.src.c);
+    if (pick.what.kind === 'rows') onChange(showRowsFor(named, Math.min(range.r1, range.r2), Math.max(range.r1, range.r2), name, pick.what.value));
+    else onChange(makeDependent(named, focus.r, focus.c, name));
+    setHold({ src: pick.src, at: selKey });
+    setPick(null);
+  };
+
   return (
     <div className="space-y-3.5 text-[12px]">
+      {ruleSource && (
+        <ValueRulesPanel
+          sheet={sheet}
+          source={ruleSource}
+          pinned={!!pinned}
+          pick={pick?.what ?? null}
+          pickPlan={pickPlan}
+          onApplyPick={applyPick}
+          onChange={onChange}
+          onPick={startPick}
+          onPin={(on) => setPinned(on ? ruleSource : null)}
+          onPreview={onPreview}
+        />
+      )}
+      {!ruleSource && dependsSource && (
+        <button
+          type="button"
+          onClick={() => setPinned({ r: dependsSource.r, c: dependsSource.c })}
+          className="w-full rounded-lg border border-dashed border-indigo-300 px-2 py-1.5 text-left text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
+        >
+          이 칸의 항목은 '{dependsSource.label}' 값에 따라 바뀝니다 — 그 설정 열기
+        </button>
+      )}
       <div className="flex items-baseline justify-between">
         <span className="text-[12.5px] font-extrabold text-ink">칸 속성</span>
         <span className="font-mono text-[11px] font-bold text-teal">{where}</span>
@@ -171,7 +255,7 @@ export function SheetCellPanel({
         />
       )}
       {props.input?.type === 'select' && !multi && (
-        <DependsEditor sheet={sheet} r={focus.r} c={focus.c} input={props.input} onInput={setInput} />
+        <DependsEditor sheet={sheet} r={focus.r} c={focus.c} input={props.input} onChange={onChange} />
       )}
 
       {props.autoNo && (
@@ -334,34 +418,38 @@ export function SheetCellPanel({
   );
 }
 
+/** 기준 칸 고르기 목록의 값 — 이름이 있으면 이름, 없으면 칸 자리(@행:열) */
+const sourceOptionKey = (x: { name?: string; r: number; c: number }) => x.name ?? `@${x.r}:${x.c}`;
+
 /**
  * 종속 선택 — 이 선택 칸의 항목을 다른 선택 칸 값에 따라 바꾼다(엑셀 종속 드롭다운).
  * 예: 지출 항목이 식대면 [간식대·외근식대·야근식대], 운반비면 [우편/택배·퀵서비스], 그 밖엔 칸을 쓸 수 없음
  */
-function DependsEditor({ sheet, r, c, input, onInput }: { sheet: Sheet; r: number; c: number; input: CellInput; onInput: (next: CellInput) => void }) {
-  const selfName = approvalCellProps(sheet, r, c).name;
-  const sources = conditionSources(sheet).filter((x) => x.name !== selfName && x.options[0] !== CHECK_MARK);
+function DependsEditor({ sheet, r, c, input, onChange }: { sheet: Sheet; r: number; c: number; input: CellInput; onChange: (next: Sheet) => void }) {
+  const at = { r1: r, r2: r, c1: c, c2: c };
+  const onInput = (next: CellInput) => onChange(setApprovalProp(sheet, at, APPROVAL_NS.input, next));
+  // 기준 칸 후보 — 이름 없는 칸도(고르면 이름을 지어 붙인다). 자기 자신·체크 칸은 빼고
+  const sources = valueSources(sheet).filter((x) => !(x.r === r && x.c === c) && x.kind !== 'checkbox');
   const dep = input.depends;
   const src = dep ? sources.find((x) => x.name === dep.name) : undefined;
   // 갈래 항목 글자 — 칸을 벗어날 때 넣는다(입력 중 쉼표 그대로)
   const textOf = (when: string) => (dep?.branches.find((b) => b.when === when)?.options ?? []).join(', ');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   useEffect(() => setDrafts({}), [r, c, dep?.name]);
+  // 반영하면 입력 중 글자는 지운다(되돌리기와 어긋나지 않게). 글자가 그대로면 시트를 바꾸지 않는다(눌렀다 나가기만 해도 항목이 지워지지 않게)
   const commit = (when: string, text: string) => {
-    if (!dep) return;
-    const list = text.split(/[,\n]/).map((o) => o.trim()).filter(Boolean);
-    const known = dep.branches.find((b) => b.when === when);
-    const branches = known ? dep.branches.map((b) => (b.when === when ? { ...b, options: list } : b)) : [...dep.branches, { when, options: list }];
-    const kept = branches.filter((b) => b.options.length || b.key);
-    onInput({ ...input, depends: { ...dep, branches: kept }, options: [...new Set(kept.flatMap((b) => b.options))] });
+    setDrafts(({ [when]: _done, ...rest }) => rest);
+    if (!dep || text === textOf(when)) return;
+    onInput(withBranchOptions(input, when, text.split(/[,\n]/).map((o) => o.trim()).filter(Boolean)));
   };
-  const choose = (name: string) => {
-    if (!name) {
-      // 종속 해제 — 모든 갈래 항목을 일반 목록으로
-      const { depends: _drop, ...rest } = input;
-      return onInput({ ...rest, options: input.options ?? [] });
-    }
-    onInput({ ...input, depends: { name, branches: [] }, options: input.options ?? [] });
+  const choose = (key: string) => {
+    // 종속 해제 — 모든 갈래 항목을 일반 목록으로
+    if (!key) return onChange(clearDependent(sheet, r, c));
+    const pick = sources.find((x) => sourceOptionKey(x) === key);
+    if (!pick) return;
+    // 기준 칸에 이름이 없으면 지어 붙이고 같은 판에서 종속을 건다
+    const { sheet: named, name } = ensureSourceName(sheet, pick.r, pick.c);
+    onChange(setApprovalProp(named, at, APPROVAL_NS.input, { ...input, depends: { name, branches: [] }, options: input.options ?? [] }));
   };
   if (!dep && sources.length === 0) return null;
   return (
@@ -372,7 +460,7 @@ function DependsEditor({ sheet, r, c, input, onInput }: { sheet: Sheet; r: numbe
       <select className={inp} value={dep?.name ?? ''} onChange={(e) => choose(e.target.value)}>
         <option value="">항상 같은 항목 (위 '고를 항목')</option>
         {sources.map((x) => (
-          <option key={x.name} value={x.name}>
+          <option key={sourceOptionKey(x)} value={sourceOptionKey(x)}>
             {x.label} 값에 따라
           </option>
         ))}
@@ -414,19 +502,26 @@ function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selec
   const r2 = Math.max(range.r1, range.r2);
   const rowLabel = r1 === r2 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`;
   const current = rowConditionOf(sheet, focus.r);
-  // 고른 행 안의 칸은 조건 칸이 될 수 없다(자기를 숨기면 다시 못 보임)
-  const sources = conditionSources(sheet).filter((x) => x.r < r1 || x.r > r2);
-  const [name, setName] = useState('');
+  // 고른 행 안의 칸은 조건 칸이 될 수 없다(자기를 숨기면 다시 못 보임). 이름 없는 칸도 — 고르면 이름을 지어 붙인다
+  const sources = valueSources(sheet).filter((x) => x.r < r1 || x.r > r2);
+  // 고른 기준 칸(sourceOptionKey) — 이름 없는 칸은 값을 처음 고를 때(조건을 실제로 걸 때) 이름을 지어 붙인다
+  const [key, setKey] = useState('');
   // 다른 행으로 옮기면 그 행 조건으로, 조건이 바뀌면(되돌리기 등) 그 칸으로 — 칸만 고르고 값을 아직 안 고른 상태는 지우지 않는다
-  useEffect(() => setName(current?.name ?? ''), [focus.r]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setKey(current?.name ?? ''), [focus.r]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (current?.name) setName(current.name);
+    if (current?.name) setKey(current.name);
   }, [current?.name]);
-  const src = sources.find((x) => x.name === name);
-  const values = current?.name === name ? current.values : [];
+  const src = sources.find((x) => sourceOptionKey(x) === key);
+  const name = src ? src.name : key;
+  const values = name && current?.name === name ? current.values : [];
+  // 기존 서식 조건에 걸린 값이 지금 항목에 없으면(직접입력 등) 그 값도 보여 준다 — 풀 수 있게
+  const shownOptions = src ? [...src.options, ...values.filter((v) => !src.options.includes(v))] : [];
   const toggle = (opt: string, on: boolean) => {
+    if (!src) return;
     const next = on ? [...values, opt] : values.filter((v) => v !== opt);
-    onChange(setRowCondition(sheet, r1, r2, next.length ? { name, values: next } : undefined));
+    const named = ensureSourceName(sheet, src.r, src.c);
+    if (named.name !== key) setKey(named.name);
+    onChange(setRowCondition(named.sheet, r1, r2, next.length ? { name: named.name, values: next } : undefined));
   };
 
   return (
@@ -434,34 +529,34 @@ function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selec
       <div className="text-[11px] font-bold text-ink2">행 보이기 조건 ({rowLabel})</div>
       {sources.length === 0 && !current ? (
         <div className="text-[10.5px] leading-snug text-ink3">
-          다른 칸 값에 따라 이 행을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 행). 조건으로 쓸 선택·체크 칸에 먼저 칸 이름을 붙이세요.
+          다른 칸 값에 따라 이 행을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 행). 조건으로 쓸 선택·체크 입력 칸을 먼저 만드세요.
         </div>
       ) : (
         <>
           <select
             className={inp}
-            value={name}
+            value={key}
             onChange={(e) => {
-              setName(e.target.value);
               // 조건 칸을 바꾸면 고른 값은 새로 — 비우면 조건 없음(항상 보임)
-              onChange(setRowCondition(sheet, r1, r2, undefined));
+              setKey(e.target.value);
+              if (current) onChange(setRowCondition(sheet, r1, r2, undefined));
             }}
           >
             <option value="">항상 보이기 (조건 없음)</option>
             {sources.map((x) => (
-              <option key={x.name} value={x.name}>
+              <option key={sourceOptionKey(x)} value={sourceOptionKey(x)}>
                 {x.label} 칸 값에 따라
               </option>
             ))}
             {current && !sources.some((x) => x.name === current.name) && <option value={current.name}>{nameLabel(current.name)} (칸 없음)</option>}
           </select>
-          {name && src && (
+          {key && src && (
             <div className="space-y-0.5 rounded-lg bg-panel-alt px-2 py-1.5">
               <div className="text-[10.5px] text-ink3">
                 <b className="text-ink2">{src.label}</b>이(가) 다음 중 하나일 때만 보입니다
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                {src.options.map((opt) => (
+                {shownOptions.map((opt) => (
                   <label key={opt} className="flex cursor-pointer items-center gap-1 text-[11.5px] text-ink">
                     <input type="checkbox" checked={values.includes(opt)} onChange={(e) => toggle(opt, e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
                     {opt === CHECK_MARK ? '체크했을 때' : opt}
@@ -471,7 +566,7 @@ function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selec
               {values.length === 0 && <div className="text-[10.5px] text-amber-600">값을 하나 이상 고르면 조건이 걸립니다.</div>}
             </div>
           )}
-          {name && !src && <div className="text-[10.5px] text-rose-600">조건 칸 '{nameLabel(name)}'이(가) 시트에 없어 이 행은 항상 보입니다.</div>}
+          {key && !src && <div className="text-[10.5px] text-rose-600">조건 칸 '{nameLabel(key)}'이(가) 시트에 없어 이 행은 항상 보입니다.</div>}
         </>
       )}
     </div>
