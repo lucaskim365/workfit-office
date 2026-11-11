@@ -1,11 +1,12 @@
 /**
  * 워드(.docx) 저장 — 외부 라이브러리 없이 문서 JSON(model.ts)을 .docx 로 만든다.
- * 담는 것: 문단·제목(1~6)·정렬, 글자(굵게·기울임·밑줄·취소선·코드·크기·색·글꼴·형광펜·배경), 링크, 줄바꿈,
- *          글머리·번호 목록(여러 단계), 인용, 구분선, 표(칸 합치기·열 너비·머리 칸), 그림(PNG·JPEG·GIF).
+ * 담는 것: 문단·제목(1~6)·정렬·줄 간격·문단 앞뒤 간격·들여쓰기, 글자(굵게·기울임·밑줄·취소선·코드·크기·색·글꼴·형광펜·배경), 링크, 줄바꿈,
+ *          글머리·번호 목록(여러 단계), 인용, 구분선, 표(칸 합치기·열 너비·행 높이·머리 칸·칸 배경색·세로 맞춤·테두리), 그림(PNG·JPEG·GIF).
  * 쪽은 A4 세로, 여백 2.54cm(편집 화면과 같음). 글꼴은 맑은 고딕 10pt.
  */
 import { A4, A4_CONTENT_WIDTH, TABLE_MAX_WIDTH, type WordMark, type WordNode } from './model';
 import { imageSize, loadImage, type ImageType } from './image';
+import { PARA_DEFAULT, bordersXml, headingDefault, paraXml } from './format';
 import { zip } from './zip';
 
 export interface DocxExportOptions {
@@ -65,6 +66,9 @@ export function halfPoints(size: unknown): number | undefined {
   return pt > 0 ? Math.round(pt * 2) : undefined;
 }
 
+/** 한글을 담은 글꼴(이름에 한글이 있거나 알려진 한글 글꼴) */
+const KOREAN_FONT = /[가-힣]|malgun|batang|gulim|dotum|gungsuh|nanum|noto (sans|serif) (kr|cjk)|pretendard|spoqa|apple ?sd|^hy|^hcr/i;
+
 const JC: Record<string, string> = { left: 'left', center: 'center', right: 'right', justify: 'both' };
 
 interface Ctx {
@@ -92,7 +96,8 @@ function runProps(marks: WordMark[] = []): string {
   if (has('code')) out.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
   else if (ts.fontFamily && typeof ts.fontFamily === 'string') {
     const f = esc(ts.fontFamily.split(',')[0].replace(/['"]/g, '').trim());
-    out.push(`<w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}"/>`);
+    // 한글 글꼴만 한글 자리(eastAsia)에도 — 영문 글꼴을 넣으면 워드가 한글을 바탕체로 바꿔 그린다
+    out.push(`<w:rFonts w:ascii="${f}" w:hAnsi="${f}"${KOREAN_FONT.test(f) ? ` w:eastAsia="${f}"` : ''}/>`);
   }
   if (has('bold')) out.push('<w:b/><w:bCs/>');
   if (has('italic')) out.push('<w:i/><w:iCs/>');
@@ -181,9 +186,11 @@ async function paragraph(node: WordNode, ctx: Ctx, p: ParaOpts = {}): Promise<st
   // 자식 순서는 워드 규칙대로(pStyle → numPr → pBdr → spacing → ind → contextualSpacing → jc) — 틀리면 '읽을 수 없는 내용'
   if (p.num) pPr.push(`<w:numPr><w:ilvl w:val="${p.num.level}"/><w:numId w:val="${p.num.id}"/></w:numPr>`);
   if (p.border) pPr.push('<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="BFBFBF"/></w:pBdr>');
-  // 표 칸 안은 위아래 간격 없이
-  if (p.tight) pPr.push('<w:spacing w:before="0" w:after="0"/>');
+  // 줄·문단 간격, 들여쓰기(문단에 정한 값). 표 칸 안은 정하지 않았으면 위아래 간격 없이. 목록 문단의 들여쓰기는 목록이 정한다
+  const look = paraXml(node.attrs, { tight: p.tight, skipIndent: p.num !== undefined || p.indentLevel !== undefined });
+  if (look.spacing) pPr.push(look.spacing);
   if (p.indentLevel !== undefined) pPr.push(`<w:ind w:left="${(p.indentLevel + 1) * 720}"/>`);
+  else if (look.ind) pPr.push(look.ind);
   // 목록 항목끼리는 문단 간격을 두지 않는다(워드 '같은 스타일 문단 사이 간격 없음')
   if (p.num || p.indentLevel !== undefined) pPr.push('<w:contextualSpacing/>');
   const jc = JC[String(node.attrs?.textAlign ?? '')];
@@ -193,18 +200,19 @@ async function paragraph(node: WordNode, ctx: Ctx, p: ParaOpts = {}): Promise<st
 
 // ── 표 ──
 
-/** 칸 음영·세로 맞춤 — tcPr 자식 순서(gridSpan → vMerge → shd → vAlign)를 지킨다. 머리 칸은 정한 색이 없으면 연회색 */
+/** 칸 테두리·음영·세로 맞춤 — tcPr 자식 순서(gridSpan → vMerge → tcBorders → shd → vAlign)를 지킨다. 머리 칸은 정한 색이 없으면 연회색 */
 function cellLookXml(cell: WordNode, head: boolean): string {
+  const borders = bordersXml(cell.attrs?.borders);
   const fill = hexColor(cell.attrs?.background) ?? (head ? 'F2F2F2' : undefined);
   const v = cell.attrs?.verticalAlign;
   const jc = v === 'middle' ? 'center' : v === 'bottom' ? 'bottom' : undefined;
-  return (fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : '') + (jc ? `<w:vAlign w:val="${jc}"/>` : '');
+  return borders + (fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : '') + (jc ? `<w:vAlign w:val="${jc}"/>` : '');
 }
 
 async function table(node: WordNode, ctx: Ctx): Promise<string> {
   const rows = node.content ?? [];
   // 칸 자리(격자) — rowspan 으로 아래 줄까지 덮는 칸은 아래 줄에 '이어 합침(vMerge)' 칸을 넣어야 워드가 맞게 그린다
-  const covered: Map<number, { span: number; left: number }>[] = rows.map(() => new Map());
+  const covered: Map<number, { span: number; cell: WordNode }>[] = rows.map(() => new Map());
   let gridCols = 0;
   const widths: number[] = [];
   const layout = rows.map((row, ri) => {
@@ -215,7 +223,7 @@ async function table(node: WordNode, ctx: Ctx): Promise<string> {
       const rspan = Math.max(1, Number(cell.attrs?.rowspan) || 1);
       const cw = Array.isArray(cell.attrs?.colwidth) ? (cell.attrs!.colwidth as unknown[]) : [];
       for (let k = 0; k < span; k++) if (Number(cw[k]) > 0 && widths[col + k] === undefined) widths[col + k] = Number(cw[k]);
-      for (let k = 1; k < rspan && ri + k < rows.length; k++) covered[ri + k].set(col, { span, left: rspan - k });
+      for (let k = 1; k < rspan && ri + k < rows.length; k++) covered[ri + k].set(col, { span, cell });
       const at = col;
       col += span;
       return { cell, at, span, rspan };
@@ -242,11 +250,11 @@ async function table(node: WordNode, ctx: Ctx): Promise<string> {
   for (let ri = 0; ri < rows.length; ri++) {
     const tcs: string[] = [];
     const cells = [...layout[ri]];
-    // 격자 순서대로 — 위에서 내려온 합친 칸 자리에는 '이어 합침' 칸
+    // 격자 순서대로 — 위에서 내려온 합친 칸 자리에는 '이어 합침' 칸(테두리는 합친 칸과 같게)
     const slots: { at: string; xml: () => Promise<string> }[] = [];
     covered[ri].forEach((v, at) => {
       const w = cols.slice(at, at + v.span).reduce((a, b) => a + b, 0);
-      slots.push({ at: String(at).padStart(4, '0'), xml: async () => `<w:tc><w:tcPr><w:tcW w:w="${tw(w)}" w:type="dxa"/>${v.span > 1 ? `<w:gridSpan w:val="${v.span}"/>` : ''}<w:vMerge/></w:tcPr><w:p/></w:tc>` });
+      slots.push({ at: String(at).padStart(4, '0'), xml: async () => `<w:tc><w:tcPr><w:tcW w:w="${tw(w)}" w:type="dxa"/>${v.span > 1 ? `<w:gridSpan w:val="${v.span}"/>` : ''}<w:vMerge/>${bordersXml(v.cell.attrs?.borders)}</w:tcPr><w:p/></w:tc>` });
     });
     for (const c of cells) {
       slots.push({
@@ -383,14 +391,15 @@ function numberingXml(nums: Ctx['nums']): string {
 }
 
 function stylesXml(): string {
+  const hd = headingDefault;
   const heading = (n: number, halfPt: number) =>
     `<w:style w:type="paragraph" w:styleId="Heading${n}"><w:name w:val="heading ${n}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>` +
-    `<w:pPr><w:keepNext/><w:spacing w:before="${n <= 2 ? 360 : 240}" w:after="120"/><w:outlineLvl w:val="${n - 1}"/></w:pPr><w:rPr><w:b/><w:bCs/><w:sz w:val="${halfPt}"/><w:szCs w:val="${halfPt}"/></w:rPr></w:style>`;
+    `<w:pPr><w:keepNext/><w:spacing w:before="${hd(n).spaceBefore * 20}" w:after="${hd(n).spaceAfter * 20}" w:line="${hd(n).lineHeight * 240}" w:lineRule="auto"/><w:outlineLvl w:val="${n - 1}"/></w:pPr><w:rPr><w:b/><w:bCs/><w:sz w:val="${halfPt}"/><w:szCs w:val="${halfPt}"/></w:rPr></w:style>`;
   return (
     XML_HEAD +
     `<w:styles xmlns:w="${NS.w}">` +
     `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${FONT}" w:hAnsi="${FONT}" w:eastAsia="${FONT}" w:cs="${FONT}"/><w:sz w:val="${BASE_HALF_PT}"/><w:szCs w:val="${BASE_HALF_PT}"/><w:lang w:val="ko-KR" w:eastAsia="ko-KR"/></w:rPr></w:rPrDefault>` +
-    '<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    `<w:pPrDefault><w:pPr><w:spacing w:after="${PARA_DEFAULT.spaceAfter * 20}" w:line="${Math.round(PARA_DEFAULT.lineHeight * 240)}" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     heading(1, 36) +
     heading(2, 30) +

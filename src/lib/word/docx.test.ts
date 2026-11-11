@@ -7,7 +7,7 @@ import { exportDocx } from './docxWrite';
 import { importDocx } from './docxRead';
 import { halfPoints, hexColor } from './docxWrite';
 import { imageSize, toDataUrl } from './image';
-import { unzip } from './zip';
+import { unzip, zip } from './zip';
 import { TABLE_MAX_WIDTH, type WordNode } from './model';
 
 const t = (text: string, ...marks: WordNode['marks'] & object): WordNode => (marks.length ? { type: 'text', text, marks } : { type: 'text', text });
@@ -121,6 +121,84 @@ test('불러온 표는 바깥 테두리까지 본문 폭 안 — 종이보다 �
   assert.ok(w <= TABLE_MAX_WIDTH, `열 너비 ${w}`);
 });
 
+test('줄 간격·문단 간격·들여쓰기 — 저장했다 불러와도 그대로, 기본값인 문단엔 값이 붙지 않는다', async () => {
+  const d = doc(
+    { type: 'paragraph', attrs: { lineHeight: 2, spaceBefore: 12, spaceAfter: 0, indent: 20, firstLine: -10 }, content: [t('모양 있는 문단')] },
+    p(t('기본 문단')),
+    { type: 'heading', attrs: { level: 1 }, content: [t('제목')] },
+  );
+  const back = await roundTrip(d);
+  assert.deepEqual(back.content![0].attrs, { lineHeight: 2, spaceBefore: 12, spaceAfter: 0, indent: 20, firstLine: -10 });
+  assert.equal(back.content![1].attrs, undefined);
+  assert.deepEqual(back.content![2].attrs, { level: 1 });
+  // 표 칸 안 기본 문단도 값이 붙지 않는다
+  const inCell = await roundTrip(doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1 }, content: [p(t('칸'))] }] }] }));
+  assert.equal(inCell.content![0].content![0].content![0].content![0].attrs, undefined);
+});
+
+/** 워드가 만든 것 같은 최소 .docx — 본문과 스타일만 */
+async function wordFile(body: string, styles: string): Promise<Uint8Array> {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  return zip([
+    ['word/document.xml', `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`],
+    ['word/styles.xml', `<?xml version="1.0"?><w:styles ${W}>${styles}</w:styles>`],
+  ]);
+}
+
+test('워드 문서 불러오기 — 문서 기본 간격·스타일 간격·글자 단위 들여쓰기를 덮어 써서 읽는다', async () => {
+  const styles =
+    '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="a"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="0"/></w:pPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="본문"/><w:basedOn w:val="a"/><w:pPr><w:spacing w:before="120"/></w:pPr></w:style>';
+  const body =
+    '<w:p><w:r><w:t>기본 스타일</w:t></w:r></w:p>' +
+    '<w:p><w:pPr><w:pStyle w:val="Body"/><w:ind w:leftChars="200" w:firstLineChars="100"/></w:pPr><w:r><w:t>본문 스타일</w:t></w:r></w:p>' +
+    '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="exact"/></w:pPr><w:r><w:t>고정 18pt</w:t></w:r></w:p>';
+  const { doc: d } = await importDocx(await wordFile(body, styles));
+  // 문서 기본(뒤 8pt·1.08줄) → Normal(뒤 0) 순으로 덮어 씀
+  assert.deepEqual(d.content![0].attrs, { lineHeight: 1.08, spaceAfter: 0 });
+  // Body 는 Normal 위에 앞 6pt, 글자 단위 들여쓰기(2글자·첫 줄 1글자 = 20pt·10pt)
+  assert.deepEqual(d.content![1].attrs, { lineHeight: 1.08, spaceBefore: 6, spaceAfter: 0, indent: 20, firstLine: 10 });
+  // 고정 줄 간격은 기본 글자 기준 배수로(18pt ÷ 13pt)
+  assert.equal(d.content![2].attrs?.lineHeight, 1.38);
+});
+
+test('표 테두리 — 칸 테두리를 저장했다 불러와도 그대로', async () => {
+  const line = { style: 'solid', width: 2, color: '#1f2d50' };
+  const none = { style: 'none', width: 0, color: '#000000' };
+  const borders = { top: line, right: none, bottom: { style: 'double', width: 3, color: '#000000' }, left: { style: 'dashed', width: 1, color: '#808080' } };
+  const d = doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1, borders }, content: [p(t('칸'))] }] }] });
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(d))).get('word/document.xml'));
+  // tcPr 안 순서: tcBorders(top → left → bottom → right) 다음 shd
+  assert.match(xml, /<w:tcBorders><w:top w:val="single" w:sz="12" w:space="0" w:color="1F2D50"\/><w:left w:val="dashed"[^>]*\/><w:bottom w:val="double"[^>]*\/><w:right w:val="nil"\/><\/w:tcBorders>/);
+  const cell = (await roundTrip(d)).content![0].content![0].content![0];
+  assert.deepEqual(cell.attrs?.borders, borders);
+});
+
+test('워드 표 테두리 불러오기 — 표 스타일·표 테두리(바깥·안쪽)·칸 테두리 순으로 정한다, 아무것도 없으면 선 없음', async () => {
+  const styles =
+    '<w:style w:type="table" w:styleId="Grid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders>' +
+    '<w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/>' +
+    '<w:insideH w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:color="000000"/></w:tblBorders></w:tblPr></w:style>';
+  const tc = (text: string, borders = '') => `<w:tc><w:tcPr>${borders}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const body =
+    '<w:tbl><w:tblPr><w:tblStyle w:val="Grid"/><w:tblBorders><w:top w:val="single" w:sz="16" w:color="1F2D50"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr>' +
+    '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
+    `<w:tr>${tc('가')}${tc('나', '<w:tcBorders><w:right w:val="dotted" w:sz="8" w:color="C62828"/></w:tcBorders>')}</w:tr>` +
+    `<w:tr>${tc('다')}${tc('라')}</w:tr></w:tbl>` +
+    '<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr>' + tc('선 없는 표') + '</w:tr></w:tbl>';
+  const { doc: d } = await importDocx(await wordFile(body, styles));
+  const cells = d.content![0].content!.map((r) => r.content!.map((c) => c.attrs?.borders as Record<string, { style: string; width: number; color: string }>));
+  // 워드 0.5pt(sz=4) 선은 0.67px — 소수 그대로 들고 있어야 다시 저장해도 0.5pt
+  const black = { style: 'solid', width: 0.67, color: '#000000' };
+  // 위 변은 표 테두리(굵은 남색), 가운데 세로선은 표가 없앰, 오른쪽 위 칸 오른쪽은 칸 테두리(빨간 점선)
+  assert.deepEqual(cells[0][0], { top: { style: 'solid', width: 2.67, color: '#1f2d50' }, right: { style: 'none', width: 0, color: '#000000' }, bottom: black, left: black });
+  assert.deepEqual(cells[0][1].right, { style: 'dotted', width: 1.33, color: '#c62828' });
+  assert.deepEqual(cells[1][1], { top: black, right: black, bottom: black, left: { style: 'none', width: 0, color: '#000000' } });
+  const plain = d.content![1].content![0].content![0].attrs?.borders as Record<string, { style: string }>;
+  assert.ok(['top', 'right', 'bottom', 'left'].every((s) => plain[s].style === 'none'));
+});
+
 test('그림 — 파일에 담고 다시 읽으면 같은 그림·크기', async () => {
   const src = toDataUrl(PNG, 'png');
   const d = doc(p(t('앞 '), { type: 'image', attrs: { src, alt: '로고', width: 40, height: 40 } }, t(' 뒤')));
@@ -148,6 +226,40 @@ test('문단 속성 순서는 워드 규칙대로(틀리면 워드가 손상 파
   const xml = new TextDecoder().decode(files.get('word/document.xml'));
   assert.ok(xml.includes('<w:pPr><w:ind w:left="720"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr>'));
   assert.match(xml, /<w:pPr><w:numPr>.*?<\/w:numPr><w:contextualSpacing\/><\/w:pPr>/);
+});
+
+test('표 선 굵기는 저장→불러오기→저장을 오가도 그대로(0.5pt 선이 0.75pt 로 바뀌지 않게)', async () => {
+  const tbl = doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1 }, content: [p(t('칸'))] }] }] });
+  const once = await roundTrip(tbl);
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(once))).get('word/document.xml'));
+  assert.match(xml, /<w:tcBorders><w:top w:val="single" w:sz="4" /);
+});
+
+test('워드 문서 불러오기 — 글자·줄 단위가 0 이면 단위 없는 값을 쓴다(한글 문서 변환본)', async () => {
+  const body =
+    '<w:p><w:pPr><w:spacing w:beforeLines="0" w:before="240" w:after="0"/><w:ind w:leftChars="0" w:left="800" w:firstLineChars="0" w:firstLine="400"/></w:pPr><w:r><w:t>가</w:t></w:r></w:p>';
+  const { doc: d } = await importDocx(await wordFile(body, ''));
+  assert.deepEqual(d.content![0].attrs, { lineHeight: 1, spaceBefore: 12, spaceAfter: 0, indent: 40, firstLine: 20 });
+});
+
+test('워드 표 테두리 불러오기 — 들쭉날쭉한 줄(gridBefore)의 첫 칸도 바깥선, 표 스타일이 없으면 문서 기본 표 스타일', async () => {
+  const styles =
+    '<w:style w:type="table" w:default="1" w:styleId="Base"><w:name w:val="Normal Table"/><w:tblPr><w:tblBorders><w:left w:val="single" w:sz="8" w:color="FF0000"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr></w:style>';
+  const tc = (text: string) => `<w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const body =
+    '<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
+    `<w:tr>${tc('가')}${tc('나')}</w:tr><w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr>${tc('다')}</w:tr></w:tbl>`;
+  const { doc: d } = await importDocx(await wordFile(body, styles));
+  const red = { style: 'solid', width: 1.33, color: '#ff0000' };
+  assert.deepEqual((d.content![0].content![1].content![0].attrs?.borders as Record<string, unknown>).left, red);
+  assert.deepEqual((d.content![0].content![0].content![1].attrs?.borders as Record<string, unknown>).left, { style: 'none', width: 0, color: '#000000' });
+});
+
+test('글꼴 — 영문 글꼴은 한글 자리에 넣지 않는다(워드가 한글을 바탕체로 바꿔 그리지 않게), 한글 글꼴은 넣는다', async () => {
+  const font = (f: string) => p(t('가a', { type: 'textStyle', attrs: { fontFamily: f } }));
+  const xml = new TextDecoder().decode((await unzip(await exportDocx(doc(font('Segoe UI'), font('Batang, 바탕, serif'))))).get('word/document.xml'));
+  assert.ok(xml.includes('<w:rFonts w:ascii="Segoe UI" w:hAnsi="Segoe UI"/>'));
+  assert.ok(xml.includes('<w:rFonts w:ascii="Batang" w:hAnsi="Batang" w:eastAsia="Batang"/>'));
 });
 
 test('색·크기 읽기', () => {

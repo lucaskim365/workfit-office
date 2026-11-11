@@ -15,6 +15,10 @@ import { Placeholder } from '@tiptap/extensions';
 import { A4, A4_CONTENT_WIDTH, type WordNode } from './model';
 import { fromDataUrl, imageSize } from './image';
 import { WordTableCell, WordTableHeader, WordTableRow } from './cell';
+import { Btn, Palette, Popover, SELECT_CLS, Sep, closePopover } from './controls';
+import { ParagraphFormat, INDENT_STEP, changeIndent, setParaFormat } from './paragraph';
+import { paraDefault } from './format';
+import { TableBar } from './TableBar';
 
 export interface WordEditorProps {
   value: WordNode;
@@ -41,8 +45,12 @@ export const WORD_EXTENSIONS = [
   WordTableRow,
   WordTableCell,
   WordTableHeader,
+  ParagraphFormat,
 ];
 
+/** 줄 간격(워드 배수)·문단 앞뒤 간격(pt) 고르기 */
+const LINE_HEIGHTS = [1, 1.15, 1.5, 2, 2.5, 3];
+const PARA_SPACES = [0, 3, 6, 8, 10, 12, 18, 24];
 const FONT_SIZES = ['8', '9', '10', '10.5', '11', '12', '14', '16', '18', '20', '24', '28', '36'];
 const COLORS = ['#000000', '#595959', '#c62828', '#d9480f', '#a16207', '#2b8a3e', '#0f766e', '#1d4ed8', '#6d28d9'];
 const HIGHLIGHTS = ['#fff59d', '#c8e6c9', '#bbdefb', '#f8bbd0', '#ffe0b2', '#e0e0e0'];
@@ -60,6 +68,7 @@ const CSS = `
 .wf-word .ProseMirror{outline:none;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:10pt;line-height:1.5;color:#111;word-break:keep-all;overflow-wrap:anywhere}
 .wf-word .ProseMirror p{margin:0 0 6pt}
 .wf-word .ProseMirror h1,.wf-word .ProseMirror h2,.wf-word .ProseMirror h3,.wf-word .ProseMirror h4,.wf-word .ProseMirror h5,.wf-word .ProseMirror h6{font-weight:700;margin:12pt 0 6pt;line-height:1.3}
+.wf-word .ProseMirror h1,.wf-word .ProseMirror h2{margin-top:18pt}
 .wf-word .ProseMirror h1{font-size:18pt}.wf-word .ProseMirror h2{font-size:15pt}.wf-word .ProseMirror h3{font-size:13pt}
 .wf-word .ProseMirror h4{font-size:12pt}.wf-word .ProseMirror h5{font-size:11pt}.wf-word .ProseMirror h6{font-size:10pt}
 .wf-word .ProseMirror ul{list-style:disc;padding-left:2em;margin:0 0 6pt}.wf-word .ProseMirror ul ul{list-style:circle}.wf-word .ProseMirror ul ul ul{list-style:square}
@@ -76,6 +85,7 @@ const CSS = `
 .wf-word .ProseMirror td,.wf-word .ProseMirror th{border:1px solid #808080;padding:3px 6px;vertical-align:top;position:relative;min-width:40px}
 .wf-word .ProseMirror th{background:#f2f2f2;font-weight:700;text-align:left}
 .wf-word .ProseMirror td>p,.wf-word .ProseMirror th>p{margin:0}
+.wf-word .ProseMirror td>:is(h1,h2,h3,h4,h5,h6),.wf-word .ProseMirror th>:is(h1,h2,h3,h4,h5,h6){margin:0}
 .wf-word .ProseMirror .selectedCell:after{content:'';position:absolute;inset:0;background:rgba(58,123,213,.15);pointer-events:none}
 .wf-word .ProseMirror .column-resize-handle{position:absolute;right:-2px;top:0;bottom:-2px;width:4px;background:#3a7bd5;pointer-events:none}
 .wf-word .ProseMirror.resize-cursor{cursor:col-resize}
@@ -136,25 +146,6 @@ export function WordEditor({ value, onChange, readOnly = false, stickyTop = 0, p
 
 // ── 도구 막대 ──
 
-function Btn({ on, title, onClick, children, disabled }: { on?: boolean; title: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-pressed={on}
-      disabled={disabled}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={`h-7 min-w-7 rounded px-1.5 text-[12.5px] leading-none ${on ? 'bg-[#dbe6f7] text-[#1d4ed8]' : 'text-[#333] hover:bg-[#eef1f5]'} disabled:opacity-35`}
-    >
-      {children}
-    </button>
-  );
-}
-
-const Sep = () => <span className="mx-0.5 h-5 w-px bg-[#d4dbe7]" />;
-
 function Toolbar({ editor, extra }: { editor: Editor; extra?: ReactNode }) {
   const imgRef = useRef<HTMLInputElement>(null);
   const c = () => editor.chain().focus();
@@ -186,7 +177,11 @@ function Toolbar({ editor, extra }: { editor: Editor; extra?: ReactNode }) {
     else c().extendMarkRange('link').setLink({ href: url.trim() }).run();
   };
 
-  const sel = 'h-7 rounded border border-[#d4dbe7] bg-white px-1 text-[12px] text-[#333] outline-none';
+  const sel = SELECT_CLS;
+  const para = editor.getAttributes(level ? 'heading' : 'paragraph') as { lineHeight?: number | null; spaceBefore?: number | null; spaceAfter?: number | null };
+  const inList = editor.isActive('listItem');
+  /** 커서 자리 문단의 기본 줄 간격 — 제목·표 칸 안이면 다르다 */
+  const baseLine = paraDefault(level, editor.isActive('tableCell') || editor.isActive('tableHeader')).lineHeight;
   return (
     <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-[#d4dbe7] bg-white/95 px-2 py-1 shadow-sm backdrop-blur">
       <Btn title="되돌리기 (Ctrl+Z)" onClick={() => c().undo().run()} disabled={!editor.can().undo()}>↶</Btn>
@@ -261,8 +256,47 @@ function Toolbar({ editor, extra }: { editor: Editor; extra?: ReactNode }) {
       <Sep />
       <Btn title="글머리 기호" on={editor.isActive('bulletList')} onClick={() => c().toggleBulletList().run()}>•≡</Btn>
       <Btn title="번호 목록" on={editor.isActive('orderedList')} onClick={() => c().toggleOrderedList().run()}>1.</Btn>
-      <Btn title="내어쓰기 (Shift+Tab)" onClick={() => c().liftListItem('listItem').run()} disabled={!editor.can().liftListItem('listItem')}>⇤</Btn>
-      <Btn title="들여쓰기 (Tab)" onClick={() => c().sinkListItem('listItem').run()} disabled={!editor.can().sinkListItem('listItem')}>⇥</Btn>
+      <Btn title="내어쓰기 (목록은 Shift+Tab)" onClick={() => (inList ? c().liftListItem('listItem').run() : changeIndent(editor, -INDENT_STEP))}>⇤</Btn>
+      <Btn title="들여쓰기 (목록은 Tab)" onClick={() => (inList ? c().sinkListItem('listItem').run() : changeIndent(editor, INDENT_STEP))}>⇥</Btn>
+      <Popover title="줄 간격·문단 간격" width={196} face={<span>↕</span>}>
+        <div className="mb-1 text-[11px] font-bold text-[#56607a]">줄 간격</div>
+        <div className="grid grid-cols-4 gap-1">
+          {LINE_HEIGHTS.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                setParaFormat(editor, { lineHeight: v === baseLine ? null : v });
+                closePopover(e.currentTarget);
+              }}
+              className={`rounded border py-0.5 text-[12px] ${(para.lineHeight ?? baseLine) === v ? 'border-[#1d4ed8] bg-[#dbe6f7] text-[#1d4ed8]' : 'border-[#d4dbe7] text-[#333] hover:bg-[#eef1f5]'}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        {(
+          [
+            ['spaceBefore', '문단 앞'],
+            ['spaceAfter', '문단 뒤'],
+          ] as const
+        ).map(([k, label]) => (
+          <label key={k} className="mt-2 flex items-center justify-between text-[12px] text-[#333]">
+            {label}
+            <select className={sel} value={para[k] ?? ''} onChange={(e) => setParaFormat(editor, { [k]: e.target.value === '' ? null : Number(e.target.value) })}>
+              <option value="">기본</option>
+              {[...new Set([...PARA_SPACES, ...(para[k] != null ? [para[k]!] : [])])]
+                .sort((a, b) => a - b)
+                .map((v) => (
+                  <option key={v} value={v}>
+                    {v}pt
+                  </option>
+                ))}
+            </select>
+          </label>
+        ))}
+      </Popover>
       <Btn title="인용" on={editor.isActive('blockquote')} onClick={() => c().toggleBlockquote().run()}>❝</Btn>
       <Btn title="구분선" onClick={() => c().setHorizontalRule().run()}>―</Btn>
       <Sep />
@@ -286,61 +320,8 @@ function Toolbar({ editor, extra }: { editor: Editor; extra?: ReactNode }) {
           {extra}
         </>
       )}
-      {inTable && (
-        <div className="mt-1 flex w-full flex-wrap items-center gap-0.5 border-t border-[#eef1f5] pt-1">
-          <span className="mr-1 text-[11.5px] font-bold text-[#56607a]">표</span>
-          <Btn title="위에 행 넣기" onClick={() => c().addRowBefore().run()}>↑행</Btn>
-          <Btn title="아래에 행 넣기" onClick={() => c().addRowAfter().run()}>↓행</Btn>
-          <Btn title="왼쪽에 열 넣기" onClick={() => c().addColumnBefore().run()}>←열</Btn>
-          <Btn title="오른쪽에 열 넣기" onClick={() => c().addColumnAfter().run()}>→열</Btn>
-          <Btn title="행 지우기" onClick={() => c().deleteRow().run()}>행 삭제</Btn>
-          <Btn title="열 지우기" onClick={() => c().deleteColumn().run()}>열 삭제</Btn>
-          <Sep />
-          <Btn title="칸 합치기(여러 칸을 끌어 고른 뒤)" onClick={() => c().mergeCells().run()} disabled={!editor.can().mergeCells()}>합치기</Btn>
-          <Btn title="칸 나누기" onClick={() => c().splitCell().run()} disabled={!editor.can().splitCell()}>나누기</Btn>
-          <Btn title="머리 행(첫 줄 강조) 켜고 끄기" onClick={() => c().toggleHeaderRow().run()}>머리 행</Btn>
-          <Sep />
-          <Btn title="표 지우기" onClick={() => c().deleteTable().run()}>표 삭제</Btn>
-        </div>
-      )}
+      {inTable && <TableBar editor={editor} />}
     </div>
   );
 }
 
-function Palette({ title, colors, current, onPick, face }: { title: string; colors: string[]; current?: string; onPick: (v: string | null) => void; face: ReactNode }) {
-  return (
-    <details className="relative">
-      <summary title={title} className="flex h-7 min-w-7 cursor-pointer list-none items-center justify-center rounded px-1.5 text-[12.5px] text-[#333] hover:bg-[#eef1f5]">
-        {face}
-        <span className="ml-0.5 text-[9px] text-[#8b95ab]">▾</span>
-      </summary>
-      <div className="absolute left-0 top-8 z-30 grid w-[132px] grid-cols-5 gap-1 rounded-lg border border-[#d4dbe7] bg-white p-2 shadow-lg">
-        {colors.map((col) => (
-          <button
-            key={col}
-            type="button"
-            title={col}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              onPick(col);
-              (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
-            }}
-            className={`h-5 w-5 rounded border ${current === col ? 'border-[#1d4ed8] ring-1 ring-[#1d4ed8]' : 'border-[#d4dbe7]'}`}
-            style={{ background: col }}
-          />
-        ))}
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            onPick(null);
-            (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
-          }}
-          className="col-span-5 mt-1 rounded border border-[#d4dbe7] py-0.5 text-[11px] text-[#56607a] hover:bg-[#eef1f5]"
-        >
-          없음
-        </button>
-      </div>
-    </details>
-  );
-}
