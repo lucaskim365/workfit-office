@@ -32,6 +32,7 @@ import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { CompanyLetterhead, CompanyLetterheadBlock } from './components/CompanyLetterhead';
 import { isLumefabDoc } from '@/domain/approvalDoc/company';
 import { CompanyTopMark, SheetTopMark } from './components/CompanyTopMark';
+import { DocTitleText } from './components/DocTitleText';
 import { ScheduleChangeNotice } from './components/ScheduleChangeNotice';
 
 let cachedLogoDataUrl: string | null = null;
@@ -706,7 +707,11 @@ export function ApprovalDocumentView({
         )}
 
         <div className={`relative mb-5 items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'} ${showDocTitle || (showStamp && stampTableInHeader(form)) ? 'flex' : 'hidden'}`}>
-          {showDocTitle && <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>}
+          {showDocTitle && (
+            <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold text-[#111]">
+              <DocTitleText title={docTitle} />
+            </h1>
+          )}
           {/* 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]] */}
           {showStamp && stampTableInHeader(form) && stampNode}
         </div>

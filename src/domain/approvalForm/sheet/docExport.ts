@@ -6,6 +6,7 @@
  * - 수식은 계산된 값으로만(결재 당시 숫자 그대로 — 엑셀이 다시 계산하지 않게)
  */
 import type { Sheet, XlsxExportOptions } from '@/lib/sheet/core';
+import { docTitleLook } from '../docTitle';
 import { approvalCellProps, completedDateRows, draftInfoValue, isSecretCell, slotOf, type DraftInfo, type SheetSlots } from './approvalSheet';
 
 export interface DocExportInput {
@@ -31,6 +32,8 @@ export function docExportOptions({ sheet, condHidden, masked, docInfo, slotText,
       if (masked && isSecretCell(sheet, r, c)) return '비공개';
       const slot = slotOf(p.bind);
       if (slot) return slotText?.[slot] ?? '';
+      // 큰 제목은 화면처럼 — 글자마다 띄어 저장된 옛 제목('기 안 서')은 띄어쓰기를 걷는다
+      if (p.bind === 'doc.formTitle') return docTitleLook(draftInfoValue(p.bind, docInfo) ?? '').text;
       if (p.bind) return draftInfoValue(p.bind, docInfo);
       return undefined;
     },
