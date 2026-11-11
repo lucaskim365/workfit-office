@@ -1,0 +1,136 @@
+/**
+ * 권한 목록 — "무엇을 할 수 있나"의 최소 단위. 화면·버튼은 이 키만 본다.
+ * 역할(authRoles)은 이 키들의 묶음이고, 지정(authAssignments)이 누구에게·어느 범위로 줄지 정한다.
+ * 설계: docs/superpowers/specs/2026-11-11-authz-v2-design.md
+ */
+
+export const AUTHZ_AREAS = [
+  { id: 'approval', name: '전자결재' },
+  { id: 'commute', name: '근태·휴가' },
+  { id: 'workplan', name: '업무계획·프로젝트' },
+  { id: 'comm', name: '게시판·소통' },
+  { id: 'schedule', name: '일정·자원' },
+  { id: 'org', name: '조직' },
+  { id: 'document', name: '문서관리' },
+  { id: 'biz', name: '사업관리' },
+  { id: 'exec', name: '경영' },
+  { id: 'adminPeople', name: '관리자 · 구성원·조직' },
+  { id: 'adminApproval', name: '관리자 · 전자결재' },
+  { id: 'adminCompany', name: '관리자 · 회사·운영' },
+  { id: 'adminSystem', name: '관리자 · 시스템' },
+] as const;
+
+export type AuthzAreaId = (typeof AUTHZ_AREAS)[number]['id'];
+
+export interface PermissionDef {
+  key: string;
+  name: string;
+  desc: string;
+  area: AuthzAreaId;
+  /** 조직 범위를 받는 권한 */
+  scoped?: boolean;
+  /** false = 최고 관리자 전용(역할에 넣을 수 없음) */
+  grantable?: false;
+  /** 관리자 콘솔 권한 — 전 직원 역할에는 넣을 수 없다 */
+  adminConsole?: boolean;
+  /** 이 권한이 있으면 따라오는 권한 */
+  implies?: string[];
+}
+
+const P = (d: PermissionDef) => d;
+/** 보기·관리 짝 — 관리는 보기를 포함한다 */
+const pair = (base: string, name: string, area: AuthzAreaId, viewDesc: string, manageDesc: string, extra: Partial<PermissionDef> = {}): PermissionDef[] => [
+  { key: `${base}.view`, name: `${name} 보기`, desc: viewDesc, area, ...extra },
+  { key: `${base}.manage`, name: `${name} 관리`, desc: manageDesc, area, implies: [`${base}.view`], ...extra },
+];
+
+export const PERMISSIONS: PermissionDef[] = [
+  // 전자결재
+  P({ key: 'approval.use', name: '기안·결재', desc: '문서를 기안하고 결재함에서 결재한다', area: 'approval' }),
+  P({ key: 'approval.secure', name: '보안·비공개 문서 열람', desc: '관계자가 아니어도 보안 등급·비공개 문서를 연다', area: 'approval', scoped: true }),
+  P({ key: 'approval.postread.forward', name: '후열 전달', desc: '결재 끝난 문서를 다른 사람에게 후열로 전달한다', area: 'approval' }),
+
+  // 근태·휴가
+  P({ key: 'commute.self', name: '내 근태·휴가', desc: '내 출퇴근 기록을 보고 휴가를 신청한다', area: 'commute' }),
+  P({ key: 'commute.view', name: '다른 사람 근태·휴가 열람', desc: '범위 안 직원의 출퇴근·휴가 현황을 본다', area: 'commute', scoped: true }),
+  P({ key: 'commute.manage', name: '근태 수정·연차 대장 관리', desc: '범위 안 직원의 근태를 고치고 연차 대장을 관리한다', area: 'commute', scoped: true, implies: ['commute.view'] }),
+
+  // 업무계획·프로젝트
+  P({ key: 'workplan.use', name: '업무계획·프로젝트', desc: '내 업무계획을 쓰고 프로젝트에 참여한다', area: 'workplan' }),
+  P({ key: 'workplan.view', name: '다른 사람 업무계획 열람', desc: '범위 안 직원의 업무계획을 본다', area: 'workplan', scoped: true }),
+  P({ key: 'workplan.overview', name: '팀·전사 업무 종합 현황', desc: '범위 안 직원의 주간 업무 현황표를 본다', area: 'workplan', scoped: true, implies: ['workplan.view'] }),
+  P({ key: 'workplan.manage', name: '명단 순서·태그 관리', desc: '업무계획 명단 순서와 공용 태그를 정한다', area: 'workplan' }),
+  P({ key: 'project.create', name: '프로젝트 만들기', desc: '새 프로젝트를 만들고 담당자를 배정한다', area: 'workplan' }),
+
+  // 게시판·소통
+  P({ key: 'board.use', name: '게시판 읽기·쓰기', desc: '게시판 글을 읽고 쓴다', area: 'comm' }),
+  P({ key: 'board.manage', name: '게시판 관리', desc: '공지를 쓰고 다른 사람 글을 고치거나 지운다', area: 'comm', implies: ['board.use'] }),
+  P({ key: 'survey.use', name: '설문 응답', desc: '사내 설문에 응답한다', area: 'comm' }),
+  P({ key: 'survey.manage', name: '설문 만들기', desc: '설문을 만들고 결과를 본다', area: 'comm', implies: ['survey.use'] }),
+  P({ key: 'gallery.use', name: '회사 갤러리', desc: '사진을 보고 올린다', area: 'comm' }),
+  P({ key: 'mail.use', name: '사내메일', desc: '메일을 주고받는다', area: 'comm' }),
+  P({ key: 'messenger.use', name: '메신저', desc: '대화방에서 대화한다', area: 'comm' }),
+  P({ key: 'messenger.manage', name: '메신저 관리', desc: '대화방을 정리하고 공지를 관리한다', area: 'comm', implies: ['messenger.use'] }),
+
+  // 일정·자원
+  P({ key: 'calendar.use', name: '캘린더', desc: '개인·부서 일정을 쓰고 본다', area: 'schedule' }),
+  P({ key: 'calendar.company', name: '전사 일정 관리', desc: '전사 일정을 등록·수정·삭제한다', area: 'schedule', implies: ['calendar.use'] }),
+  P({ key: 'resource.use', name: '자원 예약', desc: '회의실·차량·비품을 예약한다', area: 'schedule' }),
+  P({ key: 'resource.manage', name: '자원 등록·관리', desc: '예약할 자원을 등록하고 다른 사람 예약을 정리한다', area: 'schedule', implies: ['resource.use'] }),
+
+  // 조직
+  P({ key: 'org.view', name: '조직도·인명', desc: '조직도와 직원 연락처를 본다', area: 'org' }),
+  P({ key: 'seat.manage', name: '좌석 배치 편집', desc: '사무실 좌석 배치도를 고친다', area: 'org', implies: ['org.view'] }),
+
+  // 문서관리
+  ...pair('document', '문서', 'document', '문서함의 문서를 연다', '문서를 등록하고 고친다'),
+
+  // 사업관리
+  ...pair('biz.vendor', '도입기업', 'biz', '도입기업 정보를 본다', '도입기업을 등록·수정·삭제한다'),
+  ...pair('biz.project', '사업 현황', 'biz', '사업 목록과 진행 상황을 본다', '사업 정보를 고친다'),
+  ...pair('biz.po', '발주 현황', 'biz', '결재 끝난 발주서를 본다', '발주 회신 문서를 관리한다'),
+
+  // 경영
+  P({ key: 'exec.dashboard', name: '경영 현황', desc: '경영 지표 위젯을 본다', area: 'exec' }),
+
+  // 관리자 · 구성원·조직
+  ...pair('admin.user', '사용자', 'adminPeople', '직원 목록과 계정 정보를 본다', '직원을 등록·수정하고 퇴사 처리한다', { adminConsole: true }),
+  ...pair('admin.org', '부서·조직', 'adminPeople', '부서 구조를 본다', '부서를 만들고 구조와 부서장을 바꾼다', { adminConsole: true }),
+  ...pair('admin.position', '직급·직책', 'adminPeople', '직급과 직책을 본다', '직급·직책을 추가하고 순서를 바꾼다', { adminConsole: true }),
+
+  // 관리자 · 전자결재
+  ...pair('admin.approval.form', '결재서식', 'adminApproval', '결재서식 목록과 설정을 본다', '서식을 만들고 고친다', { adminConsole: true }),
+  ...pair('admin.approval.rule', '결재선 규칙', 'adminApproval', '자동 결재선 규칙을 본다', '규칙을 만들고 고친다', { adminConsole: true }),
+  ...pair('admin.approval.process', '결재 프로세스', 'adminApproval', '결재 프로세스 설정을 본다', '프로세스 옵션을 켜고 끈다', { adminConsole: true }),
+  P({ key: 'admin.approval.monitor', name: '결재문서 모니터링', desc: '전사 결재문서 진행 상황을 본다', area: 'adminApproval', adminConsole: true }),
+
+  // 관리자 · 회사·운영
+  ...pair('admin.company', '회사 정보', 'adminCompany', '법인·사업장 정보를 본다', '회사 정보·로고·직인을 고친다', { adminConsole: true }),
+  ...pair('admin.holiday', '공휴일', 'adminCompany', '공휴일 목록을 본다', '공휴일과 회사 지정 휴일을 등록한다', { adminConsole: true }),
+  ...pair('admin.code', '공통코드', 'adminCompany', '공통코드를 본다', '공통코드를 추가하고 고친다', { adminConsole: true }),
+
+  // 관리자 · 시스템
+  P({ key: 'admin.log.view', name: '로그 보기', desc: '접속 기록과 변경 기록을 본다', area: 'adminSystem', adminConsole: true }),
+  ...pair('admin.interface', '인터페이스', 'adminSystem', '외부 연동 상태를 본다', '연동 설정을 고친다', { adminConsole: true }),
+  P({ key: 'admin.authz', name: '역할·권한 관리', desc: '역할을 만들고 누구에게 줄지 정한다', area: 'adminSystem', adminConsole: true, grantable: false }),
+  P({ key: 'admin.backup', name: '데이터 백업', desc: '백업과 복원을 실행한다', area: 'adminSystem', adminConsole: true, grantable: false }),
+  P({ key: 'admin.testAccounts', name: '테스트 계정 보기 전환', desc: '화면에 테스트 계정을 보이거나 숨긴다', area: 'adminSystem', adminConsole: true, grantable: false }),
+];
+
+export const PERMISSION_BY_KEY = new Map(PERMISSIONS.map((p) => [p.key, p]));
+
+/** 최고 관리자 역할이 갖는 권한 — 콘솔 권한 전부(업무 데이터 권한은 따로 받는다) */
+export const SUPER_ADMIN_PERMISSIONS = PERMISSIONS.filter((p) => p.adminConsole).map((p) => p.key);
+
+/** implies 를 펼친 권한 목록 */
+export function expandPermissions(keys: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  const stack = [...keys];
+  while (stack.length) {
+    const k = stack.pop()!;
+    if (out.has(k)) continue;
+    out.add(k);
+    for (const i of PERMISSION_BY_KEY.get(k)?.implies ?? []) stack.push(i);
+  }
+  return out;
+}

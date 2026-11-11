@@ -68,7 +68,10 @@ export const MENU_TREE: MenuNode[] = [
       },
       {
         id: 'G_ADM_AUTH', name: '권한', icon: '◫', order: 20, use: true, children: [
-          { id: 'S_BASE_AUTH', name: '그룹 권한 관리', url: '/base/auth', icon: '◫', order: 10, use: true },
+          { id: 'S_ADM_ROLE', name: '역할 관리', url: '/base/authz/roles', icon: '◫', order: 10, use: true },
+          { id: 'S_ADM_ASSIGN', name: '역할 지정', url: '/base/authz/assign', icon: '◫', order: 20, use: true },
+          { id: 'S_ADM_PEOPLE', name: '사람별 권한', url: '/base/authz/people', icon: '◫', order: 30, use: true },
+          { id: 'S_BASE_AUTH', name: '그룹 권한 관리', url: '/base/auth', icon: '◫', order: 90, use: true },
         ]
       },
       {

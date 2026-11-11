@@ -107,6 +107,9 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/biz/po': lazy(() => import('@/modules/biz/po/BizPoScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
   '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
+  '/base/authz/roles': lazy(() => import('@/modules/base/authz/RoleScreen')),
+  '/base/authz/assign': lazy(() => import('@/modules/base/authz/AssignScreen')),
+  '/base/authz/people': lazy(() => import('@/modules/base/authz/PeopleScreen')),
   // 시스템 관리
   '/sys/company': lazy(() => import('@/modules/sys/company/CompanyScreen')),
   '/sys/menu': lazy(() => import('@/modules/sys/menu/MenuMgmtScreen')),
