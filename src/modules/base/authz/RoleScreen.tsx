@@ -7,7 +7,7 @@ import { Pill } from '@/shared/ui/Pill';
 import { Toggle } from '@/shared/ui/Toggle';
 import { Modal } from '@/shared/ui/Modal';
 import { TextField } from '@/shared/ui/form/TextField';
-import { AUTHZ_AREAS, PERMISSIONS, PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, type PermissionDef } from '@/domain/authz/permissions';
+import { AUTHZ_AREAS, PERMISSIONS, PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions, type PermissionDef } from '@/domain/authz/permissions';
 import { ROLE_TEMPLATES } from '@/domain/authz/templates';
 import type { AuthRole } from '@/domain/authz/types';
 import { authzDraft, useAuthzDraft } from '@/features/authz/useAuthzDraft';
@@ -72,8 +72,12 @@ export default function RoleScreen() {
     setDraft({ ...draft, permissions: [...next].sort() });
   };
 
-  const areas = AUTHZ_AREAS.filter((a) => (tab === 'admin') === a.id.startsWith('admin'));
-  const countIn = (admin: boolean) => PERMISSIONS.filter((p) => !!p.adminConsole === admin && (checked.has(p.key) || implied.has(p.key))).length;
+  // 만든 역할에는 전 직원이 이미 받는 권한을 보이지 않는다
+  const baseRole = roles.find((r) => r.kind === 'base');
+  const basePerms = draft.kind === 'custom' && baseRole?.use ? expandPermissions(baseRole.permissions) : new Set<string>();
+  const shown = PERMISSIONS.filter((p) => !basePerms.has(p.key));
+  const areas = AUTHZ_AREAS.filter((a) => (tab === 'admin') === a.id.startsWith('admin') && shown.some((p) => p.area === a.id));
+  const countIn = (admin: boolean) => shown.filter((p) => !!p.adminConsole === admin && (checked.has(p.key) || implied.has(p.key))).length;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -167,7 +171,7 @@ export default function RoleScreen() {
               </div>
             ) : (
               areas.map((area) => {
-                const perms = PERMISSIONS.filter((p) => p.area === area.id);
+                const perms = shown.filter((p) => p.area === area.id);
                 const on = perms.filter((p) => checked.has(p.key) || implied.has(p.key)).length;
                 return (
                   <section key={area.id} className="border-t border-border first:border-t-0">
