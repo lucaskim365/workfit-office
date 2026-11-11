@@ -25,6 +25,7 @@ import { isSealForm, sealMarkIdOf, stampTableShown } from '@/domain/approvalForm
 import { docNoOf } from '@/domain/approvalDoc/docNo';
 import { isLumefabDoc } from '@/domain/approvalDoc/company';
 import { CompanyTopMark } from './components/CompanyTopMark';
+import { DocTitleText } from './components/DocTitleText';
 import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './components/CompanyLetterhead';
 import { ScheduleChangeNotice } from './components/ScheduleChangeNotice';
@@ -598,7 +599,11 @@ export function ApprovalDocumentView({
         )}
 
         <div className={`relative mb-5 flex items-start gap-4 ${showDocTitle ? 'justify-between' : 'justify-end'}`}>
-          {showDocTitle && <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>}
+          {showDocTitle && (
+            <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold text-[#111]">
+              <DocTitleText title={docTitle} />
+            </h1>
+          )}
           {/* 직인 서식은 진행 중에만 결재란(완료되면 회사 직인), 일반 서식은 완료 문서에만 — [[seal]] */}
           {!externalDoc && stampTableShown(doc.status, sealForm) && (
             <div className="relative">

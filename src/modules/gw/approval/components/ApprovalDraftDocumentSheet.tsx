@@ -21,6 +21,7 @@ import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
 import type { ApprovalCompany } from '@/domain/approvalDoc/company';
 import { CompanyTopMark } from './CompanyTopMark';
+import { DocTitleText } from './DocTitleText';
 import {
   FileText,
   Paperclip,
@@ -440,11 +441,11 @@ export function ApprovalDraftDocumentSheet({
               if (next !== null && next.trim()) onUpdateDocTitle(next.trim());
             }
           }}
-          className={`mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111] ${showDocTitle ? '' : 'hidden'} ${isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
+          className={`mt-6 flex-1 text-center text-[26px] font-extrabold text-[#111] ${showDocTitle ? '' : 'hidden'} ${isDesignMode ? 'hover:bg-teal-soft/40 hover:text-teal rounded cursor-pointer transition-colors p-1' : ''
             }`}
           title={isDesignMode ? '클릭하여 격식 문서명(인쇄) 수정' : undefined}
         >
-          {docTitle}
+          <DocTitleText title={docTitle} />
           {isDesignMode && (
             <span className="block text-[10px] tracking-normal font-normal text-teal opacity-70 mt-0.5">
               (클릭하여 격식 문서명 수정)
