@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, FileSignature, FileText, X, Pencil, Download, Eye } from 'lucide-react';
+import { Search, FileSignature, X, Pencil, Download, Eye } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -27,6 +27,8 @@ import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { ChatFileStatusText } from './ChatFileStatusText';
 import { viewerKindOf } from './MobileFileViewer';
+import { roomFilesOf } from '@/domain/chatMessage/roomFiles';
+import { FileKindIcon } from '@/features/chat/FileKindIcon';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -104,18 +106,8 @@ export default function MobileChatThread() {
   const [showFileBox, setShowFileBox] = useState(false);
   /** 파일함 — 안 받은 옛 메시지의 파일까지(열었을 때 서버에서 받는다. 받기 전엔 받아 둔 것으로) */
   const { data: fileMessages } = useRoomFiles(roomId, showFileBox);
-  const filesInRoom = useMemo(() => {
-    return (fileMessages ?? messages)
-      .filter((m) => m.attachment)
-      .map((m) => ({
-        messageId: m.id,
-        senderName: m.senderName,
-        at: m.at,
-        attachment: m.attachment!,
-        type: m.type,
-      }))
-      .reverse();
-  }, [fileMessages, messages]);
+  // 파일함 — 예전 메시지(attachment)와 서식 메시지(attachments 여러 개)를 모두(웹·PWA 공용 roomFilesOf)
+  const filesInRoom = useMemo(() => roomFilesOf(fileMessages ?? messages), [fileMessages, messages]);
 
   const copyToClipboard = async (val: string) => {
     try {
@@ -1077,7 +1069,7 @@ function MessageBubble({
         className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
-        <FileText size={18} className="shrink-0" />
+        <FileKindIcon name={att.name} size={30} />
         <span className="min-w-0 pointer-events-none">
           <span className="block max-w-[190px] truncate chat-text-[12.5px] font-semibold">{att.name}</span>
           <ChatFileStatusText url={att.url} name={att.name} size={att.size} className={`block chat-text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`} />
@@ -1911,15 +1903,13 @@ function MobileFileBoxModal({
           files.map((f) => {
             const isImg = f.type === 'image';
             return (
-              <div key={f.messageId} className="flex items-center gap-3 rounded-xl border border-black/5 bg-black/[0.01] p-3 shadow-3xs">
+              <div key={f.key} className="flex items-center gap-3 rounded-xl border border-black/5 bg-black/[0.01] p-3 shadow-3xs">
                 {isImg ? (
                   <button onClick={() => onOpenImage(f.attachment)} className="w-12 h-12 rounded-lg border border-black/10 overflow-hidden shrink-0 block bg-black/5 cursor-pointer">
                     <img src={f.attachment.url} alt={f.attachment.name} className="w-full h-full object-cover" />
                   </button>
                 ) : (
-                  <div className="w-12 h-12 rounded-lg border border-black/10 overflow-hidden shrink-0 flex items-center justify-center bg-black/5 text-[22px] select-none">
-                    📄
-                  </div>
+                  <FileKindIcon name={f.attachment.name} size={48} />
                 )}
                 <div className="min-w-0 flex-1">
                   <button 

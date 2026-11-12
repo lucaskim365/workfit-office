@@ -3,7 +3,8 @@ import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { ImageBundleGrid } from './ImageBundleGrid';
 import { fmtSize, downloadAttachment } from '@/mobile/chatUtils';
 import { ChatFileStatusText } from '@/mobile/ChatFileStatusText';
-import { FileText, Download, FileArchive, FileSpreadsheet, FileCode } from 'lucide-react';
+import { Download } from 'lucide-react';
+import { FileKindIcon } from './FileKindIcon';
 
 interface CompositeMessageCardProps {
   text?: string;
@@ -16,14 +17,6 @@ interface CompositeMessageCardProps {
   onContextMenu?: (e: React.MouseEvent) => void;
   searchQuery?: string;
   isSearchActive?: boolean;
-}
-
-function getFileIcon(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet size={18} className="text-emerald-500 shrink-0" />;
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <FileArchive size={18} className="text-amber-500 shrink-0" />;
-  if (['js', 'ts', 'tsx', 'jsx', 'json', 'html', 'css', 'py', 'java', 'c', 'cpp'].includes(ext)) return <FileCode size={18} className="text-indigo-500 shrink-0" />;
-  return <FileText size={18} className="text-[#1890ff] shrink-0" />;
 }
 
 /**
@@ -103,7 +96,7 @@ export function CompositeMessageCard({
                   className={`flex items-center gap-2 min-w-0 flex-1 ${onOpenFile ? 'cursor-pointer' : ''}`}
                   onClick={onOpenFile ? () => onOpenFile(att) : undefined}
                 >
-                  {getFileIcon(att.name)}
+                  <FileKindIcon name={att.name} size={28} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate chat-text-[12px] font-semibold text-ink leading-tight" title={att.name}>
                       {att.name}
@@ -118,14 +111,17 @@ export function CompositeMessageCard({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => downloadAttachment(att)}
-                  title={`${att.name} 다운로드`}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-black/5 hover:bg-black/10 text-ink2 active:scale-95 transition-transform"
-                >
-                  <Download size={13} />
-                </button>
+                {/* 다운로드 단추는 PC만 — 휴대폰은 줄을 누르면 앱 안 보기 화면으로 열고 저장은 그 화면에서(RichMessageBody 와 같게) */}
+                {!onOpenFile && (
+                  <button
+                    type="button"
+                    onClick={() => downloadAttachment(att)}
+                    title={`${att.name} 다운로드`}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-black/5 hover:bg-black/10 text-ink2 active:scale-95 transition-transform"
+                  >
+                    <Download size={13} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

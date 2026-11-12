@@ -1,18 +1,11 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
-import { Download, FileArchive, FileCode, FileSpreadsheet, FileText } from 'lucide-react';
+import { Download } from 'lucide-react';
 import type { Attachment } from '@/domain/chatMessage/schema';
 import { imageIdsOfRich, isSafeHref, parseRichBody, type RichNode } from '@/domain/chatMessage/richBody';
 import { downloadAttachment, fmtSize } from '@/mobile/chatUtils';
 import { ChatFileStatusText } from '@/mobile/ChatFileStatusText';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
-
-function fileIcon(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet size={18} className="shrink-0 text-emerald-500" />;
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <FileArchive size={18} className="shrink-0 text-amber-500" />;
-  if (['js', 'ts', 'tsx', 'jsx', 'json', 'html', 'css', 'py', 'java', 'c', 'cpp'].includes(ext)) return <FileCode size={18} className="shrink-0 text-indigo-500" />;
-  return <FileText size={18} className="shrink-0 text-[#1890ff]" />;
-}
+import { FileKindIcon } from '@/features/chat/FileKindIcon';
 
 /**
  * 서식 메시지(rich) 본문 — 저장된 문서 구조를 React 요소로만 그린다(HTML 주입 없음).
@@ -29,7 +22,7 @@ export function RichMessageBody({
   attachments?: Attachment[];
   mine: boolean;
   onOpenImage?: (att: Attachment, list: Attachment[]) => void;
-  /** 파일 줄을 누르면 — 휴대폰은 앱 안에서 열기(PDF 보기·다른 앱으로 열기), 없으면(PC) 다운로드 단추만 */
+  /** 파일 줄을 누르면 — 휴대폰은 앱 안에서 열기(PDF·엑셀·워드 보기, 그 밖은 다른 앱으로), 없으면(PC) 다운로드 단추만 */
   onOpenFile?: (att: Attachment) => void;
 }) {
   const doc = useMemo(() => parseRichBody(body), [body]);
@@ -168,7 +161,7 @@ export function RichMessageBody({
                       : undefined
                   }
                 >
-                  {fileIcon(att.name)}
+                  <FileKindIcon name={att.name} size={28} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate chat-text-[12px] font-semibold leading-tight text-ink" title={att.name}>{att.name}</div>
                     {onOpenFile ? (
@@ -178,17 +171,21 @@ export function RichMessageBody({
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    downloadAttachment(att);
-                  }}
-                  title={`${att.name} 다운로드`}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-black/5 text-ink2 hover:bg-black/10"
-                >
-                  <Download size={13} />
-                </button>
+                {/* 다운로드 단추는 PC만 — 휴대폰은 줄을 누르면 앱 안 보기 화면으로 열고 저장은 그 화면에서.
+                    휴대폰에서 바로 내려받으면 다운로드 알림의 [열기]가 다른 앱으로 넘겨 대화방으로 못 돌아왔다 */}
+                {!onOpenFile && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadAttachment(att);
+                    }}
+                    title={`${att.name} 다운로드`}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-black/5 text-ink2 hover:bg-black/10"
+                  >
+                    <Download size={13} />
+                  </button>
+                )}
               </div>
             ),
           )}
