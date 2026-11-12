@@ -27,3 +27,30 @@ export function roomFilesOf(messages: readonly ChatMessage[]): RoomFile[] {
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
+
+export interface RoomFileDay {
+  /** YYYY-MM-DD */
+  day: string;
+  /** 2026년 11월 13일 (금) */
+  label: string;
+  files: RoomFile[];
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 파일함 사진을 날짜별로 묶는다 — 받은 순서(최신순)를 그대로 두고 같은 날끼리 */
+export function groupRoomFilesByDay(files: readonly RoomFile[]): RoomFileDay[] {
+  const out: RoomFileDay[] = [];
+  for (const f of files) {
+    const day = f.at.slice(0, 10);
+    let g = out[out.length - 1];
+    if (!g || g.day !== day) {
+      const [y, m, d] = day.split('-').map(Number);
+      const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+      g = { day, label: `${y}년 ${m}월 ${d}일 (${wd})`, files: [] };
+      out.push(g);
+    }
+    g.files.push(f);
+  }
+  return out;
+}
