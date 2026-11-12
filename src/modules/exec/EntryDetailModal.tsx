@@ -170,6 +170,10 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
 }) {
   const users = useUsers({ status: '사용' }).data ?? [];
   const now = useNowMinutes();
+  /** 앞뒤 일정 목록에서 커서를 올린 일정 — 하루 막대에서 그 일정을 제 색으로 옅게 */
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  // 다른 일정으로 바꿔 보면 올려 둔 표시는 지운다
+  useEffect(() => setHoverKey(null), [entry?.key]);
   if (!entry) return null;
 
   const userOf = (id: string) => users.find((u) => u.id === id);
@@ -248,7 +252,7 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
               {otherSpans.map(({ key, sp }) => (
                 <span
                   key={key}
-                  className="absolute top-1.5 bottom-1.5 rounded bg-ink3/20"
+                  className={`absolute top-1.5 bottom-1.5 rounded transition-colors ${hoverKey === key ? `${entryDotClass(all.find((x) => x.key === key)!)} opacity-45` : 'bg-ink3/20'}`}
                   style={{ left: `${pct(sp![0])}%`, width: `${Math.max(0.6, pct(sp![1]) - pct(sp![0]))}%` }}
                 />
               ))}
@@ -287,6 +291,10 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
                 <button
                   type="button"
                   onClick={() => onPick?.(n.entry)}
+                  onMouseEnter={() => setHoverKey(n.entry.key)}
+                  onMouseLeave={() => setHoverKey((k) => (k === n.entry.key ? null : k))}
+                  onFocus={() => setHoverKey(n.entry.key)}
+                  onBlur={() => setHoverKey((k) => (k === n.entry.key ? null : k))}
                   className="group flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-panel-alt"
                 >
                   {n.role !== 'day' && <span className={`w-9 shrink-0 rounded px-1 py-px text-center text-[10.5px] font-bold ${ROLE_TONE[n.role]}`}>{ROLE_LABEL[n.role]}</span>}

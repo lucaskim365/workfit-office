@@ -594,6 +594,16 @@ export function AttendanceWidget() {
               <Donut counts={counts} centerTop={`${counts.work + counts.late}일`} centerBottom="출근한 날" />
               <TodayClock rec={nowRec} />
             </div>
+            {/* 도넛 색 설명 — 작게 한 줄 */}
+            <ul className="m-0 -mt-1 mb-3 flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
+              {ATTENDANCE_BUCKETS.map((k) => (
+                <li key={k} className="flex items-center gap-1 whitespace-nowrap text-[10.5px] text-ink3">
+                  <i className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: BUCKET_STROKE[k] }} />
+                  {ATTENDANCE_LABELS[k]}
+                  <strong className="tabular-nums text-ink2">{counts[k]}</strong>
+                </li>
+              ))}
+            </ul>
             <div className="mb-1 grid grid-cols-7 gap-1">
               {WEEKDAYS.map((w, i) => (
                 <span key={w} className={`text-center text-[10px] font-bold ${i === 0 ? 'text-[#d97a7a]' : i === 6 ? 'text-[#6f9cc4]' : 'text-ink3'}`}>{w}</span>
