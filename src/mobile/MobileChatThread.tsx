@@ -28,6 +28,7 @@ import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachm
 import { ChatFileStatusText } from './ChatFileStatusText';
 import { roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
 import { FileKindIcon } from '@/features/chat/FileKindIcon';
+import { RoomPhotoGrid } from '@/features/chat/RoomPhotoGrid';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -1867,7 +1868,7 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
 
 /**
  * 파일함 모아보기 — [사진]은 바둑판으로, [파일]은 목록으로 나눠 보인다.
- * - 사진: 누르면 크게 보기(좌우로 넘기면 이 방의 다른 사진)
+ * - 사진: 날짜별 바둑판, 누르면 크게 보기(좌우로 넘기면 이 방의 다른 사진)
  * - 파일: 줄을 누르면 말풍선과 똑같이 연다(PDF·엑셀·워드는 앱 안 보기 화면, 그 밖은 휴대폰 공유 창·저장)
  */
 function MobileFileBoxModal({
@@ -1898,7 +1899,6 @@ function MobileFileBoxModal({
     }, 150);
   };
 
-  const photoList = photos.map((f) => f.attachment);
   const tabBtn = (key: 'photo' | 'file', label: string, count: number) => (
     <button
       type="button"
@@ -1921,23 +1921,7 @@ function MobileFileBoxModal({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'photo' ? (
-          photos.length === 0 ? (
-            <div className="py-20 text-center text-[12px] text-ink3">공유된 사진이 없습니다.</div>
-          ) : (
-            <div className="grid grid-cols-3 gap-0.5 p-0.5">
-              {photos.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => onOpenImage(f.attachment, photoList)}
-                  title={f.attachment.name}
-                  className="relative block aspect-square overflow-hidden bg-black/5 cursor-pointer"
-                >
-                  <img src={f.attachment.url} alt={f.attachment.name} loading="lazy" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )
+          <RoomPhotoGrid photos={photos} onOpen={onOpenImage} />
         ) : docs.length === 0 ? (
           <div className="py-20 text-center text-[12px] text-ink3">공유된 파일이 없습니다.</div>
         ) : (
