@@ -50,6 +50,11 @@ export interface SheetEditorProps {
   paste?: (s: Sheet, r: number, c: number, text: string) => Sheet;
   /** 칸 오른쪽 위에 그릴 표시(예: 입력 칸·칸 이름 표시) */
   renderBadge?: (r: number, c: number) => ReactNode;
+  /**
+   * 행 끝(시트 오른쪽 바깥)에 그릴 행 표시(예: 행 보이기 조건·대외 숨김) — 칸 안 표시와 헷갈리지 않게.
+   * 폭 0 칸에서 오른쪽으로 삐져나오게 그려 표 폭·인쇄 폭은 그대로
+   */
+  rowEnd?: (r: number) => ReactNode;
   /** 도구 모음 끝에 붙일 쓰는 쪽 버튼 */
   toolbarExtra?: ReactNode;
   onSelect?: (sel: SheetSelection) => void;
@@ -128,6 +133,7 @@ export function SheetEditor({
   setValue = (s, r, c, text) => setCellValue(s, r, c, text),
   paste,
   renderBadge,
+  rowEnd,
   toolbarExtra,
   onSelect,
   onNotice,
@@ -887,6 +893,7 @@ export function SheetEditor({
             {cols.map((col) => (
               <col key={col} style={{ width: colW(col) }} />
             ))}
+            {rowEnd && <col style={{ width: 0 }} />}
           </colgroup>
           <thead>
             <tr style={{ height: hh }}>
@@ -929,6 +936,7 @@ export function SheetEditor({
                   </div>
                 </th>
               ))}
+              {rowEnd && <th className="w-0 border-none p-0" />}
             </tr>
           </thead>
           <tbody>
@@ -1035,6 +1043,14 @@ export function SheetEditor({
                     </td>
                   );
                 })}
+                {rowEnd && (
+                  <td className="relative w-0 p-0" style={{ border: 'none' }}>
+                    {(() => {
+                      const node = rowEnd(r);
+                      return node ? <div className="absolute left-0 top-1/2 z-[2] -translate-y-1/2 whitespace-nowrap pl-1.5">{node}</div> : null;
+                    })()}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

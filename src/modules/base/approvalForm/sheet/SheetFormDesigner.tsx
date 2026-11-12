@@ -348,33 +348,6 @@ function Designer({
         )}
       </>
     );
-    // 행 표시(대외 숨김·보이기 조건) — 마지막 열 오른쪽 아래에
-    // 병합 칸이면 대표 칸(c)이 마지막 열이 아니어도 병합이 마지막 열까지 덮으면 그 칸에
-    const lastCol = c + (sheet.merges.find((m) => m.startRow === r && m.startCol === c)?.colSpan ?? 1) - 1 === sheet.cols.length - 1;
-    const ext = lastCol && isExternalHiddenRow(sheet, r);
-    const cond = lastCol ? rowConditionOf(sheet, r) : undefined;
-    const condText = cond && `${condLabels.get(cond.name) ?? nameLabel(cond.name)} = ${cond.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join('·')}`;
-    const extMark =
-      ext || cond ? (
-        <span className="pointer-events-none absolute bottom-0.5 right-0.5 flex gap-0.5">
-          {cond && (
-            <span
-              title={`행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)`}
-              className="max-w-[220px] truncate rounded-sm bg-indigo-500/85 px-1 text-[8.5px] font-bold leading-[13px] text-white"
-            >
-              조건 · {condText}
-            </span>
-          )}
-          {ext && (
-            <span
-              title="대외 문서에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다"
-              className="rounded-sm bg-slate-500/80 px-1 text-[8.5px] font-bold leading-[13px] text-white"
-            >
-              대외 숨김
-            </span>
-          )}
-        </span>
-      ) : null;
     const marks: { t: string; cls: string; title: string }[] = [];
     if (p.input) marks.push({ t: `입력·${INPUT_SHORT_LABELS[p.input.type] ?? ''}`, cls: 'bg-amber-400/90 text-white', title: '입력 칸 — 기안 화면에서 이 종류의 입력 도구가 뜹니다' });
     // 비어 있는 입력 칸에는 기안 화면에서 뜰 입력 도구 모양을 흐리게
@@ -414,7 +387,7 @@ function Designer({
       const writable = (!!p.input && !p.lock && !p.bind) || isDocFieldBind(p.bind);
       // 못 고치는 칸 중 내용이 있는 칸만 표시(빈 여백 칸까지 칠하면 오히려 어지럽다)
       const fixed = !writable && (!emptyCell || !!p.bind || !!p.seal || !!p.autoNo);
-      return simpleBadge(p, sec, ext, cond ? condText : undefined, inputLook, fixed);
+      return simpleBadge(p, sec, inputLook, fixed);
     }
     if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
     if (p.bind) {
@@ -432,18 +405,11 @@ function Designer({
     if (p.autoNo) marks.push({ t: '자동번호', cls: 'bg-sky-500 text-white', title: '자동번호 — 상신할 때 번호를 매김' });
     if (p.guide) marks.push({ t: '안내', cls: 'bg-ink3 text-white', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
     if (p.input?.depends) marks.push({ t: '종속', cls: 'bg-indigo-500 text-white', title: `종속 선택 — '${condLabels.get(p.input.depends.name) ?? nameLabel(p.input.depends.name)}' 값에 따라 고를 항목이 바뀝니다` });
-    if (!marks.length)
-      return repeatMark || extMark ? (
-        <>
-          {repeatMark}
-          {extMark}
-        </>
-      ) : null;
+    if (!marks.length) return repeatMark || null;
     return (
       <>
         {inputLook}
         {repeatMark}
-        {extMark}
         <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
           {marks.map((m) => (
             <span key={m.t} title={m.title} className={`rounded-sm px-1 text-[8.5px] font-bold leading-[13px] ${m.cls}`}>
@@ -456,17 +422,43 @@ function Designer({
   };
 
   /**
+   * 행 표시 — 시트 오른쪽 바깥(행 끝)에. 칸 안에 두면 그 칸 설정인지 행 설정인지 헷갈린다.
+   * 보이기 조건(남색)·거래처용 숨김(회색) — 바꾸기는 그 행을 고르고 오른쪽 '이 줄'에서
+   */
+  const rowMarks = (r: number) => {
+    const cond = rowConditionOf(sheet, r);
+    const ext = isExternalHiddenRow(sheet, r);
+    if (!cond && !ext) return null;
+    const condText = cond && `${condLabels.get(cond.name) ?? nameLabel(cond.name)} = ${cond.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join('·')}`;
+    const chip = 'flex items-center gap-0.5 rounded-sm px-1 text-[9.5px] font-bold leading-[15px]';
+    return (
+      <span className="flex gap-0.5">
+        {cond && (
+          <span title={`행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)`} className={`${chip} max-w-[200px] bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200`}>
+            <Filter className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{condText}</span>
+          </span>
+        )}
+        {ext && (
+          <span title="거래처용에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다" className={`${chip} bg-slate-100 text-slate-600 ring-1 ring-slate-300`}>
+            <EyeOff className="h-2.5 w-2.5 shrink-0" />
+            거래처용 숨김
+          </span>
+        )}
+      </span>
+    );
+  };
+
+  /**
    * 간단 표시 — 칸 내용을 가리지 않게.
    * 기안자가 못 고치는 칸(글자·수식·자동 채우기·잠근 칸): 옅은 빗금. 쓸 수 있는 칸은 서식 색 그대로. 빈 입력 칸엔 글 아닌 종류만 흐리게(금액·날짜 등).
    * 특별한 칸(필수·잠금·비공개·직인·칸 이름·종속·안내): 오른쪽 위 작은 아이콘 — 마우스를 올리면 설명.
    * 자동 채우기·문서 항목은 '{기안자}' 같은 흐린 글자로 이미 보이므로 따로 표시하지 않는다.
-   * 행 표시(반복 구간·대외 숨김·보이기 조건): 아이콘으로(반복 구간 보라 띠는 그대로)
+   * 행 표시: 반복 구간은 보라 띠, 보이기 조건·거래처용 숨김은 시트 오른쪽 바깥(rowMarks)
    */
   const simpleBadge = (
     p: ReturnType<typeof approvalCellProps>,
     sec: ReturnType<typeof repeatSections>[number] | undefined,
-    ext: boolean,
-    condText: string | undefined,
     inputLook: React.ReactNode,
     fixed: boolean,
   ) => {
@@ -483,9 +475,6 @@ function Designer({
       icons.push({ key: 'dep', icon: <GitBranch className={ic} />, cls: 'text-indigo-500', title: `종속 선택 — '${condLabels.get(dep) ?? nameLabel(dep)}' 값에 따라 고를 항목이 바뀝니다` });
     }
     if (p.guide) icons.push({ key: 'guide', icon: <Info className={ic} />, cls: 'text-ink3', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
-    const rowIcons: Mark[] = [];
-    if (condText) rowIcons.push({ key: 'cond', icon: <Filter className={ic} />, cls: 'text-indigo-500', title: `행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)` });
-    if (ext) rowIcons.push({ key: 'ext', icon: <EyeOff className={ic} />, cls: 'text-slate-500', title: '대외 문서에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다' });
     const iconRow = (list: Mark[], pos: string) =>
       list.length ? (
         <span className={`pointer-events-none absolute ${pos} z-[1] flex gap-px rounded-sm bg-white/85 px-px`}>
@@ -517,7 +506,6 @@ function Designer({
           />
         )}
         {iconRow(icons, 'right-0.5 top-0.5')}
-        {iconRow(rowIcons, 'bottom-0.5 right-0.5')}
       </>
     );
   };
@@ -907,6 +895,7 @@ function Designer({
             canDeleteCol={(s, c) => !isStructureLocked(s, 'col', c)}
             setValue={setApprovalCellValue}
             renderBadge={badgeWithPreview}
+            rowEnd={rowMarks}
             onSelect={setSelection}
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
