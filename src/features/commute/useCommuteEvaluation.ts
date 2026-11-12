@@ -24,7 +24,9 @@ export type CommuteRawRecord = {
  */
 export function useCommuteEvaluation() {
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
-  const { data: holidays = [] } = useHolidays();
+  // 로딩 중 기본값을 렌더마다 새로 만들면 이것을 쓰는 계산(연차 원장 등)이 매번 다시 돈다
+  const holidaysQuery = useHolidays();
+  const holidays = useMemo(() => holidaysQuery.data ?? [], [holidaysQuery.data]);
   const approvalsQuery = useAllApprovals();
   const outsideWorksQuery = useOutsideWorks();
   const scheduleChanges = useScheduleChanges();

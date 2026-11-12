@@ -16,20 +16,52 @@ import { docNoOf } from '@/domain/approvalDoc/docNo';
  */
 const KEY = 'approvalDocs';
 
+/**
+ * 결재 문서 실시간 구독 — 앱 전체가 하나를 같이 쓴다.
+ * 예전에는 이 훅을 쓰는 곳(결재함·상세·근태·휴가·캘린더·재실 등)마다 따로 구독해, 화면 하나에서 전체 문서를
+ * 여러 번 동시에 받고 문서 하나가 바뀔 때도 그 수만큼 다시 받았다(휴대폰에서 결재가 느리던 원인).
+ * 또 새로 연 화면(목록 → 상세)은 빈 목록으로 시작해 전체를 다시 받을 때까지 기다렸다 — 받아 둔 목록으로 바로 그린다.
+ * 마지막 구독이 끝나면(로그아웃 등) 받아 둔 목록도 버린다(다른 계정에 남지 않게).
+ */
+const shared: { docs: ApprovalDoc[] | null; listeners: Set<(docs: ApprovalDoc[]) => void>; unsub: (() => void) | null } = {
+  docs: null,
+  listeners: new Set(),
+  unsub: null,
+};
+
+function subscribeShared(cb: (docs: ApprovalDoc[]) => void): () => void {
+  shared.listeners.add(cb);
+  if (!shared.unsub) {
+    shared.unsub = approvalDocRepo.subscribe((list) => {
+      shared.docs = list;
+      shared.listeners.forEach((l) => l(list));
+    });
+  } else if (shared.docs) cb(shared.docs);
+  return () => {
+    shared.listeners.delete(cb);
+    if (shared.listeners.size === 0 && shared.unsub) {
+      shared.unsub();
+      shared.unsub = null;
+      shared.docs = null;
+    }
+  };
+}
+
 /** 전체 결재 문서 조회(실시간 구독형으로 변경해 결재함 자동 갱신). */
 export function useAllApprovals() {
   const qc = useQueryClient();
-  const [data, setData] = useState<ApprovalDoc[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<ApprovalDoc[]>(() => shared.docs ?? []);
+  const [isLoading, setIsLoading] = useState(() => shared.docs === null);
 
-  useEffect(() => {
-    const unsub = approvalDocRepo.subscribe((list) => {
-      setData(list);
-      qc.setQueryData([KEY], list);
-      setIsLoading(false);
-    });
-    return unsub;
-  }, [qc]);
+  useEffect(
+    () =>
+      subscribeShared((list) => {
+        setData(list);
+        qc.setQueryData([KEY], list);
+        setIsLoading(false);
+      }),
+    [qc]
+  );
 
   return { data, isLoading };
 }
