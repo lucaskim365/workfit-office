@@ -1,4 +1,4 @@
-import { PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions } from './permissions';
+import { ADMIN_CONSOLE_KEY, PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions } from './permissions';
 import { SCOPE_TYPE_LABEL, type AuthAssignment, type AuthRole } from './types';
 
 /**
@@ -179,6 +179,5 @@ export function canOnUser(r: AuthzResult, key: string, target: AuthzUser, org: A
 
 /** 관리자 콘솔 출입 */
 export function canUseAdminConsole(r: AuthzResult): boolean {
-  for (const key of r.grants.keys()) if (PERMISSION_BY_KEY.get(key)?.adminConsole) return true;
-  return false;
+  return r.grants.has(ADMIN_CONSOLE_KEY);
 }

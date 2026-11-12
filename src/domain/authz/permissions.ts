@@ -12,6 +12,7 @@ export const AUTHZ_AREAS = [
   { id: 'schedule', name: '일정·자원' },
   { id: 'org', name: '조직' },
   { id: 'biz', name: '사업관리' },
+  { id: 'adminConsole', name: '관리자 콘솔' },
   { id: 'adminPeople', name: '관리자 · 구성원·조직' },
   { id: 'adminApproval', name: '관리자 · 전자결재' },
   { id: 'adminCompany', name: '관리자 · 회사·운영' },
@@ -36,6 +37,8 @@ export interface PermissionDef {
 }
 
 const P = (d: PermissionDef) => d;
+/** 관리자 콘솔에 들어가는 권한 */
+export const ADMIN_CONSOLE_KEY = 'admin.console';
 /** 보기·관리 짝 — 관리는 보기를 포함한다 */
 const pair = (base: string, name: string, area: AuthzAreaId, viewDesc: string, manageDesc: string, extra: Partial<PermissionDef> = {}): PermissionDef[] => [
   { key: `${base}.view`, name: `${name} 보기`, desc: viewDesc, area, ...extra },
@@ -81,6 +84,9 @@ export const PERMISSIONS: PermissionDef[] = [
   ...pair('biz.project', '사업 현황', 'biz', '사업 목록과 진행 상황을 본다', '사업 정보를 고친다'),
   ...pair('biz.po', '발주 현황', 'biz', '결재 끝난 발주서를 본다', '발주 회신 문서를 관리한다'),
 
+  // 관리자 콘솔 — 들어가기. 콘솔 안에서 보이는 메뉴는 아래 관리자 권한마다 따로 준다
+  P({ key: 'admin.console', name: '관리자 콘솔 접속', desc: '관리자 콘솔에 들어간다(안에서는 받은 관리자 권한의 메뉴만 보인다)', area: 'adminConsole', adminConsole: true }),
+
   // 관리자 · 구성원·조직
   ...pair('admin.user', '사용자', 'adminPeople', '직원 목록과 계정 정보를 본다', '직원을 등록·수정하고 퇴사 처리한다', { adminConsole: true }),
   ...pair('admin.org', '부서·조직', 'adminPeople', '부서 구조를 본다', '부서를 만들고 구조와 부서장을 바꾼다', { adminConsole: true }),
@@ -104,6 +110,11 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'admin.backup', name: '데이터 백업', desc: '백업과 복원을 실행한다', area: 'adminSystem', adminConsole: true, grantable: false }),
   P({ key: 'admin.testAccounts', name: '테스트 계정 보기 전환', desc: '화면에 테스트 계정을 보이거나 숨긴다', area: 'adminSystem', adminConsole: true, grantable: false }),
 ];
+
+// 관리자 콘솔 메뉴 권한은 콘솔 접속을 함께 준다 — 메뉴 권한만 받고 콘솔에 못 들어가는 일이 없게
+for (const p of PERMISSIONS) {
+  if (p.adminConsole && p.key !== ADMIN_CONSOLE_KEY) p.implies = [...(p.implies ?? []), ADMIN_CONSOLE_KEY];
+}
 
 export const PERMISSION_BY_KEY = new Map(PERMISSIONS.map((p) => [p.key, p]));
 

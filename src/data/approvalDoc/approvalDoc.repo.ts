@@ -1,3 +1,4 @@
+import { onSessionReset } from '@/shared/lib/sessionReset';
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
 import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
@@ -238,8 +239,19 @@ class AppwriteBackend implements ApprovalDocBackend {
   private listeners = new Set<(docs: ApprovalDoc[]) => void>();
   private latest: ApprovalDoc[] | null = null;
   private stop: (() => void) | null = null;
+  /** 로그아웃마다 하나씩 올린다 — 로그아웃 전에 떠난 읽기가 늦게 와도 받아 두지 않는다 */
+  private generation = 0;
+  constructor() {
+    // 로그아웃하면 받아 둔 목록을 버린다(같은 창에서 다른 계정으로 들어와도 앞사람 목록이 보이지 않게)
+    onSessionReset(() => {
+      this.generation += 1;
+      this.latest = null;
+    });
+  }
   private refresh() {
+    const gen = this.generation;
     void this.loadAll().then((list) => {
+      if (gen !== this.generation) return;
       this.latest = list;
       this.listeners.forEach((l) => l(list));
     });
@@ -247,6 +259,8 @@ class AppwriteBackend implements ApprovalDocBackend {
   subscribe(cb: (docs: ApprovalDoc[]) => void) {
     this.listeners.add(cb);
     if (this.latest) cb(this.latest);
+    // 구독은 살아 있는데 로그아웃으로 목록을 비웠으면 새로 받는다
+    else if (this.stop) this.refresh();
     if (!this.stop) {
       this.refresh(); // 첫 구독 — 한 번 받는다(예전에 받아 둔 게 있으면 먼저 보이고 새로 받은 걸로 바꾼다)
       const dbId = APPWRITE_DATABASE_ID;

@@ -79,3 +79,17 @@ test('사용자 변경 잠금 방지 — 마지막 최고 관리자를 미사용
   assert.equal(checkUserChangeLockout({ ...base, assignments: byDept, changed: [{ ...users[4], dept: '1팀' }, { ...users[3], dept: '1팀' }] }).block, true);
   assert.equal(checkUserChangeLockout({ ...base, assignments: [...one, asg('USER', 'boss')], changed: [{ ...users[0], status: '잠금' }] }).selfLoss, true);
 });
+
+test('옮기기 전 — 예전 그룹에서 기준정보 화면을 받은 직원은 관리자 콘솔에 들어간다(받은 화면만)', async () => {
+  const { legacyGrants } = await import('./legacyEval');
+  const { canUseAdminConsole } = await import('./engine');
+  const org = { depts: [{ id: 'D1', name: '경영기획팀', parentId: null }], positions: [{ id: 'P', name: '대리', rank: 7 }] };
+  const user = { id: 'u1', name: '직원', dept: '경영기획팀', position: '대리', status: '사용' };
+  const group = (code: string, menuPermissions: Record<string, Record<string, boolean>>) =>
+    ({ id: code, code, name: code, use: true, userIds: ['u1'], deptIds: [], positionRanks: [], members: [], menuPermissions }) as never;
+  const withMon = legacyGrants(user, [group('FINANCE', { S_BASE_APMON: { access: true } })], org);
+  assert.ok(canUseAdminConsole(withMon));
+  assert.ok(withMon.grants.has('admin.approval.monitor') && !withMon.grants.has('admin.code.view'));
+  const plain = legacyGrants(user, [group('USER', { S_GW_BOARD: { access: true, update: true } })], org);
+  assert.ok(!canUseAdminConsole(plain), '업무 화면만 있으면 못 들어간다');
+});

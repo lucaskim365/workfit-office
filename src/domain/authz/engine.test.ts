@@ -110,3 +110,16 @@ test('잠금 방지 — 마지막 최고 관리자, 본인 해제', () => {
   assert.deepEqual(checkLockout({ users, org, roles, before: two, after: [two[1]], meId: 's1' }), { block: false, selfLoss: true });
   assert.deepEqual(checkLockout({ users, org, roles, before: two, after: [two[0]], meId: 's1' }), { block: false, selfLoss: false });
 });
+
+test('관리자 콘솔 접속 — 따로 줄 수 있고, 콘솔 메뉴 권한을 받으면 함께 따라온다', () => {
+  const only = resolveGrants(staff1, [role('A', ['admin.console'])], [asg('A', { targetId: 's1' })], org);
+  assert.ok(canUseAdminConsole(only), '접속 권한만 줘도 들어간다');
+  assert.ok(!only.grants.has('admin.user.view'), '메뉴 권한은 따로');
+  const menu = resolveGrants(staff1, [role('M', ['admin.approval.monitor'])], [asg('M', { targetId: 's1' })], org);
+  assert.ok(canUseAdminConsole(menu), '메뉴 권한이 접속을 함께 준다');
+  assert.ok(!menu.grants.has('admin.code.view'), '받지 않은 메뉴는 없다');
+  const work = resolveGrants(staff1, [role('W', ['board.manage', 'calendar.company'])], [asg('W', { targetId: 's1' })], org);
+  assert.ok(!canUseAdminConsole(work), '업무 권한만으로는 못 들어간다');
+  const base = resolveGrants(staff1, [role('B', ['admin.console'], 'base')], [], org);
+  assert.ok(!canUseAdminConsole(base), '전 직원 역할로는 못 준다');
+});

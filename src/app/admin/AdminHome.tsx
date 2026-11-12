@@ -5,7 +5,8 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
 import { SYSTEM_SCREENS } from '@/domain/roleGroup/schema';
-import { adminPath } from '../shell/screens';
+import { ADMIN_URL, adminPath } from '../shell/screens';
+import { usePermission } from '@/features/auth/usePermission';
 import { useAdminMenu } from './AdminConsole';
 
 /** 화면 설명 — 권한 목록(SYSTEM_SCREENS)의 설명을 주소로 찾아 쓴다 */
@@ -21,6 +22,7 @@ export default function AdminHome() {
   const menu = useAdminMenu();
   const authz = useAuthz();
   const authzRoles = useAuthRolesQuery();
+  const { canAccess } = usePermission();
 
   const stats: { label: string; value: number | undefined; to: string }[] = [
     { label: '사용 중인 구성원', value: org.isLoading ? undefined : org.users.filter((u) => u.status !== '미사용').length, to: adminPath('/base/user') },
@@ -30,14 +32,15 @@ export default function AdminHome() {
     authz.active
       ? { label: '역할', value: authz.isLoading ? undefined : authzRoles.data?.length, to: adminPath('/base/authz/roles') }
       : { label: '역할 그룹', value: (groups.data as unknown[] | undefined)?.length, to: adminPath('/base/auth') },
-  ];
+  ].filter((s) => canAccess(s.to.slice(ADMIN_URL.length))); // 받은 권한의 화면만
 
   return (
     <div className="mx-auto max-w-[1080px]">
       <h1 className="text-xl font-extrabold tracking-tight text-ink">관리자 콘솔</h1>
       <p className="mb-5 mt-0.5 text-xs text-ink3">구성원·권한·전자결재·회사 정보를 관리합니다.</p>
 
-      <div className="mb-7 grid grid-cols-5 gap-3">
+      {stats.length > 0 && (
+      <div className="mb-7 grid gap-3" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
         {stats.map((s) => (
           <Link key={s.label} to={s.to} className="rounded-xl border border-border bg-panel px-4 py-3.5 hover:border-teal">
             <div className="text-[12px] text-ink3">{s.label}</div>
@@ -45,6 +48,7 @@ export default function AdminHome() {
           </Link>
         ))}
       </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         {menu.map((g) => (

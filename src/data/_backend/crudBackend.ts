@@ -2,6 +2,7 @@ import { collection, deleteDoc, doc, getDocs, runTransaction, setDoc, updateDoc 
 import { db } from '@/shared/lib/firebase';
 import { databases, APPWRITE_DATABASE_ID, Query, safeDocId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
+import { onSessionReset } from '@/shared/lib/sessionReset';
 
 /**
  * 공유 CRUD 백엔드 어댑터 — Phase 3 보존 repo 일괄 전환용.
@@ -117,6 +118,7 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
     const SHARE_MS = 3000;
     let inflight: Promise<T[]> | null = null;
     const forget = () => { inflight = null; };
+    onSessionReset(forget);
     return {
       async loadAll() {
         if (!inflight) {

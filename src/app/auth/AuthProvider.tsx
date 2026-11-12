@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { releasePushTokenOnSignOut } from '@/shared/lib/messaging';
+import { resetSessionCaches } from '@/shared/lib/sessionReset';
 import { authRepo } from '@/data/auth/auth.repo';
 import { userRepo } from '@/data/user/user.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
@@ -116,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user?.id) void releasePushTokenOnSignOut(user.id);
     localStorage.removeItem(SESSION_KEY);
     clearWiddyToken();
+    // 받아 둔 목록(결재 문서 등)을 버린다 — 같은 창에서 다른 계정으로 들어와도 앞사람 것이 보이지 않게
+    resetSessionCaches();
     if (typeof window !== 'undefined') {
       const isMobile = window.location.pathname.startsWith('/m');
       const targetUrl = isMobile ? '/m' : '/';

@@ -84,7 +84,8 @@ export function useAuthz() {
     isLoading,
     result,
     isSuperAdmin: result.isSuperAdmin,
-    canUseConsole: Boolean(me) && (active ? canUseAdminConsole(result) : result.isSuperAdmin),
+    // 관리자 콘솔 접속 권한이 있으면(옮기기 전에는 예전 그룹 권한의 기준정보·시스템 화면 권한이 이것을 준다)
+    canUseConsole: Boolean(me) && me!.status !== '미사용' && canUseAdminConsole(result),
     can,
     canManage,
     canOnUser,
