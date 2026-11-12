@@ -45,7 +45,7 @@ import {
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
-import { extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell } from '@/domain/approvalForm/sheet/docExtras';
+import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -540,10 +540,10 @@ export function SheetDraftForm({
   const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
   // 결재 완료일 줄 — 작성 중엔 숨김(값이 없을 때)
   const completedRows = useMemo(() => new Set(sheet && !draftInfo?.completedDate ? completedDateRows(sheet) : []), [sheet, draftInfo?.completedDate]);
-  // 첨부·관련 문서 자리 — 시트에 없거나 표를 고치는 중이면 시트 아래에, 보일 것이 없으면 그 줄째 숨김
-  const hasExtras = !!slots?.extras;
-  const extrasHidden = useMemo(() => (sheet ? extrasHiddenRows(sheet, hasExtras) : new Set<number>()), [sheet, hasExtras]);
-  const extrasInSheet = !!sheet && hasExtrasPlace(sheet);
+  // 첨부·관련 문서 — 맺음말 바로 위에 띠로(값이 줄 번호에 묶여 있어 줄을 끼우지 않는다). 맺음말이 없거나 표를 고치는 중이면 시트 아래에.
+  // 예전에 저장한 자리 줄은 늘 숨기고 그 앞에 띠로
+  const extrasAt = useMemo(() => (sheet ? extrasAnchorRow(sheet) : null), [sheet]);
+  const extrasHidden = useMemo(() => (sheet ? extrasHiddenRows(sheet, false) : new Set<number>()), [sheet]);
   // 행 보이기 조건 — 조건 칸(예: 지출 항목) 값에 맞지 않는 행은 숨긴다(기존 서식 '식대일 때만 보이기')
   const condHidden = useMemo(() => (sheet ? conditionHiddenRows(sheet) : new Set<number>()), [sheet]);
 
@@ -768,7 +768,7 @@ export function SheetDraftForm({
             if (props.guide) return <span className="text-[11px] text-[#777] print:hidden">{String(sheet.rows[r]?.[sheet.cols[c]] ?? '')}</span>;
             // 문서 머리 부품 칸 — 결재란(누르면 결재선 편집)·로고·기안자 서명
             const slot = slotOf(bind);
-            if (slot === 'extras' && !isExtrasDrawCell(sheet, r, c)) return '';
+            if (slot === 'extras') return '';
             if (slot) return <SlotCell node={slots?.[slot]} slot={slot} />;
             if (bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(bind, draftInfo) ?? ''} />;
             // 문서 항목 칸 — 문서의 제목·보존연한·공개범위를 여기서 쓴다
@@ -790,6 +790,7 @@ export function SheetDraftForm({
           }}
           // 결재 완료일 줄 — 작성 중엔 아직 결재 전이라 줄째 숨김(기존 문서 머리와 같음)
           hiddenRows={(r) => completedRows.has(r) || condHidden.has(r) || extrasHidden.has(r)}
+          beforeRow={(r) => (r === extrasAt && slots?.extras ? <SlotCell node={slots.extras} slot="extras" /> : null)}
           // 반복 구간 줄 수 — 구간 바로 아래 띠(기존 서식 '표'의 [행 추가]·[행 삭제]와 같음, 인쇄 안 됨)
           afterRow={(r) => {
             const sec = sections.find((x) => x.last === r);
@@ -850,7 +851,7 @@ export function SheetDraftForm({
       </div>
       </>
       )}
-      {slots?.extras && (editing || !extrasInSheet) && <div>{slots.extras}</div>}
+      {slots?.extras && (editing || extrasAt === null) && <div>{slots.extras}</div>}
     </div>
   );
 }

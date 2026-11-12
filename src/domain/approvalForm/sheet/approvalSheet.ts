@@ -417,7 +417,7 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
   },
   {
     // 문서 머리의 제목·보존연한·공개범위를 시트 안으로 — 기안자가 이 칸에서 쓰고, 값은 문서 자체에 저장
-    label: '문서 항목',
+    label: '문서 정보',
     items: [
       { value: 'doc.title', label: '제목' },
       { value: 'doc.preservation', label: '보존연한' },
@@ -426,14 +426,13 @@ export const BIND_GROUPS: { label: string; items: { value: BindSource; label: st
   },
   {
     // 문서 머리 전체를 시트 안으로 — 결재란이 시트에 있으면 문서 머리를 모두 뺀다(§11.16)
-    label: '문서 머리',
+    label: '회사·결재',
     items: [
       { value: 'doc.formTitle', label: '문서 이름(큰 제목)' },
       { value: 'doc.approvalLine', label: '결재란' },
       { value: 'doc.logo', label: '회사 로고' },
       { value: 'doc.letterhead', label: '회사 정보(주소·전화)' },
       { value: 'draft.sign', label: '기안자 서명' },
-      { value: 'doc.extras', label: '첨부·관련 문서 자리' },
     ],
   },
 ];

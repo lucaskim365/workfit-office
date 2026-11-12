@@ -8,7 +8,7 @@
 import { applyBorder, applyStyle, deleteRow, insertCol, insertRow, mergeRange, setCellValue, setRowMeta, type Sheet } from '@/lib/sheet/core';
 import type { HeaderItem } from '@/domain/approvalForm/headerItems';
 import { HEADER_ITEMS, STAMP_TABLE, TITLE_ROW } from '@/domain/approvalForm/headerItems';
-import { APPROVAL_NS, DEFAULT_CLOSING, setApprovalProp, slotRows, type BindSource } from './approvalSheet';
+import { APPROVAL_NS, DEFAULT_CLOSING, setApprovalProp, type BindSource } from './approvalSheet';
 
 /** 칸의 자동 채우기·문서 항목 → 문서 머리에서 뺄 항목 */
 const HEADER_OF_BIND: Record<string, HeaderItem | typeof TITLE_ROW> = {
@@ -143,21 +143,14 @@ export function insertDocHeader(
 }
 
 /**
- * 맺음말 — 첨부·관련 문서 자리 · 빈 줄 · 문구 · 기안일 · 기안자 서명(가운데, 대외 문서에서 숨김).
- * 첨부·관련 문서 자리는 기존 문서처럼 본문과 맺음말 사이 — 대외 숨김을 걸지 않는다(대외 문서에선 그리는 쪽이 첨부·관련 문서를 빼고 수신처만 둔다)
+ * 맺음말 — 빈 줄 · 문구 · 기안일 · 기안자 서명(가운데, 대외 문서에서 숨김).
+ * 첨부·관련 문서는 그리는 쪽이 저절로 이 맺음말 바로 위에 둔다(docExtras.ts) — 기안일 줄 아래 기안자 서명 줄로 알아본다
  */
 function appendClosing(s0: Sheet, closing: string | undefined): Sheet {
   let s = s0;
   const n = s.cols.length;
   const all = (r: number) => ({ r1: r, r2: r, c1: 0, c2: n - 1 });
   const center = (r: number) => (s = applyStyle(s, all(r), { align: 'center' }));
-  // 이미 자리가 있으면(부품으로 넣어 둔 서식에 문서 머리를 다시 넣을 때) 더 넣지 않는다 — 서식에 하나
-  if (!slotRows(s, 'extras').length) {
-    const at = s.rows.length;
-    s = insertRow(s, at);
-    s = mergeRange(s, all(at));
-    s = setApprovalProp(s, { r1: at, r2: at, c1: 0, c2: 0 }, APPROVAL_NS.bind, 'doc.extras');
-  }
   const end = s.rows.length;
   for (let i = 0; i < 4; i++) s = insertRow(s, s.rows.length);
   for (let r = end + 1; r <= end + 3; r++) s = mergeRange(s, all(r));
