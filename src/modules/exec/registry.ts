@@ -40,7 +40,7 @@ export const WIDGETS = {
   weekSchedule: { title: '이번 주 내 일정', module: '일정', tier: 'M', min: 'S', Component: WeekScheduleWidget },
   attendance: { title: '내 근태', module: '근태', tier: 'M', min: 'S', Component: AttendanceWidget },
   todayCommute: { title: '오늘 출퇴근', module: '근태', tier: 'S', min: 'S', mini: true, Component: TodayCommuteWidget },
-  weekHours: { title: '이번 주 근무시간', module: '근태', tier: 'S', min: 'S', mini: true, Component: WeekHoursWidget },
+  weekHours: { title: '근무시간(주간·월간)', module: '근태', tier: 'S', min: 'S', mini: true, Component: WeekHoursWidget },
   leave: { title: '연차', module: '근태', tier: 'S', min: 'S', mini: true, Component: LeaveWidget },
   approval: { title: '전자결재 현황', module: '전자결재', tier: 'S', min: 'S', mini: true, Component: ApprovalWidget },
   approvalPending: { title: '결재 대기', module: '전자결재', tier: 'S', min: 'S', Component: PendingApprovalWidget },

@@ -57,12 +57,6 @@ import {
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 근태 4분류 색 — 시안 색을 따르고 다크 모드는 같은 계열 반투명 */
-const BUCKET_FILL: Record<AttendanceBucket, string> = {
-  work: 'bg-[#49b1e1]',
-  pending: 'bg-[#c4c8ce] dark:bg-white/25',
-  late: 'bg-[#f2a17e]',
-  leave: 'bg-[#d9dd7a]',
-};
 const BUCKET_STROKE: Record<AttendanceBucket, string> = {
   work: '#49b1e1',
   pending: '#c4c8ce',
@@ -395,6 +389,29 @@ function Donut({ counts, centerTop, centerBottom }: { counts: Record<AttendanceB
 }
 
 /** 일별 근무시간 막대 — 4·8·12시간 기준선 */
+/** 오늘 출근·퇴근 시각 — 내 근태 위젯의 도넛 옆 */
+function TodayClock({ rec }: { rec?: { inAt: string | null; outAt: string | null; bucket: AttendanceBucket; status: string } }) {
+  const inClock = clockOf(rec?.inAt);
+  const outClock = clockOf(rec?.outAt);
+  // 외근·출장·휴가처럼 기록 없이 인정된 날은 그 상태를 적는다
+  const note = rec && !rec.inAt && rec.bucket !== 'pending' && rec.status !== 'unknown' ? COMMUTE_STATUS_LABELS[rec.status as keyof typeof COMMUTE_STATUS_LABELS] : null;
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <span className="text-[11px] font-bold text-ink3">오늘</span>
+      {[
+        { label: '출근', value: inClock, late: rec?.bucket === 'late' },
+        { label: '퇴근', value: outClock, late: false },
+      ].map((x) => (
+        <div key={x.label} className="flex items-center justify-between gap-2 rounded-lg bg-panel-alt px-3 py-1.5">
+          <span className="text-[11.5px] font-bold text-ink3">{x.label}</span>
+          <span className={`text-[17px] leading-tight font-black tabular-nums ${x.value ? (x.late ? 'text-[#c4602f]' : 'text-ink') : 'text-ink3'}`}>{x.value ?? '--:--'}</span>
+        </div>
+      ))}
+      {note && <span className="text-[11px] font-bold text-ink2">{note}</span>}
+    </div>
+  );
+}
+
 function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; bucket: AttendanceBucket }>; today: string }) {
   const MAX = 12 * 60;
   return (
@@ -510,6 +527,9 @@ export function AttendanceWidget() {
   const todayRec = myDays.find((d) => d.date === today);
   const isThisMonth = month === today.slice(0, 7);
   const tier = useTier();
+  // 오늘 출퇴근 — 다른 달을 보고 있어도 오늘 것(같은 달 조회는 한 번만 읽는다)
+  const cur = useMyCommuteDays(today.slice(0, 7));
+  const nowRec = cur.myDays.find((d) => d.date === today);
 
   if (tier === 'S') {
     const stats = [
@@ -552,14 +572,7 @@ export function AttendanceWidget() {
   return (
     <Panel>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="text-[15px] font-extrabold tracking-tight text-ink">내 근태</h2>
-          {todayRec && isThisMonth && (
-            <span className="text-[11.5px] text-ink3">
-              오늘 {todayRec.inAt ? `${new Date(todayRec.inAt).toTimeString().slice(0, 5)} 출근` : '출근 기록 없음'}
-            </span>
-          )}
-        </div>
+        <h2 className="text-[15px] font-extrabold tracking-tight text-ink">내 근태</h2>
         <div className="flex items-center gap-1.5">
           <button type="button" aria-label="지난달" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><ChevronLeft size={15} /></button>
           <span className="min-w-[78px] text-center text-[13px] font-extrabold tabular-nums text-ink">{month.replace('-', '. ')}</span>
@@ -579,15 +592,7 @@ export function AttendanceWidget() {
           <div className="flex min-h-0 flex-col">
             <div className="mb-3 flex items-center gap-4">
               <Donut counts={counts} centerTop={`${counts.work + counts.late}일`} centerBottom="출근한 날" />
-              <ul className="m-0 flex shrink-0 list-none flex-col gap-2 p-0">
-                {ATTENDANCE_BUCKETS.map((k) => (
-                  <li key={k} className="flex items-center gap-2 whitespace-nowrap text-[12px] text-ink2">
-                    <i className={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${BUCKET_FILL[k]}`} />
-                    <span className="min-w-[52px]">{ATTENDANCE_LABELS[k]}</span>
-                    <strong className="tabular-nums text-ink">{counts[k]}일</strong>
-                  </li>
-                ))}
-              </ul>
+              <TodayClock rec={nowRec} />
             </div>
             <div className="mb-1 grid grid-cols-7 gap-1">
               {WEEKDAYS.map((w, i) => (
@@ -963,53 +968,134 @@ export function TodayCommuteWidget() {
   );
 }
 
-/* ───────────────────────── 근태: 이번 주 근무시간 ───────────────────────── */
+/* ───────────────────────── 근태: 근무시간(주간·월간) ───────────────────────── */
 
+type HoursMode = 'week' | 'month';
+const HOURS_MODE_KEY = 'workfit.home.hoursMode';
+function loadHoursMode(): HoursMode {
+  try {
+    return localStorage.getItem(HOURS_MODE_KEY) === 'month' ? 'month' : 'week';
+  } catch {
+    return 'week';
+  }
+}
+
+/** 주간·월간 고르기 */
+function HoursModeSwitch({ mode, onChange }: { mode: HoursMode; onChange: (m: HoursMode) => void }) {
+  return (
+    <div role="radiogroup" aria-label="기간" className="flex rounded-lg bg-panel-alt p-0.5">
+      {(['week', 'month'] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={mode === m}
+          onClick={() => onChange(m)}
+          className={`cursor-pointer rounded-md px-2 py-0.5 text-[11px] font-bold ${mode === m ? 'bg-panel text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-ink3 hover:text-ink2'}`}
+        >
+          {m === 'week' ? '주간' : '월간'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 근무시간 — 주간(이번 주 월~일, 기준 40시간)과 월간(이번 달, 기준 = 이번 달 평일(공휴일 뺌) × 8시간)을 오간다.
+ * 고른 보기는 이 브라우저에 기억한다.
+ */
 export function WeekHoursWidget() {
   const navigate = useGo();
   const today = todayKst();
+  const month = today.slice(0, 7);
   const week = weekDates(today);
+  const [mode, setModeState] = useState<HoursMode>(loadHoursMode);
+  const setMode = (m: HoursMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(HOURS_MODE_KEY, m);
+    } catch {
+      /* 기억 못 해도 보기는 바뀐다 */
+    }
+  };
   // 주가 두 달에 걸칠 수 있어 두 달을 읽는다(같은 달이면 한 번만 읽는다)
   const a = useMyCommuteDays(week[0].slice(0, 7));
-  const b = useMyCommuteDays(today.slice(0, 7));
+  const b = useMyCommuteDays(month);
   const byDate = new Map([...a.myDays, ...b.myDays].map((d) => [d.date, d]));
-  const days = week.map((date) => ({ date, minutes: date <= today ? byDate.get(date)?.minutes ?? 0 : 0, late: byDate.get(date)?.bucket === 'late' }));
-  const total = days.reduce((s, d) => s + d.minutes, 0);
-  const GOAL = 40 * 60;
+  const holidays = useHolidays(month.slice(0, 4)).data ?? [];
+  const holidaySet = new Set(holidays.map((h) => h.date));
+
+  const weekDays = week.map((date) => ({ date, minutes: date <= today ? byDate.get(date)?.minutes ?? 0 : 0, late: byDate.get(date)?.bucket === 'late' }));
+  const monthDays = b.myDays;
+  const isWorkday = (d: string) => weekdayOf(d) !== 0 && weekdayOf(d) !== 6 && !holidaySet.has(d);
+  const isWeek = mode === 'week';
+  const total = isWeek ? weekDays.reduce((s, d) => s + d.minutes, 0) : monthDays.filter((d) => d.date <= today).reduce((s, d) => s + d.minutes, 0);
+  const goal = isWeek ? 40 * 60 : monthDates(month).filter(isWorkday).length * DAY_GOAL_MIN;
+  // 오늘까지 채웠어야 할 시간 — 월간에서 앞섰는지·뒤졌는지
+  const dueSoFar = monthDates(month).filter((d) => d <= today && isWorkday(d)).length * DAY_GOAL_MIN;
+  const worked = monthDays.filter((d) => d.date <= today && d.minutes > 0);
+  const avg = worked.length ? Math.round(worked.reduce((s, d) => s + d.minutes, 0) / worked.length) : 0;
   const MAX = 12 * 60;
+
   if (useMini()) {
     return (
-      <MiniPanel title="이번 주 근무" onClick={() => navigate('/gw/commute')}>
+      <MiniPanel title={isWeek ? '이번 주 근무' : '이번 달 근무'} onClick={() => setMode(isWeek ? 'month' : 'week')}>
         <span className={MINI_BIG}>{hoursText(total)}</span>
         <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-panel-alt">
-          <span className="block h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+          <span className="block h-full rounded-full bg-[#0876c8]" style={{ width: `${goal ? Math.min(100, (total / goal) * 100) : 0}%` }} />
         </span>
       </MiniPanel>
     );
   }
   return (
     <Panel>
-      <Head title="이번 주 근무시간" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
-      <div className="mb-3 flex items-baseline gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-[15px] font-extrabold tracking-tight text-ink">근무시간</h2>
+        <div className="flex items-center gap-2">
+          <HoursModeSwitch mode={mode} onChange={setMode} />
+          <button type="button" onClick={() => navigate('/gw/commute')} className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">근태 화면</button>
+        </div>
+      </div>
+      <div className="mb-1 flex items-baseline gap-2">
         <span className="text-[24px] leading-none font-black tabular-nums text-ink">{hoursText(total)}</span>
-        <span className="text-[12px] text-ink3">/ 40시간</span>
+        <span className="text-[12px] text-ink3">/ {hoursText(goal)}</span>
+        <span className="ml-auto text-[11px] text-ink3">{isWeek ? '이번 주' : `${Number(month.slice(5))}월`}</span>
       </div>
-      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-panel-alt">
-        <div className="h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+      <div className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-panel-alt">
+        <div className="h-full rounded-full bg-[#0876c8]" style={{ width: `${goal ? Math.min(100, (total / goal) * 100) : 0}%` }} />
       </div>
-      <div className="relative flex h-[84px] items-end gap-2">
-        <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
-        {days.map((d) => (
-          <div key={d.date} className="flex h-full flex-1 items-end" title={`${WEEKDAYS[weekdayOf(d.date)]} ${hoursText(d.minutes)}`}>
-            {d.minutes > 0 && <div className={`w-full rounded-t-[5px] ${d.late ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(Math.min(d.minutes, MAX) / MAX) * 100}%` }} />}
+      <div className="mb-3 flex justify-between text-[11px] text-ink3">
+        {isWeek ? (
+          <span>남은 시간 <strong className="tabular-nums text-ink2">{hoursText(Math.max(0, goal - total))}</strong></span>
+        ) : (
+          <span>
+            오늘까지 기준보다{' '}
+            <strong className={`tabular-nums ${total >= dueSoFar ? 'text-[#0876c8]' : 'text-[#c4602f]'}`}>
+              {hoursText(Math.abs(total - dueSoFar))} {total >= dueSoFar ? '더' : '덜'}
+            </strong>
+          </span>
+        )}
+        <span>하루 평균 <strong className="tabular-nums text-ink2">{hoursText(avg)}</strong></span>
+      </div>
+      {isWeek ? (
+        <>
+          <div className="relative flex h-[84px] items-end gap-2">
+            <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
+            {weekDays.map((d) => (
+              <div key={d.date} className="flex h-full flex-1 items-end" title={`${WEEKDAYS[weekdayOf(d.date)]} ${hoursText(d.minutes)}`}>
+                {d.minutes > 0 && <div className={`w-full rounded-t-[5px] ${d.late ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(Math.min(d.minutes, MAX) / MAX) * 100}%` }} />}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="mt-1.5 flex gap-2">
-        {days.map((d) => (
-          <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
-        ))}
-      </div>
+          <div className="mt-1.5 flex gap-2">
+            {weekDays.map((d) => (
+              <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <HoursBars days={monthDays} today={today} />
+      )}
     </Panel>
   );
 }
