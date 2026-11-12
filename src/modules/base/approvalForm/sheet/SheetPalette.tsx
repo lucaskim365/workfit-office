@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { ChevronRight, AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -242,49 +243,96 @@ export function SheetPalette({
 }) {
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
   const icons = variant === 'icons';
+  // 접은 묶음 — 이 브라우저에 기억(편의용, 없어도 됨)
+  const [folded, setFolded] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(FOLD_KEY) ?? '[]');
+      return Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  const toggleFold = (title: string) =>
+    setFolded((cur) => {
+      const next = cur.includes(title) ? cur.filter((t) => t !== title) : [...cur, title];
+      try {
+        localStorage.setItem(FOLD_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 못 해도 동작은 같음 */
+      }
+      return next;
+    });
   return (
-    <div className={icons ? 'space-y-2' : 'space-y-3'}>
-      {!icons && <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>}
-      {PART_SECTIONS.map((sec) => (
-        <section key={sec.title} className={icons ? 'space-y-2 border-t-2 border-border pt-2 first:border-t-0 first:pt-0' : 'space-y-1.5'}>
-          {!icons && (
-            <div className="border-b border-border pb-0.5">
-              <div className="text-[11.5px] font-extrabold text-ink">{sec.title}</div>
-              {sec.desc && <div className="text-[10px] leading-snug text-ink3">{sec.desc}</div>}
-            </div>
-          )}
-          {sec.groups.map((g, gi) => (
-        <div key={g.label ?? gi} className={icons && gi > 0 ? 'border-t border-dashed border-border pt-2' : undefined}>
-          {!icons && g.label && <div className="mb-0.5 text-[10px] font-bold text-ink3">{g.label}</div>}
-          <div className={`grid gap-1 ${icons ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-4'}`}>
-            {g.parts.map((p) => {
-              const on = p.active?.(props) ?? false;
-              const Icon = p.icon;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(PART_MIME, p.id);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }}
-                  onClick={() => onApply(p.id, selection.range, true)}
-                  title={`${icons ? `[${sec.title}] ${p.label} — ` : ''}${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
-                  className={`flex cursor-grab flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1 text-[10px] font-semibold leading-tight active:cursor-grabbing ${
-                    on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'
-                  }`}
-                >
-                  <Icon className={icons ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
-                  {!icons && <span className="text-center">{p.label}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-          ))}
-        </section>
-      ))}
+    <div className={icons ? 'space-y-2' : 'space-y-2.5'}>
+      {/* 옆 패널 안(full)은 제목·도움말이 없어 안내를 한 줄로 */}
+      {variant === 'full' && <div className="text-[10.5px] leading-snug text-ink3">{PALETTE_HELP}</div>}
+      {PART_SECTIONS.map((sec) => {
+        const open = icons || !folded.includes(sec.title);
+        return (
+          <section key={sec.title} className={icons ? 'space-y-2 border-t-2 border-border pt-2 first:border-t-0 first:pt-0' : undefined}>
+            {!icons && (
+              <button
+                type="button"
+                onClick={() => toggleFold(sec.title)}
+                aria-expanded={open}
+                title={sec.desc}
+                className="mb-1 flex w-full items-center gap-1 text-left text-[11px] font-extrabold text-ink hover:text-teal"
+              >
+                <ChevronRight className={`h-3 w-3 shrink-0 text-ink3 transition-transform ${open ? 'rotate-90' : ''}`} />
+                {sec.title}
+              </button>
+            )}
+            {open && (
+              <div className={icons ? 'space-y-2' : 'space-y-1'}>
+                {sec.groups.map((g, gi) => (
+                  <div key={g.label ?? gi} className={icons && gi > 0 ? 'border-t border-dashed border-border pt-2' : undefined}>
+                    <div className={`grid gap-1 ${icons ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {g.parts.map((p) => {
+                        const on = p.active?.(props) ?? false;
+                        const Icon = p.icon;
+                        const name = SHORT_LABEL[p.id] ?? p.label;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(PART_MIME, p.id);
+                              e.dataTransfer.effectAllowed = 'copy';
+                            }}
+                            onClick={() => onApply(p.id, selection.range, true)}
+                            title={`${icons ? `[${sec.title}] ` : ''}${p.label} — ${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
+                            className={`flex min-w-0 cursor-grab items-center rounded-md border font-semibold active:cursor-grabbing ${
+                              icons ? 'justify-center py-1' : 'gap-1 px-1.5 py-[3px] text-[10.5px] leading-tight'
+                            } ${on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'}`}
+                          >
+                            <Icon className={`shrink-0 ${icons ? 'h-4 w-4' : 'h-3 w-3'}`} />
+                            {!icons && <span className="truncate">{name}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
+
+const FOLD_KEY = 'sheetPalette.folded';
+
+/** 부품 쓰는 법 — 편집기 왼쪽 막대는 '부품' 옆 (?)에, 옆 패널 안은 한 줄로 */
+export const PALETTE_HELP = '칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다. 부품 이름에 마우스를 올리면 설명이 나옵니다.';
+
+/** 좁은 부품 칸에 맞춘 짧은 이름(전체 이름은 마우스를 올리면) */
+const SHORT_LABEL: Record<string, string> = {
+  'input.select': '선택',
+  'input.multiSelect': '여러 개 선택',
+  'input.users': '여러 사람',
+  'bind.doc.formTitle': '문서 이름',
+  'bind.doc.letterhead': '회사 정보',
+};
