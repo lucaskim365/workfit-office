@@ -109,9 +109,25 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
 
   if (dbDriver === 'appwrite') {
     const dbs = () => databases!;
+    /**
+     * 진행 중인 전체 읽기를 나눠 쓴다 — 화면 여러 곳(사용자·인사 프로필·조직도 등)이 같은 컬렉션을
+     * 동시에 읽으면 예전에는 그 수만큼 요청이 나갔다(홈 첫 화면에서 부서 13번 등).
+     * 진행 중이거나 받은 지 SHARE_MS 안이면 나누고, 그 뒤엔 버린다(오래된 값을 들고 있지 않는다). 쓰기가 있으면 바로 버린다.
+     */
+    const SHARE_MS = 3000;
+    let inflight: Promise<T[]> | null = null;
+    const forget = () => { inflight = null; };
     return {
       async loadAll() {
-        return this.loadWithQueries([]);
+        if (!inflight) {
+          const p = this.loadWithQueries([]);
+          inflight = p;
+          const clear = () => { if (inflight === p) inflight = null; };
+          // 받은 뒤에도 잠깐(SHARE_MS) 나눠 쓴다 — 첫 화면에서 조금씩 늦게 묻는 곳들까지. 실패는 바로 버린다
+          p.then(() => setTimeout(clear, SHARE_MS), clear);
+        }
+        // 받는 쪽이 고쳐도 서로 번지지 않게 사본으로
+        return structuredClone(await inflight);
       },
       async loadWithQueries(queries: string[] = []) {
         const out: T[] = [];
@@ -136,6 +152,7 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
         }
       },
       async save(item: T) {
+        forget();
         const id = safeDocId(idOf(item)); // 한글 등 규격 밖 자연키는 결정적 해시 $id 로 매핑
         const row = toRow(item);
         try {
@@ -157,6 +174,7 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
         }
       },
       async insert(item: T) {
+        forget();
         const id = safeDocId(idOf(item));
         try {
           await dbs().createDocument(APPWRITE_DATABASE_ID, coll, id, toRow(item));
@@ -166,9 +184,11 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
         }
       },
       async patch(id: string, fields: Partial<T>) {
+        forget();
         await dbs().updateDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id), fields as Record<string, unknown>);
       },
       async remove(id: string) {
+        forget();
         try {
           await dbs().deleteDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id));
         } catch (e: any) {

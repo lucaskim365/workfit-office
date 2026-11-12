@@ -229,30 +229,57 @@ class AppwriteBackend implements ApprovalDocBackend {
   async remove(id: string) {
     await this.dbs.deleteDocument(APPWRITE_DATABASE_ID, COLL, id);
   }
-  subscribe(cb: (docs: ApprovalDoc[]) => void) {
-    void this.loadAll().then(cb); // 초기 1회
-    const dbId = APPWRITE_DATABASE_ID;
-    const channels = [`databases.${dbId}.collections.${COLL}.documents`, `databases.${dbId}.tables.${COLL}.rows`];
-    /**
-     * 몰려 오는 이벤트를 한 번으로 합친다.
-     *
-     * 알림과 달리 결재 문서는 사용자별로 가를 수 없다 — 상태가 바뀌면 관련자 모두가
-     * 최신 목록을 봐야 한다. 그래서 필터 대신 **합치기**로 부하를 줄인다.
-     * 일괄 결재처럼 한꺼번에 수십 건이 바뀌면 예전에는 그 수만큼 전체 재조회가 돌았다.
-     */
-    let pending: ReturnType<typeof setTimeout> | null = null;
-    const unsub = appwriteClient!.subscribe(channels, () => {
-      if (pending) clearTimeout(pending);
-      pending = setTimeout(() => {
-        pending = null;
-        void this.loadAll().then(cb);
-      }, 150);
+  /**
+   * 구독은 화면 전체가 하나를 나눠 쓴다(shared).
+   * 홈처럼 결재 위젯·근태 위젯이 동시에 각자 구독하면 예전에는 구독마다 전체 문서를 처음부터 다시 받아
+   * 같은 요청이 수십 번 나갔다. 이제 첫 구독이 한 번 받고 실시간 연결도 하나만 두며,
+   * 나중에 온 구독은 받아 둔 목록을 바로 받는다(그사이 바뀌면 다 같이 새 목록).
+   */
+  private listeners = new Set<(docs: ApprovalDoc[]) => void>();
+  private latest: ApprovalDoc[] | null = null;
+  private stop: (() => void) | null = null;
+  private refresh() {
+    void this.loadAll().then((list) => {
+      this.latest = list;
+      this.listeners.forEach((l) => l(list));
     });
+  }
+  subscribe(cb: (docs: ApprovalDoc[]) => void) {
+    this.listeners.add(cb);
+    if (this.latest) cb(this.latest);
+    if (!this.stop) {
+      this.refresh(); // 첫 구독 — 한 번 받는다(예전에 받아 둔 게 있으면 먼저 보이고 새로 받은 걸로 바꾼다)
+      const dbId = APPWRITE_DATABASE_ID;
+      const channels = [`databases.${dbId}.collections.${COLL}.documents`, `databases.${dbId}.tables.${COLL}.rows`];
+      /**
+       * 몰려 오는 이벤트를 한 번으로 합친다.
+       *
+       * 알림과 달리 결재 문서는 사용자별로 가를 수 없다 — 상태가 바뀌면 관련자 모두가
+       * 최신 목록을 봐야 한다. 그래서 필터 대신 **합치기**로 부하를 줄인다.
+       * 일괄 결재처럼 한꺼번에 수십 건이 바뀌면 예전에는 그 수만큼 전체 재조회가 돌았다.
+       */
+      let pending: ReturnType<typeof setTimeout> | null = null;
+      const unsub = appwriteClient!.subscribe(channels, () => {
+        if (pending) clearTimeout(pending);
+        pending = setTimeout(() => {
+          pending = null;
+          this.refresh();
+        }, 150);
+      });
+      this.stop = () => {
+        if (pending) clearTimeout(pending);
+        unsub();
+      };
+    }
     return () => {
-      if (pending) clearTimeout(pending);
-      unsub();
+      this.listeners.delete(cb);
+      if (this.listeners.size === 0 && this.stop) {
+        this.stop();
+        this.stop = null;
+      }
     };
   }
+
 }
 
 function selectBackend(): ApprovalDocBackend {
