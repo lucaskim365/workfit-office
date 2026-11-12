@@ -1,30 +1,21 @@
 import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
+import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { FileText, CalendarCheck2 } from 'lucide-react';
-import { calculateLeaveDays } from '@/domain/leave/policy';
+import { approvedLeavesInMonth } from '@/domain/leave/monthLeaves';
 import { leaveChip } from '@/domain/commute/statusDisplay';
 import { StatusBadge } from '@/features/commute/StatusBadge';
 
 interface CommuteLeaveViewProps {
   month: string;
-  approvals: any[];
+  approvals: ApprovalDoc[];
   personMap: Map<number, CommutePersonRow>;
   onSelectPerson: (person: CommutePersonRow) => void;
 }
 
 export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }: CommuteLeaveViewProps) {
-  // 당월에 걸쳐있는 승인 완료 휴가 문서들 추출
-  const leaveDocs = useMemo(() => {
-    return approvals
-      .filter((doc) => doc.docType === '휴가' && doc.status === '완료' && doc.form?.startDate)
-      .filter((doc) => {
-        const start = doc.form.startDate;
-        const end = doc.form.endDate || doc.form.startDate;
-        // month(YYYY-MM)와 겹치는지 체크
-        return start.slice(0, 7) === month || end.slice(0, 7) === month;
-      })
-      .sort((a, b) => (a.form.startDate || '').localeCompare(b.form.startDate || ''));
-  }, [approvals, month]);
+  // 당월에 걸쳐있는 승인 완료 휴가 문서들 추출 (PWA 근태 관제와 같은 규칙)
+  const leaveDocs = useMemo(() => approvedLeavesInMonth(approvals, month), [approvals, month]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs">
@@ -61,7 +52,7 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
                 </td>
               </tr>
             ) : (
-              leaveDocs.map((doc) => {
+              leaveDocs.map(({ doc, startDate, endDate, leaveType, days: daysCount }) => {
                 const drafterName = (doc.drafterName || '').trim();
                 let matchedPerson: CommutePersonRow | undefined;
                 for (const p of personMap.values()) {
@@ -70,17 +61,6 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
                     break;
                   }
                 }
-
-                const startDate = doc.form?.startDate;
-                const endDate = doc.form?.endDate || startDate;
-                const leaveType = doc.form?.leaveType || '연차';
-                const daysCount = calculateLeaveDays({
-                  leaveType,
-                  startDate,
-                  endDate,
-                  rawDays: doc.form?.days,
-                  title: doc.title,
-                });
 
                 return (
                   <tr

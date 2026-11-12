@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
-import { useRosterOrder } from '@/features/user/useRosterOrder';
+import { useCallback, useMemo, useState } from 'react';
 import { isTestAccount } from '@/domain/user/testAccount';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -9,7 +8,6 @@ import {
 } from '@/domain/commute/schema';
 import {
   useCommuteBootstrap,
-  useCommuteEmployees,
   useCommuteMonth,
   useCommuteMonthAll,
   useCommuteViewer,
@@ -18,8 +16,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { resolveCommuteScope } from '@/features/auth/scopeHelper';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { useUsers } from '@/features/user/useUsers';
-import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
+import { useCommuteRoster, normName } from '@/features/commute/useCommuteRoster';
+import { useLeaveLedger, type LeaveLedgerMode } from '@/features/commute/useLeaveLedger';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
@@ -34,14 +32,7 @@ import { MyCommuteLeaveTab } from './components/MyCommuteLeaveTab';
 import { LeaveLedgerTable } from '../leave/components/LeaveLedgerTable';
 import { LeaveAdjustmentModal } from '../leave/components/LeaveAdjustmentModal';
 import { BatchSubstituteHolidayModal } from '../leave/components/BatchSubstituteHolidayModal';
-import {
-  buildLeaveLedger,
-  type LeaveLedgerEntry,
-} from '@/domain/leave/ledger';
-import {
-  getStoredAdjustments,
-  type LeaveAdjustmentTransaction,
-} from '@/domain/leave/adjustmentStore';
+import type { LeaveLedgerEntry } from '@/domain/leave/ledger';
 import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
 import {
   Settings,
@@ -137,164 +128,9 @@ export default function CommuteScreen() {
   const viewerQuery = useCommuteViewer({ enabled: boot.isSettled });
   const viewer = viewerQuery.data;
 
-  // 시스템 전체 사용자 목록
-  const usersQuery = useUsers();
-  const allUsers = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
-
-  // 이름 공백 정규화 (예: '모 란' vs '모란' 동일인 처리)
-  const normName = useCallback((s?: string | null) => (s || '').replace(/\s+/g, ''), []);
-
-  // CAPS 연동 직원 목록
-  const employeesQuery = useCommuteEmployees({ enabled: boot.isSettled });
-  const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
-
-  // 사용자 검색 맵 (이름, 사번, ID 기준 빠른 매핑)
-  const userByEmpMap = useMemo(() => {
-    const map = new Map<string, typeof allUsers[0]>();
-    for (const u of allUsers) {
-      if (u.empNo) map.set(u.empNo.trim(), u);
-      if (u.name) {
-        map.set(u.name.trim(), u);
-        map.set(normName(u.name), u);
-      }
-      if (u.id) map.set(u.id.trim(), u);
-    }
-    return map;
-  }, [allUsers, normName]);
-
-  const { data: employeeProfiles = [] } = useEmployeeProfiles();
-  const profileByEmpMap = useMemo(() => {
-    const map = new Map<string, typeof employeeProfiles[0]>();
-    for (const p of employeeProfiles) {
-      if (p.empNo) map.set(p.empNo.trim(), p);
-      if (p.name) {
-        map.set(p.name.trim(), p);
-        map.set(normName(p.name), p);
-      }
-      if (p.userId) map.set(p.userId.trim(), p);
-    }
-    return map;
-  }, [employeeProfiles, normName]);
-
-  // 근태 관리 제외 대상 여부 단일 판정 헬퍼 (인명관리의 [근태 관리 대상] ON/OFF 스위치에 의해서만 결정)
-  const isExcludedAttendance = useCallback(
-    (
-      u?: {
-        id?: string;
-        name?: string | null;
-        empNo?: string | null;
-        dept?: string | null;
-        position?: string | null;
-        jobTitle?: string | null;
-      } | null,
-      rowName?: string,
-    ) => {
-      const name = (u?.name || rowName || '').trim();
-      const nName = normName(name);
-
-      // 프로필에 근태 관리 대상 여부가 설정되어 있는 경우 반영 (기본값: true / 관리자가 OFF한 경우: false)
-      const profile =
-        (u?.id ? profileByEmpMap.get(u.id) : undefined) ??
-        (u?.empNo ? profileByEmpMap.get(u.empNo) : undefined) ??
-        (name ? profileByEmpMap.get(name) ?? profileByEmpMap.get(nName) : undefined);
-
-      if (profile?.isAttendanceTarget === false) return true;
-      return false;
-    },
-    [profileByEmpMap, normName],
-  );
-
-  /** 인원 정렬 — 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]). 행에 빠진 값은 사용자 정보로 채운다. */
-  const { compare: compareRoster } = useRosterOrder();
-  const compareEmployees = useCallback(
-    (
-      a: { name?: string | null; dept?: string | null; position?: string | null; jobTitle?: string | null },
-      b: { name?: string | null; dept?: string | null; position?: string | null; jobTitle?: string | null },
-    ) => {
-      const fill = (row: typeof a) => {
-        const name = (row.name || '').trim();
-        const u = userByEmpMap.get(name) ?? userByEmpMap.get(normName(name));
-        return {
-          // 인사 프로필 행이면 id 가 아니라 userId 가 사용자 ID 다
-          id: (u && 'userId' in u ? u.userId : u?.id) || undefined,
-          name,
-          dept: row.dept || u?.dept || '',
-          position: row.position || u?.position || '',
-          jobTitle: row.jobTitle || u?.jobTitle || '',
-        };
-      };
-      return compareRoster(fill(a), fill(b));
-    },
-    [compareRoster, userByEmpMap, normName],
-  );
-
-  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (임직원 DB 미등록자 및 근태관리 OFF 대상자 100% 원천 배제)
-  const employees = useMemo(() => {
-    const list = [
-      ...allEmployees
-        .filter((row) => row.active !== false && !row.retireDate)
-        .filter((row) => {
-          const n = row.name.trim();
-          const norm = normName(n);
-
-          // [규칙 1] 임직원 데이터베이스(users/allUsers)와 비교: 매칭되는 등록 임직원이 없으면 100% 배제
-          const matchedUser = userByEmpMap.get(n) ?? userByEmpMap.get(norm) ?? userByEmpMap.get(String(row.empId));
-          if (!matchedUser) return false;
-
-          // [규칙 2] 퇴사자(미사용, resignedAt 기록자) 100% 배제
-          if (matchedUser.status === '미사용' || Boolean(matchedUser.resignedAt)) return false;
-
-          // [규칙 3] 인명관리에서 근태관리 대상 OFF로 지정된 경우 배제
-          return !isExcludedAttendance(matchedUser, row.name);
-        }),
-    ];
-    const existingNormNames = new Set(list.map((e) => normName(e.name)));
-    const existingEmpIds = new Set(list.map((e) => e.empId));
-
-    for (const u of allUsers) {
-      // 퇴사자(미사용, resignedAt 기록자) 100% 원천 배제
-      if (u.status === '미사용' || Boolean(u.resignedAt)) continue;
-
-      const name = (u.name || '').trim();
-      const nName = normName(name);
-      if (!name || !nName || existingNormNames.has(nName) || isExcludedAttendance(u, name)) continue;
-
-      let empId = Number(u.empNo);
-      if (Number.isNaN(empId) || empId <= 0 || existingEmpIds.has(empId)) {
-        let hash = 0;
-        const key = u.id || name;
-        for (let i = 0; i < key.length; i++) {
-          hash = ((hash << 5) - hash) + key.charCodeAt(i);
-          hash |= 0;
-        }
-        empId = 10000 + (Math.abs(hash) % 80000);
-        while (existingEmpIds.has(empId)) empId++;
-      }
-
-      existingNormNames.add(nName);
-      existingEmpIds.add(empId);
-
-      list.push({
-        empId,
-        name,
-        active: true,
-        retireDate: null,
-      });
-    }
-
-    return list.sort(compareEmployees);
-  }, [allEmployees, allUsers, userByEmpMap, user?.dept, user?.name, normName, isExcludedAttendance, compareEmployees]);
-
-  const getHireDateForEmp = useCallback(
-    (empName?: string | null, empId?: number | null) => {
-      if (!empName && !empId) return null;
-      const profile =
-        (empName ? (profileByEmpMap.get(empName.trim()) ?? profileByEmpMap.get(normName(empName))) : undefined) ??
-        (empId ? profileByEmpMap.get(String(empId)) : undefined);
-      return profile?.hireDate ? profile.hireDate.trim() : null;
-    },
-    [profileByEmpMap, normName],
-  );
+  // 근태 관리 대상 명단(CAPS 직원 + 사용자 + 인사 프로필) — PWA 근태 관제와 같은 훅
+  const roster = useCommuteRoster(boot.isSettled);
+  const { allEmployees, employees, userByEmpMap, profileByEmpMap, isExcludedAttendance, compareEmployees, getHireDateForEmp } = roster;
 
   // 권한 판별: 전사 관리자(ALL) vs 팀장/부서장(TEAM) vs 일반 사원(MY_ONLY)
   const isExec = canAll;
@@ -336,19 +172,9 @@ export default function CommuteScreen() {
   }, [setSearchParams]);
 
   // 연차 원장 산정 모드 & 수동 가감 상태
-  const [ledgerMode, setLedgerMode] = useState<'HIRE_DATE' | 'FISCAL_YEAR'>('HIRE_DATE');
+  const [ledgerMode, setLedgerMode] = useState<LeaveLedgerMode>('HIRE_DATE');
   const [adjustmentTarget, setAdjustmentTarget] = useState<LeaveLedgerEntry | null>(null);
   const [showBatchSubstituteModal, setShowBatchSubstituteModal] = useState(false);
-  const [adjustments, setAdjustments] = useState<LeaveAdjustmentTransaction[]>(() => getStoredAdjustments());
-
-  useEffect(() => {
-    const handleUpdate = () => {
-      setAdjustments(getStoredAdjustments());
-    };
-    window.addEventListener('workfit-leave-adjustment-updated', handleUpdate);
-    return () => window.removeEventListener('workfit-leave-adjustment-updated', handleUpdate);
-  }, []);
-
   // 필터 상태
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -396,76 +222,12 @@ export default function CommuteScreen() {
     return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
   }, [user, getHireDateForEmp]);
 
-  // 전사 연차 원장 실시간 집계 (전사 권한자 전용)
-  const { entries: leaveLedgerEntries, summary: leaveLedgerSummary } = useMemo(() => {
-    if (!canAll) {
-      return {
-        entries: [],
-        summary: {
-          totalEmployees: 0,
-          totalEntitled: 0,
-          totalAdjusted: 0,
-          totalGranted: 0,
-          totalUsed: 0,
-          totalPending: 0,
-          totalRemaining: 0,
-          avgUsageRate: 0,
-          advanceEmployeeCount: 0,
-        },
-      };
-    }
-
-    const empInput = employees
-      .filter((e) => {
-        const u =
-          userByEmpMap.get(e.name.trim()) ??
-          userByEmpMap.get(normName(e.name)) ??
-          userByEmpMap.get(String(e.empId));
-        return !isExcludedAttendance(u, e.name);
-      })
-      .map((e) => {
-        const u =
-          userByEmpMap.get(e.name.trim()) ??
-          userByEmpMap.get(normName(e.name)) ??
-          userByEmpMap.get(String(e.empId));
-        const hire = getHireDateForEmp(e.name, e.empId);
-      const isRetired = !e.active || u?.status === '미사용' || Boolean(u?.resignedAt);
-      return {
-        empId: e.empId,
-        empNo: u?.empNo ? String(u.empNo) : String(e.empId),
-        name: e.name,
-        dept: u?.dept || null,
-        position: u?.position || null,
-        hireDate: hire,
-        isRetired,
-      };
-    });
-
-    const result = buildLeaveLedger(
-      empInput,
-      employeeProfiles,
-      approvals,
-      adjustments,
-      { mode: ledgerMode, holidays },
-    );
-
-    return {
-      entries: result.entries.sort(compareEmployees),
-      summary: result.summary,
-    };
-  }, [
-    canAll,
-    employees,
-    userByEmpMap,
-    normName,
-    getHireDateForEmp,
-    employeeProfiles,
-    approvals,
-    adjustments,
-    ledgerMode,
-    holidays,
-    compareEmployees,
-  ]);
+  // 전사 연차 원장 실시간 집계 (전사 권한자 전용) — PWA 근태 관제와 같은 훅
+  const {
+    entries: leaveLedgerEntries,
+    summary: leaveLedgerSummary,
+    refreshAdjustments,
+  } = useLeaveLedger({ enabled: canAll, mode: ledgerMode, roster, approvals, holidays });
 
   // 내 근태 한 달치 레코드
   const myMonthRows = useMemo(() => {
@@ -1123,7 +885,7 @@ export default function CommuteScreen() {
           adminName={user?.name || '관리자'}
           onClose={() => setAdjustmentTarget(null)}
           onSuccess={() => {
-            setAdjustments(getStoredAdjustments());
+            refreshAdjustments();
           }}
         />
       )}
