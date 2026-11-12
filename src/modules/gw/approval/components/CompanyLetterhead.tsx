@@ -1,3 +1,4 @@
+import { createContext, useContext, type ReactNode } from 'react';
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
 import { useCompanySites } from '@/features/companySite/useCompanySites';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
@@ -56,14 +57,21 @@ export function CompanyLetterheadBlock({ config }: { config: LetterheadConfig })
   );
 }
 
+/** 시트 서식이 로고 칸에 고른 로고 — 문서 보기·기안 화면이 시트에서 읽어 넣는다(직인의 SealMarkProvider 와 같은 방식) */
+const LogoMarkContext = createContext<string | undefined>(undefined);
+export function LogoMarkProvider({ markId, children }: { markId: string | undefined; children: ReactNode }) {
+  return <LogoMarkContext.Provider value={markId}>{children}</LogoMarkContext.Provider>;
+}
+
 /**
  * 회사 로고 — 회사 정보 화면에 등록한 대표 로고(고른 로고가 있으면 그것). 등록이 없으면 fallback.
  * 시트 서식의 '회사 로고' 칸
  */
-export function CompanyLogo({ markId, height = 28, fallback = null }: { markId?: string; height?: number; fallback?: React.ReactNode }) {
+export function CompanyLogo({ markId, height = 28, fallback = null }: { markId?: string; height?: number; fallback?: ReactNode }) {
   const { data: company } = useCompanyInfo();
   const { data: marks } = useCompanyMarks();
-  const url = markUrlOf(marks, 'logo', markId, company?.logoUrl);
+  const picked = useContext(LogoMarkContext);
+  const url = markUrlOf(marks, 'logo', markId ?? picked, company?.logoUrl);
   if (!url) return <>{fallback}</>;
   // maxWidth none — 공통 스타일(img max-width:100%)에 눌려 줄어들지 않게
   return <img src={url} alt="회사 로고" style={{ height, width: 'auto', maxWidth: 'none' }} className="object-contain" />;

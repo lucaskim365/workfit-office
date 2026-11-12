@@ -5,13 +5,14 @@ import { docExportOptions } from '@/domain/approvalForm/sheet/docExport';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { SealImage } from '../components/CompanySeal';
-import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
+import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetLogoMarkId, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { extrasCell, extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell, withExtrasRow } from '@/domain/approvalForm/sheet/docExtras';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { SheetFormTitle, SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
+import { LogoMarkProvider } from '../components/CompanyLetterhead';
 
 /** 인쇄 — 결재 문서 인쇄 상자(.approval-print) 기준, A4 폭 210mm 에서 여백(index.css @page 14mm×2)을 뺀 폭 */
 const PRINT_FIT = { rootSelector: '.approval-print', pageWidthMm: 182 };
@@ -230,7 +231,9 @@ export function SheetDocView({
       }
     />
   );
-  const inner = sealMark ? <SealMarkProvider markId={sealMark}>{view}</SealMarkProvider> : view;
+  // 로고 칸이 고른 로고 — 없으면 대표 로고
+  const withLogo = <LogoMarkProvider markId={sheetLogoMarkId(sheet)}>{view}</LogoMarkProvider>;
+  const inner = sealMark ? <SealMarkProvider markId={sealMark}>{withLogo}</SealMarkProvider> : withLogo;
   // 엑셀 받기 때 그림 자리를 재는 상자
   const body = (
     <>

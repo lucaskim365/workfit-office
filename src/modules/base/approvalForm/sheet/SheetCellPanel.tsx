@@ -108,6 +108,7 @@ export function SheetCellPanel({
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
   const { data: marks } = useCompanyMarks();
   const seals = marksOf(marks, 'seal');
+  const logos = marksOf(marks, 'logo');
   const focusRange = { r1: focus.r, r2: focus.r, c1: focus.c, c2: focus.c };
 
   // 대외 문서에서 숨김 — 행 단위(칸만 비우면 빈 줄이 남아 어색함). 고른 행이 모두 켜져 있으면 켜짐으로 보인다
@@ -285,6 +286,22 @@ export function SheetCellPanel({
           {props.bind && !BIND_GROUPS.some((g) => g.items.some((i) => i.value === props.bind)) && <option value={props.bind}>{props.bind} (지금은 없는 항목)</option>}
         </select>
       </Row>
+      {props.bind === 'doc.logo' && (
+        <Row label="쓸 로고" hint="기준 정보 → 회사 정보에 등록한 로고 중에서 고릅니다. 고르지 않으면 대표 로고.">
+          <select
+            className={inp}
+            value={props.logoMark && logos.some((m) => m.id === props.logoMark) ? props.logoMark : ''}
+            onChange={(e) => onChange(setApprovalProp(sheet, focusRange, APPROVAL_NS.logoMark, e.target.value || undefined))}
+          >
+            <option value="">대표 로고</option>
+            {logos.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </Row>
+      )}
 
       <Row
         label="칸 이름"

@@ -26,6 +26,8 @@ export const APPROVAL_NS = {
   autoNo: SHEET_AUTO_NO_NS,
   /** 회사 직인 칸이 쓸 직인(회사 로고·직인 목록 id) — 없으면 대표 직인 */
   sealMark: 'sealMark',
+  /** 회사 로고 칸이 쓸 로고(회사 로고·직인 목록 id) — 없으면 대표 로고 */
+  logoMark: 'logoMark',
   /** 필수 입력 칸 — 값 true. 비어 있으면 상신을 막는다(기존 서식 '필수') */
   required: 'required',
   /**
@@ -472,6 +474,8 @@ export interface ApprovalCellProps {
   autoNo?: AutoNumberConfig;
   /** 직인 칸이 쓸 직인 id */
   sealMark?: string;
+  /** 회사 로고 칸이 쓸 로고 id */
+  logoMark?: string;
   /** 필수 입력 칸 */
   required: boolean;
 }
@@ -503,6 +507,10 @@ export function approvalCellProps(s: Sheet, r: number, c: number): ApprovalCellP
       const m = metaAt(s, APPROVAL_NS.sealMark, r, c);
       return typeof m === 'string' && m ? m : undefined;
     })(),
+    logoMark: (() => {
+      const m = metaAt(s, APPROVAL_NS.logoMark, r, c);
+      return typeof m === 'string' && m ? m : undefined;
+    })(),
   };
 }
 
@@ -516,6 +524,14 @@ export function sheetHasSecret(s: Sheet | null | undefined): boolean {
 export function sheetSealMarkId(s: Sheet | null | undefined): string | undefined {
   const m = Object.values(s?.cellMeta[APPROVAL_NS.sealMark] ?? {}).find((v) => typeof v === 'string' && v);
   return typeof m === 'string' ? m : undefined;
+}
+
+/** 시트의 회사 로고 칸이 쓸 로고 — 로고 칸에 고른 것, 없으면 undefined(대표 로고) */
+export function sheetLogoMarkId(s: Sheet | null | undefined): string | undefined {
+  const marks = s?.cellMeta[APPROVAL_NS.logoMark] ?? {};
+  const binds = s?.cellMeta[APPROVAL_NS.bind] ?? {};
+  const hit = Object.entries(marks).find(([k, v]) => typeof v === 'string' && v && binds[k] === 'doc.logo');
+  return hit ? String(hit[1]) : undefined;
 }
 
 /** 범위 안의 칸 — 병합에 가려진 칸은 빼고 대표 칸만 */
@@ -552,6 +568,7 @@ export function setApprovalProp(
     | typeof APPROVAL_NS.guide
     | typeof APPROVAL_NS.autoNo
     | typeof APPROVAL_NS.sealMark
+    | typeof APPROVAL_NS.logoMark
     | typeof APPROVAL_NS.required,
   value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {

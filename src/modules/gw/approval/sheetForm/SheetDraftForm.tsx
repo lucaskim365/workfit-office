@@ -41,11 +41,13 @@ import {
   type DocFieldBind,
   readSheetValues,
   sheetDocFields,
+  sheetLogoMarkId,
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
+import { LogoMarkProvider } from '../components/CompanyLetterhead';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -647,6 +649,8 @@ export function SheetDraftForm({
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
+    // 로고 칸이 고른 로고 — 없으면 대표 로고
+    <LogoMarkProvider markId={sheetLogoMarkId(sheet)}>
     <div className="relative">
       {canImport && (
         // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 같은 이름 칸 값을 복사(§11.4). 인쇄에는 안 나옴
@@ -853,5 +857,6 @@ export function SheetDraftForm({
       )}
       {slots?.extras && (editing || extrasAt === null) && <div>{slots.extras}</div>}
     </div>
+    </LogoMarkProvider>
   );
 }
