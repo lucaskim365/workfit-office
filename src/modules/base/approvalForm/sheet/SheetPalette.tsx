@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, Paperclip, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -11,12 +11,10 @@ import {
   type CellInputType,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
-import { placeExtras } from '@/domain/approvalForm/sheet/docExtras';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 
 /**
- * 부품 목록 — 다우오피스 양식 편집기처럼 칸에 넣을 부품을 왼쪽에 모아 둔다.
- * 칸을 고르고 부품을 누르거나, 부품을 칸으로 끌어다 놓는다.
+ * 부품 목록 — 칸에 넣을 부품을 왼쪽에 모아 둔다. 칸을 고르고 부품을 누르거나, 부품을 칸으로 끌어다 놓는다.
  * 하는 일은 오른쪽 '칸 속성'의 입력 칸·자동 채우기·직인·반복 구간과 같다(같은 저장 형식).
  */
 
@@ -71,7 +69,6 @@ const BIND_ICONS: Record<string, LucideIcon> = {
   'doc.logo': ImageIcon,
   'draft.sign': Signature,
   'doc.letterhead': Landmark,
-  'doc.extras': Paperclip,
   'doc.preservation': Archive,
   'doc.visibility': Eye,
 };
@@ -81,8 +78,7 @@ const DOC_HINTS: Record<string, string> = {
   'doc.approvalLine': '결재자 이름·도장 칸 — 결재선에 따라 칸 수가 바뀌고, 기안 화면에서 누르면 결재선을 고칩니다. 넓게 합친 칸에 두세요. 시트에 결재란이 있으면 문서 머리 전체가 빠집니다',
   'doc.logo': '회사 로고 그림',
   'doc.letterhead': '회사 주소·사업장 주소·전화·팩스·홈페이지·이메일 머리글 — 회사 정보 화면의 값이 저절로(기존 서식 \'회사정보\'와 같음)',
-  'doc.extras': '첨부파일·수신처·관련 문서가 이 줄에 들어갑니다(기존 문서처럼 본문과 맺음말 사이). 한 줄을 고르면 그 줄을 합쳐 씁니다. 없으면 시트 아래에 붙고, 보일 것이 없으면 줄째 숨습니다',
-  'draft.sign': '맺음말 아래 \'기안자 이름 (인)\' — 기안자 도장이나 서명',
+  'draft.sign': '맺음말 아래 \'기안자 이름 (인)\' — 기안자 도장이나 서명. 기안일 칸 바로 아랫줄에 두면 맺음말로 보고, 첨부·관련 문서를 그 위에 저절로 넣습니다',
   'draft.completedDate': '결재가 끝난 날짜를 채웁니다(작성·결재 중엔 비어 있음). 문서 머리의 결재 완료일은 빠집니다',
   'doc.title': '기안자가 여기서 문서 제목을 씁니다(필수, 문서 목록·검색에 쓰는 제목). 문서 머리의 제목 줄은 빠집니다',
   'doc.preservation': '기안자가 여기서 보존연한을 고릅니다. 문서 머리의 보존연한은 빠집니다',
@@ -121,41 +117,64 @@ const bindPart = (value: string, label: string): Part => ({
   remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.bind, undefined),
 });
 
-/** 첨부·관련 문서 자리 — 서식에 하나, 한 줄(고른 칸을 합침), 반복 구간 밖 */
-const extrasPart = (label: string): Part => ({ ...bindPart('doc.extras', label), apply: placeExtras });
+const BIND_LABELS = new Map<string, string>(BIND_GROUPS.flatMap((g) => g.items.map((i) => [i.value, i.label] as const)));
+const binds = (...values: string[]) => values.map((v) => bindPart(v, BIND_LABELS.get(v) ?? v));
+const inputs = (...types: CellInputType[]) => types.map(inputPart);
 
-export const PART_GROUPS: { label: string; parts: Part[] }[] = [
-  // 묶음 이름은 아래 '칸 속성'과 같게 — 입력 칸 / 자동 채우기 / 문서 항목
-  { label: '입력 칸', parts: (Object.keys(CELL_INPUT_LABELS) as CellInputType[]).map(inputPart) },
-  { label: '자동 채우기', parts: (BIND_GROUPS.find((g) => g.label === '기안 정보')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
-  { label: '문서 항목', parts: (BIND_GROUPS.find((g) => g.label === '문서 항목')?.items ?? []).map((i) => bindPart(i.value, i.label)) },
-  { label: '문서 머리', parts: (BIND_GROUPS.find((g) => g.label === '문서 머리')?.items ?? []).map((i) => (i.value === 'doc.extras' ? extrasPart(i.label) : bindPart(i.value, i.label))) },
+const sealPart: Part = {
+  id: 'seal',
+  label: '회사 직인',
+  icon: Stamp,
+  hint: '결재가 끝나면 이 칸에 회사 직인을 찍습니다',
+  apply: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, true),
+  active: (p) => p.seal,
+  remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, false),
+};
+
+const autoNoPart: Part = {
+  id: 'autoNo',
+  label: '자동번호',
+  icon: ListOrdered,
+  hint: "상신할 때 서식 규칙(접두어·날짜·자릿수·초기화 주기)으로 번호를 매깁니다 — 번호 모양은 오른쪽 칸 속성에서(기존 서식 '자동번호'와 같음)",
+  apply: (s, g) => {
+    if (hasFormula(s, g)) return { notice: '수식 칸에는 자동번호를 넣을 수 없습니다.' };
+    const at = { r1: Math.min(g.r1, g.r2), r2: Math.min(g.r1, g.r2), c1: Math.min(g.c1, g.c2), c2: Math.min(g.c1, g.c2) };
+    const cleared = setApprovalProp(setApprovalProp(s, at, APPROVAL_NS.input, undefined), at, APPROVAL_NS.bind, undefined);
+    return setApprovalProp(cleared, at, APPROVAL_NS.autoNo, DEFAULT_AUTO_NUMBER);
+  },
+  active: (p) => !!p.autoNo,
+  remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.autoNo, undefined),
+};
+
+/**
+ * 부품 목록 — 누가 채우는지로 크게 나눈다: 기안자가 쓰는 칸 / 저절로 채워지는 칸 / 도구.
+ * 첨부·관련 문서는 부품이 아니다 — 그릴 때 저절로 맺음말 위에(docExtras.ts)
+ */
+export const PART_SECTIONS: { title: string; desc?: string; groups: { label?: string; parts: Part[] }[] }[] = [
   {
-    label: '기타',
-    parts: [
+    title: '기안자가 쓰는 칸',
+    desc: '작성할 때 기안자가 채웁니다',
+    groups: [
+      { label: '글·숫자', parts: inputs('text', 'multiline', 'number', 'currency') },
+      { label: '날짜', parts: inputs('date', 'dateRange') },
+      { label: '고르기', parts: inputs('select', 'multiSelect', 'checkbox') },
+      { label: '사람·부서', parts: inputs('user', 'users', 'dept') },
+      { label: '문서 정보', parts: binds('doc.title', 'doc.preservation', 'doc.visibility') },
+    ],
+  },
+  {
+    title: '저절로 채워지는 칸',
+    desc: '시스템이 채웁니다 — 기안자는 고칠 수 없습니다',
+    groups: [
+      { label: '기안 정보', parts: [...binds('draft.drafter', 'draft.dept', 'draft.date', 'draft.docNo', 'draft.completedDate'), autoNoPart] },
+      { label: '회사·결재', parts: [...binds('doc.formTitle', 'doc.logo', 'doc.letterhead', 'doc.approvalLine', 'draft.sign'), sealPart] },
+    ],
+  },
+  {
+    title: '도구',
+    groups: [
       {
-        id: 'seal',
-        label: '회사 직인',
-        icon: Stamp,
-        hint: '결재가 끝나면 이 칸에 회사 직인을 찍습니다',
-        apply: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, true),
-        active: (p) => p.seal,
-        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, false),
-      },
-      {
-        id: 'autoNo',
-        label: '자동번호',
-        icon: ListOrdered,
-        hint: "상신할 때 서식 규칙(접두어·날짜·자릿수·초기화 주기)으로 번호를 매깁니다 — 번호 모양은 오른쪽 칸 속성에서(기존 서식 '자동번호'와 같음)",
-        apply: (s, g) => {
-          if (hasFormula(s, g)) return { notice: '수식 칸에는 자동번호를 넣을 수 없습니다.' };
-          const at = { r1: Math.min(g.r1, g.r2), r2: Math.min(g.r1, g.r2), c1: Math.min(g.c1, g.c2), c2: Math.min(g.c1, g.c2) };
-          const cleared = setApprovalProp(setApprovalProp(s, at, APPROVAL_NS.input, undefined), at, APPROVAL_NS.bind, undefined);
-          return setApprovalProp(cleared, at, APPROVAL_NS.autoNo, DEFAULT_AUTO_NUMBER);
-        },
-        active: (p) => !!p.autoNo,
-        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.autoNo, undefined),
-      },
+        parts: [
       {
         id: 'guide',
         label: '안내문',
@@ -188,11 +207,13 @@ export const PART_GROUPS: { label: string; parts: Part[] }[] = [
             s,
           ),
       },
+        ],
+      },
     ],
   },
 ];
 
-const PARTS = new Map(PART_GROUPS.flatMap((g) => g.parts).map((p) => [p.id, p]));
+const PARTS = new Map(PART_SECTIONS.flatMap((x) => x.groups.flatMap((g) => g.parts)).map((p) => [p.id, p]));
 
 /**
  * 부품 넣기 — 바뀐 시트, 또는 막힌 이유.
@@ -220,13 +241,22 @@ export function SheetPalette({
   onApply: (id: string, range: CellRange, toggle?: boolean) => void;
 }) {
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
+  const icons = variant === 'icons';
   return (
-    <div className="space-y-2">
-      {variant !== 'icons' && <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>}
-      {PART_GROUPS.map((g) => (
-        <div key={g.label} className={variant === 'icons' ? 'border-t border-border pt-2 first:border-t-0 first:pt-0' : undefined}>
-          {variant === 'icons' ? null : <div className="mb-1 text-[10.5px] font-bold text-ink3">{g.label}</div>}
-          <div className={`grid gap-1 ${variant === 'icons' ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-4'}`}>
+    <div className={icons ? 'space-y-2' : 'space-y-3'}>
+      {!icons && <div className="text-[10.5px] leading-snug text-ink3">칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다.</div>}
+      {PART_SECTIONS.map((sec) => (
+        <section key={sec.title} className={icons ? 'space-y-2 border-t-2 border-border pt-2 first:border-t-0 first:pt-0' : 'space-y-1.5'}>
+          {!icons && (
+            <div className="border-b border-border pb-0.5">
+              <div className="text-[11.5px] font-extrabold text-ink">{sec.title}</div>
+              {sec.desc && <div className="text-[10px] leading-snug text-ink3">{sec.desc}</div>}
+            </div>
+          )}
+          {sec.groups.map((g, gi) => (
+        <div key={g.label ?? gi} className={icons && gi > 0 ? 'border-t border-dashed border-border pt-2' : undefined}>
+          {!icons && g.label && <div className="mb-0.5 text-[10px] font-bold text-ink3">{g.label}</div>}
+          <div className={`grid gap-1 ${icons ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-4'}`}>
             {g.parts.map((p) => {
               const on = p.active?.(props) ?? false;
               const Icon = p.icon;
@@ -240,18 +270,20 @@ export function SheetPalette({
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   onClick={() => onApply(p.id, selection.range, true)}
-                  title={`${variant === 'icons' ? `[${g.label}] ${p.label} — ` : ''}${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
+                  title={`${icons ? `[${sec.title}] ${p.label} — ` : ''}${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
                   className={`flex cursor-grab flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1 text-[10px] font-semibold leading-tight active:cursor-grabbing ${
                     on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'
                   }`}
                 >
-                  <Icon className={variant === 'icons' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
-                  {variant !== 'icons' && <span className="text-center">{p.label}</span>}
+                  <Icon className={icons ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+                  {!icons && <span className="text-center">{p.label}</span>}
                 </button>
               );
             })}
           </div>
         </div>
+          ))}
+        </section>
       ))}
     </div>
   );

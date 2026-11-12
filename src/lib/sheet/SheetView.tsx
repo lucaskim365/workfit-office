@@ -43,6 +43,8 @@ export interface SheetViewProps {
   hiddenRows?: (r: number) => boolean;
   /** 줄 아래에 덧붙일 띠(표 폭 한 칸, 인쇄 안 됨) — 예: 반복 구간 [행 추가] */
   afterRow?: (r: number) => ReactNode;
+  /** 줄 위에 끼울 띠(표 폭 한 칸, 테두리 없음) — 그 줄이 숨어도 그린다. 예: 기안 화면의 첨부·관련 문서 */
+  beforeRow?: (r: number) => ReactNode;
   /** 줄(tr)에 붙일 클래스 — 예: 마우스를 올린 줄에만 칸 위 단추 보이기(group) */
   rowClassName?: (r: number) => string | undefined;
   /**
@@ -67,6 +69,7 @@ export function SheetView({
   printFit,
   hiddenRows,
   afterRow,
+  beforeRow,
   rowClassName,
   rowEnd,
   className = '',
@@ -149,8 +152,19 @@ export function SheetView({
           {rowEnd && <col style={{ width: 0 }} />}
         </colgroup>
         <tbody>
-          {rows.map((_row, r) => hiddenRows?.(r) ? null : (
+          {rows.map((_row, r) => {
+            const lead = beforeRow?.(r);
+            const leadRow = lead ? (
+              <tr>
+                <td colSpan={cols.length} className="p-0" style={{ border: 'none' }}>
+                  {lead}
+                </td>
+              </tr>
+            ) : null;
+            if (hiddenRows?.(r)) return leadRow ? <Fragment key={r}>{leadRow}</Fragment> : null;
+            return (
             <Fragment key={r}>
+            {leadRow}
             <tr data-sheet-row={r} className={rowClassName?.(r)} style={{ height: sheet.rowHeights[String(r)] ?? DEFAULT_ROW_HEIGHT, breakInside: 'avoid' }}>
               {cols.map((col, c) => {
                 const m = mergeAt(r, c);
@@ -210,7 +224,8 @@ export function SheetView({
               ) : null;
             })()}
             </Fragment>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

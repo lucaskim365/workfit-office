@@ -90,11 +90,11 @@ test('대외 문서 — 숨김 행을 통째로 빼고, 켜고 끌 수 있다', 
   assert.equal(withoutExternalRows(createSheet(2, 2)).rows.length, 2);
 });
 
-test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 정보, 아래: 첨부·관련 문서 자리·맺음말·기안일·기안자 서명', () => {
+test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 정보, 아래: 맺음말·기안일·기안자 서명', () => {
   const base = setCellValue(createSheet(2, 6), 0, 0, '본문');
   const s = insertDocHeader(base, { title: '기 안 서' });
   const top = 3 + DOC_INFO_ROWS + 1;
-  assert.equal(s.rows.length, top + 2 + 1 + 4);
+  assert.equal(s.rows.length, top + 2 + 4);
   assert.equal(approvalCellProps(s, 0, 0).bind, 'doc.logo');
   assert.equal(text(s, 1, 0), '기 안 서');
   assert.equal(approvalCellProps(s, 1, 3).bind, 'doc.approvalLine', '결재란은 오른쪽 절반');
@@ -102,12 +102,9 @@ test('문서 머리 전체 넣기 — 위: 로고·큰 제목/결재란·문서 
   assert.equal(s.rowHeights['1'], 96);
   assert.equal(approvalCellProps(s, 3, 1).bind, 'draft.docNo', '그 아래 문서 정보 표');
   assert.equal(text(s, top, 0), '본문');
-  // 본문 바로 아래 첨부·관련 문서 자리(한 줄 전체, 대외 숨김 아님 — 대외 문서에선 그리는 쪽이 수신처만 둔다)
-  assert.equal(approvalCellProps(s, top + 2, 0).bind, 'doc.extras');
-  assert.ok(s.merges.some((m) => m.startRow === top + 2 && m.startCol === 0 && m.colSpan === 6));
-  assert.ok(!isExternalHiddenRow(s, top + 2));
-  assert.deepEqual(slotRows(s, 'extras'), [top + 2]);
-  const end = top + 3;
+  // 첨부·관련 문서 자리는 저장하지 않는다(그릴 때 맺음말 위에 저절로)
+  assert.deepEqual(slotRows(s, 'extras'), []);
+  const end = top + 2;
   assert.equal(text(s, end + 1, 0), DEFAULT_CLOSING);
   assert.equal(approvalCellProps(s, end + 2, 0).bind, 'draft.date');
   assert.equal(approvalCellProps(s, end + 3, 0).bind, 'draft.sign');

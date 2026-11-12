@@ -33,9 +33,7 @@ import {
   valueSources,
   withBranchOptions,
 } from '@/domain/approvalForm/sheet/valueRules';
-import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
-import { EXTRAS_BIND, placeExtras } from '@/domain/approvalForm/sheet/docExtras';
-import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
+import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { isExternalHiddenRow, setExternalHiddenRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { AutoNumberSettings } from '../components/ApprovalFormEditor';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
@@ -269,14 +267,7 @@ export function SheetCellPanel({
         <select
           className={inp}
           value={props.bind ?? ''}
-          onChange={(e) => {
-            // 첨부·관련 문서 자리는 서식에 하나·한 줄 — 부품 목록과 같은 규칙으로
-            if (e.target.value === EXTRAS_BIND) {
-              const placed = placeExtras(sheet, range);
-              return 'notice' in placed ? alert(placed.notice) : onChange(placed);
-            }
-            onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined));
-          }}
+          onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}
         >
           <option value="">채우지 않음</option>
           {BIND_GROUPS.map((g) => (

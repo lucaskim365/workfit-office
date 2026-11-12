@@ -8,7 +8,7 @@ import { SealImage } from '../components/CompanySeal';
 import { approvalCellProps, completedDateRows, conditionHiddenRows, draftInfoValue, sheetSealMarkId, slotOf, type SheetSlots, type DraftInfo, DOC_SHEET_VIEW, DOC_SHEET_WIDTH, SHEET_VALUES_KEY, SHEET_VERSION_KEY, applyValues, isSealCell, isSecretCell, readSheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras } from '@/domain/approvalForm/sheet/repeatRows';
 import { withoutExternalRows } from '@/domain/approvalForm/sheet/sheetHeader';
-import { extrasCell, extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell } from '@/domain/approvalForm/sheet/docExtras';
+import { extrasCell, extrasHiddenRows, hasExtrasPlace, isExtrasDrawCell, withExtrasRow } from '@/domain/approvalForm/sheet/docExtras';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { SheetFormTitle, SlotCell } from './SheetDraftForm';
 import { SealMarkProvider } from '../components/CompanySeal';
@@ -143,7 +143,8 @@ export function SheetDocView({
   // 행 보이기 조건으로 숨은 행 — 대외 숨김 행을 빼기 전에 정한다(조건 칸이 대외 숨김 행에 있어도 맞게). 대외 문서는 행째 뺀다
   const { sheet, condHidden } = useMemo(() => {
     if (!loaded?.sheet) return { sheet: null, condHidden: new Set<number>() };
-    const filled = applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false });
+    // 첨부·관련 문서 자리 줄 — 맺음말 바로 위에 끼운다(서식엔 저장하지 않음, 맺음말이 없으면 시트 아래에)
+    const filled = withExtrasRow(applyValues(expandRepeats(loaded.sheet, readRowExtras(rawRows)), readSheetValues(rawValues), { recalc: false }));
     const hiddenRows = conditionHiddenRows(filled);
     return external ? { sheet: withoutExternalRows(filled, hiddenRows), condHidden: new Set<number>() } : { sheet: filled, condHidden: hiddenRows };
   }, [loaded, rawValues, rawRows, external]);
