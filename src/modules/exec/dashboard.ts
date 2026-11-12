@@ -302,3 +302,23 @@ export function stretchRows(boxes: Map<string, Box>): Map<string, { x: number; w
   }
   return out;
 }
+
+/**
+ * 오늘 일정 줄 순서 — 종일 업무가 맨 위, 그다음 시작 시각 순(외근·출장도 예외 없이), 시간 미정은 맨 아래.
+ * 같은 시작이면 먼저 끝나는 것부터, 그것도 같으면 들어온 순서대로.
+ */
+export function orderDayItems<T extends { allDay: boolean; start: string | null; end: string | null }>(items: T[]): T[] {
+  const rank = (i: T) => (i.allDay ? 0 : minutesOf(i.start) === null ? 2 : 1);
+  return items
+    .map((item, n) => ({ item, n }))
+    .sort((a, b) => {
+      const r = rank(a.item) - rank(b.item);
+      if (r) return r;
+      if (rank(a.item) !== 1) return a.n - b.n;
+      const s = minutesOf(a.item.start)! - minutesOf(b.item.start)!;
+      if (s) return s;
+      const e = (minutesOf(a.item.end) ?? 9999) - (minutesOf(b.item.end) ?? 9999);
+      return e || a.n - b.n;
+    })
+    .map((x) => x.item);
+}

@@ -18,12 +18,14 @@ import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { stripInlineMarks } from '@/domain/workPlan/richText';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
+import { OUTSIDE_WORK_CATEGORY_LABELS } from '@/domain/outsideWork/schema';
+import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { Modal } from '@/shared/ui/Modal';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
 import { USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
-import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { chipLook, entryDotClass } from '@/modules/gw/task/components/entryChipLook';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import type { Post } from '@/domain/board/schema';
@@ -40,7 +42,8 @@ import {
   weekDates,
   monthDates,
   nowPercent,
-  packLanes,
+  minutesOf,
+  orderDayItems,
   shiftMonth,
   timelineSpan,
   todayKst,
@@ -131,6 +134,26 @@ const TierContext = createContext<Tier | null>(null);
 export const WidgetTierProvider = TierContext.Provider;
 const useTier = () => useContext(TierContext);
 
+/** 높이가 내용에 따라 바뀌는 위젯 — 웹 모눈이 내용 높이(px)를 받아 칸 수를 맞춘다. 없으면(휴대폰 등) 그냥 늘어난다 */
+const AutoHeightContext = createContext<((px: number) => void) | null>(null);
+export const WidgetAutoHeightProvider = AutoHeightContext.Provider;
+/** 위젯 판 위아래 안쪽 여백 + 테두리(sm:p-6) */
+const PANEL_PAD_Y = 50;
+/** 내용을 감싼 요소에 ref 로 붙이면 그 높이(+위젯 안쪽 여백)를 알린다 */
+function useAutoHeight() {
+  const report = useContext(AutoHeightContext);
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!report || !el) return;
+    const send = () => report(el.offsetHeight + PANEL_PAD_Y);
+    send();
+    const ro = new ResizeObserver(send);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [report, el]);
+  return setEl;
+}
+
 /** 작게 보기 — 모바일에서 반 칸짜리 위젯. 지원하는 위젯은 요약만 크게 보여 준다 */
 const MiniContext = createContext(false);
 export const WidgetMiniProvider = MiniContext.Provider;
@@ -162,97 +185,43 @@ function useDeptId() {
 
 /* ───────────────────────── 오늘 일정 ───────────────────────── */
 
-type Tone = 'special' | 'general';
-
-interface TimelineItem {
+interface DayRow {
   key: string;
   title: string;
   start: string | null;
   end: string | null;
   allDay: boolean;
-  tone: Tone;
-  /** 칸 색(업무계획과 같은 색) · 태그 색 점 */
-  badgeClass: string;
-  dotClass?: string;
-  onClick: () => void;
+  /** 일정 색(업무계획과 같은 색) — 점과 시간 막대 */
+  color: string;
+  /** 종일(외근·출장·휴가 종일) / 시각 있음 / 시간 미정(시각 없는 업무) */
+  kind: 'allDay' | 'timed' | 'undecided';
+  entry: DayEntry;
 }
 
-/** 회의·외근·출장·휴가는 위 줄, 업무·일정은 아래 줄 */
-function isSpecial(e: DayEntry): boolean {
-  return e.source === 'MEETING' || e.source === 'OUTSIDE' || e.source === 'APPROVAL';
+/**
+ * 줄 종류 — 업무계획과 같은 규칙: 시각 없는 업무는 '시간 미정'(업무계획도 종일로 저장하고 '미정'으로 보인다),
+ * 외근·출장·휴가·회의 등의 시각 없는 일정은 '종일'.
+ */
+function rowKindOf(e: DayEntry): DayRow['kind'] {
+  const noTime = e.allDay || minutesOf(e.startTime) === null;
+  if (!noTime) return 'timed';
+  return e.source === 'ITEM' ? 'undecided' : 'allDay';
 }
 
-const LANE_H = 30;
-const LANE_GAP = 3;
-
-/** 한 묶음(위 줄 또는 아래 줄) — 겹치면 칸을 늘려 아래로 내린다 */
-function LaneGroup({ items }: { items: TimelineItem[] }) {
-  const { lanes, count } = packLanes(items);
-  return (
-    <div className="relative rounded-lg bg-panel-alt" style={{ height: count * LANE_H + (count + 1) * LANE_GAP }}>
-      {lanes.map(({ item: i, lane }) => {
-        const sp = timelineSpan(i.start, i.end);
-        if (!sp) return null;
-        return (
-          <button
-            key={i.key}
-            type="button"
-            onClick={i.onClick}
-            title={i.start === '08:00' && i.end === '20:00' ? i.title : `${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
-            className={`absolute flex cursor-pointer items-center gap-1 overflow-hidden rounded-md px-1.5 text-left text-[11px] font-bold whitespace-nowrap ${i.badgeClass}`}
-            style={{
-              left: `calc(${sp.left}% + 1px)`,
-              width: `calc(${sp.width}% - 2px)`,
-              top: LANE_GAP + lane * (LANE_H + LANE_GAP),
-              height: LANE_H,
-              lineHeight: `${LANE_H - 2}px`,
-            }}
-          >
-            {i.dotClass && <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${i.dotClass}`} />}
-            <span className="truncate">{i.title}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+/** 줄의 시간 글자 */
+function timeLabel(r: DayRow): string {
+  if (r.kind === 'allDay') return '종일';
+  if (r.kind === 'undecided') return '시간 미정';
+  return `${r.start!.slice(0, 5)}${r.end ? `~${r.end.slice(0, 5)}` : ''}`;
 }
 
-function DayTimeline({ items }: { items: TimelineItem[] }) {
-  // 지금 시각 선 — 1분마다 옮긴다
-  const [now, setNow] = useState(() => nowPercent());
-  useEffect(() => {
-    const t = setInterval(() => setNow(nowPercent()), 60_000);
-    return () => clearInterval(t);
-  }, []);
-  const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
-  // 종일·시간 미정(외근·출장·휴가)은 위 칸에 하루 전체 길이로 — 따로 줄을 두지 않는다
-  const fullDay = { start: '08:00', end: '20:00' };
-  const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
-  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end)).map((i) => ({ ...i, ...fullDay, allDay: false }));
-  const special = [...untimed, ...timed.filter((i) => i.tone === 'special')];
-  const general = timed.filter((i) => i.tone !== 'special');
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-4">
-        {hours.map((h, i) => (
-          <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
-            {h}
-          </span>
-        ))}
-      </div>
-      <div className="relative flex flex-col gap-1.5">
-        {special.length > 0 && <LaneGroup items={special} />}
-        {(general.length > 0 || special.length === 0) && <LaneGroup items={general} />}
-        {now !== null && (
-          <div className="pointer-events-none absolute inset-y-[-6px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
-            <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
+/**
+ * 오늘 일정 — 왼쪽에 업무 제목, 오른쪽에 시간 막대(08~20시). 한 줄에 일정 하나.
+ * 종일이 맨 위, 그다음 시작 시각 순(외근·출장도 같은 규칙), 시간 미정은 맨 아래.
+ * 막대: 종일은 꽉 찬 색 막대('종일'), 시간 미정은 점선 빈 칸('시간 미정')으로 구분한다.
+ * 일정 수만큼 높이가 늘어난다(웹 모눈에서는 내용 높이를 알려 칸 수를 맞춘다).
+ * 일정 줄을 누르면 업무계획으로 가지 않고 그 일정의 상세를 읽기 전용으로 띄운다.
+ */
 export function TodayWidget() {
   const navigate = useGo();
   const { user: me } = useAuth();
@@ -269,102 +238,212 @@ export function TodayWidget() {
     .map((l) => stripInlineMarks(l).replace(/^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
     .filter(Boolean);
 
-  const items: TimelineItem[] = [
-    ...myEntries.map((e) => ({
-      key: e.key,
-      title: chipLook(e).label,
-      badgeClass: chipLook(e).badgeClass,
-      dotClass: chipLook(e).dotClass,
-      start: e.startTime,
-      end: e.endTime,
-      allDay: e.allDay,
-      tone: (isSpecial(e) ? 'special' : 'general') as Tone,
-      onClick: () => navigate('/gw/work-plan'),
-    })),
-  ];
+  const rows: DayRow[] = orderDayItems(
+    myEntries.map((e) => {
+      const kind = rowKindOf(e);
+      return {
+        key: e.key,
+        title: chipLook(e).label,
+        color: entryDotClass(e),
+        kind,
+        // 정렬용 — 종일은 맨 위, 시간 미정은 시각을 비워 맨 아래로
+        allDay: kind === 'allDay',
+        start: kind === 'timed' ? e.startTime : null,
+        end: kind === 'timed' ? e.endTime : null,
+        entry: e,
+      };
+    }),
+  );
 
-  const tier = useTier();
-  if (tier === 'S') {
-    // 시간 있는 일정은 시간순, 종일·시간 미정은 맨 위
-    const sorted = [...myEntries].sort((a, b) => Number(!a.allDay && Boolean(a.startTime)) - Number(!b.allDay && Boolean(b.startTime)) || (a.startTime ?? '').localeCompare(b.startTime ?? ''));
-    return (
-      <Panel>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div className="flex min-w-0 items-end gap-2.5">
-            <div className="text-[38px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
-            <div className="min-w-0 pb-0.5">
-              <div className="text-[11.5px] font-bold text-ink3">{Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
-              <h2 className="truncate text-[15px] font-extrabold tracking-tight text-ink">오늘 일정 {items.length}건</h2>
+  // 지금 시각 선 — 1분마다 옮긴다
+  const [now, setNow] = useState(() => nowPercent());
+  useEffect(() => {
+    const t = setInterval(() => setNow(nowPercent()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
+  const bodyRef = useAutoHeight();
+  /** 누른 일정 — 읽기 전용 상세 창 */
+  const [picked, setPicked] = useState<DayEntry | null>(null);
+  const open = () => navigate('/gw/work-plan');
+  /** 왼쪽 제목 칸 · 오른쪽 시간 막대 칸 */
+  const COLS = 'grid grid-cols-[minmax(120px,38%)_minmax(0,1fr)] gap-x-4 sm:grid-cols-[minmax(200px,320px)_minmax(0,1fr)]';
+
+  return (
+    <Panel className="sm:p-6">
+      <div ref={bodyRef}>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex items-end gap-3 sm:gap-4">
+            <div className="text-[40px] sm:text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
+            <div className="pb-0.5">
+              <div className="text-[13px] font-bold text-ink2">{Number(today.slice(0, 4))}년 {Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
+              <h1 className="mt-0.5 text-[17px] sm:text-[22px] font-extrabold tracking-[-.04em] text-ink">
+                {me?.name ? `${me.name}님, 오늘 일정은 ${rows.length}건입니다` : `오늘 일정은 ${rows.length}건입니다`}
+              </h1>
             </div>
           </div>
-          <button type="button" onClick={() => navigate('/gw/work-plan')} className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">업무계획</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => navigate('/gw/calendar')} className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]">캘린더</button>
+            <button type="button" onClick={open} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
+          </div>
         </div>
         {companyLines.length > 0 && (
           <button
             type="button"
-            onClick={() => navigate('/gw/work-plan')}
+            onClick={open}
             title={companyLines.join('\n')}
-            className="mb-2 flex w-full cursor-pointer items-center gap-2 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-2.5 py-1 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
+            className="-mt-1 mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-3 py-1.5 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
           >
-            <Megaphone size={13} className="shrink-0 text-[#0876c8]" />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
+            <Megaphone size={14} className="shrink-0 text-[#0876c8]" />
+            <span className="shrink-0 text-[11.5px] font-extrabold text-[#0876c8]">전사 주요 일정</span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
           </button>
         )}
-        {sorted.length === 0 ? (
-          <Empty>오늘 일정이 없습니다.</Empty>
-        ) : (
-          <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
-            {sorted.map((e) => {
-              const look = chipLook(e);
-              return (
-                <li key={e.key}>
-                  <button type="button" onClick={() => navigate('/gw/work-plan')} className="group flex w-full cursor-pointer items-center gap-2.5 py-1.5 text-left">
-                    <span className="w-[66px] shrink-0 text-[11px] font-bold tabular-nums text-ink3">
-                      {e.startTime && !e.allDay ? `${e.startTime.slice(0, 5)}${e.endTime ? `~${e.endTime.slice(0, 5)}` : ''}` : '종일'}
-                    </span>
-                    <i className={`h-2 w-2 shrink-0 rounded-full ${look.dotClass}`} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink group-hover:text-[#0876c8]">{look.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
-    );
-  }
 
-  return (
-    <Panel className="sm:p-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div className="flex items-end gap-3 sm:gap-4">
-          <div className="text-[40px] sm:text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
-          <div className="pb-0.5">
-            <div className="text-[13px] font-bold text-ink2">{Number(today.slice(0, 4))}년 {Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
-            <h1 className="mt-0.5 text-[17px] sm:text-[22px] font-extrabold tracking-[-.04em] text-ink">
-              {me?.name ? `${me.name}님, 오늘 일정은 ${items.length}건입니다` : `오늘 일정은 ${items.length}건입니다`}
-            </h1>
+        {rows.length === 0 ? (
+          <div className="py-6 text-center text-[13px] text-ink3">오늘 일정이 없습니다.</div>
+        ) : (
+          <div className="flex flex-col">
+            {/* 시간 눈금 */}
+            <div className={`${COLS} mb-1`}>
+              <span />
+              <div className="relative h-4">
+                {hours.map((h, i) => (
+                  <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
+                    {h}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="relative">
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {rows.map((r) => {
+                  const sp = r.kind === 'timed' ? timelineSpan(r.start, r.end) : null;
+                  return (
+                    <li key={r.key}>
+                      <button type="button" onClick={() => setPicked(r.entry)} title={`${timeLabel(r)} ${r.title}`} className={`${COLS} group w-full cursor-pointer items-center rounded-lg py-1 text-left hover:bg-panel-alt/60`}>
+                        <span className="flex min-w-0 items-center gap-2 pl-1">
+                          <i className={`h-2 w-2 shrink-0 rounded-full ${r.color}`} />
+                          <span className="min-w-0 truncate text-[13px] font-semibold text-ink group-hover:text-[#0876c8]">{r.title}</span>
+                          <span className="ml-auto shrink-0 pl-2 text-[11px] tabular-nums text-ink3">{timeLabel(r)}</span>
+                        </span>
+                        {r.kind === 'undecided' ? (
+                          // 시간 미정 — 색 없이 점선 빈 칸
+                          <span className="grid h-7 place-items-center rounded-md border border-dashed border-border-hi text-[11px] font-bold text-ink3">시간 미정</span>
+                        ) : r.kind === 'allDay' ? (
+                          // 종일 — 하루 전체를 채운 색 막대
+                          <span className="relative block h-7 rounded-md bg-panel-alt">
+                            <span className={`absolute inset-1 grid place-items-center rounded text-[11px] font-bold text-white ${r.color}`}>종일</span>
+                          </span>
+                        ) : (
+                          <span className="relative block h-7 rounded-md bg-panel-alt">
+                            {sp && <span className={`absolute top-1.5 bottom-1.5 rounded opacity-85 ${r.color}`} style={{ left: `calc(${sp.left}% + 1px)`, width: `calc(${sp.width}% - 2px)` }} />}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* 지금 시각 선 — 시간 막대 칸 위에만 */}
+              {now !== null && (
+                <div className={`${COLS} pointer-events-none absolute inset-0`}>
+                  <span />
+                  <div className="relative">
+                    <div className="absolute inset-y-[-4px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
+                      <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => navigate('/gw/calendar')} className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]">캘린더</button>
-          <button type="button" onClick={() => navigate('/gw/work-plan')} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
-        </div>
+        )}
       </div>
-      {companyLines.length > 0 && (
-        <button
-          type="button"
-          onClick={() => navigate('/gw/work-plan')}
-          title={companyLines.join('\n')}
-          className="-mt-1 mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-3 py-1.5 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
-        >
-          <Megaphone size={14} className="shrink-0 text-[#0876c8]" />
-          <span className="shrink-0 text-[11.5px] font-extrabold text-[#0876c8]">전사 주요 일정</span>
-          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
-        </button>
-      )}
-      <DayTimeline items={items} />
+      <EntryDetailModal entry={picked} onClose={() => setPicked(null)} />
     </Panel>
+  );
+}
+
+/** 일정 종류 이름 */
+function entryKindName(e: DayEntry): string {
+  switch (e.source) {
+    case 'ITEM':
+      return e.tag?.name && e.tag.name !== '업무' ? `업무 · ${e.tag.name}` : '업무';
+    case 'MEETING':
+      return '회의';
+    case 'CALENDAR':
+      return '일정';
+    case 'OUTSIDE':
+      return e.outside ? `${OUTSIDE_WORK_CATEGORY_LABELS[e.outside.category]}${e.outside.subType && e.outside.subType !== OUTSIDE_WORK_CATEGORY_LABELS[e.outside.category] ? ` · ${e.outside.subType}` : ''}` : '외근·출장';
+    case 'APPROVAL':
+      return e.schedule?.category === 'LEAVE' ? `휴가${e.schedule.leaveType ? ` · ${e.schedule.leaveType}` : ''}` : e.schedule?.docType ?? '결재 일정';
+    default:
+      return '일정';
+  }
+}
+
+/** 일정 상세 — 읽기 전용. 고치려면 업무계획에서 */
+function EntryDetailModal({ entry, onClose }: { entry: DayEntry | null; onClose: () => void }) {
+  const users = useUsers({ status: '사용' }).data ?? [];
+  if (!entry) return null;
+  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+  const look = chipLook(entry);
+  const kind = rowKindOf(entry);
+  const time = kind === 'allDay' ? '종일' : kind === 'undecided' ? '시간 미정' : `${entry.startTime!.slice(0, 5)}${entry.endTime ? ` ~ ${entry.endTime.slice(0, 5)}` : ''}`;
+  const o = entry.outside;
+  const ev = entry.event;
+  const isLeave = entry.source === 'APPROVAL' && entry.schedule?.category === 'LEAVE';
+  const span = o && o.startDate !== o.endDate ? `${o.startDate.slice(5).replace('-', '.')} ~ ${o.endDate.slice(5).replace('-', '.')}` : entry.schedule && entry.schedule.startDate !== entry.schedule.endDate ? `${entry.schedule.startDate.slice(5).replace('-', '.')} ~ ${entry.schedule.endDate.slice(5).replace('-', '.')}` : '';
+  const attendees = (ev?.attendeeUserIds ?? []).map(nameOf).filter(Boolean);
+  const memo = (entry.item?.memo || ev?.memo || (!isLeave ? o?.memo : '') || '').trim();
+  const doc = o?.approval ?? (entry.schedule && !isLeave ? { docNo: entry.schedule.docNo, docTitle: entry.schedule.docTitle } : null);
+  const rows: Array<[string, ReactNode]> = [
+    ['종류', entryKindName(entry)],
+    ['시간', time],
+    ...(span ? ([['기간', span]] as Array<[string, ReactNode]>) : []),
+    ...(ev?.location ? ([['장소', ev.location]] as Array<[string, ReactNode]>) : []),
+    ...(entry.roomStatus ? ([['회의실', entry.roomStatus === 'PENDING' ? '예약 승인 대기' : '예약 반려']] as Array<[string, ReactNode]>) : []),
+    ...(attendees.length ? ([['참석자', attendees.join(', ')]] as Array<[string, ReactNode]>) : []),
+    ...(o?.destination ? ([['행선지', o.destination]] as Array<[string, ReactNode]>) : []),
+    ...(o?.purpose ? ([['목적', o.purpose]] as Array<[string, ReactNode]>) : []),
+    ...(o?.companions ? ([['동행', o.companions]] as Array<[string, ReactNode]>) : []),
+    ...(o?.transportation ? ([['교통', o.transportation]] as Array<[string, ReactNode]>) : []),
+    ...(entry.companionOf ? ([['등록한 사람', nameOf(entry.companionOf)]] as Array<[string, ReactNode]>) : []),
+    ...(doc ? ([['결재 문서', `${doc.docTitle}${doc.docNo ? ` (${doc.docNo})` : ''}`]] as Array<[string, ReactNode]>) : []),
+  ];
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      width={460}
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          {look.dotClass && <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${look.dotClass}`} />}
+          <span className="truncate">{look.label}</span>
+        </span>
+      }
+      footer={
+        <button type="button" onClick={onClose} className="cursor-pointer rounded-lg border border-border px-4 py-1.5 text-[12.5px] font-bold text-ink2 hover:bg-panel-alt">
+          닫기
+        </button>
+      }
+    >
+      <dl className="m-0 grid grid-cols-[76px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[13px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="font-bold text-ink3">{k}</dt>
+            <dd className="m-0 min-w-0 break-words text-ink">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {memo && (
+        <div className="mt-4 rounded-xl bg-panel-alt px-3.5 py-3">
+          <div className="mb-1 text-[11.5px] font-bold text-ink3">메모</div>
+          <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{stripInlineMarks(memo)}</div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

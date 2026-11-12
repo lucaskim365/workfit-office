@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ChevronDown, Eye, EyeOff, GripVertical, LayoutGrid, Pencil, Undo2, X } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { arrange, CELL_GAP, CELL_H, DRAW_COLS, GRID_COLS, PITCH, rowsHeight, stretchRows, TIER_COLS, TIER_LABEL, TIERS, type Tier, type WidgetSlot } from './dashboard';
-import { DEFAULT_LAYOUT, defaultSizeOf, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, storageKey, tierOfSlot, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
-import { WidgetTierProvider } from './widgets';
+import { arrange, CELL_GAP, CELL_H, DRAW_COLS, GRID_COLS, PITCH, rowsHeight, stretchRows, TIER_COLS, TIER_LABEL, type Tier, type WidgetSlot } from './dashboard';
+import { autoRowsFor, DEFAULT_LAYOUT, defaultSizeOf, isAutoHeight, loadLayout, MODULES, placementsOf, rowsAt, rowsOf, snapToTiers, type AutoRows, storageKey, tierOfSlot, tiersOf, WIDGET_IDS, WIDGETS, type WidgetId } from './registry';
+import { WidgetAutoHeightProvider, WidgetTierProvider } from './widgets';
 
 /**
  * 홈(경영 현황) — 로그인 후 첫 화면.
@@ -309,12 +309,28 @@ export default function ExecDashboardScreen() {
     setLayout(next);
   }, [me?.id]);
 
+  /** 높이가 바뀌는 위젯(오늘 일정 등)이 알려 준 세로 칸 수 — 저장하지 않고 그때그때 맞춘다 */
+  const [autoRows, setAutoRows] = useState<AutoRows>({});
+  const reporters = useRef(new Map<WidgetId, (px: number) => void>());
+  const reporterOf = (id: WidgetId) => {
+    if (!isAutoHeight(id)) return null;
+    let f = reporters.current.get(id);
+    if (!f) {
+      f = (px: number) => {
+        const rows = autoRowsFor(px);
+        setAutoRows((m) => (m[id] === rows ? m : { ...m, [id]: rows }));
+      };
+      reporters.current.set(id, f);
+    }
+    return f;
+  };
+
   /** 편집 중 되돌리기 기록 — 바꿀 때마다 직전 배치를 쌓는다(최근 30번) */
   const [history, setHistory] = useState<WidgetSlot<WidgetId>[][]>([]);
 
   /** 자리를 다시 잡는다(빈틈없이 왼쪽 위부터) — 저장은 '적용'에서 */
   const commit = (next: WidgetSlot<WidgetId>[], pin: WidgetId | null = null) => {
-    const boxes = arrange(placementsOf(next), pin);
+    const boxes = arrange(placementsOf(next, autoRows), pin);
     const placed = next.map((s) => {
       const b = boxes.get(s.id)!;
       return { ...s, size: b.w, x: b.x, y: b.y };
@@ -343,7 +359,7 @@ export default function ExecDashboardScreen() {
   };
 
   const shown = draft?.list ?? (editing ? layout : saved);
-  const boxes = arrange(placementsOf(shown), draft?.pin ?? null);
+  const boxes = arrange(placementsOf(shown, autoRows), draft?.pin ?? null);
   /** 적용하지 않은 바뀐 것이 있는가 */
   const dirty = editing && JSON.stringify(layout) !== JSON.stringify(saved);
 
@@ -503,7 +519,7 @@ export default function ExecDashboardScreen() {
                   data-widget-body={slot.id}
                   className={`min-h-0 flex-1 overflow-hidden [&>section]:overflow-hidden ${canEdit ? 'pointer-events-none select-none opacity-80' : ''}`}
                 >
-                  <WidgetTierProvider value={tier}><Component /></WidgetTierProvider>
+                  <WidgetAutoHeightProvider value={reporterOf(slot.id)}><WidgetTierProvider value={tier}><Component /></WidgetTierProvider></WidgetAutoHeightProvider>
                 </div>
               </div>
             )}
@@ -511,8 +527,9 @@ export default function ExecDashboardScreen() {
               <>
                 {/* 크기(소·중·대)와 숨기기 — 오른쪽 위, 커서를 올리면 */}
                 <div className="absolute -top-3 right-5 z-40 flex items-center gap-0.5 rounded-md border border-border bg-panel p-0.5 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover/slot:opacity-100">
+                  {tiersOf(slot.id).length > 1 && (
                   <div role="radiogroup" aria-label={`${title} 크기`} className="flex gap-0.5">
-                    {TIERS.map((t) => {
+                    {tiersOf(slot.id).map((t) => {
                       const on = t === tier;
                       return (
                         <button
@@ -529,7 +546,8 @@ export default function ExecDashboardScreen() {
                       );
                     })}
                   </div>
-                  <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+                  )}
+                  {tiersOf(slot.id).length > 1 && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
                   <button
                     type="button"
                     onClick={() => commit(layout.filter((s) => s.id !== slot.id))}
@@ -640,9 +658,9 @@ export default function ExecDashboardScreen() {
                 key={slot.id}
                 data-tier={tier}
                 className={`min-w-0 ${slot.size <= 6 ? 'col-span-12 lg:col-span-6' : 'col-span-12'}`}
-                style={{ gridRowEnd: `span ${rowsOf(slot)}` }}
+                style={{ gridRowEnd: `span ${autoRows[slot.id] ?? rowsOf(slot)}` }}
               >
-                <div className="h-full overflow-hidden [&>section]:overflow-hidden"><WidgetTierProvider value={tier}><Component /></WidgetTierProvider></div>
+                <div className="h-full overflow-hidden [&>section]:overflow-hidden"><WidgetAutoHeightProvider value={reporterOf(slot.id)}><WidgetTierProvider value={tier}><Component /></WidgetTierProvider></WidgetAutoHeightProvider></div>
               </div>
             );
           })}
