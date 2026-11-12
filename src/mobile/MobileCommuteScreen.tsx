@@ -17,6 +17,7 @@ import { getKoreanHoliday, requiredWorkSpan, timeToMinutes } from '@/domain/comm
 import type { CommuteRecord } from '@/domain/commute/schema';
 import { describeCommuteRecord, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileCommuteTabs from './MobileCommuteTabs';
 import MobileLeaveHistory from './MobileLeaveHistory';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
@@ -224,6 +225,7 @@ export default function MobileCommuteScreen() {
   return (
     <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
       <MobileCommonHeader title="근태·휴가" subtitle={user ? `${user.name} (${user.dept})` : ''} />
+      <MobileCommuteTabs active="me" />
 
       <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-4">
         {/* 1. 디지털 시계 및 상태 카드 */}

@@ -17,6 +17,9 @@ import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileCommuteTabs from './MobileCommuteTabs';
+import MobileLeaveStatusView from './commute/MobileLeaveStatusView';
+import MobileLeaveLedgerView from './commute/MobileLeaveLedgerView';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
@@ -28,6 +31,8 @@ const timeOf = (iso: string | null | undefined): string | null => {
 };
 
 type FilterTab = 'all' | 'anomaly' | 'leave';
+/** 근태 관제 화면 — 그날 출퇴근 / 한 달 휴가 현황 / 연차 원장(전사 권한만) */
+type AdminView = 'daily' | 'leaves' | 'ledger';
 
 export default function MobileCommuteAdminScreen() {
   const { user } = useAuth();
@@ -44,6 +49,17 @@ export default function MobileCommuteAdminScreen() {
   }, []);
 
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const [view, setView] = useState<AdminView>('daily');
+  // 연차 원장은 전사 범위(ALL)만 — 이 화면의 다른 판정(메뉴·출퇴근 명단)과 같은 commutePolicy 기준(임원·인사담당자)
+  const canLedger = commutePolicy.getScope(securityContext) === 'ALL';
+  /*
+    임원·팀장이 아닌 인사담당자 — 서버의 출퇴근 기록 권한은 전사가 아니라(caps-ingest) 출퇴근 탭에선 다른 사람 기록이 비어
+    결근처럼 보인다. 휴가 현황·연차 원장만 연다(웹 근태 화면과 같게)
+  */
+  const isHrOnly = canLedger && !securityContext.isExecutive && !securityContext.isLeader;
+  // 권한 정보가 늦게 바뀌어 원장 탭이 사라지면 출퇴근으로, 인사담당자는 출퇴근 대신 연차 원장으로
+  const activeView: AdminView =
+    view === 'ledger' && !canLedger ? 'daily' : view === 'daily' && isHrOnly ? 'ledger' : view;
   const [searchQuery, setSearchQuery] = useState('');
 
   // 1. 시스템 활성 임직원 목록
@@ -220,6 +236,33 @@ export default function MobileCommuteAdminScreen() {
             : '전사 임직원 실시간 출퇴근 관제'
         }
       />
+      <MobileCommuteTabs active="admin" />
+      <div className="flex shrink-0 gap-1.5 border-b border-border/60 bg-white px-4 py-2">
+        {(
+          [
+            ...(isHrOnly ? [] : ([['daily', '출퇴근']] as const)),
+            ['leaves', '휴가 현황'],
+            ...(canLedger ? ([['ledger', '연차 원장']] as const) : []),
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            aria-pressed={activeView === key}
+            className={`rounded-lg px-3 py-1 text-[11.5px] font-bold transition-all ${
+              activeView === key ? 'bg-ink text-white shadow-2xs' : 'border border-border bg-white text-ink3'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'leaves' && <MobileLeaveStatusView />}
+      {activeView === 'ledger' && <MobileLeaveLedgerView />}
+      {activeView === 'daily' && (
+      <>
 
       {/* 1. 일자 네비게이터 */}
       <div className="flex items-center justify-between px-4 py-2 bg-white/90 border-b border-border/60 shrink-0">
@@ -377,6 +420,8 @@ export default function MobileCommuteAdminScreen() {
           ))
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

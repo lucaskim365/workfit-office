@@ -141,7 +141,7 @@ export default function ApprovalScreen() {
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
@@ -172,7 +172,7 @@ export default function ApprovalScreen() {
     setBox(newBox);
     setCompletedForm(formCode);
     setSelId(null);
-    if (newBox === '대기') setTodoFilter('all');
+    if (newBox === '대기') setTodoFilter('pending');
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('box', newBox);
     nextUrl.searchParams.delete('doc');

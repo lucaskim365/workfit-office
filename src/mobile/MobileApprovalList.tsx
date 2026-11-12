@@ -81,7 +81,7 @@ export default function MobileApprovalList() {
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
   const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
-  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('all');
+  const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   // 완료함 서식 — null = 전체 서식. 아래에서 올라오는 목록으로 고른다(PC 완료함의 서식 드롭다운과 같다)
@@ -385,7 +385,7 @@ export default function MobileApprovalList() {
               onClick={() => {
                 setBox(b.key);
                 exitSelectMode();
-                setTodoFilter('all');
+                setTodoFilter('pending');
                 setDraftFilter('all');
                 setDoneFilter('all');
                 setDoneForm(null);
