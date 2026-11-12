@@ -41,9 +41,9 @@ import {
   validateApprovalSheet,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { rowsHiddenWhen } from '@/domain/approvalForm/sheet/valueRules';
-import { SheetCellPanel } from './SheetCellPanel';
+import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
-import { PART_MIME, SheetPalette, applyPart } from './SheetPalette';
+import { PALETTE_HELP, PART_MIME, SheetPalette, applyPart } from './SheetPalette';
 import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
@@ -864,7 +864,13 @@ function Designer({
             className={`shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2 sticky`}
             style={{ ...stickyStyle, width: layout === 'three' ? PALETTE_W : PALETTE_ICONS_W }}
           >
-            {layout === 'three' && <div className="mb-1 text-[12.5px] font-extrabold text-ink">부품</div>}
+            {layout === 'three' && (
+              <div className="mb-1.5">
+                <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
+                  <span className="text-[12.5px] font-extrabold text-ink">부품</span>
+                </Help>
+              </div>
+            )}
             <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant={layout === 'three' ? 'side' : 'icons'} />
           </div>
         )}

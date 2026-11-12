@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
-  BIND_GROUPS,
-  CELL_INPUT_LABELS,
   COMMON_CELL_NAMES,
   approvalCellProps,
   cellAddress,
@@ -16,7 +14,6 @@ import {
   setApprovalProp,
   setCellName,
   type CellInput,
-  type CellInputType,
   LEAVE_TYPE_NAMES,
   LINK_TYPES,
   linkTypeDef,
@@ -33,7 +30,10 @@ import {
   valueSources,
   withBranchOptions,
 } from '@/domain/approvalForm/sheet/valueRules';
-import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
+import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
+import { PART_SECTIONS, applyPart } from './SheetPalette';
+import { ChevronRight, CircleHelp } from 'lucide-react';
+import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { isExternalHiddenRow, setExternalHiddenRows } from '@/domain/approvalForm/sheet/sheetHeader';
 import { AutoNumberSettings } from '../components/ApprovalFormEditor';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
@@ -48,27 +48,108 @@ import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 const CUSTOM = '__custom__';
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-50';
 
+/** 설명 — 늘 펼쳐 두면 화면이 글로 가득해서 (?)에 마우스를 올리거나 누를 때만(키보드 초점·누르기로도 열림) */
+/** (?) 단추 — 마우스를 올리면 툴팁, 누르면(키보드·터치도) 아래에 설명을 펼친다(HelpText) */
+function HelpButton({ text, open, onToggle, size = 'h-3 w-3' }: { text: string; open: boolean; onToggle: () => void; size?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`설명: ${text}`}
+      aria-expanded={open}
+      title={text}
+      onClick={(e) => {
+        // 체크 칸 label 안에 있어도 체크가 바뀌지 않게
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={`inline-flex cursor-help hover:text-teal focus-visible:text-teal ${open ? 'text-teal' : 'text-ink3'}`}
+    >
+      <CircleHelp className={size} />
+    </button>
+  );
+}
+const HelpText = ({ text }: { text: string }) => <div className="text-[10.5px] font-normal leading-snug text-ink3">{text}</div>;
+
+/** 제목 옆 (?) + 누르면 아래에 설명 — 패널 밖으로 넘치지 않게 펼침은 제자리(흐름 안)에 */
+export function Help({ text, size, children }: { text?: string; size?: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1">
+        {children}
+        {text && <HelpButton text={text} open={open} onToggle={() => setOpen((v) => !v)} size={size} />}
+      </div>
+      {open && text && <HelpText text={text} />}
+    </div>
+  );
+}
+
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <div className="text-[11px] font-bold text-ink2">{label}</div>
+      <Help text={hint}>
+        <span className="text-[11px] font-bold text-ink2">{label}</span>
+      </Help>
       {children}
-      {hint && <div className="text-[10.5px] leading-snug text-ink3">{hint}</div>}
     </div>
   );
 }
 
 function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <label className="flex cursor-pointer items-start gap-2 rounded-lg px-1 py-1 hover:bg-panel-alt">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 accent-teal" />
-      <span>
-        <span className="block text-[11.5px] font-semibold text-ink">{label}</span>
-        <span className="block text-[10.5px] leading-snug text-ink3">{hint}</span>
-      </span>
-    </label>
+    <div>
+      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 hover:bg-panel-alt">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
+        <span className="text-[11.5px] font-semibold text-ink">{label}</span>
+        <HelpButton text={hint} open={open} onToggle={() => setOpen((v) => !v)} />
+      </label>
+      {open && (
+        <div className="pb-1 pl-6">
+          <HelpText text={hint} />
+        </div>
+      )}
+    </div>
   );
 }
+
+/** 접는 묶음 — 접혀 있을 때도 무엇이 켜져 있는지 한 줄로 */
+function Fold({
+  title,
+  summary,
+  open,
+  onToggle,
+  flat = false,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  /** 위 구분선 없이(묶음 안에서) */
+  flat?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={flat ? undefined : 'border-t border-border pt-2'}>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full min-w-0 items-center gap-1 text-left text-[11px] font-bold text-ink2 hover:text-teal">
+        <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="shrink-0">{title}</span>
+        {!open && summary && <span className="truncate font-normal text-ink3">· {summary}</span>}
+      </button>
+      {open && <div className="mt-1.5 space-y-1.5">{children}</div>}
+    </div>
+  );
+}
+
+/** '칸 종류' 고르기 — 왼쪽 부품 목록과 같은 묶음·같은 동작(도구·직인은 빼고, 직인은 아래 체크) */
+const KIND_GROUPS = PART_SECTIONS.filter((s) => s.title !== '도구').map((s) => ({
+  title: s.title,
+  parts: s.groups.flatMap((g) => g.parts).filter((p) => p.id !== 'seal'),
+}));
+const KIND_PARTS = new Map(KIND_GROUPS.flatMap((g) => g.parts).map((p) => [p.id, p]));
+const UNKNOWN_KIND = '__unknown__';
 
 export function SheetCellPanel({
   sheet,
@@ -106,6 +187,39 @@ export function SheetCellPanel({
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
+
+  // 칸 종류 — 입력 칸·자동 채우기·자동번호를 하나로(부품을 누르는 것과 같다)
+  const kindValue = props.input
+    ? `input.${props.input.type}`
+    : props.autoNo
+      ? 'autoNo'
+      : props.bind
+        ? KIND_PARTS.has(`bind.${props.bind}`)
+          ? `bind.${props.bind}`
+          : UNKNOWN_KIND
+        : '';
+  const setKind = (id: string) => {
+    if (id === kindValue || id === UNKNOWN_KIND) return;
+    // 자동번호는 다른 종류와 함께 두지 않는다(입력·자동 채우기는 부품이 서로 지운다)
+    const base = id === 'autoNo' ? sheet : setApprovalProp(sheet, range, APPROVAL_NS.autoNo, undefined);
+    if (!id) return onChange(setApprovalProp(setApprovalProp(base, range, APPROVAL_NS.input, undefined), range, APPROVAL_NS.bind, undefined));
+    // 자동번호는 한 칸에만 — 이 고르기가 보이는 초점 칸에(범위 왼쪽 위가 아니라)
+    const res = applyPart(base, id === 'autoNo' ? focusRange : range, id);
+    if ('notice' in res) return alert(res.notice);
+    onChange(res);
+  };
+  const kindNote =
+    kindValue === UNKNOWN_KIND
+      ? '지금은 없는 자동 채우기 항목입니다 — 다른 종류를 고르거나 글자 칸으로 빼세요.'
+      : (KIND_PARTS.get(kindValue)?.hint ??
+        (isFormula
+          ? '수식 칸 — 계산한 값이 보입니다. 수식 칸은 기안자가 쓰는 칸으로 바꿀 수 없습니다.'
+          : '쓴 글자가 그대로 보입니다. 기안자가 쓰게 하려면 위에서 종류를 고르거나 왼쪽 부품을 누르세요.'));
+
+  // 더 보기 — 접혀 있어도 켜진 것은 한 줄로 보인다
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreSet = [props.name ? `칸 이름: ${nameLabel(props.name)}` : '', props.secret ? '비공개' : '', props.guide ? '안내문' : ''].filter(Boolean);
+  const moreSummary = moreSet.length ? moreSet.join(' · ') : '칸 이름 · 비공개 · 안내문';
   const { data: marks } = useCompanyMarks();
   const seals = marksOf(marks, 'seal');
   const logos = marksOf(marks, 'logo');
@@ -206,37 +320,34 @@ export function SheetCellPanel({
           이 칸의 항목은 '{dependsSource.label}' 값에 따라 바뀝니다 — 그 설정 열기
         </button>
       )}
-      <div className="flex items-baseline justify-between">
-        <span className="text-[12.5px] font-extrabold text-ink">칸 속성</span>
-        <span className="font-mono text-[11px] font-bold text-teal">{where}</span>
+      <div className="space-y-1.5">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[12.5px] font-extrabold text-ink">칸 속성</span>
+          <span className="font-mono text-[11px] font-bold text-teal">{where}</span>
+        </div>
+        <select
+          className={`${inp} font-semibold`}
+          value={kindValue}
+          onChange={(e) => setKind(e.target.value)}
+          title="이 칸이 무엇인지 — 왼쪽 부품을 누르는 것과 같습니다"
+        >
+          <option value="">글자 칸 (그대로 보임)</option>
+          {KIND_GROUPS.map((g) => (
+            <optgroup key={g.title} label={g.title}>
+              {g.parts.map((p) => (
+                <option key={p.id} value={p.id} disabled={isFormula && (p.id.startsWith('input.') || p.id === 'autoNo')}>
+                  {p.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          {kindValue === UNKNOWN_KIND && <option value={UNKNOWN_KIND}>{props.bind} (지금은 없는 항목)</option>}
+        </select>
+        <div className="text-[10.5px] leading-snug text-ink3">{kindNote}</div>
       </div>
 
-      <Row
-        label="입력 칸"
-        hint={isFormula ? '수식 칸은 입력 칸으로 정할 수 없습니다(기안자가 쓰면 수식이 지워짐).' : '기안자가 값을 쓰는 칸. 숫자만 받기·드롭다운 같은 입력 규칙은 기안 화면에서 적용됩니다(여기 관리 편집에서는 모든 칸을 고칠 수 있음).'}
-      >
-        <select
-          className={inp}
-          value={props.input?.type ?? ''}
-          disabled={isFormula && !props.input}
-          onChange={(e) => {
-            const type = e.target.value as CellInputType | '';
-            if (!type) return setInput(undefined);
-            const keep = type === 'select' || type === 'multiSelect' ? { options: props.input?.options ?? [] } : {};
-            setInput({ type, ...keep });
-          }}
-        >
-          <option value="">입력 안 함</option>
-          {(Object.keys(CELL_INPUT_LABELS) as CellInputType[]).map((t) => (
-            <option key={t} value={t}>
-              {CELL_INPUT_LABELS[t]}
-            </option>
-          ))}
-        </select>
-      </Row>
-
       {hasOptions && !props.input?.depends && (
-        <Row label="고를 항목" hint="한 줄에 하나씩">
+        <Row label="고를 항목" hint="한 줄에 하나씩 적습니다">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
         </Row>
       )}
@@ -256,36 +367,11 @@ export function SheetCellPanel({
       )}
 
       {props.autoNo && (
-        <Row label="자동번호" hint={`상신할 때 이 모양으로 번호를 매깁니다 — 예: ${autoNumberPreview(props.autoNo)}. 모양을 바꾸면 새 순번(1번)부터 시작합니다.`}>
+        <Row label="번호 모양" hint={`상신할 때 이 모양으로 번호를 매깁니다 — 예: ${autoNumberPreview(props.autoNo)}. 모양을 바꾸면 새 순번(1번)부터 시작합니다.`}>
           <AutoNumberSettings value={props.autoNo} onChange={(v) => onChange(setApprovalProp(sheet, focusRange, APPROVAL_NS.autoNo, v))} />
         </Row>
       )}
 
-      <Row
-        label="자동 채우기"
-        hint="기안 정보: 작성할 때 기안자·부서·오늘 날짜로 채우고, 상신한 문서는 그 문서의 기안자·부서·기안일·문서번호를 보여 줍니다(기안자가 고칠 수 없음). 엑셀 양식에 이런 칸이 있으면 위 '문서 머리에 보일 항목'에서 같은 항목을 꺼 겹치지 않게 하세요. 프로젝트 값은 준비 중."
-      >
-        <select
-          className={inp}
-          value={props.bind ?? ''}
-          onChange={(e) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.bind, e.target.value || undefined))}
-        >
-          <option value="">채우지 않음</option>
-          {BIND_GROUPS.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {g.items.map((i) => (
-                <option key={i.value} value={i.value}>
-                  {i.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-          <optgroup label="프로젝트 (준비 중 — 프로젝트 관리 항목을 정한 뒤)">
-            <option disabled value="project">프로젝트 값</option>
-          </optgroup>
-          {props.bind && !BIND_GROUPS.some((g) => g.items.some((i) => i.value === props.bind)) && <option value={props.bind}>{props.bind} (지금은 없는 항목)</option>}
-        </select>
-      </Row>
       {props.bind === 'doc.logo' && (
         <Row label="쓸 로고" hint="기준 정보 → 회사 정보에 등록한 로고 중에서 고릅니다. 고르지 않으면 대표 로고.">
           <select
@@ -303,78 +389,21 @@ export function SheetCellPanel({
         </Row>
       )}
 
-      <Row
-        label="칸 이름"
-        hint={
-          multi
-            ? '칸 이름은 한 칸에만 붙습니다(지금 초점 칸).'
-            : "다른 기능·다른 문서가 이 칸 값을 찾는 이름(서식에 하나씩). 금액 키는 결재선 금액, 직접 쓴 이름(예: 품명·공급가액)은 '관련 문서 값 가져오기'에서 같은 이름 칸끼리 복사됩니다. 반복 구간 안이면 그 열의 이름."
-        }
-      >
-        <select
-          className={inp}
-          value={customNameMode ? CUSTOM : (props.name ?? '')}
-          onChange={(e) => {
-            if (e.target.value === CUSTOM) return setCustomNameMode(true);
-            setCustomNameMode(false);
-            let next = setCellName(sheet, focus.r, focus.c, e.target.value || undefined);
-            // '휴가 종류'는 휴가 정책이 아는 이름만 — 선택 칸과 항목을 채워 둔다(관리자가 고칠 수 있음)
-            if (e.target.value === 'leaveType' && props.input?.type !== 'select') {
-              next = setApprovalProp(next, { r1: focus.r, c1: focus.c, r2: focus.r, c2: focus.c }, APPROVAL_NS.input, { type: 'select', options: LEAVE_TYPE_NAMES });
-            }
-            onChange(next);
-          }}
-        >
-          <option value="">이름 없음</option>
-          {COMMON_CELL_NAMES.map((n) => (
-            <option key={n.key} value={n.key} title={n.hint}>
-              {n.label}
-            </option>
-          ))}
-          {linkDef && (
-            <optgroup label={`연동 기능 — ${linkDef.code}`}>
-              {linkDef.names.map((n) => (
-                <option key={n.key} value={n.key} title={n.hint}>
-                  {n.label}
-                  {n.required ? ' *' : ''}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {props.name && !systemKeys.has(props.name) && (
-            <option value={props.name}>
-              {nameLabel(props.name)}
-              {LINK_TYPES.some((t) => t.names.some((n) => n.key === props.name)) ? ' (지금 연동 기능에선 안 쓰는 이름 — 지워 주세요)' : ''}
-            </option>
-          )}
-          <option value={CUSTOM}>직접 쓰기…</option>
-        </select>
-        {customNameMode && (
-          <input
-            className={inp}
-            autoFocus
-            maxLength={30}
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && commitCustomName()}
-            onBlur={commitCustomName}
-            placeholder="이름(예: 품명) 쓰고 Enter"
+      <div className="space-y-0.5">
+        {props.input && (
+          <Check
+            checked={props.required}
+            onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.required, v))}
+            label="필수 입력"
+            hint="비어 있으면 상신할 수 없습니다(임시 저장은 됨)."
           />
         )}
-      </Row>
-
-      <div className="space-y-0.5 border-t border-border pt-2.5">
+        {/* 잠금은 글자·수식 칸에도 쓴다 — [표 모양 고치기]에서 그 칸을 못 고치고 그 행·열을 못 지움 */}
         <Check
           checked={props.lock}
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.lock, v))}
           label="기안자 수정 잠금"
-          hint="입력 칸이라도 기안자가 고칠 수 없습니다(불러온 값 보호 등)."
-        />
-        <Check
-          checked={props.secret}
-          onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.secret, v))}
-          label="비공개"
-          hint="결재선에 없는 사람에게는 '비공개'로 보입니다."
+          hint="기안자가 이 칸을 고칠 수 없습니다 — 입력 칸이면 값을, 글자·수식 칸이면 [표 모양 고치기]에서 그 칸과 그 행·열을 못 바꿉니다."
         />
         <Check
           checked={props.seal}
@@ -399,30 +428,93 @@ export function SheetCellPanel({
             </select>
           </div>
         )}
-        {props.input && (
-          <Check
-            checked={props.required}
-            onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.required, v))}
-            label="필수 입력"
-            hint="비어 있으면 상신할 수 없습니다(임시 저장은 됨)."
-          />
-        )}
+      </div>
+
+      <Fold title="더 보기" summary={moreSummary} open={moreOpen} onToggle={() => setMoreOpen((v) => !v)}>
+        <Row
+          label="칸 이름"
+          hint={
+            multi
+              ? '칸 이름은 한 칸에만 붙습니다(지금 초점 칸).'
+              : "다른 기능·다른 문서가 이 칸 값을 찾는 이름(서식에 하나씩). 금액 키는 결재선 금액, 직접 쓴 이름(예: 품명·공급가액)은 '관련 문서 값 가져오기'에서 같은 이름 칸끼리 복사됩니다. 반복 구간 안이면 그 열의 이름."
+          }
+        >
+          <select
+            className={inp}
+            value={customNameMode ? CUSTOM : (props.name ?? '')}
+            onChange={(e) => {
+              if (e.target.value === CUSTOM) return setCustomNameMode(true);
+              setCustomNameMode(false);
+              let next = setCellName(sheet, focus.r, focus.c, e.target.value || undefined);
+              // '휴가 종류'는 휴가 정책이 아는 이름만 — 선택 칸과 항목을 채워 둔다(관리자가 고칠 수 있음)
+              if (e.target.value === 'leaveType' && props.input?.type !== 'select') {
+                next = setApprovalProp(next, { r1: focus.r, c1: focus.c, r2: focus.r, c2: focus.c }, APPROVAL_NS.input, { type: 'select', options: LEAVE_TYPE_NAMES });
+              }
+              onChange(next);
+            }}
+          >
+            <option value="">이름 없음</option>
+            {COMMON_CELL_NAMES.map((n) => (
+              <option key={n.key} value={n.key} title={n.hint}>
+                {n.label}
+              </option>
+            ))}
+            {linkDef && (
+              <optgroup label={`연동 기능 — ${linkDef.code}`}>
+                {linkDef.names.map((n) => (
+                  <option key={n.key} value={n.key} title={n.hint}>
+                    {n.label}
+                    {n.required ? ' *' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {props.name && !systemKeys.has(props.name) && (
+              <option value={props.name}>
+                {nameLabel(props.name)}
+                {LINK_TYPES.some((t) => t.names.some((n) => n.key === props.name)) ? ' (지금 연동 기능에선 안 쓰는 이름 — 지워 주세요)' : ''}
+              </option>
+            )}
+            <option value={CUSTOM}>직접 쓰기…</option>
+          </select>
+          {customNameMode && (
+            <input
+              className={inp}
+              autoFocus
+              maxLength={30}
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && commitCustomName()}
+              onBlur={commitCustomName}
+              placeholder="이름(예: 품명) 쓰고 Enter"
+            />
+          )}
+        </Row>
+        <Check
+          checked={props.secret}
+          onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.secret, v))}
+          label="비공개"
+          hint="결재선에 없는 사람에게는 '비공개'로 보입니다."
+        />
         <Check
           checked={props.guide}
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.guide, v))}
           label="안내문"
           hint="칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴)."
         />
+      </Fold>
+
+      <div className="space-y-2 rounded-lg border border-border bg-panel-alt/40 px-2 py-2">
+        <div className="text-[11.5px] font-extrabold text-ink">이 줄 ({rowLabel})</div>
+        <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} />
         <Check
           checked={rowsExternalHidden}
           onChange={(v) => onChange(setExternalHiddenRows(sheet, range.r1, range.r2, v))}
-          label={`대외 문서에서 숨김 (${rowLabel})`}
-          hint="문서를 거래처용으로 볼 때(문서 화면의 [거래처용]·발주서 PDF) 이 행을 통째로 뺍니다."
+          label="거래처용에서 숨김"
+          hint="문서를 거래처용으로 볼 때(문서 화면의 [거래처용]·발주서 PDF) 이 줄을 통째로 뺍니다."
         />
+        <RepeatPanel sheet={sheet} selection={selection} onChange={onChange} />
       </div>
-
-      <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} />
-      <RepeatPanel sheet={sheet} selection={selection} onChange={onChange} />
     </div>
   );
 }
@@ -534,12 +626,12 @@ function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selec
   };
 
   return (
-    <div className="space-y-1.5 border-t border-border pt-2.5">
-      <div className="text-[11px] font-bold text-ink2">행 보이기 조건 ({rowLabel})</div>
+    <div className="space-y-1">
+      <Help text={`다른 칸 값에 따라 ${rowLabel}을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 줄). 조건으로 쓸 선택·체크 입력 칸이 있어야 합니다.`}>
+        <span className="text-[11px] font-bold text-ink2">보이기 조건</span>
+      </Help>
       {sources.length === 0 && !current ? (
-        <div className="text-[10.5px] leading-snug text-ink3">
-          다른 칸 값에 따라 이 행을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 행). 조건으로 쓸 선택·체크 입력 칸을 먼저 만드세요.
-        </div>
+        <div className="text-[10.5px] text-ink3">항상 보임 — 조건으로 쓸 선택·체크 칸이 없습니다</div>
       ) : (
         <>
           <select
@@ -591,49 +683,51 @@ function RepeatPanel({ sheet, selection, onChange }: { sheet: Sheet; selection: 
   const [label, setLabel] = useState('');
   useEffect(() => setLabel(current?.label ?? ''), [current?.id, current?.label]);
 
+  // 반복 구간이 아닌 줄은 접어 둔다(드물게 씀) — 다른 줄로 옮기면 다시 접힘
+  const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [focus.r]);
+  const help = '품목 표처럼 문서마다 줄 수가 다른 줄을 고르고 지정하면, 기안자가 [행 추가]·[행 삭제]로 줄 수를 바꿉니다. 줄 전체가 늘어나므로 같은 줄에 나란히 있는 표도 함께 늘어납니다.';
+  if (!current)
+    return (
+      <Fold title="반복 구간으로 지정" open={open} onToggle={() => setOpen((v) => !v)} flat>
+        <div className="text-[10.5px] leading-snug text-ink3">{help}</div>
+        <div className="flex gap-1.5">
+          <input className={inp} value={label} maxLength={30} onChange={(e) => setLabel(e.target.value)} placeholder="구간 이름(예: 품목)" />
+          <button
+            type="button"
+            onClick={() => onChange(setRepeatSection(sheet, r1, r2, label || '반복 구간'))}
+            className="shrink-0 rounded-lg bg-violet-500 px-2.5 text-[11px] font-bold text-white hover:opacity-90"
+          >
+            {r1 === r2 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`} 지정
+          </button>
+        </div>
+      </Fold>
+    );
   return (
-    <div className="space-y-1.5 border-t border-border pt-2.5">
-      <div className="text-[11px] font-bold text-ink2">반복 구간</div>
-      {current ? (
-        <>
-          <div className="text-[11px] text-ink3">
-            <span className="font-semibold text-violet-600">{current.label}</span> · {current.first + 1}~{current.last + 1}행 — 기안자가 구간 끝에 행을 추가·삭제합니다.
-          </div>
-          <div className="flex gap-1.5">
-            <input
-              className={inp}
-              value={label}
-              maxLength={30}
-              onChange={(e) => setLabel(e.target.value)}
-              onBlur={() => label.trim() && label.trim() !== current.label && onChange(renameRepeatSection(sheet, current.id, label.trim()))}
-              placeholder="구간 이름(예: 품목)"
-            />
-            <button
-              type="button"
-              onClick={() => onChange(clearRepeatSection(sheet, current.id))}
-              className="shrink-0 rounded-lg border border-border px-2.5 text-[11px] font-semibold text-ink2 hover:text-rose-600"
-            >
-              해제
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="text-[10.5px] leading-snug text-ink3">
-            품목 표처럼 문서마다 줄 수가 다른 행을 고르고 지정하면, 기안자가 [행 추가]·[행 삭제]로 줄 수를 바꿉니다. 행 전체가 늘어나므로 같은 행에 나란히 있는 표도 함께 늘어납니다.
-          </div>
-          <div className="flex gap-1.5">
-            <input className={inp} value={label} maxLength={30} onChange={(e) => setLabel(e.target.value)} placeholder="구간 이름(예: 품목)" />
-            <button
-              type="button"
-              onClick={() => onChange(setRepeatSection(sheet, r1, r2, label || '반복 구간'))}
-              className="shrink-0 rounded-lg bg-violet-500 px-2.5 text-[11px] font-bold text-white hover:opacity-90"
-            >
-              {r1 + 1 === r2 + 1 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`} 지정
-            </button>
-          </div>
-        </>
-      )}
+    <div className="space-y-1">
+      <Help text={help}>
+        <span className="text-[11px] font-bold text-ink2">반복 구간</span>
+      </Help>
+      <div className="text-[11px] text-ink3">
+        <span className="font-semibold text-violet-600">{current.label}</span> · {current.first + 1}~{current.last + 1}행
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          className={inp}
+          value={label}
+          maxLength={30}
+          onChange={(e) => setLabel(e.target.value)}
+          onBlur={() => label.trim() && label.trim() !== current.label && onChange(renameRepeatSection(sheet, current.id, label.trim()))}
+          placeholder="구간 이름(예: 품목)"
+        />
+        <button
+          type="button"
+          onClick={() => onChange(clearRepeatSection(sheet, current.id))}
+          className="shrink-0 rounded-lg border border-border px-2.5 text-[11px] font-semibold text-ink2 hover:text-rose-600"
+        >
+          해제
+        </button>
+      </div>
     </div>
   );
 }
