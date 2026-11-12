@@ -423,26 +423,60 @@ function Designer({
 
   /**
    * 행 표시 — 시트 오른쪽 바깥(행 끝)에. 칸 안에 두면 그 칸 설정인지 행 설정인지 헷갈린다.
-   * 보이기 조건(남색)·거래처용 숨김(회색) — 바꾸기는 그 행을 고르고 오른쪽 '이 줄'에서
+   * 같은 설정이 이어진 행은 세로 막대 하나로 묶고, 이름표는 묶음 첫 행에 한 번만(몇~몇 행).
+   * 보이기 조건(남색, 같은 조건끼리 묶음)·거래처용 숨김(회색) — 바꾸기는 그 행을 고르고 오른쪽 '이 줄'에서
    */
+  const condKey = (r: number) => {
+    const c = r >= 0 && r < sheet.rows.length ? rowConditionOf(sheet, r) : undefined;
+    return c ? `${c.name}=${c.values.join('|')}` : '';
+  };
+  const extAt = (r: number) => r >= 0 && r < sheet.rows.length && isExternalHiddenRow(sheet, r);
+  /** r 이 든 묶음(같은 값이 이어진 행) — 첫 행·끝 행 */
+  const runOf = (r: number, same: (x: number) => boolean) => {
+    let first = r;
+    let last = r;
+    while (same(first - 1)) first--;
+    while (same(last + 1)) last++;
+    return { first, last };
+  };
   const rowMarks = (r: number) => {
-    const cond = rowConditionOf(sheet, r);
-    const ext = isExternalHiddenRow(sheet, r);
-    if (!cond && !ext) return null;
+    const ck = condKey(r);
+    const ext = extAt(r);
+    if (!ck && !ext) return null;
+    const rowsText = (x: { first: number; last: number }) => (x.first === x.last ? `${x.first + 1}행` : `${x.first + 1}~${x.last + 1}행`);
+    const track = (on: boolean, run: { first: number; last: number } | null, color: string) => (
+      // 묶음을 잇는 세로 막대 — 첫 행은 위를, 끝 행은 아래를 조금 띄워 묶음 경계가 보이게
+      <span className="flex w-[7px] shrink-0 justify-center">
+        {on && run && <span className={`w-[3px] ${color} ${r === run.first ? 'mt-1 rounded-t-full' : ''} ${r === run.last ? 'mb-1 rounded-b-full' : ''}`} />}
+      </span>
+    );
+    const chip = 'flex items-center gap-0.5 self-center rounded-sm px-1 text-[9.5px] font-bold leading-[15px]';
+    const condRun = ck ? runOf(r, (x) => condKey(x) === ck) : null;
+    const extRun = ext ? runOf(r, extAt) : null;
+    const cond = ck ? rowConditionOf(sheet, r) : undefined;
     const condText = cond && `${condLabels.get(cond.name) ?? nameLabel(cond.name)} = ${cond.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join('·')}`;
-    const chip = 'flex items-center gap-0.5 rounded-sm px-1 text-[9.5px] font-bold leading-[15px]';
     return (
-      <span className="flex gap-0.5">
-        {cond && (
-          <span title={`행 보이기 조건 — ${condText}일 때만 이 행이 보입니다(작성·결재·인쇄 모두)`} className={`${chip} max-w-[200px] bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200`}>
-            <Filter className="h-2.5 w-2.5 shrink-0" />
-            <span className="truncate">{condText}</span>
+      <span className="flex items-stretch gap-0.5">
+        {track(ext, extRun, 'bg-slate-400')}
+        {track(!!ck, condRun, 'bg-indigo-400')}
+        {extRun && r === extRun.first && (
+          <span
+            title={`거래처용에서 숨김(${rowsText(extRun)}) — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행들을 뺍니다`}
+            className={`${chip} bg-slate-100 text-slate-600 ring-1 ring-slate-300`}
+          >
+            <EyeOff className="h-2.5 w-2.5 shrink-0" />
+            거래처용 숨김 · {rowsText(extRun)}
           </span>
         )}
-        {ext && (
-          <span title="거래처용에서 숨김 — 문서를 거래처용으로 볼 때(문서 화면 [거래처용]·발주서 PDF) 이 행을 뺍니다" className={`${chip} bg-slate-100 text-slate-600 ring-1 ring-slate-300`}>
-            <EyeOff className="h-2.5 w-2.5 shrink-0" />
-            거래처용 숨김
+        {condRun && r === condRun.first && (
+          <span
+            title={`행 보이기 조건(${rowsText(condRun)}) — ${condText}일 때만 보입니다(작성·결재·인쇄 모두)`}
+            className={`${chip} max-w-[220px] bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200`}
+          >
+            <Filter className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">
+              {condText} · {rowsText(condRun)}
+            </span>
           </span>
         )}
       </span>
