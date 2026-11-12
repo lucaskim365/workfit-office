@@ -61,3 +61,21 @@ test('옛 판정 — 부서장은 본인 부서 근태만, 임원은 전사', ()
   assert.equal(legacyGrants(users[0], groups as never, org).grants.get('commute.view')?.all, true);
   assert.equal(legacyGrants(users[2], groups as never, org).grants.has('commute.view'), false);
 });
+
+import { checkUserChangeLockout } from './audit';
+import type { AuthAssignment, AuthRole } from './types';
+
+test('사용자 변경 잠금 방지 — 마지막 최고 관리자를 미사용·삭제하면 막고, 다른 관리자가 있으면 통과', () => {
+  const roles: AuthRole[] = [{ id: 'S', name: '최고 관리자', desc: '', permissions: [], kind: 'super', use: true, sort: 0 }];
+  const asg = (targetType: AuthAssignment['targetType'], targetId: string): AuthAssignment => ({ id: targetId, roleId: 'S', targetType, targetId, targetSub: false, positionMode: 'EQ', scopeType: 'ALL', scopeDeptIds: [], scopeSub: false });
+  const one = [asg('USER', 'adm')];
+  const base = { users, org, roles, meId: 'boss' };
+  assert.equal(checkUserChangeLockout({ ...base, assignments: one, changed: [{ ...users[4], status: '미사용' }] }).block, true);
+  assert.equal(checkUserChangeLockout({ ...base, assignments: one, removedIds: ['adm'] }).block, true);
+  assert.equal(checkUserChangeLockout({ ...base, assignments: one, changed: [{ ...users[2], status: '미사용' }] }).block, false);
+  // 부서로 받은 최고 관리자 — 부서를 옮기면 빠진다
+  const byDept = [asg('DEPT', 'D3')];
+  assert.equal(checkUserChangeLockout({ ...base, assignments: byDept, changed: [{ ...users[4], dept: '1팀' }] }).block, false, '2팀에 다른 최고 관리자(s2)가 남음');
+  assert.equal(checkUserChangeLockout({ ...base, assignments: byDept, changed: [{ ...users[4], dept: '1팀' }, { ...users[3], dept: '1팀' }] }).block, true);
+  assert.equal(checkUserChangeLockout({ ...base, assignments: [...one, asg('USER', 'boss')], changed: [{ ...users[0], status: '잠금' }] }).selfLoss, true);
+});

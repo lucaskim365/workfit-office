@@ -1,3 +1,5 @@
+import { useAuthz } from '@/features/authz/useAuthz';
+import { useAuthRolesQuery } from '@/features/authz/useAuthzDraft';
 import { Link } from 'react-router-dom';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
@@ -17,13 +19,17 @@ export default function AdminHome() {
   const forms = useApprovalForms();
   const groups = useRoleGroups();
   const menu = useAdminMenu();
+  const authz = useAuthz();
+  const authzRoles = useAuthRolesQuery();
 
   const stats: { label: string; value: number | undefined; to: string }[] = [
     { label: '사용 중인 구성원', value: org.isLoading ? undefined : org.users.filter((u) => u.status !== '미사용').length, to: adminPath('/base/user') },
     { label: '부서', value: org.isLoading ? undefined : org.depts.length, to: adminPath('/base/department') },
     { label: '직급', value: org.isLoading ? undefined : org.positions.length, to: adminPath('/base/position') },
     { label: '결재서식', value: forms.data?.length, to: adminPath('/base/approval-form') },
-    { label: '역할 그룹', value: (groups.data as unknown[] | undefined)?.length, to: adminPath('/base/auth') },
+    authz.active
+      ? { label: '역할', value: authz.isLoading ? undefined : authzRoles.data?.length, to: adminPath('/base/authz/roles') }
+      : { label: '역할 그룹', value: (groups.data as unknown[] | undefined)?.length, to: adminPath('/base/auth') },
   ];
 
   return (

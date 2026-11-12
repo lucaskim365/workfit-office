@@ -185,7 +185,10 @@ export function useSecurityContext(): SecurityContext {
     [user, isSuperAdmin, myGroups, HR_ADMIN_SCREENS, authz]
   );
 
+  const authzCommute = authz.active ? { scope: authz.commuteScope(), canManage: authz.can('commute.manage'), deptNames: authz.commuteDeptNames } : undefined;
+
   return {
+    authzCommute,
     user: user ?? null,
     userId: user?.id ?? '',
     name: user?.name ?? '',

@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
@@ -12,7 +13,6 @@ import type { User } from '@/domain/user/schema';
 import { newRoutineId, routineDates, validateRoutineRule, type Routine, type RoutineRule } from '@/domain/workPlan/routine';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
-import { usePermission } from '@/features/auth/usePermission';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { CALENDAR_EVENTS_KEY, useCalendarEvents, useJoinMeeting, useLeaveMeeting } from '@/features/calendar/useCalendarEvents';
 import { useCreateOutsideWork, useRemoveOutsideWork, useUpdateOutsideWork } from '@/features/outsideWork/useOutsideWorks';
@@ -120,7 +120,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   setRoutineScope: (scope: RoutineScope) => void;
 } {
   const queryClient = useQueryClient();
-  const { isSuperAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isSuperAdmin = canManage('calendar.company');
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const readOnly = target.mode === 'view';
   const entry = target.mode === 'create' ? null : target.entry;

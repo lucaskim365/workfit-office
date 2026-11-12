@@ -1,8 +1,8 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { useResources } from '@/features/resource/useResources';
 import {
   useApproveReservation,
@@ -36,7 +36,8 @@ const TAB_LABELS: Record<TabId, string> = { overview: '예약 현황', my: '내 
  */
 export default function MobileResourceScreen() {
   const { user } = useAuth();
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('resource.manage');
   const [searchParams, setSearchParams] = useSearchParams();
   const [date, setDate] = useState(() => toDateInput(new Date()));
   const [notice, setNotice] = useState('');

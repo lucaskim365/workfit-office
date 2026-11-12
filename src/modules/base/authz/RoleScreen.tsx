@@ -82,6 +82,15 @@ export default function RoleScreen() {
     else next.delete(key);
     setDraft({ ...draft, permissions: [...next].sort() });
   };
+  /** 영역 모두 선택·해제 — 고정·전용 권한은 건드리지 않는다 */
+  const toggleAll = (keys: string[], on: boolean) => {
+    const next = new Set(draft.permissions);
+    for (const k of keys) {
+      if (on) next.add(k);
+      else next.delete(k);
+    }
+    setDraft({ ...draft, permissions: [...next].sort() });
+  };
 
   // 만든 역할에는 전 직원이 이미 받는 권한을 보이지 않는다
   const baseRole = roles.find((r) => r.kind === 'base');
@@ -184,12 +193,25 @@ export default function RoleScreen() {
               areas.map((area) => {
                 const perms = shown.filter((p) => p.area === area.id);
                 const on = perms.filter((p) => checked.has(p.key) || implied.has(p.key)).length;
+                const editable = perms.filter((p) => !lockReason(p)).map((p) => p.key);
+                const allOn = editable.length > 0 && editable.every((k) => checked.has(k) || implied.has(k));
                 return (
                   <section key={area.id} className="border-t border-border first:border-t-0">
-                    <div className="flex items-center justify-between bg-panel-alt/60 px-5 py-2">
+                    <div className="flex items-center justify-between gap-3 bg-panel-alt/60 px-5 py-2">
                       <span className="text-[12px] font-extrabold text-navy">{area.name}</span>
-                      <span className="text-[11px] tabular-nums text-ink3">
-                        {on} / {perms.length}
+                      <span className="flex items-center gap-3">
+                        <span className="text-[11px] tabular-nums text-ink3">
+                          {on} / {perms.length}
+                        </span>
+                        {editable.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleAll(editable, !allOn)}
+                            className="rounded-md border border-border bg-panel px-2.5 py-0.5 text-[11px] font-bold text-ink2 transition-colors hover:border-teal hover:text-teal"
+                          >
+                            {allOn ? '모두 해제' : '모두 선택'}
+                          </button>
+                        )}
                       </span>
                     </div>
                     <ul className="m-0 list-none p-0">

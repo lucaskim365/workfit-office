@@ -1,3 +1,6 @@
+import { Navigate } from 'react-router-dom';
+import { useAuthz } from '@/features/authz/useAuthz';
+import { adminPath } from '@/app/shell/screens';
 import React, { useState, useMemo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
@@ -41,7 +44,15 @@ function Checkbox({
   );
 }
 
+/** 새 권한 체계로 옮긴 뒤에는 역할 관리로 보낸다 — 옮기기 전(운영)에는 지금처럼 이 화면이 권한 원본 */
 export default function AuthScreen() {
+  const { active, isLoading } = useAuthz();
+  if (isLoading) return null;
+  if (active) return <Navigate to={adminPath('/base/authz/roles')} replace />;
+  return <LegacyAuthScreen />;
+}
+
+function LegacyAuthScreen() {
   const org = useOrgTree();
   const { data: rawGroups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
   const saveGroup = useSaveRoleGroup();

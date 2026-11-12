@@ -54,3 +54,31 @@ export function checkLockout(p: {
   const now = superAdminIds(p.users, p.roles, p.after, p.org);
   return { block: now.size === 0, selfLoss: Boolean(p.meId && was.has(p.meId) && !now.has(p.meId)) };
 }
+
+/**
+ * 사용자 관리의 잠금 방지 — 직원을 미사용·잠금으로 바꾸거나, 부서·직급을 바꾸거나, 지울 때.
+ * 로그인할 수 있는('사용') 최고 관리자가 0명이 되면 block, 바꾸는 사람 본인이 빠지면 selfLoss.
+ */
+export function checkUserChangeLockout(p: {
+  users: AuthzUser[];
+  changed?: AuthzUser[];
+  removedIds?: string[];
+  org: AuthzOrg;
+  roles: AuthRole[];
+  assignments: AuthAssignment[];
+  meId: string | undefined;
+}): { block: boolean; selfLoss: boolean } {
+  const usable = (list: AuthzUser[]) => list.filter((u) => (u.status ?? '사용') === '사용');
+  const removed = new Set(p.removedIds ?? []);
+  const after = p.users
+    .filter((u) => !removed.has(u.id))
+    .map((u) => {
+      const c = p.changed?.find((x) => x.id === u.id);
+      if (!c) return u;
+      // 부서 이름이 바뀌면 예전 부서 id 는 버린다
+      return { ...u, ...c, deptId: c.dept !== undefined && c.dept !== u.dept ? undefined : u.deptId };
+    });
+  const was = superAdminIds(usable(p.users), p.roles, p.assignments, p.org);
+  const now = superAdminIds(usable(after), p.roles, p.assignments, p.org);
+  return { block: was.size > 0 && now.size === 0, selfLoss: Boolean(p.meId && was.has(p.meId) && !now.has(p.meId)) };
+}

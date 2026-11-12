@@ -1,6 +1,7 @@
+import { useUserLockoutGuard } from '@/features/authz/useUserLockoutGuard';
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState, useMemo } from 'react';
 import { Search, Plus, X, AlertTriangle } from 'lucide-react';
-import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles, useUpsertEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
@@ -33,7 +34,9 @@ import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
 import { DateInput } from '@/shared/ui/form/DateInput';
 
 export default function EmployeeScreen() {
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const lockoutOk = useUserLockoutGuard();
+  const isAdmin = canManage('admin.user.manage');
   const { data: users = [], isLoading: isUsersLoading } = useUsers();
   const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const { data: departments = [] } = useDepartments();
@@ -377,6 +380,7 @@ export default function EmployeeScreen() {
     const deptId = targetDept?.id || 'dept_default';
     const finalDuty = sanitizeJobTitle(targetDept, newEmpDuty || '팀원');
     if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
+    if (!lockoutOk({ changed: [{ ...targetUser, dept: targetDept?.name ?? targetDeptName }] })) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({
@@ -492,6 +496,8 @@ export default function EmployeeScreen() {
     const prevDeptId = prevProfile?.deptId ?? departmentMembers.find((m) => m.userId === targetUser.id && m.isPrimary)?.deptId ?? null;
     const prevTitle = prevProfile?.jobTitle ?? '';
     if (!confirmDeptHeadChange(targetUser.id, targetDept, finalDuty)) return;
+    // 퇴직·부서·직급 변경으로 최고 관리자가 없어지지 않게
+    if (!lockoutOk({ changed: [{ ...targetUser, dept: editEmpDept || '미지정', position: editEmpPos || '사원', status: editEmpStatus === 'RETIRED' ? '미사용' : targetUser.status }] })) return;
 
     try {
       await upsertEmployeeProfile.mutateAsync({

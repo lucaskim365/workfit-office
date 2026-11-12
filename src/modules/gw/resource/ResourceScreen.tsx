@@ -21,7 +21,6 @@ import ReservationReasonDialog from './ReservationReasonDialog';
 import ReservationRescheduleDialog from './ReservationRescheduleDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
-import { usePermission } from '@/features/auth/usePermission';
 
 type TabId = 'overview' | 'request' | 'my' | 'approvals' | 'admin';
 
@@ -45,8 +44,9 @@ const OVERVIEW_DETAIL_STATUSES = new Set<Reservation['status']>(['PENDING', 'CON
 
 function LocalResourceScreen() {
   const { user: authenticatedUser } = useAuth();
-  const { isAdmin, canAction } = usePermission();
-  const canCreate = canAction('S_GW_RESOURCE', 'create');
+  const { canManage: canManageKey } = useAuthz();
+  const isAdmin = canManageKey('resource.manage');
+  const canCreate = canManageKey('resource.manage');
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U011');
   const [modalTarget, setModalTarget] = useState<{ resource: Resource; date?: string } | null>(null);

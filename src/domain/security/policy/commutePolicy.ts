@@ -17,6 +17,7 @@ export const commutePolicy = {
    */
   canAccessCommuteAdmin(context: SecurityContext): boolean {
     if (!context.user) return false;
+    if (context.authzCommute) return context.authzCommute.scope !== 'MY_ONLY' || context.authzCommute.canManage;
     // ⚠️ 최고관리자(isSuperAdmin)라도 비임원/비팀장인 개발자는 전사 인사/근태 관제 자동 오픈에서 제외 (임원/팀장/인사위임자 전용)
     if (context.isExecutive) return true;
     if (context.isLeader || context.organization.isDeptHead(context.dept)) return true;
@@ -31,6 +32,7 @@ export const commutePolicy = {
    */
   getScope(context: SecurityContext): DataScope {
     if (!context.user) return 'MY_ONLY';
+    if (context.authzCommute) return context.authzCommute.scope;
 
     // 1. 임원 또는 HR 관리자 / 운영자 / 그룹권한관리에서 직접 관제 권한을 부여받은 비팀장(인사담당자 등) -> 전사 스코프 (ALL)
     if (
@@ -66,6 +68,7 @@ export const commutePolicy = {
    */
   canManagePolicy(context: SecurityContext): boolean {
     if (!context.user) return false;
+    if (context.authzCommute) return context.authzCommute.scope === 'ALL' || context.authzCommute.canManage;
     return (
       context.isSuperAdmin ||
       context.isExecutive ||
@@ -91,6 +94,7 @@ export const commutePolicy = {
     const scope = this.getScope(context);
     if (scope === 'ALL') return true;
     if (scope === 'TEAM') {
+      if (context.authzCommute?.deptNames) return context.authzCommute.deptNames.has((targetEmployee.dept ?? '').trim());
       return context.organization.isSameDept(targetEmployee.dept);
     }
     return false;

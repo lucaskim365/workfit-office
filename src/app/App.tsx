@@ -1,3 +1,4 @@
+import { LEGACY_AUTH_SCREENS, useAuthz } from '@/features/authz/useAuthz';
 import { lazy as reactLazy, useEffect, type ComponentType } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from './shell/AppShell';
@@ -136,8 +137,11 @@ function ToAdmin() {
 
 function ProtectedRoute({ url, children }: { url: string; children: React.ReactNode }) {
   const { canAccess, isLoading } = usePermission();
+  const authz = useAuthz();
   if (isLoading) return null;
   if (!canAccess(url)) {
+    // 옛 그룹 권한 관리 주소(즐겨찾기 등)는 새 역할 관리로
+    if (authz.active && LEGACY_AUTH_SCREENS.has(url)) return <Navigate to={adminPath('/base/authz/roles')} replace />;
     return <Navigate to="/exec" replace />;
   }
   return <>{children}</>;

@@ -8,6 +8,11 @@ import { legacyGrants, type LegacyOrg, type LegacyUser } from '@/domain/authz/le
 import { screenActionPerms } from '@/domain/authz/screenPerms';
 import { useAuthAssignmentsQuery, useAuthRolesQuery } from './useAuthzDraft';
 
+const grantsHas = (r: { grants: Map<string, unknown> }, key: string) => r.grants.has(key);
+
+/** 새 체계로 옮긴 뒤 닫는 옛 그룹 권한 관리 화면 */
+export const LEGACY_AUTH_SCREENS = new Set(['/base/auth', 'S_SYS_AUTH', 'S_BASE_AUTH']);
+
 export type DataScope = 'MY_ONLY' | 'TEAM' | 'TEAM_AND_LEADERS' | 'ALL';
 
 /**
@@ -41,12 +46,20 @@ export function useAuthz() {
   const can = useCallback((key: string) => canKey(result, key), [result]);
   const canOnUser = useCallback((key: string, target: AuthzUser) => canOnUserKey(result, key, target, legacyOrg), [result, legacyOrg]);
   const canOnDept = useCallback((key: string, deptId: string) => canOnDeptKey(result, key, deptId), [result]);
+  /**
+   * 관리 권한 — 남의 데이터를 고치는 업무 기능. 새 체계에서는 그 권한을 받은 사람만(최고 관리자도 따로 받아야 함),
+   * 옮기기 전에는 예전처럼 최고 관리자도 통과.
+   */
+  const canManage = useCallback((key: string) => grantsHas(result, key) || (!active && result.isSuperAdmin), [result, active]);
   /** 옛 화면 단위 판정(canAccess·canAction)을 새 권한으로 */
   const canScreen = useCallback(
     (urlOrId: string, action: 'access' | 'create' | 'update' | 'delete' = 'access') => {
       if (!me || me.status === '미사용') return false;
+      // 옛 그룹 권한 관리 화면은 새 체계로 옮긴 뒤에는 쓰지 않는다(역할 관리가 대신함)
+      if (active && LEGACY_AUTH_SCREENS.has(urlOrId)) return false;
       const perms = screenActionPerms(urlOrId, action);
       if (perms === null) return result.isSuperAdmin;
+      if (perms.length === 0) return true;
       return perms.some((k) => result.grants.has(k));
     },
     [me, result],
@@ -58,13 +71,22 @@ export function useAuthz() {
     return g.all ? 'ALL' : 'TEAM';
   }, [result]);
 
+  /** 근태를 볼 수 있는 부서 이름 — 전사이거나 옮기기 전(예전처럼 본인 부서 이름으로 비교)이면 null */
+  const commuteDeptNames = useMemo(() => {
+    const g = result.grants.get('commute.view');
+    if (!active || !g || g.all) return null;
+    return new Set(org.depts.filter((d) => g.deptIds.has(d.id)).map((d) => d.name.trim()));
+  }, [active, result, org.depts]);
+
   return {
     active,
+    commuteDeptNames,
     isLoading,
     result,
     isSuperAdmin: result.isSuperAdmin,
     canUseConsole: Boolean(me) && (active ? canUseAdminConsole(result) : result.isSuperAdmin),
     can,
+    canManage,
     canOnUser,
     canOnDept,
     canScreen,

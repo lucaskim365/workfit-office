@@ -17,7 +17,6 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   S_ADM_ASSIGN: { url: '/base/authz/assign', row: { access: ['admin.authz'], create: ['admin.authz'], update: ['admin.authz'], delete: ['admin.authz'] } },
   S_ADM_PEOPLE: { url: '/base/authz/people', row: { access: ['admin.authz'] } },
   S_SYS_BACKUP: { url: '/sys/backup', row: { access: ['admin.backup'], create: ['admin.backup'], update: ['admin.backup'], delete: ['admin.backup'] } },
-  S_GW_DOCUMENT: { url: '/gw/document', row: { access: ['document.view'], create: ['document.manage'], update: ['document.manage'], delete: ['document.manage'] } },
 };
 
 /** 옛 권한표 화면의 URL (SYSTEM_SCREENS 와 같음) */
@@ -33,7 +32,6 @@ const URL_OF: Record<string, string> = {
 
 const ROWS = new Map<string, Row>();
 for (const [id, row] of Object.entries(LEGACY_MAP)) {
-  if (Object.keys(row).length === 0) continue;
   ROWS.set(id, row);
   if (URL_OF[id]) ROWS.set(URL_OF[id], row);
 }
@@ -42,7 +40,7 @@ for (const [id, { url, row }] of Object.entries(EXTRA)) {
   ROWS.set(url, row);
 }
 
-/** 화면 id 또는 url 의 작업에 필요한 권한. 모르는 화면이면 null */
+/** 화면 id 또는 url 의 작업에 필요한 권한. 빈 목록 = 모두에게 열림(홈 등), 모르는 화면이면 null */
 export function screenActionPerms(urlOrId: string, action: Act): string[] | null {
   const row = ROWS.get(urlOrId);
   if (!row) return null;

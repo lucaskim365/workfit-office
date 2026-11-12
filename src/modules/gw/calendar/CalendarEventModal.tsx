@@ -30,7 +30,6 @@ import {
 import { MEETING_DEFAULT_VISIBILITY, canJoinMeeting, findSimilarMeetings, isMeeting } from '@/domain/calendarEvent/meeting';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useUsers } from '@/features/user/useUsers';
-import { usePermission } from '@/features/auth/usePermission';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { Field } from '@/shared/ui/form/Field';
@@ -93,7 +92,8 @@ export default function CalendarEventModal({
   onRemoved,
   zClass,
 }: CalendarEventModalProps) {
-  const { isSuperAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isSuperAdmin = canManage('calendar.company');
   const { can } = useAuthz();
   const { user } = useAuth();
   const queryClient = useQueryClient();

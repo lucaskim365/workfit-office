@@ -1,7 +1,7 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { isKnownTestUserId, setViewerCanSeeTestAccounts } from '@/data/_backend/testAccountVisibility';
 import { canViewerSeeTestAccounts, isTestAccount } from '@/domain/user/testAccount';
 import { useShowTestAccounts } from './testAccountToggle';
@@ -14,7 +14,8 @@ import { useShowTestAccounts } from './testAccountToggle';
  */
 export function TestAccountVisibilitySync() {
   const { user } = useAuth();
-  const { isSuperAdmin } = useSecurityContext();
+  const { can } = useAuthz();
+  const isSuperAdmin = can('admin.testAccounts');
   const superAdminShowsTestAccounts = useShowTestAccounts();
   const qc = useQueryClient();
   // 개발 서버에서는 일반 임직원 계정도 테스트 계정이 보여야 메신저로 서로 대화해 볼 수 있다(최고관리자는 상단 토글 그대로)

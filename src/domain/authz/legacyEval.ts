@@ -1,10 +1,10 @@
 import type { RoleGroup } from '@/domain/roleGroup/schema';
 import { resolveUserRoles } from '@/domain/roleGroup/roleResolver';
-import { isExecutiveUser, isLeaderUser } from '@/features/auth/scopeHelper';
+import { isExecutiveUser, isLeaderUser } from './legacyRules';
 import type { User } from '@/domain/user/schema';
 import { PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions } from './permissions';
 import { userDeptIds, type AuthzOrg, type AuthzResult, type Grant } from './engine';
-import { LEGACY_MAP, RULE_PERMISSIONS, UNGATED_PERMISSIONS } from './legacy';
+import { LEGACY_MAP, RULE_PERMISSIONS } from './legacy';
 
 /**
  * 옛 판정을 새 권한 키로 옮겨 계산한다 — 새 체계로 옮기기 전(authRoles 가 비었을 때)의 동작과,
@@ -87,7 +87,6 @@ export function legacyGrants(user: LegacyUser | null | undefined, groups: RoleGr
     }
   };
 
-  add(UNGATED_PERMISSIONS, '전 직원 기본');
   // 권한표(그룹별 화면 × 작업)
   for (const g of myGroups) {
     const keys: string[] = [];
@@ -103,7 +102,7 @@ export function legacyGrants(user: LegacyUser | null | undefined, groups: RoleGr
   if (flags.superAdmin) {
     const keys: string[] = [...SUPER_ADMIN_PERMISSIONS];
     for (const [screen, row] of Object.entries(LEGACY_MAP)) if (!HR_SCREENS.has(screen)) for (const ks of Object.values(row)) keys.push(...(ks ?? []));
-    keys.push('approval.secure', 'messenger.manage', 'resource.manage', 'document.manage', 'biz.po.manage', 'workplan.manage', 'admin.approval.rule.manage');
+    keys.push('approval.secure', 'messenger.manage', 'resource.manage', 'biz.po.manage', 'workplan.manage', 'admin.approval.rule.manage');
     add(keys, LEGACY_SUPER_VIA);
   }
   if (flags.exec) add(RULE_PERMISSIONS.exec.filter((k) => k !== 'commute.view'), '임원 판정');

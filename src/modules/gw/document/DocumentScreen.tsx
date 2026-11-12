@@ -76,6 +76,7 @@ export default function DocumentScreen() {
 
   // 권한 요약 (기준정보 > 권한그룹관리 연동)
   const { can: canAuthz } = useAuthz();
+  // 문서관리는 보류 중이라 권한 목록에 없다 — 다시 열 때 문서 권한을 만들어 연결한다
   const hasWriteAccess = canAuthz('document.manage');
 
   // 사이드바 카테고리 필터

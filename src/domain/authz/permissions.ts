@@ -11,9 +11,7 @@ export const AUTHZ_AREAS = [
   { id: 'comm', name: '게시판·소통' },
   { id: 'schedule', name: '일정·자원' },
   { id: 'org', name: '조직' },
-  { id: 'document', name: '문서관리' },
   { id: 'biz', name: '사업관리' },
-  { id: 'exec', name: '경영' },
   { id: 'adminPeople', name: '관리자 · 구성원·조직' },
   { id: 'adminApproval', name: '관리자 · 전자결재' },
   { id: 'adminCompany', name: '관리자 · 회사·운영' },
@@ -47,18 +45,16 @@ const pair = (base: string, name: string, area: AuthzAreaId, viewDesc: string, m
 export const PERMISSIONS: PermissionDef[] = [
   // 전자결재
   P({ key: 'approval.use', name: '기안·결재', desc: '문서를 기안하고 결재함에서 결재한다', area: 'approval' }),
-  P({ key: 'approval.secure', name: '보안·비공개 문서 열람', desc: '관계자가 아니어도 보안 등급·비공개 문서를 연다', area: 'approval', scoped: true }),
+  P({ key: 'approval.secure', name: '보안·비공개 문서 열람', desc: '관계자가 아니어도 보안 등급·비공개 문서를 연다', area: 'approval' }),
   P({ key: 'approval.postread.forward', name: '후열 전달', desc: '결재 끝난 문서를 다른 사람에게 후열로 전달한다', area: 'approval' }),
 
   // 근태·휴가
   P({ key: 'commute.self', name: '내 근태·휴가', desc: '내 출퇴근 기록을 보고 휴가를 신청한다', area: 'commute' }),
   P({ key: 'commute.view', name: '다른 사람 근태·휴가 열람', desc: '범위 안 직원의 출퇴근·휴가 현황을 본다', area: 'commute', scoped: true }),
-  P({ key: 'commute.manage', name: '근태 수정·연차 대장 관리', desc: '범위 안 직원의 근태를 고치고 연차 대장을 관리한다', area: 'commute', scoped: true, implies: ['commute.view'] }),
+  P({ key: 'commute.manage', name: '근태 수정·연차 대장 관리', desc: '범위 안 직원의 근태를 고치고 연차 대장을 관리한다', area: 'commute', implies: ['commute.view'] }),
 
   // 업무계획·프로젝트
   P({ key: 'workplan.use', name: '업무계획·프로젝트', desc: '내 업무계획을 쓰고 프로젝트에 참여한다', area: 'workplan' }),
-  P({ key: 'workplan.view', name: '다른 사람 업무계획 열람', desc: '범위 안 직원의 업무계획을 본다', area: 'workplan', scoped: true }),
-  P({ key: 'workplan.overview', name: '팀·전사 업무 종합 현황', desc: '범위 안 직원의 주간 업무 현황표를 본다', area: 'workplan', scoped: true, implies: ['workplan.view'] }),
   P({ key: 'workplan.manage', name: '명단 순서·태그 관리', desc: '업무계획 명단 순서와 공용 태그를 정한다', area: 'workplan' }),
   P({ key: 'project.create', name: '프로젝트 만들기', desc: '새 프로젝트를 만들고 담당자를 배정한다', area: 'workplan' }),
 
@@ -68,9 +64,7 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'survey.use', name: '설문 응답', desc: '사내 설문에 응답한다', area: 'comm' }),
   P({ key: 'survey.manage', name: '설문 만들기', desc: '설문을 만들고 결과를 본다', area: 'comm', implies: ['survey.use'] }),
   P({ key: 'gallery.use', name: '회사 갤러리', desc: '사진을 보고 올린다', area: 'comm' }),
-  P({ key: 'mail.use', name: '사내메일', desc: '메일을 주고받는다', area: 'comm' }),
-  P({ key: 'messenger.use', name: '메신저', desc: '대화방에서 대화한다', area: 'comm' }),
-  P({ key: 'messenger.manage', name: '메신저 관리', desc: '대화방을 정리하고 공지를 관리한다', area: 'comm', implies: ['messenger.use'] }),
+  P({ key: 'messenger.manage', name: '메신저 관리', desc: '다른 사람이 만든 대화방도 삭제한다', area: 'comm' }),
 
   // 일정·자원
   P({ key: 'calendar.use', name: '캘린더', desc: '개인·부서 일정을 쓰고 본다', area: 'schedule' }),
@@ -82,16 +76,10 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'org.view', name: '조직도·인명', desc: '조직도와 직원 연락처를 본다', area: 'org' }),
   P({ key: 'seat.manage', name: '좌석 배치 편집', desc: '사무실 좌석 배치도를 고친다', area: 'org', implies: ['org.view'] }),
 
-  // 문서관리
-  ...pair('document', '문서', 'document', '문서함의 문서를 연다', '문서를 등록하고 고친다'),
-
   // 사업관리
   ...pair('biz.vendor', '도입기업', 'biz', '도입기업 정보를 본다', '도입기업을 등록·수정·삭제한다'),
   ...pair('biz.project', '사업 현황', 'biz', '사업 목록과 진행 상황을 본다', '사업 정보를 고친다'),
   ...pair('biz.po', '발주 현황', 'biz', '결재 끝난 발주서를 본다', '발주 회신 문서를 관리한다'),
-
-  // 경영
-  P({ key: 'exec.dashboard', name: '경영 현황', desc: '경영 지표 위젯을 본다', area: 'exec' }),
 
   // 관리자 · 구성원·조직
   ...pair('admin.user', '사용자', 'adminPeople', '직원 목록과 계정 정보를 본다', '직원을 등록·수정하고 퇴사 처리한다', { adminConsole: true }),

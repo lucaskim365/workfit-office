@@ -1,5 +1,5 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState } from 'react';
-import { usePermission } from '@/features/auth/usePermission';
 import type { Reservation } from '@/domain/reservation/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
@@ -18,7 +18,8 @@ interface ReservationApprovalsProps {
 }
 
 export default function ReservationApprovals({ actor, reservations, resources, users, onSelectReservation }: ReservationApprovalsProps) {
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('resource.manage');
   const [error, setError] = useState('');
   const [rejectTarget, setRejectTarget] = useState<Reservation | null>(null);
   const approveReservation = useApproveReservation();

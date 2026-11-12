@@ -16,7 +16,6 @@ import {
   useCommuteViewer,
 } from '@/features/commute/useCommute';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { GwHead } from '@/modules/gw/_gw';
@@ -111,17 +110,17 @@ const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border bor
 
 export default function CommuteScreen() {
   const { user } = useAuth();
-  const { isAdmin } = usePermission();
+  const { canManage: canManageKey } = useAuthz();
   const { savePolicy } = useCommutePolicy();
   const { policy, holidays, holidayMap, approvals = [], approvalDaysOf, evaluate } = useCommuteEvaluation();
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
 
-  const { commuteScope: authzCommuteScope } = useAuthz();
+  const { commuteScope: authzCommuteScope, commuteDeptNames } = useAuthz();
   const commuteScope = authzCommuteScope();
   // 보안 지침 준수: 비임원/비팀장 사원은 ADMIN 권한이 있더라도 전사 근태 관제 센터에 접근할 수 없으며, 오직 ALL 스코프 보유자만 canAll 부여
   const canAll = commuteScope === 'ALL';
-  const canManagePolicy = isAdmin || canAll;
+  const canManagePolicy = canAll || canManageKey('commute.manage');
 
   // 조회 월 — 화면을 열 때 한 번에 받는 요청(useCommuteBootstrap)이 써서 여기서 정한다
   const [month, setMonth] = useState(thisMonth());
@@ -524,14 +523,16 @@ export default function CommuteScreen() {
       if (commuteScope === 'ALL') return true;
 
       if (commuteScope === 'TEAM') {
-        const myDept = (user?.dept ?? '').trim();
         const empDept = (matchedUser?.dept ?? '').trim();
+        // 새 권한 체계: 역할 지정의 범위(본인 부서·하위 부서·지정 조직)
+        if (commuteDeptNames) return commuteDeptNames.has(empDept);
+        const myDept = (user?.dept ?? '').trim();
         return Boolean(myDept && empDept && myDept === empDept);
       }
 
       return false;
     });
-  }, [employees, commuteScope, user?.dept, userByEmpMap, normName, excludeTestDept, isExcludedAttendance]);
+  }, [employees, commuteScope, commuteDeptNames, user?.dept, userByEmpMap, normName, excludeTestDept, isExcludedAttendance]);
 
   // 부서 목록 추출
   const deptList = useMemo(() => {

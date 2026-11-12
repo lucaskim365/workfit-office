@@ -18,16 +18,16 @@ export const LEGACY_MAP: Record<string, LegacyRow> = {
   S_GW_COMMUTE_ADMIN: { access: ['commute.view'], update: ['commute.manage'] },
   S_GW_BOARD: { access: ['board.use'], update: ['board.manage'], delete: ['board.manage'] },
   S_GW_CALENDAR: { access: ['calendar.use'] },
-  S_GW_MAIL: { access: ['mail.use'] },
+  S_GW_MAIL: {},
   S_GW_TASK: { access: ['workplan.use'], create: ['project.create'] },
-  S_GW_WORK_PLAN: { access: ['workplan.use', 'workplan.view'] },
-  S_GW_WORK_PLAN_ADMIN: { access: ['workplan.overview'], update: ['workplan.manage'] },
+  S_GW_WORK_PLAN: { access: ['workplan.use'] },
+  S_GW_WORK_PLAN_ADMIN: { update: ['workplan.manage'] },
   S_GW_RESOURCE: { access: ['resource.use'], update: ['resource.manage'] },
   S_GW_SURVEY: { access: ['survey.use'], create: ['survey.manage'] },
   S_GW_EMPLOYEE: { access: ['org.view'] },
   S_GW_ORGCHART: { access: ['org.view'] },
   S_GW_GALLERY: { access: ['gallery.use'] },
-  S_EXEC_DASH: { access: ['exec.dashboard'] },
+  S_EXEC_DASH: {},
   S_BASE_USER: { access: ['admin.user.view'], create: ['admin.user.manage'], update: ['admin.user.manage'], delete: ['admin.user.manage'] },
   S_BASE_DEPT: { access: ['admin.org.view'], create: ['admin.org.manage'], update: ['admin.org.manage'], delete: ['admin.org.manage'] },
   S_BASE_POSITION: { access: ['admin.position.view'], create: ['admin.position.manage'], update: ['admin.position.manage'], delete: ['admin.position.manage'] },
@@ -57,9 +57,6 @@ export function legacyPermissions(menuPermissions: Record<string, Partial<Record
   }
   return [...out].sort();
 }
-
-/** 옛 체계에서 권한 검사 없이 모두가 쓰던 기능 */
-export const UNGATED_PERMISSIONS = ['messenger.use'];
 
 /** 이름·플래그로 판정하던 역할의 권한 */
 export const RULE_PERMISSIONS = {
@@ -124,7 +121,7 @@ export function convertLegacy(
   for (const u of users) if (u.role === 'admin' && !assignments.some((a) => a.roleId === 'ROLE-SUPER' && a.targetId === u.id)) assignments.push(blank('ROLE-SUPER', { targetType: 'USER', targetId: u.id }));
 
   const base = byCode.get('USER');
-  roles.push({ id: 'ROLE-BASE', name: '전 직원', desc: '사용 중인 모든 직원이 자동으로 받는 기본 권한', permissions: [...new Set([...legacyPermissions(base?.menuPermissions as never).filter((k) => !k.startsWith('admin.')), ...UNGATED_PERMISSIONS])].sort(), kind: 'base', use: true, sort: 1, migratedFrom: base?.name ?? '' });
+  roles.push({ id: 'ROLE-BASE', name: '전 직원', desc: '사용 중인 모든 직원이 자동으로 받는 기본 권한', permissions: legacyPermissions(base?.menuPermissions as never).filter((k) => !k.startsWith('admin.')).sort(), kind: 'base', use: true, sort: 1, migratedFrom: base?.name ?? '' });
 
   const basePerms = new Set(roles[1].permissions);
   const minusBase = (keys: Iterable<string>) => [...new Set(keys)].filter((k) => !basePerms.has(k)).sort();
