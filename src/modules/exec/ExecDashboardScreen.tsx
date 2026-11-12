@@ -368,20 +368,21 @@ export default function ExecDashboardScreen() {
   useLayoutEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
-    const g = grid.getBoundingClientRect();
-    const k = g.width ? grid.offsetWidth / g.width : 1;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const next = new Map<string, { x: number; y: number }>();
     grid.querySelectorAll<HTMLElement>('[data-slot-id]').forEach((el) => {
       const id = el.dataset.slotId!;
-      const r = el.getBoundingClientRect();
-      const at = { x: (r.left - g.left) * k, y: (r.top - g.top) * k };
+      // 제자리(모눈 안 위치)는 offset 으로 잰다. 화면 위치(getBoundingClientRect)는 미끄러지는 중의 이동이 섞여,
+      // 움직이는 동안 다시 그려지면 그 중간 위치를 출발점으로 삼아 움직임이 끝없이 겹치고 커졌다(위젯이 떨리다 화면 밖으로)
+      const at = { x: el.offsetLeft, y: el.offsetTop };
       next.set(id, at);
       const before = prevRects.current.get(id);
       if (!editing || still || !before) return;
       const dx = before.x - at.x;
       const dy = before.y - at.y;
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      // 앞의 움직임이 아직 남아 있으면 끊고 새로(겹치지 않게)
+      el.getAnimations().forEach((x) => x.cancel());
       el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' });
     });
     prevRects.current = next;
