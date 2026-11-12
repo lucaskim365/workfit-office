@@ -17,7 +17,7 @@ export interface MigrationRow {
   extra: string[];
   /** 범위가 달라지는 권한 */
   scopeChanged: string[];
-  /** 최고 관리자라서 열리던 업무 권한 — 새 체계에서는 따로 받아야 함(의도한 차이) */
+  /** 최고 관리자라서 열리던 권한 중 새 체계에서 빠지는 것(최고 관리자는 이제 모든 권한을 가져 보통 비어 있음) */
   superOnly: string[];
 }
 

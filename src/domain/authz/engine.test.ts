@@ -53,11 +53,12 @@ test('직급 이상 지정, 부서 하위 포함 지정', () => {
   assert.ok(!resolveGrants(staff2, roles, [asg('E', { targetType: 'DEPT', targetId: 'D1' })], org).grants.has('calendar.company'));
 });
 
-test('최고 관리자 — 콘솔 권한 전부, 업무 데이터 권한은 없음, 관리는 보기를 포함', () => {
+test('최고 관리자 — 모든 메뉴·기능(업무 권한도 전사), 관리는 보기를 포함', () => {
   const r = resolveGrants(staff1, [role('S', [], 'super')], [asg('S', { targetId: 's1' })], org);
   assert.ok(r.isSuperAdmin);
   assert.ok(r.grants.has('admin.authz'));
-  assert.ok(!r.grants.has('commute.view'));
+  assert.ok(r.grants.get('commute.view')?.all, '근태 열람도 전사');
+  assert.ok(r.grants.has('approval.secure') && r.grants.has('biz.project.manage'));
   const c = resolveGrants(staff1, [role('C', ['admin.code.manage', 'admin.backup'])], [asg('C', { targetId: 's1' })], org);
   assert.ok(c.grants.has('admin.code.view'));
   assert.ok(!c.grants.has('admin.backup'), '최고 관리자 전용은 일반 역할로 못 준다');

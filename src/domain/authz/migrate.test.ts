@@ -47,11 +47,11 @@ test('옮기기 — 임원·부서장·일반 직원은 권한이 같고, 미사
   assert.ok(!plan.rows.some((r) => r.user.id === 'gone'));
 });
 
-test('옮기기 — 최고 관리자의 업무 권한은 의도한 차이로만 나온다', () => {
+test('옮기기 — 최고 관리자는 예전·새 체계 모두 모든 권한이라 차이가 없다', () => {
   const plan = planMigration(groups as never, org, users);
   const adm = plan.rows.find((r) => r.user.id === 'adm')!;
   assert.deepEqual([adm.missing, adm.extra, adm.scopeChanged], [[], [], []]);
-  assert.ok(adm.superOnly.includes('approval.secure'));
+  assert.deepEqual(adm.superOnly, []);
 });
 
 test('옛 판정 — 부서장은 본인 부서 근태만, 임원은 전사', () => {

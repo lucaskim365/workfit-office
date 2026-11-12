@@ -47,7 +47,7 @@ export function useAuthz() {
   const canOnUser = useCallback((key: string, target: AuthzUser) => canOnUserKey(result, key, target, legacyOrg), [result, legacyOrg]);
   const canOnDept = useCallback((key: string, deptId: string) => canOnDeptKey(result, key, deptId), [result]);
   /**
-   * 관리 권한 — 남의 데이터를 고치는 업무 기능. 새 체계에서는 그 권한을 받은 사람만(최고 관리자도 따로 받아야 함),
+   * 관리 권한 — 남의 데이터를 고치는 업무 기능. 새 체계에서는 그 권한을 받은 사람만(최고 관리자는 모든 권한을 가짐),
    * 옮기기 전에는 예전처럼 최고 관리자도 통과.
    */
   const canManage = useCallback((key: string) => grantsHas(result, key) || (!active && result.isSuperAdmin), [result, active]);

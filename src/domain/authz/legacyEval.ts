@@ -35,7 +35,6 @@ export interface LegacyFlags {
 }
 
 export const LEGACY_SUPER_VIA = '최고 관리자(예전 방식)';
-const HR_SCREENS = new Set(['S_GW_COMMUTE_ADMIN', 'S_GW_WORK_PLAN_ADMIN']);
 const EXEC_KEYWORDS = ['대표이사', '대표', '상무', '상무이사', '전무', '부사장', '사장', '이사', '위원장', '부위원장'];
 const LEADER_KEYWORDS = ['팀장', '부서장', '파트장', '실장', '본부장', '그룹장', '센터장', '지사장', 'leader', 'manager', 'head'];
 
@@ -95,16 +94,11 @@ export function legacyGrants(user: LegacyUser | null | undefined, groups: RoleGr
       if (!row || !f) continue;
       for (const act of ['access', 'create', 'update', 'delete'] as const) if ((f as Record<string, boolean>)[act]) keys.push(...(row[act] ?? []));
     }
-    // 관리자 그룹의 권한표는 최고 관리자 몫으로 본다(새 체계에서 최고 관리자는 시스템 관리 권한만)
+    // 관리자 그룹의 권한표는 최고 관리자 몫으로 본다
     add(keys, /^(ROLE_)?ADMIN$/i.test(g.code) ? LEGACY_SUPER_VIA : g.name || g.code);
   }
-  // 최고 관리자 — 근태 관제·업무 종합 현황 말고 모든 화면 통과
-  if (flags.superAdmin) {
-    const keys: string[] = [...SUPER_ADMIN_PERMISSIONS];
-    for (const [screen, row] of Object.entries(LEGACY_MAP)) if (!HR_SCREENS.has(screen)) for (const ks of Object.values(row)) keys.push(...(ks ?? []));
-    keys.push('approval.secure', 'messenger.manage', 'resource.manage', 'biz.po.manage', 'workplan.manage', 'admin.approval.rule.manage');
-    add(keys, LEGACY_SUPER_VIA);
-  }
+  // 최고 관리자 — 모든 메뉴·기능(새 체계와 같다)
+  if (flags.superAdmin) add([...SUPER_ADMIN_PERMISSIONS], LEGACY_SUPER_VIA);
   if (flags.exec) add(RULE_PERMISSIONS.exec.filter((k) => k !== 'commute.view'), '임원 판정');
   if (flags.operator) add(RULE_PERMISSIONS.operator, flags.operatorExplicit ? '운영자 판정' : LEGACY_SUPER_VIA);
   if (flags.execCommute) add(['commute.view'], '임원 판정');

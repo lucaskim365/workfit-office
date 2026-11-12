@@ -187,7 +187,7 @@ export default function RoleScreen() {
           >
             {isSuper && tab === 'work' ? (
               <div className="px-5 py-10 text-center text-[12.5px] text-ink3">
-                최고 관리자 역할에는 업무 권한이 없습니다. 근태 열람 같은 업무 권한은 다른 역할로 함께 지정하세요.
+                최고 관리자는 모든 업무 권한을 전사 범위로 갖습니다. 따로 지정할 필요가 없습니다.
               </div>
             ) : (
               areas.map((area) => {

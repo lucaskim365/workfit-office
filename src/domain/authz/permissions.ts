@@ -107,8 +107,8 @@ export const PERMISSIONS: PermissionDef[] = [
 
 export const PERMISSION_BY_KEY = new Map(PERMISSIONS.map((p) => [p.key, p]));
 
-/** 최고 관리자 역할이 갖는 권한 — 콘솔 권한 전부(업무 데이터 권한은 따로 받는다) */
-export const SUPER_ADMIN_PERMISSIONS = PERMISSIONS.filter((p) => p.adminConsole).map((p) => p.key);
+/** 최고 관리자 역할이 갖는 권한 — 모든 메뉴·기능(업무 권한 포함, 전사 범위). 따로 지정할 필요가 없다 */
+export const SUPER_ADMIN_PERMISSIONS = PERMISSIONS.map((p) => p.key);
 
 /** implies 를 펼친 권한 목록 */
 export function expandPermissions(keys: Iterable<string>): Set<string> {
