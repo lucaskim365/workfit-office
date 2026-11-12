@@ -323,11 +323,14 @@ export function TodayWidget() {
                         ) : r.kind === 'allDay' ? (
                           // 종일 — 하루 전체를 채운 색 막대
                           <span className="relative block h-7 rounded-md bg-panel-alt">
-                            <span className={`absolute inset-1 grid place-items-center rounded text-[11px] font-bold text-white ${r.color}`}>종일</span>
+                            <span className="absolute inset-1 grid place-items-center overflow-hidden rounded">
+                              <span className={`absolute inset-0 opacity-35 ${r.color}`} />
+                              <span className="relative text-[11px] font-bold text-ink2">종일</span>
+                            </span>
                           </span>
                         ) : (
                           <span className="relative block h-7 rounded-md bg-panel-alt">
-                            {sp && <span className={`absolute top-1.5 bottom-1.5 rounded opacity-85 ${r.color}`} style={{ left: `calc(${sp.left}% + 1px)`, width: `calc(${sp.width}% - 2px)` }} />}
+                            {sp && <span className={`absolute top-1.5 bottom-1.5 rounded opacity-45 ${r.color}`} style={{ left: `calc(${sp.left}% + 1px)`, width: `calc(${sp.width}% - 2px)` }} />}
                           </span>
                         )}
                       </button>

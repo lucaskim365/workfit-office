@@ -87,10 +87,12 @@ type Near = { entry: DayEntry; role: 'prev' | 'with' | 'next' | 'day'; note: str
 /**
  * 고른 일정의 앞뒤·겹치는 일정.
  * 시각 있는 일정: 바로 앞(끝난 것 중 가장 늦은 것) · 겹치는 것 · 바로 뒤(시작 중 가장 이른 것), 쉬는 틈도 함께.
- * 종일·시간 미정: 그날의 시각 있는 일정을 순서대로(최대 4개).
+ * 종일 일정은 겹침에 넣지 않는다 — 종일을 고르면 목록 없음, 다른 일정의 앞뒤·겹침에도 안 나온다.
+ * 시간 미정: 그날의 시각 있는 일정을 순서대로(최대 4개).
  */
 function nearOf(entry: DayEntry, all: DayEntry[]): Near[] {
   const others = all.filter((x) => x.key !== entry.key);
+  if (entryTimeKind(entry) === 'allDay') return [];
   const me = spanOf(entry);
   const timed = others.map((x) => ({ x, sp: spanOf(x) })).filter((o): o is { x: DayEntry; sp: [number, number] } => o.sp !== null);
   if (!me) {
@@ -242,7 +244,8 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
         </div>
       </div>
 
-      {/* 하루 중 어디쯤 — 08~20시 */}
+      {/* 하루 중 어디쯤 — 08~20시. 종일 일정은 막대 없이 내용·메모만 */}
+      {kind !== 'allDay' && (
       <div className="border-y border-border bg-panel px-5 py-3">
         {kind === 'undecided' ? (
           <div className="grid h-7 place-items-center rounded-lg border border-dashed border-border-hi text-[12px] font-bold text-ink3">시간을 정하지 않은 업무입니다</div>
@@ -252,19 +255,15 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
               {otherSpans.map(({ key, sp }) => (
                 <span
                   key={key}
-                  className={`absolute top-1.5 bottom-1.5 rounded transition-colors ${hoverKey === key ? `${entryDotClass(all.find((x) => x.key === key)!)} opacity-45` : 'bg-ink3/20'}`}
+                  className={`absolute top-1.5 bottom-1.5 rounded transition-colors ${hoverKey === key ? `${entryDotClass(all.find((x) => x.key === key)!)} opacity-30` : 'bg-ink3/20'}`}
                   style={{ left: `${pct(sp![0])}%`, width: `${Math.max(0.6, pct(sp![1]) - pct(sp![0]))}%` }}
                 />
               ))}
-              {kind === 'allDay' ? (
-                <span className={`absolute inset-1 grid place-items-center rounded-md text-[11.5px] font-bold text-white ${color}`}>하루 종일</span>
-              ) : (
-                startMin !== null && (
-                  <span
-                    className={`absolute top-1 bottom-1 rounded-md ${color}`}
-                    style={{ left: `${pct(startMin)}%`, width: `max(6px, ${pct(endMin ?? startMin + 30) - pct(startMin)}%)` }}
-                  />
-                )
+              {startMin !== null && (
+                <span
+                  className={`absolute top-1 bottom-1 rounded-md opacity-55 ${color}`}
+                  style={{ left: `${pct(startMin)}%`, width: `max(6px, ${pct(endMin ?? startMin + 30) - pct(startMin)}%)` }}
+                />
               )}
               {nowPct !== null && (
                 <span className="absolute -top-1 -bottom-1 w-0.5 rounded bg-rose-500" style={{ left: `${nowPct}%` }} aria-hidden="true">
@@ -280,6 +279,7 @@ export function EntryDetailModal({ entry, date, all = [], onPick, onClose }: {
           </>
         )}
       </div>
+      )}
 
       {/* 앞뒤·겹치는 일정 — 누르면 그 일정으로 */}
       {near.length > 0 && (
