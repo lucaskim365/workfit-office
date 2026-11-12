@@ -1,11 +1,8 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
-import { commutePolicy } from '@/domain/security/policy/commutePolicy';
-import { approvedLeavesInMonth } from '@/domain/leave/monthLeaves';
+import { useScopedMonthLeaves } from '@/features/commute/useScopedMonthLeaves';
 import { leaveChip, STATUS_TONES } from '@/domain/commute/statusDisplay';
-import { useUsers } from '@/features/user/useUsers';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 const thisMonth = () => {
@@ -24,23 +21,12 @@ const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8,
  * 팀장은 자기 부서까지만(근태 관제와 같은 판정).
  */
 export default function MobileLeaveStatusView() {
-  const ctx = useSecurityContext();
   const { approvals: approvalsData } = useCommuteEvaluation();
   const approvals = useMemo(() => approvalsData ?? [], [approvalsData]);
   const [month, setMonth] = useState(thisMonth);
   const [keyword, setKeyword] = useState('');
-
-  const { data: users } = useUsers();
-  // 볼 수 있는 사람만 — 부서는 기안자의 지금 부서로(출퇴근 탭과 같게). 사용자 목록에 없으면 기안 당시 부서
-  const scope = commutePolicy.getScope(ctx);
-  const inScope = useMemo(() => {
-    const deptOf = new Map((users ?? []).map((u) => [u.id, u.dept]));
-    return approvedLeavesInMonth(approvals, month).filter(({ doc }) =>
-      commutePolicy.canViewEmployee(ctx, { name: (doc.drafterName || '').trim(), dept: deptOf.get(doc.drafterId) ?? doc.drafterDept })
-    );
-    // ctx 는 렌더마다 새 객체 — 판정에 쓰는 범위·이름·부서가 바뀔 때만 다시 거른다
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approvals, month, users, scope, ctx.name, ctx.dept]);
+  // 볼 수 있는 휴가만(웹 휴가 현황과 같은 훅)
+  const inScope = useScopedMonthLeaves(approvals, month);
   const leaves = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
     if (!kw) return inScope;

@@ -15,6 +15,8 @@ import {
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { resolveCommuteScope } from '@/features/auth/scopeHelper';
+import { useSecurityContext } from '@/features/auth/useSecurityContext';
+import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useCommuteRoster, normName } from '@/features/commute/useCommuteRoster';
 import { useLeaveLedger, type LeaveLedgerMode } from '@/features/commute/useLeaveLedger';
@@ -135,7 +137,15 @@ export default function CommuteScreen() {
   // 권한 판별: 전사 관리자(ALL) vs 팀장/부서장(TEAM) vs 일반 사원(MY_ONLY)
   const isExec = canAll;
   const isLeader = commuteScope === 'TEAM';
-  const canManage = isExec || isLeader;
+  /*
+    연차 원장·전사 휴가 현황은 인사담당자(HR_ADMIN·근태 관제 메뉴 권한)도 본다 — PWA 근태 관제와 같은 commutePolicy 기준.
+    다만 서버의 출퇴근 기록 권한은 인사담당자를 전사로 보지 않으므로(caps-ingest), 임원·팀장이 아닌 인사담당자에게는
+    출퇴근 표 대신 휴가 현황·연차 원장만 연다(다른 사람 기록이 비어 결근처럼 보이지 않게).
+  */
+  const securityContext = useSecurityContext();
+  const canLedger = canAll || commutePolicy.getScope(securityContext) === 'ALL';
+  const isHrOnly = canLedger && !isExec && !isLeader;
+  const canManage = isExec || isLeader || canLedger;
 
   // 상위 탭 상태: URL searchParams를 단일 원천(Single Source of Truth)으로 사용
   const [searchParams, setSearchParams] = useSearchParams();
@@ -157,7 +167,9 @@ export default function CommuteScreen() {
 
   // 관제 서브 View 탭 상태
   const urlAdminTab = searchParams.get('adminTab') as CommuteAdminTab | null;
-  const adminTab: CommuteAdminTab = urlAdminTab || 'all_matrix';
+  // 인사담당자는 출퇴근 표가 없어 연차 원장부터
+  const adminTab: CommuteAdminTab =
+    isHrOnly && (!urlAdminTab || !['leave', 'leave_ledger'].includes(urlAdminTab)) ? 'leave_ledger' : urlAdminTab || 'all_matrix';
 
   const handleAdminTabChange = useCallback((nextAdminTab: CommuteAdminTab) => {
     setSearchParams((prev) => {
@@ -227,7 +239,7 @@ export default function CommuteScreen() {
     entries: leaveLedgerEntries,
     summary: leaveLedgerSummary,
     refreshAdjustments,
-  } = useLeaveLedger({ enabled: canAll, mode: ledgerMode, roster, approvals, holidays });
+  } = useLeaveLedger({ enabled: canLedger, mode: ledgerMode, roster, approvals, holidays });
 
   // 내 근태 한 달치 레코드
   const myMonthRows = useMemo(() => {
@@ -592,7 +604,7 @@ export default function CommuteScreen() {
       {canManage && (
         toggleButton(
           TEAM_TAB,
-          isExec ? '전사 관리' : '부서 관리',
+          isExec || isHrOnly ? '전사 관리' : '부서 관리',
           isTeam,
           () => handleTabChange(TEAM_TAB),
         )
@@ -604,7 +616,7 @@ export default function CommuteScreen() {
   const adminControlPanel = (
     <div className="space-y-3">
       {/* 1. 상단 KPI 관제 카드 (출퇴근 관리 탭일 때만 노출, 연차 원장 대장일 때는 분리) */}
-      {adminTab !== 'leave_ledger' && (
+      {adminTab !== 'leave_ledger' && !isHrOnly && (
         // 4개로 단순화(2026-10-13): 인원 · 휴가 · 외근·출장 · 확인 필요. 지각·결근 등 세부는 상태 필터로 본다
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           <StatCard
@@ -664,9 +676,9 @@ export default function CommuteScreen() {
         {/* 상단 뷰 탭 & 기간 컨트롤러 */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
           <div className="flex flex-wrap items-center gap-1 bg-panel-alt p-0.5 rounded-lg border border-border shadow-2xs">
-            {toggleButton('all_matrix', isExec ? '전사 근태 현황' : '부서 근태 현황', adminTab === 'all_matrix', () => handleAdminTabChange('all_matrix'), <Users size={13} />)}
-            {toggleButton('leave', isExec ? '전사 휴가 현황' : '부서 휴가 현황', adminTab === 'leave', () => handleAdminTabChange('leave'), <CalendarCheck2 size={13} />)}
-            {isExec && (
+            {!isHrOnly && toggleButton('all_matrix', isExec ? '전사 근태 현황' : '부서 근태 현황', adminTab === 'all_matrix', () => handleAdminTabChange('all_matrix'), <Users size={13} />)}
+            {toggleButton('leave', isExec || isHrOnly ? '전사 휴가 현황' : '부서 휴가 현황', adminTab === 'leave', () => handleAdminTabChange('leave'), <CalendarCheck2 size={13} />)}
+            {canLedger && (
               toggleButton(
                 'leave_ledger',
                 '전사 연차 원장',
@@ -692,7 +704,7 @@ export default function CommuteScreen() {
         </div>
 
         {/* 하단 상세 필터 툴바 (근태 전용) */}
-        {adminTab !== 'leave_ledger' && (
+        {adminTab !== 'leave_ledger' && !isHrOnly && (
         <div className="flex flex-wrap items-center gap-2">
           {/* 부서 필터 */}
           <div className="flex items-center gap-1.5 text-xs text-ink3">
@@ -830,7 +842,7 @@ export default function CommuteScreen() {
             />
           )}
 
-          {adminTab === 'leave_ledger' && canAll && (
+          {adminTab === 'leave_ledger' && canLedger && (
             <div className="space-y-3">
               {/* 전사 연차 KPI 통계 바 */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">

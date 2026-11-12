@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { FileText, CalendarCheck2 } from 'lucide-react';
-import { approvedLeavesInMonth } from '@/domain/leave/monthLeaves';
+import { useScopedMonthLeaves } from '@/features/commute/useScopedMonthLeaves';
+import { useSecurityContext } from '@/features/auth/useSecurityContext';
+import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import { leaveChip } from '@/domain/commute/statusDisplay';
 import { StatusBadge } from '@/features/commute/StatusBadge';
 
@@ -14,8 +15,10 @@ interface CommuteLeaveViewProps {
 }
 
 export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }: CommuteLeaveViewProps) {
-  // 당월에 걸쳐있는 승인 완료 휴가 문서들 추출 (PWA 근태 관제와 같은 규칙)
-  const leaveDocs = useMemo(() => approvedLeavesInMonth(approvals, month), [approvals, month]);
+  // 당월에 걸쳐있는 승인 완료 휴가 중 볼 수 있는 것 — 팀장은 자기 부서만(PWA 근태 관제와 같은 훅).
+  // 예전에는 팀장에게도 전사 휴가가 다 보였다
+  const leaveDocs = useScopedMonthLeaves(approvals, month);
+  const scopeLabel = commutePolicy.getScope(useSecurityContext()) === 'ALL' ? '전사' : '부서';
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs">
@@ -23,7 +26,7 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
         <div className="flex items-center gap-2">
           <CalendarCheck2 size={16} className="text-teal" />
           <h3 className="text-xs font-extrabold text-ink">
-            전사 승인 휴가 현황 ({month.slice(0, 4)}년 {Number(month.slice(5))}월 총 {leaveDocs.length}건)
+            {scopeLabel} 승인 휴가 현황 ({month.slice(0, 4)}년 {Number(month.slice(5))}월 총 {leaveDocs.length}건)
           </h3>
         </div>
         <div className="text-[11px] text-ink3">

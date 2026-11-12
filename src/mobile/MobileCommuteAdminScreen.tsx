@@ -52,8 +52,14 @@ export default function MobileCommuteAdminScreen() {
   const [view, setView] = useState<AdminView>('daily');
   // 연차 원장은 전사 범위(ALL)만 — 이 화면의 다른 판정(메뉴·출퇴근 명단)과 같은 commutePolicy 기준(임원·인사담당자)
   const canLedger = commutePolicy.getScope(securityContext) === 'ALL';
-  // 권한 정보가 늦게 바뀌어 원장 탭이 사라지면 출퇴근으로
-  const activeView: AdminView = view === 'ledger' && !canLedger ? 'daily' : view;
+  /*
+    임원·팀장이 아닌 인사담당자 — 서버의 출퇴근 기록 권한은 전사가 아니라(caps-ingest) 출퇴근 탭에선 다른 사람 기록이 비어
+    결근처럼 보인다. 휴가 현황·연차 원장만 연다(웹 근태 화면과 같게)
+  */
+  const isHrOnly = canLedger && !securityContext.isExecutive && !securityContext.isLeader;
+  // 권한 정보가 늦게 바뀌어 원장 탭이 사라지면 출퇴근으로, 인사담당자는 출퇴근 대신 연차 원장으로
+  const activeView: AdminView =
+    view === 'ledger' && !canLedger ? 'daily' : view === 'daily' && isHrOnly ? 'ledger' : view;
   const [searchQuery, setSearchQuery] = useState('');
 
   // 1. 시스템 활성 임직원 목록
@@ -234,7 +240,7 @@ export default function MobileCommuteAdminScreen() {
       <div className="flex shrink-0 gap-1.5 border-b border-border/60 bg-white px-4 py-2">
         {(
           [
-            ['daily', '출퇴근'],
+            ...(isHrOnly ? [] : ([['daily', '출퇴근']] as const)),
             ['leaves', '휴가 현황'],
             ...(canLedger ? ([['ledger', '연차 원장']] as const) : []),
           ] as const
