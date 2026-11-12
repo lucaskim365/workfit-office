@@ -62,7 +62,7 @@ interface WorkPlanMyWeekProps {
 /**
  * 내 주간 — 7일 × 시간 세로 시간표(구글·아웃룩 주 보기). 페이지 전체가 스크롤되고 주차·요일·종일 줄은 위에 남는다.
  * 맨 위 줄은 종일·시간 미정 일정,
- * 빈 시간을 누르면 그 30분 칸으로 새 일정, 블록을 누르면 상세.
+ * 빈 시간을 누르면 그 30분 칸으로 새 일정(끌어 옮기면 10분 단위), 블록을 누르면 상세.
  * 내 일반 업무는 끌어서 시간·요일을 옮긴다(길이는 그대로, 놓을 때 저장, 이번 주 안에서만).
  */
 export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem }: WorkPlanMyWeekProps) {

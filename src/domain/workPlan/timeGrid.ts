@@ -1,6 +1,9 @@
-// 업무계획 시간표 계산 — 30분 칸 클릭·끌기·옮기기·겹침 배치 (분 단위 정수, 0~1440)
+// 업무계획 시간표 계산 — 30분 칸 클릭, 10분 단위 끌기·옮기기·늘리기, 겹침 배치 (분 단위 정수, 0~1440)
 
+/** 시간표 한 칸(누르면 생기는 길이·눈금) */
 export const SLOT_MINUTES = 30;
+/** 계획을 쪼갤 수 있는 가장 작은 단위 — 끌기·옮기기·늘리기·시각 목록 */
+export const SNAP_MINUTES = 10;
 export const DAY_END = 1440;
 
 export interface MinuteRange {
@@ -22,27 +25,35 @@ export function toHHmm(minutes: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** 끌기: 두 점이 속한 30분 칸을 모두 덮는다(최소 30분) */
+/**
+ * 끌기 — 누르기만 하면(같은 10분 안) 그 30분 칸.
+ * 끌면 두 점이 속한 10분 칸을 모두 덮는다(최소 10분) — 10·20·40분 같은 계획도 잡을 수 있다.
+ */
 export function rangeFromDrag(anchor: number, current: number): MinuteRange {
   const lo = Math.min(anchor, current);
   const hi = Math.max(anchor, current);
-  const end = clamp((Math.floor(hi / SLOT_MINUTES) + 1) * SLOT_MINUTES, SLOT_MINUTES, DAY_END);
-  const start = clamp(Math.floor(lo / SLOT_MINUTES) * SLOT_MINUTES, 0, end - SLOT_MINUTES);
+  if (Math.floor(lo / SNAP_MINUTES) === Math.floor(hi / SNAP_MINUTES)) {
+    const end = clamp((Math.floor(hi / SLOT_MINUTES) + 1) * SLOT_MINUTES, SLOT_MINUTES, DAY_END);
+    const start = clamp(Math.floor(lo / SLOT_MINUTES) * SLOT_MINUTES, 0, end - SLOT_MINUTES);
+    return { start, end };
+  }
+  const end = clamp((Math.floor(hi / SNAP_MINUTES) + 1) * SNAP_MINUTES, SNAP_MINUTES, DAY_END);
+  const start = clamp(Math.floor(lo / SNAP_MINUTES) * SNAP_MINUTES, 0, end - SNAP_MINUTES);
   return { start, end };
 }
 
-/** 옮기기: 30분 단위로 반올림, 길이 유지, 하루 안으로 */
+/** 옮기기: 10분 단위로 반올림, 길이 유지, 하루 안으로 */
 export function moveRange(range: MinuteRange, delta: number): MinuteRange {
   const length = range.end - range.start;
-  const shift = Math.round(delta / SLOT_MINUTES) * SLOT_MINUTES;
+  const shift = Math.round(delta / SNAP_MINUTES) * SNAP_MINUTES;
   const start = clamp(range.start + shift, 0, DAY_END - length);
   return { start, end: start + length };
 }
 
-/** 끝 늘리기: 30분 단위 올림, 최소 시작+30분, 최대 24시 */
+/** 끝 늘리기: 10분 단위 올림, 최소 시작+10분, 최대 24시 */
 export function resizeEnd(range: MinuteRange, end: number): MinuteRange {
-  const snapped = Math.ceil(end / SLOT_MINUTES) * SLOT_MINUTES;
-  return { start: range.start, end: clamp(snapped, range.start + SLOT_MINUTES, DAY_END) };
+  const snapped = Math.ceil(end / SNAP_MINUTES) * SNAP_MINUTES;
+  return { start: range.start, end: clamp(snapped, range.start + SNAP_MINUTES, DAY_END) };
 }
 
 /** 길이 표시: '30분' | '1시간' | '1시간 30분' */
@@ -94,20 +105,20 @@ export function quickDefaultRange(now: Date): MinuteRange {
 /** 시각 글 — 24:00(하루 끝)도 그대로 쓴다(저장은 toHHmm 이 23:59로 바꾼다) */
 const clockLabel = (minutes: number) => (minutes >= DAY_END ? '24:00' : toHHmm(minutes));
 
-/** 시작 시각 고르기 목록 — 30분 간격, 칸에 없는 지금 값(예: 09:15)은 끼워 넣는다 */
+/** 시작 시각 고르기 목록 — 10분 간격, 칸에 없는 지금 값(예: 09:15)은 끼워 넣는다 */
 export function startTimeOptions(current: number | null): number[] {
-  const list = Array.from({ length: DAY_END / SLOT_MINUTES }, (_, i) => i * SLOT_MINUTES);
-  if (current !== null && current >= 0 && current < DAY_END && current % SLOT_MINUTES !== 0) {
+  const list = Array.from({ length: DAY_END / SNAP_MINUTES }, (_, i) => i * SNAP_MINUTES);
+  if (current !== null && current >= 0 && current < DAY_END && current % SNAP_MINUTES !== 0) {
     list.push(current);
     list.sort((a, b) => a - b);
   }
   return list;
 }
 
-/** 종료 시각 고르기 목록 — 시작 뒤 30분 경계부터 24:00까지, 글에 길이를 붙인다('11:00 (1시간)') */
+/** 종료 시각 고르기 목록 — 시작 뒤 10분 경계부터 24:00까지, 글에 길이를 붙인다('11:00 (1시간)') */
 export function endTimeOptions(start: number, current: number | null): Array<{ minute: number; label: string }> {
   const minutes: number[] = [];
-  for (let m = (Math.floor(start / SLOT_MINUTES) + 1) * SLOT_MINUTES; m <= DAY_END; m += SLOT_MINUTES) minutes.push(m);
+  for (let m = (Math.floor(start / SNAP_MINUTES) + 1) * SNAP_MINUTES; m <= DAY_END; m += SNAP_MINUTES) minutes.push(m);
   if (current !== null && current > start && current <= DAY_END && !minutes.includes(current)) {
     minutes.push(current);
     minutes.sort((a, b) => a - b);
