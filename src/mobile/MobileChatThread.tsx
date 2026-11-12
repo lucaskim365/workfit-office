@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
+import { Search, FileSignature, FileText, X, Pencil, Download, Eye } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -26,6 +26,7 @@ import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { ChatFileStatusText } from './ChatFileStatusText';
+import { viewerKindOf } from './MobileFileViewer';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -1943,13 +1944,25 @@ function MobileFileBoxModal({
                   >
                     💬
                   </button>
-                  <button 
-                    onClick={() => downloadAttachment(f.attachment)}
-                    className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
-                    title="다운로드"
-                  >
-                    <Download size={15} />
-                  </button>
+                  {/* PDF·엑셀·워드는 앱 안 보기 화면으로 연다(저장은 그 화면 위 [저장]) — 바로 내려받으면 휴대폰 다운로드 알림의
+                      [열기]가 다른 앱으로 넘겨 버려 뒤로가기로 대화방에 못 돌아왔다 */}
+                  {viewerKindOf(f.attachment.name, f.attachment.mime) ? (
+                    <button
+                      onClick={() => openAttachment(f.attachment)}
+                      className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                      title="열기"
+                    >
+                      <Eye size={15} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => downloadAttachment(f.attachment)}
+                      className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                      title="다운로드"
+                    >
+                      <Download size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

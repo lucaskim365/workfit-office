@@ -201,15 +201,24 @@ class AppwriteBackend implements ApprovalDocBackend {
     }
   }
   async loadAll() {
-    const out: ApprovalDoc[] = [];
+    // 첫 장에서 전체 건수를 알고 나머지 장은 한꺼번에 받는다 — 한 장씩 차례로 받으면 문서가 늘수록 기다림이 길어졌다(휴대폰에서 특히).
+    // 받는 사이 문서가 바뀌면 실시간 알림으로 다시 받으므로 여기서 따로 쫓지 않는다
     const PAGE = 100;
-    for (let offset = 0; ; offset += PAGE) {
-      const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [Query.limit(PAGE), Query.offset(offset)]);
+    const page = (offset: number) => this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [Query.limit(PAGE), Query.offset(offset)]);
+    const first = await page(0);
+    const offsets: number[] = [];
+    for (let offset = PAGE; offset < first.total; offset += PAGE) offsets.push(offset);
+    const pages = [first, ...(await Promise.all(offsets.map(page)))];
+    const seen = new Set<string>();
+    const out: ApprovalDoc[] = [];
+    for (const res of pages) {
       for (const row of res.documents as unknown as ApRow[]) {
+        // 받는 사이 새 문서가 끼면 장 경계에서 같은 문서가 두 번 올 수 있다
+        if (seen.has(row.$id)) continue;
+        seen.add(row.$id);
         const m = this.fromRow(row);
         if (m) out.push(m);
       }
-      if (res.documents.length < PAGE) break;
     }
     return out;
   }

@@ -17,6 +17,7 @@ import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import MobileCommonHeader from './MobileCommonHeader';
+import MobileCommuteTabs from './MobileCommuteTabs';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 
@@ -220,6 +221,7 @@ export default function MobileCommuteAdminScreen() {
             : '전사 임직원 실시간 출퇴근 관제'
         }
       />
+      <MobileCommuteTabs active="admin" />
 
       {/* 1. 일자 네비게이터 */}
       <div className="flex items-center justify-between px-4 py-2 bg-white/90 border-b border-border/60 shrink-0">
