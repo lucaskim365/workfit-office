@@ -1047,7 +1047,8 @@ export function SheetEditor({
                   <td className="relative w-0 p-0" style={{ border: 'none' }}>
                     {(() => {
                       const node = rowEnd(r);
-                      return node ? <div className="absolute left-0 top-1/2 z-[2] -translate-y-1/2 whitespace-nowrap pl-1.5">{node}</div> : null;
+                      // 행 높이 전체(이어진 행을 세로 막대로 잇는 표시가 끊기지 않게) — 가운데 맞춤은 표시 쪽에서
+                      return node ? <div className="absolute inset-y-0 left-0 z-[2] flex whitespace-nowrap pl-1">{node}</div> : null;
                     })()}
                   </td>
                 )}
